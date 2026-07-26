@@ -85,6 +85,19 @@ function todoTransactionFixture() {
   return repoRoot;
 }
 
+function chatRegistryFixture() {
+  const repoRoot = todoTransactionFixture();
+  const chatRoot = join(repoRoot, "examples/chat");
+  mkdirSync(join(chatRoot, "src"), { recursive: true });
+  writeFileSync(join(chatRoot, "package.json"), '{"name":"@example/chat","version":"1.0.0"}\n');
+  writeFileSync(
+    join(chatRoot, "spine-proto.json"),
+    '{"formatVersion":1,"mode":"application","modelPackages":[],"registryOutput":"src/model-registry.ts"}\n',
+  );
+  writeFileSync(join(chatRoot, "src/model-registry.ts"), "previous registry\n");
+  return repoRoot;
+}
+
 function rootStageCommand(label, _executable, args) {
   if (!label.startsWith("buf generate")) {
     const output = args[args.indexOf("--out") + 1];
@@ -118,6 +131,16 @@ function todoStageCommand(failure, writeManifest = true) {
     }
     mkdirSync(dirname(args.at(-1)), { recursive: true });
     writeFileSync(args.at(-1), "handler\n");
+    return 0;
+  };
+}
+
+function chatCompositionCommand(failure) {
+  return (label, _executable, _args, cwd) => {
+    if (label !== "Chat model registry composition") return 1;
+    if (failure) return 1;
+    mkdirSync(join(cwd, "src"), { recursive: true });
+    writeFileSync(join(cwd, "src/model-registry.ts"), "next registry\n");
     return 0;
   };
 }
@@ -171,12 +194,16 @@ describe("proto-workflow", () => {
       "examples/todo/generated",
       "examples/project-management/generated",
       "examples/datastore-orders/generated",
+      "examples/users-model/generated",
+      "examples/chat-model/generated",
     ]);
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
       "examples/todo/generated",
       "examples/project-management/generated",
       "examples/datastore-orders/generated",
+      "examples/users-model/generated",
+      "examples/chat-model/generated",
     ]);
   });
 
@@ -254,6 +281,76 @@ describe("proto-workflow", () => {
     expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
       "examples/todo/spine-proto-manifest.json\n",
     );
+  });
+
+  it("preserves every live artifact when Chat registry composition fails", () => {
+    const repoRoot = chatRegistryFixture();
+
+    expect(
+      generateTargets({
+        repoRoot,
+        runCommand: rootStageCommand,
+        runModelCommand: todoStageCommand(undefined),
+        runCompositionCommand: chatCompositionCommand(true),
+      }),
+    ).toBe(1);
+
+    expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+      "packages/proto/generated\n",
+    );
+    expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
+      "examples/todo/generated\n",
+    );
+    expect(readFileSync(join(repoRoot, "packages/proto/spine-proto-manifest.json"), "utf8")).toBe(
+      "packages/proto/spine-proto-manifest.json\n",
+    );
+    expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
+      "examples/todo/spine-proto-manifest.json\n",
+    );
+    expect(readFileSync(join(repoRoot, "examples/chat/src/model-registry.ts"), "utf8")).toBe(
+      "previous registry\n",
+    );
+    expect(
+      readdirSync(join(repoRoot, "examples/chat")).some((name) => name.startsWith(".generated-")),
+    ).toBe(false);
+    expect(
+      readdirSync(join(repoRoot, "examples/chat/src")).some((name) =>
+        name.startsWith(".generated-"),
+      ),
+    ).toBe(false);
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+  });
+
+  it("rejects a symlinked staged Chat registry before publication", () => {
+    const repoRoot = chatRegistryFixture();
+    const external = mkdtempSync(join(tmpdir(), "spine-chat-registry-external-"));
+    const externalRegistry = join(external, "model-registry.ts");
+    writeFileSync(externalRegistry, "unsafe registry\n");
+
+    expect(
+      generateTargets({
+        repoRoot,
+        runCommand: rootStageCommand,
+        runModelCommand: todoStageCommand(undefined),
+        runCompositionCommand(label, _executable, _args, cwd) {
+          if (label !== "Chat model registry composition") return 1;
+          mkdirSync(join(cwd, "src"), { recursive: true });
+          symlinkSync(externalRegistry, join(cwd, "src/model-registry.ts"));
+          return 0;
+        },
+      }),
+    ).toBe(1);
+
+    expect(readFileSync(join(repoRoot, "examples/chat/src/model-registry.ts"), "utf8")).toBe(
+      "previous registry\n",
+    );
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+    expect(
+      readdirSync(join(repoRoot, "examples/chat/src")).some((name) =>
+        name.startsWith(".generated-"),
+      ),
+    ).toBe(false);
+    rmSync(external, { recursive: true, force: true });
   });
 
   it("fails closed when the staged Spine manifest is missing", () => {
@@ -513,7 +610,7 @@ describe("proto-workflow", () => {
       ],
       repoRoot,
       {
-        manifests: [
+        files: [
           {
             target: rootManifest,
             staged: rootManifestStage,
@@ -535,6 +632,181 @@ describe("proto-workflow", () => {
     expect(readFileSync(join(todoGenerated, "complete.txt"), "utf8")).toBe("todo next\n");
     expect(readFileSync(rootManifest, "utf8")).toBe("root next\n");
     expect(readFileSync(todoManifest, "utf8")).toBe("todo next\n");
+  });
+
+  it("publishes a staged Chat registry with the generated roots and manifests", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const generatedRoot = join(repoRoot, "packages/proto/generated");
+    const stagedOutputRoot = join(repoRoot, "packages/proto/.generated-root/generated");
+    const registry = join(repoRoot, "examples/chat/src/model-registry.ts");
+    const stagedRegistry = join(
+      repoRoot,
+      "examples/chat/src/.generated-registry/model-registry.ts",
+    );
+    mkdirSync(generatedRoot, { recursive: true });
+    mkdirSync(stagedOutputRoot, { recursive: true });
+    mkdirSync(dirname(registry), { recursive: true });
+    mkdirSync(dirname(stagedRegistry), { recursive: true });
+    writeFileSync(join(generatedRoot, "previous.txt"), "previous output\n");
+    writeFileSync(join(stagedOutputRoot, "next.txt"), "next output\n");
+    writeFileSync(registry, "previous registry\n");
+    writeFileSync(stagedRegistry, "next registry\n");
+
+    publishGeneratedTargets(
+      [{ generatedRoot, stagedOutputRoot, target: { displayPath: "packages/proto/generated" } }],
+      repoRoot,
+      {
+        files: [
+          {
+            target: registry,
+            staged: stagedRegistry,
+            backup: join(dirname(registry), ".model-registry.ts.backup-test"),
+            hadPrevious: true,
+            contents: "next registry\n",
+          },
+        ],
+      },
+    );
+
+    expect(readFileSync(join(generatedRoot, "next.txt"), "utf8")).toBe("next output\n");
+    expect(readFileSync(registry, "utf8")).toBe("next registry\n");
+  });
+
+  it("rolls back a v3 mid-file interruption including the Chat registry", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const registry = join(repoRoot, "examples/chat/src/model-registry.ts");
+    const staged = join(repoRoot, "examples/chat/src/.generated-interrupted/model-registry.ts");
+    const backup = join(repoRoot, "examples/chat/src/.model-registry.ts.backup-interrupted");
+    const manifest = join(repoRoot, "packages/proto/spine-proto-manifest.json");
+    const stagedManifest = join(
+      repoRoot,
+      "packages/proto/.generated-interrupted/spine-proto-manifest.json",
+    );
+    const manifestBackup = join(
+      repoRoot,
+      "packages/proto/.spine-proto-manifest.backup-interrupted",
+    );
+    mkdirSync(dirname(staged), { recursive: true });
+    mkdirSync(dirname(stagedManifest), { recursive: true });
+    writeFileSync(registry, "next registry\n");
+    writeFileSync(staged, "next registry\n");
+    writeFileSync(backup, "previous registry\n");
+    writeFileSync(manifest, "previous manifest\n");
+    writeFileSync(stagedManifest, "next manifest\n");
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify({
+        version: 3,
+        state: "committing",
+        targets: [],
+        files: [
+          {
+            target: registry,
+            staged,
+            backup,
+            hadPrevious: true,
+            contents: "next registry\n",
+          },
+          {
+            target: manifest,
+            staged: stagedManifest,
+            backup: manifestBackup,
+            hadPrevious: true,
+            contents: "next manifest\n",
+          },
+        ],
+      })}\n`,
+    );
+
+    publishGeneratedTargets([], repoRoot);
+
+    expect(readFileSync(registry, "utf8")).toBe("previous registry\n");
+    expect(readFileSync(manifest, "utf8")).toBe("previous manifest\n");
+    expect(existsSync(staged)).toBe(false);
+    expect(existsSync(backup)).toBe(false);
+    expect(existsSync(stagedManifest)).toBe(false);
+    expect(existsSync(manifestBackup)).toBe(false);
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+  });
+
+  it("recovers every atomic root, manifest, and Chat registry from a v3 mid-file interruption", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const targets = atomicGeneratedTargets.map((definition, index) => {
+      const target = join(repoRoot, definition.displayPath);
+      const staged = join(dirname(target), `.generated-v3-${index}/generated`);
+      const backup = join(dirname(target), `.${basename(target)}.backup-v3-${index}`);
+      mkdirSync(target, { recursive: true });
+      mkdirSync(staged, { recursive: true });
+      mkdirSync(backup, { recursive: true });
+      writeFileSync(join(target, "value.txt"), "next\n");
+      writeFileSync(join(staged, "value.txt"), "staged\n");
+      writeFileSync(join(backup, "value.txt"), "previous\n");
+      return { target, staged, backup, hadPrevious: true };
+    });
+    const manifestPaths = [
+      "packages/proto/spine-proto-manifest.json",
+      ...modelAtomicTargets.map((target) => `${target.packagePath}/spine-proto-manifest.json`),
+      "examples/chat/src/model-registry.ts",
+    ];
+    const files = manifestPaths.map((path, index) => {
+      const target = join(repoRoot, path);
+      const staged = join(dirname(target), `.generated-v3-${index}/${basename(target)}`);
+      const backup = join(dirname(target), `.${basename(target)}.backup-v3-${index}`);
+      mkdirSync(dirname(staged), { recursive: true });
+      writeFileSync(target, index === 0 ? "next\n" : "previous\n");
+      writeFileSync(staged, "next\n");
+      writeFileSync(backup, "previous\n");
+      return { target, staged, backup, hadPrevious: true, contents: "next\n" };
+    });
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify({ version: 3, state: "committing", targets, files })}\n`,
+    );
+
+    publishGeneratedTargets([], repoRoot);
+
+    for (const target of targets) {
+      expect(readFileSync(join(target.target, "value.txt"), "utf8")).toBe("previous\n");
+      expect(existsSync(target.staged)).toBe(false);
+      expect(existsSync(target.backup)).toBe(false);
+    }
+    for (const file of files) {
+      expect(readFileSync(file.target, "utf8")).toBe("previous\n");
+      expect(existsSync(file.staged)).toBe(false);
+      expect(existsSync(file.backup)).toBe(false);
+      expect(existsSync(dirname(file.staged))).toBe(false);
+    }
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+  });
+
+  it("preserves an unexpected stage sibling while removing the journal-owned file", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const target = join(repoRoot, "examples/chat/src/model-registry.ts");
+    const stageRoot = join(repoRoot, "examples/chat/src/.generated-preserve");
+    const staged = join(stageRoot, "model-registry.ts");
+    const sibling = join(stageRoot, "keep.txt");
+    const backup = join(repoRoot, "examples/chat/src/.model-registry.ts.backup-preserve");
+    mkdirSync(stageRoot, { recursive: true });
+    writeFileSync(target, "next\n");
+    writeFileSync(staged, "next\n");
+    writeFileSync(sibling, "keep\n");
+    writeFileSync(backup, "previous\n");
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify({
+        version: 3,
+        state: "committing",
+        targets: [],
+        files: [{ target, staged, backup, hadPrevious: true, contents: "replacement\n" }],
+      })}\n`,
+    );
+
+    publishGeneratedTargets([], repoRoot);
+
+    expect(readFileSync(target, "utf8")).toBe("previous\n");
+    expect(existsSync(staged)).toBe(false);
+    expect(readFileSync(sibling, "utf8")).toBe("keep\n");
+    expect(existsSync(stageRoot)).toBe(true);
   });
 
   it("leaves Todo Protobuf-ES ownership to its model package", () => {
@@ -913,13 +1185,15 @@ describe("proto-workflow", () => {
         ],
         repoRoot,
         {
-          manifest: {
-            target: manifest,
-            staged: stagedManifest,
-            backup: join(repoRoot, "packages/proto/.spine-proto-manifest.backup-test"),
-            hadPrevious: true,
-            contents: "next manifest\n",
-          },
+          files: [
+            {
+              target: manifest,
+              staged: stagedManifest,
+              backup: join(repoRoot, "packages/proto/.spine-proto-manifest.backup-test"),
+              hadPrevious: true,
+              contents: "next manifest\n",
+            },
+          ],
           operations: {
             remove(path) {
               if (failCleanup && path.includes(".generated.backup-"))

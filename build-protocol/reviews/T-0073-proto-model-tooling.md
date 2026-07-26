@@ -872,3 +872,183 @@ staging/freshness generalization.
   model-module tests, and 16 real local-gRPC behavior tests.
 - No P0/P1/P2 remains. The Project Management and Datastore Orders migration is
   accepted for commit and immediate task-branch push.
+
+## Slice C Chat atomic-foundation review assignment
+
+Scope is the uncommitted diff after `bfa1207b`: Users/Chat model packages, Chat
+application composition scaffold and transitive registry test, six-model root
+staging/freshness, version-3 journaled published files with v1/v2 recovery, the
+generated-registry TypeScript annotation, formatter policy, root references,
+and lock importers. Runnable Chat gRPC behavior is explicitly the next
+sub-slice.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`; review journal/file
+  terminology, staging cohesion, cleanup duplication, target-table depth,
+  test maintainability, and scaffold package shape.
+- TypeScript/API: existing `typescript_api_docs_reviewer`, expected and
+  explicitly dispatched `gpt-5.6-terra` / `high`; review model exports,
+  declarations/TSDoc, canonical cross-import, manifests, application registry,
+  package dependencies/exports/payload assumptions, and generated-registry
+  annotation.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; review six-root/file atomicity, v1/v2/v3 recovery,
+  composition failure, cleanup/crash artifacts, freshness, bounds, and
+  dependency resolution staging.
+- Documentation: N/A for this foundation; complete Chat and external workflow
+  documentation remains mandatory after runnable behavior.
+- All reviewers are read-only, may not edit, spawn children, commit, push, or
+  merge. Model/reasoning fields are explicit; immutable configured profiles
+  are runtime metadata because independent self-introspection is unavailable.
+
+## Slice C Chat atomic-foundation review results
+
+- Style/maintainability accepted two P2s. The freshness checker calls Chat
+  composition before establishing cleanup, so composition failure can leak
+  already-staged model directories. The v3 heterogeneous file list is also
+  still locally named `manifests`; rename it to `publicationFiles`.
+- TypeScript/API accepted two P1s and one P2. Chat Core/Server dependencies use
+  workspace-only specs rather than ordinary registry versions. Users/Chat
+  model builds do not clean stale compiled generated output before build/pack.
+  The generated public `typeRegistry` also lacks TSDoc.
+- Both existing roles ran with expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable configured profiles match and independent
+  runtime self-introspection is unavailable.
+- Canonical cross-model imports, manifests, ProtoModule exports, target-table
+  depth, formatter exclusion, and explicit registry typing are otherwise
+  CLEAN. Performance/reliability remains in progress before one correction
+  batch returns to implementation.
+- Performance/reliability accepted one P1 and one P2. V3 staged/live published
+  files are not validated as safe regular files before the journal/publish
+  step, so a symlinked composed registry can be renamed live and strand
+  recovery. The v3 interruption regression also covers only files, not the
+  actual six generated roots, six manifests, and registry as one transaction.
+- The existing reliability role ran with expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable configured profile matches and
+  independent runtime self-introspection is unavailable.
+- The complete review wave is collected. One correction batch returns to the
+  same existing `implementer`, expected and explicitly redispatched
+  `gpt-5.6-terra` / `medium`: fix freshness cleanup ordering and v3 naming;
+  ordinary Chat framework dependency specs; generated-dist cleanup for both
+  models; generated registry TSDoc; pre-publication safe-regular-file
+  validation with symlink regression; and exact full-transaction v3 recovery
+  evidence. No scope broadening, docs/behavior/external work, children, commit,
+  push, or merge.
+
+## Slice C Chat atomic-foundation correction evidence
+
+- The correction owner used the expected, explicitly dispatched existing
+  `implementer` profile: `gpt-5.6-terra` / `medium`. The surface does not expose
+  independent runtime self-introspection; the immutable configured profile is
+  the available runtime metadata and matches.
+- Owner evidence is GREEN for 56 focused workflow, freshness, and package
+  payload tests; deterministic generation/freshness; generated typechecks;
+  lint/cleanup enforcement; and whitespace. The correction covers every
+  accepted style, API, and reliability finding from the complete review wave.
+- Bounded finding-closure reviews remain required for the substantively
+  affected style, TypeScript/API, and performance/reliability concerns.
+  Documentation remains N/A for this foundation because the complete public
+  model-package guide is a later mandatory Wave 3 slice.
+- Finding-closure dispatches reuse the existing
+  `style_maintainability_reviewer`, `typescript_api_docs_reviewer`, and
+  `performance_reliability_reviewer` roles. Each is expected and explicitly
+  dispatched as `gpt-5.6-terra` / `high`, read-only, without children. They
+  review only whether their accepted findings are closed and whether the
+  corrections introduce a new P0-P2 defect in that same concern.
+
+## Slice C Chat atomic-foundation finding-closure results
+
+- TypeScript/API: CLEAN. Ordinary framework dependency specifications,
+  generated-dist cleanup and shipped scripts, real archive execution,
+  generated-registry TSDoc/typing, model exports, canonical cross-package
+  imports, manifests, declarations, and payload mappings agree. The existing
+  role used the expected and explicitly dispatched `gpt-5.6-terra` / `high`
+  profile; runtime self-introspection is unavailable.
+- Style/maintainability: the original cleanup-ordering and terminology findings
+  are closed, but one new P2 is accepted. Stale-output branches call
+  `process.exit(1)` inside the freshness checker's `try`, so Node bypasses its
+  `finally` block after successful Chat composition and can leave staged roots
+  and files. Propagate the failure until cleanup completes, exit afterward, and
+  add an integration regression for stale output after successful composition.
+  The existing role used the expected and explicitly dispatched
+  `gpt-5.6-terra` / `high` profile; runtime self-introspection is unavailable.
+- Performance/reliability remains in progress so the complete bounded review
+  wave is collected before the accepted correction returns to implementation.
+- Performance/reliability: the original safe-file, symlink, and exact
+  full-transaction recovery findings are closed, but one new P2 is accepted.
+  Version-3 recovery removes the staged Chat registry file while leaving its
+  empty `src/.generated-*` parent because only the file is journaled. Recovery
+  must remove that bounded staging directory too, and the exact full-transaction
+  regression must assert its absence. The existing role used the expected and
+  explicitly dispatched `gpt-5.6-terra` / `high` profile; runtime
+  self-introspection is unavailable. Its independent 52-test affected suite
+  passed before the finding.
+- The complete bounded wave is collected. One correction batch returns to the
+  existing `implementer`, expected and explicitly redispatched as
+  `gpt-5.6-terra` / `medium`: defer freshness-check exit until its `finally`
+  cleanup completes with a stale-output integration regression, and remove the
+  empty Chat registry staging parent during v3 recovery with an exact
+  full-transaction assertion. No other behavior, API, docs, external harness,
+  runnable Chat work, lockfile mutation, commit, push, or merge is allowed.
+- The existing `implementer` completed the exact batch with the expected and
+  explicitly redispatched `gpt-5.6-terra` / `medium` profile; runtime
+  self-introspection is unavailable. Owner evidence is GREEN for 53 affected
+  workflow/freshness tests plus type/lint/format/whitespace checks.
+- Only style/maintainability and performance/reliability are substantively
+  affected and require final finding-closure. TypeScript/API remains CLEAN;
+  documentation remains N/A for this foundation.
+- Final closure returns to the same existing style and reliability roles under
+  their originally explicit immutable `gpt-5.6-terra` / `high` profiles.
+  Both follow-ups are read-only, bounded to their accepted cleanup findings,
+  and may not spawn children, edit, commit, push, or merge.
+- Final style closure accepts one test-only P2. The stale cleanup regression
+  exercises a stale Chat registry, not the separate stale-generated-root
+  return path. Add a true generated-root mismatch that reaches that branch and
+  proves all staged roots/files/directories are removed. The production
+  deferred-exit correction is otherwise CLEAN.
+- Final reliability closure accepts one P2. Recovery recursively removes the
+  staged file's parent, which could erase an unexpected non-journal sibling.
+  Remove the parent only when proven empty and add a regression preserving an
+  unexpected sibling. Empty exact Chat staging parents must still be removed.
+- Both existing roles used their originally explicit immutable
+  `gpt-5.6-terra` / `high` profiles; runtime self-introspection is unavailable.
+  Their affected suites passed 7/7 and 53/53 respectively before identifying
+  the coverage/safety gaps.
+- One final bounded correction returns to the existing `implementer`, expected
+  and explicitly redispatched as `gpt-5.6-terra` / `medium`: empty-only staging
+  parent removal with sibling preservation, and true stale-generated-root
+  cleanup evidence. Production behavior outside those paths, API, docs,
+  external/runnable work, lockfile/install, commit, push, and merge are
+  prohibited.
+- The existing `implementer` completed the exact correction with the expected
+  and explicitly dispatched `gpt-5.6-terra` / `medium` profile; runtime
+  self-introspection is unavailable. Owner evidence is GREEN for 55 affected
+  tests plus type/lint/format/whitespace checks.
+- Because the changes are deterministic test coverage and an empty-directory
+  guard directly matching the accepted findings, final acceptance uses
+  independent coordinator execution plus source/evidence audit rather than a
+  new complete reviewer wave. No concern outside style and reliability was
+  reopened.
+
+## Slice C Chat atomic-foundation final disposition
+
+- Style/maintainability: CLEAN after deferred CLI exit, true stale-generated-
+  root cleanup evidence, and consistent publication terminology.
+- TypeScript/API: CLEAN after ordinary registry-compatible dependency specs,
+  clean generated builds/packs, shipped cleanup scripts, real payload
+  execution, and generated registry TSDoc.
+- Performance/reliability: CLEAN after safe regular-file validation, symlink
+  rejection, exact six-root/six-manifest/registry recovery, empty-only staging
+  parent removal, and unexpected-sibling preservation.
+- Documentation: N/A for this foundation because the comprehensive public
+  model-package guide remains a mandatory later Wave 3 slice.
+- All invoked roles used their expected explicitly configured profiles:
+  implementer `gpt-5.6-terra` / `medium`; style, API, and reliability reviewers
+  `gpt-5.6-terra` / `high`. Runtime self-introspection was unavailable and no
+  contradictory metadata was exposed.
+- Final coordinator evidence: 59/59 focused workflow, freshness, and real
+  package-payload tests; deterministic generation and all-model/registry
+  freshness; generated/tooling typechecks; lint/cleanup enforcement;
+  formatting; whitespace; frozen lock/supply-chain verification; and no
+  journal, backup, or staging residue. No P0, P1, or accepted P2 remains.

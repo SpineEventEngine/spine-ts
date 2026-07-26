@@ -47,6 +47,16 @@ export const modelAtomicTargets = [
     moduleName: "Datastore Orders",
     handlerProjectPath: "examples/datastore-orders/tsconfig.json",
   },
+  {
+    displayPath: "examples/users-model/generated",
+    packagePath: "examples/users-model",
+    moduleName: "Users",
+  },
+  {
+    displayPath: "examples/chat-model/generated",
+    packagePath: "examples/chat-model",
+    moduleName: "Chat",
+  },
 ];
 export const atomicGeneratedTargets = [...generatedTargets, ...modelAtomicTargets];
 
@@ -259,7 +269,7 @@ function validatePublicationJournal(root, journal) {
   if (
     typeof journal !== "object" ||
     journal === null ||
-    ![1, 2].includes(journal.version) ||
+    ![1, 2, 3].includes(journal.version) ||
     !["preparing", "committing", "committed"].includes(journal.state) ||
     !Array.isArray(journal.targets)
   ) {
@@ -292,40 +302,47 @@ function validatePublicationJournal(root, journal) {
     }
     seenTargets.add(target.target);
   }
-  const manifests = journal.manifests ?? (journal.manifest === undefined ? [] : [journal.manifest]);
+  const files = journalFiles(journal);
   const allowedManifests = new Set([
     join(root, "packages/proto/spine-proto-manifest.json"),
     ...modelAtomicTargets.map((target) =>
       join(root, target.packagePath, "spine-proto-manifest.json"),
     ),
   ]);
-  if (
-    !Array.isArray(manifests) ||
-    new Set(manifests.map((entry) => entry?.target)).size !== manifests.length
-  )
+  const allowedFiles = new Set([
+    ...allowedManifests,
+    join(root, "examples/chat/src/model-registry.ts"),
+  ]);
+  if (!Array.isArray(files) || new Set(files.map((entry) => entry?.target)).size !== files.length)
     throw new Error("invalid publication journal");
-  if (journal.state === "committing" && manifests.length === 0)
+  if (journal.state === "committing" && files.length === 0)
     throw new Error("invalid publication journal");
-  for (const manifest of manifests) {
+  for (const file of files) {
     if (
-      typeof manifest !== "object" ||
-      manifest === null ||
-      typeof manifest.target !== "string" ||
-      typeof manifest.staged !== "string" ||
-      typeof manifest.backup !== "string" ||
-      typeof manifest.hadPrevious !== "boolean" ||
-      typeof manifest.contents !== "string" ||
-      !allowedManifests.has(manifest.target) ||
-      !isStagedSibling(dirname(manifest.target), manifest.staged) ||
-      dirname(manifest.backup) !== dirname(manifest.target) ||
-      !basename(manifest.backup).startsWith(".spine-proto-manifest.backup-")
+      typeof file !== "object" ||
+      file === null ||
+      typeof file.target !== "string" ||
+      typeof file.staged !== "string" ||
+      typeof file.backup !== "string" ||
+      typeof file.hadPrevious !== "boolean" ||
+      typeof file.contents !== "string" ||
+      !allowedFiles.has(file.target) ||
+      !isStagedSibling(dirname(file.target), file.staged) ||
+      dirname(file.backup) !== dirname(file.target) ||
+      !(
+        basename(file.backup).startsWith(`.${basename(file.target)}.backup-`) ||
+        (basename(file.target) === "spine-proto-manifest.json" &&
+          basename(file.backup).startsWith(".spine-proto-manifest.backup-"))
+      )
     )
       throw new Error("invalid publication journal");
   }
 }
 
-function journalManifests(journal) {
-  return journal.manifests ?? (journal.manifest === undefined ? [] : [journal.manifest]);
+function journalFiles(journal) {
+  if (journal.version === 3) return journal.files;
+  if (journal.version === 2) return journal.manifests;
+  return journal.manifest === undefined ? [] : [journal.manifest];
 }
 
 function assertSafeRecoveryEntry(root, path, expectedKind) {
@@ -348,10 +365,33 @@ function assertSafeRecoveryJournal(root, journal) {
     assertSafeRecoveryEntry(root, target.staged, "directory");
     assertSafeRecoveryEntry(root, target.backup, "directory");
   }
-  for (const manifest of journalManifests(journal)) {
-    assertSafeRecoveryEntry(root, manifest.target, "file");
-    assertSafeRecoveryEntry(root, manifest.staged, "file");
-    assertSafeRecoveryEntry(root, manifest.backup, "file");
+  for (const file of journalFiles(journal)) {
+    assertSafeRecoveryEntry(root, file.target, "file");
+    assertSafeRecoveryEntry(root, file.staged, "file");
+    assertSafeRecoveryEntry(root, file.backup, "file");
+  }
+}
+
+function removeEmptyStageParent(path, operations) {
+  if (existsSync(path) && readdirSync(path).length === 0) operations.remove(path);
+}
+
+function assertPublicationFilesSafe(root, publicationFiles) {
+  for (const file of publicationFiles) {
+    for (const path of [file.target, file.staged, file.backup]) {
+      if (findSymlinkedAncestors(root, relative(root, path)).length > 0)
+        throw new Error("unsafe publication file");
+    }
+    const staged = lstatIfPresent(file.staged);
+    const target = lstatIfPresent(file.target);
+    if (
+      staged === undefined ||
+      staged.isSymbolicLink() ||
+      !staged.isFile() ||
+      (target !== undefined && (target.isSymbolicLink() || !target.isFile()))
+    ) {
+      throw new Error("unsafe publication file");
+    }
   }
 }
 
@@ -367,10 +407,8 @@ function recoverPublication(root, operations = defaultPublicationOperations) {
   const committed =
     journal.state === "committed" ||
     (journal.state === "committing" &&
-      journalManifests(journal).every(
-        (manifest) =>
-          existsSync(manifest.target) &&
-          readFileSync(manifest.target, "utf8") === manifest.contents,
+      journalFiles(journal).every(
+        (file) => existsSync(file.target) && readFileSync(file.target, "utf8") === file.contents,
       ));
 
   if (!committed) {
@@ -382,11 +420,11 @@ function recoverPublication(root, operations = defaultPublicationOperations) {
         operations.remove(target.target);
       }
     }
-    for (const manifest of journalManifests(journal).reverse()) {
-      if (existsSync(manifest.backup)) {
-        operations.remove(manifest.target);
-        operations.rename(manifest.backup, manifest.target);
-      } else if (!manifest.hadPrevious) operations.remove(manifest.target);
+    for (const file of journalFiles(journal).reverse()) {
+      if (existsSync(file.backup)) {
+        operations.remove(file.target);
+        operations.rename(file.backup, file.target);
+      } else if (!file.hadPrevious) operations.remove(file.target);
     }
   }
 
@@ -394,9 +432,10 @@ function recoverPublication(root, operations = defaultPublicationOperations) {
     operations.remove(target.backup);
     operations.remove(target.staged);
   }
-  for (const manifest of journalManifests(journal)) {
-    operations.remove(manifest.backup);
-    operations.remove(manifest.staged);
+  for (const file of journalFiles(journal)) {
+    operations.remove(file.backup);
+    operations.remove(file.staged);
+    removeEmptyStageParent(dirname(file.staged), operations);
   }
   operations.remove(journalPath);
   operations.remove(`${journalPath}.next`);
@@ -499,8 +538,8 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
     hadPrevious: existsSync(stagedTarget.generatedRoot),
   }));
   const journalPath = publicationJournalPath(root);
-  const manifests = options.manifests ?? (options.manifest === undefined ? [] : [options.manifest]);
-  const journal = { version: 2, state: "preparing", targets, manifests };
+  const publicationFiles = options.files ?? [];
+  const journal = { version: 3, state: "preparing", targets, files: publicationFiles };
 
   try {
     for (const stagedTarget of stagedTargets) {
@@ -511,6 +550,8 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
         `${stagedTarget.target.displayPath} staging`,
       );
     }
+    validatePublicationJournal(root, journal);
+    assertPublicationFilesSafe(root, publicationFiles);
     writePublicationJournal(journalPath, journal, operations);
     for (const target of targets) {
       if (target.hadPrevious) operations.rename(target.target, target.backup);
@@ -518,12 +559,12 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
       operations.rename(target.staged, target.target);
     }
     options.beforeFinalize?.();
-    if (journal.manifests.length > 0) {
+    if (journalFiles(journal).length > 0) {
       journal.state = "committing";
       writePublicationJournal(journalPath, journal, operations);
-      for (const manifest of journal.manifests) {
-        if (manifest.hadPrevious) operations.rename(manifest.target, manifest.backup);
-        operations.rename(manifest.staged, manifest.target);
+      for (const file of journalFiles(journal)) {
+        if (file.hadPrevious) operations.rename(file.target, file.backup);
+        operations.rename(file.staged, file.target);
       }
     }
     journal.state = "committed";
@@ -657,7 +698,10 @@ function stageModel(target, root, options = {}) {
   const run = options.runModelCommand ?? runCommandIn;
   try {
     for (const name of ["package.json", "spine-proto.json", "proto"]) {
-      cpSync(join(livePackageRoot, name), join(packageRoot, name), { recursive: true });
+      cpSync(join(livePackageRoot, name), join(packageRoot, name), {
+        recursive: true,
+        dereference: false,
+      });
     }
     const modelStatus = run(
       `${target.moduleName} model generation`,
@@ -677,24 +721,27 @@ function stageModel(target, root, options = {}) {
       if (companionStatus !== 0)
         throw new Error(`${target.moduleName} companion generation failed`);
     }
-    const handlerStatus = run(
-      `${target.moduleName} handler registry post-step`,
-      process.execPath,
-      [
-        join(root, "scripts/generate-handler-registry.mjs"),
-        "--project",
-        join(root, target.handlerProjectPath),
-        "--generated-root",
-        output,
-        "--source-generated-root",
-        join(livePackageRoot, "generated"),
-        "--out",
-        join(output, "handler/generated-handler-registry.ts"),
-        "--published-out",
-        join(livePackageRoot, "generated/handler/generated-handler-registry.ts"),
-      ],
-      root,
-    );
+    const handlerStatus =
+      target.handlerProjectPath === undefined
+        ? 0
+        : run(
+            `${target.moduleName} handler registry post-step`,
+            process.execPath,
+            [
+              join(root, "scripts/generate-handler-registry.mjs"),
+              "--project",
+              join(root, target.handlerProjectPath),
+              "--generated-root",
+              output,
+              "--source-generated-root",
+              join(livePackageRoot, "generated"),
+              "--out",
+              join(output, "handler/generated-handler-registry.ts"),
+              "--published-out",
+              join(livePackageRoot, "generated/handler/generated-handler-registry.ts"),
+            ],
+            root,
+          );
     if (handlerStatus !== 0)
       throw new Error(`${target.moduleName} handler registry post-step failed`);
     if (!existsSync(join(packageRoot, "spine-proto-manifest.json")))
@@ -706,7 +753,7 @@ function stageModel(target, root, options = {}) {
         stagedOutputRoot: output,
         stageRoot,
         target,
-        manifests: [
+        files: [
           {
             target: join(livePackageRoot, "spine-proto-manifest.json"),
             staged: join(packageRoot, "spine-proto-manifest.json"),
@@ -727,6 +774,40 @@ export function cleanupStagedTargets(stagedTargets) {
   removeStagedTargets(stagedTargets);
 }
 
+export function stageChatRegistry(root, options = {}) {
+  const liveRoot = join(root, "examples/chat");
+  if (!existsSync(join(liveRoot, "spine-proto.json"))) return undefined;
+  const stageRoot = mkdtempSync(join(liveRoot, ".generated-"));
+  let fileStageRoot;
+  try {
+    cpSync(join(liveRoot, "package.json"), join(stageRoot, "package.json"), {
+      dereference: false,
+    });
+    cpSync(join(liveRoot, "spine-proto.json"), join(stageRoot, "spine-proto.json"), {
+      dereference: false,
+    });
+    const run = options.runCompositionCommand ?? runCommandIn;
+    const status = run(
+      "Chat model registry composition",
+      process.execPath,
+      [join(root, "packages/proto-tools/dist/src/cli/spine-proto.js"), "compose"],
+      stageRoot,
+    );
+    if (status !== 0) throw new Error("Chat model registry composition failed");
+    const rendered = join(stageRoot, "src/model-registry.ts");
+    if (!existsSync(rendered)) throw new Error("Chat staged registry is missing");
+    const target = join(liveRoot, "src/model-registry.ts");
+    fileStageRoot = mkdtempSync(join(dirname(target), ".generated-"));
+    const staged = join(fileStageRoot, "model-registry.ts");
+    cpSync(rendered, staged, { dereference: false });
+    return { stageRoot, fileStageRoot, target, staged };
+  } catch (error) {
+    rmSync(stageRoot, { recursive: true, force: true });
+    if (fileStageRoot !== undefined) rmSync(fileStageRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 export function generateTargets(options = {}) {
   const root = options.repoRoot ?? repoRoot;
   let lock;
@@ -743,6 +824,7 @@ export function generateTargets(options = {}) {
   let status = 1;
   let primaryFailure = false;
   let staged;
+  let chatRegistry;
   try {
     recoverPublication(root, { ...defaultPublicationOperations, ...options.publicationOperations });
     const prepareStatus = prepareGeneratedOutput(root);
@@ -755,15 +837,16 @@ export function generateTargets(options = {}) {
         primaryFailure = true;
         status = staged.status;
       } else {
+        chatRegistry = stageChatRegistry(root, options);
         const spineTarget = staged.stagedTargets.find(
           (candidate) => candidate.target.displayPath === "packages/proto/generated",
         );
-        const manifests = [];
+        const publicationFiles = [];
         if (spineTarget !== undefined) {
           const stagedManifest = join(spineTarget.stageRoot, "spine-proto-manifest.json");
           if (!existsSync(stagedManifest)) throw new Error("Spine staged manifest is missing");
           const manifest = join(root, "packages/proto/spine-proto-manifest.json");
-          manifests.push({
+          publicationFiles.push({
             target: manifest,
             staged: stagedManifest,
             backup: join(dirname(manifest), `.spine-proto-manifest.backup-${randomUUID()}`),
@@ -772,24 +855,35 @@ export function generateTargets(options = {}) {
           });
         }
         for (const stagedTarget of staged.stagedTargets) {
-          for (const stagedManifest of stagedTarget.manifests ?? []) {
-            if (!existsSync(stagedManifest.staged))
-              throw new Error("model staged manifest is missing");
-            manifests.push({
-              target: stagedManifest.target,
-              staged: stagedManifest.staged,
+          for (const stagedFile of stagedTarget.files ?? []) {
+            if (!existsSync(stagedFile.staged)) throw new Error("model staged manifest is missing");
+            publicationFiles.push({
+              target: stagedFile.target,
+              staged: stagedFile.staged,
               backup: join(
-                dirname(stagedManifest.target),
+                dirname(stagedFile.target),
                 `.spine-proto-manifest.backup-${randomUUID()}`,
               ),
-              hadPrevious: existsSync(stagedManifest.target),
-              contents: readFileSync(stagedManifest.staged, "utf8"),
+              hadPrevious: existsSync(stagedFile.target),
+              contents: readFileSync(stagedFile.staged, "utf8"),
             });
           }
         }
+        if (chatRegistry !== undefined) {
+          publicationFiles.push({
+            target: chatRegistry.target,
+            staged: chatRegistry.staged,
+            backup: join(
+              dirname(chatRegistry.target),
+              `.${basename(chatRegistry.target)}.backup-${randomUUID()}`,
+            ),
+            hadPrevious: existsSync(chatRegistry.target),
+            contents: readFileSync(chatRegistry.staged, "utf8"),
+          });
+        }
         publishGeneratedTargets(staged.stagedTargets, root, {
           operations: options.publicationOperations,
-          manifests,
+          files: publicationFiles,
         });
         status = 0;
       }
@@ -807,6 +901,10 @@ export function generateTargets(options = {}) {
     } catch {
       primaryFailure = true;
       status = 1;
+    }
+    if (chatRegistry !== undefined) {
+      rmSync(chatRegistry.stageRoot, { recursive: true, force: true });
+      rmSync(chatRegistry.fileStageRoot, { recursive: true, force: true });
     }
     try {
       releaseWorkflowLock(lock);

@@ -48,6 +48,44 @@ importers:
         specifier: 4.1.9
         version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(vite@8.1.0(@types/node@24.13.2)(yaml@2.9.0))
 
+  examples/chat:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/chat-model':
+        specifier: 0.0.0
+        version: link:../chat-model
+      '@spine-event-engine/core':
+        specifier: 0.0.0
+        version: link:../../packages/core
+      '@spine-event-engine/server':
+        specifier: 0.0.0
+        version: link:../../packages/server
+      '@spine-event-engine/users-model':
+        specifier: 0.0.0
+        version: link:../users-model
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
+
+  examples/chat-model:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/proto':
+        specifier: 0.0.0
+        version: link:../../packages/proto
+      '@spine-event-engine/users-model':
+        specifier: 0.0.0
+        version: link:../users-model
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
+
   examples/datastore-orders:
     dependencies:
       '@bufbuild/protobuf':
@@ -143,6 +181,19 @@ importers:
       '@spine-event-engine/transport':
         specifier: workspace:*
         version: link:../../packages/transport
+
+  examples/users-model:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/proto':
+        specifier: 0.0.0
+        version: link:../../packages/proto
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
 
   packages/client:
     dependencies:

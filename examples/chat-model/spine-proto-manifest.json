@@ -1,0 +1,16 @@
+{
+  "formatVersion": 1,
+  "packageName": "@spine-event-engine/chat-model",
+  "packageVersion": "0.0.0",
+  "protoFiles": [
+    "spine/example/chat/v1/chat.proto"
+  ],
+  "generatedExports": {
+    "spine/example/chat/v1/chat.proto": "generated/spine/example/chat/v1/chat_pb.js"
+  },
+  "dependencies": [
+    "@spine-event-engine/proto",
+    "@spine-event-engine/users-model"
+  ],
+  "moduleExport": "chatProtoModule"
+}

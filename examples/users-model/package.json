@@ -1,0 +1,37 @@
+{
+  "name": "@spine-event-engine/users-model",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "proto:generate": "spine-proto generate",
+    "clean:generated-dist": "node scripts/clean-generated-dist.mjs",
+    "prepack": "pnpm clean:generated-dist && tsc -b"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/generated/proto-module.d.ts",
+      "default": "./dist/generated/proto-module.js"
+    },
+    "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+    "./proto/*": "./proto/*",
+    "./generated/*.js": {
+      "types": "./dist/generated/*.d.ts",
+      "default": "./dist/generated/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "proto",
+    "scripts",
+    "spine-proto.json",
+    "spine-proto-manifest.json"
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@spine-event-engine/proto": "0.0.0"
+  },
+  "devDependencies": {
+    "@spine-event-engine/proto-tools": "0.0.0"
+  }
+}

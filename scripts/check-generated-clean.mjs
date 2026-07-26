@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
@@ -7,6 +7,7 @@ import {
   cleanupStagedTargets,
   atomicGeneratedTargets,
   generatedTargets,
+  stageChatRegistry,
   stageGeneratedTargets,
 } from "./proto-workflow.mjs";
 
@@ -158,6 +159,16 @@ function compareGeneratedOutput(currentRoot, expectedRoot) {
   return { missing, unexpected, changed };
 }
 
+export function chatRegistryIsFresh(target, staged) {
+  return readFileSync(target, "utf8") === readFileSync(staged, "utf8");
+}
+
+export function checkChatRegistryFresh(chatRegistry) {
+  return chatRegistry === undefined || chatRegistryIsFresh(chatRegistry.target, chatRegistry.staged)
+    ? 0
+    : 1;
+}
+
 export function generatedTargetsForCheck(expectedGeneratedRoot) {
   return expectedGeneratedRoot === undefined
     ? atomicGeneratedTargets
@@ -183,29 +194,27 @@ function printGeneratedDiff(diff) {
 
 function main() {
   const { repoRoot, expectedGeneratedRoot } = parseArgs(process.argv.slice(2));
-  const targets = generatedTargetsForCheck(expectedGeneratedRoot);
-  const staged =
-    expectedGeneratedRoot === undefined
-      ? stageGeneratedTargets({
-          repoRoot,
-        })
-      : {
-          stagedTargets: [],
-          status: 0,
-        };
-
-  if (staged.status !== 0) {
-    process.exit(staged.status);
-  }
-
-  const expectedRoots = new Map(
-    staged.stagedTargets.map((stagedTarget) => [
-      stagedTarget.target.displayPath,
-      stagedTarget.stagedOutputRoot,
-    ]),
-  );
+  let targets = generatedTargetsForCheck(expectedGeneratedRoot);
+  let staged = { stagedTargets: [], status: 0 };
+  let chatRegistry;
 
   try {
+    staged =
+      expectedGeneratedRoot === undefined
+        ? stageGeneratedTargets({
+            repoRoot,
+          })
+        : staged;
+    if (staged.status !== 0) return staged.status;
+    if (expectedGeneratedRoot === undefined)
+      targets = staged.stagedTargets.map(({ target }) => target);
+    const expectedRoots = new Map(
+      staged.stagedTargets.map((stagedTarget) => [
+        stagedTarget.target.displayPath,
+        stagedTarget.stagedOutputRoot,
+      ]),
+    );
+    chatRegistry = expectedGeneratedRoot === undefined ? stageChatRegistry(repoRoot) : undefined;
     for (const target of targets) {
       const trackedResult = runCommand(repoRoot, "tracked generated output check", "git", [
         "ls-files",
@@ -286,7 +295,7 @@ function main() {
           console.error(`Generated directory is not ignored by Git: ${target.displayPath}`);
         }
 
-        process.exit(1);
+        return 1;
       }
 
       const diff = compareGeneratedOutput(generatedDirectory, expectedRoot);
@@ -295,13 +304,24 @@ function main() {
         console.error("Generated proto output is stale.");
         console.error(`Generated root: ${target.displayPath}`);
         printGeneratedDiff(diff);
-        process.exit(1);
+        return 1;
       }
     }
 
+    if (checkChatRegistryFresh(chatRegistry) !== 0) {
+      console.error("Generated Chat model registry is stale.");
+      console.error(`Registry: ${relative(repoRoot, chatRegistry.target)}`);
+      return 1;
+    }
+
     console.log("Generated proto outputs are ignored, untracked, and freshly regenerated.");
+    return 0;
   } finally {
     cleanupStagedTargets(staged.stagedTargets);
+    if (chatRegistry !== undefined) {
+      rmSync(chatRegistry.stageRoot, { recursive: true, force: true });
+      rmSync(chatRegistry.fileStageRoot, { recursive: true, force: true });
+    }
   }
 }
 
@@ -310,7 +330,7 @@ const isMain =
 
 if (isMain) {
   try {
-    main();
+    process.exit(main());
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

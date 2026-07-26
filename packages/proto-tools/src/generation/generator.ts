@@ -265,7 +265,8 @@ export function composeApplication(
         `import { ${model.moduleExport} as ${aliases[index] ?? "model"} } from ${JSON.stringify(model.name)};`,
     ),
     "",
-    `export const typeRegistry = TypeRegistry.from(${aliases.join(", ")});`,
+    "/** Registry of every model package declared by this application. */",
+    `export const typeRegistry: TypeRegistry = TypeRegistry.from(${aliases.join(", ")});`,
     "",
   ].join("\n");
   const target = join(packageRoot, config.registryOutput);

@@ -9,6 +9,8 @@ const repositoryRoot = new URL("..", import.meta.url).pathname;
 const packages = [
   "@spine-event-engine/example-project-management",
   "@spine-event-engine/example-datastore-orders",
+  "@spine-event-engine/users-model",
+  "@spine-event-engine/chat-model",
 ];
 
 describe("application model package payloads", () => {

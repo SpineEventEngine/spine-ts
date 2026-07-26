@@ -1,0 +1,9 @@
+syntax = "proto3";
+package spine.example.chat.v1;
+
+import "spine/example/users/v1/users.proto";
+
+message ChatId { string value = 1; }
+message Message { ChatId chat_id = 1; spine.example.users.v1.UserId author = 2; string text = 3; }
+message PostMessage { ChatId chat_id = 1; spine.example.users.v1.UserId author = 2; string text = 3; }
+message MessagePosted { Message message = 1; }
