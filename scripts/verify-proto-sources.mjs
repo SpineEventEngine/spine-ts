@@ -101,10 +101,12 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
     isAbsolute(localPath) ||
     localPath.includes("\\") ||
     localPath.split("/").includes("..") ||
-    !localPath.startsWith("proto/") ||
+    !localPath.startsWith("packages/proto/proto/") ||
     !localPath.endsWith(".proto")
   ) {
-    failures.push(`${localPath}: localPath must be a relative proto/**/*.proto path without '..'`);
+    failures.push(
+      `${localPath}: localPath must be a relative packages/proto/proto/**/*.proto path without '..'`,
+    );
     return undefined;
   }
 
@@ -172,9 +174,9 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
 export function verifyProtoSources(options = {}) {
   const repoRoot = resolve(options.repoRoot ?? defaultRepoRoot);
   const manifestPath = resolve(
-    options.manifestPath ?? resolve(repoRoot, "proto/spine-sources.json"),
+    options.manifestPath ?? resolve(repoRoot, "packages/proto/proto/spine-sources.json"),
   );
-  const protoRoot = resolve(repoRoot, "proto");
+  const protoRoot = resolve(repoRoot, "packages/proto/proto");
   const failures = [];
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 

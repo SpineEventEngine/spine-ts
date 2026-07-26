@@ -2,14 +2,16 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
+  renameSync,
   symlinkSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   cleanupStagedTargets,
@@ -19,12 +21,36 @@ import {
   stageGeneratedTargets,
   writeStagedTemplate,
 } from "./proto-workflow.mjs";
+import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
+
+function workflowClaimOperations(claims, liveness) {
+  return {
+    create(path, content) {
+      const name = basename(path);
+      if (claims.has(name)) throw new Error("exists");
+      claims.set(name, { content, kind: "regular" });
+    },
+    list() {
+      return [...claims.keys()];
+    },
+    read(path) {
+      return claims.get(basename(path)).content;
+    },
+    inspect(path) {
+      return claims.get(basename(path)).kind;
+    },
+    remove(path) {
+      claims.delete(basename(path));
+    },
+    liveness,
+  };
+}
 
 describe("proto-workflow", () => {
   it("keeps frozen-source lint ignores scoped away from authored modules", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-lint-scope-"));
     const modulePaths = [
-      "proto",
+      "packages/proto/proto",
       "examples/todo/proto",
       "examples/project-management/proto",
       "examples/datastore-orders/proto",
@@ -35,7 +61,7 @@ describe("proto-workflow", () => {
     }
 
     writeFileSync(join(repoRoot, "buf.yaml"), readFileSync("buf.yaml", "utf8"));
-    const frozenHealthRoot = join(repoRoot, "proto/grpc/health/v1");
+    const frozenHealthRoot = join(repoRoot, "packages/proto/proto/grpc/health/v1");
     mkdirSync(frozenHealthRoot, { recursive: true });
     writeFileSync(
       join(frozenHealthRoot, "health.proto"),
@@ -154,13 +180,13 @@ describe("proto-workflow", () => {
     expect(readFileSync(join(todoGenerated, "keep.txt"), "utf8")).toBe("todo output\n");
   });
 
-  it("mirrors staged generated files into an existing generated root", () => {
+  it("publishes staged generated files by same-parent rename without exposing a partial tree", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const generatedRoot = join(repoRoot, "packages/proto/generated");
     const stageRoot = join(repoRoot, "packages/proto/.generated-test");
     const stagedOutputRoot = join(stageRoot, "output");
     const orphanedDirectory = join(generatedRoot, "orphaned");
-    let observedGeneratedRootDuringPublish = false;
+    let observedGeneratedRootDuringPublish = true;
 
     mkdirSync(generatedRoot, { recursive: true });
     mkdirSync(orphanedDirectory, { recursive: true });
@@ -188,11 +214,45 @@ describe("proto-workflow", () => {
       },
     );
 
-    expect(observedGeneratedRootDuringPublish).toBe(true);
+    expect(observedGeneratedRootDuringPublish).toBe(false);
     expect(existsSync(generatedRoot)).toBe(true);
     expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("next output\n");
     expect(existsSync(orphanedDirectory)).toBe(false);
-    expect(existsSync(join(stageRoot, "previous"))).toBe(false);
+    expect(readdirSync(join(repoRoot, "packages/proto"))).not.toContain(
+      expect.stringMatching(/^\.generated\.backup-/u),
+    );
+  });
+
+  it("rejects staged generated modules that do not exactly match owned Proto sources", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-artifacts-"));
+    const packageRoot = join(repoRoot, "packages/proto");
+    const protoRoot = join(packageRoot, "proto");
+    const generatedRoot = join(packageRoot, "generated");
+    mkdirSync(join(protoRoot, "model"), { recursive: true });
+    mkdirSync(join(generatedRoot, "model"), { recursive: true });
+    writeFileSync(
+      join(packageRoot, "spine-proto.json"),
+      JSON.stringify({
+        formatVersion: 1,
+        mode: "model",
+        protoRoot: "proto",
+        exportRoot: "generated",
+        dependencies: [],
+        moduleExport: "spineProtoModule",
+      }),
+    );
+    writeFileSync(
+      join(packageRoot, "package.json"),
+      JSON.stringify({ name: "@example/proto", version: "1.0.0" }),
+    );
+    writeFileSync(join(protoRoot, "model/value.proto"), 'syntax = "proto3";');
+    writeFileSync(join(generatedRoot, "model/extra_pb.ts"), "export {};\n");
+
+    expect(() =>
+      writeSpineProtoArtifacts(repoRoot, generatedRoot, join(packageRoot, "manifest.json")),
+    ).toThrow("generated Protobuf modules must exactly match owned Proto sources");
+    expect(existsSync(join(packageRoot, "manifest.json"))).toBe(false);
+    expect(existsSync(join(generatedRoot, "proto-module.ts"))).toBe(false);
   });
 
   it("keeps live generated output when replacement output is not ready", () => {
@@ -223,6 +283,309 @@ describe("proto-workflow", () => {
 
     expect(existsSync(generatedRoot)).toBe(true);
     expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("previous output\n");
+  });
+
+  it("restores generated output when final publication fails", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const generatedRoot = join(repoRoot, "packages/proto/generated");
+    const stageRoot = join(repoRoot, "packages/proto/.generated-test");
+    const stagedOutputRoot = join(stageRoot, "output");
+
+    mkdirSync(generatedRoot, { recursive: true });
+    mkdirSync(stagedOutputRoot, { recursive: true });
+    writeFileSync(join(generatedRoot, "message.txt"), "previous output\n");
+    writeFileSync(join(stagedOutputRoot, "message.txt"), "next output\n");
+
+    expect(() =>
+      publishGeneratedTargets(
+        [
+          {
+            generatedRoot,
+            stagedOutputRoot,
+            stageRoot,
+            target: { displayPath: "packages/proto/generated" },
+          },
+        ],
+        repoRoot,
+        {
+          beforeFinalize: () => {
+            throw new Error("manifest replacement failed");
+          },
+        },
+      ),
+    ).toThrow("manifest replacement failed");
+
+    expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("previous output\n");
+  });
+
+  it("restores prior output when the staged-root rename fails", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const generatedRoot = join(repoRoot, "packages/proto/generated");
+    const stageRoot = join(repoRoot, "packages/proto/.generated-test");
+    const stagedOutputRoot = join(stageRoot, "output");
+    mkdirSync(generatedRoot, { recursive: true });
+    mkdirSync(stagedOutputRoot, { recursive: true });
+    writeFileSync(join(generatedRoot, "message.txt"), "previous output\n");
+    writeFileSync(join(stagedOutputRoot, "message.txt"), "next output\n");
+
+    expect(() =>
+      publishGeneratedTargets(
+        [
+          {
+            generatedRoot,
+            stagedOutputRoot,
+            stageRoot,
+            target: { displayPath: "packages/proto/generated" },
+          },
+        ],
+        repoRoot,
+        {
+          operations: {
+            rename(from, to) {
+              if (from === stagedOutputRoot && to === generatedRoot)
+                throw new Error("staged rename failed");
+              renameSync(from, to);
+            },
+          },
+        },
+      ),
+    ).toThrow("staged rename failed");
+    expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("previous output\n");
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+  });
+
+  it("removes first-publication output when finalization fails", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const generatedRoot = join(repoRoot, "packages/proto/generated");
+    const stageRoot = join(repoRoot, "packages/proto/.generated-test");
+    const stagedOutputRoot = join(stageRoot, "output");
+    mkdirSync(stagedOutputRoot, { recursive: true });
+    writeFileSync(join(stagedOutputRoot, "message.txt"), "first output\n");
+
+    expect(() =>
+      publishGeneratedTargets(
+        [
+          {
+            generatedRoot,
+            stagedOutputRoot,
+            stageRoot,
+            target: { displayPath: "packages/proto/generated" },
+          },
+        ],
+        repoRoot,
+        {
+          beforeFinalize: () => {
+            throw new Error("finalization failed");
+          },
+        },
+      ),
+    ).toThrow("finalization failed");
+    expect(existsSync(generatedRoot)).toBe(false);
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+  });
+
+  it("retains a committed publication journal when cleanup fails and completes it on recovery", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const generatedRoot = join(repoRoot, "packages/proto/generated");
+    const stageRoot = join(repoRoot, "packages/proto/.generated-test");
+    const stagedOutputRoot = join(stageRoot, "output");
+    const manifest = join(repoRoot, "packages/proto/spine-proto-manifest.json");
+    const stagedManifest = join(stageRoot, "spine-proto-manifest.json");
+    mkdirSync(generatedRoot, { recursive: true });
+    mkdirSync(stagedOutputRoot, { recursive: true });
+    writeFileSync(join(generatedRoot, "message.txt"), "previous output\n");
+    writeFileSync(join(stagedOutputRoot, "message.txt"), "next output\n");
+    writeFileSync(manifest, "previous manifest\n");
+    writeFileSync(stagedManifest, "next manifest\n");
+    let failCleanup = true;
+
+    expect(() =>
+      publishGeneratedTargets(
+        [
+          {
+            generatedRoot,
+            stagedOutputRoot,
+            stageRoot,
+            target: { displayPath: "packages/proto/generated" },
+          },
+        ],
+        repoRoot,
+        {
+          manifest: {
+            target: manifest,
+            staged: stagedManifest,
+            backup: join(repoRoot, "packages/proto/.spine-proto-manifest.backup-test"),
+            hadPrevious: true,
+            contents: "next manifest\n",
+          },
+          operations: {
+            remove(path) {
+              if (failCleanup && path.includes(".generated.backup-"))
+                throw new Error("cleanup failed");
+              rmSync(path, { recursive: true, force: true });
+            },
+          },
+        },
+      ),
+    ).toThrow("cleanup failed");
+
+    expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("next output\n");
+    expect(readFileSync(manifest, "utf8")).toBe("next manifest\n");
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(true);
+
+    failCleanup = false;
+    publishGeneratedTargets([], repoRoot);
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+    expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("next output\n");
+    expect(readFileSync(manifest, "utf8")).toBe("next manifest\n");
+  });
+
+  it("rolls back a preparing partial swap even when the deterministic manifest is unchanged", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const packageRoot = join(repoRoot, "packages/proto");
+    const generatedRoot = join(packageRoot, "generated");
+    const stageRoot = join(packageRoot, ".generated-interrupted");
+    const stagedOutputRoot = join(stageRoot, "generated");
+    const backup = join(packageRoot, ".generated.backup-interrupted");
+    const manifest = join(packageRoot, "spine-proto-manifest.json");
+    const stagedManifest = join(stageRoot, "spine-proto-manifest.json");
+    const manifestBackup = join(packageRoot, ".spine-proto-manifest.backup-interrupted");
+    const contents = "unchanged manifest\n";
+    mkdirSync(generatedRoot, { recursive: true });
+    mkdirSync(backup, { recursive: true });
+    mkdirSync(stagedOutputRoot, { recursive: true });
+    writeFileSync(join(generatedRoot, "message.txt"), "new output\n");
+    writeFileSync(join(backup, "message.txt"), "previous output\n");
+    writeFileSync(manifest, contents);
+    writeFileSync(stagedManifest, contents);
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify({
+        version: 1,
+        state: "preparing",
+        targets: [{ target: generatedRoot, staged: stagedOutputRoot, backup, hadPrevious: true }],
+        manifest: {
+          target: manifest,
+          staged: stagedManifest,
+          backup: manifestBackup,
+          hadPrevious: true,
+          contents,
+        },
+      })}\n`,
+    );
+
+    publishGeneratedTargets([], repoRoot);
+
+    expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("previous output\n");
+    expect(readFileSync(manifest, "utf8")).toBe(contents);
+  });
+
+  it("rejects a forged journal before it can touch paths outside generated targets", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const outside = join(repoRoot, "outside.txt");
+    writeFileSync(outside, "keep\n");
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify({
+        version: 1,
+        state: "committed",
+        targets: [
+          {
+            target: outside,
+            staged: join(repoRoot, "staged"),
+            backup: join(repoRoot, "backup"),
+            hadPrevious: true,
+          },
+        ],
+      })}\n`,
+    );
+
+    expect(() => publishGeneratedTargets([], repoRoot)).toThrow("invalid publication journal");
+    expect(readFileSync(outside, "utf8")).toBe("keep\n");
+  });
+
+  it("rejects a live second generator before it can touch its journal or staging", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const claims = new Map([
+      [
+        ".spine-proto-workflow.lock.live",
+        { content: JSON.stringify({ pid: 77, token: "live" }), kind: "regular" },
+      ],
+    ]);
+    writeFileSync(join(repoRoot, ".spine-proto-publication.json"), "first writer journal\n");
+
+    expect(
+      generateTargets({
+        repoRoot,
+        lockOperations: workflowClaimOperations(claims, () => "alive"),
+      }),
+    ).toBe(1);
+    expect(readFileSync(join(repoRoot, ".spine-proto-publication.json"), "utf8")).toBe(
+      "first writer journal\n",
+    );
+    expect(existsSync(join(repoRoot, "packages/proto/generated"))).toBe(false);
+    expect([...claims.keys()]).toEqual([".spine-proto-workflow.lock.live"]);
+  });
+
+  it("acquires generate ownership before preparing live generated roots", () => {
+    const source = readFileSync(new URL("./proto-workflow.mjs", import.meta.url), "utf8");
+    const ownership = source.indexOf("lock = acquireWorkflowLock(root, options.lockOperations)");
+    const preparation = source.indexOf("const prepareStatus = prepareGeneratedOutput(root);");
+
+    expect(source).toContain('if (command === "generate") return generateTargets();');
+    expect(ownership).toBeGreaterThanOrEqual(0);
+    expect(preparation).toBeGreaterThan(ownership);
+  });
+
+  it.each([
+    ["dead", "dead", "regular"],
+    ["indeterminate", "indeterminate", "regular"],
+    ["unsafe", "dead", "symlink"],
+  ])("handles a %s workflow claim without touching another claim", (_name, liveness, kind) => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const claims = new Map([
+      [
+        ".spine-proto-workflow.lock.existing",
+        { content: JSON.stringify({ pid: 78, token: "existing" }), kind },
+      ],
+    ]);
+
+    const status = generateTargets({
+      repoRoot,
+      lockOperations: workflowClaimOperations(claims, () => liveness),
+    });
+
+    if (liveness === "dead" && kind === "regular") expect([...claims.keys()]).toEqual([]);
+    else expect([...claims.keys()]).toEqual([".spine-proto-workflow.lock.existing"]);
+    expect(status).toBe(1);
+  });
+
+  it("rejects a symlinked recovery backup before mutating a journal target", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const packageRoot = join(repoRoot, "packages/proto");
+    const generatedRoot = join(packageRoot, "generated");
+    const stageRoot = join(packageRoot, ".generated-poisoned");
+    const stagedOutputRoot = join(stageRoot, "generated");
+    const backup = join(packageRoot, ".generated.backup-poisoned");
+    const external = mkdtempSync(join(tmpdir(), "spine-external-generated-"));
+    mkdirSync(generatedRoot, { recursive: true });
+    mkdirSync(stagedOutputRoot, { recursive: true });
+    writeFileSync(join(generatedRoot, "message.txt"), "new output\n");
+    symlinkSync(external, backup, "dir");
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify({
+        version: 1,
+        state: "preparing",
+        targets: [{ target: generatedRoot, staged: stagedOutputRoot, backup, hadPrevious: true }],
+      })}\n`,
+    );
+
+    expect(() => publishGeneratedTargets([], repoRoot)).toThrow(
+      "unsafe publication recovery entry",
+    );
+    expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("new output\n");
+    rmSync(external, { recursive: true, force: true });
   });
 
   it("does not publish staged protobuf output when handler registry generation fails", () => {

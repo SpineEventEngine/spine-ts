@@ -526,3 +526,130 @@ compare-delete operation entirely.
   slice; complete end-user CLI/config/layout documentation remains Slice D.
 - All accepted P1/P2 findings are resolved. Slice B2 is accepted for commit and
   immediate task-branch push.
+
+## Shared Spine model prerequisite review assignment
+
+Scope is the uncommitted diff from `0abf4050`: canonical Spine source relocation
+into the Proto package, deterministic manifest and generated
+`spineProtoModule`, transactional root-workflow publication, package exports and
+packed contents, source/descriptor verification paths, and focused tests.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  `gpt-5.6-terra`, expected reasoning `high`, both explicit in dispatch. Check
+  generation-script cohesion, duplication against proto-tools, temporary-file
+  lifecycle, naming, and smallest maintainable package seam.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected
+  `gpt-5.6-terra`, expected reasoning `high`, both explicit in dispatch. Check
+  package exports, ESM/declaration path mapping, generated module typing,
+  manifest correctness, old-entrypoint compatibility, and fresh npm-package
+  usability.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected `gpt-5.6-terra`, expected reasoning `high`, both explicit in
+  dispatch. Check bounded traversal, deterministic generation, source/manifest
+  agreement, atomic rollback for first/prior publication, symlink/path safety,
+  cleanup, and archive integrity.
+- Documentation: N/A for this prerequisite because it changes no end-user prose;
+  the complete external workflow and package docs are required in Slice D.
+
+All reviewers are read-only, may not spawn children, and must report CLEAN or
+one prioritized actionable finding set. Immutable configured profiles are the
+runtime metadata evidence because independent self-introspection is unavailable.
+
+## Shared Spine model prerequisite partial review results
+
+- Style/maintainability returned P1: manifest-generated import specifiers end
+  in `.js`, while the `./generated/*` export target appends `.js`, producing
+  nonexistent `.js.js` runtime and `.js.d.ts` declaration targets.
+- TypeScript/API independently confirmed the same P1 with an exact ESM import
+  failure. It also returned P2: generated `spineProtoModule` lost the public
+  TSDoc previously attached to the hand-written export.
+- Both existing roles ran with expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable profiles match and independent runtime
+  self-introspection is unavailable.
+- Findings are held for one deduplicated correction batch after reliability
+  completes.
+
+## Shared Spine model prerequisite complete review wave
+
+- Performance/reliability returned P1: copy-in-place publication can expose an
+  empty/partial generated tree or new output with an old manifest during
+  interruption; backup cleanup failure can also report failure after commit
+  without a coherent recovery state. Replace it with same-filesystem sibling
+  publication plus bounded recoverable rollback/journaling and focused
+  interruption/copy/cleanup evidence.
+- Performance/reliability returned P2: the manifest inventories owned Proto
+  sources while the module inventories observed generated files, but no exact
+  one-to-one equality is enforced. Reject missing or extra staged generated
+  Protobuf modules before publication.
+- Reliability ran with expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable profile matches and independent runtime
+  self-introspection is unavailable.
+- One complete correction batch is accepted: fix `.js` manifest export
+  resolution; restore public generated-module TSDoc; implement recoverable
+  publication; and enforce exact source/output equality. All three invoked
+  concerns reopen for bounded re-review.
+
+## Shared Spine model prerequisite re-review assignment
+
+- Style/maintainability rechecks exact-extension exports and localized
+  publication/recovery structure.
+- TypeScript/API rechecks exact manifest-derived packed imports and generated
+  public TSDoc.
+- Performance/reliability rechecks exact source/output equality, first/prior
+  publication, preparing rollback, committing/committed recovery, cleanup
+  failure, and validated contained journal paths.
+- Existing reviewer roles retain their originally explicit expected
+  `gpt-5.6-terra` / `high` profiles. All are read-only and may not spawn
+  children, edit, commit, push, or merge.
+
+## Shared Spine model prerequisite re-review results
+
+- Style/maintainability: CLEAN. Exact-extension exports resolve and recovery
+  remains localized.
+- TypeScript/API: P1 export resolution is clean. P2 found stale compiled TSDoc
+  in `dist`; a clean build refreshed it and coordinator inspection confirms
+  source and declaration now contain the same accurate public description.
+- Performance/reliability: prior single-writer publication and exact-inventory
+  findings are resolved. P1 remains for concurrent writers because recovery is
+  not protected by exclusive generation ownership. P2 remains because a
+  lexically contained journal can still name a symlink/nonregular staged or
+  backup entry.
+- All three existing roles ran with their originally explicit immutable
+  `gpt-5.6-terra` / `high` profiles; independent runtime self-introspection is
+  unavailable.
+- One bounded high-risk correction adds safe exclusive generation ownership,
+  runs recovery only under that ownership, validates recovery entry file types
+  and symlink ancestors before mutation, and adds two-writer/symlink
+  regressions. Reliability must re-review; style reopens only for the added
+  lock structure. API needs only confirmation of the rebuilt declaration.
+
+## Shared Spine model final confirmation findings
+
+- TypeScript/API: CLEAN after rebuild; source and declaration carry the same
+  accurate public TSDoc.
+- Style/maintainability: CLEAN after lock/recovery additions.
+- Performance/reliability: claim and journal safety findings are otherwise
+  resolved, but P2 remains because CLI `prepareGeneratedOutput()` mutates live
+  generated roots before `generateTargets()` acquires exclusive ownership. A
+  losing contender can recreate a winner's renamed target and cause the
+  winner's staged rename to fail.
+- Final bounded correction moves preparation inside the claimed lifecycle and
+  adds an entrypoint-level two-writer regression. Reliability alone rechecks
+  this ordering.
+
+## Shared Spine model prerequisite closure
+
+- Style/maintainability: CLEAN after exact exports, transactional publication,
+  exclusive ownership, and recovery validation.
+- TypeScript/API: CLEAN after exact manifest-derived import coverage and rebuilt
+  public declaration TSDoc.
+- Performance/reliability: CLEAN after preparation moved inside the exclusive
+  claim. Live contenders reject before recovery, mkdir, staging, or live-output
+  mutation; no claim or journal artifact remains.
+- All roles retained their originally explicit immutable
+  `gpt-5.6-terra` / `high` profiles; independent runtime self-introspection is
+  unavailable.
+- Documentation remains N/A for this prerequisite; complete public workflow
+  prose is required in Slice D.
+- All accepted findings are resolved. The prerequisite is accepted for final
+  mechanical verification, commit, and immediate task-branch push.

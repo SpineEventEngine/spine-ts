@@ -1,5 +1,6 @@
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { spineProtoModule as packageModule, type ProtoModule } from "@spine-event-engine/proto";
 
@@ -28,7 +29,17 @@ import * as languageSchemas from "../generated/spine/ui/language_pb.js";
 import * as validationSchemas from "../generated/spine/validation/validation_error_pb.js";
 import * as catchUpSchemas from "../generated/spine/server/catchup/catch_up_pb.js";
 import * as environmentSchemas from "../generated/spine/server/server_environment_pb.js";
-import { spineProtoModule } from "../src/index.js";
+import { spineProtoModule } from "../generated/proto-module.js";
+
+interface SpineManifest {
+  readonly formatVersion: number;
+  readonly packageName: string;
+  readonly packageVersion: string;
+  readonly protoFiles: readonly string[];
+  readonly generatedExports: Readonly<Record<string, string>>;
+  readonly dependencies: readonly string[];
+  readonly moduleExport: string;
+}
 
 function schemaNames(exports: object): string[] {
   return Object.values(exports)
@@ -43,6 +54,32 @@ function schemaNames(exports: object): string[] {
 }
 
 describe("spineProtoModule", () => {
+  it("retains the public descriptor documentation in generated source", () => {
+    expect(
+      readFileSync(new URL("../generated/proto-module.ts", import.meta.url), "utf8"),
+    ).toContain("/** All Spine schemas shipped by `@spine-event-engine/proto`. */");
+  });
+
+  it("publishes a deterministic manifest for every owned canonical source", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../spine-proto-manifest.json", import.meta.url), "utf8"),
+    ) as unknown as SpineManifest;
+
+    expect(manifest).toMatchObject({
+      formatVersion: 1,
+      packageName: "@spine-event-engine/proto",
+      packageVersion: "0.0.0",
+      dependencies: [],
+      moduleExport: "spineProtoModule",
+    });
+    expect(manifest.protoFiles).toHaveLength(39);
+    expect(Object.keys(manifest.generatedExports)).toEqual(manifest.protoFiles);
+    expect(Object.values(manifest.generatedExports)).toEqual(
+      manifest.protoFiles.map((path) => `generated/${path.replace(/\.proto$/, "_pb.js")}`),
+    );
+    expect(JSON.stringify(manifest)).not.toMatch(/(?:file:|workspace:|\/Users\/|\\\\)/u);
+  });
+
   it("is available with its declaration from the package root", () => {
     const module: ProtoModule = packageModule;
 

@@ -17,7 +17,7 @@ describe("format-files", () => {
         "packages/proto/generated/spine/core/command_pb.ts",
         "examples/todo/generated/task_pb.ts",
         "examples/todo/src/index.test.ts",
-        "proto/spine/README.md",
+        "packages/proto/proto/spine/README.md",
         "scripts/proto-workflow.mjs",
         "build-protocol/work-logs/T-0016a.md",
         "src/out-of-scope.ts",
@@ -29,7 +29,7 @@ describe("format-files", () => {
       "examples/todo/src/index.test.ts",
       "package.json",
       "packages/core/src/index.ts",
-      "proto/spine/README.md",
+      "packages/proto/proto/spine/README.md",
       "scripts/proto-workflow.mjs",
     ]);
   });

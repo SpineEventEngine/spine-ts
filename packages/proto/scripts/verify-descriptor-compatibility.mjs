@@ -55,7 +55,7 @@ export function buildDescriptorSet(root = repoRoot) {
   try {
     const result = spawnSync(
       executable,
-      ["build", "proto", "--as-file-descriptor-set", "--exclude-source-info", "-o", outputPath],
+      ["build", "packages/proto/proto", "--as-file-descriptor-set", "--exclude-source-info", "-o", outputPath],
       { cwd: root, encoding: "utf8" },
     );
 
@@ -74,7 +74,7 @@ export function buildDescriptorSet(root = repoRoot) {
 
 export function verifyFrozenDescriptorCompatibility(root = repoRoot) {
   const descriptorSet = buildDescriptorSet(root);
-  const expectedDigest = readFileSync(resolve(root, "proto/frozen-descriptor-set.sha256"), "utf8")
+  const expectedDigest = readFileSync(resolve(root, "packages/proto/proto/frozen-descriptor-set.sha256"), "utf8")
     .trim()
     .split(/\s+/u)[0];
   const actualDigest = normalizedDescriptorDigest(descriptorSet);

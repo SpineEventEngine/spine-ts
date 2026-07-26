@@ -347,7 +347,16 @@ function runBuf(
   writeFileSync(join(moduleRoot, "buf.yaml"), "version: v2\nmodules:\n  - path: .\n", "utf8");
   writeFileSync(
     join(moduleRoot, "buf.gen.yaml"),
-    `version: v2\nplugins:\n  - local: ${protocGenEs}\n    out: output\n    opt:\n      - target=ts\n      - import_extension=js\n`,
+    [
+      "version: v2",
+      "plugins:",
+      `  - local: ${protocGenEs}`,
+      "    out: output",
+      "    opt:",
+      "      - target=ts",
+      "      - import_extension=js",
+      "",
+    ].join("\n"),
     "utf8",
   );
   const buf = resolveTool("@bufbuild/buf/bin/buf");
@@ -457,11 +466,19 @@ function writeModule(
     ),
     "",
     "const schemas = Object.freeze([",
-    ...generated.map(
-      ({ alias }) =>
-        `  ...Object.values(${alias}).filter((value) => typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "message").map((value) => value as unknown as GenMessage<Message>),`,
+    ...generated.map(({ alias }) =>
+      [
+        `  ...Object.values(${alias})`,
+        '    .filter((value) => typeof value === "object" && value !== null &&',
+        '      (value as { kind?: unknown }).kind === "message")',
+        "    .map((value) => value as unknown as GenMessage<Message>),",
+      ].join("\n"),
     ),
-    "].sort((left, right) => (left as { typeName: string }).typeName.localeCompare((right as { typeName: string }).typeName)));",
+    "].sort((left, right) =>",
+    "  (left as { typeName: string }).typeName.localeCompare(",
+    "    (right as { typeName: string }).typeName,",
+    "  ),",
+    "));",
     "",
     `export const ${exportName}: ProtoModule = Object.freeze({`,
     `  name: ${JSON.stringify(packageName)},`,
@@ -478,7 +495,7 @@ function publish(
   generatedRoot: string,
   output: string,
   manifest: unknown,
-  rename: (from: string, to: string) => void = renameSync,
+  onRename: (from: string, to: string) => void = renameSync,
   manifestOperations: Partial<ManifestFileOperations> = {},
 ): void {
   const target = join(packageRoot, generatedRoot);
@@ -487,9 +504,9 @@ function publish(
   const oldManifest = existsSync(manifestTarget) ? readFileSync(manifestTarget, "utf8") : undefined;
   let outputPublished = false;
   try {
-    if (existsSync(target)) rename(target, backup);
+    if (existsSync(target)) onRename(target, backup);
     mkdirSync(dirname(target), { recursive: true });
-    rename(output, target);
+    onRename(output, target);
     outputPublished = true;
     writeManifestAtomically(
       manifestTarget,

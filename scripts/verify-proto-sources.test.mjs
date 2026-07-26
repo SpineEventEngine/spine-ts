@@ -10,7 +10,7 @@ const copiedProtoSha = "4952a97f8d4161592137c66d0a649d6e949ef78089e6d1df642008be
 
 function createFixture() {
   const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-verify-"));
-  mkdirSync(join(repoRoot, "proto/spine"), { recursive: true });
+  mkdirSync(join(repoRoot, "packages/proto/proto/spine"), { recursive: true });
 
   return repoRoot;
 }
@@ -30,7 +30,7 @@ function manifestSource(localPath) {
 }
 
 function runVerifier(repoRoot, manifest) {
-  const manifestPath = join(repoRoot, "proto/spine-sources.json");
+  const manifestPath = join(repoRoot, "packages/proto/proto/spine-sources.json");
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
   return spawnSync(
@@ -43,11 +43,11 @@ function runVerifier(repoRoot, manifest) {
 }
 
 describe("verify-proto-sources", () => {
-  it("accepts frozen non-Spine service contracts under proto", () => {
+  it("accepts frozen non-Spine service contracts under the canonical package Proto root", () => {
     const repoRoot = createFixture();
-    const localPath = "proto/grpc/health/v1/health.proto";
+    const localPath = "packages/proto/proto/grpc/health/v1/health.proto";
     const filePath = join(repoRoot, localPath);
-    mkdirSync(join(repoRoot, "proto/grpc/health/v1"), { recursive: true });
+    mkdirSync(join(repoRoot, "packages/proto/proto/grpc/health/v1"), { recursive: true });
     writeFileSync(filePath, copiedProtoContents);
 
     const source = manifestSource(localPath);
@@ -65,7 +65,7 @@ describe("verify-proto-sources", () => {
 
   it("rejects copied proto files missing from the manifest", () => {
     const repoRoot = createFixture();
-    writeFileSync(join(repoRoot, "proto/spine/present.proto"), copiedProtoContents);
+    writeFileSync(join(repoRoot, "packages/proto/proto/spine/present.proto"), copiedProtoContents);
 
     const result = runVerifier(repoRoot, {
       schemaVersion: 1,
@@ -74,24 +74,26 @@ describe("verify-proto-sources", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      "proto/spine/present.proto: copied proto file is missing from manifest",
+      "packages/proto/proto/spine/present.proto: copied proto file is missing from manifest",
     );
   });
 
   it("rejects duplicate manifest localPath entries", () => {
     const repoRoot = createFixture();
-    writeFileSync(join(repoRoot, "proto/spine/present.proto"), copiedProtoContents);
+    writeFileSync(join(repoRoot, "packages/proto/proto/spine/present.proto"), copiedProtoContents);
 
     const result = runVerifier(repoRoot, {
       schemaVersion: 1,
       sources: [
-        manifestSource("proto/spine/present.proto"),
-        manifestSource("proto/spine/present.proto"),
+        manifestSource("packages/proto/proto/spine/present.proto"),
+        manifestSource("packages/proto/proto/spine/present.proto"),
       ],
     });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("proto/spine/present.proto: duplicate manifest localPath");
+    expect(result.stderr).toContain(
+      "packages/proto/proto/spine/present.proto: duplicate manifest localPath",
+    );
   });
 
   it("rejects manifest paths containing traversal", () => {
@@ -99,19 +101,19 @@ describe("verify-proto-sources", () => {
 
     const result = runVerifier(repoRoot, {
       schemaVersion: 1,
-      sources: [manifestSource("proto/spine/../escape.proto")],
+      sources: [manifestSource("packages/proto/proto/spine/../escape.proto")],
     });
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      "localPath must be a relative proto/**/*.proto path without '..'",
+      "localPath must be a relative packages/proto/proto/**/*.proto path without '..'",
     );
   });
 
   it("rejects provenance URLs for a different repository", () => {
     const repoRoot = createFixture();
-    writeFileSync(join(repoRoot, "proto/spine/present.proto"), copiedProtoContents);
-    const source = manifestSource("proto/spine/present.proto");
+    writeFileSync(join(repoRoot, "packages/proto/proto/spine/present.proto"), copiedProtoContents);
+    const source = manifestSource("packages/proto/proto/spine/present.proto");
     source.repository = "SpineEventEngine/core-java";
 
     const result = runVerifier(repoRoot, { schemaVersion: 1, sources: [source] });
@@ -127,8 +129,8 @@ describe("verify-proto-sources", () => {
 
   it("rejects provenance URLs for a different upstream path", () => {
     const repoRoot = createFixture();
-    writeFileSync(join(repoRoot, "proto/spine/present.proto"), copiedProtoContents);
-    const source = manifestSource("proto/spine/present.proto");
+    writeFileSync(join(repoRoot, "packages/proto/proto/spine/present.proto"), copiedProtoContents);
+    const source = manifestSource("packages/proto/proto/spine/present.proto");
     source.upstreamPath = "base/src/main/proto/spine/other.proto";
 
     const result = runVerifier(repoRoot, { schemaVersion: 1, sources: [source] });
