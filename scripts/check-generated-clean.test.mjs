@@ -98,6 +98,7 @@ describe("check-generated-clean", () => {
       "examples/datastore-orders/generated",
       "examples/users-model/generated",
       "examples/chat-model/generated",
+      "examples/chat/generated",
     ]);
   });
 

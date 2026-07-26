@@ -161,6 +161,11 @@ function applicationModelTransactionFixture(target) {
   writeFileSync(join(generatedRoot, "previous.txt"), "previous model output\n");
   writeFileSync(manifest, "previous model manifest\n");
   writeFileSync(join(rootGenerated, "previous.txt"), "previous root output\n");
+  if (target.handlerGeneratedPath !== undefined) {
+    const handlerGeneratedRoot = join(root, target.handlerGeneratedPath);
+    mkdirSync(handlerGeneratedRoot, { recursive: true });
+    writeFileSync(join(handlerGeneratedRoot, "previous.txt"), "previous handler output\n");
+  }
   writeFileSync(
     join(root, "buf.gen.yaml"),
     "version: v2\nplugins:\n  - local: test\n    out: packages/proto/generated\n",
@@ -204,7 +209,17 @@ describe("proto-workflow", () => {
       "examples/datastore-orders/generated",
       "examples/users-model/generated",
       "examples/chat-model/generated",
+      "examples/chat/generated",
     ]);
+  });
+
+  it("stages the Chat handler registry with its model output", () => {
+    expect(
+      modelAtomicTargets.find((target) => target.packagePath === "examples/chat-model"),
+    ).toMatchObject({
+      handlerGeneratedPath: "examples/chat/generated",
+      handlerProjectPath: "examples/chat/tsconfig.json",
+    });
   });
 
   it.each(modelAtomicTargets.filter((target) => target.packagePath !== "examples/todo"))(
@@ -231,6 +246,16 @@ describe("proto-workflow", () => {
       expect(readFileSync(join(root, "packages/proto/generated/previous.txt"), "utf8")).toBe(
         "previous root output\n",
       );
+      if (target.handlerGeneratedPath !== undefined) {
+        expect(readFileSync(join(root, target.handlerGeneratedPath, "previous.txt"), "utf8")).toBe(
+          "previous handler output\n",
+        );
+        expect(
+          readdirSync(dirname(join(root, target.handlerGeneratedPath))).some((name) =>
+            name.startsWith(".generated-"),
+          ),
+        ).toBe(false);
+      }
       expect(readdirSync(packageRoot).some((name) => name.startsWith(".generated-"))).toBe(false);
       expect(readdirSync(root).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
     },

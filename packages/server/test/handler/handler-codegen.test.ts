@@ -4,6 +4,7 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -103,6 +104,81 @@ describe("handler codegen", () => {
     expect(() => {
       generateHandlerRegistry({ appRoot: externalApp });
     }).toThrow("Handler source must stay within");
+  });
+
+  it("reports malformed configuration and ignores non-string includes", () => {
+    const malformed = application();
+    writeFileSync(join(malformed, "tsconfig.json"), "{ invalid");
+    expect(() => {
+      generateHandlerRegistry({ appRoot: malformed });
+    }).toThrow("tsconfig.json");
+
+    const app = application({ include: [42] });
+    expect(() => {
+      generateHandlerRegistry({ appRoot: app });
+    }).toThrow("TS5024");
+  });
+
+  it("rejects traversal includes and non-TypeScript compiler roots", () => {
+    const traversal = application({ include: ["../outside/**/*.ts"] });
+    expect(() => {
+      generateHandlerRegistry({ appRoot: traversal });
+    }).toThrow("Handler source must stay within");
+
+    const javascript = application({ files: ["src/app.js"], include: undefined });
+    writeFileSync(join(javascript, "src/app.js"), "export {};\n");
+    expect(() => {
+      generateHandlerRegistry({ appRoot: javascript });
+    }).toThrow("TypeScript file");
+  });
+
+  it("rejects a file app root and a directory tsconfig path", () => {
+    const appRootFile = join(
+      realpathSync(mkdtempSync(join(tmpdir(), "spine-handler-root-"))),
+      "app.ts",
+    );
+    writeFileSync(appRootFile, "export {};\n");
+    expect(() => {
+      generateHandlerRegistry({ appRoot: appRootFile });
+    }).toThrow("Application root must be a directory");
+
+    const app = application();
+    rmSync(join(app, "tsconfig.json"));
+    mkdirSync(join(app, "tsconfig.json"));
+    expect(() => {
+      generateHandlerRegistry({ appRoot: app });
+    }).toThrow("Project must be a regular file");
+  });
+
+  it("discovers nested directories and rejects a directory compiler root", () => {
+    const app = application({ files: ["src"], include: undefined });
+    expect(() => {
+      generateHandlerRegistry({ appRoot: app });
+    }).toThrow("Handler source must be a TypeScript file");
+
+    const nested = application();
+    mkdirSync(join(nested, "src/nested"));
+    writeFileSync(join(nested, "src/nested/extra.ts"), "export {};\n");
+    expect(() => {
+      generateHandlerRegistry({ appRoot: nested });
+    }).not.toThrow();
+  });
+
+  it("rejects declaration roots and handler-analysis diagnostics", () => {
+    const declarations = application({ files: ["src/types.d.ts"], include: undefined });
+    writeFileSync(join(declarations, "src/types.d.ts"), "declare const value: string;\n");
+    expect(() => {
+      generateHandlerRegistry({ appRoot: declarations });
+    }).toThrow("TypeScript file");
+
+    const invalid = application();
+    writeFileSync(
+      join(invalid, "src/app.ts"),
+      "import { Assign } from '@spine-event-engine/server';\nclass Invalid { @Assign run(): void {} }\n",
+    );
+    expect(() => {
+      generateHandlerRegistry({ appRoot: invalid });
+    }).toThrow(/handler|assign/i);
   });
 
   it("rejects more than one thousand compiler roots before loading them", () => {

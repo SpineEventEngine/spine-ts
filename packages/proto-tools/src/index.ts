@@ -1,7 +1,8 @@
-import { type Dirent, lstatSync, readFileSync, readdirSync } from "node:fs";
+import { lstatSync, opendirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
 import { isRegistryDependencySpecifier } from "./model/registry-dependency.js";
+import { isNpmPackageName } from "./model/npm-package-name.js";
 
 /** Version shared by the configuration and published manifest JSON documents. */
 export const manifestFormatVersion = 1;
@@ -60,6 +61,7 @@ interface PackageJson {
   readonly name: string;
   readonly version: string;
   readonly dependencies: Readonly<Record<string, string>>;
+  readonly exports: Readonly<Record<string, unknown>>;
 }
 
 /** Reads and validates the one versioned configuration at a package root. */
@@ -82,7 +84,7 @@ export function readConfig(packageRoot: string): SpineProtoConfig {
       ["formatVersion", "mode", "modelPackages", "registryOutput"],
       "application mode",
     );
-    const modelPackages = stringList(packageJson.name, config.modelPackages, "modelPackages");
+    const modelPackages = packageNameList(packageJson.name, config.modelPackages, "modelPackages");
     validateRegistryDependencies(packageJson, modelPackages, "model package");
     const registryOutput = packagePath(
       packageRoot,
@@ -115,10 +117,10 @@ export function readConfig(packageRoot: string): SpineProtoConfig {
     ],
     "model mode",
   );
-  const packageName = stringValue(packageJson.name, config.packageName, "packageName");
+  const packageName = packageNameValue(packageJson.name, config.packageName, "packageName");
   if (packageName !== packageJson.name)
     fail(packageJson.name, "packageName must match package.json name");
-  const dependencies = stringList(packageJson.name, config.dependencies, "dependencies");
+  const dependencies = packageNameList(packageJson.name, config.dependencies, "dependencies");
   validateRegistryDependencies(packageJson, dependencies, "dependency");
   const protoRoot = packagePath(packageRoot, packageJson.name, config.protoRoot, "protoRoot");
   const generatedRoot = packagePath(
@@ -133,13 +135,15 @@ export function readConfig(packageRoot: string): SpineProtoConfig {
     pathsOverlap(protoRoot, generatedRoot)
   )
     fail(packageJson.name, "generatedRoot must not overlap protoRoot or package root");
+  const exportRoot = packagePath(packageRoot, packageJson.name, config.exportRoot, "exportRoot");
+  validateGeneratedExports(packageJson, exportRoot);
   return {
     formatVersion: 1,
     mode: "model",
     packageName,
     protoRoot,
     generatedRoot,
-    exportRoot: packagePath(packageRoot, packageJson.name, config.exportRoot, "exportRoot"),
+    exportRoot,
     dependencies,
     moduleExport: bindingIdentifier(packageJson.name, config.moduleExport, "moduleExport"),
   };
@@ -177,6 +181,8 @@ export function createManifest(
   const config = readConfig(packageRoot);
   if (config.mode !== "model") fail(readPackage(packageRoot).name, "manifest requires model mode");
   const packageJson = readPackage(packageRoot);
+  if (ownedProtoFiles !== undefined && ownedProtoFiles.length > 10000)
+    fail(packageJson.name, "owned Proto paths exceeds 10000 entries");
   const protoFiles = (
     ownedProtoFiles ?? discoverProtoFiles(join(packageRoot, config.protoRoot), packageJson.name)
   )
@@ -215,8 +221,6 @@ function manifestFromValue(value: unknown, requester: string): ProtoManifest {
   );
   if (manifest.formatVersion !== manifestFormatVersion)
     fail(requester, "manifest formatVersion must be 1");
-  if (Array.isArray(manifest.dependencies) && manifest.dependencies.length > 10000)
-    fail(requester, "manifest dependencies exceeds 10000 entries");
   const protoFiles = stringList(requester, manifest.protoFiles, "manifest protoFiles")
     .map((file) => manifestPath(requester, file, "manifest protoFiles"))
     .sort();
@@ -225,13 +229,14 @@ function manifestFromValue(value: unknown, requester: string): ProtoManifest {
     manifest.generatedExports,
     "manifest generatedExports",
   );
+  assertRecordBound(requester, generatedExports, "manifest generatedExports");
   const keys = Object.keys(generatedExports).sort();
   if (keys.length !== protoFiles.length || keys.some((key, index) => key !== protoFiles[index])) {
     fail(requester, "manifest generatedExports must map every proto file exactly once");
   }
   return {
     formatVersion: 1,
-    packageName: stringValue(requester, manifest.packageName, "manifest packageName"),
+    packageName: packageNameValue(requester, manifest.packageName, "manifest packageName"),
     packageVersion: stringValue(requester, manifest.packageVersion, "manifest packageVersion"),
     protoFiles,
     generatedExports: Object.fromEntries(
@@ -240,7 +245,9 @@ function manifestFromValue(value: unknown, requester: string): ProtoManifest {
         manifestPath(requester, generatedExports[file], `manifest generated export for ${file}`),
       ]),
     ),
-    dependencies: [...stringList(requester, manifest.dependencies, "manifest dependencies")].sort(),
+    dependencies: [
+      ...packageNameList(requester, manifest.dependencies, "manifest dependencies"),
+    ].sort(),
     moduleExport: bindingIdentifier(requester, manifest.moduleExport, "manifest moduleExport"),
   };
 }
@@ -248,29 +255,39 @@ function manifestFromValue(value: unknown, requester: string): ProtoManifest {
 function discoverProtoFiles(root: string, name: string): string[] {
   const files: string[] = [];
   const pending = [{ path: root, relativePath: "", depth: 0 }];
+  let encountered = 0;
   while (pending.length > 0) {
     const directory = pending.pop();
     if (directory === undefined) break;
-    let entries: Dirent[];
+    let directoryHandle: ReturnType<typeof opendirSync>;
     try {
-      entries = readdirSync(directory.path, { encoding: "utf8", withFileTypes: true });
+      directoryHandle = opendirSync(directory.path, { encoding: "utf8" });
     } catch {
       fail(name, "proto root is missing or inaccessible");
     }
-    for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-      const relativePath =
-        directory.relativePath === "" ? entry.name : `${directory.relativePath}/${entry.name}`;
-      if (entry.isDirectory()) {
-        if (directory.depth >= 100) fail(name, "proto source exceeds 100 directory levels");
-        pending.push({
-          path: join(directory.path, entry.name),
-          relativePath,
-          depth: directory.depth + 1,
-        });
-      } else if (entry.isFile() && entry.name.endsWith(".proto")) {
-        files.push(relativePath);
-        if (files.length > 10000) fail(name, "proto source exceeds 10000 files");
+    try {
+      for (
+        let entry = directoryHandle.readSync();
+        entry !== null;
+        entry = directoryHandle.readSync()
+      ) {
+        encountered += 1;
+        if (encountered > 10000) fail(name, "proto source exceeds 10000 entries");
+        const relativePath =
+          directory.relativePath === "" ? entry.name : `${directory.relativePath}/${entry.name}`;
+        if (entry.isDirectory()) {
+          if (directory.depth >= 100) fail(name, "proto source exceeds 100 directory levels");
+          pending.push({
+            path: join(directory.path, entry.name),
+            relativePath,
+            depth: directory.depth + 1,
+          });
+        } else if (entry.isFile() && entry.name.endsWith(".proto")) {
+          files.push(relativePath);
+        }
       }
+    } finally {
+      directoryHandle.closeSync();
     }
   }
   return files;
@@ -400,16 +417,38 @@ function validateRegistryDependencies(
   }
 }
 
+function validateGeneratedExports(packageJson: PackageJson, exportRoot: string): void {
+  const key = `./${exportRoot}/*.js`;
+  const entry = packageJson.exports[key];
+  const expectedRuntime = `./dist/${exportRoot}/*.js`;
+  const expectedTypes = `./dist/${exportRoot}/*.d.ts`;
+  if (
+    typeof entry !== "object" ||
+    entry === null ||
+    Array.isArray(entry) ||
+    (entry as Record<string, unknown>).default !== expectedRuntime ||
+    (entry as Record<string, unknown>).types !== expectedTypes
+  ) {
+    fail(
+      packageJson.name,
+      `package.json exports must expose ${key} with default ${expectedRuntime} and types ${expectedTypes}`,
+    );
+  }
+}
+
 function readPackage(packageRoot: string): PackageJson {
   const value = objectValue(
     packageRoot,
     readJson(join(packageRoot, "package.json"), packageRoot),
     "package.json",
   );
+  const name = packageNameValue(packageRoot, value.name, "package.json name");
   return {
-    name: stringValue(packageRoot, value.name, "package.json name"),
-    version: stringValue(packageRoot, value.version, "package.json version"),
-    dependencies: stringRecord(value.dependencies, packageRoot, "package.json dependencies"),
+    name,
+    version: stringValue(name, value.version, "package.json version"),
+    dependencies: stringRecord(value.dependencies, name, "package.json dependencies"),
+    exports:
+      value.exports === undefined ? {} : objectValue(name, value.exports, "package.json exports"),
   };
 }
 
@@ -435,12 +474,38 @@ function stringValue(name: string, value: unknown, label: string): string {
 
 function stringList(name: string, value: unknown, label: string): readonly string[] {
   if (!Array.isArray(value)) fail(name, `${label} must be an array of non-empty strings`);
+  if (value.length > 10000) fail(name, `${label} exceeds 10000 entries`);
   const strings = value.filter(
     (item): item is string => typeof item === "string" && item.length > 0,
   );
   if (strings.length !== value.length) fail(name, `${label} must be an array of non-empty strings`);
   if (new Set(strings).size !== strings.length) fail(name, `${label} must not contain duplicates`);
   return strings;
+}
+
+function packageNameValue(name: string, value: unknown, label: string): string {
+  const packageName = stringValue(name, value, label);
+  if (!isNpmPackageName(packageName)) fail(name, `${label} must be a valid npm package name`);
+  return packageName;
+}
+
+function packageNameList(name: string, value: unknown, label: string): readonly string[] {
+  return stringList(name, value, label).map((packageName) =>
+    packageNameValue(name, packageName, label),
+  );
+}
+
+function assertRecordBound(
+  name: string,
+  record: Readonly<Record<string, unknown>>,
+  label: string,
+): void {
+  let count = 0;
+  for (const key in record) {
+    if (!Object.hasOwn(record, key)) continue;
+    count += 1;
+    if (count > 10000) fail(name, `${label} exceeds 10000 entries`);
+  }
 }
 
 function stringRecord(

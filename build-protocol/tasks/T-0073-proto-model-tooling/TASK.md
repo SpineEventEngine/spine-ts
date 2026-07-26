@@ -1,10 +1,10 @@
 # T-0073: Proto Model Modules and External Generation Tooling
 
-Status: In progress
+Status: Accepted for integration
 
-Implementation status: the approved contract is frozen in
-`build-protocol/planning/WAVE_3_PROTO_MODEL_MODULES_PLAN.md`; dependency-ordered
-implementation is active.
+Implementation status: implemented, fully reviewed, and branch-verified. The
+task is ready to commit, push, merge into `main`, post-merge verify, and
+remotely synchronize.
 
 ## Objective
 

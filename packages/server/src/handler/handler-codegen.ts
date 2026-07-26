@@ -113,7 +113,7 @@ function boundedConfigHost(appRoot: string, currentDirectory: string): ts.ParseC
         extensions: readonly string[],
         excludes: readonly string[] | undefined,
         includes: readonly string[] | undefined,
-        useCaseSensitiveFileNames: boolean,
+        caseSensitive: boolean,
         currentDirectory: string,
         depth: number | undefined,
         getFileSystemEntries: (directory: string) => { files: string[]; directories: string[] },
@@ -181,10 +181,11 @@ function formatDiagnostics(
   }[],
 ): string {
   return diagnostics
-    .map(
-      (diagnostic) =>
-        `${diagnostic.sourceFile}:${String(diagnostic.line)}:${String(diagnostic.column)} ${diagnostic.code} ${diagnostic.message}`,
-    )
+    .map((diagnostic) => {
+      const location =
+        `${diagnostic.sourceFile}:${String(diagnostic.line)}:` + String(diagnostic.column);
+      return `${location} ${diagnostic.code} ${diagnostic.message}`;
+    })
     .join("\n");
 }
 

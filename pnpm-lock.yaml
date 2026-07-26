@@ -56,12 +56,21 @@ importers:
       '@spine-event-engine/chat-model':
         specifier: 0.0.0
         version: link:../chat-model
+      '@spine-event-engine/client':
+        specifier: workspace:*
+        version: link:../../packages/client
       '@spine-event-engine/core':
         specifier: 0.0.0
         version: link:../../packages/core
+      '@spine-event-engine/proto':
+        specifier: 0.0.0
+        version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: 0.0.0
         version: link:../../packages/server
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@spine-event-engine/users-model':
         specifier: 0.0.0
         version: link:../users-model

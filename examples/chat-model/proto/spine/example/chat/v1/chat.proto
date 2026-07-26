@@ -2,8 +2,21 @@ syntax = "proto3";
 package spine.example.chat.v1;
 
 import "spine/example/users/v1/users.proto";
+import "spine/options.proto";
 
-message ChatId { string value = 1; }
-message Message { ChatId chat_id = 1; spine.example.users.v1.UserId author = 2; string text = 3; }
-message PostMessage { ChatId chat_id = 1; spine.example.users.v1.UserId author = 2; string text = 3; }
-message MessagePosted { Message message = 1; }
+option (type_url_prefix) = "type.spine.example.chat";
+
+message ChatId {
+  string value = 1 [(required) = true];
+}
+
+message Message {
+  spine.example.users.v1.UserId author = 1 [(required) = true];
+  string text = 2 [(required) = true];
+}
+
+message Chat {
+  option (entity).kind = AGGREGATE;
+  ChatId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+  repeated Message messages = 2;
+}

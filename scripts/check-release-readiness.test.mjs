@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  collectAssetExportTargets,
   collectLegacyNamespaceReferences,
   collectMarkdownRelativeLinks,
   collectRuntimeExportSpecifiers,
@@ -159,6 +160,59 @@ describe("check-release-readiness", () => {
           specifier: "@example/proto/generated/spine/core/command_pb.js",
         },
       ]);
+    });
+  });
+
+  it("enumerates static package assets without treating them as JavaScript imports", () => {
+    withTempRepository((repoRoot) => {
+      const packageRoot = join(repoRoot, "packages", "proto");
+      mkdirSync(join(packageRoot, "proto", "spine"), { recursive: true });
+      writeJson(join(packageRoot, "package.json"), {
+        name: "@example/proto",
+        exports: {
+          ".": "./dist/index.js",
+          "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+          "./proto/*": "./proto/*",
+        },
+      });
+      writeJson(join(packageRoot, "spine-proto-manifest.json"), { schemaVersion: 1 });
+      writeFileSync(join(packageRoot, "proto", "spine", "command.proto"), 'syntax = "proto3";\n');
+
+      expect(collectRuntimeExportSpecifiers(repoRoot)).toEqual([
+        {
+          packageDirectory: "packages/proto",
+          specifier: "@example/proto",
+        },
+      ]);
+      expect(collectAssetExportTargets(repoRoot)).toEqual([
+        {
+          packageDirectory: "packages/proto",
+          subpath: "./proto/spine/command.proto",
+          target: "./proto/spine/command.proto",
+        },
+        {
+          packageDirectory: "packages/proto",
+          subpath: "./spine-proto-manifest.json",
+          target: "./spine-proto-manifest.json",
+        },
+      ]);
+    });
+  });
+
+  it("reports a missing fixed package asset export", () => {
+    withTempRepository((repoRoot) => {
+      const packageRoot = join(repoRoot, "packages", "assets");
+      mkdirSync(packageRoot, { recursive: true });
+      writeJson(join(packageRoot, "package.json"), {
+        name: "@example/assets",
+        exports: {
+          "./manifest.json": "./missing-manifest.json",
+        },
+      });
+
+      expect(() => runReleaseReadiness(repoRoot)).toThrow(
+        "Broken package asset export: packages/assets: ./manifest.json -> ./missing-manifest.json",
+      );
     });
   });
 

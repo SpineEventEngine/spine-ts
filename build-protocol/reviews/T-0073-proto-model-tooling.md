@@ -1,11 +1,274 @@
 # T-0073 Review Record
 
-Status: Not started
+Status: CLEAN
 
 All four canonical specialist concerns and the final Wave 3 security gate are
 required as recorded in the task brief. Assignments, explicit model/reasoning
 metadata, findings, dispositions, correction batches, and re-review evidence
 will be recorded before results are accepted.
+
+## Final Wave 3 specialist assignment
+
+Scope is the complete T-0073 change from base `3c5df96e` through the current
+task branch plus its uncommitted closure diff. Review against the frozen Wave 3
+plan, task requirements ledger, current build protocol, and code-quality rules.
+
+- Style/maintainability: existing `style_maintainability_reviewer`; expected
+  model explicitly `gpt-5.6-terra`, expected reasoning explicitly `high`.
+  Review package/tool depth, generation workflow cohesion, Chat example,
+  Aggregate notification/query corrections, test quality, naming, and
+  maintenance cost.
+- Documentation: existing `documentation_reviewer`; expected model explicitly
+  `gpt-5.6-luna`, expected reasoning explicitly `medium`. Review the User Guide,
+  Proto/Proto Tools/Chat READMEs, snippets, package/configuration claims,
+  external-repository workflow, limitations, and publication status against
+  actual code.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`; expected model
+  explicitly `gpt-5.6-terra`, expected reasoning explicitly `high`. Review
+  public `ProtoModule`, `TypeRegistry`, `Any` helpers, Proto Tools config and
+  manifest declarations, package exports/declarations, generated import
+  contracts, and Query/Stand behavior changes.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`; expected model explicitly
+  `gpt-5.6-terra`, expected reasoning explicitly `high`. Review bounded graph
+  and filesystem traversal, atomic generation/publication and cleanup,
+  external-fixture processes, registry memory, Aggregate single-write/history
+  ordering, subscriptions, tenant isolation, and Query ID decoding.
+
+All four roles are read-only, may not edit or spawn children, and must return
+CLEAN or prioritized actionable findings with file/line evidence. The selected
+Desktop surface supports the required model profiles and explicit dispatch.
+If a separate CLI process is used because the live collaboration tree has no
+free role slot, its model/reasoning flags and existing role instructions remain
+explicit. Independent runtime self-introspection is not exposed; configured
+profile and CLI event metadata will be recorded honestly before accepting
+results.
+
+## Final Wave 3 documentation result
+
+- Existing `documentation_reviewer` returned CLEAN under explicitly configured
+  `gpt-5.6-luna` / `medium`; the CLI runtime banner confirmed both fields.
+  Independent self-introspection beyond configured/runtime banner metadata was
+  unavailable.
+- No P0-P2 documentation finding remains. The reviewer verified the User
+  Guide, Proto/Proto Tools/Chat READMEs, exact configurations and commands,
+  cross-model imports and transitive composition, handler generation and CI,
+  failure/atomicity semantics, local-tarball workflow, deferred publication,
+  and TypeScript snippets.
+- The read-only reviewer could not start a focused Vitest process because Vite
+  attempted to write `.vite-temp`; this is not a product limitation, and the
+  coordinator's external acceptance already passed.
+
+## Final Wave 3 specialist results and dispositions
+
+Runtime metadata:
+
+- Style/maintainability: CLI banner confirmed existing reviewer configuration
+  `gpt-5.6-terra` / `high`.
+- TypeScript/API docs: CLI banner confirmed existing reviewer configuration
+  `gpt-5.6-terra` / `high`.
+- Performance/reliability: collaboration dispatch retained the immutable
+  configured existing role `gpt-5.6-terra` / `high`.
+- Independent self-introspection was unavailable in every lane; no mismatch or
+  inherited fallback was exposed.
+
+Accepted aggregate correction batch:
+
+- P1: the fresh tarball fixture links third-party runtime dependencies from the
+  monorepo and can mask missing installed dependency resolution. Replace those
+  symlinks with an isolated copied/extracted dependency tree and assert no
+  external symlink/path resolves into the repository.
+- P1: the external fixture does not run `spine-proto compose` or
+  `unpackAnyUsing()` for Spine, Users, and Chat. Add real application
+  composition and dynamic decoding.
+- P1: model `exportRoot` is contained but is not checked against
+  `package.json.exports`; reject configuration that does not export the
+  generated wildcard contract.
+- P1: Aggregate persistence now writes through `Stand.update()`, whose
+  subscriber exception can abort before histories and event journals are
+  appended even though current state is already committed. Complete persistence
+  before subscriber delivery or make notification best-effort/rollback-safe;
+  add a throwing-subscriber regression.
+- P2: a failed Chat handler post-step leaks its independent `.generated-*`
+  staging directory. Clean it in the failure path and test the exact sibling.
+- P2: Proto discovery materializes and permits unlimited non-Proto
+  entries/directories because only found `.proto` files count toward the bound.
+  Stream and bound all discovery entries; add an over-budget non-Proto fixture.
+
+Rejected finding:
+
+- Style P1 claimed portable handler generation is unapproved scope. Rejected:
+  Slice D of the approved plan requires a fresh external application to
+  compile/start from generated, ignored sources; the established Server runtime
+  requires a generated handler registry at startup. A portable build-time
+  handler step is therefore necessary to satisfy the approved application
+  acceptance, remains under an internal Server codegen export, and is
+  documented as build-time rather than runtime API.
+
+One consolidated correction batch returns to existing implementation contexts.
+Documentation remains CLEAN. Style, TypeScript/API, and reliability reopen only
+for their affected findings.
+
+## Final correction bounded re-review assignments
+
+- Style/maintainability: existing `style_maintainability_reviewer`; expected
+  model explicitly `gpt-5.6-terra`, expected reasoning explicitly `high`.
+  Re-review only handler-stage cleanup, Proto Tools export/discovery/external
+  fixture corrections, and the internal deferred Stand seam.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`; expected model
+  explicitly `gpt-5.6-terra`, expected reasoning explicitly `high`. Re-review
+  only generated wildcard export validation, installed application
+  composition/dynamic `Any`, and absence of unintended public Stand API.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`; expected model explicitly
+  `gpt-5.6-terra`, expected reasoning explicitly `high`. Re-review all accepted
+  resource-bound, staging cleanup, external isolation, and aggregate
+  subscriber-failure ordering findings.
+
+All three reviewers are read-only, may not edit or spawn children, and must
+return CLEAN or remaining actionable P0-P2 findings with exact evidence.
+Configured role/model/reasoning metadata is immutable on the Desktop surface;
+independent runtime self-introspection is unavailable and will be recorded
+honestly before accepting results.
+
+## Final correction bounded re-review results
+
+- TypeScript/API docs: CLEAN. The existing reviewer ran under its explicitly
+  dispatched `gpt-5.6-terra` / `high` profile; independent runtime
+  self-introspection was unavailable and no mismatch was exposed. Exact
+  wildcard exports are validated, installed application composition and
+  dynamic `Any` are exercised for Spine/Users/Chat, and the deferred Stand
+  capability is absent from the public Server API while `Stand.update()`
+  retains its public signature and synchronous error behavior.
+- Style/maintainability: one P2 accepted. The external consumer asserts
+  copied/no-symlink isolation for the final application but not for the Users
+  and Chat model build trees which also execute installed tooling. Assert the
+  same isolated installed-tree invariant before each model generation/build.
+  Handler staging, export validation, bounded discovery, and the internal
+  deferred Stand seam are otherwise clean.
+- Performance/reliability: one P1 accepted. Deferred notification chooses
+  subscribers after the aggregate journals finish, so a late subscriber can
+  receive a state write which preceded its registration and an original
+  subscriber can miss it after unsubscribing. Capture the same-tenant
+  subscriber snapshot at the current-write boundary and notify that snapshot;
+  prove the boundary with a blocked-journal regression. All other assigned
+  corrections are clean, with 198 focused tests independently passing.
+- Both reviewers ran under explicitly dispatched `gpt-5.6-terra` / `high`
+  profiles. Independent runtime self-introspection was unavailable and no
+  configured-profile mismatch was exposed.
+
+One consolidated final correction batch returns to the existing implementer.
+Only style/maintainability and performance/reliability reopen for the exact
+accepted findings; TypeScript/API and documentation remain CLEAN.
+
+## Exact final re-review assignments
+
+- Style/maintainability: existing `style_maintainability_reviewer`, explicitly
+  configured `gpt-5.6-terra` / `high`; verify only Users/Chat external
+  installed-tree isolation assertions.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, explicitly configured
+  `gpt-5.6-terra` / `high`; verify only write-boundary subscriber capture and
+  its deterministic aggregate journal-gate regression.
+
+Both are read-only and may not edit or spawn children. Independent runtime
+self-introspection is unavailable; immutable configured role/profile metadata
+and absence of mismatch remain the acceptance evidence.
+
+## Exact final re-review results
+
+- Style/maintainability: CLEAN. Users, Chat, and the final application assert
+  isolated installed dependency trees at the correct pre-execution boundary.
+- Performance/reliability: CLEAN. The reviewer verified write-boundary
+  same-tenant subscriber capture, exact deferred delivery, deterministic late
+  subscriber exclusion, unchanged direct `Stand.update()` behavior, and
+  close/in-flight semantics; 218/218 focused tests passed independently.
+- Both existing reviewers ran under their explicitly dispatched
+  `gpt-5.6-terra` / `high` profiles. Independent runtime self-introspection was
+  unavailable and no mismatch was exposed.
+- Documentation and TypeScript/API remain CLEAN. All four canonical specialist
+  concerns are closed.
+
+## Final Wave 3 security assignment
+
+- Existing `security_reviewer`; expected model explicitly
+  `gpt-5.6-terra`, expected reasoning explicitly `high`.
+- Scope is the complete T-0073 diff from base `3c5df96e` through the accepted
+  correction endpoint. Review manifest/config/package trust boundaries, path
+  and symlink containment, generated import/code injection, dependency and
+  tarball isolation, bounded filesystem/graph work, dynamic `Any` exact-type
+  decoding and malformed/unknown inputs, registry memory, tenant isolation,
+  handler generation, child-process bounds/cleanup, and the deferred Stand
+  notification capability.
+- The reviewer is read-only, may not edit or spawn children, and must return
+  CLEAN or prioritized actionable P0-P2 findings with exact evidence.
+  Immutable Desktop role/profile metadata is the runtime evidence;
+  independent self-introspection is unavailable.
+
+## Final Wave 3 security result
+
+- The existing `security_reviewer` ran under its explicitly dispatched
+  `gpt-5.6-terra` / `high` profile. Independent runtime self-introspection was
+  unavailable and no mismatch was exposed.
+- P1 accepted: model package identity and dependency names are not validated
+  as npm package names before package resolution and generated import
+  rendering. Traversal-like names can escape the intended package-resolution
+  boundary. Validate own identities and every config/manifest package
+  reference before resolution/rendering; regress relative and absolute-like
+  names.
+- P2 accepted: local model-package lists and registry manifest
+  `protoFiles`/`generatedExports` can be arbitrarily large before graph limits
+  apply, causing unbounded sorting, containment checks, maps, and copying.
+  Apply collection limits before allocation/sorting/traversal and bound total
+  owned Proto paths across the resolved graph.
+- Dynamic `Any`, Stand tenant/error behavior, handler containment/staging, and
+  public API isolation are otherwise clean.
+
+One consolidated security correction batch returns to the existing
+implementation context. Final security re-review is required for both findings.
+
+## Final security re-review assignment
+
+- Existing `security_reviewer`, explicitly configured
+  `gpt-5.6-terra` / `high`, read-only and without children.
+- Verify only the accepted package-name trust-boundary P1 and collection/graph
+  resource-bound P2, including validation placement before resolver/rendering
+  and bounds before expensive allocation/sorting/map growth.
+- Return CLEAN or exact remaining actionable P0-P2 evidence. Independent
+  runtime self-introspection is unavailable; immutable configured profile and
+  absence of mismatch remain the metadata evidence.
+
+## Final security closure
+
+- CLEAN. The existing `security_reviewer` ran under its explicitly dispatched
+  `gpt-5.6-terra` / `high` profile; independent runtime self-introspection was
+  unavailable and no mismatch was exposed.
+- Package names are validated before resolver/source/generated-import use,
+  configuration and manifest collections are bounded before normalization and
+  sorting, and resolved graphs cap total owned Proto paths at 10,000.
+- The reviewer independently passed the focused Proto Tools suite. Both
+  accepted security findings are resolved; the final Wave 3 security gate is
+  closed.
+
+## Package-lifecycle race reliability assignment
+
+- Existing `performance_reliability_reviewer`, explicitly configured
+  `gpt-5.6-terra` / `high`, read-only and without children.
+- Verify only that shared workspace packing no longer executes mutating
+  lifecycle scripts in parallel acceptance fixtures, while fresh private model
+  generation/build and the dedicated lifecycle payload test remain intact.
+- Return CLEAN or exact actionable P0-P2 evidence. Independent runtime
+  self-introspection is unavailable; immutable configured profile and absence
+  of mismatch remain the metadata evidence.
+
+## Package-lifecycle race reliability result
+
+- CLEAN. The existing reviewer ran under its explicitly dispatched
+  `gpt-5.6-terra` / `high` profile; independent runtime self-introspection was
+  unavailable and no mismatch was exposed.
+- Shared workspace pack helpers are non-mutating, fresh private models still
+  generate and compile before packing, and the dedicated payload test still
+  executes package lifecycle cleanup. The reviewer passed 69/69 related tests.
 
 ## Slice A specialist assignments
 
@@ -1261,3 +1524,25 @@ and mechanical formatting of the immediately preceding Chat foundation.
   evidence is GREEN for builds, full lint/cleanup, formatting, whitespace,
   packed installed acceptance, and all 92 focused tests. No accepted finding
   remains before commit.
+
+## Final branch-gate closure
+
+- All four canonical final concerns are CLEAN: style/maintainability,
+  documentation, TypeScript/API, and performance/reliability.
+- The final security review and both bounded security corrections are CLEAN.
+  No accepted P0-P2 finding or security exception remains.
+- The package-lifecycle race re-review is CLEAN. Concurrent workspace packing
+  no longer permits lifecycle scripts to clean shared dependency outputs.
+- The definitive full `verify` passed after the reviewed endpoint. Native and
+  coverage phases each passed 139 files / 2,628 tests, with 3 files / 25
+  intentional opt-in tests skipped. Branch coverage is exactly 90.00%
+  (8,406/9,339).
+- Typechecking, ESLint and cleanup enforcement, formatting, TypeDoc/API
+  inventory, Proto source/descriptor integrity, generated cleanliness, 61
+  runtime package imports, 43 static package assets, and 121 relative Markdown
+  links all passed.
+- The final release-readiness correction is deterministic checker maintenance:
+  intentional non-JavaScript package exports are resolved and existence-checked
+  as static assets instead of imported as ESM. Its 13 focused tests and the
+  complete gate pass. It does not reopen any specialist lane.
+- T-0073 has no open review finding and is accepted for integration.

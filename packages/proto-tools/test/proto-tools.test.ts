@@ -30,14 +30,43 @@ import { resolveModelGraph } from "../src/model/model-graph.js";
 
 function packageDirectory(name: string): string {
   const directory = mkdtempSync(join(tmpdir(), "spine-proto-tools-"));
-  writeFileSync(join(directory, "package.json"), JSON.stringify({ name, version: "1.2.3" }));
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({
+      name,
+      version: "1.2.3",
+      exports: {
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
+      },
+    }),
+  );
   return realpathSync(directory);
 }
 
 function writeJson(directory: string, path: string, value: unknown): void {
   const target = join(directory, path);
   mkdirSync(join(target, ".."), { recursive: true });
-  writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`);
+  const packageValue =
+    path === "package.json" &&
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    !("exports" in value)
+      ? {
+          ...value,
+          exports: {
+            "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+            "./generated/*.js": {
+              types: "./dist/generated/*.d.ts",
+              default: "./dist/generated/*.js",
+            },
+          },
+        }
+      : value;
+  writeFileSync(target, `${JSON.stringify(packageValue, null, 2)}\n`);
 }
 
 function modelConfig(name: string, dependencies: readonly string[] = []) {
@@ -133,11 +162,22 @@ function packedHandlerTarballs(): readonly string[] {
     "examples/chat-model",
   ];
   for (const packagePath of packages) {
-    execFileSync("pnpm", ["--dir", packagePath, "pack", "--pack-destination", destination], {
-      cwd: process.cwd(),
-      stdio: "pipe",
-      timeout: 30_000,
-    });
+    execFileSync(
+      "pnpm",
+      [
+        "--dir",
+        packagePath,
+        "pack",
+        "--config.ignore-scripts=true",
+        "--pack-destination",
+        destination,
+      ],
+      {
+        cwd: process.cwd(),
+        stdio: "pipe",
+        timeout: 30_000,
+      },
+    );
   }
   createHandlerModelTarball(destination);
   return readdirSync(destination).map((name) => join(destination, name));
@@ -1348,6 +1388,119 @@ describe("spine proto model tooling", () => {
     ).toThrow("spine-proto: @example/application: model dependency graph exceeds 10000 packages");
   });
 
+  it("rejects unsafe model package names before resolution or generation", () => {
+    const application = packageDirectory("@example/application");
+    for (const modelPackage of [
+      "../outside",
+      "/absolute",
+      "@scope",
+      "model\\path",
+      "https://host/x",
+    ]) {
+      expect(() => resolveModelGraph(application, [modelPackage])).toThrow(
+        `spine-proto: @example/application: model package ${modelPackage} must be a valid npm package name`,
+      );
+    }
+
+    const model = packageDirectory("@example/model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/model", ["../../outside"]));
+    expect(() => {
+      generateModel(model);
+    }).toThrow("spine-proto: @example/model: dependencies must be a valid npm package name");
+    expect(existsSync(join(model, "src", "generated"))).toBe(false);
+
+    writeJson(model, "package.json", { name: "../outside", version: "1.2.3" });
+    expect(() => readConfig(model)).toThrow("package.json name must be a valid npm package name");
+  });
+
+  it("bounds config and manifest collection inputs before copying or sorting", () => {
+    const application = packageDirectory("@example/bounded-application");
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: Array.from({ length: 10001 }, () => "@example/model"),
+      registryOutput: "src/registry.ts",
+    });
+    expect(() => readConfig(application)).toThrow(
+      "spine-proto: @example/bounded-application: modelPackages exceeds 10000 entries",
+    );
+
+    const model = packageDirectory("@example/bounded-model");
+    writeJson(model, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/bounded-model",
+      packageVersion: "1.2.3",
+      protoFiles: Array.from({ length: 10001 }, (_, index) => `proto/${String(index)}.proto`),
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => readManifest(model)).toThrow(
+      "spine-proto: @example/bounded-model: manifest protoFiles exceeds 10000 entries",
+    );
+
+    writeJson(model, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/bounded-model",
+      packageVersion: "1.2.3",
+      protoFiles: [],
+      generatedExports: Object.fromEntries(
+        Array.from({ length: 10001 }, (_, index) => [
+          `proto/${String(index)}.proto`,
+          "generated/x.js",
+        ]),
+      ),
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => readManifest(model)).toThrow(
+      "spine-proto: @example/bounded-model: manifest generatedExports exceeds 10000 entries",
+    );
+  });
+
+  it("bounds aggregate owned Proto paths while composing a model graph", () => {
+    const application = packageDirectory("@example/path-budget-application");
+    const dependency = installModel(application, "@example/path-budget-dependency");
+    const root = installModel(application, "@example/path-budget-root", [
+      "@example/path-budget-dependency",
+    ]);
+    const writeManifest = (
+      directory: string,
+      name: string,
+      count: number,
+      dependencies: string[],
+      prefix: string,
+    ) => {
+      const protoFiles = Array.from(
+        { length: count },
+        (_, index) => `${prefix}/${String(index)}.proto`,
+      );
+      writeJson(directory, "spine-proto-manifest.json", {
+        formatVersion: 1,
+        packageName: name,
+        packageVersion: "1.2.3",
+        protoFiles,
+        generatedExports: Object.fromEntries(
+          protoFiles.map((protoFile) => [protoFile, `generated/${protoFile}.js`]),
+        ),
+        dependencies,
+        moduleExport: "modelProtoModule",
+      });
+    };
+    writeManifest(dependency, "@example/path-budget-dependency", 5001, [], "dependency");
+    writeManifest(
+      root,
+      "@example/path-budget-root",
+      5000,
+      ["@example/path-budget-dependency"],
+      "root",
+    );
+
+    expect(() => resolveModelGraph(application, ["@example/path-budget-root"])).toThrow(
+      "spine-proto: @example/path-budget-root: resolved model graph exceeds 10000 owned Proto paths",
+    );
+  });
+
   it("rejects 10,001 raw manifest dependencies before normalization", () => {
     const directory = packageDirectory("@example/oversized-model");
     writeJson(directory, "spine-proto-manifest.json", {
@@ -1596,6 +1749,501 @@ describe("spine proto model tooling", () => {
     });
     expect(() => readConfig(directory)).toThrow(
       "spine-proto: @example/users-model: application mode must not declare protoRoot",
+    );
+  });
+
+  it("rejects malformed configuration and manifest contracts before filesystem work", () => {
+    const application = packageDirectory("@example/contract-application");
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 2,
+      mode: "application",
+      modelPackages: [],
+      registryOutput: "src/registry.ts",
+    });
+    expect(() => readConfig(application)).toThrow(
+      "spine-proto: @example/contract-application: formatVersion must be 1",
+    );
+
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: "@example/model",
+      registryOutput: "src/registry.ts",
+    });
+    expect(() => readConfig(application)).toThrow(
+      "spine-proto: @example/contract-application: modelPackages must be an array of non-empty strings",
+    );
+
+    const model = packageDirectory("@example/contract-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/contract-model"));
+    writeJson(model, "spine-proto-manifest.json", {
+      formatVersion: 2,
+      packageName: "@example/contract-model",
+      packageVersion: "1.2.3",
+      protoFiles: [],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => readManifest(model)).toThrow(
+      "spine-proto: @example/contract-model: manifest formatVersion must be 1",
+    );
+
+    writeJson(model, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/contract-model",
+      packageVersion: "1.2.3",
+      protoFiles: ["model.proto"],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => readManifest(model)).toThrow(
+      "spine-proto: @example/contract-model: manifest generatedExports must map every proto file exactly once",
+    );
+
+    writeJson(model, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/contract-model",
+      packageVersion: "9.9.9",
+      protoFiles: [],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => readManifest(model)).toThrow(
+      "spine-proto: @example/contract-model: manifest packageVersion must match package.json version",
+    );
+  });
+
+  it("distinguishes model-only and application-only operations and validates supplied ownership", () => {
+    const application = packageDirectory("@example/operation-application");
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: [],
+      registryOutput: "src/registry.ts",
+    });
+    expect(() => createManifest(application)).toThrow(
+      "spine-proto: @example/operation-application: manifest requires model mode",
+    );
+    expect(() => {
+      generateModel(application);
+    }).toThrow("generate requires model mode");
+
+    const model = packageDirectory("@example/operation-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/operation-model"));
+    expect(() => {
+      composeApplication(model);
+    }).toThrow("compose requires application mode");
+    expect(createManifest(model, ["id.proto"]).protoFiles).toEqual(["id.proto"]);
+    expect(() => createManifest(model, ["id.proto", "id.proto"])).toThrow(
+      "spine-proto: @example/operation-model: duplicate proto path",
+    );
+    expect(() =>
+      createManifest(
+        model,
+        Array.from({ length: 10001 }, () => "id.proto"),
+      ),
+    ).toThrow("spine-proto: @example/operation-model: owned Proto paths exceeds 10000 entries");
+  });
+
+  it("keeps graph resolution idempotent for a repeated direct model root", () => {
+    const application = packageDirectory("@example/repeated-root-application");
+    installModel(application, "@example/repeated-root-model");
+    expect(
+      resolveModelGraph(application, [
+        "@example/repeated-root-model",
+        "@example/repeated-root-model",
+      ]).models,
+    ).toHaveLength(1);
+  });
+
+  it("rejects malformed JSON and value shapes at package boundaries", () => {
+    const malformed = packageDirectory("@example/malformed-json");
+    writeFileSync(join(malformed, "spine-proto.json"), "{");
+    expect(() => readConfig(malformed)).toThrow(
+      "spine-proto: @example/malformed-json: cannot read spine-proto.json",
+    );
+
+    const shape = packageDirectory("@example/shape-model");
+    writeJson(shape, "spine-proto.json", "not an object");
+    expect(() => readConfig(shape)).toThrow(
+      "spine-proto: @example/shape-model: configuration must be an object",
+    );
+
+    writeJson(shape, "package.json", {
+      name: "@example/shape-model",
+      version: "1.2.3",
+      dependencies: { "@example/dependency": 3 },
+    });
+    expect(() => readConfig(shape)).toThrow(
+      "spine-proto: @example/shape-model: package.json dependencies must contain string versions",
+    );
+
+    const manifest = packageDirectory("@example/list-model");
+    writeJson(manifest, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/list-model",
+      packageVersion: "1.2.3",
+      protoFiles: [""],
+      generatedExports: {},
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => readManifest(manifest)).toThrow(
+      "spine-proto: @example/list-model: manifest protoFiles must be an array of non-empty strings",
+    );
+  });
+
+  it("wraps non-Error generation failures after releasing its claim", () => {
+    const model = packageDirectory("@example/non-error-generation");
+    writeJson(model, "spine-proto.json", modelConfig("@example/non-error-generation"));
+    mkdirSync(join(model, "proto"));
+    writeFileSync(join(model, "proto", "model.proto"), 'syntax = "proto3"; message Model {}\n');
+
+    expect(() => {
+      generateModel(model, {
+        runBuf: () => {
+          throw Object.create(null);
+        },
+      });
+    }).toThrow("spine-proto: @example/non-error-generation: generation failed");
+    expect(readdirSync(model).some((name) => name.startsWith(".spine-proto-generate.lock."))).toBe(
+      false,
+    );
+  });
+
+  it("rejects normalized-path, empty-value, and missing-export configuration variants", () => {
+    const model = packageDirectory("@example/validation-variants");
+    writeJson(model, "spine-proto.json", {
+      ...modelConfig("@example/validation-variants"),
+      packageName: "",
+    });
+    expect(() => readConfig(model)).toThrow(
+      "spine-proto: @example/validation-variants: packageName must be a non-empty string",
+    );
+
+    writeFileSync(
+      join(model, "package.json"),
+      JSON.stringify({ name: "@example/validation-variants", version: "1.2.3" }),
+    );
+    writeJson(model, "spine-proto.json", modelConfig("@example/validation-variants"));
+    expect(() => readConfig(model)).toThrow("package.json exports must expose ./generated/*.js");
+
+    writeJson(model, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/validation-variants",
+      packageVersion: "1.2.3",
+      protoFiles: ["nested//model.proto"],
+      generatedExports: { "nested//model.proto": "generated/nested/model_pb.js" },
+      dependencies: [],
+      moduleExport: "modelProtoModule",
+    });
+    expect(() => readManifest(model)).toThrow(
+      "spine-proto: @example/validation-variants: manifest protoFiles must be a normalized contained relative path",
+    );
+  });
+
+  it("rejects malformed graph requester package metadata before resolution", () => {
+    const requester = packageDirectory("@example/graph-metadata");
+    writeFileSync(join(requester, "package.json"), "[]");
+    expect(() => resolveModelGraph(requester, [])).toThrow("cannot read package.json");
+
+    writeJson(requester, "package.json", { name: "InvalidName", version: "1.2.3" });
+    expect(() => resolveModelGraph(requester, [])).toThrow(
+      "package.json name must be a valid npm package name",
+    );
+
+    writeJson(requester, "package.json", {
+      name: "@example/graph-metadata",
+      version: "1.2.3",
+      dependencies: [],
+    });
+    expect(() => resolveModelGraph(requester, [])).toThrow(
+      "package.json dependencies must contain string versions",
+    );
+  });
+
+  it("rejects invalid claim ownership and every bounded Buf failure result", () => {
+    const claimModel = packageDirectory("@example/claim-variants");
+    writeJson(claimModel, "spine-proto.json", modelConfig("@example/claim-variants"));
+    mkdirSync(join(claimModel, "proto"));
+    const malformedClaims = new Map<string, Claim>([
+      [".spine-proto-generate.lock.invalid", { content: JSON.stringify({ pid: 0 }) }],
+    ]);
+    expect(() => {
+      generateModel(claimModel, {
+        runBuf: generatedOutput,
+        lockOperations: claimOperations(malformedClaims),
+      });
+    }).toThrow("spine-proto: @example/claim-variants: generation claim has invalid owner metadata");
+
+    const releaseClaims = new Map<string, Claim>();
+    const operations = claimOperations(releaseClaims);
+    expect(() => {
+      generateModel(claimModel, {
+        runBuf: generatedOutput,
+        lockOperations: {
+          ...operations,
+          read: (path) => {
+            const owner = JSON.parse(operations.read(path)) as { token?: string };
+            return JSON.stringify({ ...owner, token: "replaced" });
+          },
+        },
+      });
+    }).toThrow("spine-proto: @example/claim-variants: cannot clean up generation lock");
+
+    const failure = (
+      name: string,
+      result: "start" | "signal" | "no-status" | "status" | "stdout" | "missing",
+    ) => {
+      const model = packageDirectory(`@example/buf-${name}`);
+      writeJson(model, "spine-proto.json", modelConfig(`@example/buf-${name}`));
+      mkdirSync(join(model, "proto"));
+      writeFileSync(join(model, "proto", "model.proto"), 'syntax = "proto3"; message Model {}\n');
+      expect(() => {
+        generateModel(model, {
+          runProcess: () => {
+            if (result === "start")
+              return {
+                pid: 1,
+                output: [],
+                stdout: "",
+                stderr: "",
+                status: null,
+                signal: null,
+                error: new Error("unavailable"),
+              };
+            if (result === "signal")
+              return {
+                pid: 1,
+                output: [],
+                stdout: "",
+                stderr: "",
+                status: null,
+                signal: "SIGTERM",
+              };
+            if (result === "no-status")
+              return { pid: 1, output: [], stdout: "", stderr: "", status: null, signal: null };
+            if (result === "status")
+              return { pid: 1, output: [], stdout: "", stderr: "failure", status: 1, signal: null };
+            if (result === "stdout")
+              return {
+                pid: 1,
+                output: [],
+                stdout: "diagnostic",
+                stderr: "",
+                status: 1,
+                signal: null,
+              };
+            return { pid: 1, output: [], stdout: "", stderr: "", status: 0, signal: null };
+          },
+        });
+      }).toThrow(
+        result === "start"
+          ? "Buf generation could not start: unavailable"
+          : result === "signal"
+            ? "Buf generation ended by signal SIGTERM"
+            : result === "no-status"
+              ? "Buf generation ended without an exit status"
+              : result === "status"
+                ? "Buf generation failed: failure"
+                : result === "stdout"
+                  ? "Buf generation failed: diagnostic"
+                  : "Buf generated no owned output",
+      );
+    };
+    failure("start", "start");
+    failure("signal", "signal");
+    failure("no-status", "no-status");
+    failure("status", "status");
+    failure("stdout", "stdout");
+    failure("missing", "missing");
+  });
+
+  it("canonicalizes exported Proto symlinks and rejects exported non-files", () => {
+    const source = (kind: "symlink" | "directory") => {
+      const model = packageDirectory(`@example/unsafe-${kind}-source`);
+      const dependencyName = `@example/${kind}-source-dependency`;
+      const dependency = installModel(model, dependencyName, [], "dependency.proto");
+      mkdirSync(join(model, "proto"));
+      writeFileSync(join(model, "proto", "model.proto"), 'syntax = "proto3"; message Model {}\n');
+      mkdirSync(join(dependency, "proto"));
+      writeFileSync(
+        join(dependency, "proto", "dependency.proto"),
+        'syntax = "proto3"; message Dependency {}\n',
+      );
+      if (kind === "symlink") {
+        writeFileSync(join(dependency, "source.proto"), 'syntax = "proto3"; message Source {}\n');
+        symlinkSync("source.proto", join(dependency, "exported.proto"));
+      } else {
+        mkdirSync(join(dependency, "exported.proto"));
+      }
+      writeJson(dependency, "package.json", {
+        name: dependencyName,
+        version: "1.2.3",
+        exports: {
+          "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+          "./proto/dependency.proto": "./exported.proto",
+        },
+      });
+      writeJson(model, "package.json", {
+        name: `@example/unsafe-${kind}-source`,
+        version: "1.2.3",
+        dependencies: { [dependencyName]: "^1.2.3" },
+      });
+      writeJson(
+        model,
+        "spine-proto.json",
+        modelConfig(`@example/unsafe-${kind}-source`, [dependencyName]),
+      );
+      if (kind === "symlink") {
+        generateModel(model, { runBuf: generatedOutput });
+        return;
+      }
+      expect(() => {
+        generateModel(model, { runBuf: generatedOutput });
+      }).toThrow(
+        `spine-proto: ${dependencyName}: cannot resolve exported Proto source dependency.proto`,
+      );
+    };
+    source("symlink");
+    source("directory");
+  });
+
+  it("rejects default live and non-regular claims, including release-time replacement", () => {
+    const live = packageDirectory("@example/default-live-claim");
+    writeJson(live, "spine-proto.json", modelConfig("@example/default-live-claim"));
+    mkdirSync(join(live, "proto"));
+    writeFileSync(
+      join(live, `.spine-proto-generate.lock.${String(process.pid)}`),
+      JSON.stringify({ pid: process.pid }),
+    );
+    expect(() => {
+      generateModel(live, { runBuf: generatedOutput });
+    }).toThrow("spine-proto: @example/default-live-claim: generation already in progress");
+
+    const symlinked = packageDirectory("@example/symlink-claim");
+    writeJson(symlinked, "spine-proto.json", modelConfig("@example/symlink-claim"));
+    mkdirSync(join(symlinked, "proto"));
+    symlinkSync("package.json", join(symlinked, ".spine-proto-generate.lock.link"));
+    expect(() => {
+      generateModel(symlinked, { runBuf: generatedOutput });
+    }).toThrow("spine-proto: @example/symlink-claim: generation claim is not a regular file");
+
+    const replacement = packageDirectory("@example/replaced-release-claim");
+    writeJson(replacement, "spine-proto.json", modelConfig("@example/replaced-release-claim"));
+    mkdirSync(join(replacement, "proto"));
+    const claims = new Map<string, Claim>();
+    const operations = claimOperations(claims);
+    expect(() => {
+      generateModel(replacement, {
+        runBuf: generatedOutput,
+        lockOperations: { ...operations, inspect: () => "other" },
+      });
+    }).toThrow("spine-proto: @example/replaced-release-claim: cannot clean up generation lock");
+  });
+
+  it("fails default cleanup when its own lock is replaced by a directory", () => {
+    const model = packageDirectory("@example/default-directory-release");
+    writeJson(model, "spine-proto.json", modelConfig("@example/default-directory-release"));
+    mkdirSync(join(model, "proto"));
+    expect(() => {
+      generateModel(model, {
+        runBuf: (_, output) => {
+          generatedOutput("", output);
+          const lock = readdirSync(model).find((name) =>
+            name.startsWith(".spine-proto-generate.lock."),
+          );
+          if (lock === undefined) throw new Error("generation lock was not created");
+          rmSync(join(model, lock));
+          mkdirSync(join(model, lock));
+        },
+      });
+    }).toThrow("spine-proto: @example/default-directory-release: cannot clean up generation lock");
+    const replacedLock = readdirSync(model).find((name) =>
+      name.startsWith(".spine-proto-generate.lock."),
+    );
+    expect(replacedLock).toBeDefined();
+    if (replacedLock !== undefined)
+      rmSync(join(model, replacedLock), { recursive: true, force: true });
+  });
+
+  it("preserves local and unknown generated imports while ignoring non-TypeScript output", () => {
+    const model = packageDirectory("@example/local-generated-imports");
+    writeJson(model, "spine-proto.json", modelConfig("@example/local-generated-imports"));
+    mkdirSync(join(model, "proto"));
+    writeFileSync(join(model, "proto", "model.proto"), 'syntax = "proto3"; message Model {}\n');
+    writeFileSync(join(model, "proto", "other.proto"), 'syntax = "proto3"; message Other {}\n');
+
+    generateModel(model, {
+      runBuf: (_, output) => {
+        mkdirSync(output, { recursive: true });
+        writeFileSync(
+          join(output, "model_pb.ts"),
+          [
+            'import {} from "./other_pb.js";',
+            'import {} from "./unknown_pb.js";',
+            "export {};",
+            "",
+          ].join("\n"),
+        );
+        writeFileSync(join(output, "generated.txt"), "not TypeScript\n");
+      },
+    });
+    const generated = readFileSync(join(model, "src/generated/model_pb.ts"), "utf8");
+    expect(generated).toContain('from "./other_pb.js"');
+    expect(generated).toContain('from "./unknown_pb.js"');
+    expect(readFileSync(join(model, "src/generated/generated.txt"), "utf8")).toBe(
+      "not TypeScript\n",
+    );
+  });
+
+  it("fails graph resolution when an exported manifest has no owning package metadata", () => {
+    const application = packageDirectory("@example/owner-search-application");
+    const model = installModel(application, "@example/owner-search-model");
+    writeJson(model, "package.json", {
+      name: "@example/different-model",
+      version: "1.2.3",
+      exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+    });
+    expect(() => resolveModelGraph(application, ["@example/owner-search-model"])).toThrow(
+      "spine-proto: @example/owner-search-model: cannot locate owning package.json",
+    );
+  });
+
+  it("requires each installed manifest dependency to be declared by its owning package", () => {
+    const application = packageDirectory("@example/graph-declaration-application");
+    const model = installModel(application, "@example/graph-declaration-model", [
+      "@example/missing-declaration",
+    ]);
+    writeJson(model, "package.json", {
+      name: "@example/graph-declaration-model",
+      version: "1.2.3",
+      dependencies: {},
+      exports: { "./spine-proto-manifest.json": "./spine-proto-manifest.json" },
+    });
+    expect(() => resolveModelGraph(application, ["@example/graph-declaration-model"])).toThrow(
+      "spine-proto: @example/graph-declaration-model: dependency " +
+        "@example/missing-declaration must be declared in package.json dependencies",
+    );
+  });
+
+  it("requires model packages to export compiled generated schema subpaths", () => {
+    const directory = packageDirectory("@example/export-model");
+    writeJson(directory, "package.json", {
+      name: "@example/export-model",
+      version: "1.2.3",
+      exports: {},
+    });
+    writeJson(directory, "spine-proto.json", modelConfig("@example/export-model"));
+
+    expect(() => readConfig(directory)).toThrow(
+      [
+        "spine-proto: @example/export-model: package.json exports must expose ./generated/*.js",
+        "with default ./dist/generated/*.js and types ./dist/generated/*.d.ts",
+      ].join(" "),
     );
   });
 
@@ -1930,7 +2578,7 @@ describe("spine proto model tooling", () => {
     for (let file = 0; file <= 10000; file += 1)
       writeFileSync(join(largeRoot, `${String(file)}.proto`), "");
     expect(() => createManifest(large)).toThrow(
-      "spine-proto: @example/large-model: proto source exceeds 10000 files",
+      "spine-proto: @example/large-model: proto source exceeds 10000 entries",
     );
     let generationStarted = false;
     expect(() => {
@@ -1939,9 +2587,22 @@ describe("spine proto model tooling", () => {
           generationStarted = true;
         },
       });
-    }).toThrow("spine-proto: @example/large-model: proto source exceeds 10000 files");
+    }).toThrow("spine-proto: @example/large-model: proto source exceeds 10000 entries");
     expect(generationStarted).toBe(false);
     expect(existsSync(join(large, "src"))).toBe(false);
+  }, 120_000);
+
+  it("bounds every encountered Proto-root entry before collecting non-Proto content", () => {
+    const directory = packageDirectory("@example/non-proto-budget-model");
+    const root = join(directory, "proto");
+    mkdirSync(root);
+    writeJson(directory, "spine-proto.json", modelConfig("@example/non-proto-budget-model"));
+    for (let entry = 0; entry <= 10000; entry += 1)
+      writeFileSync(join(root, `${String(entry)}.txt`), "");
+
+    expect(() => createManifest(directory)).toThrow(
+      "spine-proto: @example/non-proto-budget-model: proto source exceeds 10000 entries",
+    );
   }, 120_000);
 
   it("rejects generation beyond the Proto directory-depth bound before staging", () => {

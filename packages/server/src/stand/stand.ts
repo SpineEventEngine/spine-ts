@@ -140,6 +140,9 @@ export class Stand {
   constructor(options: StandOptions) {
     this.#context = cloneStorageContext(options.context);
     this.#storageFactory = options.storageFactory;
+    deferredUpdates.set(this, (schema, state, updateOptions) =>
+      this.#deferUpdate(schema, state, updateOptions),
+    );
   }
 
   /** Register one known entity state schema. Re-registering the same schema is idempotent. */
@@ -308,38 +311,63 @@ export class Stand {
     state: MessageShape<Schema>,
     options: StandUpdateOptions = {},
   ): Promise<void> {
-    const finish = this.#beginOperation();
+    const deferred = await standAccess.deferUpdate(this, schema, state, options);
+    deferred.notify();
+  }
 
+  async #deferUpdate<Schema extends MessageSchema>(
+    schema: Schema,
+    state: MessageShape<Schema>,
+    options: StandUpdateOptions,
+  ): Promise<DeferredStandUpdate> {
+    const finish = this.#beginOperation();
     try {
       const registration = this.#registration(schema, "update");
       const tenantId = this.#tenantId(options.tenantId);
       const stateCopy = clone(schema, state);
       const id = readStateId(stateCopy, registration);
-      let previousState: MessageShape<Schema> | undefined;
-      const previousStateObservable = this.#hasTenantSubscribers(registration, tenantId);
-
-      {
-        const current = this.#openCurrent(registration, tenantId);
-        if (previousStateObservable) {
-          previousState = (await current.read(id))?.state as MessageShape<Schema> | undefined;
-        }
-        await current.write({
-          id,
-          state: stateCopy,
-          version: BigInt(options.version?.number ?? 0),
-          archived: options.lifecycle?.archived ?? false,
-          deleted: options.lifecycle?.deleted ?? false,
-        });
-      }
-      this.#notify(registration, {
+      const previousState = this.#hasTenantSubscribers(registration, tenantId)
+        ? ((await this.#openCurrent(registration, tenantId).read(id))?.state as
+            MessageShape<Schema> | undefined)
+        : undefined;
+      const subscribers = [...this.#tenantSubscribers(registration, this.#tenantKey(tenantId))];
+      await this.#openCurrent(registration, tenantId).write({
         id,
-        previousState,
         state: stateCopy,
-        tenantId,
-        version: options.version,
+        version: BigInt(options.version?.number ?? 0),
+        archived: options.lifecycle?.archived ?? false,
+        deleted: options.lifecycle?.deleted ?? false,
       });
-    } finally {
+      let settled = false;
+      const settle = () => {
+        if (!settled) {
+          settled = true;
+          finish();
+        }
+      };
+      return Object.freeze({
+        cancel: settle,
+        notify: () => {
+          try {
+            this.#notify(
+              registration,
+              {
+                id,
+                previousState,
+                state: stateCopy,
+                tenantId,
+                version: options.version,
+              },
+              subscribers,
+            );
+          } finally {
+            settle();
+          }
+        },
+      });
+    } catch (error) {
       finish();
+      throw error;
     }
   }
 
@@ -467,10 +495,11 @@ export class Stand {
       readonly tenantId: string | undefined;
       readonly version: Version | undefined;
     },
+    captured?: readonly Subscriber<Schema>[],
   ): void {
     const errors: unknown[] = [];
     const tenantKey = this.#tenantKey(input.tenantId);
-    const subscribers = this.#tenantSubscribers(registration, tenantKey);
+    const subscribers = captured ?? this.#tenantSubscribers(registration, tenantKey);
 
     for (const subscriber of subscribers) {
       try {
@@ -661,6 +690,44 @@ interface EntityStorageFactory {
     close(): void;
   };
 }
+
+interface DeferredStandUpdate {
+  notify(): void;
+  cancel(): void;
+}
+
+interface StandAccess {
+  deferUpdate<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    state: MessageShape<Schema>,
+    options: StandUpdateOptions,
+  ): Promise<DeferredStandUpdate>;
+}
+
+/** @internal Repository-only persistence seam which defers subscriber delivery. */
+export const standAccess: StandAccess = Object.freeze({
+  deferUpdate<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    state: MessageShape<Schema>,
+    options: StandUpdateOptions,
+  ): Promise<DeferredStandUpdate> {
+    const deferred = deferredUpdates.get(stand);
+    if (deferred === undefined)
+      throw new TypeError("Stand deferred update requires a Stand instance.");
+    return deferred(schema, state, options);
+  },
+});
+
+const deferredUpdates = new WeakMap<
+  Stand,
+  <Schema extends MessageSchema>(
+    schema: Schema,
+    state: MessageShape<Schema>,
+    options: StandUpdateOptions,
+  ) => Promise<DeferredStandUpdate>
+>();
 
 function openEntityStorage<I, S extends Message>(
   factory: StorageFactory,

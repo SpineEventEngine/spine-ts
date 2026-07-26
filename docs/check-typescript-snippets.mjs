@@ -11,8 +11,11 @@ const documents = [
   "packages/client/README.md",
   "packages/delivery-client/README.md",
   "packages/delivery-server/README.md",
+  "packages/proto/README.md",
+  "packages/proto-tools/README.md",
   "packages/server/README.md",
   "packages/testing/README.md",
+  "examples/chat/README.md",
 ];
 const fence = /^```ts\n([\s\S]*?)^```$/gm;
 const root = resolve(import.meta.dirname, "..");
@@ -74,10 +77,14 @@ function exportsFor(specifier) {
   const cached = moduleExports.get(specifier);
   if (cached !== undefined) return cached;
   const parts = specifier.split("/");
-  const packageDirectory = resolve(root, "packages", parts[1]);
+  const packageDirectory = resolve(
+    root,
+    ["users-model", "chat-model"].includes(parts[1]) ? "examples" : "packages",
+    parts[1],
+  );
   const manifest = JSON.parse(readFileSync(resolve(packageDirectory, "package.json"), "utf8"));
   const subpath = parts.length === 2 ? "." : `./${parts.slice(2).join("/")}`;
-  const entry = manifest.exports?.[subpath];
+  const entry = exportedEntry(manifest.exports, subpath);
   const declaration = typeof entry === "string" ? entry : entry?.types;
   if (typeof declaration !== "string") return undefined;
   const declarationPath = resolve(packageDirectory, declaration);
@@ -94,6 +101,23 @@ function exportsFor(specifier) {
   );
   moduleExports.set(specifier, exported);
   return exported;
+}
+
+function exportedEntry(exports, subpath) {
+  const exact = exports?.[subpath];
+  if (exact !== undefined) return exact;
+  for (const [pattern, entry] of Object.entries(exports ?? {})) {
+    const marker = pattern.indexOf("*");
+    if (marker < 0) continue;
+    const prefix = pattern.slice(0, marker);
+    const suffix = pattern.slice(marker + 1);
+    if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix)) continue;
+    const wildcard = subpath.slice(prefix.length, subpath.length - suffix.length);
+    if (typeof entry === "string") return entry.replace("*", wildcard);
+    if (typeof entry?.types === "string")
+      return { ...entry, types: entry.types.replace("*", wildcard) };
+  }
+  return undefined;
 }
 
 function fail(document, line, message) {

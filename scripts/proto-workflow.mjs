@@ -56,9 +56,15 @@ export const modelAtomicTargets = [
     displayPath: "examples/chat-model/generated",
     packagePath: "examples/chat-model",
     moduleName: "Chat",
+    handlerProjectPath: "examples/chat/tsconfig.json",
+    handlerGeneratedPath: "examples/chat/generated",
   },
 ];
-export const atomicGeneratedTargets = [...generatedTargets, ...modelAtomicTargets];
+export const atomicGeneratedTargets = [
+  ...generatedTargets,
+  ...modelAtomicTargets,
+  { displayPath: "examples/chat/generated" },
+];
 
 export function main(argv = process.argv.slice(2)) {
   const command = argv[0];
@@ -671,6 +677,8 @@ export function stageGeneratedTargets(options = {}) {
         return { stagedTargets: [], status: modelStage.status };
       }
       if (modelStage.stagedTarget !== undefined) stagedTargets.push(modelStage.stagedTarget);
+      if (modelStage.handlerStagedTarget !== undefined)
+        stagedTargets.push(modelStage.handlerStagedTarget);
     }
 
     return {
@@ -696,6 +704,7 @@ function stageModel(target, root, options = {}) {
   const packageRoot = stageRoot;
   const output = join(packageRoot, "generated");
   const run = options.runModelCommand ?? runCommandIn;
+  let handlerStagedTarget;
   try {
     for (const name of ["package.json", "spine-proto.json", "proto"]) {
       cpSync(join(livePackageRoot, name), join(packageRoot, name), {
@@ -721,6 +730,11 @@ function stageModel(target, root, options = {}) {
       if (companionStatus !== 0)
         throw new Error(`${target.moduleName} companion generation failed`);
     }
+    handlerStagedTarget =
+      target.handlerGeneratedPath === undefined
+        ? undefined
+        : createHandlerStage(target.handlerGeneratedPath, root);
+    const handlerOutput = handlerStagedTarget?.stagedOutputRoot ?? output;
     const handlerStatus =
       target.handlerProjectPath === undefined
         ? 0
@@ -732,13 +746,17 @@ function stageModel(target, root, options = {}) {
               "--project",
               join(root, target.handlerProjectPath),
               "--generated-root",
-              output,
+              handlerOutput,
               "--source-generated-root",
-              join(livePackageRoot, "generated"),
+              target.handlerGeneratedPath === undefined
+                ? join(livePackageRoot, "generated")
+                : join(root, target.handlerGeneratedPath),
               "--out",
-              join(output, "handler/generated-handler-registry.ts"),
+              join(handlerOutput, "handler/generated-handler-registry.ts"),
               "--published-out",
-              join(livePackageRoot, "generated/handler/generated-handler-registry.ts"),
+              target.handlerGeneratedPath === undefined
+                ? join(livePackageRoot, "generated/handler/generated-handler-registry.ts")
+                : join(root, target.handlerGeneratedPath, "handler/generated-handler-registry.ts"),
             ],
             root,
           );
@@ -760,14 +778,31 @@ function stageModel(target, root, options = {}) {
           },
         ],
       },
+      ...(handlerStagedTarget === undefined ? {} : { handlerStagedTarget }),
     };
   } catch (error) {
     console.error(
       `Failed to stage ${target.moduleName} output: ${error instanceof Error ? error.message : String(error)}`,
     );
+    if (handlerStagedTarget !== undefined)
+      rmSync(handlerStagedTarget.stageRoot, { recursive: true, force: true });
     rmSync(stageRoot, { recursive: true, force: true });
     return { status: 1 };
   }
+}
+
+function createHandlerStage(displayPath, root) {
+  if (!assertGeneratedPathSafe(root, displayPath)) throw new Error("unsafe handler generated path");
+  const generatedRoot = join(root, displayPath);
+  const stageRoot = mkdtempSync(join(dirname(generatedRoot), ".generated-"));
+  const stagedOutputRoot = join(stageRoot, "generated");
+  mkdirSync(stagedOutputRoot, { recursive: true });
+  return {
+    generatedRoot,
+    stagedOutputRoot,
+    stageRoot,
+    target: { displayPath },
+  };
 }
 
 export function cleanupStagedTargets(stagedTargets) {
@@ -890,6 +925,11 @@ export function generateTargets(options = {}) {
     }
   } catch (error) {
     primaryFailure = true;
+    if (chatRegistry !== undefined) {
+      rmSync(chatRegistry.stageRoot, { recursive: true, force: true });
+      rmSync(chatRegistry.fileStageRoot, { recursive: true, force: true });
+      chatRegistry = undefined;
+    }
     console.error(
       `Failed to publish generated output: ${
         error instanceof Error ? error.message : String(error)

@@ -6,6 +6,7 @@ import { satisfies, validRange } from "semver";
 import { type ProtoManifest } from "../index.js";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { isRegistryDependencySpecifier } from "./registry-dependency.js";
+import { isNpmPackageName } from "./npm-package-name.js";
 
 export interface ResolvedModel {
   readonly name: string;
@@ -50,11 +51,17 @@ export function resolveModelGraph(
       "model dependency graph exceeds 10000 packages",
     );
   }
+  const rootPackage = readPackageJson(join(requesterRoot, "package.json"), requesterRoot);
+  for (const modelPackage of modelPackages) {
+    if (!isNpmPackageName(modelPackage))
+      fail(rootPackage.name, `model package ${modelPackage} must be a valid npm package name`);
+  }
   const resolved = new Map<string, ResolvedNode>();
   const owners: Record<string, ProtoOwner> = {};
   const models: ResolvedModel[] = [];
   const states = new Map<string, "visiting" | "visited">();
   let packageCount = 0;
+  let ownedProtoPaths = 0;
   let scheduledEdges = modelPackages.length;
   const pending: TraversalStep[] = modelPackages
     .slice()
@@ -83,6 +90,9 @@ export function resolveModelGraph(
       states.set(node.model.root, "visited");
       models.push(node.model);
       for (const protoFile of node.manifest.protoFiles) {
+        ownedProtoPaths += 1;
+        if (ownedProtoPaths > 10000)
+          fail(node.model.name, "resolved model graph exceeds 10000 owned Proto paths");
         const existing = owners[protoFile];
         if (existing !== undefined && existing.packageName !== node.model.name) {
           fail(
@@ -174,6 +184,8 @@ function readPackageJson(path: string, requester: string): PackageJson {
     const packageJson = value as Record<string, unknown>;
     if (typeof packageJson.name !== "string" || packageJson.name.length === 0)
       fail(requester, "package.json name must be a non-empty string");
+    if (!isNpmPackageName(packageJson.name))
+      fail(requester, "package.json name must be a valid npm package name");
     if (typeof packageJson.version !== "string" || packageJson.version.length === 0)
       fail(requester, "package.json version must be a non-empty string");
     if (packageJson.dependencies !== undefined && !isStringRecord(packageJson.dependencies)) {
@@ -192,6 +204,8 @@ function readPackageJson(path: string, requester: string): PackageJson {
 
 function validateDeclaredDependencies(packageJson: PackageJson, manifest: ProtoManifest): void {
   for (const dependency of manifest.dependencies) {
+    if (!isNpmPackageName(dependency))
+      fail(packageJson.name, `dependency ${dependency} must be a valid npm package name`);
     const specifier = packageJson.dependencies[dependency];
     if (specifier === undefined)
       fail(

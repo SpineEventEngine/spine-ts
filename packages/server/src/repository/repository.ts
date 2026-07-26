@@ -78,7 +78,7 @@ import {
   type HandlerParameterCount,
   type RegisteredHandlerMetadata,
 } from "../handler/handler-metadata.js";
-import type { Stand } from "../stand/stand.js";
+import { standAccess, type Stand } from "../stand/stand.js";
 import { TransitionValidationError } from "./command-errors.js";
 import { MessageIds, PrimitiveIds } from "./primitive-id.js";
 
@@ -1149,31 +1149,45 @@ class AggregateExecutionSupport {
     events: readonly Event[],
   ): Promise<void> {
     const lifecycle = repositoryLifecycle(loaded.entity);
-    await loaded.current.write({
-      id: entityId,
-      state: repositoryState(loaded.entity) as Message,
-      version,
-      archived: lifecycle.archived,
-      deleted: lifecycle.deleted,
-    });
-    if (historyConfiguration(this.#repository).stateHistory) {
-      await loaded.states.append({
-        entityId,
-        state: repositoryState(loaded.entity) as Message,
-        version,
-        createdAt: events[events.length - 1]?.context?.timestamp ?? create(TimestampSchema),
-      });
-      entityStateHistoryCaches.get(loaded.entity)?.clear();
+    const deferred = await standAccess.deferUpdate(
+      this.#runtime.stand,
+      this.#repository.stateSchema,
+      repositoryState(loaded.entity) as never,
+      standUpdateOptions(
+        this.#storageContext.tenantId,
+        create(VersionSchema, { number: eventVersionNumber(version) }),
+        lifecycle,
+      ),
+    );
+    try {
+      if (historyConfiguration(this.#repository).stateHistory) {
+        await loaded.states.append({
+          entityId,
+          state: repositoryState(loaded.entity) as Message,
+          version,
+          createdAt: events[events.length - 1]?.context?.timestamp ?? create(TimestampSchema),
+        });
+        entityStateHistoryCaches.get(loaded.entity)?.clear();
+      }
+      for (const event of events) {
+        await loaded.events.append({
+          entityId,
+          event,
+          producerVersion: readEventVersion(event),
+          createdAt: event.context?.timestamp ?? create(TimestampSchema),
+        });
+      }
+      await this.appendDeliveryEvents(events);
+    } catch (error) {
+      deferred.cancel();
+      throw error;
     }
-    for (const event of events) {
-      await loaded.events.append({
-        entityId,
-        event,
-        producerVersion: readEventVersion(event),
-        createdAt: event.context?.timestamp ?? create(TimestampSchema),
-      });
+    try {
+      deferred.notify();
+    } catch (error) {
+      const event = events[events.length - 1];
+      if (event !== undefined) this.#runtime.recordDispatchFailure(event, error);
     }
-    await this.appendDeliveryEvents(events);
   }
 
   async appendDiagnosticEvent(
