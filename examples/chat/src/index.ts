@@ -1,7 +1,13 @@
 import { create, type Message as ProtoMessage } from "@bufbuild/protobuf";
 import { unpackAnyUsing, packAny } from "@spine-event-engine/core";
-import { MessageSchema, type Message } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/chat_pb.js";
-import { UserIdSchema, type UserId } from "@spine-event-engine/users-model/generated/spine/example/users/v1/users_pb.js";
+import {
+  MessageSchema,
+  type Message,
+} from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/chat_pb.js";
+import {
+  UserIdSchema,
+  type UserId,
+} from "@spine-event-engine/users-model/generated/spine/example/users/v1/users_pb.js";
 
 import { typeRegistry } from "./model-registry.js";
 
@@ -13,7 +19,9 @@ export function postMessage(author: UserId, text: string): Message {
 }
 
 /** Dynamically decodes registered application model values. */
-export function unpackChatValue(value: Parameters<typeof unpackAnyUsing>[1]): ProtoMessage | undefined {
+export function unpackChatValue(
+  value: Parameters<typeof unpackAnyUsing>[1],
+): ProtoMessage | undefined {
   return unpackAnyUsing(typeRegistry, value);
 }
 

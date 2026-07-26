@@ -20,6 +20,7 @@ import { createManifest, readConfig } from "../index.js";
 import { readManifestAt } from "../io/manifest-reader.js";
 import { resolveModelGraph } from "../model/model-graph.js";
 import { writeManifestAtomically, type ManifestFileOperations } from "../io/atomic-manifest.js";
+export { generateHandlers } from "./handler-generator.js";
 
 /** Bounded seams used to test failure handling while retaining real Buf integration. */
 export interface GenerationOperations {

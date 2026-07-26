@@ -282,6 +282,9 @@ importers:
       '@bufbuild/protoc-gen-es':
         specifier: 2.12.1
         version: 2.12.1(@bufbuild/protobuf@2.12.1)
+      '@spine-event-engine/server':
+        specifier: 0.0.0
+        version: link:../server
       semver:
         specifier: 7.8.5
         version: 7.8.5
@@ -313,6 +316,9 @@ importers:
       '@spine-event-engine/transport':
         specifier: workspace:*
         version: link:../transport
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
 
   packages/storage:
     dependencies:

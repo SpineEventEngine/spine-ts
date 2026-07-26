@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
@@ -1140,7 +1141,27 @@ function generatedModuleExports(
 ): GeneratedExports | undefined {
   const module = generatedModuleSource(source, moduleSpecifier, program);
 
-  return module === undefined ? undefined : exportedNames(module);
+  if (module === undefined) return undefined;
+  const declarations = exportedNames(module);
+  const runtime = pairedRuntimeExports(module);
+  if (runtime === undefined) return declarations;
+  return {
+    types: declarations.types,
+    values: runtime.values,
+    schemaRoles: runtime.schemaRoles,
+  };
+}
+
+function pairedRuntimeExports(declarations: ts.SourceFile): GeneratedExports | undefined {
+  if (!declarations.isDeclarationFile) return undefined;
+  const runtimePath = declarations.fileName.replace(/\.d\.ts$/u, ".js");
+  try {
+    return exportedNames(
+      ts.createSourceFile(runtimePath, readFileSync(runtimePath, "utf8"), ts.ScriptTarget.Latest),
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 function generatedModuleSource(
@@ -1148,8 +1169,15 @@ function generatedModuleSource(
   moduleSpecifier: string,
   program: ts.Program,
 ): ts.SourceFile | undefined {
+  const resolved = ts.resolveModuleName(
+    moduleSpecifier,
+    source.fileName,
+    program.getCompilerOptions(),
+    ts.sys,
+  ).resolvedModule?.resolvedFileName;
   const base = resolve(dirname(source.fileName), moduleSpecifier);
   const candidates = uniqueStrings([
+    ...(resolved === undefined ? [] : [resolved]),
     base.replace(/\.js$/, ".ts"),
     `${base}.ts`,
     base,

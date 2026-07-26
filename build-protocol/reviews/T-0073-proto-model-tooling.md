@@ -1052,3 +1052,212 @@ sub-slice.
   freshness; generated/tooling typechecks; lint/cleanup enforcement;
   formatting; whitespace; frozen lock/supply-chain verification; and no
   journal, backup, or staging residue. No P0, P1, or accepted P2 remains.
+
+## Slice C portable handler command review assignment
+
+Scope is the uncommitted diff after `2a74ed7b`: packaged
+`spine-proto handlers`, the bounded Server handler-codegen export and analyzer
+package-resolution correction, exact dependency/reference/lock changes,
+external-style generation/failure/symlink tests, Proto Tools clean-pack flow,
+and mechanical formatting of the immediately preceding Chat foundation.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`; review command/codegen
+  cohesion, dependency direction, naming, duplication, global Vitest alias,
+  test maintainability, and absence of speculative configuration/tooling.
+- TypeScript/API: existing `typescript_api_docs_reviewer`, expected and
+  explicitly dispatched `gpt-5.6-terra` / `high`; review internal export
+  contract, declarations/TSDoc, exact package metadata/dependencies, CLI/bin
+  behavior, portable generated imports, tarball payload, and compatibility
+  with fresh npm-installed applications.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; review compiler/program resource bounds, path and
+  symlink containment, atomic replacement, diagnostics/failure preservation,
+  clean builds, module resolution, and test sufficiency.
+- Documentation: N/A for this bounded tooling foundation because the
+  comprehensive external workflow guide remains a mandatory Wave 3 closure
+  slice after runnable Chat and fresh-tarball acceptance.
+- All reviewers are read-only and may not edit, spawn children, commit, push,
+  or merge. Runtime self-introspection limitations must be recorded honestly.
+
+## Slice C portable handler command review results
+
+- TypeScript/API accepts one P1. The external-style fixture maps generated
+  imports to raw `.ts` sources with schema initializers and calls source
+  `generateHandlers()` through a Vitest alias. Real packed model exports expose
+  `.d.ts` plus runtime `.js`; declarations omit the initializer the analyzer
+  currently uses to infer command/event roles, so a normal packaged
+  application would fail with `INVALID_SIGNAL_TYPE` or emitted-schema
+  diagnostics. The fixture also does not exercise the packaged Proto Tools to
+  packaged Server codegen link.
+- Required correction: use real tarball-installed package layouts and the
+  packaged CLI, make analyzer resolution obtain the generated runtime
+  descriptor information needed for roles without weakening validation, and
+  prove generated entity/schema imports typecheck and resolve at runtime.
+  Server TypeScript dependency, exact Proto Tools Server dependency/lock,
+  bin/clean-pack payload, TSDoc, and specifiers are otherwise clean.
+- The existing API role used expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable configured metadata matches and
+  independent runtime self-introspection is unavailable.
+- Style and reliability remain in progress before the complete wave returns
+  one correction batch.
+- Style/maintainability accepts two P2s. Optional internal codegen paths are
+  documented as application paths but relative values resolve from
+  `process.cwd()` instead of `appRoot`; either resolve relative overrides from
+  the application or remove the unneeded knobs and keep only conventional
+  paths. The global Vitest alias and fixture path mappings also remap both
+  package boundaries to repository sources, so the portability claim can stay
+  green while exports or installed declarations are broken.
+- The existing style role used expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable configured metadata matches and
+  independent runtime self-introspection is unavailable. Command naming,
+  clean-pack behavior, and analyzer/writer reuse are otherwise clean.
+- Reliability remains in progress before the complete correction batch is
+  dispatched.
+- Performance/reliability confirms the packaged-model P1 and accepts one P2.
+  The compiler accepts unbounded config roots/references and the analyzer scans
+  every non-declaration source in the program, including external TypeScript
+  loaded through path mappings. A broad configuration can consume unbounded
+  work and can register dependency-source decorated entities. Bound compiler
+  inputs, restrict analyzed entities to validated application-owned roots, and
+  cover over-limit plus external-source/project-reference cases.
+- Add direct stage-write/rename cleanup faults and a real packaged CLI
+  invocation to the correction evidence. Atomic sequencing and live-output
+  preservation are otherwise sound.
+- The existing reliability role used expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable configured metadata matches and
+  independent runtime self-introspection is unavailable.
+- The complete wave is collected. One correction batch returns to the same
+  existing `implementer`, expected and explicitly redispatched as
+  `gpt-5.6-terra` / `medium`: support packed `.d.ts` plus runtime `.js`
+  descriptor role inference; replace source aliases with real packed
+  CLI/model/Server acceptance whose generated imports typecheck and resolve;
+  remove or app-root optional path knobs; bound compiler inputs and analyze
+  only application-owned sources; and add write/rename, over-limit,
+  external-source, and project-reference regressions. No docs, runnable Chat
+  behavior, unrelated packages, commit, push, or merge.
+
+## Slice C portable handler command correction result
+
+- The existing `implementer` used the expected explicitly configured
+  `gpt-5.6-terra` / `medium` profile; independent runtime self-introspection
+  was unavailable.
+- Packed `.d.ts` exports are paired with statically parsed `.js` descriptors
+  without executing package code. Conventional application paths, a
+  1,000-root admission bound, application-owned analysis, project-reference
+  and external-root rejection, and injectable atomic publication operations
+  address the accepted API/reliability/style findings.
+- A registry-free positive fixture uses only extracted real Spine and model
+  tarball payloads, invokes the installed Proto Tools CLI and Server codegen,
+  typechecks generated imports, and resolves them from the fresh app. Only
+  third-party dependencies use workspace test-infrastructure links; no Spine
+  source alias, path mapping, or symlink remains.
+- Owner evidence is GREEN: installed acceptance; 89/89 focused tests; both
+  package builds; generated lint; formatting; and whitespace. Coordinator
+  verification and focused finding-closure re-review follow.
+
+## Slice C finding-closure review assignment
+
+- Coordinator verification independently passes the real packed installed CLI
+  acceptance, all 89 focused tests, Server/Proto Tools builds, full generated
+  lint and cleanup enforcement, repository formatting, and whitespace.
+- TypeScript/API finding closure uses the existing
+  `typescript_api_docs_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`: verify packed descriptor pairing, installed
+  exports/imports/declarations, package dependency direction, and closure of
+  the accepted P1.
+- Style/maintainability finding closure uses the existing
+  `style_maintainability_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`: verify conventional paths, removal of aliases and
+  speculative knobs, test maintainability, and closure of both accepted P2s.
+- Performance/reliability finding closure uses the existing
+  `performance_reliability_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`: verify compiler/source bounds, application
+  ownership, project/external rejection, atomic fault cleanup, bounded child
+  commands, and packed acceptance.
+- All reviews are read-only and may not edit, spawn children, commit, push, or
+  merge. Runtime self-introspection limitations must be reported honestly.
+- Style/maintainability finding closure accepts one remaining P2:
+  `packages/proto-tools/tsconfig.json` still maps the Server handler-codegen
+  export directly to Server source, bypassing the compiled export/declaration
+  boundary during Proto Tools builds. Remove that path mapping and rely on the
+  exact dependency plus project-reference build order. All prior style
+  findings are otherwise closed.
+- The existing style role used the expected explicitly dispatched
+  `gpt-5.6-terra` / `high` profile; independent runtime self-introspection is
+  unavailable.
+- The same existing `implementer`, expected and explicitly redispatched
+  `gpt-5.6-terra` / `medium`, owns only removal of that path mapping and the
+  resulting build/test metadata reconciliation. No other behavior or scope may
+  change.
+- Performance/reliability finding closure accepts two remaining P2s. First,
+  TypeScript expands `include` globs fully before the 1,000-root check, so
+  discovery itself remains unbounded; use a bounded config directory host or a
+  simpler accepted-config constraint that enforces the limit during discovery,
+  with an over-limit discovery regression. Second, stage cleanup failure can
+  replace the primary write/rename diagnostic; preserve the primary error and
+  attach cleanup only as secondary context, with real stage removal and
+  cleanup-failure regressions.
+- The existing reliability role used the expected explicitly dispatched
+  `gpt-5.6-terra` / `high` profile; independent runtime self-introspection is
+  unavailable. Descriptor pairing, application-owned analysis,
+  external/project rejection, packed CLI/typecheck/resolve, and subprocess
+  bounds are closed.
+- Style correction result: the same explicitly configured Terra/medium
+  implementer removed the Server source path mapping only. Proto Tools now
+  resolves the exact dependency through project-reference build order.
+  Server/Proto Tools build, all 59 Proto Tools tests including packed
+  acceptance, full generated lint, formatting, and whitespace pass.
+- TypeScript/API finding closure is CLEAN. Packed declarations and sibling
+  runtime descriptor JavaScript are paired and statically AST-parsed without
+  execution; exact descriptor/schema export names gate role inference; the
+  exact Server dependency and internal export align with declarations/TSDoc;
+  and installed CLI generation, typechecking, runtime resolution, bin/files,
+  and clean-pack behavior are covered.
+- The API role used the expected explicitly dispatched
+  `gpt-5.6-terra` / `high` profile; actual runtime metadata was not exposed.
+- The complete closure wave is collected. The same existing `implementer`,
+  expected and explicitly redispatched `gpt-5.6-terra` / `medium`, owns one
+  final batch: enforce the source/discovery budget while TypeScript expands
+  config globs, and preserve the primary write/rename error with cleanup
+  failure secondary. Add focused discovery, real stage removal, and
+  cleanup-failure ordering regressions. No other behavior or scope may change.
+- Final correction result: the expected explicit Terra/medium implementer
+  added streaming TypeScript-native discovery with a 1,000-entry budget,
+  application-root containment, and symlink rejection, plus ordered aggregate
+  reporting for primary and cleanup failures. Coordinator evidence passes
+  Server/Proto Tools builds, full lint/cleanup, formatting, whitespace, packed
+  acceptance, and all 90 focused tests.
+- Only the substantively affected existing
+  `performance_reliability_reviewer` reopens for finding closure, expected and
+  explicitly dispatched `gpt-5.6-terra` / `high`. The review is read-only and
+  may not edit, spawn children, commit, push, or merge.
+- Final reliability closure confirms streaming discovery, containment,
+  project-reference rejection, real stage cleanup, and ordered primary/cleanup
+  reporting. One P2 remains: add a direct matched source-directory/file symlink
+  regression that proves rejection before output mutation. Also cover the
+  conventional generated-root symlink preservation path in the same direct
+  codegen boundary.
+- The existing reliability role retained the expected explicitly dispatched
+  `gpt-5.6-terra` / `high` profile; independent runtime metadata was not
+  exposed. The same explicit Terra/medium implementer owns tests only.
+- Tests-only correction result: the expected explicit Terra/medium implementer
+  added direct matched-source and generated-root symlink regressions; no
+  production change was required. Coordinator verification passes builds, full
+  lint/cleanup, formatting, whitespace, packed acceptance, and all 92 focused
+  tests.
+- The same reliability role performs final read-only closure under expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`.
+- Final performance/reliability closure is CLEAN. The direct matched-source and
+  generated-root symlink regressions close the final P2; no accepted
+  reliability finding remains. The role retained the expected explicit
+  `gpt-5.6-terra` / `high` profile and independent runtime metadata was not
+  exposed.
+- Slice C closure disposition: style, TypeScript/API, and
+  performance/reliability concerns are CLEAN after correction. Documentation
+  remains N/A for this bounded foundation because the comprehensive public
+  workflow guide is a mandatory later Wave 3 closure slice. Coordinator
+  evidence is GREEN for builds, full lint/cleanup, formatting, whitespace,
+  packed installed acceptance, and all 92 focused tests. No accepted finding
+  remains before commit.

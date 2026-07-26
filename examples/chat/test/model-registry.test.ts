@@ -12,7 +12,9 @@ describe("Chat application model registry", () => {
     const message = create(MessageSchema, { author: user, text: "hello" });
 
     expect(unpackChatValue(packAny(UserIdSchema, user))?.$typeName).toBe(UserIdSchema.typeName);
-    expect(unpackChatValue(packAny(MessageSchema, message))?.$typeName).toBe(MessageSchema.typeName);
+    expect(unpackChatValue(packAny(MessageSchema, message))?.$typeName).toBe(
+      MessageSchema.typeName,
+    );
     expect(typeRegistry.findByFullName(UserIdSchema.typeName)?.schema).toBe(UserIdSchema);
     expect(typeRegistry.findByFullName(MessageSchema.typeName)?.schema).toBe(MessageSchema);
   });

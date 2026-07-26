@@ -11,7 +11,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -30,7 +31,7 @@ import { resolveModelGraph } from "../src/model/model-graph.js";
 function packageDirectory(name: string): string {
   const directory = mkdtempSync(join(tmpdir(), "spine-proto-tools-"));
   writeFileSync(join(directory, "package.json"), JSON.stringify({ name, version: "1.2.3" }));
-  return directory;
+  return realpathSync(directory);
 }
 
 function writeJson(directory: string, path: string, value: unknown): void {
@@ -119,7 +120,196 @@ function generatedOutput(_: string, output: string): void {
   writeFileSync(join(output, "model_pb.ts"), "export {};\n");
 }
 
+function packedHandlerTarballs(): readonly string[] {
+  const destination = mkdtempSync(join(tmpdir(), "spine-handler-tarballs-"));
+  const packages = [
+    "packages/proto-tools",
+    "packages/server",
+    "packages/proto",
+    "packages/core",
+    "packages/storage",
+    "packages/transport",
+    "examples/users-model",
+    "examples/chat-model",
+  ];
+  for (const packagePath of packages) {
+    execFileSync("pnpm", ["--dir", packagePath, "pack", "--pack-destination", destination], {
+      cwd: process.cwd(),
+      stdio: "pipe",
+      timeout: 30_000,
+    });
+  }
+  createHandlerModelTarball(destination);
+  return readdirSync(destination).map((name) => join(destination, name));
+}
+
+function createHandlerModelTarball(destination: string): void {
+  const model = packageDirectory("@acme/handler-model");
+  writeJson(model, "package.json", {
+    name: "@acme/handler-model",
+    version: "1.0.0",
+    type: "module",
+    files: ["dist"],
+    exports: {
+      "./generated/*.js": { types: "./dist/generated/*.d.ts", default: "./dist/generated/*.js" },
+    },
+  });
+  writeJson(model, "spine-proto.json", {
+    ...modelConfig("@acme/handler-model"),
+    generatedRoot: "generated",
+    exportRoot: "generated",
+  });
+  writeJson(model, "tsconfig.json", {
+    compilerOptions: {
+      module: "NodeNext",
+      moduleResolution: "NodeNext",
+      target: "ES2024",
+      declaration: true,
+      outDir: "dist",
+      rootDir: ".",
+      strict: true,
+    },
+    include: ["generated/**/*.ts"],
+  });
+  mkdirSync(join(model, "proto/chat/v1"), { recursive: true });
+  writeFileSync(
+    join(model, "proto/chat/v1/chat.proto"),
+    'syntax = "proto3"; package chat.v1;\nmessage Message { string text = 1; }\n',
+  );
+  writeFileSync(
+    join(model, "proto/chat/v1/commands.proto"),
+    'syntax = "proto3"; package chat.v1;\nmessage PostMessage { string text = 1; }\n',
+  );
+  writeFileSync(
+    join(model, "proto/chat/v1/events.proto"),
+    'syntax = "proto3"; package chat.v1;\nmessage MessagePosted { string text = 1; }\n',
+  );
+  const modules = join(model, "node_modules");
+  mkdirSync(join(modules, "@bufbuild"), { recursive: true });
+  mkdirSync(join(modules, "@spine-event-engine"), { recursive: true });
+  symlinkSync(
+    join(process.cwd(), "packages/proto-tools/node_modules/@bufbuild/protobuf"),
+    join(modules, "@bufbuild/protobuf"),
+  );
+  symlinkSync(join(process.cwd(), "packages/proto"), join(modules, "@spine-event-engine/proto"));
+  generateModel(model);
+  execFileSync(
+    process.execPath,
+    [join(process.cwd(), "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+    { cwd: model, timeout: 30_000 },
+  );
+  execFileSync("npm", ["pack", "--ignore-scripts", "--pack-destination", destination], {
+    cwd: model,
+    timeout: 30_000,
+    env: { ...process.env, npm_config_cache: mkdtempSync(join(tmpdir(), "spine-npm-pack-cache-")) },
+  });
+}
+
+function installTarballs(app: string, tarballs: readonly string[]): void {
+  const modules = join(app, "node_modules");
+  mkdirSync(modules);
+  for (const tarball of tarballs) extractTarball(tarball, modules);
+  linkThirdParty(app);
+}
+
+function extractTarball(tarball: string, modules: string): void {
+  const stage = mkdtempSync(join(tmpdir(), "spine-handler-extract-"));
+  execFileSync("tar", ["-xzf", tarball, "--strip-components=1", "-C", stage], { timeout: 30_000 });
+  const packageName = JSON.parse(readFileSync(join(stage, "package.json"), "utf8")) as {
+    name?: unknown;
+  };
+  if (
+    typeof packageName.name !== "string" ||
+    (!packageName.name.startsWith("@spine-event-engine/") &&
+      packageName.name !== "@acme/handler-model")
+  )
+    throw new Error(`Unexpected packed package: ${tarball}`);
+  const target = join(modules, ...packageName.name.split("/"));
+  mkdirSync(dirname(target), { recursive: true });
+  renameSync(stage, target);
+}
+
+function linkThirdParty(app: string): void {
+  const modules = join(app, "node_modules");
+  for (const [name, source] of [
+    ["@bufbuild", join(process.cwd(), "packages/proto-tools/node_modules/@bufbuild")],
+    ["@connectrpc", join(process.cwd(), "packages/server/node_modules/@connectrpc")],
+    ["typescript", join(process.cwd(), "node_modules/typescript")],
+    ["zeromq", join(process.cwd(), "node_modules/zeromq")],
+    ["semver", join(process.cwd(), "packages/proto-tools/node_modules/semver")],
+    [
+      "@spine-event-engine/validation-ts",
+      join(process.cwd(), "packages/core/node_modules/@spine-event-engine/validation-ts"),
+    ],
+  ] as const) {
+    const target = join(modules, ...name.split("/"));
+    mkdirSync(dirname(target), { recursive: true });
+    symlinkSync(source, target);
+  }
+}
+
 describe("spine proto model tooling", () => {
+  it("runs installed handler tooling against packed Server and model packages", () => {
+    const tarballs = packedHandlerTarballs();
+    const app = packageDirectory("@acme/packed-handler-app");
+    installTarballs(app, tarballs);
+    writeJson(app, "tsconfig.json", {
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        target: "ES2024",
+        lib: ["ES2024", "DOM", "decorators"],
+        skipLibCheck: true,
+        strict: true,
+      },
+      include: ["src/**/*.ts", "generated/**/*.ts"],
+    });
+    mkdirSync(join(app, "src"), { recursive: true });
+    writeFileSync(
+      join(app, "src/chat.ts"),
+      [
+        'import { Aggregate, Assign } from "@spine-event-engine/server";',
+        'import { type Message, MessageSchema } from "@acme/handler-model/generated/chat/v1/chat_pb.js";',
+        'import { type PostMessage } from "@acme/handler-model/generated/chat/v1/commands_pb.js";',
+        'import { type MessagePosted } from "@acme/handler-model/generated/chat/v1/events_pb.js";',
+        "",
+        "export class Chat extends Aggregate<string, typeof MessageSchema, bigint> {",
+        "  @Assign post(command: PostMessage): MessagePosted { return {} as MessagePosted; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    execFileSync(
+      process.execPath,
+      [
+        join(app, "node_modules/@spine-event-engine/proto-tools/dist/src/cli/spine-proto.js"),
+        "handlers",
+      ],
+      {
+        cwd: app,
+        timeout: 30_000,
+      },
+    );
+    const registry = join(app, "generated/handler/generated-handler-registry.ts");
+    const source = readFileSync(registry, "utf8");
+    expect(source).toContain("@acme/handler-model/generated/chat/v1/chat_pb.js");
+    expect(source).toContain("@spine-event-engine/server/internal/generated-handler-registry");
+    execFileSync(
+      process.execPath,
+      [join(app, "node_modules/typescript/bin/tsc"), "--noEmit", "-p", "tsconfig.json"],
+      {
+        cwd: app,
+        timeout: 30_000,
+      },
+    );
+    const require = createRequire(join(app, "package.json"));
+    expect(
+      require.resolve("@spine-event-engine/server/internal/generated-handler-registry"),
+    ).toContain("generated-handler-registry.js");
+    expect(require.resolve("@acme/handler-model/generated/chat/v1/chat_pb.js")).toContain(
+      "chat_pb.js",
+    );
+  }, 120_000);
   it("runs packaged Buf to generate only a model's owned source and module", () => {
     const model = packageDirectory("@example/users-model");
     writeJson(model, "spine-proto.json", modelConfig("@example/users-model"));
@@ -967,7 +1157,8 @@ describe("spine proto model tooling", () => {
       'import { TypeRegistry } from "@spine-event-engine/core";\n' +
         'import { modelProtoModule as model0 } from "@example/chat-model";\n' +
         'import { modelProtoModule as model1 } from "@example/users-model";\n\n' +
-        "export const typeRegistry = TypeRegistry.from(model0, model1);\n",
+        "/** Registry of every model package declared by this application. */\n" +
+        "export const typeRegistry: TypeRegistry = TypeRegistry.from(model0, model1);\n",
     );
   });
 
