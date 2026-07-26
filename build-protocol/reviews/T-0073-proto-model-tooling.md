@@ -653,3 +653,119 @@ runtime metadata evidence because independent self-introspection is unavailable.
   prose is required in Slice D.
 - All accepted findings are resolved. The prerequisite is accepted for final
   mechanical verification, commit, and immediate task-branch push.
+
+## Slice C Todo migration review assignment
+
+Scope is the uncommitted diff after `ecd07b9c`: Todo combined model/application
+package configuration, deterministic manifest/module, custom generation
+post-steps, root orchestration, package exports/clean build, lockfile, focused
+tests, and the task-owned generator-template cleanup.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  `gpt-5.6-terra` / `high`, both explicit. Check smallest combined-package
+  shape, root orchestration cohesion, custom post-step clarity, clean-dist
+  ownership, and avoidance of generic hooks.
+- TypeScript/API: existing `typescript_api_docs_reviewer`, expected
+  `gpt-5.6-terra` / `high`, both explicit. Check package-root module export,
+  exact manifest-derived generated subpaths, declarations/TSDoc, dependency
+  specs, packed contents, and preserved Todo public/runtime surface.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected `gpt-5.6-terra` / `high`, both explicit. Check generation ordering,
+  partial post-step failure behavior, deterministic ownership, stale-dist
+  prevention, dependency-owned output exclusion, and cleanup/resource bounds.
+- Documentation: N/A because no public prose changes in this sub-slice; final
+  example/model workflow documentation is mandatory later in Wave 3.
+
+All reviewers are read-only, may not spawn children, edit, commit, push, or
+merge. Immutable configured profiles are runtime metadata evidence because
+independent self-introspection is unavailable.
+
+## Slice C Todo migration review results
+
+- Style/maintainability: CLEAN.
+- TypeScript/API: CLEAN.
+- Performance/reliability P1 accepted: the Todo model publishes before custom
+  rejection/column/handler post-steps write into the live tree, and root
+  ownership has already been released. Post-step failure or concurrent root
+  generation can leave a partial Todo package; a Todo failure can also leave
+  already-published Spine/legacy targets advanced.
+- All roles retained their originally explicit immutable
+  `gpt-5.6-terra` / `high` profiles; independent runtime self-introspection is
+  unavailable.
+- One correction must keep root ownership through staging the complete Todo
+  model, companions, and handler registry, then atomically publish/rollback the
+  root targets, Spine manifest, Todo generated tree, and Todo manifest as one
+  journaled unit. Add custom-Buf, handler-failure, and concurrent-run evidence.
+  Reliability reopens; style reopens only for workflow structure.
+
+## Slice C Todo transactional correction re-review assignment
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`; review only the staged
+  Todo workflow, multi-manifest journal cohesion, naming, duplication, and
+  cleanup structure.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; review atomicity, recovery, failure cleanup,
+  competing ownership, manifest consistency, bounded resources, and the exact
+  regression evidence.
+- Both reviewers are read-only, may not spawn children, edit, commit, push, or
+  merge. Their model and reasoning fields are explicit in dispatch. Immutable
+  configured profiles are the available runtime metadata because independent
+  self-introspection is unavailable.
+- TypeScript/API remains CLEAN and is not reopened because the transactional
+  correction changes no public declaration. Documentation remains the
+  previously recorded N/A for this sub-slice.
+
+## Slice C Todo transactional correction re-review results
+
+- Style/maintainability returned one P1 and one P2. Publication silently skips
+  a missing expected Spine or Todo staged manifest, which can pair a new
+  generated tree with stale metadata. One Datastore handler-registry assertion
+  is also duplicated and provides no distinct coverage.
+- Performance/reliability returned two P2 findings. A `committing` journal
+  with no manifests is classified as committed through vacuous `every()`, and
+  version-2 recovery lacks a regression at the real mid-commit point after
+  only one of two manifest renames.
+- Both existing reviewer roles ran with the expected and explicitly dispatched
+  `gpt-5.6-terra` / `high` profiles. Immutable configured profiles match;
+  independent runtime self-introspection is unavailable.
+- All findings are accepted as one bounded correction batch. The existing Todo
+  `implementer`, expected and originally explicitly dispatched
+  `gpt-5.6-terra` / `medium`, owns fail-closed staged-manifest validation,
+  contradictory journal-state rejection or safe rollback, the exact missing
+  manifest and mid-commit recovery regressions, and removal of the duplicate
+  assertion. It may not broaden scope, edit protocol records, spawn children,
+  commit, push, or merge.
+- The complete correction passes 38/38 workflow/module/smoke tests and focused
+  lint, format, and whitespace. Both missing-manifest cases, the contradictory
+  zero-manifest journal, and the real two-manifest mid-commit interruption now
+  have direct regressions. The same two affected reviewer roles receive a
+  bounded finding-closure re-review at their originally explicit
+  `gpt-5.6-terra` / `high` profiles.
+- Style finding-closure is CLEAN.
+- Reliability confirms all new transactional cases except one backward-
+  compatibility edge: the zero-manifest `committing` rejection is limited to
+  version 2, so a legacy version-1 journal without `manifest` still reaches
+  vacuous committed classification. One final bounded correction must apply
+  the guard regardless of journal version and extend the regression to v1.
+- The existing Todo `implementer`, originally explicitly dispatched
+  `gpt-5.6-terra` / `medium`, owns only this policy/test correction. Reliability
+  alone rechecks it; style remains CLEAN.
+
+## Slice C Todo migration final disposition
+
+- Style/maintainability: CLEAN after finding closure.
+- TypeScript/API: CLEAN; the internal transactional corrections did not reopen
+  this lane.
+- Performance/reliability: CLEAN after the version-independent v1/v2
+  zero-manifest guard and regression; independent final workflow verification
+  is 35/35.
+- Documentation: N/A for this sub-slice because complete end-user workflow
+  documentation remains a mandatory later Wave 3 slice.
+- All invoked roles used their expected and explicitly dispatched immutable
+  profiles: implementer `gpt-5.6-terra` / `medium`, reviewers
+  `gpt-5.6-terra` / `high`. Independent runtime self-introspection is
+  unavailable.
+- No P0, P1, or accepted P2 remains. The Todo migration is accepted for commit
+  and immediate task-branch push.

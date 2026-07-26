@@ -50,9 +50,13 @@ export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput
     ),
     "",
     "const schemas = Object.freeze([",
-    ...generatedFiles.map(
-      (_, index) =>
-        `  ...Object.values(schemas${String(index)}).filter((value) => typeof value === "object" && value !== null && (value as { kind?: unknown }).kind === "message").map((value) => value as unknown as GenMessage<Message>),`,
+    ...generatedFiles.map((_, index) =>
+      [
+        `  ...Object.values(schemas${String(index)})`,
+        '    .filter((value) => typeof value === "object" && value !== null &&',
+        '      (value as { kind?: unknown }).kind === "message")',
+        "    .map((value) => value as unknown as GenMessage<Message>),",
+      ].join("\n"),
     ),
     "].sort((left, right) => left.typeName < right.typeName ? -1 : left.typeName > right.typeName ? 1 : 0));",
     "",

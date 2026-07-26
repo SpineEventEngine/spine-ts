@@ -1,11 +1,5 @@
 version: v2
 plugins:
-  - local: protoc-gen-es
-    out: examples/todo/generated
-    include_imports: true
-    opt:
-      - target=ts
-      - import_extension=js
   - local:
       - node
       - scripts/generate-rejections.mjs

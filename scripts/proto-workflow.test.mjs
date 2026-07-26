@@ -11,10 +11,12 @@ import {
 } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   cleanupStagedTargets,
+  atomicGeneratedTargets,
+  generatedTargets,
   generateTargets,
   prepareGeneratedOutput,
   publishGeneratedTargets,
@@ -46,7 +48,368 @@ function workflowClaimOperations(claims, liveness) {
   };
 }
 
+function todoTransactionFixture() {
+  const repoRoot = mkdtempSync(join(tmpdir(), "spine-todo-transaction-"));
+  for (const [template, output] of [
+    ["buf.gen.yaml", "packages/proto/generated"],
+    ["examples/project-management/buf.gen.yaml", "examples/project-management/generated"],
+    ["examples/datastore-orders/buf.gen.yaml", "examples/datastore-orders/generated"],
+  ]) {
+    mkdirSync(join(repoRoot, dirname(template)), { recursive: true });
+    writeFileSync(
+      join(repoRoot, template),
+      `version: v2\nplugins:\n  - local: test\n    out: ${output}\n`,
+    );
+  }
+  const todo = join(repoRoot, "examples/todo");
+  mkdirSync(join(todo, "proto"), { recursive: true });
+  writeFileSync(join(todo, "package.json"), '{"name":"@example/todo","version":"1.0.0"}\n');
+  writeFileSync(join(todo, "spine-proto.json"), "{}\n");
+  writeFileSync(join(todo, "proto/todo.proto"), 'syntax = "proto3";\n');
+  writeFileSync(
+    join(todo, "buf.gen.custom.yaml"),
+    "version: v2\nplugins:\n  - local: test\n    out: examples/todo/generated\n",
+  );
+  for (const path of ["packages/proto/generated", "examples/todo/generated"]) {
+    mkdirSync(join(repoRoot, path), { recursive: true });
+    writeFileSync(join(repoRoot, path, "previous.txt"), `${path}\n`);
+  }
+  for (const path of [
+    "packages/proto/spine-proto-manifest.json",
+    "examples/todo/spine-proto-manifest.json",
+  ]) {
+    mkdirSync(dirname(join(repoRoot, path)), { recursive: true });
+    writeFileSync(join(repoRoot, path), `${path}\n`);
+  }
+  return repoRoot;
+}
+
+function rootStageCommand(label, _executable, args) {
+  if (!label.startsWith("buf generate")) {
+    const output = args[args.indexOf("--out") + 1];
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, "handler\n");
+    return 0;
+  }
+  const template = readFileSync(args.at(-1), "utf8");
+  const output = template.match(/^\s*out:\s*(.+)$/mu)?.[1];
+  if (output === undefined) return 1;
+  mkdirSync(output, { recursive: true });
+  writeFileSync(join(output, "next.txt"), "next\n");
+  return 0;
+}
+
+function todoStageCommand(failure, writeManifest = true) {
+  return (label, _executable, args, cwd) => {
+    if (label === "Todo model generation") {
+      mkdirSync(join(cwd, "generated"), { recursive: true });
+      writeFileSync(join(cwd, "generated/model.txt"), "model\n");
+      if (writeManifest) writeFileSync(join(cwd, "spine-proto-manifest.json"), "todo next\n");
+      return 0;
+    }
+    if (label === failure) return 1;
+    if (label === "Todo companion generation") {
+      const template = readFileSync(args.at(-1), "utf8");
+      const output = template.match(/^\s*out:\s*(.+)$/mu)?.[1];
+      mkdirSync(output, { recursive: true });
+      writeFileSync(join(output, "companion.txt"), "companion\n");
+      return 0;
+    }
+    mkdirSync(dirname(args.at(-1)), { recursive: true });
+    writeFileSync(args.at(-1), "handler\n");
+    return 0;
+  };
+}
+
 describe("proto-workflow", () => {
+  it.each(["Todo companion generation", "Todo handler registry post-step"])(
+    "%s preserves live Todo and root artifacts when its staged post-step fails",
+    (failure) => {
+      const repoRoot = todoTransactionFixture();
+      expect(
+        generateTargets({
+          repoRoot,
+          runCommand: rootStageCommand,
+          runTodoCommand: todoStageCommand(failure),
+        }),
+      ).toBe(1);
+      expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
+        "examples/todo/generated\n",
+      );
+      expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
+        "examples/todo/spine-proto-manifest.json\n",
+      );
+      expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+        "packages/proto/generated\n",
+      );
+      expect(readFileSync(join(repoRoot, "packages/proto/spine-proto-manifest.json"), "utf8")).toBe(
+        "packages/proto/spine-proto-manifest.json\n",
+      );
+      expect(
+        readdirSync(join(repoRoot, "examples/todo")).some((name) => name.startsWith(".generated-")),
+      ).toBe(false);
+      expect(readdirSync(repoRoot).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
+    },
+  );
+
+  it("fails closed when the staged Todo manifest is missing", () => {
+    const repoRoot = todoTransactionFixture();
+    expect(
+      generateTargets({
+        repoRoot,
+        runCommand: rootStageCommand,
+        runTodoCommand: todoStageCommand(undefined, false),
+      }),
+    ).toBe(1);
+    expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
+      "examples/todo/generated\n",
+    );
+    expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
+      "examples/todo/spine-proto-manifest.json\n",
+    );
+  });
+
+  it("fails closed when the staged Spine manifest is missing", () => {
+    const repoRoot = todoTransactionFixture();
+    mkdirSync(join(repoRoot, "packages/proto"), { recursive: true });
+    writeFileSync(join(repoRoot, "packages/proto/spine-proto.json"), "{}\n");
+    let writerCalled = false;
+    expect(
+      generateTargets({
+        repoRoot,
+        runCommand: rootStageCommand,
+        runTodoCommand: todoStageCommand(undefined),
+        writeSpineArtifacts() {
+          writerCalled = true;
+        },
+      }),
+    ).toBe(1);
+    expect(writerCalled).toBe(true);
+    expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+      "packages/proto/generated\n",
+    );
+    expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
+      "examples/todo/generated\n",
+    );
+    expect(readFileSync(join(repoRoot, "packages/proto/spine-proto-manifest.json"), "utf8")).toBe(
+      "packages/proto/spine-proto-manifest.json\n",
+    );
+    expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
+      "examples/todo/spine-proto-manifest.json\n",
+    );
+    expect(readdirSync(repoRoot).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
+  });
+
+  it("rejects a competing root claim before creating a Todo stage", () => {
+    const repoRoot = todoTransactionFixture();
+    const claims = new Map([
+      [
+        ".spine-proto-workflow.lock.live",
+        { content: JSON.stringify({ pid: 99, token: "live" }), kind: "regular" },
+      ],
+    ]);
+    expect(
+      generateTargets({
+        repoRoot,
+        lockOperations: workflowClaimOperations(claims, () => "alive"),
+        runCommand: rootStageCommand,
+        runTodoCommand: todoStageCommand(undefined),
+      }),
+    ).toBe(1);
+    expect(
+      readdirSync(join(repoRoot, "examples/todo")).some((name) => name.startsWith(".generated-")),
+    ).toBe(false);
+    expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
+      "examples/todo/generated\n",
+    );
+    expect(readFileSync(join(repoRoot, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+      "packages/proto/generated\n",
+    );
+  });
+
+  it("recovers an interrupted Todo/root publication with both manifests", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const entries = [
+      ["packages/proto/generated", "packages/proto/.generated-root/generated", "root"],
+      ["examples/todo/generated", "examples/todo/.generated-todo/generated", "todo"],
+    ];
+    const targets = entries.map(([target, staged, name]) => {
+      const targetPath = join(repoRoot, target);
+      const backup = join(dirname(targetPath), `.${basename(targetPath)}.backup-${name}`);
+      mkdirSync(targetPath, { recursive: true });
+      const stagedPath = join(repoRoot, staged);
+      mkdirSync(stagedPath, { recursive: true });
+      writeFileSync(join(targetPath, "value.txt"), "next\n");
+      mkdirSync(backup, { recursive: true });
+      writeFileSync(join(backup, "value.txt"), "previous\n");
+      return { target: targetPath, staged: stagedPath, backup, hadPrevious: true };
+    });
+    const manifests = [
+      "packages/proto/spine-proto-manifest.json",
+      "examples/todo/spine-proto-manifest.json",
+    ].map((target, index) => {
+      const targetPath = join(repoRoot, target);
+      const staged = join(dirname(targetPath), `.generated-${index}/spine-proto-manifest.json`);
+      const backup = join(dirname(targetPath), `.spine-proto-manifest.backup-${index}`);
+      mkdirSync(dirname(staged), { recursive: true });
+      writeFileSync(targetPath, "next\n");
+      writeFileSync(staged, "next\n");
+      writeFileSync(backup, "previous\n");
+      return { target: targetPath, staged, backup, hadPrevious: true, contents: "next\n" };
+    });
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify({ version: 2, state: "preparing", targets, manifests })}\n`,
+    );
+    publishGeneratedTargets([], repoRoot);
+    for (const target of targets)
+      expect(readFileSync(join(target.target, "value.txt"), "utf8")).toBe("previous\n");
+    for (const manifest of manifests)
+      expect(readFileSync(manifest.target, "utf8")).toBe("previous\n");
+    expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+  });
+
+  it.each([1, 2])("rejects a v%s committing journal with no manifests", (version) => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify(
+        version === 1
+          ? { version, state: "committing", targets: [] }
+          : { version, state: "committing", targets: [], manifests: [] },
+      )}\n`,
+    );
+    expect(() => publishGeneratedTargets([], repoRoot)).toThrow("invalid publication journal");
+  });
+
+  it("rolls back a mid-commit Todo manifest rename", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const rootGenerated = join(repoRoot, "packages/proto/generated");
+    const todoGenerated = join(repoRoot, "examples/todo/generated");
+    const targets = [rootGenerated, todoGenerated].map((target, index) => {
+      const backup = join(dirname(target), `.generated.backup-${index}`);
+      mkdirSync(target, { recursive: true });
+      mkdirSync(backup, { recursive: true });
+      writeFileSync(join(target, "value.txt"), "next\n");
+      writeFileSync(join(backup, "value.txt"), "previous\n");
+      return {
+        target,
+        staged: join(dirname(target), `.generated-stage-${index}`),
+        backup,
+        hadPrevious: true,
+      };
+    });
+    const rootManifest = join(repoRoot, "packages/proto/spine-proto-manifest.json");
+    const todoManifest = join(repoRoot, "examples/todo/spine-proto-manifest.json");
+    const manifests = [rootManifest, todoManifest].map((target, index) => {
+      const staged = join(
+        dirname(target),
+        `.generated-manifest-${index}/spine-proto-manifest.json`,
+      );
+      const backup = join(dirname(target), `.spine-proto-manifest.backup-${index}`);
+      mkdirSync(dirname(staged), { recursive: true });
+      writeFileSync(target, index === 0 ? "next\n" : "previous\n");
+      if (index === 1) writeFileSync(staged, "next\n");
+      writeFileSync(backup, "previous\n");
+      return { target, staged, backup, hadPrevious: true, contents: "next\n" };
+    });
+    writeFileSync(
+      join(repoRoot, ".spine-proto-publication.json"),
+      `${JSON.stringify({ version: 2, state: "committing", targets, manifests })}\n`,
+    );
+    publishGeneratedTargets([], repoRoot);
+    for (const target of targets)
+      expect(readFileSync(join(target.target, "value.txt"), "utf8")).toBe("previous\n");
+    for (const manifest of manifests)
+      expect(readFileSync(manifest.target, "utf8")).toBe("previous\n");
+  });
+
+  it("includes Todo in the root atomic publication boundary without restoring it as a legacy generator", () => {
+    expect(generatedTargets.map((target) => target.displayPath)).not.toContain(
+      "examples/todo/generated",
+    );
+    expect(atomicGeneratedTargets.map((target) => target.displayPath)).toContain(
+      "examples/todo/generated",
+    );
+  });
+
+  it("publishes Todo output and both manifests in the root transaction", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const rootGenerated = join(repoRoot, "packages/proto/generated");
+    const todoGenerated = join(repoRoot, "examples/todo/generated");
+    const rootStage = join(repoRoot, "packages/proto/.generated-root/generated");
+    const todoStage = join(repoRoot, "examples/todo/.generated-todo/generated");
+    const rootManifest = join(repoRoot, "packages/proto/spine-proto-manifest.json");
+    const todoManifest = join(repoRoot, "examples/todo/spine-proto-manifest.json");
+    const rootManifestStage = join(
+      repoRoot,
+      "packages/proto/.generated-root/spine-proto-manifest.json",
+    );
+    const todoManifestStage = join(
+      repoRoot,
+      "examples/todo/.generated-todo/spine-proto-manifest.json",
+    );
+    for (const path of [rootGenerated, todoGenerated, rootStage, todoStage])
+      mkdirSync(path, { recursive: true });
+    writeFileSync(join(rootGenerated, "previous.txt"), "root previous\n");
+    writeFileSync(join(todoGenerated, "previous.txt"), "todo previous\n");
+    writeFileSync(join(rootStage, "complete.txt"), "root next\n");
+    writeFileSync(join(todoStage, "complete.txt"), "todo next\n");
+    writeFileSync(rootManifest, "root previous\n");
+    writeFileSync(todoManifest, "todo previous\n");
+    writeFileSync(rootManifestStage, "root next\n");
+    writeFileSync(todoManifestStage, "todo next\n");
+    publishGeneratedTargets(
+      [
+        {
+          generatedRoot: rootGenerated,
+          stagedOutputRoot: rootStage,
+          target: { displayPath: "packages/proto/generated" },
+        },
+        {
+          generatedRoot: todoGenerated,
+          stagedOutputRoot: todoStage,
+          target: { displayPath: "examples/todo/generated" },
+        },
+      ],
+      repoRoot,
+      {
+        manifests: [
+          {
+            target: rootManifest,
+            staged: rootManifestStage,
+            backup: join(repoRoot, "packages/proto/.spine-proto-manifest.backup-root"),
+            hadPrevious: true,
+            contents: "root next\n",
+          },
+          {
+            target: todoManifest,
+            staged: todoManifestStage,
+            backup: join(repoRoot, "examples/todo/.spine-proto-manifest.backup-todo"),
+            hadPrevious: true,
+            contents: "todo next\n",
+          },
+        ],
+      },
+    );
+    expect(readFileSync(join(rootGenerated, "complete.txt"), "utf8")).toBe("root next\n");
+    expect(readFileSync(join(todoGenerated, "complete.txt"), "utf8")).toBe("todo next\n");
+    expect(readFileSync(rootManifest, "utf8")).toBe("root next\n");
+    expect(readFileSync(todoManifest, "utf8")).toBe("todo next\n");
+  });
+
+  it("leaves Todo Protobuf-ES ownership to its model package", () => {
+    expect(generatedTargets.map((target) => target.displayPath)).not.toContain(
+      "examples/todo/generated",
+    );
+    expect(readFileSync("examples/todo/spine-proto.json", "utf8")).toContain(
+      '"moduleExport": "todoProtoModule"',
+    );
+    expect(readFileSync("examples/todo/buf.gen.custom.yaml", "utf8")).not.toContain(
+      "protoc-gen-es",
+    );
+  });
+
   it("keeps frozen-source lint ignores scoped away from authored modules", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-lint-scope-"));
     const modulePaths = [
@@ -647,10 +1010,9 @@ describe("proto-workflow", () => {
     expect(status).toBe(1);
     expect(commands).toEqual([
       "buf generate packages/proto/generated",
-      "buf generate examples/todo/generated",
       "buf generate examples/project-management/generated",
       "buf generate examples/datastore-orders/generated",
-      "todo handler registry generation",
+      "project-management handler registry generation",
     ]);
     expect(readFileSync(join(packageGenerated, "message.txt"), "utf8")).toBe(
       "previous package output\n",
@@ -726,10 +1088,8 @@ describe("proto-workflow", () => {
       expect(staged.status).toBe(0);
       expect(commands).toEqual([
         "buf generate packages/proto/generated",
-        "buf generate examples/todo/generated",
         "buf generate examples/project-management/generated",
         "buf generate examples/datastore-orders/generated",
-        "todo handler registry generation",
         "project-management handler registry generation",
         "datastore-orders handler registry generation",
       ]);
@@ -750,11 +1110,6 @@ describe("proto-workflow", () => {
       expect(
         existsSync(
           join(staged.stagedTargets[2].stagedOutputRoot, "handler/generated-handler-registry.ts"),
-        ),
-      ).toBe(true);
-      expect(
-        existsSync(
-          join(staged.stagedTargets[3].stagedOutputRoot, "handler/generated-handler-registry.ts"),
         ),
       ).toBe(true);
     } finally {

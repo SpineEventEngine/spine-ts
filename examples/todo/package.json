@@ -6,18 +6,30 @@
   "description": "Runnable server-side to-do example for Spine TS.",
   "scripts": {
     "start": "node dist/src/index.js",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "proto:generate": "spine-proto generate",
+    "clean:generated-dist": "node scripts/clean-generated-dist.mjs",
+    "prepack": "pnpm clean:generated-dist && tsc -b"
   },
   "exports": {
     ".": {
       "types": "./dist/src/index.d.ts",
       "default": "./dist/src/index.js"
+    },
+    "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+    "./proto/*": "./proto/*",
+    "./generated/*.js": {
+      "types": "./dist/generated/*.d.ts",
+      "default": "./dist/generated/*.js"
     }
   },
   "files": [
     "dist",
     "README.md",
-    "USER_GUIDE.md"
+    "USER_GUIDE.md",
+    "proto",
+    "spine-proto.json",
+    "spine-proto-manifest.json"
   ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
@@ -25,10 +37,11 @@
     "@connectrpc/connect-node": "2.1.2",
     "@spine-event-engine/client": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
-    "@spine-event-engine/proto": "workspace:*",
+    "@spine-event-engine/proto": "0.0.0",
     "@spine-event-engine/server": "workspace:*"
   },
   "devDependencies": {
+    "@spine-event-engine/proto-tools": "0.0.0",
     "@spine-event-engine/testing": "workspace:*",
     "@spine-event-engine/transport": "workspace:*"
   }

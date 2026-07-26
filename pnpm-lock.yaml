@@ -120,12 +120,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 0.0.0
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../../packages/server
     devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
       '@spine-event-engine/testing':
         specifier: workspace:*
         version: link:../../packages/testing

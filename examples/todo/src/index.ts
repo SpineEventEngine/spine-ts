@@ -38,6 +38,8 @@ import type {
 } from "../generated/spine/example/todo/v1/task_rejections_pb.js";
 import { TaskSchema } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
+export { todoProtoModule } from "../generated/proto-module.js";
+
 /** Task aggregate for the create-task example flow. */
 export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
   /** Handle `CreateTask` and produce the domain event stored by the context. */

@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -18,7 +19,6 @@ import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
 
 const protoRoot = fileURLToPath(new URL("../packages/proto/proto", import.meta.url));
-const todoProtoRoot = fileURLToPath(new URL("../examples/todo/proto", import.meta.url));
 const projectManagementProtoRoot = fileURLToPath(
   new URL("../examples/project-management/proto", import.meta.url),
 );
@@ -31,12 +31,6 @@ export const generatedTargets = [
     displayPath: "packages/proto/generated",
     templatePath: "buf.gen.yaml",
     protoRoot,
-  },
-  {
-    displayPath: "examples/todo/generated",
-    templatePath: "examples/todo/buf.gen.yaml",
-    protoRoot: todoProtoRoot,
-    handlerRegistry: { name: "todo", projectPath: "examples/todo/tsconfig.json" },
   },
   {
     displayPath: "examples/project-management/generated",
@@ -57,6 +51,11 @@ export const generatedTargets = [
     },
   },
 ];
+const todoAtomicTarget = {
+  displayPath: "examples/todo/generated",
+  templatePath: "examples/todo/buf.gen.custom.yaml",
+};
+export const atomicGeneratedTargets = [...generatedTargets, todoAtomicTarget];
 
 export function main(argv = process.argv.slice(2)) {
   const command = argv[0];
@@ -97,8 +96,12 @@ export function main(argv = process.argv.slice(2)) {
 }
 
 function runCommand(label, executable, args) {
+  return runCommandIn(label, executable, args, repoRoot);
+}
+
+function runCommandIn(label, executable, args, cwd) {
   const result = spawnSync(executable, args, {
-    cwd: repoRoot,
+    cwd,
     stdio: "inherit",
   });
 
@@ -258,13 +261,15 @@ function validatePublicationJournal(root, journal) {
   if (
     typeof journal !== "object" ||
     journal === null ||
-    journal.version !== 1 ||
+    ![1, 2].includes(journal.version) ||
     !["preparing", "committing", "committed"].includes(journal.state) ||
     !Array.isArray(journal.targets)
   ) {
     throw new Error("invalid publication journal");
   }
-  const allowedTargets = new Set(generatedTargets.map((target) => join(root, target.displayPath)));
+  const allowedTargets = new Set(
+    atomicGeneratedTargets.map((target) => join(root, target.displayPath)),
+  );
   const seenTargets = new Set();
   for (const target of journal.targets) {
     if (
@@ -289,25 +294,38 @@ function validatePublicationJournal(root, journal) {
     }
     seenTargets.add(target.target);
   }
-  if (journal.manifest === undefined) return;
-  const manifest = journal.manifest;
-  const manifestTarget = join(root, "packages/proto/spine-proto-manifest.json");
-  const manifestParent = dirname(manifestTarget);
+  const manifests = journal.manifests ?? (journal.manifest === undefined ? [] : [journal.manifest]);
+  const allowedManifests = new Set([
+    join(root, "packages/proto/spine-proto-manifest.json"),
+    join(root, "examples/todo/spine-proto-manifest.json"),
+  ]);
   if (
-    typeof manifest !== "object" ||
-    manifest === null ||
-    typeof manifest.target !== "string" ||
-    typeof manifest.staged !== "string" ||
-    typeof manifest.backup !== "string" ||
-    typeof manifest.hadPrevious !== "boolean" ||
-    typeof manifest.contents !== "string" ||
-    manifest.target !== manifestTarget ||
-    !isStagedSibling(manifestParent, manifest.staged) ||
-    dirname(manifest.backup) !== manifestParent ||
-    !basename(manifest.backup).startsWith(".spine-proto-manifest.backup-")
-  ) {
+    !Array.isArray(manifests) ||
+    new Set(manifests.map((entry) => entry?.target)).size !== manifests.length
+  )
     throw new Error("invalid publication journal");
+  if (journal.state === "committing" && manifests.length === 0)
+    throw new Error("invalid publication journal");
+  for (const manifest of manifests) {
+    if (
+      typeof manifest !== "object" ||
+      manifest === null ||
+      typeof manifest.target !== "string" ||
+      typeof manifest.staged !== "string" ||
+      typeof manifest.backup !== "string" ||
+      typeof manifest.hadPrevious !== "boolean" ||
+      typeof manifest.contents !== "string" ||
+      !allowedManifests.has(manifest.target) ||
+      !isStagedSibling(dirname(manifest.target), manifest.staged) ||
+      dirname(manifest.backup) !== dirname(manifest.target) ||
+      !basename(manifest.backup).startsWith(".spine-proto-manifest.backup-")
+    )
+      throw new Error("invalid publication journal");
   }
+}
+
+function journalManifests(journal) {
+  return journal.manifests ?? (journal.manifest === undefined ? [] : [journal.manifest]);
 }
 
 function assertSafeRecoveryEntry(root, path, expectedKind) {
@@ -330,10 +348,10 @@ function assertSafeRecoveryJournal(root, journal) {
     assertSafeRecoveryEntry(root, target.staged, "directory");
     assertSafeRecoveryEntry(root, target.backup, "directory");
   }
-  if (journal.manifest !== undefined) {
-    assertSafeRecoveryEntry(root, journal.manifest.target, "file");
-    assertSafeRecoveryEntry(root, journal.manifest.staged, "file");
-    assertSafeRecoveryEntry(root, journal.manifest.backup, "file");
+  for (const manifest of journalManifests(journal)) {
+    assertSafeRecoveryEntry(root, manifest.target, "file");
+    assertSafeRecoveryEntry(root, manifest.staged, "file");
+    assertSafeRecoveryEntry(root, manifest.backup, "file");
   }
 }
 
@@ -349,9 +367,11 @@ function recoverPublication(root, operations = defaultPublicationOperations) {
   const committed =
     journal.state === "committed" ||
     (journal.state === "committing" &&
-      journal.manifest !== undefined &&
-      existsSync(journal.manifest.target) &&
-      readFileSync(journal.manifest.target, "utf8") === journal.manifest.contents);
+      journalManifests(journal).every(
+        (manifest) =>
+          existsSync(manifest.target) &&
+          readFileSync(manifest.target, "utf8") === manifest.contents,
+      ));
 
   if (!committed) {
     for (const target of [...journal.targets].reverse()) {
@@ -362,13 +382,11 @@ function recoverPublication(root, operations = defaultPublicationOperations) {
         operations.remove(target.target);
       }
     }
-    if (journal.manifest !== undefined) {
-      if (existsSync(journal.manifest.backup)) {
-        operations.remove(journal.manifest.target);
-        operations.rename(journal.manifest.backup, journal.manifest.target);
-      } else if (!journal.manifest.hadPrevious) {
-        operations.remove(journal.manifest.target);
-      }
+    for (const manifest of journalManifests(journal).reverse()) {
+      if (existsSync(manifest.backup)) {
+        operations.remove(manifest.target);
+        operations.rename(manifest.backup, manifest.target);
+      } else if (!manifest.hadPrevious) operations.remove(manifest.target);
     }
   }
 
@@ -376,9 +394,9 @@ function recoverPublication(root, operations = defaultPublicationOperations) {
     operations.remove(target.backup);
     operations.remove(target.staged);
   }
-  if (journal.manifest !== undefined) {
-    operations.remove(journal.manifest.backup);
-    operations.remove(journal.manifest.staged);
+  for (const manifest of journalManifests(journal)) {
+    operations.remove(manifest.backup);
+    operations.remove(manifest.staged);
   }
   operations.remove(journalPath);
   operations.remove(`${journalPath}.next`);
@@ -481,7 +499,8 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
     hadPrevious: existsSync(stagedTarget.generatedRoot),
   }));
   const journalPath = publicationJournalPath(root);
-  const journal = { version: 1, state: "preparing", targets, manifest: options.manifest };
+  const manifests = options.manifests ?? (options.manifest === undefined ? [] : [options.manifest]);
+  const journal = { version: 2, state: "preparing", targets, manifests };
 
   try {
     for (const stagedTarget of stagedTargets) {
@@ -499,12 +518,13 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
       operations.rename(target.staged, target.target);
     }
     options.beforeFinalize?.();
-    if (journal.manifest !== undefined) {
+    if (journal.manifests.length > 0) {
       journal.state = "committing";
       writePublicationJournal(journalPath, journal, operations);
-      if (journal.manifest.hadPrevious)
-        operations.rename(journal.manifest.target, journal.manifest.backup);
-      operations.rename(journal.manifest.staged, journal.manifest.target);
+      for (const manifest of journal.manifests) {
+        if (manifest.hadPrevious) operations.rename(manifest.target, manifest.backup);
+        operations.rename(manifest.staged, manifest.target);
+      }
     }
     journal.state = "committed";
     writePublicationJournal(journalPath, journal, operations);
@@ -604,12 +624,21 @@ export function stageGeneratedTargets(options = {}) {
       (candidate) => candidate.target.displayPath === "packages/proto/generated",
     );
     if (spineTarget !== undefined && existsSync(join(root, "packages/proto/spine-proto.json"))) {
-      writeSpineProtoArtifacts(
+      const stagedManifest = join(spineTarget.stageRoot, "spine-proto-manifest.json");
+      (options.writeSpineArtifacts ?? writeSpineProtoArtifacts)(
         root,
         spineTarget.stagedOutputRoot,
-        join(spineTarget.stageRoot, "spine-proto-manifest.json"),
+        stagedManifest,
       );
+      if (!existsSync(stagedManifest)) throw new Error("Spine staged manifest is missing");
     }
+
+    const todoStage = stageTodoModel(root, options);
+    if (todoStage.status !== 0) {
+      removeStagedTargets(stagedTargets);
+      return { stagedTargets: [], status: todoStage.status };
+    }
+    if (todoStage.stagedTarget !== undefined) stagedTargets.push(todoStage.stagedTarget);
 
     return {
       stagedTargets,
@@ -624,6 +653,79 @@ export function stageGeneratedTargets(options = {}) {
       stagedTargets: [],
       status: 1,
     };
+  }
+}
+
+function stageTodoModel(root, options = {}) {
+  const liveTodoRoot = join(root, "examples/todo");
+  if (!existsSync(join(liveTodoRoot, "spine-proto.json"))) return { status: 0 };
+  const stageRoot = mkdtempSync(join(liveTodoRoot, ".generated-"));
+  const packageRoot = stageRoot;
+  const output = join(packageRoot, "generated");
+  const run =
+    options.runTodoCommand ??
+    ((label, executable, args, cwd) => runCommandIn(label, executable, args, cwd));
+  try {
+    for (const name of ["package.json", "spine-proto.json", "proto"]) {
+      cpSync(join(liveTodoRoot, name), join(packageRoot, name), { recursive: true });
+    }
+    const modelStatus = run(
+      "Todo model generation",
+      process.execPath,
+      [join(root, "packages/proto-tools/dist/src/cli/spine-proto.js")],
+      packageRoot,
+    );
+    if (modelStatus !== 0) throw new Error("Todo model generation failed");
+    const template = writeStagedTemplate(todoAtomicTarget, output, stageRoot, root);
+    const companionStatus = run(
+      "Todo companion generation",
+      resolveBufExecutable(),
+      ["generate", "--template", template],
+      root,
+    );
+    if (companionStatus !== 0) throw new Error("Todo companion generation failed");
+    const handlerStatus = run(
+      "Todo handler registry post-step",
+      process.execPath,
+      [
+        join(root, "scripts/generate-handler-registry.mjs"),
+        "--project",
+        join(root, "examples/todo/tsconfig.json"),
+        "--generated-root",
+        output,
+        "--source-generated-root",
+        join(liveTodoRoot, "generated"),
+        "--out",
+        join(output, "handler/generated-handler-registry.ts"),
+        "--published-out",
+        join(liveTodoRoot, "generated/handler/generated-handler-registry.ts"),
+      ],
+      root,
+    );
+    if (handlerStatus !== 0) throw new Error("Todo handler registry post-step failed");
+    if (!existsSync(join(packageRoot, "spine-proto-manifest.json")))
+      throw new Error("Todo staged manifest is missing");
+    return {
+      status: 0,
+      stagedTarget: {
+        generatedRoot: join(liveTodoRoot, "generated"),
+        stagedOutputRoot: output,
+        stageRoot,
+        target: todoAtomicTarget,
+        manifests: [
+          {
+            target: join(liveTodoRoot, "spine-proto-manifest.json"),
+            staged: join(packageRoot, "spine-proto-manifest.json"),
+          },
+        ],
+      },
+    };
+  } catch (error) {
+    console.error(
+      `Failed to stage Todo output: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    rmSync(stageRoot, { recursive: true, force: true });
+    return { status: 1 };
   }
 }
 
@@ -662,23 +764,38 @@ export function generateTargets(options = {}) {
         const spineTarget = staged.stagedTargets.find(
           (candidate) => candidate.target.displayPath === "packages/proto/generated",
         );
-        const stagedManifest =
-          spineTarget === undefined
-            ? undefined
-            : join(spineTarget.stageRoot, "spine-proto-manifest.json");
-        const manifest = join(root, "packages/proto/spine-proto-manifest.json");
+        const manifests = [];
+        if (spineTarget !== undefined) {
+          const stagedManifest = join(spineTarget.stageRoot, "spine-proto-manifest.json");
+          if (!existsSync(stagedManifest)) throw new Error("Spine staged manifest is missing");
+          const manifest = join(root, "packages/proto/spine-proto-manifest.json");
+          manifests.push({
+            target: manifest,
+            staged: stagedManifest,
+            backup: join(dirname(manifest), `.spine-proto-manifest.backup-${randomUUID()}`),
+            hadPrevious: existsSync(manifest),
+            contents: readFileSync(stagedManifest, "utf8"),
+          });
+        }
+        for (const stagedTarget of staged.stagedTargets) {
+          for (const stagedManifest of stagedTarget.manifests ?? []) {
+            if (!existsSync(stagedManifest.staged))
+              throw new Error("Todo staged manifest is missing");
+            manifests.push({
+              target: stagedManifest.target,
+              staged: stagedManifest.staged,
+              backup: join(
+                dirname(stagedManifest.target),
+                `.spine-proto-manifest.backup-${randomUUID()}`,
+              ),
+              hadPrevious: existsSync(stagedManifest.target),
+              contents: readFileSync(stagedManifest.staged, "utf8"),
+            });
+          }
+        }
         publishGeneratedTargets(staged.stagedTargets, root, {
           operations: options.publicationOperations,
-          manifest:
-            stagedManifest === undefined || !existsSync(stagedManifest)
-              ? undefined
-              : {
-                  target: manifest,
-                  staged: stagedManifest,
-                  backup: join(dirname(manifest), `.spine-proto-manifest.backup-${randomUUID()}`),
-                  hadPrevious: existsSync(manifest),
-                  contents: readFileSync(stagedManifest, "utf8"),
-                },
+          manifests,
         });
         status = 0;
       }

@@ -480,6 +480,7 @@ function writeModule(
     "  ),",
     "));",
     "",
+    `/** All Protobuf message schemas owned by \`${packageName}\`. */`,
     `export const ${exportName}: ProtoModule = Object.freeze({`,
     `  name: ${JSON.stringify(packageName)},`,
     "  schemas,",
