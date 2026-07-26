@@ -769,3 +769,106 @@ independent self-introspection is unavailable.
   unavailable.
 - No P0, P1, or accepted P2 remains. The Todo migration is accepted for commit
   and immediate task-branch push.
+
+## Slice C remaining-example review assignment
+
+Scope is the uncommitted diff after `d03cfac0`: Project Management and
+Datastore Orders combined model/application packages, their generated
+manifests/modules and package payloads, and the data-driven atomic model
+staging/freshness generalization.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`; review the target-table
+  depth, naming, test cohesion, cleanup duplication, and absence of speculative
+  hooks.
+- TypeScript/API: existing `typescript_api_docs_reviewer`, expected and
+  explicitly dispatched `gpt-5.6-terra` / `high`; review root module exports,
+  declarations, manifests, package export maps/dependencies, packed payloads,
+  and preserved example entrypoints.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; review one-claim atomicity, all-model generation
+  ordering/freshness, failure cleanup, fail-closed manifests, recovery bounds,
+  stale compiled output, and regression sufficiency.
+- Documentation: N/A for this sub-slice because the comprehensive external
+  model-package guide and compile-checked snippets remain a mandatory later
+  Wave 3 slice.
+- All reviewers are read-only, may not edit, spawn children, commit, push, or
+  merge. Model and reasoning fields are explicit in dispatch. Immutable
+  configured profiles are runtime metadata because independent
+  self-introspection is unavailable.
+
+## Slice C remaining-example review results
+
+- Style/maintainability: no P0/P1; one P2 accepted. The generalized workflow
+  retains the now-dead legacy handler-registry helper and unused
+  `handlerRegistry.name` fields, plus the Todo-specific `runTodoCommand`
+  fallback. Collapse these onto the generic model target/`runModelCommand`
+  contract and update tests consistently.
+- The existing style role ran with expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable configured profile matches and
+  independent runtime self-introspection is unavailable.
+- TypeScript/API and performance/reliability remain in progress. One complete
+  review wave will be collected before the accepted correction batch returns
+  to implementation.
+- TypeScript/API: one P1 accepted. Both packed examples retain the public
+  `clean:generated-dist` script but exclude its
+  `scripts/clean-generated-dist.mjs` target, so the command fails with
+  `MODULE_NOT_FOUND` after extraction. Include the script in each payload and
+  add real tarball extraction/execution regressions. Root exports,
+  declaration/runtime identity, manifests, generated subpaths, canonical
+  sources, and preserved entrypoints are otherwise CLEAN.
+- The existing API role ran with expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable configured profile matches and
+  independent runtime self-introspection is unavailable.
+- Performance/reliability: no P0/P1; one test-only P2 accepted. Recovery now
+  handles four generated roots and manifests, but interruption regressions
+  still cover only Spine plus Todo. Add a data-driven version-2 preparing or
+  mid-commit fixture over every atomic root/manifest and assert complete prior
+  state restoration plus stage/backup/journal cleanup without live leakage.
+- The existing reliability role ran with expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`; immutable configured profile matches and
+  independent runtime self-introspection is unavailable.
+- The complete review wave is collected. One correction batch returns to the
+  same existing `implementer`, expected and explicitly redispatched
+  `gpt-5.6-terra` / `medium`: remove the dead legacy/Todo-specific workflow
+  seams, include and extraction-test both packed cleanup scripts, and add the
+  four-root recovery regression. The owner may not broaden scope, edit
+  protocol records, spawn children, commit, push, or merge.
+- Correction evidence is GREEN: 43/43 workflow/freshness tests, 2/2 real
+  pack/extract/declared-cleanup tests, and 3/3 model-module tests. The dead
+  legacy/Todo-specific seams are removed; both archives ship their cleanup
+  scripts; and version-2 mid-commit recovery now models every generated root
+  with only the first of four manifests renamed.
+- The same style, API, and reliability roles receive bounded finding-closure
+  reviews at their originally explicit `gpt-5.6-terra` / `high` profiles.
+  Documentation remains N/A for this sub-slice.
+- Style finding-closure: structurally CLEAN. The only remaining item was
+  deterministic Prettier formatting of the new payload test; the coordinator
+  applied it and targeted formatting/whitespace pass without reopening a lane.
+- TypeScript/API finding-closure: CLEAN. Fresh archives contain and execute the
+  declared cleanup script, retain their exports, and contain the required
+  compiled module/declarations plus canonical sources/config/manifest.
+- Performance/reliability finding-closure: CLEAN. The exact four-root,
+  four-manifest mid-commit state is covered and fully rolled back/cleaned;
+  independent focused workflow verification is 39/39.
+- All review roles retained their expected and originally explicit
+  `gpt-5.6-terra` / `high` profiles; immutable configured profiles match and
+  independent runtime self-introspection is unavailable. No P0/P1 or accepted
+  P2 remains.
+
+## Slice C remaining-example final disposition
+
+- Style/maintainability: CLEAN after generic workflow cleanup and deterministic
+  formatting.
+- TypeScript/API: CLEAN after real archive inclusion/execution verification.
+- Performance/reliability: CLEAN after exact four-root/four-manifest recovery
+  coverage.
+- Documentation: N/A for this sub-slice; the mandatory Wave 3 public guide
+  remains later.
+- Final coordinator verification passes generation and all-model freshness,
+  generated/tooling typechecks, full lint and cleanup enforcement, focused
+  authored formatting, 43 workflow/freshness tests, 2 real payload tests, 3
+  model-module tests, and 16 real local-gRPC behavior tests.
+- No P0/P1/P2 remains. The Project Management and Datastore Orders migration is
+  accepted for commit and immediate task-branch push.

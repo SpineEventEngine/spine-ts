@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { generatedTargetsForCheck } from "./check-generated-clean.mjs";
 
 const scriptPath = new URL("./check-generated-clean.mjs", import.meta.url).pathname;
 
@@ -45,6 +46,14 @@ function runChecker(repoRoot, expectedGeneratedRoot) {
 }
 
 describe("check-generated-clean", () => {
+  it("compares every atomic model output by default", () => {
+    expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
+      "packages/proto/generated",
+      "examples/todo/generated",
+      "examples/project-management/generated",
+      "examples/datastore-orders/generated",
+    ]);
+  });
   it("rejects symlinked generated output", () => {
     const repoRoot = createFixture();
     const linkedOutput = join(repoRoot, "linked-generated");

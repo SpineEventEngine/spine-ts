@@ -19,12 +19,6 @@ import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.
 import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
 
 const protoRoot = fileURLToPath(new URL("../packages/proto/proto", import.meta.url));
-const projectManagementProtoRoot = fileURLToPath(
-  new URL("../examples/project-management/proto", import.meta.url),
-);
-const datastoreOrdersProtoRoot = fileURLToPath(
-  new URL("../examples/datastore-orders/proto", import.meta.url),
-);
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const generatedTargets = [
   {
@@ -32,30 +26,29 @@ export const generatedTargets = [
     templatePath: "buf.gen.yaml",
     protoRoot,
   },
+];
+export const modelAtomicTargets = [
+  {
+    displayPath: "examples/todo/generated",
+    packagePath: "examples/todo",
+    moduleName: "Todo",
+    templatePath: "examples/todo/buf.gen.custom.yaml",
+    handlerProjectPath: "examples/todo/tsconfig.json",
+  },
   {
     displayPath: "examples/project-management/generated",
-    templatePath: "examples/project-management/buf.gen.yaml",
-    protoRoot: projectManagementProtoRoot,
-    handlerRegistry: {
-      name: "project-management",
-      projectPath: "examples/project-management/tsconfig.json",
-    },
+    packagePath: "examples/project-management",
+    moduleName: "Project Management",
+    handlerProjectPath: "examples/project-management/tsconfig.json",
   },
   {
     displayPath: "examples/datastore-orders/generated",
-    templatePath: "examples/datastore-orders/buf.gen.yaml",
-    protoRoot: datastoreOrdersProtoRoot,
-    handlerRegistry: {
-      name: "datastore-orders",
-      projectPath: "examples/datastore-orders/tsconfig.json",
-    },
+    packagePath: "examples/datastore-orders",
+    moduleName: "Datastore Orders",
+    handlerProjectPath: "examples/datastore-orders/tsconfig.json",
   },
 ];
-const todoAtomicTarget = {
-  displayPath: "examples/todo/generated",
-  templatePath: "examples/todo/buf.gen.custom.yaml",
-};
-export const atomicGeneratedTargets = [...generatedTargets, todoAtomicTarget];
+export const atomicGeneratedTargets = [...generatedTargets, ...modelAtomicTargets];
 
 export function main(argv = process.argv.slice(2)) {
   const command = argv[0];
@@ -65,7 +58,12 @@ export function main(argv = process.argv.slice(2)) {
     return 1;
   }
 
-  const protoFiles = generatedTargets.flatMap((target) => findProtoFiles(target.protoRoot));
+  const protoFiles = [
+    ...generatedTargets.flatMap((target) => findProtoFiles(target.protoRoot)),
+    ...modelAtomicTargets.flatMap((target) =>
+      findProtoFiles(join(repoRoot, target.packagePath, "proto")),
+    ),
+  ];
 
   if (protoFiles.length === 0) {
     console.log(
@@ -297,7 +295,9 @@ function validatePublicationJournal(root, journal) {
   const manifests = journal.manifests ?? (journal.manifest === undefined ? [] : [journal.manifest]);
   const allowedManifests = new Set([
     join(root, "packages/proto/spine-proto-manifest.json"),
-    join(root, "examples/todo/spine-proto-manifest.json"),
+    ...modelAtomicTargets.map((target) =>
+      join(root, target.packagePath, "spine-proto-manifest.json"),
+    ),
   ]);
   if (
     !Array.isArray(manifests) ||
@@ -610,16 +610,6 @@ export function stageGeneratedTargets(options = {}) {
       }
     }
 
-    const registryStatus = generateHandlerRegistries(stagedTargets, root, run);
-
-    if (registryStatus !== 0) {
-      removeStagedTargets(stagedTargets);
-      return {
-        stagedTargets: [],
-        status: registryStatus,
-      };
-    }
-
     const spineTarget = stagedTargets.find(
       (candidate) => candidate.target.displayPath === "packages/proto/generated",
     );
@@ -633,12 +623,14 @@ export function stageGeneratedTargets(options = {}) {
       if (!existsSync(stagedManifest)) throw new Error("Spine staged manifest is missing");
     }
 
-    const todoStage = stageTodoModel(root, options);
-    if (todoStage.status !== 0) {
-      removeStagedTargets(stagedTargets);
-      return { stagedTargets: [], status: todoStage.status };
+    for (const target of modelAtomicTargets) {
+      const modelStage = stageModel(target, root, options);
+      if (modelStage.status !== 0) {
+        removeStagedTargets(stagedTargets);
+        return { stagedTargets: [], status: modelStage.status };
+      }
+      if (modelStage.stagedTarget !== undefined) stagedTargets.push(modelStage.stagedTarget);
     }
-    if (todoStage.stagedTarget !== undefined) stagedTargets.push(todoStage.stagedTarget);
 
     return {
       stagedTargets,
@@ -656,65 +648,67 @@ export function stageGeneratedTargets(options = {}) {
   }
 }
 
-function stageTodoModel(root, options = {}) {
-  const liveTodoRoot = join(root, "examples/todo");
-  if (!existsSync(join(liveTodoRoot, "spine-proto.json"))) return { status: 0 };
-  const stageRoot = mkdtempSync(join(liveTodoRoot, ".generated-"));
+function stageModel(target, root, options = {}) {
+  const livePackageRoot = join(root, target.packagePath);
+  if (!existsSync(join(livePackageRoot, "spine-proto.json"))) return { status: 0 };
+  const stageRoot = mkdtempSync(join(livePackageRoot, ".generated-"));
   const packageRoot = stageRoot;
   const output = join(packageRoot, "generated");
-  const run =
-    options.runTodoCommand ??
-    ((label, executable, args, cwd) => runCommandIn(label, executable, args, cwd));
+  const run = options.runModelCommand ?? runCommandIn;
   try {
     for (const name of ["package.json", "spine-proto.json", "proto"]) {
-      cpSync(join(liveTodoRoot, name), join(packageRoot, name), { recursive: true });
+      cpSync(join(livePackageRoot, name), join(packageRoot, name), { recursive: true });
     }
     const modelStatus = run(
-      "Todo model generation",
+      `${target.moduleName} model generation`,
       process.execPath,
       [join(root, "packages/proto-tools/dist/src/cli/spine-proto.js")],
       packageRoot,
     );
-    if (modelStatus !== 0) throw new Error("Todo model generation failed");
-    const template = writeStagedTemplate(todoAtomicTarget, output, stageRoot, root);
-    const companionStatus = run(
-      "Todo companion generation",
-      resolveBufExecutable(),
-      ["generate", "--template", template],
-      root,
-    );
-    if (companionStatus !== 0) throw new Error("Todo companion generation failed");
+    if (modelStatus !== 0) throw new Error(`${target.moduleName} model generation failed`);
+    if (target.templatePath !== undefined) {
+      const template = writeStagedTemplate(target, output, stageRoot, root);
+      const companionStatus = run(
+        `${target.moduleName} companion generation`,
+        resolveBufExecutable(),
+        ["generate", "--template", template],
+        root,
+      );
+      if (companionStatus !== 0)
+        throw new Error(`${target.moduleName} companion generation failed`);
+    }
     const handlerStatus = run(
-      "Todo handler registry post-step",
+      `${target.moduleName} handler registry post-step`,
       process.execPath,
       [
         join(root, "scripts/generate-handler-registry.mjs"),
         "--project",
-        join(root, "examples/todo/tsconfig.json"),
+        join(root, target.handlerProjectPath),
         "--generated-root",
         output,
         "--source-generated-root",
-        join(liveTodoRoot, "generated"),
+        join(livePackageRoot, "generated"),
         "--out",
         join(output, "handler/generated-handler-registry.ts"),
         "--published-out",
-        join(liveTodoRoot, "generated/handler/generated-handler-registry.ts"),
+        join(livePackageRoot, "generated/handler/generated-handler-registry.ts"),
       ],
       root,
     );
-    if (handlerStatus !== 0) throw new Error("Todo handler registry post-step failed");
+    if (handlerStatus !== 0)
+      throw new Error(`${target.moduleName} handler registry post-step failed`);
     if (!existsSync(join(packageRoot, "spine-proto-manifest.json")))
-      throw new Error("Todo staged manifest is missing");
+      throw new Error(`${target.moduleName} staged manifest is missing`);
     return {
       status: 0,
       stagedTarget: {
-        generatedRoot: join(liveTodoRoot, "generated"),
+        generatedRoot: join(livePackageRoot, "generated"),
         stagedOutputRoot: output,
         stageRoot,
-        target: todoAtomicTarget,
+        target,
         manifests: [
           {
-            target: join(liveTodoRoot, "spine-proto-manifest.json"),
+            target: join(livePackageRoot, "spine-proto-manifest.json"),
             staged: join(packageRoot, "spine-proto-manifest.json"),
           },
         ],
@@ -722,7 +716,7 @@ function stageTodoModel(root, options = {}) {
     };
   } catch (error) {
     console.error(
-      `Failed to stage Todo output: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to stage ${target.moduleName} output: ${error instanceof Error ? error.message : String(error)}`,
     );
     rmSync(stageRoot, { recursive: true, force: true });
     return { status: 1 };
@@ -780,7 +774,7 @@ export function generateTargets(options = {}) {
         for (const stagedTarget of staged.stagedTargets) {
           for (const stagedManifest of stagedTarget.manifests ?? []) {
             if (!existsSync(stagedManifest.staged))
-              throw new Error("Todo staged manifest is missing");
+              throw new Error("model staged manifest is missing");
             manifests.push({
               target: stagedManifest.target,
               staged: stagedManifest.staged,
@@ -828,41 +822,6 @@ export function generateTargets(options = {}) {
     }
   }
   return status;
-}
-
-function generateHandlerRegistries(stagedTargets, root = repoRoot, run = runCommand) {
-  for (const target of generatedTargets.filter(
-    (candidate) => candidate.handlerRegistry !== undefined,
-  )) {
-    const registry = target.handlerRegistry;
-    const displayPath = target.displayPath;
-    const stagedTarget = stagedTargets.find(
-      (candidate) => candidate.target.displayPath === displayPath,
-    );
-    if (stagedTarget === undefined) {
-      console.error(`Missing staged ${displayPath} target for handler registry generation.`);
-      return 1;
-    }
-    const publishedOutputFile = join(
-      stagedTarget.generatedRoot,
-      "handler/generated-handler-registry.ts",
-    );
-    const status = run(`${registry.name} handler registry generation`, process.execPath, [
-      join(root, "scripts/generate-handler-registry.mjs"),
-      "--project",
-      join(root, registry.projectPath),
-      "--generated-root",
-      stagedTarget.stagedOutputRoot,
-      "--source-generated-root",
-      stagedTarget.generatedRoot,
-      "--out",
-      join(stagedTarget.stagedOutputRoot, "handler/generated-handler-registry.ts"),
-      "--published-out",
-      publishedOutputFile,
-    ]);
-    if (status !== 0) return status;
-  }
-  return 0;
 }
 
 const isMain =

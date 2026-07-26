@@ -4,15 +4,41 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "load": "node dist/scripts/load.mjs"
+    "load": "node dist/scripts/load.mjs",
+    "proto:generate": "spine-proto generate",
+    "clean:generated-dist": "node scripts/clean-generated-dist.mjs",
+    "prepack": "pnpm clean:generated-dist && tsc -b"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+    "./proto/*": "./proto/*",
+    "./generated/*.js": {
+      "types": "./dist/generated/*.d.ts",
+      "default": "./dist/generated/*.js"
+    }
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "proto",
+    "spine-proto.json",
+    "spine-proto-manifest.json",
+    "README.md"
+  ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
     "@connectrpc/connect": "2.1.2",
     "@connectrpc/connect-node": "2.1.2",
     "@spine-event-engine/client": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
-    "@spine-event-engine/proto": "workspace:*",
+    "@spine-event-engine/proto": "0.0.0",
     "@spine-event-engine/server": "workspace:*"
+  },
+  "devDependencies": {
+    "@spine-event-engine/proto-tools": "0.0.0"
   }
 }

@@ -66,7 +66,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 0.0.0
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
@@ -77,6 +77,10 @@ importers:
       '@spine-event-engine/storage-datastore':
         specifier: workspace:*
         version: link:../../packages/storage-datastore
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
 
   examples/project-management:
     dependencies:
@@ -96,11 +100,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 0.0.0
         version: link:../../packages/proto
       '@spine-event-engine/server':
         specifier: workspace:*
         version: link:../../packages/server
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../packages/proto-tools
 
   examples/todo:
     dependencies:

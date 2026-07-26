@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 import {
   cleanupStagedTargets,
+  atomicGeneratedTargets,
   generatedTargets,
   stageGeneratedTargets,
 } from "./proto-workflow.mjs";
@@ -157,6 +158,17 @@ function compareGeneratedOutput(currentRoot, expectedRoot) {
   return { missing, unexpected, changed };
 }
 
+export function generatedTargetsForCheck(expectedGeneratedRoot) {
+  return expectedGeneratedRoot === undefined
+    ? atomicGeneratedTargets
+    : [
+        {
+          ...generatedTargets[0],
+          expectedGeneratedRoot,
+        },
+      ];
+}
+
 function printGeneratedDiff(diff) {
   for (const label of ["missing", "changed", "unexpected"]) {
     for (const path of diff[label].slice(0, 40)) {
@@ -171,15 +183,7 @@ function printGeneratedDiff(diff) {
 
 function main() {
   const { repoRoot, expectedGeneratedRoot } = parseArgs(process.argv.slice(2));
-  const targets =
-    expectedGeneratedRoot === undefined
-      ? generatedTargets
-      : [
-          {
-            ...generatedTargets[0],
-            expectedGeneratedRoot,
-          },
-        ];
+  const targets = generatedTargetsForCheck(expectedGeneratedRoot);
   const staged =
     expectedGeneratedRoot === undefined
       ? stageGeneratedTargets({
@@ -301,9 +305,14 @@ function main() {
   }
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+const isMain =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

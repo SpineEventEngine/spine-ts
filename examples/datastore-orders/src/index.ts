@@ -9,6 +9,8 @@ import {
   Subscribe,
   type RunningServer,
 } from "@spine-event-engine/server";
+
+export { datastoreOrdersProtoModule } from "../generated/proto-module.js";
 import type { StorageFactory } from "@spine-event-engine/storage";
 import {
   DatastoreStorageFactory,

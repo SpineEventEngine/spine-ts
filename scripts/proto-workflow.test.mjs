@@ -17,6 +17,7 @@ import {
   cleanupStagedTargets,
   atomicGeneratedTargets,
   generatedTargets,
+  modelAtomicTargets,
   generateTargets,
   prepareGeneratedOutput,
   publishGeneratedTargets,
@@ -121,7 +122,93 @@ function todoStageCommand(failure, writeManifest = true) {
   };
 }
 
+function applicationModelTransactionFixture(target) {
+  const root = mkdtempSync(join(tmpdir(), "spine-application-model-transaction-"));
+  const packageRoot = join(root, target.packagePath);
+  const generatedRoot = join(root, target.displayPath);
+  const manifest = join(packageRoot, "spine-proto-manifest.json");
+  const rootGenerated = join(root, "packages/proto/generated");
+
+  mkdirSync(join(packageRoot, "proto"), { recursive: true });
+  mkdirSync(generatedRoot, { recursive: true });
+  mkdirSync(rootGenerated, { recursive: true });
+  writeFileSync(join(packageRoot, "package.json"), '{"name":"@example/model","version":"1.0.0"}\n');
+  writeFileSync(join(packageRoot, "spine-proto.json"), "{}\n");
+  writeFileSync(join(packageRoot, "proto/model.proto"), 'syntax = "proto3";\n');
+  writeFileSync(join(generatedRoot, "previous.txt"), "previous model output\n");
+  writeFileSync(manifest, "previous model manifest\n");
+  writeFileSync(join(rootGenerated, "previous.txt"), "previous root output\n");
+  writeFileSync(
+    join(root, "buf.gen.yaml"),
+    "version: v2\nplugins:\n  - local: test\n    out: packages/proto/generated\n",
+  );
+  return root;
+}
+
+function applicationModelStageCommand(failure) {
+  return (label, _executable, args, cwd) => {
+    if (label.endsWith("model generation")) {
+      mkdirSync(join(cwd, "generated"), { recursive: true });
+      writeFileSync(join(cwd, "generated/model.txt"), "model\n");
+      writeFileSync(join(cwd, "spine-proto-manifest.json"), "next model manifest\n");
+      return 0;
+    }
+    if (label === failure) return 1;
+    const output = args[args.indexOf("--out") + 1];
+    if (output === undefined) return 1;
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, "handler\n");
+    return 0;
+  };
+}
+
 describe("proto-workflow", () => {
+  it("keeps every application model inside the single atomic publication boundary", () => {
+    expect(generatedTargets.map((target) => target.displayPath)).toEqual([
+      "packages/proto/generated",
+    ]);
+    expect(modelAtomicTargets.map((target) => target.displayPath)).toEqual([
+      "examples/todo/generated",
+      "examples/project-management/generated",
+      "examples/datastore-orders/generated",
+    ]);
+    expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
+      "packages/proto/generated",
+      "examples/todo/generated",
+      "examples/project-management/generated",
+      "examples/datastore-orders/generated",
+    ]);
+  });
+
+  it.each(modelAtomicTargets.filter((target) => target.packagePath !== "examples/todo"))(
+    "preserves $moduleName output and manifest when its handler post-step fails",
+    (target) => {
+      const root = applicationModelTransactionFixture(target);
+      const packageRoot = join(root, target.packagePath);
+
+      expect(
+        generateTargets({
+          repoRoot: root,
+          runCommand: rootStageCommand,
+          runModelCommand: applicationModelStageCommand(
+            `${target.moduleName} handler registry post-step`,
+          ),
+        }),
+      ).toBe(1);
+      expect(readFileSync(join(root, target.displayPath, "previous.txt"), "utf8")).toBe(
+        "previous model output\n",
+      );
+      expect(readFileSync(join(packageRoot, "spine-proto-manifest.json"), "utf8")).toBe(
+        "previous model manifest\n",
+      );
+      expect(readFileSync(join(root, "packages/proto/generated/previous.txt"), "utf8")).toBe(
+        "previous root output\n",
+      );
+      expect(readdirSync(packageRoot).some((name) => name.startsWith(".generated-"))).toBe(false);
+      expect(readdirSync(root).some((name) => name.startsWith(".spine-proto-"))).toBe(false);
+    },
+  );
+
   it.each(["Todo companion generation", "Todo handler registry post-step"])(
     "%s preserves live Todo and root artifacts when its staged post-step fails",
     (failure) => {
@@ -130,7 +217,7 @@ describe("proto-workflow", () => {
         generateTargets({
           repoRoot,
           runCommand: rootStageCommand,
-          runTodoCommand: todoStageCommand(failure),
+          runModelCommand: todoStageCommand(failure),
         }),
       ).toBe(1);
       expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
@@ -158,7 +245,7 @@ describe("proto-workflow", () => {
       generateTargets({
         repoRoot,
         runCommand: rootStageCommand,
-        runTodoCommand: todoStageCommand(undefined, false),
+        runModelCommand: todoStageCommand(undefined, false),
       }),
     ).toBe(1);
     expect(readFileSync(join(repoRoot, "examples/todo/generated/previous.txt"), "utf8")).toBe(
@@ -178,7 +265,7 @@ describe("proto-workflow", () => {
       generateTargets({
         repoRoot,
         runCommand: rootStageCommand,
-        runTodoCommand: todoStageCommand(undefined),
+        runModelCommand: todoStageCommand(undefined),
         writeSpineArtifacts() {
           writerCalled = true;
         },
@@ -213,7 +300,7 @@ describe("proto-workflow", () => {
         repoRoot,
         lockOperations: workflowClaimOperations(claims, () => "alive"),
         runCommand: rootStageCommand,
-        runTodoCommand: todoStageCommand(undefined),
+        runModelCommand: todoStageCommand(undefined),
       }),
     ).toBe(1);
     expect(
@@ -267,6 +354,58 @@ describe("proto-workflow", () => {
     for (const manifest of manifests)
       expect(readFileSync(manifest.target, "utf8")).toBe("previous\n");
     expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
+  });
+
+  it("rolls back a v2 mid-commit interruption across every atomic root and manifest", () => {
+    const root = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const targets = atomicGeneratedTargets.map((target, index) => {
+      const live = join(root, target.displayPath);
+      const stageRoot = join(dirname(live), `.generated-interrupted-${index}`);
+      const staged = join(stageRoot, "generated");
+      const backup = join(dirname(live), `.${basename(live)}.backup-interrupted-${index}`);
+      mkdirSync(live, { recursive: true });
+      mkdirSync(staged, { recursive: true });
+      mkdirSync(backup, { recursive: true });
+      writeFileSync(join(live, "value.txt"), "next\n");
+      writeFileSync(join(staged, "value.txt"), "staged\n");
+      writeFileSync(join(backup, "value.txt"), "previous\n");
+      return { target: live, staged, backup, hadPrevious: true };
+    });
+    const manifestPaths = [
+      "packages/proto/spine-proto-manifest.json",
+      ...modelAtomicTargets.map((target) => `${target.packagePath}/spine-proto-manifest.json`),
+    ];
+    const manifests = manifestPaths.map((path, index) => {
+      const target = join(root, path);
+      const staged = join(
+        dirname(target),
+        `.generated-interrupted-${index}/spine-proto-manifest.json`,
+      );
+      const backup = join(dirname(target), `.spine-proto-manifest.backup-interrupted-${index}`);
+      mkdirSync(dirname(staged), { recursive: true });
+      writeFileSync(target, index === 0 ? "next\n" : "previous\n");
+      writeFileSync(staged, "next\n");
+      if (index === 0) writeFileSync(backup, "previous\n");
+      return { target, staged, backup, hadPrevious: true, contents: "next\n" };
+    });
+    writeFileSync(
+      join(root, ".spine-proto-publication.json"),
+      `${JSON.stringify({ version: 2, state: "committing", targets, manifests })}\n`,
+    );
+
+    publishGeneratedTargets([], root);
+
+    for (const target of targets) {
+      expect(readFileSync(join(target.target, "value.txt"), "utf8")).toBe("previous\n");
+      expect(existsSync(target.staged)).toBe(false);
+      expect(existsSync(target.backup)).toBe(false);
+    }
+    for (const manifest of manifests) {
+      expect(readFileSync(manifest.target, "utf8")).toBe("previous\n");
+      expect(existsSync(manifest.staged)).toBe(false);
+      expect(existsSync(manifest.backup)).toBe(false);
+    }
+    expect(existsSync(join(root, ".spine-proto-publication.json"))).toBe(false);
   });
 
   it.each([1, 2])("rejects a v%s committing journal with no manifests", (version) => {
@@ -951,7 +1090,7 @@ describe("proto-workflow", () => {
     rmSync(external, { recursive: true, force: true });
   });
 
-  it("does not publish staged protobuf output when handler registry generation fails", () => {
+  it("does not publish staged protobuf output when its staged manifest is unavailable", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
@@ -1008,19 +1147,14 @@ describe("proto-workflow", () => {
     });
 
     expect(status).toBe(1);
-    expect(commands).toEqual([
-      "buf generate packages/proto/generated",
-      "buf generate examples/project-management/generated",
-      "buf generate examples/datastore-orders/generated",
-      "project-management handler registry generation",
-    ]);
+    expect(commands).toEqual(["buf generate packages/proto/generated"]);
     expect(readFileSync(join(packageGenerated, "message.txt"), "utf8")).toBe(
       "previous package output\n",
     );
     expect(readFileSync(join(todoGenerated, "message.txt"), "utf8")).toBe("previous todo output\n");
   });
 
-  it("stages generated output without publishing it", () => {
+  it("stages the legacy root output without publishing it", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
@@ -1086,13 +1220,7 @@ describe("proto-workflow", () => {
 
     try {
       expect(staged.status).toBe(0);
-      expect(commands).toEqual([
-        "buf generate packages/proto/generated",
-        "buf generate examples/project-management/generated",
-        "buf generate examples/datastore-orders/generated",
-        "project-management handler registry generation",
-        "datastore-orders handler registry generation",
-      ]);
+      expect(commands).toEqual(["buf generate packages/proto/generated"]);
       expect(readFileSync(join(packageGenerated, "message.txt"), "utf8")).toBe(
         "previous package output\n",
       );
@@ -1102,16 +1230,6 @@ describe("proto-workflow", () => {
       expect(
         readFileSync(join(staged.stagedTargets[0].stagedOutputRoot, "message.txt"), "utf8"),
       ).toBe("buf generate packages/proto/generated staged output\n");
-      expect(
-        existsSync(
-          join(staged.stagedTargets[1].stagedOutputRoot, "handler/generated-handler-registry.ts"),
-        ),
-      ).toBe(true);
-      expect(
-        existsSync(
-          join(staged.stagedTargets[2].stagedOutputRoot, "handler/generated-handler-registry.ts"),
-        ),
-      ).toBe(true);
     } finally {
       cleanupStagedTargets(staged.stagedTargets);
     }

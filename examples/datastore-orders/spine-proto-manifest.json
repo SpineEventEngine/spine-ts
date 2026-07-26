@@ -1,0 +1,21 @@
+{
+  "formatVersion": 1,
+  "packageName": "@spine-event-engine/example-datastore-orders",
+  "packageVersion": "0.0.0",
+  "protoFiles": [
+    "spine/example/datastore_orders/v1/commands.proto",
+    "spine/example/datastore_orders/v1/entities.proto",
+    "spine/example/datastore_orders/v1/events.proto",
+    "spine/example/datastore_orders/v1/read_models.proto"
+  ],
+  "generatedExports": {
+    "spine/example/datastore_orders/v1/commands.proto": "generated/spine/example/datastore_orders/v1/commands_pb.js",
+    "spine/example/datastore_orders/v1/entities.proto": "generated/spine/example/datastore_orders/v1/entities_pb.js",
+    "spine/example/datastore_orders/v1/events.proto": "generated/spine/example/datastore_orders/v1/events_pb.js",
+    "spine/example/datastore_orders/v1/read_models.proto": "generated/spine/example/datastore_orders/v1/read_models_pb.js"
+  },
+  "dependencies": [
+    "@spine-event-engine/proto"
+  ],
+  "moduleExport": "datastoreOrdersProtoModule"
+}
