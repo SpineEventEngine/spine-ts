@@ -3,8 +3,8 @@ import { dirname, join } from "node:path";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { satisfies, validRange } from "semver";
 
-import { type ProtoManifest } from "./index.js";
-import { readManifestAt } from "./manifest-reader.js";
+import { type ProtoManifest } from "../index.js";
+import { readManifestAt } from "../io/manifest-reader.js";
 import { isRegistryDependencySpecifier } from "./registry-dependency.js";
 
 export interface ResolvedModel {

@@ -138,8 +138,8 @@ import {
   file_spine_validation_validation_error as generatedFileSpineValidationValidationError,
 } from "../generated/spine/validation/validation_error_pb.js";
 
-export type { ProtoModule } from "./proto-module.js";
-export { spineProtoModule } from "./spine-proto-module.js";
+export type { ProtoModule } from "./model/proto-module.js";
+export { spineProtoModule } from "./model/spine-proto-module.js";
 import type {
   ConstraintViolation,
   ValidationError,

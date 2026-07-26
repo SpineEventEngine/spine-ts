@@ -191,6 +191,7 @@ describe("@spine-event-engine/proto", () => {
         "ResponseSchema",
         "set_once",
         "SPI_type",
+        "spineProtoModule",
         "StatusSchema",
         "TemplateStringSchema",
         "TenantIdSchema",

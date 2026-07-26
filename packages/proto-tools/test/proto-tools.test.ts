@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -10,13 +11,21 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { writeManifestAtomically } from "../src/atomic-manifest.js";
+import { writeManifestAtomically } from "../src/io/atomic-manifest.js";
 import { createManifest, readConfig, readManifest } from "../src/index.js";
-import { resolveModelGraph } from "../src/model-graph.js";
+import {
+  composeApplication,
+  generateModel,
+  type GenerationLockOperations,
+  type GenerationOperations,
+  probeGenerationClaimLiveness,
+} from "../src/generation/generator.js";
+import { resolveModelGraph } from "../src/model/model-graph.js";
 
 function packageDirectory(name: string): string {
   const directory = mkdtempSync(join(tmpdir(), "spine-proto-tools-"));
@@ -69,7 +78,1011 @@ function installModel(
   return directory;
 }
 
+interface Claim {
+  readonly content: string;
+  readonly kind?: "regular" | "symlink" | "other";
+}
+
+function claimOperations(
+  claims: Map<string, Claim>,
+  alive: ReadonlySet<number> = new Set(),
+  removed: string[] = [],
+): GenerationLockOperations {
+  return {
+    create: (path, content) => {
+      const name = basename(path);
+      if (claims.has(name)) {
+        const error = new Error("exists") as NodeJS.ErrnoException;
+        error.code = "EEXIST";
+        throw error;
+      }
+      claims.set(name, { content });
+    },
+    list: () => [...claims.keys()],
+    read: (path) => {
+      const claim = claims.get(basename(path));
+      if (claim === undefined) throw new Error("missing claim");
+      return claim.content;
+    },
+    inspect: (path) => claims.get(basename(path))?.kind ?? "regular",
+    remove: (path) => {
+      const name = basename(path);
+      removed.push(name);
+      claims.delete(name);
+    },
+    liveness: (pid) => (alive.has(pid) ? "alive" : "dead"),
+  };
+}
+
+function generatedOutput(_: string, output: string): void {
+  mkdirSync(output, { recursive: true });
+  writeFileSync(join(output, "model_pb.ts"), "export {};\n");
+}
+
 describe("spine proto model tooling", () => {
+  it("runs packaged Buf to generate only a model's owned source and module", () => {
+    const model = packageDirectory("@example/users-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/users-model"));
+    mkdirSync(join(model, "proto/users/v1"), { recursive: true });
+    writeFileSync(
+      join(model, "proto/users/v1/user.proto"),
+      'syntax = "proto3";\npackage users.v1;\nmessage User { string id = 1; }\n',
+    );
+
+    generateModel(model);
+
+    expect(readFileSync(join(model, "src/generated/users/v1/user_pb.ts"), "utf8")).toContain(
+      "UserSchema",
+    );
+    expect(readFileSync(join(model, "src/generated/proto-module.ts"), "utf8")).toContain(
+      "modelProtoModule",
+    );
+    expect(readManifest(model).protoFiles).toEqual(["users/v1/user.proto"]);
+  });
+
+  it("links a cross-model Proto import to the dependency's manifest npm export without duplicating output", () => {
+    const chat = packageDirectory("@example/chat-model");
+    const users = installModel(chat, "@example/users-model", [], "users/v1/user.proto");
+    mkdirSync(join(users, "proto/users/v1"), { recursive: true });
+    writeFileSync(
+      join(users, "proto/users/v1/user.proto"),
+      'syntax = "proto3";\npackage users.v1;\nmessage UserId { string value = 1; }\n',
+    );
+    writeJson(users, "package.json", {
+      name: "@example/users-model",
+      version: "1.2.3",
+      exports: {
+        "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+        "./proto/users/v1/user.proto": "./proto/users/v1/user.proto",
+      },
+    });
+    writeJson(chat, "package.json", {
+      name: "@example/chat-model",
+      version: "1.2.3",
+      dependencies: { "@example/users-model": "^1.2.3" },
+    });
+    writeJson(
+      chat,
+      "spine-proto.json",
+      modelConfig("@example/chat-model", ["@example/users-model"]),
+    );
+    mkdirSync(join(chat, "proto/chat/v1"), { recursive: true });
+    writeFileSync(
+      join(chat, "proto/chat/v1/message.proto"),
+      [
+        'syntax = "proto3";\npackage chat.v1;\nimport "users/v1/user.proto";\n',
+        "message Chat { users.v1.UserId author = 1; }\n",
+      ].join(""),
+    );
+
+    generateModel(chat);
+
+    expect(readFileSync(join(chat, "src/generated/chat/v1/message_pb.ts"), "utf8")).toContain(
+      'from "@example/users-model/generated/users/v1/user_pb.js"',
+    );
+    expect(existsSync(join(chat, "src/generated/users/v1/user_pb.ts"))).toBe(false);
+  });
+
+  it("uses each direct dependency manifest's module export in the generated model module", () => {
+    const chat = packageDirectory("@example/chat-model");
+    const users = installModel(chat, "@example/users-model", [], "users/v1/user.proto");
+    mkdirSync(join(users, "proto/users/v1"), { recursive: true });
+    writeFileSync(
+      join(users, "proto/users/v1/user.proto"),
+      'syntax = "proto3"; package users.v1; message UserId { string value = 1; }\n',
+    );
+    writeJson(users, "package.json", {
+      name: "@example/users-model",
+      version: "1.2.3",
+      exports: {
+        "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+        "./proto/users/v1/user.proto": "./proto/users/v1/user.proto",
+      },
+    });
+    writeJson(users, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/users-model",
+      packageVersion: "1.2.3",
+      protoFiles: ["users/v1/user.proto"],
+      generatedExports: { "users/v1/user.proto": "generated/users/v1/user_pb.js" },
+      dependencies: [],
+      moduleExport: "usersProtoModule",
+    });
+    writeJson(chat, "package.json", {
+      name: "@example/chat-model",
+      version: "1.2.3",
+      dependencies: { "@example/users-model": "^1.2.3" },
+    });
+    writeJson(
+      chat,
+      "spine-proto.json",
+      modelConfig("@example/chat-model", ["@example/users-model"]),
+    );
+    mkdirSync(join(chat, "proto/chat/v1"), { recursive: true });
+    writeFileSync(
+      join(chat, "proto/chat/v1/message.proto"),
+      [
+        'syntax = "proto3"; package chat.v1; import "users/v1/user.proto"; ',
+        "message Chat { users.v1.UserId author = 1; }\n",
+      ].join(""),
+    );
+
+    generateModel(chat);
+
+    expect(readFileSync(join(chat, "src/generated/proto-module.ts"), "utf8")).toContain(
+      'import { usersProtoModule as dependency0 } from "@example/users-model";',
+    );
+  });
+
+  it("typechecks a generated model package with resolved Protobuf and dependency module imports", () => {
+    const chat = packageDirectory("@example/chat-model");
+    const users = installModel(chat, "@example/users-model", [], "users/v1/user.proto");
+    mkdirSync(join(users, "proto/users/v1"), { recursive: true });
+    writeFileSync(
+      join(users, "proto/users/v1/user.proto"),
+      'syntax = "proto3"; package users.v1; message UserId { string value = 1; }\n',
+    );
+    writeJson(users, "package.json", {
+      name: "@example/users-model",
+      version: "1.2.3",
+      exports: {
+        "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+        "./proto/users/v1/user.proto": "./proto/users/v1/user.proto",
+        "./generated/users/v1/user_pb.js": "./generated/users/v1/user_pb.d.ts",
+        ".": "./index.d.ts",
+      },
+    });
+    writeJson(users, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/users-model",
+      packageVersion: "1.2.3",
+      protoFiles: ["users/v1/user.proto"],
+      generatedExports: { "users/v1/user.proto": "generated/users/v1/user_pb.js" },
+      dependencies: [],
+      moduleExport: "usersProtoModule",
+    });
+    mkdirSync(join(users, "generated/users/v1"), { recursive: true });
+    writeFileSync(
+      join(users, "generated/users/v1/user_pb.d.ts"),
+      [
+        "export interface UserId {}\nexport declare const UserIdSchema: any;\n",
+        "export declare const file_users_v1_user: any;\n",
+      ].join(""),
+    );
+    writeFileSync(
+      join(users, "index.d.ts"),
+      [
+        'import type { ProtoModule } from "@spine-event-engine/proto"; ',
+        "export declare const usersProtoModule: ProtoModule;\n",
+      ].join(""),
+    );
+    writeJson(chat, "package.json", {
+      name: "@example/chat-model",
+      version: "1.2.3",
+      dependencies: { "@example/users-model": "^1.2.3" },
+    });
+    writeJson(
+      chat,
+      "spine-proto.json",
+      modelConfig("@example/chat-model", ["@example/users-model"]),
+    );
+    mkdirSync(join(chat, "proto/chat/v1"), { recursive: true });
+    writeFileSync(
+      join(chat, "proto/chat/v1/message.proto"),
+      [
+        'syntax = "proto3"; package chat.v1; import "users/v1/user.proto"; ',
+        "message Chat { users.v1.UserId author = 1; }\n",
+      ].join(""),
+    );
+    const moduleDirectory = join(chat, "node_modules");
+    mkdirSync(join(moduleDirectory, "@spine-event-engine"), { recursive: true });
+    mkdirSync(join(moduleDirectory, "@bufbuild"), { recursive: true });
+    symlinkSync(
+      join(process.cwd(), "packages/proto"),
+      join(moduleDirectory, "@spine-event-engine/proto"),
+    );
+    symlinkSync(
+      join(process.cwd(), "packages/proto-tools/node_modules/@bufbuild/protobuf"),
+      join(moduleDirectory, "@bufbuild/protobuf"),
+    );
+
+    generateModel(chat);
+    writeJson(chat, "tsconfig.json", {
+      compilerOptions: {
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        strict: true,
+        noEmit: true,
+      },
+      include: ["src/generated/**/*.ts"],
+    });
+    const checked = spawnSync(
+      process.execPath,
+      [join(process.cwd(), "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+      { cwd: chat, encoding: "utf8" },
+    );
+    expect(`${checked.stdout}${checked.stderr}`).toBe("");
+    expect(checked.status).toBe(0);
+  });
+
+  it("rejects a declared dependency whose canonical Proto source is not exported", () => {
+    const chat = packageDirectory("@example/chat-model");
+    installModel(chat, "@example/users-model", [], "users/v1/user.proto");
+    writeJson(chat, "package.json", {
+      name: "@example/chat-model",
+      version: "1.2.3",
+      dependencies: { "@example/users-model": "^1.2.3" },
+    });
+    writeJson(
+      chat,
+      "spine-proto.json",
+      modelConfig("@example/chat-model", ["@example/users-model"]),
+    );
+    mkdirSync(join(chat, "proto"), { recursive: true });
+    writeFileSync(join(chat, "proto/chat.proto"), 'syntax = "proto3"; message Chat {}\n');
+
+    expect(() => {
+      generateModel(chat);
+    }).toThrow(
+      "spine-proto: @example/users-model: cannot resolve exported Proto source users/v1/user.proto",
+    );
+  });
+
+  it("rejects duplicate fully-qualified generated messages before replacing prior output", () => {
+    const model = packageDirectory("@example/conflict-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/conflict-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    writeFileSync(
+      join(model, "proto/first.proto"),
+      'syntax = "proto3"; package example.v1; message Duplicate {}\n',
+    );
+    writeFileSync(
+      join(model, "proto/second.proto"),
+      'syntax = "proto3"; package example.v1; message Duplicate {}\n',
+    );
+    mkdirSync(join(model, "src/generated"), { recursive: true });
+    writeFileSync(join(model, "src/generated/prior.ts"), "prior\n");
+
+    expect(() => {
+      generateModel(model);
+    }).toThrow(/Buf (generation|validation) failed/);
+    expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior\n");
+  });
+
+  it("rejects undeclared and unowned canonical Proto imports before publication", () => {
+    for (const dependency of [false, true]) {
+      const model = packageDirectory(
+        `@example/import-${dependency ? "unowned" : "undeclared"}-model`,
+      );
+      const dependencyName = "@example/users-model";
+      if (dependency) {
+        const users = installModel(model, dependencyName, [], "users/v1/other.proto");
+        mkdirSync(join(users, "proto/users/v1"), { recursive: true });
+        writeFileSync(
+          join(users, "proto/users/v1/other.proto"),
+          'syntax = "proto3"; package users.v1; message Other {}\n',
+        );
+        writeJson(users, "package.json", {
+          name: dependencyName,
+          version: "1.2.3",
+          exports: {
+            "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+            "./proto/users/v1/other.proto": "./proto/users/v1/other.proto",
+          },
+        });
+      }
+      writeJson(model, "package.json", {
+        name: dependency ? "@example/import-unowned-model" : "@example/import-undeclared-model",
+        version: "1.2.3",
+        dependencies: dependency ? { [dependencyName]: "^1.2.3" } : {},
+      });
+      writeJson(
+        model,
+        "spine-proto.json",
+        modelConfig(
+          dependency ? "@example/import-unowned-model" : "@example/import-undeclared-model",
+          dependency ? [dependencyName] : [],
+        ),
+      );
+      mkdirSync(join(model, "proto"), { recursive: true });
+      writeFileSync(
+        join(model, "proto/model.proto"),
+        'syntax = "proto3"; import "users/v1/user.proto"; message Model {}\n',
+      );
+      mkdirSync(join(model, "src/generated"), { recursive: true });
+      writeFileSync(join(model, "src/generated/prior.ts"), "prior\n");
+      writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+
+      let error: unknown;
+      try {
+        generateModel(model);
+      } catch (caught) {
+        error = caught;
+      }
+      expect(error).toBeInstanceOf(Error);
+      const message = (error as Error).message;
+      expect(message).toContain(
+        `spine-proto: ${dependency ? "@example/import-unowned-model" : "@example/import-undeclared-model"}:`,
+      );
+      expect(message).toContain("model.proto");
+      expect(message).not.toContain(".stage-");
+      expect(message).not.toContain(model);
+      expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior\n");
+      expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe(
+        "prior manifest\n",
+      );
+    }
+  });
+
+  it("preserves prior generated output and manifest when a generation boundary fails", () => {
+    const model = packageDirectory("@example/failure-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/failure-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+    mkdirSync(join(model, "src/generated"), { recursive: true });
+    writeFileSync(join(model, "src/generated/prior.ts"), "prior output\n");
+    writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+
+    const failures: Readonly<Record<string, GenerationOperations>> = {
+      command: {
+        runBuf: () => {
+          throw new Error("command failed");
+        },
+      },
+      rewrite: {
+        rewriteImports: () => {
+          throw new Error("rewrite failed");
+        },
+      },
+      module: {
+        writeModule: () => {
+          throw new Error("module failed");
+        },
+      },
+      publish: {
+        rename: () => {
+          throw new Error("rename failed");
+        },
+      },
+    };
+    for (const [boundary, operations] of Object.entries(failures)) {
+      expect(() => {
+        generateModel(model, operations);
+      }).toThrow(`${boundary === "publish" ? "rename" : boundary} failed`);
+      expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+      expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe(
+        "prior manifest\n",
+      );
+    }
+  });
+
+  it("rejects active unique claims and cleans a contender claim without touching the owner", () => {
+    const model = packageDirectory("@example/active-claim-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/active-claim-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    const claims = new Map<string, Claim>([
+      [
+        ".spine-proto-generate.lock.active",
+        { content: JSON.stringify({ pid: 41, token: "active" }) },
+      ],
+    ]);
+    const removed: string[] = [];
+
+    expect(() => {
+      generateModel(model, {
+        runBuf: generatedOutput,
+        lockOperations: claimOperations(claims, new Set([41]), removed),
+      });
+    }).toThrow(
+      "spine-proto: @example/active-claim-model: generation already in progress for this package",
+    );
+    expect([...claims.keys()]).toEqual([".spine-proto-generate.lock.active"]);
+    expect(removed).toHaveLength(1);
+  });
+
+  it("removes only dead unique claims and its exact own claim after successful recovery", () => {
+    const model = packageDirectory("@example/dead-claim-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/dead-claim-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    const claims = new Map<string, Claim>([
+      [".spine-proto-generate.lock.dead", { content: JSON.stringify({ pid: 42, token: "dead" }) }],
+    ]);
+    const removed: string[] = [];
+
+    generateModel(model, {
+      runBuf: generatedOutput,
+      lockOperations: claimOperations(claims, new Set(), removed),
+    });
+    expect(claims).toEqual(new Map());
+    expect(removed).toContain(".spine-proto-generate.lock.dead");
+    expect(removed).toHaveLength(2);
+  });
+
+  it("removes a claim only after an explicit dead liveness result", () => {
+    const model = packageDirectory("@example/explicit-dead-claim-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/explicit-dead-claim-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    const claims = new Map<string, Claim>([
+      [".spine-proto-generate.lock.dead", { content: JSON.stringify({ pid: 43, token: "dead" }) }],
+    ]);
+    const operations = claimOperations(claims);
+
+    generateModel(model, {
+      runBuf: generatedOutput,
+      lockOperations: { ...operations, liveness: () => "dead" },
+    });
+    expect(claims).toEqual(new Map());
+  });
+
+  it("rejects an indeterminate liveness result without removing its claim", () => {
+    const model = packageDirectory("@example/indeterminate-claim-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/indeterminate-claim-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    const claim = ".spine-proto-generate.lock.indeterminate";
+    const claims = new Map<string, Claim>([
+      [claim, { content: JSON.stringify({ pid: 44, token: "indeterminate" }) }],
+    ]);
+    const operations = claimOperations(claims);
+
+    expect(() => {
+      generateModel(model, {
+        runBuf: generatedOutput,
+        lockOperations: { ...operations, liveness: () => "indeterminate" },
+      });
+    }).toThrow(
+      "spine-proto: @example/indeterminate-claim-model: generation already in progress for this package",
+    );
+    expect([...claims.keys()]).toEqual([claim]);
+  });
+
+  it("classifies only ESRCH as dead when probing a generation claim owner", () => {
+    const errno = (code: string): NodeJS.ErrnoException => Object.assign(new Error(code), { code });
+    expect(probeGenerationClaimLiveness(1, () => undefined)).toBe("alive");
+    expect(
+      probeGenerationClaimLiveness(1, () => {
+        throw errno("ESRCH");
+      }),
+    ).toBe("dead");
+    expect(
+      probeGenerationClaimLiveness(1, () => {
+        throw errno("EPERM");
+      }),
+    ).toBe("indeterminate");
+    expect(
+      probeGenerationClaimLiveness(1, () => {
+        throw errno("EIO");
+      }),
+    ).toBe("indeterminate");
+  });
+
+  it("never lets two claims present before scanning both proceed", () => {
+    const model = packageDirectory("@example/two-claim-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/two-claim-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    for (const contender of ["a", "b"]) {
+      const claims = new Map<string, Claim>([
+        [".spine-proto-generate.lock.a", { content: JSON.stringify({ pid: 51, token: "a" }) }],
+        [".spine-proto-generate.lock.b", { content: JSON.stringify({ pid: 52, token: "b" }) }],
+      ]);
+      expect(() => {
+        generateModel(model, {
+          runBuf: generatedOutput,
+          lockOperations: claimOperations(claims, new Set([51, 52])),
+        });
+      }).toThrow(
+        "spine-proto: @example/two-claim-model: generation already in progress for this package",
+      );
+      expect(claims.has(`.spine-proto-generate.lock.${contender}`)).toBe(true);
+    }
+  });
+
+  it("never removes another contender's live replacement while cleaning a stale unique claim", () => {
+    const model = packageDirectory("@example/interleaved-claim-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/interleaved-claim-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    for (const replacement of ["a", "b"]) {
+      const claims = new Map<string, Claim>([
+        [
+          ".spine-proto-generate.lock.stale",
+          { content: JSON.stringify({ pid: 71, token: "stale" }) },
+        ],
+      ]);
+      const operations = claimOperations(claims, new Set([72]));
+      const originalRemove = operations.remove;
+      const replacementName = `.spine-proto-generate.lock.${replacement}`;
+      const interleaved: GenerationLockOperations = {
+        ...operations,
+        remove: (path) => {
+          originalRemove(path);
+          if (basename(path) === ".spine-proto-generate.lock.stale") {
+            claims.set(replacementName, {
+              content: JSON.stringify({ pid: 72, token: replacement }),
+            });
+          }
+        },
+      };
+
+      expect(() => {
+        generateModel(model, { runBuf: generatedOutput, lockOperations: interleaved });
+      }).toThrow(
+        "spine-proto: @example/interleaved-claim-model: generation already in progress for this package",
+      );
+      expect(claims.has(replacementName)).toBe(true);
+      expect([...claims.keys()]).toEqual([replacementName]);
+    }
+  });
+
+  it("refuses malformed, nonregular, and over-budget unique claims", () => {
+    const model = packageDirectory("@example/invalid-claim-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/invalid-claim-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    for (const kind of ["symlink", "other"] as const) {
+      const claims = new Map<string, Claim>([
+        [".spine-proto-generate.lock.bad", { content: JSON.stringify({ pid: 61 }), kind }],
+      ]);
+      expect(() => {
+        generateModel(model, { runBuf: generatedOutput, lockOperations: claimOperations(claims) });
+      }).toThrow(
+        "spine-proto: @example/invalid-claim-model: generation claim is not a regular file",
+      );
+    }
+    const oversized = new Map<string, Claim>();
+    for (let index = 0; index <= 1000; index += 1)
+      oversized.set(`.spine-proto-generate.lock.${String(index)}`, {
+        content: JSON.stringify({ pid: 62, token: String(index) }),
+      });
+    expect(() => {
+      generateModel(model, { runBuf: generatedOutput, lockOperations: claimOperations(oversized) });
+    }).toThrow("spine-proto: @example/invalid-claim-model: generation claim count exceeds 1000");
+  });
+
+  it("surfaces own-claim release failure without masking a primary generation error", () => {
+    const model = packageDirectory("@example/release-claim-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/release-claim-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    const claims = new Map<string, Claim>();
+    const operations = claimOperations(claims);
+    const release = (): never => {
+      throw new Error("forced release failure");
+    };
+
+    expect(() => {
+      generateModel(model, {
+        runBuf: generatedOutput,
+        lockOperations: { ...operations, remove: release },
+      });
+    }).toThrow("spine-proto: @example/release-claim-model: cannot clean up generation lock");
+    claims.clear();
+    expect(() => {
+      generateModel(model, {
+        runBuf: () => {
+          throw new Error("primary generation failure");
+        },
+        lockOperations: { ...operations, remove: release },
+      });
+    }).toThrow("primary generation failure");
+  });
+
+  it("rejects an owned Proto import from a nested transitive model before publication", () => {
+    const current = packageDirectory("@example/current-model");
+    const direct = installModel(
+      current,
+      "@example/direct-model",
+      ["@example/transitive-model"],
+      "direct/v1/direct.proto",
+    );
+    const transitive = installModel(
+      direct,
+      "@example/transitive-model",
+      [],
+      "transitive/v1/shared.proto",
+    );
+    for (const [root, path] of [
+      [direct, "direct/v1/direct.proto"],
+      [transitive, "transitive/v1/shared.proto"],
+    ] as const) {
+      mkdirSync(join(root, "proto", dirname(path)), { recursive: true });
+      writeFileSync(join(root, "proto", path), 'syntax = "proto3";\n');
+      writeJson(root, "package.json", {
+        name: root === direct ? "@example/direct-model" : "@example/transitive-model",
+        version: "1.2.3",
+        dependencies: root === direct ? { "@example/transitive-model": "^1.2.3" } : {},
+        exports: {
+          "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+          [`./proto/${path}`]: `./proto/${path}`,
+        },
+      });
+    }
+    writeJson(current, "package.json", {
+      name: "@example/current-model",
+      version: "1.2.3",
+      dependencies: { "@example/direct-model": "^1.2.3" },
+    });
+    writeJson(
+      current,
+      "spine-proto.json",
+      modelConfig("@example/current-model", ["@example/direct-model"]),
+    );
+    mkdirSync(join(current, "proto/app/v1"), { recursive: true });
+    writeFileSync(join(current, "proto/app/v1/current.proto"), 'syntax = "proto3";\n');
+    mkdirSync(join(current, "src/generated"), { recursive: true });
+    writeFileSync(join(current, "src/generated/prior.ts"), "prior output\n");
+    writeFileSync(join(current, "spine-proto-manifest.json"), "prior manifest\n");
+
+    const transitiveImportError =
+      "spine-proto: @example/current-model: generated import " +
+      "transitive/v1/shared.proto is owned by transitive dependency " +
+      "@example/transitive-model";
+    expect(() => {
+      generateModel(current, {
+        runBuf: (_, output) => {
+          mkdirSync(join(output, "app/v1"), { recursive: true });
+          writeFileSync(
+            join(output, "app/v1/current_pb.ts"),
+            'import {} from "../../transitive/v1/shared_pb.js";\nexport {};\n',
+          );
+        },
+      });
+    }).toThrow(transitiveImportError);
+    expect(readFileSync(join(current, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+    expect(readFileSync(join(current, "spine-proto-manifest.json"), "utf8")).toBe(
+      "prior manifest\n",
+    );
+  });
+
+  it("JSON-escapes a hostile installed generated export without injecting generated source", () => {
+    const current = packageDirectory("@example/escaped-import-model");
+    const dependency = installModel(current, "@example/escaped-dependency", [], "dependency.proto");
+    const hostileExport = 'generated/quote";throw new Error("injected");_pb.js';
+    writeJson(dependency, "package.json", {
+      name: "@example/escaped-dependency",
+      version: "1.2.3",
+      exports: {
+        "./spine-proto-manifest.json": "./spine-proto-manifest.json",
+        "./proto/dependency.proto": "./proto/dependency.proto",
+        [`./${hostileExport}`]: `./${hostileExport.replace(/\.js$/, ".d.ts")}`,
+      },
+    });
+    writeJson(dependency, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/escaped-dependency",
+      packageVersion: "1.2.3",
+      protoFiles: ["dependency.proto"],
+      generatedExports: { "dependency.proto": hostileExport },
+      dependencies: [],
+      moduleExport: "dependencyProtoModule",
+    });
+    mkdirSync(join(dependency, "proto"), { recursive: true });
+    writeFileSync(join(dependency, "proto/dependency.proto"), 'syntax = "proto3";\n');
+    mkdirSync(join(dependency, dirname(hostileExport)), { recursive: true });
+    writeFileSync(join(dependency, hostileExport.replace(/\.js$/, ".d.ts")), "export {};\n");
+    writeJson(current, "package.json", {
+      name: "@example/escaped-import-model",
+      version: "1.2.3",
+      dependencies: { "@example/escaped-dependency": "^1.2.3" },
+    });
+    writeJson(
+      current,
+      "spine-proto.json",
+      modelConfig("@example/escaped-import-model", ["@example/escaped-dependency"]),
+    );
+    mkdirSync(join(current, "proto"), { recursive: true });
+    writeFileSync(join(current, "proto/current.proto"), 'syntax = "proto3";\n');
+
+    generateModel(current, {
+      runBuf: (_, output) => {
+        mkdirSync(output, { recursive: true });
+        writeFileSync(
+          join(output, "current_pb.ts"),
+          'import {} from "./dependency_pb.js";\nexport {};\n',
+        );
+      },
+      writeModule: () => undefined,
+    });
+
+    const source = readFileSync(join(current, "src/generated/current_pb.ts"), "utf8");
+    expect(source).toContain(JSON.stringify(`@example/escaped-dependency/${hostileExport}`));
+    expect(source).not.toContain(';throw new Error("injected");";');
+    const checked = spawnSync(
+      process.execPath,
+      [
+        join(process.cwd(), "node_modules/typescript/bin/tsc"),
+        "--noEmit",
+        "--module",
+        "NodeNext",
+        "--moduleResolution",
+        "NodeNext",
+        "src/generated/current_pb.ts",
+      ],
+      { cwd: current, encoding: "utf8" },
+    );
+    expect(`${checked.stdout}${checked.stderr}`).toBe("");
+    expect(checked.status).toBe(0);
+  });
+
+  it("JSON-escapes quoted owned Proto filenames in generated local module imports", () => {
+    const model = packageDirectory("@example/quoted-owned-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/quoted-owned-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    writeFileSync(join(model, 'proto/quote".proto'), 'syntax = "proto3";\n');
+    const moduleDirectory = join(model, "node_modules");
+    mkdirSync(join(moduleDirectory, "@spine-event-engine"), { recursive: true });
+    mkdirSync(join(moduleDirectory, "@bufbuild"), { recursive: true });
+    symlinkSync(
+      join(process.cwd(), "packages/proto"),
+      join(moduleDirectory, "@spine-event-engine/proto"),
+    );
+    symlinkSync(
+      join(process.cwd(), "packages/proto-tools/node_modules/@bufbuild/protobuf"),
+      join(moduleDirectory, "@bufbuild/protobuf"),
+    );
+
+    generateModel(model, {
+      runBuf: (_, output) => {
+        mkdirSync(output, { recursive: true });
+        writeFileSync(join(output, 'quote"_pb.ts'), "export {};\n");
+      },
+    });
+
+    const source = readFileSync(join(model, "src/generated/proto-module.ts"), "utf8");
+    expect(source).toContain('from "./quote\\"_pb.js"');
+    const checked = spawnSync(
+      process.execPath,
+      [
+        join(process.cwd(), "node_modules/typescript/bin/tsc"),
+        "--noEmit",
+        "--module",
+        "NodeNext",
+        "--moduleResolution",
+        "NodeNext",
+        "src/generated/proto-module.ts",
+      ],
+      { cwd: model, encoding: "utf8" },
+    );
+    expect(`${checked.stdout}${checked.stderr}`).toBe("");
+    expect(checked.status).toBe(0);
+  });
+
+  it("uses a bounded injected Buf runner and labels timeout failures by package", () => {
+    const model = packageDirectory("@example/runner-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/runner-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+    const options: { timeout: number; maxBuffer: number }[] = [];
+    expect(() => {
+      generateModel(model, {
+        runProcess: (_, arguments_, processOptions) => {
+          options.push(processOptions);
+          if (arguments_[0] === "generate")
+            return {
+              pid: 1,
+              output: [],
+              stdout: "",
+              stderr: "",
+              status: null,
+              signal: null,
+              error: Object.assign(new Error("timed out"), { code: "ETIMEDOUT" }),
+            };
+          return { pid: 1, output: [], stdout: "", stderr: "", status: 0, signal: null };
+        },
+      });
+    }).toThrow("spine-proto: @example/runner-model: Buf generation timed out");
+    expect(options.map(({ timeout, maxBuffer }) => ({ timeout, maxBuffer }))).toEqual([
+      { timeout: 300000, maxBuffer: 1048576 },
+    ]);
+  });
+
+  it("rolls back generated output when staged manifest publication fails and removes its sibling stage", () => {
+    const model = packageDirectory("@example/manifest-failure-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/manifest-failure-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+    mkdirSync(join(model, "src/generated"), { recursive: true });
+    writeFileSync(join(model, "src/generated/prior.ts"), "prior output\n");
+    writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+
+    expect(() => {
+      generateModel(model, {
+        manifestOperations: {
+          rename: () => {
+            throw new Error("manifest rename failed");
+          },
+        },
+      });
+    }).toThrow("manifest rename failed");
+    expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+    expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe("prior manifest\n");
+    expect(readdirSync(model).filter((name) => name.includes("spine-proto-manifest.json"))).toEqual(
+      ["spine-proto-manifest.json"],
+    );
+  });
+
+  it("leaves no generated output, manifest, backup, or stage when first manifest publication fails", () => {
+    const model = packageDirectory("@example/first-manifest-failure-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/first-manifest-failure-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+
+    expect(() => {
+      generateModel(model, {
+        manifestOperations: {
+          rename: () => {
+            throw new Error("manifest rename failed");
+          },
+        },
+      });
+    }).toThrow("manifest rename failed");
+    expect(existsSync(join(model, "src/generated"))).toBe(false);
+    expect(existsSync(join(model, "spine-proto-manifest.json"))).toBe(false);
+    expect(readdirSync(join(model, "src")).filter((name) => name.includes("generated"))).toEqual(
+      [],
+    );
+    expect(readdirSync(model).filter((name) => name.includes("spine-proto-manifest.json"))).toEqual(
+      [],
+    );
+  });
+
+  it("composes a deterministic registry source from configured top-level model modules", () => {
+    const application = packageDirectory("@example/chat-application");
+    writeJson(application, "package.json", {
+      name: "@example/chat-application",
+      version: "1.2.3",
+      dependencies: {
+        "@example/chat-model": "^1.2.3",
+        "@example/users-model": "^1.2.3",
+      },
+    });
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: ["@example/users-model", "@example/chat-model"],
+      registryOutput: "src/model-registry.ts",
+    });
+    installModel(application, "@example/chat-model");
+    installModel(application, "@example/users-model");
+
+    composeApplication(application);
+
+    expect(readFileSync(join(application, "src/model-registry.ts"), "utf8")).toBe(
+      'import { TypeRegistry } from "@spine-event-engine/core";\n' +
+        'import { modelProtoModule as model0 } from "@example/chat-model";\n' +
+        'import { modelProtoModule as model1 } from "@example/users-model";\n\n' +
+        "export const typeRegistry = TypeRegistry.from(model0, model1);\n",
+    );
+  });
+
+  it("composes scoped packages with identical leaves using deterministic collision-free aliases", () => {
+    const application = packageDirectory("@example/application");
+    writeJson(application, "package.json", {
+      name: "@example/application",
+      version: "1.2.3",
+      dependencies: { "@a/users-model": "^1.2.3", "@b/users-model": "^1.2.3" },
+    });
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: ["@b/users-model", "@a/users-model"],
+      registryOutput: "src/registry.ts",
+    });
+    installModel(application, "@a/users-model");
+    installModel(application, "@b/users-model");
+
+    composeApplication(application);
+
+    expect(readFileSync(join(application, "src/registry.ts"), "utf8")).toContain(
+      [
+        'import { modelProtoModule as model0 } from "@a/users-model";\n',
+        'import { modelProtoModule as model1 } from "@b/users-model";',
+      ].join(""),
+    );
+  });
+  it("composes through each installed manifest's declared module export and atomically replaces its output", () => {
+    const application = packageDirectory("@example/application");
+    writeJson(application, "package.json", {
+      name: "@example/application",
+      version: "1.2.3",
+      dependencies: { "@example/users-model": "^1.2.3" },
+    });
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: ["@example/users-model"],
+      registryOutput: "src/model-registry.ts",
+    });
+    const users = installModel(application, "@example/users-model");
+    writeJson(users, "spine-proto-manifest.json", {
+      formatVersion: 1,
+      packageName: "@example/users-model",
+      packageVersion: "1.2.3",
+      protoFiles: ["users.proto"],
+      generatedExports: { "users.proto": "generated/users_pb.js" },
+      dependencies: [],
+      moduleExport: "usersProtoModule",
+    });
+    mkdirSync(join(application, "src"), { recursive: true });
+    writeFileSync(join(application, "src/model-registry.ts"), "old registry\n");
+
+    composeApplication(application);
+
+    expect(readFileSync(join(application, "src/model-registry.ts"), "utf8")).toContain(
+      'import { usersProtoModule as model0 } from "@example/users-model";',
+    );
+    expect(
+      readdirSync(join(application, "src")).filter((name) => name.includes("model-registry.ts")),
+    ).toEqual(["model-registry.ts"]);
+  });
+
+  it("preserves a prior registry and removes its sibling stage on compose write and rename failures", () => {
+    const application = packageDirectory("@example/application");
+    writeJson(application, "package.json", { name: "@example/application", version: "1.2.3" });
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: [],
+      registryOutput: "src/model-registry.ts",
+    });
+    mkdirSync(join(application, "src"), { recursive: true });
+    const target = join(application, "src/model-registry.ts");
+    writeFileSync(target, "prior registry\n");
+    for (const failure of ["write", "rename"] as const) {
+      expect(() => {
+        composeApplication(application, {
+          registryOperations: {
+            writeFile: (stage, content) => {
+              writeFileSync(stage, content);
+              if (failure === "write") throw new Error("write failed");
+            },
+            rename: (stage, destination) => {
+              if (failure === "rename") throw new Error("rename failed");
+              renameSync(stage, destination);
+            },
+          },
+        });
+      }).toThrow(`${failure} failed`);
+      expect(readFileSync(target, "utf8")).toBe("prior registry\n");
+      expect(
+        readdirSync(dirname(target)).filter((name) => name.includes("model-registry.ts")),
+      ).toEqual(["model-registry.ts"]);
+    }
+  });
+
+  it("stages model output beside its destination and never falls back to PATH for protoc-gen-es", () => {
+    const model = packageDirectory("@example/staged-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/staged-model"));
+    mkdirSync(join(model, "proto"), { recursive: true });
+    writeFileSync(join(model, "proto/model.proto"), 'syntax = "proto3"; message Model {}\n');
+    const previousPath = process.env.PATH;
+    process.env.PATH = dirname(process.execPath);
+    try {
+      generateModel(model);
+    } finally {
+      process.env.PATH = previousPath;
+    }
+    expect(readdirSync(join(model, "src")).filter((name) => name.includes("generated"))).toEqual([
+      "generated",
+    ]);
+    expect(readFileSync(join(model, "src/generated/model_pb.ts"), "utf8")).toContain("ModelSchema");
+  });
   it("resolves nested installed dependencies dependency-first with canonical Proto ownership", () => {
     const application = packageDirectory("@example/application");
     const chat = installModel(application, "@example/chat-model", ["@example/users-model"]);
@@ -280,7 +1293,10 @@ describe("spine proto model tooling", () => {
     setSpecifier("npm:@example/users-model@^1.2.3");
     setUsersVersion("2.0.0");
     expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
-      "spine-proto: @example/chat-model: dependency @example/users-model version 2.0.0 does not satisfy npm:@example/users-model@^1.2.3",
+      [
+        "spine-proto: @example/chat-model: dependency @example/users-model ",
+        "version 2.0.0 does not satisfy npm:@example/users-model@^1.2.3",
+      ].join(""),
     );
 
     setSpecifier("latest");
@@ -504,7 +1520,10 @@ describe("spine proto model tooling", () => {
               },
         );
         expect(() => readConfig(directory)).toThrow(
-          `spine-proto: ${name}: ${mode === "model" ? "dependency" : "model package"} @example/users-model must use a registry version`,
+          [
+            `spine-proto: ${name}: ${mode === "model" ? "dependency" : "model package"} `,
+            "@example/users-model must use a registry version",
+          ].join(""),
         );
       }
     }
@@ -589,7 +1608,10 @@ describe("spine proto model tooling", () => {
       moduleExport: "usersProtoModule",
     });
     expect(() => readManifest(dangling)).toThrow(
-      "spine-proto: @example/dangling-model: manifest generated export for users/id.proto must not pass through a symlink",
+      [
+        "spine-proto: @example/dangling-model: manifest generated export for ",
+        "users/id.proto must not pass through a symlink",
+      ].join(""),
     );
   });
 
@@ -719,5 +1741,149 @@ describe("spine proto model tooling", () => {
     expect(() => createManifest(large)).toThrow(
       "spine-proto: @example/large-model: proto source exceeds 10000 files",
     );
+    let generationStarted = false;
+    expect(() => {
+      generateModel(large, {
+        runBuf: () => {
+          generationStarted = true;
+        },
+      });
+    }).toThrow("spine-proto: @example/large-model: proto source exceeds 10000 files");
+    expect(generationStarted).toBe(false);
+    expect(existsSync(join(large, "src"))).toBe(false);
   }, 120_000);
+
+  it("rejects generation beyond the Proto directory-depth bound before staging", () => {
+    const deep = packageDirectory("@example/deep-generation-model");
+    writeJson(deep, "spine-proto.json", modelConfig("@example/deep-generation-model"));
+    let nested = join(deep, "proto");
+    for (let level = 0; level <= 100; level += 1) {
+      nested = join(nested, "nested");
+      mkdirSync(nested, { recursive: true });
+    }
+    let generationStarted = false;
+
+    expect(() => {
+      generateModel(deep, {
+        runBuf: () => {
+          generationStarted = true;
+        },
+      });
+    }).toThrow(
+      "spine-proto: @example/deep-generation-model: proto source exceeds 100 directory levels",
+    );
+    expect(generationStarted).toBe(false);
+    expect(existsSync(join(deep, "src"))).toBe(false);
+  });
+
+  it("generates only Proto files and never stages non-Proto source content", () => {
+    const model = packageDirectory("@example/proto-only-model");
+    writeJson(model, "spine-proto.json", modelConfig("@example/proto-only-model"));
+    mkdirSync(join(model, "proto/model/v1"), { recursive: true });
+    writeFileSync(join(model, "proto/model/v1/value.proto"), 'syntax = "proto3";\n');
+    writeFileSync(join(model, "proto/model/v1/notes.txt"), "not protobuf\n");
+    writeFileSync(join(model, "proto/unrelated.json"), "{}\n");
+    let staged: string[] = [];
+
+    generateModel(model, {
+      runBuf: (moduleRoot, output, owned) => {
+        staged = readdirSync(join(moduleRoot, "model/v1"));
+        expect(owned).toEqual(["model/v1/value.proto"]);
+        mkdirSync(join(output, "model/v1"), { recursive: true });
+        writeFileSync(join(output, "model/v1/value_pb.ts"), "export {};\n");
+      },
+    });
+
+    expect(staged).toEqual(["value.proto"]);
+    expect(existsSync(join(model, "src/generated/model/v1/notes.txt"))).toBe(false);
+    expect(existsSync(join(model, "src/generated/unrelated.json"))).toBe(false);
+  });
+
+  it("rejects model generated roots that could overwrite metadata or Proto sources", () => {
+    const directory = packageDirectory("@example/unsafe-model-output");
+    for (const { generatedRoot, protoRoot = "proto" } of [
+      { generatedRoot: "." },
+      { generatedRoot: "package.json" },
+      { generatedRoot: "spine-proto.json" },
+      { generatedRoot: "spine-proto-manifest.json" },
+      { generatedRoot: "proto" },
+      { generatedRoot: "proto/generated" },
+      { generatedRoot: "src", protoRoot: "src/proto" },
+    ]) {
+      writeJson(directory, "spine-proto.json", {
+        ...modelConfig("@example/unsafe-model-output"),
+        generatedRoot,
+        protoRoot,
+      });
+      expect(() => readConfig(directory)).toThrow(
+        "spine-proto: @example/unsafe-model-output: generatedRoot must not overlap protoRoot or package root",
+      );
+    }
+  });
+
+  it("rejects application registry outputs that could overwrite package metadata", () => {
+    const directory = packageDirectory("@example/unsafe-application-output");
+    for (const registryOutput of [
+      ".",
+      "package.json",
+      "spine-proto.json",
+      "spine-proto-manifest.json",
+    ]) {
+      writeJson(directory, "spine-proto.json", {
+        formatVersion: 1,
+        mode: "application",
+        modelPackages: [],
+        registryOutput,
+      });
+      expect(() => readConfig(directory)).toThrow(
+        "spine-proto: @example/unsafe-application-output: registryOutput must name a safe source file",
+      );
+    }
+  });
+
+  it("rejects invalid and reserved local module-export bindings", () => {
+    const directory = packageDirectory("@example/invalid-local-module-export");
+    for (const moduleExport of ["not-valid", "class"]) {
+      writeJson(directory, "spine-proto.json", {
+        ...modelConfig("@example/invalid-local-module-export"),
+        moduleExport,
+      });
+      expect(() => readConfig(directory)).toThrow(
+        "spine-proto: @example/invalid-local-module-export: moduleExport must be a legal ESM binding identifier",
+      );
+    }
+  });
+
+  it("rejects invalid and reserved installed manifest module-export bindings before emission", () => {
+    const application = packageDirectory("@example/manifest-binding-application");
+    const model = installModel(application, "@example/manifest-binding-model");
+    writeJson(application, "package.json", {
+      name: "@example/manifest-binding-application",
+      version: "1.2.3",
+      dependencies: { "@example/manifest-binding-model": "^1.2.3" },
+    });
+    writeJson(application, "spine-proto.json", {
+      formatVersion: 1,
+      mode: "application",
+      modelPackages: ["@example/manifest-binding-model"],
+      registryOutput: "src/model-registry.ts",
+    });
+    for (const moduleExport of ["not-valid", "await"]) {
+      writeJson(model, "spine-proto-manifest.json", {
+        formatVersion: 1,
+        packageName: "@example/manifest-binding-model",
+        packageVersion: "1.2.3",
+        protoFiles: [],
+        generatedExports: {},
+        dependencies: [],
+        moduleExport,
+      });
+      expect(() => {
+        composeApplication(application);
+      }).toThrow(
+        "spine-proto: @example/manifest-binding-model: manifest moduleExport must be a legal ESM binding identifier",
+      );
+      expect(existsSync(join(application, "src/model-registry.ts"))).toBe(false);
+    }
+  });
 });

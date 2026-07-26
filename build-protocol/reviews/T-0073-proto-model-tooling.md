@@ -324,3 +324,205 @@ B1b owner; both reviewer lanes reopen only for these findings.
   this internal, prose-free slice.
 - All accepted P1/P2 findings are resolved. Slice B1b is accepted for commit
   and immediate task-branch push.
+
+## Slice B2 specialist assignments
+
+Scope: internal model generator/linker, packaged Buf/Protobuf dependencies,
+installed canonical source assembly, owned-only generation, manifest-driven
+dependency import rewriting, generated frozen `ProtoModule`, application
+registry composition, conflict/import failures, sibling staging, atomic
+publication/rollback, CLI modes, and 39 focused real/injected tests.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`; focus on module depth,
+  circular/internal seams, generated-source simplicity, deterministic naming,
+  error clarity, and avoiding a new parser.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected and
+  explicitly dispatched `gpt-5.6-terra` / `high`; focus on package/bin
+  publication layout, runtime dependency completeness, generated ESM/d.ts
+  compatibility, frozen root export surface, generated `ProtoModule` typing,
+  and external npm-package usability.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected and explicitly dispatched `gpt-5.6-terra` / `high`; focus on
+  subprocess/resource bounds, source/export trust, owned-only generation,
+  import/conflict evidence, sibling staging, transactional restoration,
+  cleanup, determinism, filesystem failure behavior, and first publication.
+- Documentation completeness: N/A for B2 because end-user CLI/config/layout
+  documentation and examples are explicitly Slice C/D deliverables. Public
+  TSDoc and package/declaration accuracy are assigned to the API lane.
+
+All reviewers are read-only, may not spawn children, and must return CLEAN or
+prioritized actionable findings. Explicit dispatch and immutable configured
+profiles are available; independent child self-introspection is not.
+
+## Slice B2 specialist results
+
+All three invoked roles ran with expected and explicitly dispatched
+`gpt-5.6-terra` / `high`; immutable configured profiles match and independent
+self-introspection is unavailable.
+
+- P1 accepted: generator recursively copies the entire source tree before
+  manifest bounds, risking stack/resource exhaustion and staging non-Proto
+  files. Compute one bounded manifest snapshot first and copy only its owned
+  Proto inventory iteratively.
+- P1 accepted: config permits package-root, metadata/tool-file, and
+  generated/source-overlap targets that generation/composition may rename or
+  replace. Reject destructive paths before staging.
+- P1 accepted and deduplicated across style/API: `moduleExport`, package/import
+  paths, and generated literals are interpolated without identifier validation
+  or safe serialization. Validate binding identifiers (including keywords) and
+  serialize generated string literals/import specifiers.
+- P1 accepted: overlapping generators can interleave generated output and
+  manifest publication. Add exclusive per-package generation ownership with
+  cleanup and an interleaving regression.
+- P1 accepted: generated imports may target a transitive model package not
+  directly declared by the current model/package. Reject non-direct external
+  owners before output publication.
+- P2 accepted: synchronous Buf/plugin subprocesses have no deadline or
+  timeout-specific diagnostic. Add a bounded timeout and focused seam evidence.
+- P2 accepted: generator recomputes the owned manifest, permitting source drift
+  and duplicated traversal. Use the one pre-staging snapshot for owned paths and
+  publication.
+
+Package/bin layout, direct runtime dependencies, frozen root exports,
+generated declaration/import compatibility, real Buf conflict rejection,
+sibling staging, first/prior publication rollback, and package-labelled
+diagnostics are otherwise clean. One complete correction batch returns to the
+existing B2 implementation context; all three invoked lanes require bounded
+re-review because their concerns change.
+
+## Slice B2 correction and re-review
+
+- One pre-staging manifest snapshot drives bounded exact `.proto` copying, Buf
+  owned paths, and publication. Non-Proto files are excluded.
+- Config rejects package root/metadata/tool targets and source/generated
+  overlap; local and installed module-export identifiers are validated.
+  Generated strings and import specifiers use safe serialization.
+- An exclusive package generation lock prevents interleaved output/manifest
+  publication and is released in `finally`.
+- Generated external imports must be direct configured/package dependencies;
+  transitive imports fail before publication.
+- Packaged Buf processes use an injected bounded runner with a five-minute
+  deadline, 1 MiB output cap, and distinct package-labelled failure modes.
+- Regressions cover depth/file admission before staging, non-Proto exclusion,
+  destructive targets, identifiers, concurrent generation, transitive imports,
+  subprocess timeout, and all prior generation/rollback behavior.
+- Cleanup enforcement required moving all new Wave 3 source files into nested
+  cohesive directories, updating the package bin/import/export paths, shortening
+  one semantic name, and wrapping test lines. No allowlist was added.
+- Coordinator GREEN: 55 focused generator/Proto tests plus 51 core
+  export/registry tests, both typecheck layers, full lint/cleanup, repository
+  formatting, TypeDoc/API inventory, Proto generated-output freshness, and
+  whitespace checks.
+- Bounded re-review reuses the existing style/maintainability,
+  TypeScript/API, and performance/reliability roles, each with its originally
+  explicit `gpt-5.6-terra` / `high` profile.
+
+## Slice B2 re-review findings
+
+- P1 accepted and deduplicated across style/API: manifest-controlled generated
+  export paths and owned generated source paths still use manual quote
+  interpolation. Serialize the complete import specifiers and cover hostile
+  quoted paths.
+- P1 accepted: the exclusive generation lock is not crash-recoverable; a dead
+  owner permanently blocks the package, and cleanup failure is suppressed.
+  Use a bounded stale-owner protocol that never follows/removes symlinks,
+  preserves a primary error, and surfaces otherwise-failed release.
+- P2 accepted: add the missing direct-model-to-transitive-owner import
+  rejection regression; implementation is present but unproven.
+
+Identifier validation, all other generated literals, manifest-first copying,
+destructive-path guards, nested layout/bin/declarations/package contents,
+bounded subprocesses, and normal overlapping generation are otherwise clean.
+One final correction batch returns to the existing B2 implementation context;
+all three lanes reopen only for these findings.
+
+## Slice B2 final correction evidence
+
+- Complete import specifiers for dependency-generated exports and owned
+  generated source paths use JSON serialization; hostile quote-containing
+  dependency exports and owned Proto filenames generate parseable,
+  typechecked source without injected statements.
+- The exclusive generation lock records pid/token ownership, rejects live and
+  unsafe symlink/nonregular owners, performs one bounded dead-owner recovery,
+  releases only its own token, surfaces cleanup-only failure, and preserves a
+  primary failure when cleanup also fails.
+- A real direct-to-nested-transitive model fixture proves transitive-owned
+  generated imports reject before publication and preserve prior artifacts.
+- An internal lock-operations seam supports deterministic lifecycle tests while
+  real defaults remain unchanged.
+- Coordinator GREEN: 113 focused tests, both typecheck layers, full
+  lint/cleanup, repository formatting, TypeDoc/API inventory, Proto generated
+  freshness, and whitespace checks.
+- Final bounded re-review reuses all three existing reviewer roles with their
+  originally explicit `gpt-5.6-terra` / `high` profiles.
+
+## Slice B2 final re-review results
+
+- Style/maintainability: CLEAN.
+- TypeScript/API: CLEAN.
+- Performance/reliability:
+  - direct-to-transitive import evidence is CLEAN;
+  - P1 accepted: canonical stale-lock recovery uses compare-then-remove and can
+    unlink a replacement live owner during a takeover race.
+
+The final lock correction replaces the shared canonical path with immutable
+tokenized per-attempt claim files: create the own claim exclusively, enumerate
+a bounded claim set, reject any other live/unsafe claim, remove only a dead
+claim's unique filename, and release only the own token. Concurrent contenders
+that see each other may both reject safely; a later contender always sees an
+already-proceeding live claim. This removes the stale replacement
+compare-delete operation entirely.
+
+## Slice B2 unique-claim correction evidence
+
+- Each contender creates an immutable UUID claim and enumerates a bounded claim
+  set twice before proceeding.
+- It removes only dead unique claim paths and its own rejected/released claim;
+  it never compare-deletes a shared replacement path.
+- Tests cover simultaneous pre-scan claims, stale A/B takeover interleavings,
+  a later contender observing a live owner, dead cleanup, unsafe claims, the
+  1,000-claim bound, exact own release, release-only failure, and primary-error
+  preservation.
+- RED exposed a rejected contender leaking its own claim; correction removes
+  only that claim.
+- Coordinator GREEN: 114 focused tests plus both typecheck layers, full
+  lint/cleanup, repository formatting, TypeDoc/API inventory, Proto freshness,
+  and whitespace checks.
+- Final re-review is limited to the existing performance/reliability role with
+  its originally explicit `gpt-5.6-terra` / `high` profile.
+
+## Slice B2 unique-claim re-review finding
+
+- P1 accepted: the default liveness probe treats every `process.kill(pid, 0)`
+  error as dead. Only `ESRCH` proves absence; `EPERM` and other failures are
+  live/indeterminate and must reject takeover.
+- The final correction makes liveness a three-state internal result and removes
+  claims only for explicit `dead`; tests cover indeterminate refusal.
+
+## Slice B2 liveness correction evidence
+
+- Internal liveness is explicitly `alive | dead | indeterminate`.
+- The default probe maps successful signal checks to alive, only `ESRCH` to
+  dead, and `EPERM`, `EIO`, and unknown failures to indeterminate.
+- Claim cleanup occurs only for explicit dead; indeterminate preserves the
+  claim and rejects takeover.
+- Coordinator GREEN: 117 focused tests plus both typecheck layers, full
+  lint/cleanup, formatting, docs/API inventory, Proto freshness, and
+  whitespace checks.
+- Final re-review is reliability-only under the originally explicit
+  `gpt-5.6-terra` / `high` profile.
+
+## Slice B2 closure
+
+- Style/maintainability final re-review: CLEAN.
+- TypeScript/API final re-review: CLEAN.
+- Performance/reliability final re-review: CLEAN; 64 targeted tests passed
+  independently.
+- All roles retained their expected and originally explicit
+  `gpt-5.6-terra` / `high` profiles. Immutable configured metadata matches;
+  independent self-introspection remains unavailable.
+- Documentation retains its concrete N/A disposition for this implementation
+  slice; complete end-user CLI/config/layout documentation remains Slice D.
+- All accepted P1/P2 findings are resolved. Slice B2 is accepted for commit and
+  immediate task-branch push.

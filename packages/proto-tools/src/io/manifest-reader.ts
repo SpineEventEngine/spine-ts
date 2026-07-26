@@ -1,4 +1,4 @@
-import { readManifest, type ProtoManifest } from "./index.js";
+import { readManifest, type ProtoManifest } from "../index.js";
 
 type ManifestReader = (packageRoot: string, manifestPath: string) => ProtoManifest;
 

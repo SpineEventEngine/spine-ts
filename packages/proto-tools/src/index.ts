@@ -1,7 +1,7 @@
 import { type Dirent, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { isAbsolute, join, normalize, sep } from "node:path";
 
-import { isRegistryDependencySpecifier } from "./registry-dependency.js";
+import { isRegistryDependencySpecifier } from "./model/registry-dependency.js";
 
 /** Version shared by the configuration and published manifest JSON documents. */
 export const manifestFormatVersion = 1;
@@ -84,16 +84,19 @@ export function readConfig(packageRoot: string): SpineProtoConfig {
     );
     const modelPackages = stringList(packageJson.name, config.modelPackages, "modelPackages");
     validateRegistryDependencies(packageJson, modelPackages, "model package");
+    const registryOutput = packagePath(
+      packageRoot,
+      packageJson.name,
+      config.registryOutput,
+      "registryOutput",
+    );
+    if (isReservedOutput(registryOutput))
+      fail(packageJson.name, "registryOutput must name a safe source file");
     return {
       formatVersion: 1,
       mode: "application",
       modelPackages,
-      registryOutput: packagePath(
-        packageRoot,
-        packageJson.name,
-        config.registryOutput,
-        "registryOutput",
-      ),
+      registryOutput,
     };
   }
 
@@ -117,20 +120,28 @@ export function readConfig(packageRoot: string): SpineProtoConfig {
     fail(packageJson.name, "packageName must match package.json name");
   const dependencies = stringList(packageJson.name, config.dependencies, "dependencies");
   validateRegistryDependencies(packageJson, dependencies, "dependency");
+  const protoRoot = packagePath(packageRoot, packageJson.name, config.protoRoot, "protoRoot");
+  const generatedRoot = packagePath(
+    packageRoot,
+    packageJson.name,
+    config.generatedRoot,
+    "generatedRoot",
+  );
+  if (
+    generatedRoot === "." ||
+    ["package.json", "spine-proto.json", "spine-proto-manifest.json"].includes(generatedRoot) ||
+    pathsOverlap(protoRoot, generatedRoot)
+  )
+    fail(packageJson.name, "generatedRoot must not overlap protoRoot or package root");
   return {
     formatVersion: 1,
     mode: "model",
     packageName,
-    protoRoot: packagePath(packageRoot, packageJson.name, config.protoRoot, "protoRoot"),
-    generatedRoot: packagePath(
-      packageRoot,
-      packageJson.name,
-      config.generatedRoot,
-      "generatedRoot",
-    ),
+    protoRoot,
+    generatedRoot,
     exportRoot: packagePath(packageRoot, packageJson.name, config.exportRoot, "exportRoot"),
     dependencies,
-    moduleExport: stringValue(packageJson.name, config.moduleExport, "moduleExport"),
+    moduleExport: bindingIdentifier(packageJson.name, config.moduleExport, "moduleExport"),
   };
 }
 
@@ -230,7 +241,7 @@ function manifestFromValue(value: unknown, requester: string): ProtoManifest {
       ]),
     ),
     dependencies: [...stringList(requester, manifest.dependencies, "manifest dependencies")].sort(),
-    moduleExport: stringValue(requester, manifest.moduleExport, "manifest moduleExport"),
+    moduleExport: bindingIdentifier(requester, manifest.moduleExport, "manifest moduleExport"),
   };
 }
 
@@ -284,6 +295,66 @@ function packagePath(packageRoot: string, name: string, value: unknown, label: s
   assertNoSymlinkAncestor(packageRoot, name, path, label);
   return path;
 }
+
+function pathsOverlap(left: string, right: string): boolean {
+  return left === right || left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+}
+
+function isReservedOutput(path: string): boolean {
+  return (
+    path === "." ||
+    ["package.json", "spine-proto.json", "spine-proto-manifest.json"].includes(path) ||
+    !path.includes(".")
+  );
+}
+
+function bindingIdentifier(name: string, value: unknown, label: string): string {
+  const identifier = stringValue(name, value, label);
+  if (!/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(identifier) || reservedBindings.has(identifier))
+    fail(name, `${label} must be a legal ESM binding identifier`);
+  return identifier;
+}
+
+const reservedBindings = new Set([
+  "await",
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "import",
+  "in",
+  "instanceof",
+  "let",
+  "new",
+  "null",
+  "return",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "typeof",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+]);
 
 function manifestPath(name: string, value: unknown, label: string): string {
   const path = stringValue(name, value, label).replaceAll("\\", "/");
