@@ -5,8 +5,9 @@ TypeDoc is the canonical API documentation generator for this repository.
 Current status: the generated TypeDoc reference contains the curated
 `@spine-event-engine/proto` root API for copied Spine contracts, the `@spine-event-engine/core`
 metadata/type registry and validation facade APIs, the first `@spine-event-engine/server`
-descriptor-derived entity metadata, the `@spine-event-engine/client-node` Projection-column
-registration model, context-owned `Repository` registration,
+descriptor-derived entity metadata, the browser-safe injected-transport
+`@spine-event-engine/client-web` protocol kernel, the `@spine-event-engine/client-node` Node transport factory and descriptor-backed query helpers,
+context-owned `Repository` registration,
 set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
@@ -18,7 +19,8 @@ contracts, the first `@spine-event-engine/storage` contracts, and the minimal
 `@spine-event-engine/testing` BlackBox test boundary, optional Datastore storage, and
 the MySQL-first RDBMS storage factory/errors/options.
 
-The reference has 13 entry points, including `@spine-event-engine/delivery-client` and
+The reference has 15 entry points, including `@spine-event-engine/client-web`,
+`@spine-event-engine/client-node`, `@spine-event-engine/delivery-client`, and
 `@spine-event-engine/delivery-server`. The latter is a listener-free, in-memory simple
 server core; constructing a replacement core intentionally loses its state.
 The delivery client facade owns curated delivery-server Inbox/Shard/Admin operations and remote
@@ -896,8 +898,8 @@ pnpm docs:check
 
 Generated output is written to `docs/api/reference`.
 
-`docs:check` also emits temporary TypeDoc JSON and verifies nine expected
-entry points in the API model: `@spine-event-engine/proto`, `@spine-event-engine/core`,
+`docs:check` also emits temporary TypeDoc JSON and verifies ten expected
+entry points in the API model: `@spine-event-engine/proto`, `@spine-event-engine/client-web`, `@spine-event-engine/core`,
 `@spine-event-engine/server`, `@spine-event-engine/storage`, `@spine-event-engine/storage-datastore`,
 `@spine-event-engine/storage-rdbms`, `@spine-event-engine/transport`,
 `@spine-event-engine/transport/zeromq`, and `@spine-event-engine/testing`. The

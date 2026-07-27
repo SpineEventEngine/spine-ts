@@ -151,18 +151,14 @@ const expectedCoreExports = [
 ];
 const expectedClientExports = [
   "Client",
+  "ClientKernel",
   "ClientOperationOptions",
   "ClientOptions",
-  "ClientObserveOptions",
   "ClientOutcome",
-  "ClientPostOptions",
   "ClientProtocolError",
-  "ClientQueryOutcome",
   "ClientRequest",
-  "CommandEvent",
-  "CommandEvents",
-  "EventSubscription",
-  "ObservedClientOutcome",
+  "ClientTransport",
+  "Subscription",
   "EntityColumn",
   "EntityColumnDefinition",
   "EntityColumnDefinitionEntry",
@@ -178,11 +174,6 @@ const expectedClientExports = [
   "EntityPredicate",
   "EntityQuery",
   "EntityQueryBuilder",
-  "QueryState",
-  "StateSubscription",
-  "StateSubscriptionOptions",
-  "StateSubscriptionUpdate",
-  "SubscriptionEvent",
   "all",
   "either",
   "eq",
@@ -190,6 +181,16 @@ const expectedClientExports = [
   "gt",
   "le",
   "lt",
+];
+const expectedClientWebExports = [
+  "Client",
+  "ClientOperationOptions",
+  "ClientOptions",
+  "ClientOutcome",
+  "ClientProtocolError",
+  "ClientRequest",
+  "ClientTransport",
+  "Subscription",
 ];
 const expectedDeliveryClientExports = [
   "DeliveryClient",
@@ -536,6 +537,7 @@ const expectedServerExports = [
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
 const clientIndexPath = join("packages", "client-node", "src", "index.ts");
+const clientWebIndexPath = join("packages", "client-web", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
 const deliveryServerIndexPath = join("packages", "delivery-server", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
@@ -577,6 +579,7 @@ const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
+const clientWebModuleNames = collectDirectModuleNames(apiDocs, "packages/client-web/src");
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
 const deliveryServerModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
@@ -887,6 +890,7 @@ const forbiddenStorageTypeDocNames = [
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredProtoToolsExports = collectNamedExports(protoToolsIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
+const declaredClientWebExports = collectNamedExports(clientWebIndexPath);
 const declaredDeliveryClientExports = collectNamedExports(deliveryClientIndexPath);
 const declaredDeliveryServerExports = collectNamedExports(deliveryServerIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
@@ -902,6 +906,15 @@ const unexpectedProtoToolsExports = declaredProtoToolsExports.filter(
   (name) => !expectedProtoToolsExports.includes(name),
 );
 const missingClientExports = expectedClientExports.filter((name) => !clientModuleNames.has(name));
+const missingClientWebExports = expectedClientWebExports.filter(
+  (name) => !clientWebModuleNames.has(name),
+);
+const missingDeclaredClientWebExports = expectedClientWebExports.filter(
+  (name) => !declaredClientWebExports.includes(name),
+);
+const unexpectedClientWebExports = declaredClientWebExports.filter(
+  (name) => !expectedClientWebExports.includes(name),
+);
 const missingDeclaredClientExports = expectedClientExports.filter(
   (name) => !declaredClientExports.includes(name),
 );
@@ -1013,6 +1026,22 @@ if (missingCoreExports.length > 0) {
 if (missingClientExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-event-engine/client-node exports: ${missingClientExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingClientWebExports.length > 0 || missingDeclaredClientWebExports.length > 0) {
+  console.error(
+    "@spine-event-engine/client-web is missing expected exports: " +
+      [...missingClientWebExports, ...missingDeclaredClientWebExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedClientWebExports.length > 0) {
+  console.error(
+    "@spine-event-engine/client-web exports changed without updating docs expectations: " +
+      unexpectedClientWebExports.join(", "),
   );
   process.exit(1);
 }
@@ -1272,6 +1301,7 @@ console.log(
     `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-event-engine/proto exports`,
     `${expectedCoreExports.length} expected @spine-event-engine/core exports`,
     `${expectedClientExports.length} expected @spine-event-engine/client-node exports`,
+    `${expectedClientWebExports.length} expected @spine-event-engine/client-web exports`,
     `${expectedDeliveryClientExports.length} expected @spine-event-engine/delivery-client exports`,
     `${expectedDeliveryServerExports.length} expected @spine-event-engine/delivery-server exports`,
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,

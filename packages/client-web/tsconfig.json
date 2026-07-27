@@ -4,11 +4,10 @@
     "composite": true,
     "rootDir": "src",
     "outDir": "dist",
-    "lib": ["ES2024", "DOM", "decorators"],
-    "types": ["node"],
+    "lib": ["ES2024", "DOM"],
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../client-web" }, { "path": "../core" }, { "path": "../proto" }]
+  "references": [{ "path": "../core" }, { "path": "../proto" }]
 }

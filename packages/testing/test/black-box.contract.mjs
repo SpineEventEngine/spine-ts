@@ -8,7 +8,7 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packEvent } from "@spine-event-engine/core";
+import { deriveTypeUrl, packAny, packEvent, unpackAny } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -21,6 +21,8 @@ import {
   QuerySchema,
   TargetFiltersSchema,
   TargetSchema,
+  TopicIdSchema,
+  TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { Aggregate, Projection, Repository, defineEntityHandlers } from "@spine-event-engine/server";
 import { readFileSync } from "node:fs";
@@ -66,7 +68,7 @@ class TaskProjection extends Projection {
 /** Register the runner-neutral BlackBox contract with any `(name, body)` test API. */
 export function registerBlackBoxContract(test, testing) {
   const { BlackBox, BlackBoxClosedError, BlackBoxTimeoutError } = testing;
-  test("posts a command then eventually reads an immutable decoded projection", async () => {
+  test("posts a command then eventually sends a query and decodes its projection", async () => {
     const blackBox = await BlackBox.from(taskContext());
     try {
       const scope = blackBox.asGuest();
@@ -76,49 +78,23 @@ export function registerBlackBoxContract(test, testing) {
       );
       if (posted.kind !== "ok") throw new Error("command was not accepted");
       const result = await blackBox.eventually(
-        () => scope.query(ProjectionStateSchema, query("task-1")),
-        (candidate) => candidate.kind === "ok" && candidate.states.length === 1,
+        () => scope.send(query("task-1")),
+        (candidate) => candidate.message.length === 1,
       );
-      if (result.kind !== "ok") throw new Error("query was not accepted");
-      const first = result.states[0].state;
-      if (first.name !== "First (projected)" || !Object.isFrozen(first))
+      const first = unpackAny(result.message[0]?.state, ProjectionStateSchema);
+      if (first?.name !== "First (projected)")
         throw new Error("projection was not immutable");
     } finally {
       await blackBox.close();
     }
   });
 
-  test("owns the event handle for an observed accepted command", async () => {
-    const blackBox = await BlackBox.from(taskContext());
-    try {
-      const result = await blackBox
-        .asGuest()
-        .post(
-          AggregateStateSchema,
-          create(AggregateStateSchema, { id: "observed", name: "Observed" }),
-          { observe: [ProjectionStateSchema] },
-        );
-      if (result.kind !== "ok") throw new Error("observed command was not accepted");
-      const originalCancel = result.events.cancel.bind(result.events);
-      let cancellations = 0;
-      result.events.cancel = async () => {
-        cancellations += 1;
-        await originalCancel();
-      };
-      await result.events.cancel();
-      await originalCancel();
-      await blackBox.close();
-      if (cancellations !== 1) throw new Error("observed stream was canceled more than once");
-    } finally {
-      await blackBox.close();
-    }
-  });
-
-  test("receives a decoded projection state subscription update through the public client", async () => {
+  test("activates a raw projection topic and decodes its update with the schema", async () => {
     const blackBox = await BlackBox.from(taskContext());
     try {
       const scope = blackBox.asGuest();
-      const subscription = await scope.subscribeToState(ProjectionStateSchema, StringValueSchema);
+      const subscription = await scope.createSubscription(topic(ProjectionStateSchema));
+      await subscription.activate();
       const next = subscription[Symbol.asyncIterator]().next();
       const posted = await scope.post(
         AggregateStateSchema,
@@ -128,8 +104,9 @@ export function registerBlackBoxContract(test, testing) {
       const update = await next;
       if (
         update.done ||
-        update.value.kind !== "state" ||
-        update.value.state.name !== "State (projected)"
+        update.value.update.case !== "entityUpdates" ||
+        unpackAny(update.value.update.value.update[0]?.kind.value, ProjectionStateSchema)?.name !==
+          "State (projected)"
       ) {
         throw new Error("state subscription did not decode the projection update");
       }
@@ -139,11 +116,12 @@ export function registerBlackBoxContract(test, testing) {
     }
   });
 
-  test("releases explicitly canceled and returned state subscriptions before BlackBox close", async () => {
+  test("releases explicitly canceled and returned raw subscriptions before BlackBox close", async () => {
     const blackBox = await BlackBox.from(taskContext());
     try {
       const scope = blackBox.asGuest();
-      const canceled = await scope.subscribeToState(ProjectionStateSchema, StringValueSchema);
+      const canceled = await scope.createSubscription(topic(ProjectionStateSchema));
+      await canceled.activate();
       const originalCancel = canceled.cancel.bind(canceled);
       let cancellations = 0;
       canceled.cancel = async () => {
@@ -156,7 +134,8 @@ export function registerBlackBoxContract(test, testing) {
       if (!exhausted.done) throw new Error("canceled state stream did not finish iteration");
       if (cancellations !== 1)
         throw new Error("explicit cancellation was not observed exactly once");
-      const returned = await scope.subscribeToState(ProjectionStateSchema, StringValueSchema);
+      const returned = await scope.createSubscription(topic(ProjectionStateSchema));
+      await returned.activate();
       const returnedCancel = returned.cancel.bind(returned);
       let returnedCancellations = 0;
       returned.cancel = async () => {
@@ -174,11 +153,12 @@ export function registerBlackBoxContract(test, testing) {
     }
   });
 
-  test("receives a decoded event subscription update with immutable context", async () => {
+  test("activates a raw event topic and decodes its update with the schema", async () => {
     const blackBox = await BlackBox.from(eventContext());
     try {
       const scope = blackBox.asGuest();
-      const events = await scope.subscribeToEvents(EventStateSchema);
+      const events = await scope.createSubscription(topic(EventStateSchema));
+      await events.activate();
       const iterator = events[Symbol.asyncIterator]();
       const pending = iterator.next();
       const update = await emitUntil(pending, () =>
@@ -186,8 +166,9 @@ export function registerBlackBoxContract(test, testing) {
       );
       if (
         update.done ||
-        update.value.message.id !== "event-1" ||
-        !Object.isFrozen(update.value.context)
+        update.value.update.case !== "eventUpdates" ||
+        unpackAny(update.value.update.value.event[0]?.message, EventStateSchema)?.id !== "event-1" ||
+        update.value.update.value.event[0]?.context === undefined
       ) {
         throw new Error("event subscription did not decode an immutable event context");
       }
@@ -317,14 +298,13 @@ export function registerBlackBoxContract(test, testing) {
       BlackBoxClosedError,
     );
     await assertFailure(
-      () => scope.query(ProjectionStateSchema, query("missing")),
+      () => scope.send(query("missing")),
       BlackBoxClosedError,
     );
     await assertFailure(
-      () => scope.subscribeToState(ProjectionStateSchema, StringValueSchema),
+      () => scope.createSubscription(topic(ProjectionStateSchema)),
       BlackBoxClosedError,
     );
-    await assertFailure(() => scope.subscribeToEvents(EventStateSchema), BlackBoxClosedError);
     await assertFailure(
       () => scope.postEvent(EventStateSchema, create(EventStateSchema, { id: "closed" })),
       BlackBoxClosedError,
@@ -546,6 +526,15 @@ function query(id) {
           idFilter: { id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))] },
         }),
       },
+    }),
+  });
+}
+function topic(schema) {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: `topic-${schema.typeName}` }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(schema),
+      criterion: { case: "includeAll", value: true },
     }),
   });
 }

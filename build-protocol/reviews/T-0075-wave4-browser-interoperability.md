@@ -428,3 +428,294 @@ Final A1 concerns:
 
 A1 is accepted for commit and immediate push. No Spine JVM build or execution
 was used for implementation, review, or verification.
+
+## A2 consolidated review-wave assignments
+
+The A2 boundary introduces `@spine-event-engine/client-web`, moves the common
+client lifecycle behind its browser-safe transport-injection seam, makes
+`client-node` a native transport/UUID adapter, freezes the approved public
+verbs, removes legacy client verbs without aliases, and migrates live
+BlackBox/Chat/Todo/docs consumers.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`. Review module depth,
+  adapter/kernel cohesion, duplication removal, test maintainability, and
+  whether the broad test deletions preserve adequate behavioral evidence.
+- Documentation: existing `documentation_reviewer`, immutable configured
+  `gpt-5.6-luna` / `medium`, explicitly named in the assignment. Review both
+  package READMEs, user/testing guides, raw wire-decoding examples, limitations,
+  and future-slice claims.
+- TypeScript/API: existing `typescript_api_docs_reviewer`, expected and
+  explicitly dispatched `gpt-5.6-terra` / `high`. Review exports,
+  declarations, Node return types, the transport-injection contract, approved
+  verb removal, TypeDoc attribution aliases, package/lock/project references,
+  and browser-safe public types.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected and explicitly dispatched `gpt-5.6-terra` / `high`. Review
+  close/in-flight behavior, subscription activation/cancellation races,
+  abort propagation, transport ownership/cleanup, idempotency, raw stream
+  lifecycle, and whether A2 accidentally regresses guarantees before A4.
+- Security: no credentials or gateway boundary are introduced in A2; browser
+  dependency isolation and context overwrite remain in the specialist scope,
+  while the mandatory final Wave 4 security gate remains open.
+
+All reviewers are read-only, share the worktree, may not spawn children, and
+may not build or run Spine JVM. Return `CLEAN` or exact P0-P2 findings. The
+surface does not expose independent runtime self-introspection; configured
+role/profile and explicit assignment are accepted metadata absent a visible
+mismatch.
+
+## A2 consolidated review-wave results
+
+All four relevant lanes completed under the pre-recorded existing roles and
+profiles. Independent runtime self-introspection was unavailable; no visible
+mismatch or inherited fallback occurred. No reviewer built or ran Spine JVM.
+
+- Style/maintainability:
+  - P1: `Client.close()` does not own or cancel admitted subscriptions, and the
+    broad deletion of lifecycle tests hides the regression.
+  - P1: current guide/snippet migration is incomplete and contains invalid or
+    stale examples.
+- TypeScript/API:
+  - P1: no independent expected/declaration/TypeDoc export inventory exists for
+    the new `client-web` package.
+  - P1: the Node `Client` factory is accidentally constructible and its return
+    type is ambiguous in TypeDoc.
+  - P2: Node TypeDoc attribution aliases and the same-reference error
+    constructor export lack accurate public documentation/kind explanation.
+- Performance/reliability:
+  - P1: close is not terminal for admitted unary work, inactive or active
+    subscriptions, or activation after close.
+  - P1: concurrent activation, cancellation during activation, repeated
+    cancellation, stalled cancellation, and local iterator termination are
+    unsafe or unbounded.
+  - P1: Subscribe results and delivered update identities are not validated;
+    the positive test currently accepts protocol-invalid missing IDs/topics.
+  - P2: the guide claims signal cleanup and bounded decoded buffering that are
+    not implemented in A2.
+- Documentation:
+  - P1: an old observed-post/outcome-events example uses removed API.
+  - P1: raw Topic examples miss imports and call an undefined cancellation
+    variable.
+  - P2: query decoding, raw update behavior, activation timing, signal/buffer
+    guarantees, package ownership, TypeDoc entry count, and transport-factory
+    limitations are stale or incomplete.
+  - P2: the testing README is not self-contained and dropped still-public
+    `postEvent`, `eventually`, tenant/zone/timeout workflows and constraints.
+
+## A2 correction batch
+
+One existing `implementer` receives the aggregated batch, expected and
+explicitly dispatched as `gpt-5.6-terra` / `medium`:
+
+1. Restore owner-tracked terminal close for admitted unary work and all
+   subscription states, with ordered/idempotent bounded cleanup and regression
+   tests.
+2. Serialize activation/cancellation, cancel late Subscribe results, terminate
+   local iteration, share cancellation completion/failure, and bound remote
+   cleanup. Reuse established finite lifecycle constants/patterns where
+   available; do not invent reconnect behavior.
+3. Validate accepted subscription identity/topic and every delivered update
+   identity before exposure; cancel on invalid acceptance.
+4. Restore focused lifecycle/protocol tests removed from the Node suite by
+   porting them to the shared kernel contract.
+5. Make the Node factory nonconstructible and its returned kernel type
+   unambiguous; accurately document its local TypeDoc aliases/error constructor
+   identity.
+6. Add independent `client-web` declared-export and TypeDoc-module inventory
+   enforcement.
+7. Repair and compile-check all current examples and prose. Explicitly state
+   that concrete browser transports arrive in A3 and reconnect, signal-lifetime
+   composition, bounded queues, overflow, and gap/resync lifecycle arrive in
+   A4; do not claim them in A2.
+8. Restore a self-contained testing README covering the still-public testing
+   workflows and constraints, and correct root/API ownership/status counts.
+
+The owner must preserve the approved verbs and browser isolation, may not add
+compatibility aliases, and may not commit, push, merge, spawn children, or
+build/run Spine JVM. All affected lanes reopen for one focused re-review.
+
+## A2 correction evidence and focused re-review assignments
+
+The correction now has:
+
+- terminal owner tracking, serialized activation/cancellation, finite cleanup,
+  accepted/update identity validation, and the five exact race/failure
+  regressions requested by review;
+- 17 focused web-kernel tests and native branch coverage 81/89 (91.01%);
+- 5 total client files / 48 tests and the exact 3 BlackBox/Chat/Todo files /
+  51 tests passing;
+- independent API inventories for 31 Node and 8 web exports;
+- corrected package factories/declarations, guides, testing workflows,
+  ownership/status claims, and explicit A3/A4 deferment;
+- root build, browser dependency scan, docs/API, snippet, formatting, diff,
+  legacy-verb, and temporary-artifact checks passing.
+
+All four affected concerns reopen once:
+
+- Style/maintainability: existing reviewer, explicitly dispatched
+  `gpt-5.6-terra` / `high`, focused on lifecycle cohesion, test quality, and
+  correction completeness.
+- Documentation: existing fixed reviewer, explicitly assigned immutable
+  `gpt-5.6-luna` / `medium`, focused on every prior guide/README finding and
+  compile-valid examples/deferments.
+- TypeScript/API: existing reviewer, explicitly dispatched
+  `gpt-5.6-terra` / `high`, focused on independent web inventory,
+  nonconstructible Node factory, unambiguous kernel types, and documented
+  attribution aliases/error identity.
+- Performance/reliability: existing reviewer, explicitly dispatched
+  `gpt-5.6-terra` / `high`, focused on every prior close/race/cleanup/identity
+  finding and the new 91.01% coverage evidence.
+
+Reviewers are read-only, may not spawn children, and may not build/run Spine
+JVM. Return `CLEAN` or exact remaining P0-P2 findings. Independent runtime
+self-introspection remains unavailable; configured profile plus explicit
+dispatch is the accepted metadata absent visible mismatch.
+
+## A2 focused re-review results
+
+- Style/maintainability:
+  - P1: early iterator return releases owner tracking without remotely
+    cancelling, so later close cannot clean the live subscription.
+  - P1: guide examples/claims remain broken, and syntax-only snippet
+    transpilation cannot detect missing local symbols.
+- Performance/reliability:
+  - P1: remote cancellation timeout is cooperative only; a transport ignoring
+    abort can still stall forever.
+  - P1: cancellation failures can skip owner release, and fail-fast close can
+    stop orderly settlement of remaining cleanup.
+  - All other prior lifecycle, race, identity, natural-completion, and A4
+    deferment findings are resolved.
+- Documentation:
+  - P1/P2: stale raw-subscription semantics, missing `TopicSchema`, undefined
+    cancellation variable, false signal/buffer guarantees, missing raw query
+    decoding, stale TypeDoc count/terminology, and ambiguous curated-inventory
+    wording remain.
+  - Package READMEs and the restored testing README are otherwise clean.
+- TypeScript/API:
+  - P1: the same broken guide contradicts the frozen public contract.
+  - P2: public `ClientRequest` operations, `Subscription` operations, and
+    `ClientTransport.createRequestId` lack member-level TypeDoc.
+  - Independent inventories, nonconstructible Node factory, returned kernel
+    identity, aliases/error constructor docs, and project/package references
+    are clean.
+
+## A2 final correction batch
+
+A fresh existing `implementer`, expected and explicitly dispatched
+`gpt-5.6-terra` / `medium`, owns only:
+
+1. Race the remote Cancel RPC against a real finite timeout so public cleanup
+   settles even when transport ignores abort; safely observe any late
+   completion/rejection.
+2. Release subscription ownership in `finally`, settle every subscription
+   cleanup, and close the owned source exactly once even when individual
+   cleanup fails; report failures without skipping later cleanup.
+3. Make early iterator return perform the same bounded remote cancellation;
+   natural completion must release without a redundant Cancel.
+4. Add exact RED/GREEN regressions for all three behaviors and retain ≥90%
+   native web branch coverage.
+5. Repair all named guide/API status defects, show explicit raw
+   `QueryResponse`/`Any` and `SubscriptionUpdate` handling, and accurately
+   defer signal-lifetime composition/bounded queues/overflow to A4.
+6. Strengthen snippet checking to detect unresolved local symbols in the
+   affected snippets, rather than syntax-only transpilation.
+7. Add member-level TypeDoc for every new public web interface operation.
+
+No other A2 design is reopened. No compatibility aliases, reconnect,
+commit/push/merge, child dispatch, or Spine JVM build/execution are allowed.
+Only substantively affected style, docs, API, and reliability points reopen
+after deterministic evidence.
+
+## A2 correction implementation evidence
+
+The existing `implementer` completed the consolidated correction under the
+explicitly dispatched `gpt-5.6-terra` / `medium` profile. Independent runtime
+self-introspection is unavailable; no visible profile mismatch occurred.
+
+- Shared-kernel regressions cover terminal close of admitted unary/inactive
+  work, invalid accepted subscription cancellation, and serialized concurrent
+  activation with cancellation during a late Subscribe result. The kernel now
+  owner-tracks cleanup, validates accepted and delivered identities/topics,
+  shares cancellation completion, bounds remote cancellation, and closes the
+  owned source in `finally`.
+- `client-node` exposes a nonconstructible documented factory with explicit
+  kernel return types and documented local aliases/error identity. The API
+  checker independently enforces the eight `client-web` declaration and
+  TypeDoc exports.
+- Current guides, root/API counts, package READMEs, and testing workflows were
+  repaired; A3 transports and A4 reconnect/signal/queue/overflow/gap-resync
+  remain explicitly deferred.
+- Focused client suite: 5 files / 36 tests passed; the elevated BlackBox/Chat/Todo
+  loopback suite passed 3 files / 51 tests. Web/Node typechecks,
+  repository TypeScript build, browser dependency scan, TypeDoc API inventory,
+  formatting, and diff checks passed.
+
+## A2 client-web coverage correction evidence
+
+- Coverage-specific RED/GREEN found and corrected two public lifecycle defects:
+  an already-aborted activation signal could reach `Subscribe`, and an invalid
+  delivered subscription identity could surface as normal completion. The
+  narrow correction rejects the former before transport use and preserves the
+  latter as an iterator failure after finite cleanup.
+- The shared kernel now has 17 behavior-focused tests. Fresh isolated native
+  coverage is 81/89 branches (91.01%); the complete client-web/client-node
+  suite is green at 5 files / 48 tests. The covered contract includes command
+  outcomes and acknowledgement validation, context validation/cloning, send
+  builder/abort/close behavior, and subscription identity/topic/update,
+  activation/cancellation/close/natural-completion ownership paths.
+- This correction uses neither coverage exclusions nor implementation-only
+  exports and adds no reconnect, transport-factory, or A4 queue/gap behavior.
+  Fresh root `typecheck:build`, `pnpm format:check`, and `git diff --check`
+  passed.
+
+## A2 final correction implementation evidence
+
+- RED/GREEN regressions prove non-cooperative finite Cancel settlement,
+  owner/source cleanup despite failures, early iterator remote cancellation,
+  natural-completion no-recancel behavior, and failed activation compensation
+  with original-plus-cleanup failure reporting. The corrected kernel observes
+  late Cancel completion/rejection, removes terminal owners in `finally`,
+  settles all close cleanups before failure reporting, and closes an owned
+  source exactly once.
+- Guide/API corrections now explicitly handle raw `QueryResponse` packed `Any`
+  values and `SubscriptionUpdate` variants, remove undefined locals, correct
+  the TypeDoc entry-point count, and defer signal-lifetime composition, queues,
+  overflow, reconnect, and gap/resync to A4. The checker now includes a
+  semantic unresolved-local pass for client snippets in addition to syntax and
+  public-export checks. Required member TSDoc is present.
+- Deterministic evidence: client tests 5 files / 51 tests; loopback
+  BlackBox/Chat/Todo tests 3 files / 51 tests; root build, docs/snippets/API,
+  browser dependency scan, formatting, and diff check passed. Isolated
+  client-web coverage is 91/99 branches (91.91%), above the 90% gate. The
+  sandboxed loopback attempt was blocked only by `listen EPERM`; the required
+  unrestricted rerun passed.
+
+## A2 final coordinator disposition
+
+The coordinator inspected the corrected lifecycle paths and reran every
+change-sensitive gate after the second complete review wave. The activation
+failure path always releases ownership even when compensating cancellation
+fails; client close settles every subscription cleanup attempt before closing
+the source exactly once; remote cancellation is finite even for a
+non-cooperative transport; early iterator return performs bounded cancellation;
+and natural stream completion releases ownership without a redundant Cancel.
+
+All accepted P1 and P2 findings from both review waves are resolved. No P0/P1
+risk remains, so the protocol's two-wave limit applies and no third complete
+review wave is opened. Canonical concern dispositions are:
+
+- style/maintainability: accepted after the final correction and targeted
+  lifecycle inspection;
+- documentation completeness: accepted after compile-checked raw
+  `QueryResponse` / `SubscriptionUpdate` examples and explicit A3/A4
+  limitations;
+- TypeScript/API docs: accepted after independent 8-web / 31-node export
+  inventories and member-level TSDoc;
+- performance/reliability: accepted after finite cleanup, all-settled close,
+  ownership-release, early-return, and natural-completion regressions.
+
+Fresh targeted evidence is 5 client files / 51 tests, 3 native loopback files /
+51 tests, 20 isolated web-kernel tests, 91.91% web branch coverage (91/99),
+root TypeScript build, TypeDoc/API, semantic snippet, browser dependency,
+formatting, and diff checks. No Spine JVM build or execution was performed.

@@ -1,3 +1,8 @@
+import { ClientProtocolError as WebClientProtocolError } from "@spine-event-engine/client-web";
+
+/** The same protocol-error constructor exported by `@spine-event-engine/client-web`. */
+const ClientProtocolError: typeof WebClientProtocolError = WebClientProtocolError;
+
 export {
   EntityColumn,
   type EntityColumnDefinition,
@@ -24,23 +29,20 @@ export {
   type EntityGroup,
   type EntityPredicate,
 } from "./query/entity-query.js";
-export {
-  Client,
-  ClientProtocolError,
-  type ClientRequest,
-  type ClientOperationOptions,
-  type ClientOptions,
-  type ClientObserveOptions,
-  type ClientPostOptions,
-  type CommandEvent,
-  type CommandEvents,
-  type EventSubscription,
-  type StateSubscription,
-  type StateSubscriptionOptions,
-  type StateSubscriptionUpdate,
-  type SubscriptionEvent,
-  type ObservedClientOutcome,
-  type ClientOutcome,
-  type ClientQueryOutcome,
-  type QueryState,
-} from "./client/client.js";
+export { Client } from "./client/node-client.js";
+export { ClientProtocolError };
+/** Shared browser-safe client returned by each Node factory. */
+export type ClientKernel = import("@spine-event-engine/client-web").Client;
+/** Shared operation options accepted by the returned kernel. */
+export type ClientOperationOptions =
+  import("@spine-event-engine/client-web").ClientOperationOptions;
+/** Shared client construction options accepted by Node factories. */
+export type ClientOptions = import("@spine-event-engine/client-web").ClientOptions;
+/** Shared outcome of a posted command. */
+export type ClientOutcome = import("@spine-event-engine/client-web").ClientOutcome;
+/** Shared actor-bound request scope returned by the kernel. */
+export type ClientRequest = import("@spine-event-engine/client-web").ClientRequest;
+/** Shared injected transport contract; Node factories create it internally. */
+export type ClientTransport = import("@spine-event-engine/client-web").ClientTransport;
+/** Shared manually activated subscription handle. */
+export type Subscription = import("@spine-event-engine/client-web").Subscription;

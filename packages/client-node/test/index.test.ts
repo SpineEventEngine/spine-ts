@@ -1,71 +1,45 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { Message, MessageShape } from "@bufbuild/protobuf";
-import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 
 import * as clientRoot from "../src/index.js";
-import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
 import type {
-  ClientObserveOptions,
+  ClientKernel,
+  ClientOperationOptions,
+  ClientOptions,
   ClientOutcome,
-  ClientPostOptions,
   ClientRequest,
-  CommandEvent,
-  ObservedClientOutcome,
-  QueryState,
+  ClientTransport,
+  Subscription,
 } from "../src/index.js";
 
 type ClientRoot = typeof import("../src/index.js");
 
 describe("@spine-event-engine/client-node", () => {
-  it("exports the public client facade alongside Entity query construction", () => {
-    expect(clientRoot.Client).toBeTypeOf("function");
+  it("uses the browser-safe public client contract with Node transport factories", () => {
+    expect(clientRoot.Client).toBeTypeOf("object");
+    expect(() => Reflect.construct(clientRoot.Client as never, [])).toThrow();
     expect(clientRoot.ClientProtocolError).toBeTypeOf("function");
     expect(clientRoot.EntityColumn).toBeTypeOf("function");
-    expect("AggregateColumn" in clientRoot).toBe(false);
-    expect("ProcessManagerColumn" in clientRoot).toBe(false);
+    expectTypeOf<"query" extends keyof ClientRoot ? true : false>().toEqualTypeOf<false>();
     expectTypeOf<
-      "AggregateColumn" extends keyof ClientRoot ? true : false
+      "subscribeToState" extends keyof ClientRoot ? true : false
     >().toEqualTypeOf<false>();
     expectTypeOf<
-      "ProcessManagerColumn" extends keyof ClientRoot ? true : false
+      "subscribeToEvents" extends keyof ClientRoot ? true : false
     >().toEqualTypeOf<false>();
   });
 
-  it("accepts both broad and observed post option variables", () => {
-    function compile<Schema extends GenMessage<Message>>(
-      request: ClientRequest,
-      schema: Schema,
-      message: MessageShape<Schema>,
-      options: ClientPostOptions,
-      observed: ClientObserveOptions,
-    ) {
-      expectTypeOf(request.post(schema, message, options)).toEqualTypeOf<
-        Promise<ClientOutcome | ObservedClientOutcome>
-      >();
-      expectTypeOf(request.post(schema, message, observed)).toEqualTypeOf<
-        Promise<ObservedClientOutcome>
-      >();
-    }
-
-    expectTypeOf(compile).toBeFunction();
-  });
-
-  it("rejects mutation of published decoded observations", () => {
-    const queryState = null as unknown as QueryState<typeof ProjectionStateSchema>;
-    const commandEvent = null as unknown as CommandEvent;
-    function compileOnly() {
-      // @ts-expect-error Public query states are deeply readonly.
-      queryState.state.title = "mutated";
-      // @ts-expect-error Byte observations are readonly too.
-      queryState.state.fingerprint[0] = 1;
-      // @ts-expect-error Query versions are readonly.
-      queryState.version.number = 2;
-      // @ts-expect-error Command messages are readonly.
-      commandEvent.message.$typeName = "mutated";
-      // @ts-expect-error Command contexts are readonly.
-      commandEvent.context.$typeName = "mutated";
-    }
-    expectTypeOf(compileOnly).toBeFunction();
-    expectTypeOf(queryState).toBeObject();
+  it("re-exports the client-web declaration contract from the Node package", () => {
+    expectTypeOf<ClientKernel>().toMatchTypeOf<{
+      asGuest(): ClientRequest;
+      close(): Promise<void>;
+    }>();
+    expectTypeOf<ClientOperationOptions>().toMatchTypeOf<{ readonly signal?: AbortSignal }>();
+    expectTypeOf<ClientOptions>().toMatchTypeOf<{ readonly tenant?: string }>();
+    expectTypeOf<ClientOutcome>().toMatchTypeOf<{ readonly kind: string }>();
+    expectTypeOf<ClientTransport>().toMatchTypeOf<{ createRequestId(): string }>();
+    expectTypeOf<Subscription>().toMatchTypeOf<{
+      activate(): Promise<void>;
+      cancel(): Promise<void>;
+    }>();
   });
 });

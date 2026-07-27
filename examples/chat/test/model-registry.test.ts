@@ -1,11 +1,6 @@
 import { create } from "@bufbuild/protobuf";
-import {
-  Client,
-  EntityQuery,
-  type EventSubscription,
-  type StateSubscription,
-} from "@spine-event-engine/client-node";
-import { packAny } from "@spine-event-engine/core";
+import { Client, EntityQuery, type Subscription } from "@spine-event-engine/client-node";
+import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
 import {
   ChatIdSchema,
   ChatSchema,
@@ -14,6 +9,12 @@ import {
 import { PostMessageSchema } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/commands_pb.js";
 import { MessagePostedSchema } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/events_pb.js";
 import { ActorContextSchema } from "@spine-event-engine/proto";
+import {
+  TargetFiltersSchema,
+  TargetSchema,
+  TopicIdSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
 import { Server } from "@spine-event-engine/server";
 import { UserIdSchema } from "@spine-event-engine/users-model/generated/spine/example/users/v1/users_pb.js";
 import { describe, expect, it } from "vitest";
@@ -53,13 +54,34 @@ describe("Chat application model registry", () => {
     const client = Client.connectTo(server.baseUrl);
     const chatId = create(ChatIdSchema, { value: "chat-1" });
     const author = create(UserIdSchema, { value: "ada" });
-    let states: StateSubscription<typeof ChatSchema, typeof ChatIdSchema> | undefined;
-    let events: EventSubscription<typeof MessagePostedSchema> | undefined;
+    let states: Subscription | undefined;
+    let events: Subscription | undefined;
     try {
-      states = await client.asGuest().subscribeToState(ChatSchema, ChatIdSchema, {
-        ids: [chatId],
-      });
-      events = await client.asGuest().subscribeToEvents(MessagePostedSchema);
+      states = await client.asGuest().createSubscription(
+        create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "chat-state" }),
+          target: create(TargetSchema, {
+            type: deriveTypeUrl(ChatSchema),
+            criterion: {
+              case: "filters",
+              value: create(TargetFiltersSchema, {
+                idFilter: { id: [packAny(ChatIdSchema, chatId)] },
+              }),
+            },
+          }),
+        }),
+      );
+      events = await client.asGuest().createSubscription(
+        create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "chat-events" }),
+          target: create(TargetSchema, {
+            type: deriveTypeUrl(MessagePostedSchema),
+            criterion: { case: "includeAll", value: true },
+          }),
+        }),
+      );
+      await states.activate();
+      await events.activate();
       const stateUpdate = states[Symbol.asyncIterator]().next();
       const eventUpdate = events[Symbol.asyncIterator]().next();
 
@@ -83,18 +105,23 @@ describe("Chat application model registry", () => {
       })
         .byId(chatId)
         .build();
-      await expect(
-        readEventually(() => client.asGuest().query(ChatSchema, query)),
-      ).resolves.toMatchObject({
-        kind: "ok",
-        states: [{ state: { id: { value: "chat-1" }, messages: [{ text: "hello" }] } }],
+      const response = await readEventually(() => client.asGuest().send(query));
+      expect(unpackAny(response.message[0]?.state, ChatSchema)).toMatchObject({
+        id: { value: "chat-1" },
+        messages: [{ text: "hello" }],
       });
-      await expect(withTimeout(stateUpdate, "filtered Chat state update")).resolves.toMatchObject({
-        value: { kind: "state", state: { id: { value: "chat-1" } } },
-      });
-      await expect(withTimeout(eventUpdate, "MessagePosted event update")).resolves.toMatchObject({
-        value: { message: { id: { value: "chat-1" }, text: "hello" } },
-      });
+      const state = await withTimeout(stateUpdate, "filtered Chat state update");
+      expect(
+        state.done || state.value.update.case !== "entityUpdates"
+          ? undefined
+          : unpackAny(state.value.update.value.update[0]?.kind.value, ChatSchema),
+      ).toMatchObject({ id: { value: "chat-1" } });
+      const event = await withTimeout(eventUpdate, "MessagePosted event update");
+      expect(
+        event.done || event.value.update.case !== "eventUpdates"
+          ? undefined
+          : unpackAny(event.value.update.value.event[0]?.message, MessagePostedSchema),
+      ).toMatchObject({ id: { value: "chat-1" }, text: "hello" });
     } finally {
       const cleanup: Promise<void>[] = [];
       if (states !== undefined) cleanup.push(states.cancel());
@@ -115,11 +142,8 @@ async function readEventually<Result>(read: () => Promise<Result>): Promise<Resu
     if (
       typeof result === "object" &&
       result !== null &&
-      "kind" in result &&
-      result.kind === "ok" &&
-      "states" in result &&
-      Array.isArray(result.states) &&
-      result.states.length > 0
+      "message" in result &&
+      result.message.length > 0
     ) {
       return result;
     }

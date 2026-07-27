@@ -9,6 +9,7 @@ const documents = [
   "README.md",
   "docs/USER_GUIDE.md",
   "packages/client-node/README.md",
+  "packages/client-web/README.md",
   "packages/delivery-client/README.md",
   "packages/delivery-server/README.md",
   "packages/proto/README.md",
@@ -23,6 +24,8 @@ const compilerOptions = {
   experimentalDecorators: true,
   module: ts.ModuleKind.NodeNext,
   moduleResolution: ts.ModuleResolutionKind.NodeNext,
+  noResolve: true,
+  skipLibCheck: true,
   target: ts.ScriptTarget.ESNext,
 };
 const moduleExports = new Map();
@@ -30,12 +33,33 @@ let failures = 0;
 
 for (const document of documents) {
   const source = readFileSync(resolve(root, document), "utf8");
+  let snippet = 0;
   for (const match of source.matchAll(fence)) {
+    snippet += 1;
     const code = match[1];
-    const result = ts.transpileModule(code, { compilerOptions, reportDiagnostics: true });
-    const errors = result.diagnostics?.filter(
-      (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
-    );
+    const syntax = ts.transpileModule(code, { compilerOptions, reportDiagnostics: true });
+    const semanticCode = `${importStubs(code)}\n${code}`;
+    const virtualFile = resolve(root, `.snippet-${snippet}.ts`);
+    const host = ts.createCompilerHost(compilerOptions);
+    const originalGetSourceFile = host.getSourceFile.bind(host);
+    host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
+      fileName === virtualFile
+        ? ts.createSourceFile(fileName, semanticCode, languageVersion, true)
+        : originalGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+    const program = ts.createProgram([virtualFile], compilerOptions, host);
+    const errors = [
+      ...(syntax.diagnostics ?? []).filter(
+        (diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error,
+      ),
+      ...(!/"@spine-event-engine\/(client-|testing)/.test(code)
+        ? []
+        : ts
+            .getPreEmitDiagnostics(program)
+            .filter(
+              (diagnostic) =>
+                diagnostic.category === ts.DiagnosticCategory.Error && diagnostic.code === 2304,
+            )),
+    ];
     const line = source.slice(0, match.index).split("\n").length;
     if (errors !== undefined && errors.length > 0) {
       failures += 1;
@@ -73,6 +97,28 @@ function checkSpineImports(code, containingFile, document, line) {
   }
 }
 
+function importStubs(code) {
+  const source = ts.createSourceFile("snippet.ts", code, ts.ScriptTarget.ESNext, true);
+  const imports = new Map();
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const names = imports.get(statement.moduleSpecifier.text) ?? new Set();
+    const clause = statement.importClause;
+    if (clause?.name !== undefined) names.add(clause.name.text);
+    if (clause?.namedBindings !== undefined && ts.isNamedImports(clause.namedBindings)) {
+      for (const element of clause.namedBindings.elements) names.add((element.propertyName ?? element.name).text);
+    }
+    imports.set(statement.moduleSpecifier.text, names);
+  }
+  return [...imports]
+    .map(([specifier, names]) =>
+      `declare module ${JSON.stringify(specifier)} { ${[...names]
+        .map((name) => `export const ${name}: any;`)
+        .join(" ")} }`,
+    )
+    .join("\n");
+}
+
 function exportsFor(specifier) {
   const cached = moduleExports.get(specifier);
   if (cached !== undefined) return cached;
@@ -88,7 +134,7 @@ function exportsFor(specifier) {
   const declaration = typeof entry === "string" ? entry : entry?.types;
   if (typeof declaration !== "string") return undefined;
   const declarationPath = resolve(packageDirectory, declaration);
-  const program = ts.createProgram([declarationPath], compilerOptions);
+  const program = ts.createProgram([declarationPath], { ...compilerOptions, noResolve: false });
   const source = program.getSourceFile(declarationPath);
   const symbol =
     source === undefined ? undefined : program.getTypeChecker().getSymbolAtLocation(source);
