@@ -4774,3 +4774,142 @@ Consequences:
   app-owned model packages and a cross-package Proto import.
 - Browser interoperability, deployment packaging, and cluster-complete
   subscriptions remain Waves 4, 5, and 6.
+
+## D-0103: Split Browser, Node, And React Client Responsibilities
+
+Status: Accepted
+
+Date: 2026-07-27
+
+Task: Wave 4 planning / `T-0074`
+
+Decision:
+
+- Transform the current `@spine-event-engine/client` implementation into
+  `@spine-event-engine/client-node`; do not discard and reimplement it.
+- Add framework-neutral `@spine-event-engine/client-web` and separate
+  `@spine-event-engine/client-react`. React remains a peer dependency of the
+  adapter and does not enter the browser client's generic API or declarations.
+- Do not publish a third `client-core` package. Share transport-neutral
+  implementation internally. Keep Node-only Entity column code generation with
+  `client-node`.
+- Use gRPC-Web as the required universal browser protocol and Connect as an
+  explicit optional optimization. Do not probe or silently fall back.
+- Preserve Spine protocol verbs: post commands, send queries, create/activate/
+  cancel subscriptions. Reserve `use...` for React-specific hooks that observe
+  request or subscription state.
+- Support current Chromium, Firefox, and WebKit. Do not claim Wave 4 support
+  for legacy browsers, SSR, service workers, edge-worker runtimes, Suspense,
+  normalized caches, or external state managers.
+
+Reasoning:
+
+- Separate transport clients preserve runtime boundaries, while a separate
+  React package keeps generic browser consumers free of framework dependencies.
+- Explicit protocol and domain verbs avoid hidden network behavior and preserve
+  the Command/Query/Subscription service model.
+
+Consequences:
+
+- The browser and React packages require real-browser tests.
+- The continuing Chat example uses React through `client-react`.
+- No other JavaScript framework adapter is part of Wave 4.
+
+## D-0104: Treat Subscriptions As Best-Effort Notifications
+
+Status: Accepted; supersedes the earlier Wave 6 cluster-complete guarantee
+
+Date: 2026-07-27
+
+Task: Wave 4 planning / `T-0074`
+
+Decision:
+
+- Subscription updates are live notifications, not authoritative state.
+- Promise no completeness, exactly-once delivery, global ordering, or complete
+  intermediate Entity state history. Duplicates and missing updates are
+  possible.
+- Perform bounded automatic reconnect with separate visible lifecycle states.
+  Re-send an authoritative Entity query after reconnect. Notify
+  `gapPossible` and continue event subscriptions by default.
+- Never retry commands automatically.
+- If a framework-owned buffer overflows, terminate the stream instead of
+  knowingly discarding buffered updates while reporting it healthy.
+- Preserve subscriptions to explicitly exposed event types. Chat messages are
+  Projection entities, not domain events.
+- Wave 6 provides best-effort cross-node notification reachability. It does not
+  provide the previously discussed cluster-complete-while-connected guarantee.
+
+Reasoning:
+
+- The current wire carries no resumable cursor or sufficient ordering contract
+  for lossless reconnect. Authoritative Entity re-query is honest and simple;
+  stronger delivery guarantees would be speculative.
+
+Consequences:
+
+- Every user, package, API, Chat, and agent-oriented guide must state the
+  limitations prominently.
+- React and browser APIs expose lifecycle and gap notifications separately from
+  domain/entity updates.
+
+## D-0105: Authenticate In A Standalone Protocol-Aware Gateway
+
+Status: Accepted
+
+Date: 2026-07-27
+
+Task: Wave 4 planning / `T-0074`
+
+Decision:
+
+- Add `@spine-event-engine/auth` as the provider-neutral contracts and runtime
+  for assembling a standalone authentication gateway in front of unmodified
+  Spine TS or Spine JVM services.
+- Bounded contexts configure no authentication routines. The gateway
+  authenticates an application session, authorizes a typed `IncomingRequest`,
+  resolves actor and tenant using the request signal, query/subscription
+  details, safe transport facts, and application policy, rewrites
+  `ActorContext`, and forwards native gRPC.
+- Support opaque stored sessions and signed application-session tokens behind
+  extension contracts. Support cookie and bearer transport. Validate the
+  application session and authorize every request without forcing another
+  external-provider login.
+- Add standards-based OIDC, first-class configurable Google OIDC and GitHub
+  OAuth web flows, and a provider extension seam. Keep provider access and
+  refresh tokens server-side by default. Applications own external-identity to
+  Actor mapping, tenant rules, provisioning, roles, sessions, and persistence.
+- Return informational actor, tenant, and expiry to the client, but do not
+  treat browser-returned values as proof. Reconstruct trusted context for every
+  request. Reject a client actor/tenant mismatch before forwarding; when values
+  agree, replace the object with a freshly constructed trusted
+  `ActorContext`.
+- Authenticate and authorize `Subscribe`, `Activate`, and `Cancel`
+  independently. Do not freeze a general signed client-context token in this
+  plan. The protected subscription-ownership mechanism remains subject to
+  implementation evidence and final security review.
+- Provide a configurable Envoy reference that exposes the gateway by default
+  and documents the backend trust assumption. This is a template and secure
+  default, not a claim that Spine controls or enforces user deployment.
+- Freeze an unmodified JVM commit and prove browser → Envoy → auth gateway →
+  TS/JVM commands, queries, Projection subscriptions, and exposed-event
+  subscriptions. Freeze the commit during implementation preflight before the
+  first production slice.
+
+Reasoning:
+
+- A generic edge authorization filter cannot safely inspect policy-relevant
+  Protobuf messages and rewrite nested `ActorContext`. A protocol-aware gateway
+  supplies one security boundary for both runtimes without changing JVM code.
+- External sign-in and later application requests are different phases. A
+  local application session prevents repeated Google/GitHub authentication
+  while preserving per-request authorization.
+
+Consequences:
+
+- Wave 3 model registries are composed by gateways whose authorization policy
+  inspects application messages.
+- Documentation must cover sessions, revocation, cookies, CSRF/CORS, OAuth/OIDC
+  callbacks, token storage, context trust, already-open stream revocation
+  limits, Envoy customization, and backend-bypass consequences.
+- Wave 4 creates and tests the Envoy template; Wave 5 productionizes it.

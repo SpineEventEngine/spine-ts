@@ -16,6 +16,13 @@ None as of 2026-06-27.
 
 ## Resolved In This Round
 
+- 2026-07-27, T-0074: Wave 4 Q&A is complete. The human approved the browser,
+  client packaging, React, best-effort subscription, standalone authentication
+  gateway, application-session, Google/GitHub/OIDC, context-resolution,
+  Envoy-reference, Chat Projection, TS/JVM interoperability, documentation,
+  and later-wave boundaries recorded in D-0103 through D-0105 and
+  `WAVE_4_BROWSER_CLIENT_INTEROPERABILITY_PLAN.md`. No Wave 4 product question
+  remains open.
 - 2026-07-15, T-0041 / SF-013: the human explicitly accepted the same-UID local
   IPC multipart-allocation residual for the initial release. D-0093 requires
   Buf Protobuf binary encoding for Proto signal messages, retains the 8 MiB

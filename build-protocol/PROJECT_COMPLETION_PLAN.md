@@ -1,13 +1,14 @@
 # Spine TS Project Completion Plan
 
 Status: Initial release and post-release JVM parity Waves 1 through 3 complete;
-Wave 4 Q&A pending
+Wave 4 Q&A complete and implementation plan awaiting autonomous start
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: Wave 4 browser access and interoperability Q&A
+Active implementation frontier: Wave 4 browser access and interoperability
+implementation start
 
 ## Purpose
 
@@ -78,8 +79,12 @@ generation and handler analysis. All specialist and security concerns are
 clean. Definitive post-merge verification passes 140 files / 2,638 tests in
 both native and coverage phases, with 90.01% branch coverage (8,412/9,345);
 `origin/main` contains the verified correction endpoint. Wave 3 is durably
-closed. Wave 4 requires the previously requested human Q&A before planning or
-implementation starts.
+closed. Wave 4 Q&A is complete. T-0074 records the approved public contracts,
+limitations, diagrams, authentication flows, extension points, and
+dependency-ordered implementation plan in
+`build-protocol/planning/WAVE_4_BROWSER_CLIENT_INTEROPERABILITY_PLAN.md`.
+Production implementation has not started and awaits the human autonomous-start
+instruction.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a
@@ -95,17 +100,23 @@ implementation starts.
 - **Wave 3:** independently published Proto model modules, generation,
   dependency linking, explicit registry composition, dynamic `Any` decoding,
   example migration, and fresh packed-tarball acceptance.
-- **Wave 4:** browser access and TS/JVM service interoperability through
-  universal gRPC-Web with optional Connect optimization, authentication
-  integration points, and the Chat example. Cluster-complete subscription
-  requirements need the already requested Q&A.
+- **Wave 4:** `client-node`, framework-neutral `client-web`, separate
+  `client-react`, browser access and TS/JVM service interoperability through
+  universal gRPC-Web with optional Connect optimization, a standalone
+  provider-neutral authentication gateway, opaque and signed application
+  sessions, OIDC/Google/GitHub sign-in, a configurable Envoy reference, and the
+  Projection-based Chat example. Subscriptions are explicitly best-effort
+  notifications with reconnect/re-query behavior and no completeness promise.
 - **Wave 5:** storage-neutral application packaging/deployment contracts,
   containers, deterministic Compose, and minimal Kubernetes references.
-- **Wave 6:** horizontal subscription propagation with cluster-complete
-  behavior while connected.
+- **Wave 6:** horizontal best-effort subscription propagation so notifications
+  produced by any application node are reachable through subscriptions
+  attached to any node. The earlier cluster-complete-while-connected delivery
+  guarantee is superseded; queries remain authoritative.
 
-Each Wave 4-6 plan requires a separate human Q&A. Do not publish packages to
-npm until all waves are complete and publication is revisited with the human.
+Each Wave 5-6 plan still requires a separate human Q&A. Do not publish packages
+to npm until all waves are complete and publication is revisited with the
+human.
 
 Wave 1 uses frozen `core-java` commit
 `a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b` and frozen `delivery-server`
