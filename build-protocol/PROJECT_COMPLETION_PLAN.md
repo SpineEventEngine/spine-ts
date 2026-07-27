@@ -1,14 +1,14 @@
 # Spine TS Project Completion Plan
 
 Status: Initial release and post-release JVM parity Waves 1 through 3 complete;
-Wave 4 Q&A complete and implementation plan awaiting autonomous start
+Wave 4 implementation active under T-0075
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: Wave 4 browser access and interoperability
-implementation start
+Active implementation frontier: T-0075 is executing the approved Wave 4
+browser access and interoperability plan autonomously.
 
 ## Purpose
 
