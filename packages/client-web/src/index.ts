@@ -7,6 +7,13 @@ export {
   type ClientOutcome,
   type ClientRequest,
   type ClientTransport,
+  type CreateSubscriptionOptions,
   type OnRequestMetadata,
   type Subscription,
+  type SubscriptionDelivery,
+  type SubscriptionLifecycle,
+  type SubscriptionLifecycleState,
+  type SubscriptionRetryPolicy,
+  type SubscriptionRuntimeOptions,
+  type SubscriptionScheduler,
 } from "./client/client.js";

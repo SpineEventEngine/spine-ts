@@ -21,6 +21,7 @@ import {
   QuerySchema,
   QueryService,
   SubscriptionService,
+  SubscriptionUpdateSchema,
   TopicSchema,
   type Query,
   type QueryResponse,
@@ -44,7 +45,68 @@ export interface ClientOperationOptions {
 export interface ClientOptions {
   readonly tenant?: string | TenantId;
   readonly zoneId?: string | ZoneId;
+  readonly subscriptions?: SubscriptionRuntimeOptions;
 }
+
+/** Bounded retry and scheduling configuration reserved for the A4 lifecycle runtime. */
+export interface SubscriptionRuntimeOptions {
+  readonly updateBufferCapacity?: number;
+  readonly updateBufferByteCapacity?: number;
+  readonly lifecycleBufferCapacity?: number;
+  readonly retryPolicy?: SubscriptionRetryPolicy;
+  readonly scheduler?: SubscriptionScheduler;
+}
+
+/** Finite retry settings for retries after the initial subscription attempt. */
+export interface SubscriptionRetryPolicy {
+  readonly maxAttempts: number;
+  readonly maxElapsedMs: number;
+  delayMs(attempt: number): number;
+}
+
+/** Timer seam reserved for deterministic A4 reconnect scheduling. */
+export interface SubscriptionScheduler {
+  now(): number;
+  wait(delayMs: number, signal: AbortSignal): Promise<void>;
+}
+
+/** An event subscription does not perform authoritative state recovery. */
+export interface EventSubscriptionOptions extends ClientOperationOptions {
+  readonly kind: "event";
+}
+
+/** An entity subscription supplies the query used for later authoritative recovery. */
+export interface EntitySubscriptionOptions extends ClientOperationOptions {
+  readonly kind: "entity";
+  readonly authoritativeQuery: () => Query | { build(): Query };
+}
+
+/** Explicit kind and recovery information required to create a subscription. */
+export type CreateSubscriptionOptions = EventSubscriptionOptions | EntitySubscriptionOptions;
+
+/** A delivered raw wire update or an authoritative entity recovery result. */
+export type SubscriptionDelivery =
+  | Readonly<{ readonly kind: "update"; readonly update: SubscriptionUpdate }>
+  | Readonly<{ readonly kind: "resynchronization"; readonly response: QueryResponse }>;
+
+/** A lifecycle state emitted independently for one logical subscription. */
+export type SubscriptionLifecycleState =
+  "connecting" | "connected" | "resynchronizing" | "gapPossible" | "failed" | "closed";
+
+export type SubscriptionLifecycle =
+  /** A generation is starting; `attempt` counts retries after its initial attempt. */
+  | Readonly<{
+      readonly state: "connecting";
+      readonly generation: number;
+      readonly attempt: number;
+    }>
+  /** A non-terminal lifecycle transition, identified by its generation. */
+  | Readonly<{
+      readonly state: "connected" | "resynchronizing" | "gapPossible" | "closed";
+      readonly generation: number;
+    }>
+  /** A terminal failure for a generation, carrying its exact failure object. */
+  | Readonly<{ readonly state: "failed"; readonly generation: number; readonly error: Error }>;
 
 /** Supplies fresh application-owned request metadata synchronously for one outbound call. */
 export type OnRequestMetadata = () => HeadersInit;
@@ -64,7 +126,11 @@ export interface ClientTransport {
 }
 
 /** A manually activated protocol subscription. */
-export interface Subscription extends AsyncIterable<SubscriptionUpdate> {
+export interface Subscription {
+  /** Raw updates and authoritative entity recovery results for one consumer. */
+  readonly updates: AsyncIterable<SubscriptionDelivery>;
+  /** Independent lifecycle notices for one consumer. */
+  readonly lifecycle: AsyncIterable<SubscriptionLifecycle>;
   /** Starts the remote subscription and makes its updates available for iteration. */
   activate(options?: ClientOperationOptions): Promise<void>;
   /** Ends local iteration and performs one bounded remote cancellation. */
@@ -84,11 +150,13 @@ export class Client {
   readonly #owner: ClientOwner;
   readonly #tenant: TenantId | undefined;
   readonly #zoneId: ZoneId;
+  readonly #subscriptions: RequiredSubscriptionRuntimeOptions;
 
   protected constructor(source: ClientTransport, options: ClientOptions) {
     this.#owner = new ClientOwner(source);
     this.#tenant = tenant(options.tenant);
     this.#zoneId = zoneId(options.zoneId);
+    this.#subscriptions = subscriptionRuntimeOptions(options.subscriptions);
   }
 
   /** Create a client from an injected transport and request-ID source. */
@@ -114,13 +182,13 @@ export class Client {
 
   /** Create an immutable request scope for the guest actor. */
   asGuest(): ClientRequest {
-    return new Request(this.#owner, this.#tenant, this.#zoneId, "guest");
+    return new Request(this.#owner, this.#tenant, this.#zoneId, this.#subscriptions, "guest");
   }
 
   /** Create an immutable request scope for one actor. */
   onBehalfOf(user: string): ClientRequest {
     if (user.length === 0) throw new TypeError("Client actor must not be empty.");
-    return new Request(this.#owner, this.#tenant, this.#zoneId, user);
+    return new Request(this.#owner, this.#tenant, this.#zoneId, this.#subscriptions, user);
   }
 
   /** Cancel open work and close an owned platform transport once. */
@@ -140,24 +208,27 @@ export interface ClientRequest {
   /** Sends a query after applying this scope's immutable actor context. */
   send(query: Query | { build(): Query }, options?: ClientOperationOptions): Promise<QueryResponse>;
   /** Creates an inactive topic subscription owned by this client lifecycle. */
-  createSubscription(topic: Topic, options?: ClientOperationOptions): Promise<Subscription>;
+  createSubscription(topic: Topic, options: CreateSubscriptionOptions): Promise<Subscription>;
 }
 
 class Request implements ClientRequest {
   readonly #owner: ClientOwner;
   readonly #tenant: TenantId | undefined;
   readonly #zoneId: ZoneId;
+  readonly #subscriptions: RequiredSubscriptionRuntimeOptions;
   readonly #actor: string;
 
   constructor(
     owner: ClientOwner,
     selectedTenant: TenantId | undefined,
     selectedZoneId: ZoneId,
+    subscriptions: RequiredSubscriptionRuntimeOptions,
     actor: string,
   ) {
     this.#owner = owner;
     this.#tenant = selectedTenant;
     this.#zoneId = selectedZoneId;
+    this.#subscriptions = subscriptions;
     this.#actor = actor;
   }
 
@@ -197,11 +268,12 @@ class Request implements ClientRequest {
 
   async createSubscription(
     topic: Topic,
-    options: ClientOperationOptions = {},
+    options: CreateSubscriptionOptions,
   ): Promise<Subscription> {
+    validateSubscriptionOptions(topic, options);
     return this.#owner.run(options.signal, async (signal) => {
       const prepared = cloneTopic(topic, this.#context());
-      return new TopicSubscription(this.#owner, prepared, signal);
+      return new TopicSubscription(this.#owner, prepared, signal, options, this.#subscriptions);
     });
   }
 
@@ -293,20 +365,45 @@ class TopicSubscription implements Subscription {
   readonly #owner: ClientOwner;
   readonly #topic: Topic;
   readonly #signal: AbortSignal;
+  /** Retained for generation-aware entity recovery in A4.3. */
+  readonly #options: CreateSubscriptionOptions;
+  /** Retained for generation-owned retry and scheduling in A4.2/A4.3. */
+  readonly #runtime: RequiredSubscriptionRuntimeOptions;
+  readonly #updates: BoundedChannel<SubscriptionDelivery>;
+  readonly #lifecycle: BoundedChannel<SubscriptionLifecycle>;
   readonly #controller = new AbortController();
   #wire: WireSubscription | undefined;
-  #updates: AsyncIterable<SubscriptionUpdate> | undefined;
   #cancelled = false;
   #activation: Promise<void> | undefined;
   #cancellation: Promise<void> | undefined;
   #streamIterator: AsyncIterator<SubscriptionUpdate> | undefined;
-  readonly #terminated = Promise.withResolvers<void>();
 
-  constructor(owner: ClientOwner, topic: Topic, signal: AbortSignal) {
+  constructor(
+    owner: ClientOwner,
+    topic: Topic,
+    signal: AbortSignal,
+    options: CreateSubscriptionOptions,
+    runtime: RequiredSubscriptionRuntimeOptions,
+  ) {
     this.#owner = owner;
     this.#topic = topic;
     this.#signal = signal;
+    this.#options = options;
+    this.#runtime = runtime;
+    this.#updates = new BoundedChannel(
+      "subscription update",
+      runtime.updateCapacity,
+      runtime.updateByteCapacity,
+    );
+    this.#lifecycle = new BoundedChannel("subscription lifecycle", runtime.lifecycleCapacity);
     owner.add(this);
+  }
+
+  get updates(): AsyncIterable<SubscriptionDelivery> {
+    return this.#updates;
+  }
+  get lifecycle(): AsyncIterable<SubscriptionLifecycle> {
+    return this.#lifecycle;
   }
 
   async activate(options: ClientOperationOptions = {}): Promise<void> {
@@ -326,6 +423,7 @@ class TopicSubscription implements Subscription {
     signal?.addEventListener("abort", abort, { once: true });
     this.#signal.addEventListener("abort", abort, { once: true });
     try {
+      this.#pushLifecycle({ state: "connecting", generation: 0, attempt: 0 });
       const subscription = await createClient(SubscriptionService, this.#owner.transport).subscribe(
         this.#topic,
         { signal: this.#controller.signal },
@@ -343,8 +441,11 @@ class TopicSubscription implements Subscription {
       );
       const iterator = updates[Symbol.asyncIterator]();
       this.#streamIterator = iterator;
-      this.#updates = this.validatedUpdates(iterator, subscription);
+      void this.consumeUpdates(iterator, subscription).catch(() => undefined);
+      this.#pushLifecycle({ state: "connected", generation: 0 });
     } catch (error) {
+      if (this.#cancelled) throw error;
+      this.#failStreams(error);
       let cleanupFailure: unknown;
       try {
         if (this.#wire !== undefined && !this.#cancelled) await this.cancelWire(this.#wire);
@@ -368,8 +469,9 @@ class TopicSubscription implements Subscription {
 
   async #cancelOwned(): Promise<void> {
     this.#cancelled = true;
-    this.#terminated.resolve();
-    if (this.#updates === undefined) this.#controller.abort();
+    this.#updates.discard();
+    this.#lifecycle.discard();
+    this.#controller.abort();
     try {
       try {
         await this.#activation;
@@ -402,10 +504,10 @@ class TopicSubscription implements Subscription {
     }
   }
 
-  async *validatedUpdates(
+  async consumeUpdates(
     updates: AsyncIterator<SubscriptionUpdate>,
     subscription: WireSubscription,
-  ): AsyncIterable<SubscriptionUpdate> {
+  ): Promise<void> {
     try {
       while (true) {
         const next = await updates.next();
@@ -416,13 +518,22 @@ class TopicSubscription implements Subscription {
           throw new ClientProtocolError(
             "subscription update ID does not match the accepted subscription.",
           );
-        yield update;
+        this.#pushUpdate(
+          freezeDelivery({ kind: "update", update: clone(SubscriptionUpdateSchema, update) }),
+          toBinary(SubscriptionUpdateSchema, update).byteLength,
+        );
       }
     } catch (error) {
       if (this.#cancelled) return;
-      await this.#cancelAfterFailure();
-      throw error;
+      this.#failStreams(error);
+      try {
+        await this.#cancelAfterFailure();
+      } catch {
+        // The stream's original terminal error remains observable; cleanup is best effort.
+      }
     } finally {
+      this.#updates.close();
+      this.#lifecycle.close();
       this.#owner.remove(this);
       if (this.#streamIterator === updates) this.#streamIterator = undefined;
     }
@@ -437,28 +548,239 @@ class TopicSubscription implements Subscription {
     }
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
-    if (this.#updates === undefined)
-      throw new ClientProtocolError("subscription is not activated.");
-    const iterator = this.#updates[Symbol.asyncIterator]();
-    return {
-      next: async () => {
-        if (this.#cancelled) return { done: true, value: undefined };
-        return Promise.race([
-          iterator.next(),
-          this.#terminated.promise.then(() => ({ done: true as const, value: undefined })),
-        ]);
-      },
-      return: async () => {
-        await this.cancel();
-        await iterator.return?.();
-        return { done: true as const, value: undefined };
-      },
-    };
+  #pushUpdate(value: SubscriptionDelivery, bytes: number): void {
+    const error = this.#updates.push(value, bytes);
+    if (error !== undefined) throw error;
+  }
+
+  #pushLifecycle(value: SubscriptionLifecycle): void {
+    const error = this.#lifecycle.push(value);
+    if (error !== undefined) throw error;
+  }
+
+  #failStreams(error: unknown): void {
+    this.#updates.fail(error);
+    this.#lifecycle.fail(error);
   }
 }
 
 const CLEANUP_TIMEOUT_MS = 1_000;
+
+interface RequiredSubscriptionRuntimeOptions {
+  readonly updateCapacity: number;
+  readonly updateByteCapacity: number;
+  readonly lifecycleCapacity: number;
+  readonly retryPolicy: SubscriptionRetryPolicy;
+  readonly scheduler: SubscriptionScheduler;
+}
+
+function subscriptionRuntimeOptions(
+  options: SubscriptionRuntimeOptions | undefined,
+): RequiredSubscriptionRuntimeOptions {
+  return {
+    updateCapacity: positiveSubscriptionOption(
+      options?.updateBufferCapacity,
+      64,
+      "update buffer capacity",
+    ),
+    updateByteCapacity: positiveSubscriptionOption(
+      options?.updateBufferByteCapacity,
+      1_048_576,
+      "update buffer byte capacity",
+    ),
+    lifecycleCapacity: positiveSubscriptionOption(
+      options?.lifecycleBufferCapacity,
+      32,
+      "lifecycle buffer capacity",
+    ),
+    retryPolicy: retryPolicy(options?.retryPolicy),
+    scheduler: scheduler(options?.scheduler),
+  };
+}
+
+const DEFAULT_RETRY_POLICY: SubscriptionRetryPolicy = {
+  maxAttempts: 5,
+  maxElapsedMs: 30_000,
+  delayMs(attempt: number): number {
+    const bounded = Math.min(5_000, 250 * 2 ** Math.max(0, attempt - 1));
+    return Math.min(5_000, Math.max(1, Math.round(bounded * (0.8 + Math.random() * 0.4))));
+  },
+};
+
+const DEFAULT_SUBSCRIPTION_SCHEDULER: SubscriptionScheduler = {
+  now: () => Date.now(),
+  wait: (delayMs, signal) =>
+    new Promise<void>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      const timeout = setTimeout(resolve, delayMs);
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearTimeout(timeout);
+          reject(signal.reason);
+        },
+        { once: true },
+      );
+    }),
+};
+
+function retryPolicy(policy: SubscriptionRetryPolicy | undefined): SubscriptionRetryPolicy {
+  const resolved = policy ?? DEFAULT_RETRY_POLICY;
+  if (!Number.isSafeInteger(resolved.maxAttempts) || resolved.maxAttempts <= 0)
+    throw new TypeError("Client subscription retry max attempts must be a positive safe integer.");
+  if (!Number.isSafeInteger(resolved.maxElapsedMs) || resolved.maxElapsedMs <= 0)
+    throw new TypeError(
+      "Client subscription retry max elapsed time must be a positive safe integer.",
+    );
+  if (typeof resolved.delayMs !== "function")
+    throw new TypeError("Client subscription retry delay must be a function.");
+  for (let attempt = 1; attempt <= resolved.maxAttempts; attempt++) {
+    const delay = resolved.delayMs(attempt);
+    if (!Number.isSafeInteger(delay) || delay <= 0)
+      throw new TypeError("Client subscription retry delay must be a positive safe integer.");
+  }
+  return resolved;
+}
+
+function scheduler(scheduler: SubscriptionScheduler | undefined): SubscriptionScheduler {
+  const resolved = scheduler ?? DEFAULT_SUBSCRIPTION_SCHEDULER;
+  if (typeof resolved.now !== "function" || typeof resolved.wait !== "function")
+    throw new TypeError("Client subscription scheduler must provide now() and wait().");
+  const now = resolved.now();
+  if (!Number.isSafeInteger(now) || now < 0)
+    throw new TypeError("Client subscription scheduler time must be a non-negative safe integer.");
+  return resolved;
+}
+
+function positiveSubscriptionOption(
+  value: number | undefined,
+  fallback: number,
+  name: string,
+): number {
+  const resolved = value ?? fallback;
+  if (!Number.isSafeInteger(resolved) || resolved <= 0)
+    throw new TypeError(`Client subscription ${name} must be a positive safe integer.`);
+  return resolved;
+}
+
+function validateSubscriptionOptions(
+  topic: Topic,
+  options: CreateSubscriptionOptions,
+): CreateSubscriptionOptions {
+  if (options === undefined || (options.kind !== "event" && options.kind !== "entity"))
+    throw new TypeError("Subscription kind must be 'event' or 'entity'.");
+  if (options.kind === "event") {
+    if ("authoritativeQuery" in options)
+      throw new TypeError("Event subscriptions must not provide an authoritative query.");
+    return options;
+  }
+  if (typeof options.authoritativeQuery !== "function")
+    throw new TypeError("Entity subscriptions require an authoritative query.");
+  return options;
+}
+
+class BoundedChannel<Value> implements AsyncIterable<Value> {
+  readonly #name: string;
+  readonly #capacity: number;
+  readonly #byteCapacity: number | undefined;
+  readonly #values: Array<Readonly<{ value: Value; bytes: number }>> = [];
+  #bytes = 0;
+  #consumer = false;
+  #closed = false;
+  #error: unknown;
+  #pending: PromiseWithResolvers<IteratorResult<Value>> | undefined;
+
+  constructor(name: string, capacity: number, byteCapacity?: number) {
+    this.#name = name;
+    this.#capacity = capacity;
+    this.#byteCapacity = byteCapacity;
+  }
+
+  push(value: Value, bytes = 0): ClientProtocolError | undefined {
+    if (this.#closed || this.#error !== undefined)
+      return new ClientProtocolError(`${this.#name} stream is closed.`);
+    if (
+      this.#values.length >= this.#capacity ||
+      this.#bytes + bytes > (this.#byteCapacity ?? Infinity)
+    ) {
+      return new ClientProtocolError(`${this.#name} buffer overflow.`);
+    }
+    if (this.#pending !== undefined) {
+      this.#pending.resolve({ done: false, value });
+      this.#pending = undefined;
+      return undefined;
+    }
+    this.#values.push({ value, bytes });
+    this.#bytes += bytes;
+    return undefined;
+  }
+
+  /** Ends after already accepted values have been consumed. */
+  close(): void {
+    this.#closed = true;
+    if (this.#values.length === 0 && this.#error === undefined) {
+      this.#pending?.resolve({ done: true, value: undefined });
+      this.#pending = undefined;
+    }
+  }
+
+  /** Discards buffered values for explicit local cancellation. */
+  discard(): void {
+    this.#closed = true;
+    this.#values.length = 0;
+    this.#bytes = 0;
+    if (this.#error === undefined) {
+      this.#pending?.resolve({ done: true, value: undefined });
+      this.#pending = undefined;
+    }
+  }
+
+  fail(error: unknown): void {
+    if (this.#error !== undefined) return;
+    this.#error = error;
+    this.#values.length = 0;
+    this.#pending?.reject(error);
+    this.#pending = undefined;
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<Value> {
+    if (this.#consumer)
+      throw new ClientProtocolError(`${this.#name} stream has a single consumer.`);
+    this.#consumer = true;
+    return { next: () => this.next() };
+  }
+
+  next(): Promise<IteratorResult<Value>> {
+    if (this.#error !== undefined) return Promise.reject(this.#error);
+    const entry = this.#values.shift();
+    if (entry !== undefined) {
+      this.#bytes -= entry.bytes;
+      return Promise.resolve({ done: false, value: entry.value });
+    }
+    if (this.#closed) return Promise.resolve({ done: true, value: undefined });
+    if (this.#pending !== undefined)
+      return Promise.reject(
+        new ClientProtocolError(`${this.#name} stream allows only one pending next() call.`),
+      );
+    this.#pending = Promise.withResolvers<IteratorResult<Value>>();
+    return this.#pending.promise;
+  }
+}
+
+function freezeDelivery(
+  delivery: Extract<SubscriptionDelivery, { readonly kind: "update" }>,
+): SubscriptionDelivery {
+  return Object.freeze({ ...delivery, update: deepFreeze(delivery.update) });
+}
+
+function deepFreeze<Value>(value: Value): Value {
+  if (value === null || typeof value !== "object" || ArrayBuffer.isView(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
+}
 
 function browserSource(transport: Transport): ClientTransport {
   return { transport, createRequestId: browserRequestId };

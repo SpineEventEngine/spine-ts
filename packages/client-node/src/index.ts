@@ -46,3 +46,10 @@ export type ClientRequest = import("@spine-event-engine/client-web").ClientReque
 export type ClientTransport = import("@spine-event-engine/client-web").ClientTransport;
 /** Shared manually activated subscription handle. */
 export type Subscription = import("@spine-event-engine/client-web").Subscription;
+/** A raw wire update or authoritative entity recovery delivered to a subscription consumer. */
+export type SubscriptionDelivery = import("@spine-event-engine/client-web").SubscriptionDelivery;
+/** A lifecycle notification emitted independently of subscription deliveries. */
+export type SubscriptionLifecycle = import("@spine-event-engine/client-web").SubscriptionLifecycle;
+/** Explicit kind and recovery information for a shared subscription. */
+export type CreateSubscriptionOptions =
+  import("@spine-event-engine/client-web").CreateSubscriptionOptions;

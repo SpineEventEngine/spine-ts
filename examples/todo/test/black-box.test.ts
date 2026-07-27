@@ -636,9 +636,21 @@ describe("@spine-event-engine/example-todo", () => {
   it("subscribes to task-list updates and receives projection-driven changes", async () => {
     const fixture = await createTodoBlackBox();
     const scope = fixture.asGuest();
-    const subscription = await scope.createSubscription(createTaskListTopic());
+    const subscription = await scope.createSubscription(
+      createTaskListTopic(),
+      taskListSubscriptionOptions(),
+    );
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
     await subscription.activate();
-    const iterator = subscription[Symbol.asyncIterator]();
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      done: false,
+      value: { state: "connecting" },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      done: false,
+      value: { state: "connected" },
+    });
+    const iterator = subscription.updates[Symbol.asyncIterator]();
 
     try {
       await scope.post(CreateTaskSchema, createTask("task-live", "First"));
@@ -680,6 +692,7 @@ describe("@spine-event-engine/example-todo", () => {
       expect(reopened.openTaskCount).toBe(1);
     } finally {
       await withTimeout(subscription.cancel(), "subscription cleanup", 250);
+      await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
     }
   });
 
@@ -942,15 +955,19 @@ describe("@spine-event-engine/example-todo", () => {
     const context = await createTodoContext();
     const fixture = await createTodoBlackBox(context);
     const scope = fixture.asGuest();
-    const subscription = await scope.createSubscription(createTaskAlreadyDoneTopic());
+    const subscription = await scope.createSubscription(createTaskAlreadyDoneTopic(), {
+      kind: "event",
+    });
     await subscription.activate();
-    const iterator = subscription[Symbol.asyncIterator]();
+    const iterator = subscription.updates[Symbol.asyncIterator]();
 
     try {
       await establishRejectionSubscriptionReadiness(scope, {
         next: async () => {
           const result = await iterator.next();
-          return result.done ? undefined : unpackSubscribedTaskAlreadyDone(result.value);
+          return result.done || result.value.kind !== "update"
+            ? undefined
+            : unpackSubscribedTaskAlreadyDone(result.value.update);
         },
       });
       await scope.post(CreateTaskSchema, createTask("task-refuse", "One-shot"));
@@ -966,7 +983,9 @@ describe("@spine-event-engine/example-todo", () => {
       const ack = await scope.post(CompleteTaskSchema, completeTask("task-refuse"));
       const update = await nextRejection;
       if (update.done) throw new Error("Expected a task rejection event.");
-      const event = unpackSubscribedTaskAlreadyDone(update.value);
+      if (update.value.kind !== "update")
+        throw new Error("Expected a task rejection event update.");
+      const event = unpackSubscribedTaskAlreadyDone(update.value.update);
       expect(context.storedEventDispatchFailures()).toEqual([]);
       const response = await expectTaskListEventuallyUnchanged(
         fixture,
@@ -1021,9 +1040,12 @@ describe("@spine-event-engine/example-todo", () => {
   it("cancels task-list subscriptions and makes later reads inert", async () => {
     const fixture = await createTodoBlackBox();
     const scope = fixture.asGuest();
-    const subscription = await scope.createSubscription(createTaskListTopic());
+    const subscription = await scope.createSubscription(
+      createTaskListTopic(),
+      taskListSubscriptionOptions(),
+    );
     await subscription.activate();
-    const iterator = subscription[Symbol.asyncIterator]();
+    const iterator = subscription.updates[Symbol.asyncIterator]();
 
     try {
       await scope.post(CreateTaskSchema, createTask("task-cancel", "Cancel"));
@@ -1251,14 +1273,17 @@ async function readTaskListsEventually(
 }
 
 async function nextTaskListState(
-  iterator: AsyncIterator<SubscriptionUpdate>,
+  iterator: AsyncIterator<import("@spine-event-engine/client-node").SubscriptionDelivery>,
   label: string,
 ): Promise<TaskList> {
   const result = await withTimeout(iterator.next(), `subscription update for ${label}`, 250);
   if (result.done) {
     throw new Error(`Expected a task-list state update for ${label}.`);
   }
-  return unpackSubscribedTaskList(result.value).list;
+  if (result.value.kind !== "update") {
+    throw new Error(`Expected a task-list update for ${label}.`);
+  }
+  return unpackSubscribedTaskList(result.value.update).list;
 }
 
 type RemoteCommandClient = Pick<Client<typeof CommandService>, "post">;
@@ -1586,6 +1611,14 @@ function createTaskListTopic(id?: string) {
     }),
     context: createActorContext(),
   });
+}
+
+function taskListSubscriptionOptions(id?: string) {
+  return {
+    kind: "entity" as const,
+    authoritativeQuery: () =>
+      id === undefined ? createTaskListQuery() : createTaskListIdQuery(id),
+  };
 }
 
 function createTaskAlreadyDoneTopic() {

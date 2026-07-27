@@ -7,8 +7,14 @@ be ended with `cancel()`.
 
 ```ts
 const response = await alice.send(taskListQuery);
-const subscription = await alice.createSubscription(topic);
+const subscription = await alice.createSubscription(taskListTopic, {
+  kind: "entity",
+  authoritativeQuery: () => taskListQuery,
+});
 await subscription.activate();
+for await (const delivery of subscription.updates) {
+  if (delivery.kind === "update") console.log(delivery.update);
+}
 await subscription.cancel();
 ```
 

@@ -684,9 +684,10 @@ IDs require Web Crypto: it prefers `crypto.randomUUID()`, falls back to
 `crypto.getRandomValues()`, and rejects before transport invocation when
 neither secure API is available.
 
-Reconnect, signal-lifetime composition, bounded queues, overflow, and
-gap/resynchronization lifecycle are A4 work and are not provided by this
-browser client yet.
+The browser client now provides bounded update and lifecycle queues; overflow
+terminates both streams and triggers bounded cleanup rather than silently
+dropping data. Reconnect, entity resynchronization, gap recovery, and
+signal-lifetime composition remain later A4 work.
 
 ## 8. Query and subscribe to state
 
@@ -804,11 +805,14 @@ disconnection or process restart, so clients must query current state when they
 need a fresh view.
 
 Use the public client facade for application subscriptions. It applies the
-frozen actor/tenant context to the caller-provided `Topic` and returns raw,
-validated `SubscriptionUpdate` wire messages. State topics permit IDs, equality predicates, nested
+frozen actor/tenant context to the caller-provided `Topic`. Its bounded,
+single-consumer `updates` stream delivers validated raw `SubscriptionUpdate`
+messages as `{ kind: "update", update }` deliveries, while its separate
+single-consumer `lifecycle` stream reports local lifecycle notifications. State topics permit IDs, equality predicates, nested
 `all()` / `either()` groups, and masks; ordered comparisons, ordering, and
 limits are not subscription criteria. Event topics currently take only an
-`AbortSignal` because the server accepts neither event criteria nor masks.
+explicit `{ kind: "event" }` option (and an optional `AbortSignal`) because
+the server accepts neither event criteria nor masks.
 Creation returns an inactive local handle without sending `Subscribe`.
 `activate()` sends `Subscribe`, then opens the activation stream; it does not
 claim a remote activation acknowledgement.
@@ -816,35 +820,58 @@ Asynchronous activation failures reject pending and future iterator reads.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, EntityColumn, all, eq } from "@spine-event-engine/client-node";
-import { TopicSchema, type SubscriptionUpdate } from "@spine-event-engine/proto/client";
-import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
-import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
-import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
+import { Client } from "@spine-event-engine/client-node";
+import { deriveTypeUrl } from "@spine-event-engine/core";
+import {
+  QueryIdSchema,
+  QuerySchema,
+  TargetSchema,
+  TopicIdSchema,
+  TopicSchema,
+  type SubscriptionUpdate,
+} from "@spine-event-engine/proto/client";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
-const TaskListColumns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
 const subscriptionClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
-const topic = create(TopicSchema);
-const subscription = await subscriptionClient.onBehalfOf("alice").createSubscription(topic);
+const query = create(QuerySchema, {
+  id: create(QueryIdSchema, { value: "task-list-query" }),
+  target: create(TargetSchema, {
+    type: deriveTypeUrl(TaskListSchema),
+    criterion: { case: "includeAll", value: true },
+  }),
+});
+const topic = create(TopicSchema, {
+  id: create(TopicIdSchema, { value: "task-list-topic" }),
+  target: create(TargetSchema, {
+    type: deriveTypeUrl(TaskListSchema),
+    criterion: { case: "includeAll", value: true },
+  }),
+});
+const subscription = await subscriptionClient.onBehalfOf("alice").createSubscription(topic, {
+  kind: "entity",
+  authoritativeQuery: () => query,
+});
 await subscription.activate();
-for await (const update of subscription) handleUpdate(update);
+for await (const delivery of subscription.updates) {
+  if (delivery.kind === "update") handleUpdate(delivery.update);
+}
 await subscription.cancel();
 await subscriptionClient.close();
 
 function handleUpdate(update: SubscriptionUpdate): void {
   if (update.update.case === "entityUpdates") console.log(update.update.value);
-  if (update.update.case === "eventUpdates") console.log(update.update.value);
 }
 ```
 
 Await `cancel()` when the application needs bounded remote cleanup
 confirmation. A caller-provided signal can stop an individual `post`, `send`,
-or `activate` operation, but durable signal-lifetime composition is A4 work.
-The A2 kernel has no decoded-update queue, overflow policy, reconnect, or
-gap/resynchronization lifecycle; applications must query current state before
-opening a new subscription after disconnection. `connectTo()` owns and closes
-its HTTP/2 transport; `usingTransport()` leaves the caller's transport open.
+or `activate` operation. Updates and lifecycle notices have independent bounded
+queues; overflow terminates both streams and triggers bounded cleanup rather
+than silently dropping a delivery. Reconnect, authoritative entity
+resynchronization, and `gapPossible` handling remain A4.3/A4.4 work, so an
+application must still query current state before opening a new subscription
+after disconnection. `connectTo()` owns and closes its HTTP/2 transport;
+`usingTransport()` leaves the caller's transport open.
 
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.
@@ -927,7 +954,8 @@ message fixtures from the consumer test-support package.
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { BlackBox } from "@spine-event-engine/testing";
-import { TopicSchema } from "@spine-event-engine/proto/client";
+import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TargetSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { taskListQuery, tasksContext } from "@example/tasks-test-support";
 import { CreateTaskSchema } from "../generated/acme/tasks/v1/task_commands_pb.js";
 import { TaskCreatedSchema } from "../generated/acme/tasks/v1/task_events_pb.js";
@@ -950,7 +978,16 @@ try {
     () => true,
   );
   console.log(observed.message);
-  const subscription = await actor.createSubscription(create(TopicSchema));
+  const taskListTopic = create(TopicSchema, {
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(TaskListSchema),
+      criterion: { case: "includeAll", value: true },
+    }),
+  });
+  const subscription = await actor.createSubscription(taskListTopic, {
+    kind: "entity",
+    authoritativeQuery: () => taskListQuery,
+  });
   await subscription.activate();
   await actor.postEvent(
     TaskCreatedSchema,
@@ -967,9 +1004,10 @@ try {
 
 `eventually()` has a bounded timeout (`BlackBoxTimeoutError` on expiry) and is
 the correct assertion boundary for asynchronous projections. State and event
-subscriptions yield raw validated `SubscriptionUpdate` messages; do not depend
-on private server types in application tests. Decoded queues, overflow, and
-gap/resynchronization handling remain A4 work.
+subscriptions expose the same bounded `updates` and `lifecycle` streams as the
+client; update deliveries wrap raw validated `SubscriptionUpdate` messages, so
+tests should not depend on private server types. Reconnect, entity
+resynchronization, and gap handling remain A4.3/A4.4 work.
 `postEvent(EventSchema, message)` injects a generated domain event directly
 with the calling scope's fixed actor, tenant, and zone; use it for test setup
 when a command is not the behavior under test.

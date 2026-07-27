@@ -8,6 +8,7 @@ import {
   type ClientOutcome,
   type ClientRequest,
   type Subscription,
+  type CreateSubscriptionOptions,
 } from "@spine-event-engine/client-node";
 import { packEvent, type MessageSchema } from "@spine-event-engine/core";
 import {
@@ -357,16 +358,94 @@ class Request implements BlackBoxScope {
     return this.#request.send(query, options);
   }
 
-  async createSubscription(topic: Topic, options?: ClientOperationOptions): Promise<Subscription> {
+  async createSubscription(
+    topic: Topic,
+    options: CreateSubscriptionOptions,
+  ): Promise<Subscription> {
     this.#internals.assertOpen();
-    return this.track(await this.#request.createSubscription(topic, options));
-  }
-
-  private track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle {
-    const tracked = new Tracked(handle, () => {
+    const subscription = await this.#request.createSubscription(topic, options);
+    const tracked = new TrackedSubscription(subscription, () => {
       this.#internals.onRelease(tracked);
     });
-    return this.#internals.track(tracked) as unknown as Handle;
+    return this.#internals.track(tracked);
+  }
+}
+
+class TrackedSubscription implements Subscription {
+  readonly #handle: Subscription;
+  readonly #onRelease: () => void;
+  #released = false;
+  #cancellation: Promise<void> | undefined;
+
+  constructor(handle: Subscription, onRelease: () => void) {
+    this.#handle = handle;
+    this.#onRelease = onRelease;
+  }
+
+  get updates(): AsyncIterable<import("@spine-event-engine/client-node").SubscriptionDelivery> {
+    return this.trackStream(this.#handle.updates);
+  }
+
+  get lifecycle(): AsyncIterable<import("@spine-event-engine/client-node").SubscriptionLifecycle> {
+    return this.trackStream(this.#handle.lifecycle);
+  }
+
+  activate(options?: ClientOperationOptions): Promise<void> {
+    return this.#handle.activate(options);
+  }
+
+  async cancel(): Promise<void> {
+    try {
+      this.#cancellation ??= this.#handle.cancel();
+      await this.#cancellation;
+    } finally {
+      this.release();
+    }
+  }
+
+  private trackStream<Value>(source: AsyncIterable<Value>): AsyncIterable<Value> {
+    const owner = this;
+    return {
+      [Symbol.asyncIterator](): AsyncIterator<Value> {
+        const iterator = source[Symbol.asyncIterator]();
+        return {
+          next: async () => {
+            try {
+              const result = await iterator.next();
+              if (result.done) owner.release();
+              return result;
+            } catch (error) {
+              owner.release();
+              throw error;
+            }
+          },
+          return: async (value) => {
+            try {
+              await owner.cancel();
+              const returned = await iterator.return?.(value);
+              return returned ?? { done: true, value: undefined };
+            } finally {
+              owner.release();
+            }
+          },
+          throw: async (error) => {
+            try {
+              await owner.cancel();
+              if (iterator.throw === undefined) throw error;
+              return await iterator.throw(error);
+            } finally {
+              owner.release();
+            }
+          },
+        };
+      },
+    };
+  }
+
+  private release(): void {
+    if (this.#released) return;
+    this.#released = true;
+    this.#onRelease();
   }
 }
 

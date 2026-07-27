@@ -10,8 +10,10 @@ Pass `onRequestMetadata` to supply fresh request headers synchronously for each
 outbound call. This is the application extension point for credentials; the
 client does not log or place those values in request IDs. Browser request IDs
 use secure Web Crypto and fail before a transport call if it is unavailable.
-Reconnect, signal-lifetime composition, bounded queues, overflow, and
-gap/resynchronization lifecycle arrive in A4.
+Subscriptions now expose separate bounded update and lifecycle streams. Queue
+overflow terminates both streams and triggers bounded cleanup rather than
+silently dropping data. Reconnect, entity resynchronization, gap recovery, and
+signal-lifetime composition remain later A4 work.
 
 The public protocol verbs are `post`, `send`, `createSubscription`, `activate`,
 and `cancel`. A subscription is created inactive, then activated explicitly.

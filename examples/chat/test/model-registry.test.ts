@@ -5,6 +5,7 @@ import {
   ChatIdSchema,
   ChatSchema,
   MessageSchema,
+  type ChatId,
 } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/chat_pb.js";
 import { PostMessageSchema } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/commands_pb.js";
 import { MessagePostedSchema } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/events_pb.js";
@@ -14,6 +15,7 @@ import {
   TargetSchema,
   TopicIdSchema,
   TopicSchema,
+  type Query,
 } from "@spine-event-engine/proto/client";
 import { Server } from "@spine-event-engine/server";
 import { UserIdSchema } from "@spine-event-engine/users-model/generated/spine/example/users/v1/users_pb.js";
@@ -70,6 +72,7 @@ describe("Chat application model registry", () => {
             },
           }),
         }),
+        { kind: "entity", authoritativeQuery: () => createChatQuery(chatId) },
       );
       events = await client.asGuest().createSubscription(
         create(TopicSchema, {
@@ -79,11 +82,12 @@ describe("Chat application model registry", () => {
             criterion: { case: "includeAll", value: true },
           }),
         }),
+        { kind: "event" },
       );
       await states.activate();
       await events.activate();
-      const stateUpdate = states[Symbol.asyncIterator]().next();
-      const eventUpdate = events[Symbol.asyncIterator]().next();
+      const stateUpdate = states.updates[Symbol.asyncIterator]().next();
+      const eventUpdate = events.updates[Symbol.asyncIterator]().next();
 
       await expect(
         client
@@ -98,29 +102,26 @@ describe("Chat application model registry", () => {
         state: { id: { value: "chat-1" }, messages: [{ text: "hello" }] },
       });
 
-      const query = EntityQuery.select({
-        schema: ChatSchema,
-        columns: {} as never,
-        context: create(ActorContextSchema),
-      })
-        .byId(chatId)
-        .build();
-      const response = await readEventually(() => client.asGuest().send(query));
+      const response = await readEventually(() => client.asGuest().send(createChatQuery(chatId)));
       expect(unpackAny(response.message[0]?.state, ChatSchema)).toMatchObject({
         id: { value: "chat-1" },
         messages: [{ text: "hello" }],
       });
       const state = await withTimeout(stateUpdate, "filtered Chat state update");
       expect(
-        state.done || state.value.update.case !== "entityUpdates"
+        state.done ||
+          state.value.kind !== "update" ||
+          state.value.update.update.case !== "entityUpdates"
           ? undefined
-          : unpackAny(state.value.update.value.update[0]?.kind.value, ChatSchema),
+          : unpackAny(state.value.update.update.value.update[0]?.kind.value, ChatSchema),
       ).toMatchObject({ id: { value: "chat-1" } });
       const event = await withTimeout(eventUpdate, "MessagePosted event update");
       expect(
-        event.done || event.value.update.case !== "eventUpdates"
+        event.done ||
+          event.value.kind !== "update" ||
+          event.value.update.update.case !== "eventUpdates"
           ? undefined
-          : unpackAny(event.value.update.value.event[0]?.message, MessagePostedSchema),
+          : unpackAny(event.value.update.update.value.event[0]?.message, MessagePostedSchema),
       ).toMatchObject({ id: { value: "chat-1" }, text: "hello" });
     } finally {
       const cleanup: Promise<void>[] = [];
@@ -132,6 +133,16 @@ describe("Chat application model registry", () => {
     }
   }, 15_000);
 });
+
+function createChatQuery(chatId: ChatId): Query {
+  return EntityQuery.select({
+    schema: ChatSchema,
+    columns: {} as never,
+    context: create(ActorContextSchema),
+  })
+    .byId(chatId)
+    .build();
+}
 
 async function readEventually<Result>(read: () => Promise<Result>): Promise<Result> {
   const deadline = Date.now() + 5_000;

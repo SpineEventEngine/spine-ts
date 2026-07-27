@@ -1,4 +1,5 @@
-import { create, type Message } from "@bufbuild/protobuf";
+import { create, toBinary, type Message } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Interceptor, Transport, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
 import { packAny } from "@spine-event-engine/core";
 import {
@@ -6,6 +7,8 @@ import {
   ActorContextSchema,
   CommandIdSchema,
   ErrorSchema,
+  EventContextSchema,
+  EventIdSchema,
   EventSchema,
   ResponseSchema,
   StatusSchema,
@@ -16,6 +19,7 @@ import {
 import {
   QueryResponseSchema,
   QuerySchema,
+  EventUpdatesSchema,
   SubscriptionSchema,
   SubscriptionIdSchema,
   SubscriptionUpdateSchema,
@@ -24,12 +28,19 @@ import {
 } from "@spine-event-engine/proto/client";
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { Client, type BrowserClientOptions } from "../src/index.js";
+import {
+  Client,
+  type BrowserClientOptions,
+  type CreateSubscriptionOptions,
+  type SubscriptionLifecycle,
+  type SubscriptionRetryPolicy,
+} from "../src/index.js";
 
 const browserFactories = vi.hoisted(() => ({
   connect: vi.fn(),
   grpcWeb: vi.fn(),
 }));
+const eventSubscription = { kind: "event" } as const;
 
 vi.mock("@connectrpc/connect-web", () => ({
   createConnectTransport: browserFactories.connect,
@@ -37,6 +48,291 @@ vi.mock("@connectrpc/connect-web", () => ({
 }));
 
 describe("Client", () => {
+  it("requires explicit subscription kind and option validation without evaluating entity queries", async () => {
+    const client = Client.usingTransport(source());
+    const request = client.asGuest();
+    const topic = create(TopicSchema);
+
+    await expect(request.createSubscription(topic, undefined as never)).rejects.toThrow("kind");
+    await expect(
+      request.createSubscription(topic, {
+        kind: "event",
+        authoritativeQuery: () => create(QuerySchema),
+      } as never),
+    ).rejects.toThrow("authoritative");
+    await expect(request.createSubscription(topic, { kind: "entity" } as never)).rejects.toThrow(
+      "authoritative",
+    );
+    await expect(
+      request.createSubscription(topic, {
+        kind: "entity",
+        authoritativeQuery: () => create(QuerySchema),
+      }),
+    ).resolves.toBeDefined();
+    await client.close();
+  });
+
+  it("rejects invalid subscription capacities during client construction", () => {
+    for (const subscriptions of [
+      { updateBufferCapacity: 0 },
+      { updateBufferByteCapacity: Number.POSITIVE_INFINITY },
+      { lifecycleBufferCapacity: Number.NaN },
+    ]) {
+      expect(() => Client.usingTransport(source(), { subscriptions })).toThrow("subscription");
+    }
+  });
+
+  it("freezes the discriminated lifecycle and finite retry configuration contract", () => {
+    expectTypeOf<CreateSubscriptionOptions>().toMatchTypeOf<
+      | { readonly kind: "event"; readonly signal?: AbortSignal }
+      | {
+          readonly kind: "entity";
+          readonly authoritativeQuery: () => unknown;
+          readonly signal?: AbortSignal;
+        }
+    >();
+    expectTypeOf<SubscriptionLifecycle>().toMatchTypeOf<
+      | { readonly state: "connecting"; readonly generation: number; readonly attempt: number }
+      | { readonly state: "failed"; readonly generation: number; readonly error: Error }
+      | {
+          readonly state: "connected" | "resynchronizing" | "gapPossible" | "closed";
+          readonly generation: number;
+        }
+    >();
+    expectTypeOf<SubscriptionRetryPolicy>().toMatchTypeOf<{
+      readonly maxAttempts: number;
+      readonly maxElapsedMs: number;
+      delayMs(attempt: number): number;
+    }>();
+
+    const validPolicy: SubscriptionRetryPolicy = {
+      maxAttempts: 1,
+      maxElapsedMs: 1,
+      delayMs: () => 1,
+    };
+    expect(() =>
+      Client.usingTransport(source(), {
+        subscriptions: {
+          retryPolicy: validPolicy,
+          scheduler: { now: () => 0, wait: async () => {} },
+        },
+      }),
+    ).not.toThrow();
+
+    for (const retryPolicy of [
+      { maxAttempts: 0, maxElapsedMs: 1, delayMs: () => 1 },
+      { maxAttempts: 1, maxElapsedMs: Number.NaN, delayMs: () => 1 },
+      { maxAttempts: 1, maxElapsedMs: 1, delayMs: () => Number.POSITIVE_INFINITY },
+    ])
+      expect(() => Client.usingTransport(source(), { subscriptions: { retryPolicy } })).toThrow(
+        "retry",
+      );
+
+    expect(() =>
+      Client.usingTransport(source(), {
+        subscriptions: { scheduler: { now: () => Number.NaN, wait: async () => {} } },
+      }),
+    ).toThrow("scheduler");
+  });
+
+  it("rejects every invalid retry and scheduler validation branch at construction", () => {
+    for (const retryPolicy of [
+      { maxAttempts: 1.5, maxElapsedMs: 1, delayMs: () => 1 },
+      { maxAttempts: 1, maxElapsedMs: 0, delayMs: () => 1 },
+      { maxAttempts: 1, maxElapsedMs: 1, delayMs: () => 0 },
+      { maxAttempts: 1, maxElapsedMs: 1, delayMs: undefined },
+    ])
+      expect(() => Client.usingTransport(source(), { subscriptions: { retryPolicy } })).toThrow(
+        "retry",
+      );
+
+    for (const scheduler of [{ now: () => 0 }, { now: () => -1, wait: async () => {} }])
+      expect(() => Client.usingTransport(source(), { subscriptions: { scheduler } })).toThrow(
+        "scheduler",
+      );
+  });
+
+  it("exposes separate single-consumer update and lifecycle streams", async () => {
+    const client = Client.usingTransport(source());
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const streams = subscription as unknown as {
+      updates: AsyncIterable<unknown>;
+      lifecycle: AsyncIterable<unknown>;
+    };
+
+    expect(streams.updates).toBeDefined();
+    expect(streams.lifecycle).toBeDefined();
+    streams.updates[Symbol.asyncIterator]();
+    expect(() => streams.updates[Symbol.asyncIterator]()).toThrow("single consumer");
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it("fails both streams and cleans up on count or byte overflow", async () => {
+    for (const subscriptions of [{ updateBufferCapacity: 1 }, { updateBufferByteCapacity: 1 }]) {
+      const client = Client.usingTransport(
+        { transport: updateTransport(), createRequestId: () => "overflow" },
+        { subscriptions },
+      );
+      const subscription = await client
+        .asGuest()
+        .createSubscription(create(TopicSchema), eventSubscription);
+      const updates = subscription.updates[Symbol.asyncIterator]();
+      const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+      await subscription.activate();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const updateError = await updates.next().catch((error: unknown) => error);
+      const lifecycleError = await lifecycle.next().catch((error: unknown) => error);
+      expect(updateError).toBe(lifecycleError);
+      expect(updateError).toBeInstanceOf(Error);
+      expect((updateError as Error).message).toContain("overflow");
+      await subscription.cancel();
+      await client.close();
+    }
+  });
+
+  it("reclaims exactly one encoded delivery after dequeue and freezes delivery copies", async () => {
+    const now = BigInt(Math.floor(Date.now() / 1_000));
+    const topic = create(TopicSchema, {
+      context: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "guest" }),
+        zoneId: create(ZoneIdSchema, { value: "UTC" }),
+        timestamp: create(TimestampSchema, { seconds: now }),
+      }),
+    });
+    const encodedDeliveryBytes = toBinary(
+      SubscriptionUpdateSchema,
+      create(SubscriptionUpdateSchema, {
+        subscription: create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: "updates" }),
+          topic,
+        }),
+      }),
+    ).byteLength;
+    let releaseSecond: (() => void) | undefined;
+    const client = Client.usingTransport(
+      {
+        transport: updateTransport(
+          2,
+          () => new Promise<void>((resolve) => (releaseSecond = resolve)),
+        ),
+        createRequestId: () => "immutable",
+      },
+      {
+        zoneId: "UTC",
+        subscriptions: { updateBufferCapacity: 2, updateBufferByteCapacity: encodedDeliveryBytes },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    await subscription.activate();
+    const first = await updates.next();
+    expect(first.done).toBe(false);
+    if (!first.done && first.value.kind === "update") {
+      expect(Object.isFrozen(first.value)).toBe(true);
+      expect(Object.isFrozen(first.value.update)).toBe(true);
+    }
+    releaseSecond?.();
+    await expect(updates.next()).resolves.toMatchObject({ done: false });
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it("drains buffered updates after graceful wire completion", async () => {
+    const client = Client.usingTransport(
+      { transport: updateTransport(2), createRequestId: () => "drain" },
+      { subscriptions: { updateBufferCapacity: 2, updateBufferByteCapacity: 10_000 } },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    await subscription.activate();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    await expect(updates.next()).resolves.toMatchObject({ done: false });
+    await expect(updates.next()).resolves.toMatchObject({ done: false });
+    await expect(updates.next()).resolves.toMatchObject({ done: true });
+    await client.close();
+  });
+
+  it("preserves binary event payloads while freezing a delivered update", async () => {
+    let topic: Topic | undefined;
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name !== "Subscribe") return create(ResponseSchema);
+          topic = input as Topic;
+          return create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "binary" }),
+            topic,
+          });
+        },
+        undefined,
+        () =>
+          (async function* () {
+            yield create(SubscriptionUpdateSchema, {
+              subscription: create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "binary" }),
+                topic: topic!,
+              }),
+              update: {
+                case: "eventUpdates",
+                value: create(EventUpdatesSchema, {
+                  event: [
+                    create(EventSchema, {
+                      id: create(EventIdSchema, { value: "event" }),
+                      context: create(EventContextSchema),
+                      message: { typeUrl: "type.example/Binary", value: new Uint8Array([1, 2]) },
+                    }),
+                  ],
+                }),
+              },
+            });
+          })(),
+      ),
+      createRequestId: () => "binary",
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    await subscription.activate();
+    const next = await subscription.updates[Symbol.asyncIterator]().next();
+    if (
+      next.done ||
+      next.value.kind !== "update" ||
+      next.value.update.update.case !== "eventUpdates"
+    )
+      throw new Error("expected binary event update");
+    const value = next.value.update.update.value.event[0]?.message.value;
+    expect(value).toEqual(new Uint8Array([1, 2]));
+    expect(Object.isFrozen(next.value)).toBe(true);
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it("fails both streams deterministically when lifecycle capacity overflows", async () => {
+    const client = Client.usingTransport(
+      { transport: updateTransport(), createRequestId: () => "lifecycle" },
+      { subscriptions: { lifecycleBufferCapacity: 1 } },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    await expect(subscription.activate()).rejects.toThrow("lifecycle buffer overflow");
+    const lifecycleError = await lifecycle.next().catch((error: unknown) => error);
+    const updateError = await subscription.updates[Symbol.asyncIterator]()
+      .next()
+      .catch((error: unknown) => error);
+    expect(updateError).toBe(lifecycleError);
+    expect((updateError as Error).message).toContain("lifecycle buffer overflow");
+    await client.close();
+  });
+
   beforeEach(() => browserFactories.connect.mockReset());
   beforeEach(() => browserFactories.grpcWeb.mockReset());
 
@@ -215,7 +511,9 @@ describe("Client", () => {
       createRequestId: () => "request-2",
     });
 
-    const subscription = await client.asGuest().createSubscription(create(TopicSchema));
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
     expect(calls).toEqual([]);
     await subscription.activate();
     await subscription.cancel();
@@ -243,7 +541,7 @@ describe("Client", () => {
     const scope = client.asGuest();
     const read = scope.send(create(QuerySchema));
     const readResult = expect(read).rejects.toThrow("client is closing");
-    const subscription = await scope.createSubscription(create(TopicSchema));
+    const subscription = await scope.createSubscription(create(TopicSchema), eventSubscription);
 
     const closed = client.close();
     resolveRead?.();
@@ -269,7 +567,7 @@ describe("Client", () => {
       }),
       createRequestId: () => "request-4",
     });
-    const subscription = await client.asGuest().createSubscription(topic);
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await expect(subscription.activate()).rejects.toThrow("subscription ID");
     expect(calls).toEqual(["Subscribe", "Cancel"]);
     await client.close();
@@ -291,9 +589,9 @@ describe("Client", () => {
       }),
       createRequestId: () => "request-done",
     });
-    const subscription = await client.asGuest().createSubscription(topic);
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
-    await expect(subscription[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+    await expect(subscription.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
       done: true,
     });
     await client.close();
@@ -320,7 +618,7 @@ describe("Client", () => {
       }),
       createRequestId: () => "request-stall",
     });
-    const subscription = await client.asGuest().createSubscription(topic);
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
     const cancellation = subscription.cancel();
     const rejected = expect(cancellation).rejects.toThrow("cleanup timed out");
@@ -344,7 +642,7 @@ describe("Client", () => {
       }),
       createRequestId: () => "request-non-cooperative",
     });
-    const subscription = await client.asGuest().createSubscription(topic);
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
     const cancellation = subscription.cancel();
     const cancellationFailure = cancellation.catch((error: unknown) => error);
@@ -372,8 +670,8 @@ describe("Client", () => {
       createRequestId: () => "request-cleanup-failure",
       close: () => closed++,
     });
-    const first = await client.asGuest().createSubscription(topic);
-    const second = await client.asGuest().createSubscription(topic);
+    const first = await client.asGuest().createSubscription(topic, eventSubscription);
+    const second = await client.asGuest().createSubscription(topic, eventSubscription);
     await first.activate();
     await second.activate();
     await expect(client.close()).rejects.toThrow("cancel failed");
@@ -400,7 +698,9 @@ describe("Client", () => {
       createRequestId: () => "request-invalid-cleanup",
       close: () => closed++,
     });
-    const subscription = await client.asGuest().createSubscription(create(TopicSchema));
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
     const failure = await subscription.activate().catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toMatchObject([
@@ -431,7 +731,8 @@ describe("Client", () => {
       }),
       createRequestId: () => "request-5",
     });
-    const subscription = await client.asGuest().createSubscription(topic);
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const pendingUpdate = subscription.updates[Symbol.asyncIterator]().next();
     const activation = subscription.activate();
     const duplicate = subscription.activate();
     const cancellation = subscription.cancel();
@@ -444,10 +745,124 @@ describe("Client", () => {
     await expect(activation).rejects.toThrow("cancelled");
     await expect(duplicate).rejects.toThrow("cancelled");
     await cancellation;
+    await expect(pendingUpdate).resolves.toMatchObject({ done: true });
     expect(subscribes).toBe(1);
     expect(cancels).toBe(1);
     await client.close();
     expect(cancels).toBe(1);
+  });
+
+  it("rejects creation and activation through their caller-owned abort signals", async () => {
+    let subscribes = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport((method, input) => {
+        if (method.name === "Subscribe") subscribes++;
+        return create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: "abort" }),
+          topic: input as Topic,
+        });
+      }),
+      createRequestId: () => "abort",
+    });
+    const creationAbort = new AbortController();
+    creationAbort.abort(new Error("creation stopped"));
+    await expect(
+      client
+        .asGuest()
+        .createSubscription(create(TopicSchema), { kind: "event", signal: creationAbort.signal }),
+    ).rejects.toThrow("creation stopped");
+
+    const activationAbort = new AbortController();
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), { kind: "event", signal: activationAbort.signal });
+    activationAbort.abort(new Error("subscription stopped"));
+    await expect(subscription.activate({ signal: activationAbort.signal })).rejects.toThrow(
+      "subscription stopped",
+    );
+    expect(subscribes).toBe(0);
+    await subscription.cancel();
+    await expect(subscription.activate()).rejects.toThrow("cancelled");
+    await client.close();
+  });
+
+  it("aggregates subscription and source-close failures", async () => {
+    const topic = create(TopicSchema);
+    const client = Client.usingTransport({
+      transport: unaryTransport((method, input) => {
+        if (method.name === "Subscribe")
+          return create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "aggregate" }),
+            topic: input as Topic,
+          });
+        if (method.name === "Cancel") throw new Error("cancel failed");
+        return create(ResponseSchema);
+      }),
+      createRequestId: () => "aggregate",
+      close: () => {
+        throw new Error("source close failed");
+      },
+    });
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    await subscription.activate();
+    const failure = await client.close().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toMatchObject([
+      { message: "cancel failed" },
+      { message: "source close failed" },
+    ]);
+  });
+
+  it("fails activation without attempting cleanup when Subscribe rejects before a wire exists", async () => {
+    let cancels = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) => {
+        if (method.name === "Subscribe") throw new Error("subscribe failed");
+        if (method.name === "Cancel") cancels++;
+        return create(ResponseSchema);
+      }),
+      createRequestId: () => "subscribe-reject",
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    await expect(subscription.activate()).rejects.toThrow("subscribe failed");
+    expect(cancels).toBe(0);
+    await client.close();
+  });
+
+  it("emits one connecting transition for concurrent activation calls", async () => {
+    const client = Client.usingTransport({
+      transport: updateTransport(0),
+      createRequestId: () => "one",
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    await Promise.all([subscription.activate(), subscription.activate()]);
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it("rejects a concurrent pending next without stranding the first call", async () => {
+    const client = Client.usingTransport({
+      transport: updateTransport(2, () => new Promise<void>(() => {})),
+      createRequestId: () => "pending",
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    await subscription.activate();
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    await updates.next();
+    const first = updates.next();
+    await expect(updates.next()).rejects.toThrow("one pending next");
+    await subscription.cancel();
+    await expect(first).resolves.toMatchObject({ done: true });
+    await client.close();
   });
 
   it("settles a pending iterator locally when its transport ignores cancellation", async () => {
@@ -470,9 +885,9 @@ describe("Client", () => {
       ),
       createRequestId: () => "request-6",
     });
-    const subscription = await client.asGuest().createSubscription(topic);
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
-    const pending = subscription[Symbol.asyncIterator]().next();
+    const pending = subscription.updates[Symbol.asyncIterator]().next();
     await subscription.cancel();
     await expect(pending).resolves.toMatchObject({ done: true });
   });
@@ -493,7 +908,7 @@ describe("Client", () => {
       createRequestId: () => "request-7",
       close: () => closed++,
     });
-    const subscription = await client.asGuest().createSubscription(topic);
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
     await expect(client.close()).rejects.toThrow("cancel failed");
     await expect(client.close()).rejects.toThrow("cancel failed");
@@ -660,7 +1075,7 @@ describe("Client", () => {
     await expect(client.asGuest().send(query)).rejects.toThrow("client is closing");
   });
 
-  it("rejects unactivated iteration and validates subscription topic and delivered identity", async () => {
+  it("allows pre-activation iteration and validates subscription topic and delivered identity", async () => {
     const requested = create(TopicSchema);
     let phase = 0;
     let accepted: Topic | undefined;
@@ -689,13 +1104,13 @@ describe("Client", () => {
       ),
       createRequestId: () => "subscription-1",
     });
-    const first = await client.asGuest().createSubscription(requested);
-    expect(() => first[Symbol.asyncIterator]()).toThrow("not activated");
+    const first = await client.asGuest().createSubscription(requested, eventSubscription);
+    expect(() => first.updates[Symbol.asyncIterator]()).not.toThrow();
     await expect(first.activate()).rejects.toThrow("topic does not match");
     phase = 1;
-    const second = await client.asGuest().createSubscription(requested);
+    const second = await client.asGuest().createSubscription(requested, eventSubscription);
     await second.activate();
-    await expect(second[Symbol.asyncIterator]().next()).rejects.toThrow("does not match");
+    await expect(second.updates[Symbol.asyncIterator]().next()).rejects.toThrow("does not match");
     await client.close();
   });
 
@@ -733,11 +1148,13 @@ describe("Client", () => {
       ),
       createRequestId: () => "subscription-deliver",
     });
-    const subscription = await client.asGuest().createSubscription(create(TopicSchema));
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
     await subscription.activate();
-    const iterator = subscription[Symbol.asyncIterator]();
+    const iterator = subscription.updates[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toMatchObject({ done: false });
-    await iterator.return?.();
+    await subscription.cancel();
     expect(calls).toContain("Cancel");
     await expect(iterator.next()).resolves.toMatchObject({ done: true });
     await client.close();
@@ -755,13 +1172,44 @@ describe("Client", () => {
       }),
       createRequestId: () => "subscription-abort",
     });
-    const subscription = await client.asGuest().createSubscription(create(TopicSchema));
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
     const abort = new AbortController();
     abort.abort(new Error("activation stopped"));
     await expect(subscription.activate({ signal: abort.signal })).rejects.toThrow(
       "activation stopped",
     );
     expect(subscribes).toBe(0);
+    await client.close();
+  });
+
+  it("aborts an in-flight activation and forwards its abort reason to Subscribe", async () => {
+    let resolveStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => (resolveStarted = resolve));
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, _input, signal) => {
+          if (method.name !== "Subscribe") return create(ResponseSchema);
+          resolveStarted?.();
+          return new Promise<Message>((_resolve, reject) => {
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        },
+        undefined,
+        undefined,
+      ),
+      createRequestId: () => "activation-abort",
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const abort = new AbortController();
+    const activation = subscription.activate({ signal: abort.signal });
+    await started;
+    abort.abort(new Error("activation interrupted"));
+    await expect(activation).rejects.toThrow("activation interrupted");
+    await subscription.cancel();
     await client.close();
   });
 });
@@ -885,4 +1333,31 @@ function browserResponse(
     messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: command.id?.uuid })),
     status: create(StatusSchema, { status: { case: "ok", value: {} } }),
   });
+}
+
+function updateTransport(count = 2, beforeSecond?: () => Promise<void>): Transport {
+  let topic: Topic | undefined;
+  return unaryTransport(
+    (method, input) => {
+      if (method.name !== "Subscribe") return create(ResponseSchema);
+      topic = input as Topic;
+      return create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: "updates" }),
+        topic,
+      });
+    },
+    undefined,
+    () =>
+      (async function* () {
+        for (let index = 0; index < count; index++) {
+          if (index === 1 && beforeSecond !== undefined) await beforeSecond();
+          yield create(SubscriptionUpdateSchema, {
+            subscription: create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "updates" }),
+              topic: topic!,
+            }),
+          });
+        }
+      })(),
+  );
 }

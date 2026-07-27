@@ -856,3 +856,194 @@ self-introspection was unavailable, no visible mismatch occurred, and no
 reviewer edited files or built/ran Spine JVM. No P0-P2 finding remains. A3 is
 accepted subject to the full TypeScript repository gate, commit, and immediate
 task-branch push.
+
+## A4.1 migration completion — coordinator evidence
+
+- Scope was mechanical caller/doc migration after the A4.1 public contract and
+  bounded-channel implementation reached 31 focused-green tests. No production
+  lifecycle/reconnect behavior was changed here.
+- The migration satisfies the frozen discriminated contract: Todo TaskList is
+  Entity with a matching all-row/by-ID authoritative query, Todo rejection is
+  Event, Chat state is Entity with its factored by-ID query, Chat MessagePosted
+  is Event, and BlackBox ProjectionState/EventState use matching include-all
+  Entity/Event selections. Consumers read `subscription.updates` and unwrap raw
+  update deliveries.
+- The concrete migration compile finding (`client-node` missing public
+  `SubscriptionDelivery` and `SubscriptionLifecycle` aliases) is resolved and
+  covered by the successful root typecheck. BlackBox's wrapper now exposes the
+  replacement streams rather than treating Subscription itself as iterable.
+- Verification is clean: root `typecheck:build`; migrated loopback 3 files / 51
+  tests; TypeDoc/API inventory; semantic snippets; browser dependency checker;
+  format and diff checks; scoped web coverage 92.25% branches (143/155),
+  97.03% statements, 31/31 tests. The accidental repository-wide coverage
+  invocation failed its global threshold only because its include set covered
+  unrelated packages; the required scoped command passed.
+- No Spine JVM source was built or executed. This record is evidence for the
+  coordinator's relevant A4.1 review disposition, not a new reviewer lane.
+
+## A4.1 specialist review wave assignments
+
+The review base is pushed A3 commit `09a12fb3`; the package is the complete
+uncommitted A4.1 diff. Reviewers must apply the full Human-Imposed Requirements
+Ledger in
+`build-protocol/tasks/T-0075-wave4-browser-interoperability/TASK.md`, the exact
+A4 contract freeze in `build-protocol/work-logs/T-0075.md`, and the explicit
+prohibition on building or executing Spine JVM.
+
+- Style/maintainability: existing `style_maintainability_reviewer`; expected
+  `gpt-5.6-terra` / `high`, both explicit in dispatch.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`;
+  expected `gpt-5.6-terra` / `high`, both explicit in dispatch.
+- Performance/reliability: existing `performance_reliability_reviewer`;
+  expected `gpt-5.6-terra` / `high`, both explicit in dispatch.
+- Documentation completeness: existing `documentation_reviewer`; immutable
+  configured profile `gpt-5.6-luna` / `medium`. The Desktop role dispatch
+  selects that configured profile; independent runtime self-introspection is
+  unavailable. The reviewer is required because public guide, README, TSDoc,
+  and API inventory claims changed.
+
+Each reviewer is read-only, owns one distinct concern, may run only focused
+Spine TS checks, and may not edit, commit, push, merge, spawn children, or
+build/run/generate/test Spine JVM. Actual runtime metadata will be recorded
+when the surface exposes it; otherwise the immutable role profile and
+limitation above are the honest acceptance evidence.
+
+## A4.1 complete review wave results and correction batch
+
+All four existing reviewers completed read-only reviews. The surface exposed
+their immutable configured roles/profiles but not independent runtime
+self-introspection; no visible mismatch occurred. The style, TypeScript/API,
+and reliability lanes used the explicitly dispatched Terra/high profiles. The
+documentation lane used its immutable Luna/medium profile. Focused reviewer
+checks passed, no reviewer edited files, and no Spine JVM project was built,
+run, generated, or tested.
+
+Accepted and deduplicated findings:
+
+1. P0: graceful wire completion calls a channel close that discards already
+   buffered deliveries. Graceful completion must preserve and drain queued
+   values; cancellation may use a separate terminal discard path.
+2. P1: concurrent `next()` calls overwrite the sole pending resolver and can
+   strand a promise. They must be queued or rejected deterministically.
+3. P1: repeated/concurrent `activate()` emits duplicate `connecting`
+   notifications and can overflow outside owned cleanup. The one memoized
+   activation pipeline must own the transition.
+4. P1: count/byte and lifecycle overflow store one error but propagate a
+   replacement error to the other stream. Both streams must observe the same
+   terminal error object and cleanup must remain bounded.
+5. P1: detached update-consumer cleanup can reject without containment, while
+   cancellation during activation can replace locally completed streams with
+   failure. Detached failures must be contained and cancellation must preserve
+   terminal `done`.
+6. P2: the byte-capacity reclamation test uses a loose limit and does not prove
+   that dequeue releases bytes. Tighten it to one encoded delivery at a time.
+7. P2: public TSDoc must say retries are after the initial attempt and explain
+   lifecycle-variant fields.
+8. P1/P2 documentation: the browser-client guide paragraph and
+   `packages/client-web/README.md` still claim bounded queues/overflow are
+   absent. They must describe current A4.1 behavior and defer only reconnect,
+   resynchronization/gap recovery, and remaining signal-lifetime behavior.
+9. P3: remove the obsolete, unread `#terminated` promise.
+
+The API reviewer also correctly observed that the Entity authoritative-query
+target is not yet compared with the Topic. The frozen design requires the
+factory to remain deferred, and the executable split assigns factory
+evaluation plus target comparison to A4.3. It is therefore accepted as an
+A4.3 requirement rather than an A4.1 defect. The misleading A4.1 test title
+must be corrected now; A4.3 must add the mismatch regression before runtime
+recovery is accepted.
+
+One consolidated correction returns to the existing `implementer` context,
+expected `gpt-5.6-terra` / `medium`, explicitly recorded and dispatched. It
+owns the findings above in client-web production/tests/docs and exact
+mechanical evidence only. Caller migrations are frozen. It may not add
+reconnect/resynchronization behavior, commit, push, merge, spawn children, or
+build/run/generate/test Spine JVM.
+
+## A4.1 consolidated correction evidence and targeted re-review
+
+- The existing implementer context (`gpt-5.6-terra` / `medium`, explicitly
+  dispatched; independent runtime metadata unavailable with no visible
+  mismatch) completed the one correction batch. Graceful completion now drains
+  accepted values while explicit cancellation discards them; a second pending
+  `next()` rejects deterministically; activation owns one `connecting`
+  transition; both streams receive the identical overflow error; detached
+  cleanup is contained without replacing cancellation's local terminal result;
+  the exact-byte regression proves dequeue reclamation; dead state is removed;
+  and TSDoc/README/guide claims match A4.1.
+- The Entity query factory remains deferred and untouched. A4.3 owns first
+  evaluation, Topic-target comparison, and mismatch regression.
+- Fresh coordinator evidence passed: web plus Node clients 5 files / 66 tests;
+  root TypeScript build with 39 frozen Proto source checksums and 48 descriptor
+  digests; scoped web coverage 35/35 with 91.62% branches and 95.42%
+  statements. Implementer evidence additionally passed the complete
+  documentation/API inventory, semantic snippets, browser dependency,
+  formatting, and diff checks. No Spine JVM project was executed.
+- Because the correction substantively affects all four concerns, one targeted
+  second and final review wave reuses the existing reviewers. Expected
+  profiles remain style, API, and reliability at explicit
+  `gpt-5.6-terra` / `high`, plus the immutable documentation reviewer at
+  `gpt-5.6-luna` / `medium`. Review is limited to accepted findings and
+  regressions; reviewers are read-only and may not execute Spine JVM.
+
+## A4.1 review convergence
+
+- Targeted style/maintainability re-review is clean: the owned activation
+  transition, graceful drain/cancel discard split, byte-reclamation regression,
+  pending-read handling, overflow identity, and dead-state removal introduce no
+  maintainability finding.
+- Targeted performance/reliability re-review is clean: all accepted queue,
+  cancellation, overflow, cleanup, and resource-ownership findings are resolved;
+  its focused 35-test run passed.
+- Targeted documentation re-review is clean: the browser guide, client-web
+  README, and public TSDoc agree on A4.1 bounded streams and terminal overflow,
+  and accurately defer recovery behavior.
+- Targeted TypeScript/API re-review confirmed exact exports/inventories, public
+  retry/lifecycle TSDoc, unevaluated `authoritativeQuery`, and durable A4.3
+  ownership. Its sole P3 was a stale test title. The existing implementer
+  renamed only that title; focused 35/35, formatting, and diff checks passed.
+  This deterministic correction does not reopen a lane.
+- Every canonical concern is clean, every accepted P0-P3 is resolved, and no
+  reviewer profile mismatch occurred. No review or correction built, ran,
+  generated, or tested the Spine JVM project. A4.1 is accepted subject to the
+  full TypeScript repository gate, commit, and immediate task-branch push.
+
+### A4.1 consolidated correction evidence
+
+- The bounded channel now distinguishes graceful `close()` (drain admitted
+  values) from cancellation `discard()` (terminal local discard), rejects a
+  second pending `next()` deterministically, and preserves one terminal error
+  object across both streams. A memoized activation pipeline owns the sole
+  `connecting` notification; detached consumer cleanup is contained, and
+  cancellation during activation leaves local streams done.
+- Focused regressions cover graceful buffered drain, a duplicate pending
+  `next()`, concurrent activation's one `connecting` transition, shared error
+  identity for update/lifecycle overflow, cancellation's terminal done, and
+  exact one-delivery byte reclamation. The Entity authoritative-query factory
+  is still not evaluated or compared to the Topic; that remains the explicitly
+  recorded A4.3 requirement.
+- Public TSDoc now explains retry counting and lifecycle-variant fields. The
+  browser guide and client-web README describe current bounded queues/overflow
+  while deferring only reconnect, entity resynchronization, gap recovery, and
+  signal-lifetime composition. The stale pre-activation test title is fixed
+  and the unused `#terminated` promise is removed.
+- Fresh evidence: client-web focused suite 1 file / 35 tests; combined web and
+  Node focused suite 5 files / 66 tests; scoped client-web coverage 95.42%
+  statements, 91.62% branches, 91.46% functions, and 96.45% lines; root
+  `typecheck:build`; `docs:check`; semantic snippets; client-web dependency
+  isolation; formatting; and diff hygiene passed. No Spine JVM project was
+  built, run, generated, or tested.
+- Final deterministic API P3 disposition: the first options-validation test
+  title no longer claims Entity query-target validation. It now states that
+  validation does not evaluate Entity queries, preserving the frozen A4.3
+  factory-evaluation and Topic-comparison deferral. This record-only title
+  correction does not reopen review lanes.
+
+### A4.1 coverage follow-up
+
+- Behavior-focused public client, Todo, and BlackBox lifecycle coverage raised
+  the unrestricted TypeScript coverage result from 8,315/9,252 to 8,331/9,252
+  branches (90.0454%). The batch keeps all coverage configuration unchanged and
+  adds no production behavior. The sandbox cannot bind the BlackBox loopback
+  port (`listen EPERM`); the exact elevated focused run and the elevated full
+  TypeScript coverage gate passed. No Spine JVM project was executed.
