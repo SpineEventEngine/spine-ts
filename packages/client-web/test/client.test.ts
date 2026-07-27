@@ -242,7 +242,7 @@ describe("Client", () => {
     await client.close();
   });
 
-  it("drains buffered updates after graceful wire completion", async () => {
+  it("treats unexpected wire EOF as one terminal failure", async () => {
     const client = Client.usingTransport(
       { transport: updateTransport(2), createRequestId: () => "drain" },
       { subscriptions: { updateBufferCapacity: 2, updateBufferByteCapacity: 10_000 } },
@@ -250,12 +250,18 @@ describe("Client", () => {
     const subscription = await client
       .asGuest()
       .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
     await subscription.activate();
     await new Promise((resolve) => setTimeout(resolve, 0));
     const updates = subscription.updates[Symbol.asyncIterator]();
-    await expect(updates.next()).resolves.toMatchObject({ done: false });
-    await expect(updates.next()).resolves.toMatchObject({ done: false });
-    await expect(updates.next()).resolves.toMatchObject({ done: true });
+    const updateError = await updates.next().catch((error: unknown) => error);
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    const failed = await lifecycle.next();
+    expect(failed).toMatchObject({ value: { state: "failed" } });
+    if (!failed.done && failed.value.state === "failed")
+      expect(failed.value.error).toBe(updateError);
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
     await client.close();
   });
 
@@ -574,7 +580,7 @@ describe("Client", () => {
     expect(calls).toEqual(["Subscribe", "Cancel"]);
   });
 
-  it("does not re-cancel a naturally completed stream during client close", async () => {
+  it("cancels unexpected EOF once and does not re-cancel it during client close", async () => {
     let cancels = 0;
     const topic = create(TopicSchema);
     const client = Client.usingTransport({
@@ -591,11 +597,51 @@ describe("Client", () => {
     });
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
-    await expect(subscription.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
-      done: true,
-    });
+    await expect(subscription.updates[Symbol.asyncIterator]().next()).rejects.toThrow(
+      "ended unexpectedly",
+    );
+    expect(cancels).toBe(1);
     await client.close();
-    expect(cancels).toBe(0);
+    expect(cancels).toBe(1);
+  });
+
+  it("normalizes a non-Error stream rejection into one failed lifecycle notice", async () => {
+    let cancels = 0;
+    const topic = create(TopicSchema);
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) => {
+          if (method.name === "Subscribe")
+            return create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "s-non-error" }),
+              topic: input as Topic,
+            });
+          if (method.name === "Cancel") cancels++;
+          return create(ResponseSchema);
+        },
+        undefined,
+        async function* () {
+          throw "stream rejected without an Error";
+        },
+      ),
+      createRequestId: () => "non-error-stream",
+    });
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    const updateError = await updates.next().catch((error: unknown) => error);
+    expect(updateError).toBeInstanceOf(Error);
+    expect((updateError as Error).message).toBe("stream rejected without an Error");
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "failed", error: updateError },
+    });
+    expect(cancels).toBe(1);
+    await client.close();
+    expect(cancels).toBe(1);
   });
 
   it("bounds a stalled remote cancellation", async () => {
@@ -735,21 +781,181 @@ describe("Client", () => {
     const pendingUpdate = subscription.updates[Symbol.asyncIterator]().next();
     const activation = subscription.activate();
     const duplicate = subscription.activate();
+    const activationError = activation.catch((error: unknown) => error);
+    const duplicateError = duplicate.catch((error: unknown) => error);
     const cancellation = subscription.cancel();
+    expect(subscription.cancel()).toBe(cancellation);
     resolveSubscribe?.(
       create(SubscriptionSchema, {
         id: create(SubscriptionIdSchema, { value: "s-late" }),
         topic: subscribedTopic!,
       }),
     );
-    await expect(activation).rejects.toThrow("cancelled");
-    await expect(duplicate).rejects.toThrow("cancelled");
+    await expect(activationError).resolves.toMatchObject({
+      message: expect.stringContaining("aborted"),
+    });
+    await expect(duplicateError).resolves.toMatchObject({
+      message: expect.stringContaining("aborted"),
+    });
     await cancellation;
     await expect(pendingUpdate).resolves.toMatchObject({ done: true });
     expect(subscribes).toBe(1);
     expect(cancels).toBe(1);
     await client.close();
     expect(cancels).toBe(1);
+  });
+
+  it("settles client close when Subscribe ignores abort without retaining the source", async () => {
+    let closed = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) =>
+        method.name === "Subscribe" ? new Promise<Message>(() => {}) : create(ResponseSchema),
+      ),
+      createRequestId: () => "subscribe-never-settles",
+      close: () => closed++,
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    void subscription.activate().catch(() => undefined);
+    await Promise.resolve();
+
+    await expect(client.close()).resolves.toBeUndefined();
+    expect(closed).toBe(1);
+  });
+
+  it("settles cancellation requested synchronously while Subscribe is dispatched", async () => {
+    let subscription: Awaited<ReturnType<ReturnType<Client["asGuest"]>["createSubscription"]>>;
+    let cancellation: Promise<void> | undefined;
+    const client = Client.usingTransport({
+      transport: unaryTransport((method) => {
+        if (method.name === "Subscribe") {
+          cancellation = subscription.cancel();
+          return new Promise<Message>(() => {});
+        }
+        return create(ResponseSchema);
+      }),
+      createRequestId: () => "synchronous-cancel",
+    });
+    subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const activationError = subscription.activate().catch((error: unknown) => error);
+
+    await expect(cancellation).resolves.toBeUndefined();
+    await expect(activationError).resolves.toMatchObject({
+      message: expect.stringContaining("aborted"),
+    });
+    await expect(subscription.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      done: true,
+    });
+    await client.close();
+  });
+
+  it("cancels a wire accepted after client close exactly once", async () => {
+    let resolveSubscribe: ((value: Message) => void) | undefined;
+    let topic: Topic | undefined;
+    let cancels = 0;
+    const client = Client.usingTransport({
+      transport: unaryTransport(async (method, input) => {
+        if (method.name === "Subscribe") {
+          topic = input as Topic;
+          return await new Promise<Message>((resolve) => (resolveSubscribe = resolve));
+        }
+        if (method.name === "Cancel") cancels++;
+        return create(ResponseSchema);
+      }),
+      createRequestId: () => "late-wire",
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    void subscription.activate().catch(() => undefined);
+    await Promise.resolve();
+    await client.close();
+
+    resolveSubscribe?.(
+      create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: "after-close" }),
+        topic: topic!,
+      }),
+    );
+    await vi.waitFor(() => expect(cancels).toBe(1));
+    await client.close();
+    expect(cancels).toBe(1);
+  });
+
+  it("settles local streams when update next ignores cancellation", async () => {
+    let nextCalls = 0;
+    let closed = 0;
+    const topic = create(TopicSchema);
+    const updates: AsyncIterable<Message> = {
+      [Symbol.asyncIterator](): AsyncIterator<Message> {
+        return {
+          next: () => {
+            nextCalls++;
+            return new Promise<IteratorResult<Message>>(() => {});
+          },
+        };
+      },
+    };
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) =>
+          method.name === "Subscribe"
+            ? create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "noncooperative-stream" }),
+                topic: input as Topic,
+              })
+            : create(ResponseSchema),
+        undefined,
+        () => updates,
+      ),
+      createRequestId: () => "stream-never-settles",
+      close: () => closed++,
+    });
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const localUpdates = subscription.updates[Symbol.asyncIterator]();
+    await subscription.activate();
+    await vi.waitFor(() => expect(nextCalls).toBe(1));
+
+    await expect(client.close()).resolves.toBeUndefined();
+    expect(closed).toBe(1);
+    await expect(localUpdates.next()).resolves.toMatchObject({ done: true });
+  });
+
+  it("preserves a full lifecycle queue before one observable closed terminal notice", async () => {
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport((method, _input, signal) =>
+          method.name === "Subscribe"
+            ? new Promise<Message>((_resolve, reject) =>
+                signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+              )
+            : create(ResponseSchema),
+        ),
+        createRequestId: () => "closed-terminal",
+      },
+      { subscriptions: { lifecycleBufferCapacity: 1 } },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    const activation = subscription.activate();
+    await Promise.resolve();
+    await subscription.cancel();
+    await expect(activation).rejects.toThrow("aborted");
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      done: false,
+      value: { state: "connecting" },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      done: false,
+      value: { state: "closed" },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await client.close();
   });
 
   it("rejects creation and activation through their caller-owned abort signals", async () => {

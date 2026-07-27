@@ -1008,6 +1008,139 @@ build/run/generate/test Spine JVM.
   generated, or tested the Spine JVM project. A4.1 is accepted subject to the
   full TypeScript repository gate, commit, and immediate task-branch push.
 
+## A4.2 specialist review wave assignments
+
+The review base is pushed A4.1 commit `190c66be`; the review package is the
+complete uncommitted A4.2 diff. Reviewers must apply the full Human-Imposed
+Requirements Ledger, A4 contract freeze, and A4.2 acceptance/evidence in the
+work log.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit `gpt-5.6-terra` / `high`.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  expected explicit `gpt-5.6-terra` / `high`.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected explicit `gpt-5.6-terra` / `high`.
+- Documentation completeness: existing `documentation_reviewer`, immutable
+  configured `gpt-5.6-luna` / `medium`; the fixed role does not accept a free
+  model override on this surface.
+
+The Desktop surface exposes configured immutable profiles but not independent
+runtime self-introspection; no result is accepted on a visible mismatch. Each
+reviewer is read-only, owns one concern, and may run focused Spine TS checks
+only. No reviewer may edit, commit, push, merge, spawn children, or build/run/
+generate/test Spine JVM.
+
+## A4.2 complete review wave and correction batch
+
+All four existing concerns completed. The style/API/reliability reviewers used
+their explicitly dispatched Terra/high profiles. The first documentation turn
+stalled in a mechanical check and was interrupted without acceptance; the same
+immutable Luna/medium role was redispatched for a bounded static review and
+returned clean. Independent runtime self-introspection was unavailable, no
+visible mismatch occurred, no reviewer edited files, and no Spine JVM work
+occurred.
+
+Accepted, deduplicated findings:
+
+1. P1: `cancel()` and `Client.close()` can remain unbounded while a transport's
+   Subscribe promise ignores abort, because cancellation awaits the unresolved
+   activation. The owner/listeners/source close remain retained.
+2. P1: cancellation aborts but never disposes the active stream iterator. A
+   non-cooperative `next()` can retain the consume loop and owner indefinitely.
+3. P2: overflow classification depends on English
+   `ClientProtocolError.message.includes(...)` fragments. A typed internal
+   overflow marker/result must select the established overflow terminal path.
+
+One consolidated correction returns to the existing `implementer` context,
+expected explicit `gpt-5.6-terra` / `medium`. It must:
+
+- race pending Subscribe and iterator reads against terminal cancellation so
+  local activation/consumption and client close settle without waiting for a
+  non-cooperative transport;
+- detach only the minimum late-result continuation needed to perform one
+  bounded Cancel on a wire accepted after local cancellation, without
+  retaining the subscription/client owner path;
+- invoke iterator `return()` when present without allowing a non-cooperative
+  return to block terminal cleanup;
+- preserve exact cancel-Promise identity, terminal notice ordering, one
+  cleanup per accepted wire, and A4.3 deferrals; and
+- replace message parsing with a private typed overflow signal and add focused
+  non-cooperative Subscribe/next/return plus classification regressions.
+
+The owner may change only A4.2 client runtime/tests and evidence, may not begin
+A4.3, and may not commit, push, merge, spawn children, or execute Spine JVM.
+
+## A4.2 targeted final re-review assignments
+
+The consolidated correction is complete. The final targeted wave reopens only
+the concerns substantively affected by the correction:
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit `gpt-5.6-terra` / `high`; review the typed overflow marker and the
+  terminal-race/late-cleanup helper structure.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  expected explicit `gpt-5.6-terra` / `high`; review exact `cancel()` promise
+  identity, public terminal semantics, and preservation of the A4.3 boundary.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected explicit
+  `gpt-5.6-terra` / `high`; verify bounded local settlement, detached
+  non-retaining late cleanup, iterator disposal, and exactly one Cancel per
+  accepted wire.
+
+All three fields are explicit in dispatch. The Desktop surface exposes each
+immutable configured role/profile but not independent runtime
+self-introspection; a visible mismatch invalidates a result. Documentation
+completeness is not reopened because the correction changes only private
+runtime mechanics and focused tests; the public TSDoc and guides reviewed clean
+in the complete A4.2 wave remain unchanged. Every reviewer is read-only and
+must use only focused Spine TS checks. The permanent Wave 4 rule allows static
+read-only Spine JVM references only and forbids JVM builds, tests, generation,
+dependency resolution, or any other project execution.
+
+## A4.2 targeted final re-review results
+
+- Performance/reliability is clean. Focused 45/45 tests confirm prompt local
+  settlement for non-cooperative Subscribe/stream reads, non-retaining late
+  continuations, exactly one bounded Cancel per accepted wire, observed raw
+  rejections, and best-effort non-blocking iterator disposal. No A4.3 behavior
+  was introduced.
+- TypeScript/API is clean. Exact memoized `cancel()` Promise identity,
+  `closed` versus `failed` terminal semantics, public exports/TSDoc, and the
+  A4.3 boundary are preserved.
+- Style/maintainability confirms the typed overflow marker and helper
+  structure are clean, with one remaining P2 verification gap: the focused
+  tests do not supply an iterator `return()` that rejects or never settles, so
+  they do not directly prove that best-effort disposal is invoked and cannot
+  delay terminal settlement.
+
+The immutable configured reviewer profiles were visible and matched the
+explicit dispatches; independent runtime self-introspection remained
+unavailable. Focused tests and diff hygiene passed, and no Spine JVM operation
+occurred. The one deterministic correction returns to the existing
+`implementer`, expected explicit `gpt-5.6-terra` / `medium`: add a focused
+regression for one invocation of a rejecting or never-settling iterator
+`return()` while cancellation/client close still settles locally. Production
+behavior must remain unchanged. This test-only correction does not reopen
+already clean review lanes.
+
+## A4.2 review convergence
+
+- The test-only iterator-disposal correction proves one invocation of a
+  rejecting optional `return()` while local cancellation, client/source close,
+  stream completion, and exactly-one remote Cancel remain prompt. It changes no
+  production behavior and resolves the final style P2.
+- The unrestricted full gate initially exposed two stale lifecycle callers;
+  both now assert the documented terminal `closed` notice followed by stream
+  completion. Their elevated focused suites passed 48/48.
+- The final coverage-only batch added two meaningful A4.2 behavior cases and
+  restored the unchanged global branch threshold. Because these were
+  deterministic test/assertion corrections, they do not reopen clean review
+  lanes.
+- All canonical A4.2 concerns are clean. The final full TypeScript gate passed
+  140 runnable files / 2,612 tests and 90.00% branches (8,356/9,284). No
+  reviewer-profile mismatch and no Spine JVM project operation occurred.
+
 ### A4.1 consolidated correction evidence
 
 - The bounded channel now distinguishes graceful `close()` (drain admitted

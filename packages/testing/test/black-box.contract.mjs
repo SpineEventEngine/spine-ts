@@ -131,7 +131,10 @@ export function registerBlackBoxContract(test, testing) {
       }
       await subscription.cancel();
       const closed = await lifecycle.next();
-      if (!closed.done) throw new Error("canceled lifecycle stream did not finish iteration");
+      if (closed.done || closed.value.state !== "closed")
+        throw new Error("canceled lifecycle stream did not emit its closed terminal notice");
+      const done = await lifecycle.next();
+      if (!done.done) throw new Error("canceled lifecycle stream did not finish iteration");
     } finally {
       await blackBox.close();
     }

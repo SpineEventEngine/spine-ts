@@ -692,6 +692,10 @@ describe("@spine-event-engine/example-todo", () => {
       expect(reopened.openTaskCount).toBe(1);
     } finally {
       await withTimeout(subscription.cancel(), "subscription cleanup", 250);
+      await expect(lifecycle.next()).resolves.toMatchObject({
+        done: false,
+        value: { state: "closed" },
+      });
       await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
     }
   });
