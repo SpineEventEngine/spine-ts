@@ -7,6 +7,7 @@ export default defineConfig({
       "examples/*/src/**/*.test.ts",
       "examples/*/test/**/*.test.ts",
       "scripts/**/*.test.mjs",
+      "interop/jvm/**/*.test.mjs",
     ],
     coverage: {
       provider: "v8",

@@ -1,4 +1,5 @@
 .worktrees/
+interop/jvm/.cache/
 node_modules/
 dist/
 coverage/

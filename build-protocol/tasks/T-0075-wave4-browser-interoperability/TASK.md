@@ -49,7 +49,9 @@ both Spine TS and an unmodified frozen Spine JVM backend.
   gRPC servers through the standalone gateway.
 - Add and use the dedicated Chat example. Chat messages are Projection
   entities, not domain events. The browser uses `client-react`.
-- Freeze and consume a suitable Spine JVM fixture without modifying Spine JVM.
+- Do not build Spine JVM during Wave 4. Preserve an immutable, unmodified
+  source/descriptor reference for static capability and wire-contract
+  comparison only. Runtime JVM compatibility execution is deferred.
 - Support current Chromium, Firefox, and WebKit. SSR, Suspense, service workers,
   edge runtimes, normalized caching, and non-React adapters are out of scope.
 - Document all update-completeness, auth, session, trust-boundary, and
@@ -91,7 +93,9 @@ both Spine TS and an unmodified frozen Spine JVM backend.
 - `client-react` and Chat implement safe React/Strict Mode lifecycle behavior
   and authoritative re-query after reconnect/gaps.
 - Configurable Envoy acceptance proves real browser traffic through the gateway
-  to Spine TS and the frozen unmodified Spine JVM fixture.
+  to Spine TS. JVM compatibility in this wave is limited to shared
+  Protobuf/service descriptors, static unmodified-source inspection, and
+  TS-owned wire-contract fixtures; no Spine JVM build or launch is performed.
 - Public and agent-oriented docs exactly describe APIs, extensions,
   limitations, examples, diagrams, and deployment assumptions.
 - Focused verification, all specialist concerns, final security review, full

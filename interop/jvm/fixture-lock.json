@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "status": "static-source-reference-runtime-compatibility-deferred",
+  "repository": "https://github.com/SpineEventEngine/core-java",
+  "revision": "461a8281e484c12636d8cf660a1d6c929fbbd7ec",
+  "archiveUrl": "https://github.com/SpineEventEngine/core-java/archive/461a8281e484c12636d8cf660a1d6c929fbbd7ec.zip",
+  "archiveSha256": "bbecc94a9b2321da279f7997b50b9bc0aaab330f0ec78afe4e0d8fb971249e12",
+  "archiveRoot": "core-jvm-461a8281e484c12636d8cf660a1d6c929fbbd7ec",
+  "sourceTreeSha256": "b677332aa8bf39da79d4205671d6f82d228d3c1c78dd1195ba8ec839038e104a",
+  "limits": {
+    "maximumArchiveBytes": 268435456,
+    "maximumEntries": 30000,
+    "maximumExpandedBytes": 1073741824
+  },
+  "capabilities": {
+    "nativeServices": ["CommandService", "QueryService", "SubscriptionService"],
+    "projectionSubscription": "SubscriptionService accepts Topic targets, including projections",
+    "eventSubscription": "SubscriptionService delegates Topics to Stand; TopicValidator accepts EventMessage targets and EventUpdateHandler emits EventUpdates"
+  }
+}

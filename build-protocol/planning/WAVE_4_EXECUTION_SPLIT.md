@@ -61,48 +61,49 @@ approved plan without reopening product decisions.
 - Relay message-count and byte bounds are independent. Crossing either aborts
   both sides. Disconnect, expiry, cancellation, or backend error aborts native
   work; cleanup is bounded and idempotent.
-- The JVM fixture is not a submodule, vendored tree, or patched source. A lock
-  manifest records official repository/full SHA, archive SHA-256, Gradle
-  wrapper/toolchain/locks, fixture inputs, capabilities, and launch probe.
-  Fetch into ignored cache, verify before extraction, build detached, and
-  assert the upstream tree remains clean.
+- Wave 4 does not build Spine JVM. The JVM reference is not a submodule,
+  vendored tree, or patched source. A lock manifest records the official
+  repository/full SHA and archive SHA-256. Static capability/source and shared
+  Protobuf/service-descriptor checks may fetch into an ignored cache and verify
+  before extraction. Runtime JVM build/launch evidence is explicitly deferred.
 
 ## Dependency-ordered tasks
 
-| ID  | Boundary                                                                                                                       | Prerequisite    | Required focus                            |
-| --- | ------------------------------------------------------------------------------------------------------------------------------ | --------------- | ----------------------------------------- |
-| P1  | Freeze/fetch/build/checksum the unmodified JVM fixture and capability probe under `interop/jvm/**`.                            | None            | Docs, reliability, supply-chain integrity |
-| A1  | Rename existing client to `client-node`, move codegen, migrate all Node consumers without behavior change.                     | P1 recorded     | Style, API, docs                          |
-| A2  | Add browser-safe `client-web` kernel/API and make Node reuse its transport seam.                                               | A1              | Style, API, reliability                   |
-| A3  | Add explicit gRPC-Web/Connect factories, credential metadata, and secure browser IDs.                                          | A2              | API, reliability, security                |
-| A4  | Add subscription lifecycle generations, bounded streams, reconnect/resync/gap behavior, and terminal cancellation.             | A3              | Reliability, API, docs                    |
-| B1  | Add auth Proto/contracts, exhaustive `IncomingRequest`, safe transport facts, session/policy/context seams, registry decoding. | A2              | API, style, docs, security                |
-| B2  | Add unary Post/Read/ResolveContext gateway pipeline with stale-context rejection and fresh replacement.                        | B1              | API, reliability, security                |
-| B3  | Add atomic subscription binding and independently authorized Subscribe/Activate/Cancel.                                        | B2              | Reliability, API, security                |
-| B4  | Add native-gRPC forwarding and bounded bidirectional stream relay/cleanup.                                                     | B3              | Reliability, style, docs, security        |
-| C1  | Add opaque in-memory sessions, cookie extraction, Origin/CSRF, rotation, expiry, logout.                                       | B1              | API, reliability, docs, security          |
-| C2  | Add ES256 signed sessions, key rotation/validation, and explicit revocation capability.                                        | B1              | API, reliability, docs, security          |
-| C3  | Add generic OIDC code flow, transaction store, PKCE/state/nonce, mapping, and one-time bearer exchange.                        | C1, C2          | API, reliability, docs, security          |
-| C4  | Add Google, GitHub, and custom verified-identity provider adapters.                                                            | C3              | API, docs, reliability, security          |
-| C5  | Integrate cookie/bearer credentials and `ResolveContext` into web reconnect/reauthorization.                                   | A4, B4, C1-C4   | API, reliability, docs, security          |
-| D1  | Add `client-react`, React peer dependency, stable observers, provider/context, Strict Mode cleanup.                            | A4, C5          | Style, API, reliability, docs             |
-| D2  | Complete Chat per-message Projection model and columns; messages remain entities, not events.                                  | A1              | API, docs, style                          |
-| D3  | Add Chat Aggregate/Projection/backend, identity mapping, and authorization policy.                                             | B4, C4, D2      | Style, reliability, docs, security        |
-| D4  | Add Chat browser/auth UI using `client-react`, authoritative Query, subscription lifecycle, and re-query.                      | D1, D3          | All concerns                              |
-| D5  | Run real Strict Mode/race acceptance in Chromium, Firefox, and WebKit.                                                         | D4              | Reliability, docs                         |
-| E1  | Add configurable Envoy template/harness exposing only the gateway by default.                                                  | P1, B4, C5      | Reliability, docs, security               |
-| E2  | Prove browser → Envoy → gateway → TS Chat for credentials/protocols/denials/lifecycle.                                         | D4, E1          | Reliability, docs, security               |
-| E3  | Prove the same contract against the frozen unmodified JVM fixture.                                                             | P1, E1          | Reliability, docs, API, security          |
-| E4  | Consolidate browser/runtime resilience matrix and zero-retained-resource checks.                                               | D5, E2, E3      | Reliability, docs, security               |
-| F1  | Complete package/API docs, signatures, snippets, and responsibility map.                                                       | A-E APIs frozen | API, docs, style                          |
-| F2  | Complete auth/session/provider/security/Envoy extension guide and decision tables.                                             | C-E             | Docs, API, security                       |
-| F3  | Complete subscription state machine, React/Chat/interoperability diagrams, and every public limitation.                        | E4              | Docs, API, reliability                    |
-| F4  | Run deterministic gates, all reviews, final security, ≥90% branch coverage, merge/post-merge verification, and remote sync.    | F1-F3           | All                                       |
+| ID  | Boundary                                                                                                                            | Prerequisite    | Required focus                            |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------- | ----------------------------------------- |
+| P1  | Freeze/checksum the unmodified JVM source reference and static service/descriptor evidence under `interop/jvm/**`; do not build it. | None            | Docs, reliability, supply-chain integrity |
+| A1  | Rename existing client to `client-node`, move codegen, migrate all Node consumers without behavior change.                          | P1 recorded     | Style, API, docs                          |
+| A2  | Add browser-safe `client-web` kernel/API and make Node reuse its transport seam.                                                    | A1              | Style, API, reliability                   |
+| A3  | Add explicit gRPC-Web/Connect factories, credential metadata, and secure browser IDs.                                               | A2              | API, reliability, security                |
+| A4  | Add subscription lifecycle generations, bounded streams, reconnect/resync/gap behavior, and terminal cancellation.                  | A3              | Reliability, API, docs                    |
+| B1  | Add auth Proto/contracts, exhaustive `IncomingRequest`, safe transport facts, session/policy/context seams, registry decoding.      | A2              | API, style, docs, security                |
+| B2  | Add unary Post/Read/ResolveContext gateway pipeline with stale-context rejection and fresh replacement.                             | B1              | API, reliability, security                |
+| B3  | Add atomic subscription binding and independently authorized Subscribe/Activate/Cancel.                                             | B2              | Reliability, API, security                |
+| B4  | Add native-gRPC forwarding and bounded bidirectional stream relay/cleanup.                                                          | B3              | Reliability, style, docs, security        |
+| C1  | Add opaque in-memory sessions, cookie extraction, Origin/CSRF, rotation, expiry, logout.                                            | B1              | API, reliability, docs, security          |
+| C2  | Add ES256 signed sessions, key rotation/validation, and explicit revocation capability.                                             | B1              | API, reliability, docs, security          |
+| C3  | Add generic OIDC code flow, transaction store, PKCE/state/nonce, mapping, and one-time bearer exchange.                             | C1, C2          | API, reliability, docs, security          |
+| C4  | Add Google, GitHub, and custom verified-identity provider adapters.                                                                 | C3              | API, docs, reliability, security          |
+| C5  | Integrate cookie/bearer credentials and `ResolveContext` into web reconnect/reauthorization.                                        | A4, B4, C1-C4   | API, reliability, docs, security          |
+| D1  | Add `client-react`, React peer dependency, stable observers, provider/context, Strict Mode cleanup.                                 | A4, C5          | Style, API, reliability, docs             |
+| D2  | Complete Chat per-message Projection model and columns; messages remain entities, not events.                                       | A1              | API, docs, style                          |
+| D3  | Add Chat Aggregate/Projection/backend, identity mapping, and authorization policy.                                                  | B4, C4, D2      | Style, reliability, docs, security        |
+| D4  | Add Chat browser/auth UI using `client-react`, authoritative Query, subscription lifecycle, and re-query.                           | D1, D3          | All concerns                              |
+| D5  | Run real Strict Mode/race acceptance in Chromium, Firefox, and WebKit.                                                              | D4              | Reliability, docs                         |
+| E1  | Add configurable Envoy template/harness exposing only the gateway by default.                                                       | P1, B4, C5      | Reliability, docs, security               |
+| E2  | Prove browser → Envoy → gateway → TS Chat for credentials/protocols/denials/lifecycle.                                              | D4, E1          | Reliability, docs, security               |
+| E3  | Prove the gateway contract against TS-owned fixtures generated from shared JVM/TS Protobuf service descriptors; no JVM build.       | P1, E1          | Reliability, docs, API, security          |
+| E4  | Consolidate browser/TS-runtime resilience and zero-retained-resource checks; record JVM runtime coverage as deferred.               | D5, E2, E3      | Reliability, docs, security               |
+| F1  | Complete package/API docs, signatures, snippets, and responsibility map.                                                            | A-E APIs frozen | API, docs, style                          |
+| F2  | Complete auth/session/provider/security/Envoy extension guide and decision tables.                                                  | C-E             | Docs, API, security                       |
+| F3  | Complete subscription state machine, React/Chat/interoperability diagrams, and every public limitation.                             | E4              | Docs, API, reliability                    |
+| F4  | Run deterministic gates, all reviews, final security, ≥90% branch coverage, merge/post-merge verification, and remote sync.         | F1-F3           | All                                       |
 
 ## Acceptance evidence by area
 
-- P1 must fail on checksum mismatch or source mutation and pass native Command,
-  Query, Projection-subscription, and exposed-event-subscription probes.
+- P1 must fail on checksum mismatch or source mutation and statically confirm
+  native Command, Query, Projection-subscription, and exposed-event-subscription
+  surfaces without invoking a Spine JVM build.
 - A slices require compile/package tests, browser dependency scans, explicit
   transport behavior, fake-clock reconnect races, bounded-stream overflow, and
   proof that commands are never retried.
@@ -118,16 +119,17 @@ approved plan without reopening product decisions.
   policy, real post/query/subscription/re-query behavior, React Strict Mode
   mount/unmount/remount cleanup, and all three browser engines.
 - E slices require validated Envoy routes/CORS/limits/private backends, real TS
-  and JVM end-to-end behavior, no direct backend access, and zero retained
-  resources across the browser/runtime matrix.
+  end-to-end behavior, descriptor-level JVM wire compatibility, no direct
+  backend access, and zero retained resources across the browser/TS matrix.
 - F slices require compile-checked examples, fresh-reader extension tests,
   exact limitations, full native verification/coverage, complete review
   dispositions, final security acceptance, and durable remote refs.
 
 ## Blocker rule
 
-No blocker is established. P1 becomes a human blocker only if no immutable
-official Spine JVM revision can be fetched and built with the required native
-service capabilities, or if required artifacts are inaccessible under
-repository/authentication policy. Ordinary failures and implementation-shape
-corrections remain autonomous work.
+No blocker is established. Spine JVM build/launch failures are not Wave 4
+blockers because that execution is explicitly deferred. P1 becomes a human
+blocker only if no immutable official source/descriptors can be fetched and
+verified, or if required artifacts are inaccessible under repository or
+authentication policy. Ordinary failures and implementation-shape corrections
+remain autonomous work.
