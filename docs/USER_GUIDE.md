@@ -647,10 +647,46 @@ await client.close();
 ```
 
 Commands are never retried by this client. Caller abort and client close abort
-admitted work; network and deadline failures remain Connect errors. Concrete
-browser transports arrive in A3. Reconnect, signal-lifetime composition,
-bounded queues, overflow, and gap/resynchronization lifecycle are A4 work and
-are not provided by this A2 kernel.
+admitted work; network and deadline failures remain Connect errors.
+
+### Browser client protocol and metadata
+
+Browser applications choose a protocol explicitly when composing the client:
+`Client.forGrpcWeb()` is the universal gRPC-Web route, while
+`Client.forConnect()` is an optimization only for an endpoint known to support
+Connect. Neither factory probes or falls back to the other protocol.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Client, type BrowserClientOptions } from "@spine-event-engine/client-web";
+import { QuerySchema } from "@spine-event-engine/proto/client";
+
+const browserOptions: BrowserClientOptions = {
+  tenant: "tasks",
+  onRequestMetadata: () => ({ "x-application-version": "web-1" }),
+};
+const browserClient = Client.forGrpcWeb("https://api.example.test", browserOptions);
+const result = await browserClient.onBehalfOf("alice").send(create(QuerySchema));
+await browserClient.close();
+
+// Use this only for a separately configured Connect-compatible endpoint:
+const connectClient = Client.forConnect("https://connect.example.test", browserOptions);
+await connectClient.close();
+void result;
+```
+
+`onRequestMetadata` runs synchronously for every outbound call and returns
+fresh application-owned headers. It is the A3 extension point for adding a
+credential header, but it is not a session, cookie, or identity-provider
+implementation; C5 integrates the auth gateway, sessions, and provider flows.
+The client never logs these header values or uses them in request IDs. Request
+IDs require Web Crypto: it prefers `crypto.randomUUID()`, falls back to
+`crypto.getRandomValues()`, and rejects before transport invocation when
+neither secure API is available.
+
+Reconnect, signal-lifetime composition, bounded queues, overflow, and
+gap/resynchronization lifecycle are A4 work and are not provided by this
+browser client yet.
 
 ## 8. Query and subscribe to state
 

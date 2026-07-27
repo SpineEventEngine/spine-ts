@@ -719,3 +719,140 @@ Fresh targeted evidence is 5 client files / 51 tests, 3 native loopback files /
 51 tests, 20 isolated web-kernel tests, 91.91% web branch coverage (91/99),
 root TypeScript build, TypeDoc/API, semantic snippet, browser dependency,
 formatting, and diff checks. No Spine JVM build or execution was performed.
+
+## A3 consolidated review-wave assignments
+
+The A3 endpoint adds the public explicit browser protocol factories, per-call
+metadata provider, Web Crypto request IDs, exact Connect-Web dependency, tests,
+and narrow API/package documentation. Pre-review lint found no stale status,
+compatibility alias, hidden fallback, A4 reconnect claim, auth/session
+implementation claim, Node/React/codegen dependency leak, or accidental export.
+Fresh mechanical evidence is 5 client files / 55 tests, root TypeScript build,
+TypeDoc/API inventory with 10 web exports, dependency isolation, formatting,
+and diff cleanliness.
+
+All reviewers must apply the complete Human-Imposed Requirements Ledger in the
+T-0075 task, review only the A3 diff from `26843990`, preserve the no-JVM-build
+boundary, and return `CLEAN` or exact P0-P2 findings:
+
+- Style/maintainability: existing `style_maintainability_reviewer`; expected
+  `gpt-5.6-terra` / `high`, both explicit in dispatch. Inspect the factory and
+  metadata seams, naming, duplication, test maintainability, and whether this
+  remains the smallest idiomatic TypeScript API.
+- Documentation completeness: existing `documentation_reviewer`; expected
+  immutable `gpt-5.6-luna` / `medium`. The Desktop spawn surface rejected Luna
+  as a free model override, so the successful dispatch explicitly selected the
+  fixed documentation role and named its immutable Luna/medium profile in the
+  prompt rather than falsely recording accepted override fields. Verify the
+  package/API claims, protocol selection, synchronous metadata semantics,
+  secure-ID failure, and A4/C5 deferrals against code.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`; expected
+  `gpt-5.6-terra` / `high`, both explicit in dispatch. Inspect public types,
+  declaration/TypeDoc inventory, browser compatibility, factory signatures,
+  test compile coverage, and compatibility with the existing injected seam.
+- Performance/reliability: existing `performance_reliability_reviewer`;
+  expected `gpt-5.6-terra` / `high`, both explicit in dispatch. Inspect
+  per-request metadata freshness/error behavior, secure randomness paths,
+  protocol non-fallback, request ordering, retained secrets/resources, and A2
+  lifecycle regressions.
+
+The Desktop surface exposes immutable role profiles but not independent runtime
+self-introspection. Before accepting each result, record the configured profile
+and whether any visible mismatch occurred. No reviewer may edit, commit, push,
+merge, spawn children, or build/run Spine JVM.
+
+## A3 consolidated review-wave results
+
+The complete wave returned no P0/P1 findings and four overlapping P2 findings.
+The three Terra/high dispatches explicitly named model and reasoning; runtime
+self-introspection was unavailable and no mismatch was visible. The
+documentation dispatch used the immutable `documentation_reviewer`
+Luna/medium role after the surface rejected Luna as a free override; the role
+profile and limitation were explicit, with no visible mismatch. No reviewer
+edited files or built/ran Spine JVM.
+
+Accepted, deduplicated findings:
+
+1. The factory tests cast `Client` through hand-authored `unknown` shapes, so
+   they do not compile-check the real public static methods or
+   `BrowserClientOptions`.
+2. The mocked transports bypass the registered interceptors and cover only
+   gRPC-Web Post plus Connect Read. They do not prove both factories support
+   both operations, fresh metadata is requested for every call, or a metadata
+   provider failure prevents transport invocation.
+3. The user guide still says concrete browser transports arrive in A3 and calls
+   the client an A2 kernel. It has no current browser factory/metadata snippet
+   or secure-ID failure explanation.
+4. The guide must distinguish the synchronous A3 caller-owned header hook from
+   C5 cookie/session/OIDC/provider authentication and retain the A4
+   reconnect/queue/gap deferral.
+
+Production factory structure, explicit non-fallback selection, UUID v4
+version/variant bits, package/API claims, dependency boundary, and A2 lifecycle
+behavior were otherwise clean.
+
+## A3 correction batch
+
+The existing A3 `implementer` context owns one behavior-first correction:
+
+1. call `Client.forGrpcWeb()` / `Client.forConnect()` directly in tests and
+   compile-check a real `BrowserClientOptions` value;
+2. use the smallest interceptor-aware test harness that covers both protocols ×
+   Post/Read, changing metadata on successive calls, and provider failure before
+   `next`/transport;
+3. update the practical user-guide browser-client section and compile-checked
+   snippet for explicit protocol choice, synchronous request metadata, Web
+   Crypto request-ID failure, C5 auth/session/provider deferral, and A4
+   lifecycle deferral;
+4. rerun focused clients, semantic snippets/docs/API, dependency isolation,
+   root TypeScript build, formatting/diff, and scoped web coverage.
+
+Expected existing role/profile remains explicitly dispatched
+`gpt-5.6-terra` / `medium`; the follow-up reuses that immutable implementation
+context. It may change only A3 tests/docs and minimal checker support if a real
+compile-check requires it. It may not add A4/C5 behavior, aliases, commit, push,
+merge, children, or any Spine JVM build/execution.
+
+## A3 correction implementation evidence
+
+- Existing `implementer` context, explicitly dispatched `gpt-5.6-terra` /
+  `medium`; independent runtime self-introspection is unavailable, with no
+  visible profile mismatch.
+- The corrected test uses direct `Client.forGrpcWeb()` / `Client.forConnect()`
+  calls and a real `BrowserClientOptions` value. A minimal interceptor-aware
+  transport harness proves both protocols execute both `Post` and `Read`, each
+  call receives newly supplied metadata, and a throwing provider reaches
+  neither the harness next function nor transport. No factory probing/fallback
+  or production behavior was added.
+- The practical user guide has a compile-checked browser-client snippet and
+  exact A3/C5/A4 boundary language: explicit protocol choice, synchronous
+  header provider, Web Crypto request-ID failure, auth/session/provider
+  deferral, and reconnect/queue/gap deferral.
+- Fresh evidence: `client-web` 25/25, web+Node focused suite 5 files / 56
+  tests, root TypeScript build, semantic snippets, TypeDoc/API inventory,
+  dependency isolation, formatting, and diff hygiene passed. Scoped web
+  coverage is 90.99% branches (101/111). No Spine JVM build or execution
+  occurred.
+
+## A3 targeted re-review results
+
+Every substantively affected concern is clean:
+
+- style/maintainability: the interceptor-aware harness is minimal, calls the
+  real public factories, proves four fresh values, and contains no production
+  duplication;
+- TypeScript/API docs: direct calls, typed `BrowserClientOptions`, emitted
+  declarations, and public guide imports/signatures all match;
+- documentation completeness: the compile-checked guide now states explicit
+  non-fallback selection, synchronous metadata, secure-ID behavior, and exact
+  A4/C5 deferrals;
+- performance/reliability: both protocols execute Post and Read, metadata is
+  fresh per call, and a provider exception reaches neither `next` nor
+  transport. The reviewer independently passed 25/25 web tests.
+
+Configured profiles remained the original explicit Terra/high reviewers and
+the immutable Luna/medium documentation role. Independent runtime
+self-introspection was unavailable, no visible mismatch occurred, and no
+reviewer edited files or built/ran Spine JVM. No P0-P2 finding remains. A3 is
+accepted subject to the full TypeScript repository gate, commit, and immediate
+task-branch push.

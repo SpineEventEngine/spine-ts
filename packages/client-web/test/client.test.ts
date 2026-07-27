@@ -1,5 +1,5 @@
 import { create, type Message } from "@bufbuild/protobuf";
-import type { Transport } from "@connectrpc/connect";
+import type { Interceptor, Transport, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
 import { packAny } from "@spine-event-engine/core";
 import {
   AckSchema,
@@ -22,11 +22,161 @@ import {
   type Topic,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { Client } from "../src/index.js";
+import { Client, type BrowserClientOptions } from "../src/index.js";
+
+const browserFactories = vi.hoisted(() => ({
+  connect: vi.fn(),
+  grpcWeb: vi.fn(),
+}));
+
+vi.mock("@connectrpc/connect-web", () => ({
+  createConnectTransport: browserFactories.connect,
+  createGrpcWebTransport: browserFactories.grpcWeb,
+}));
 
 describe("Client", () => {
+  beforeEach(() => browserFactories.connect.mockReset());
+  beforeEach(() => browserFactories.grpcWeb.mockReset());
+
+  it("selects each explicit protocol for post and read with fresh request metadata", async () => {
+    const calls: BrowserCall[] = [];
+    browserFactories.grpcWeb.mockImplementation((options) =>
+      browserTransport("grpc-web", options?.interceptors ?? [], calls),
+    );
+    browserFactories.connect.mockImplementation((options) =>
+      browserTransport("connect", options?.interceptors ?? [], calls),
+    );
+    let sequence = 0;
+    const options: BrowserClientOptions = {
+      onRequestMetadata: () => ({ "x-application-call": String(++sequence) }),
+    };
+    expectTypeOf(options).toMatchTypeOf<BrowserClientOptions>();
+
+    const grpcWeb = Client.forGrpcWeb("https://gateway.example", options);
+    const connect = Client.forConnect("https://gateway.example", options);
+    await grpcWeb.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }));
+    await grpcWeb.asGuest().send(create(QuerySchema));
+    await connect.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }));
+    await connect.asGuest().send(create(QuerySchema));
+
+    expect(calls).toEqual([
+      { protocol: "grpc-web", method: "Post", metadata: "1" },
+      { protocol: "grpc-web", method: "Read", metadata: "2" },
+      { protocol: "connect", method: "Post", metadata: "3" },
+      { protocol: "connect", method: "Read", metadata: "4" },
+    ]);
+    expect(browserFactories.grpcWeb).toHaveBeenCalledTimes(1);
+    expect(browserFactories.connect).toHaveBeenCalledTimes(1);
+    expect(browserFactories.grpcWeb).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: "https://gateway.example",
+        interceptors: [expect.any(Function)],
+      }),
+    );
+    expect(browserFactories.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        baseUrl: "https://gateway.example",
+        interceptors: [expect.any(Function)],
+      }),
+    );
+    await Promise.all([grpcWeb.close(), connect.close()]);
+  });
+
+  it("rejects a metadata provider failure before its selected transport executes", async () => {
+    const calls: BrowserCall[] = [];
+    browserFactories.grpcWeb.mockImplementation((options) =>
+      browserTransport("grpc-web", options?.interceptors ?? [], calls),
+    );
+    const client = Client.forGrpcWeb("https://gateway.example", {
+      onRequestMetadata: () => {
+        throw new Error("metadata unavailable");
+      },
+    });
+
+    await expect(client.asGuest().send(create(QuerySchema))).rejects.toThrow(
+      "metadata unavailable",
+    );
+    expect(calls).toEqual([]);
+    await client.close();
+  });
+
+  it("generates a UUID v4 with getRandomValues when randomUUID is unavailable", async () => {
+    const originalCrypto = globalThis.crypto;
+    const random = new Uint8Array(16).fill(0);
+    vi.stubGlobal("crypto", {
+      getRandomValues: (bytes: Uint8Array) => {
+        bytes.set(random);
+        return bytes;
+      },
+    });
+    let id: string | undefined;
+    browserFactories.grpcWeb.mockReturnValue(
+      unaryTransport((method, input) => {
+        if (method.name === "Post") {
+          id = (input as { id?: { uuid?: string } }).id?.uuid;
+          return create(AckSchema, {
+            messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: id })),
+            status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+          });
+        }
+        return create(QueryResponseSchema);
+      }),
+    );
+    const client = Client.forGrpcWeb("https://gateway.example");
+    await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }));
+    expect(id).toBe("00000000-0000-4000-8000-000000000000");
+    await client.close();
+    vi.stubGlobal("crypto", originalCrypto);
+  });
+
+  it("uses randomUUID before getRandomValues for browser request IDs", async () => {
+    const originalCrypto = globalThis.crypto;
+    const randomUUID = vi.fn(() => "6f75b67a-5f23-4b64-8a35-6ce5f8f97cf5");
+    const getRandomValues = vi.fn();
+    vi.stubGlobal("crypto", { randomUUID, getRandomValues });
+    let id: string | undefined;
+    browserFactories.connect.mockReturnValue(
+      unaryTransport((method, input) => {
+        if (method.name === "Post") {
+          id = (input as { id?: { uuid?: string } }).id?.uuid;
+          return create(AckSchema, {
+            messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: id })),
+            status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+          });
+        }
+        return create(QueryResponseSchema);
+      }),
+    );
+    const client = Client.forConnect("https://gateway.example");
+    await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }));
+    expect(id).toBe("6f75b67a-5f23-4b64-8a35-6ce5f8f97cf5");
+    expect(randomUUID).toHaveBeenCalledOnce();
+    expect(getRandomValues).not.toHaveBeenCalled();
+    await client.close();
+    vi.stubGlobal("crypto", originalCrypto);
+  });
+
+  it("fails before invoking the selected transport when secure browser randomness is unavailable", async () => {
+    const originalCrypto = globalThis.crypto;
+    vi.stubGlobal("crypto", undefined);
+    const post = vi.fn();
+    browserFactories.grpcWeb.mockReturnValue(
+      unaryTransport((method) => {
+        if (method.name === "Post") post();
+        return create(QueryResponseSchema);
+      }),
+    );
+    const client = Client.forGrpcWeb("https://gateway.example");
+    await expect(
+      client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" })),
+    ).rejects.toThrow("secure random");
+    expect(post).not.toHaveBeenCalled();
+    await client.close();
+    vi.stubGlobal("crypto", originalCrypto);
+  });
+
   it("uses injected transport and request IDs for post and send", async () => {
     const calls: string[] = [];
     const client = Client.usingTransport({
@@ -78,13 +228,16 @@ describe("Client", () => {
     let resolveRead: (() => void) | undefined;
     let cancelled = 0;
     const client = Client.usingTransport({
-      transport: unaryTransport((method) => {
-        if (method.name === "Cancel") cancelled++;
-        return create(ResponseSchema);
-      }, async () => {
-        await new Promise<void>((resolve) => (resolveRead = resolve));
-        return create(QueryResponseSchema);
-      }),
+      transport: unaryTransport(
+        (method) => {
+          if (method.name === "Cancel") cancelled++;
+          return create(ResponseSchema);
+        },
+        async () => {
+          await new Promise<void>((resolve) => (resolveRead = resolve));
+          return create(QueryResponseSchema);
+        },
+      ),
       createRequestId: () => "request-3",
     });
     const scope = client.asGuest();
@@ -140,7 +293,9 @@ describe("Client", () => {
     });
     const subscription = await client.asGuest().createSubscription(topic);
     await subscription.activate();
-    await expect(subscription[Symbol.asyncIterator]().next()).resolves.toMatchObject({ done: true });
+    await expect(subscription[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      done: true,
+    });
     await client.close();
     expect(cancels).toBe(0);
   });
@@ -157,7 +312,9 @@ describe("Client", () => {
           });
         if (method.name === "Cancel")
           return new Promise<Message>((_resolve, reject) =>
-            signal.addEventListener("abort", () => reject(new Error("cleanup timed out")), { once: true }),
+            signal.addEventListener("abort", () => reject(new Error("cleanup timed out")), {
+              once: true,
+            }),
           );
         return create(ResponseSchema);
       }),
@@ -192,7 +349,9 @@ describe("Client", () => {
     const cancellation = subscription.cancel();
     const cancellationFailure = cancellation.catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(1_000);
-    await expect(cancellationFailure).resolves.toMatchObject({ message: expect.stringContaining("timed out") });
+    await expect(cancellationFailure).resolves.toMatchObject({
+      message: expect.stringContaining("timed out"),
+    });
     await client.close().catch(() => undefined);
     vi.useRealTimers();
   });
@@ -294,16 +453,19 @@ describe("Client", () => {
   it("settles a pending iterator locally when its transport ignores cancellation", async () => {
     const topic = create(TopicSchema);
     const client = Client.usingTransport({
-      transport: unaryTransport((method, input) =>
-        method.name === "Subscribe"
-          ? create(SubscriptionSchema, {
-              id: create(SubscriptionIdSchema, { value: "s-pending" }),
-              topic: input as Topic,
-            })
-          : create(ResponseSchema),
+      transport: unaryTransport(
+        (method, input) =>
+          method.name === "Subscribe"
+            ? create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "s-pending" }),
+                topic: input as Topic,
+              })
+            : create(ResponseSchema),
         undefined,
         () => ({
-          [Symbol.asyncIterator]: () => ({ next: () => new Promise<IteratorResult<Message>>(() => {}) }),
+          [Symbol.asyncIterator]: () => ({
+            next: () => new Promise<IteratorResult<Message>>(() => {}),
+          }),
         }),
       ),
       createRequestId: () => "request-6",
@@ -357,11 +519,15 @@ describe("Client", () => {
       createRequestId: () => "post-1",
     });
 
-    expect((await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }))).kind).toBe("ok");
-    expect((await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }))).kind).toBe("error");
-    expect((await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }))).kind).toBe(
-      "rejection",
-    );
+    expect(
+      (await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }))).kind,
+    ).toBe("ok");
+    expect(
+      (await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }))).kind,
+    ).toBe("error");
+    expect(
+      (await client.asGuest().post(UserIdSchema, create(UserIdSchema, { value: "command" }))).kind,
+    ).toBe("rejection");
     await client.close();
   });
 
@@ -373,16 +539,23 @@ describe("Client", () => {
         return create(AckSchema, {
           messageId: malformed
             ? undefined
-            : packAny(CommandIdSchema, create(CommandIdSchema, { uuid: `${command.id?.uuid}-other` })),
+            : packAny(
+                CommandIdSchema,
+                create(CommandIdSchema, { uuid: `${command.id?.uuid}-other` }),
+              ),
           status: create(StatusSchema, { status: { case: "ok", value: {} } }),
         });
       }),
       createRequestId: () => "post-2",
     });
     const scope = client.asGuest();
-    await expect(scope.post(UserIdSchema, create(UserIdSchema, { value: "command" }))).rejects.toThrow("acknowledgement");
+    await expect(
+      scope.post(UserIdSchema, create(UserIdSchema, { value: "command" })),
+    ).rejects.toThrow("acknowledgement");
     malformed = false;
-    await expect(scope.post(UserIdSchema, create(UserIdSchema, { value: "command" }))).rejects.toThrow("does not match");
+    await expect(
+      scope.post(UserIdSchema, create(UserIdSchema, { value: "command" })),
+    ).rejects.toThrow("does not match");
     await client.close();
   });
 
@@ -403,15 +576,31 @@ describe("Client", () => {
   });
 
   it("validates and snapshots tenant, zone, and actor context for outbound work", async () => {
-    expect(() => Client.usingTransport(source(), { tenant: "" })).toThrow("tenant must not be empty");
-    expect(() => Client.usingTransport(source(), { zoneId: "" })).toThrow("zoneId must not be empty");
+    expect(() => Client.usingTransport(source(), { tenant: "" })).toThrow(
+      "tenant must not be empty",
+    );
+    expect(() => Client.usingTransport(source(), { zoneId: "" })).toThrow(
+      "zoneId must not be empty",
+    );
     expect(() => Client.usingTransport(source()).onBehalfOf("")).toThrow("actor must not be empty");
-    expect(() => Client.usingTransport(source(), { tenant: create(TenantIdSchema) })).toThrow("tenant");
-    expect(() => Client.usingTransport(source(), { zoneId: create(ZoneIdSchema) })).toThrow("zoneId");
+    expect(() => Client.usingTransport(source(), { tenant: create(TenantIdSchema) })).toThrow(
+      "tenant",
+    );
+    expect(() => Client.usingTransport(source(), { zoneId: create(ZoneIdSchema) })).toThrow(
+      "zoneId",
+    );
 
     const tenant = create(TenantIdSchema, { kind: { case: "value", value: "tenant-a" } });
     const zoneId = create(ZoneIdSchema, { value: "Europe/Lisbon" });
-    let received: { context?: { tenantId?: { kind: { value?: string } }; zoneId?: { value?: string }; actor?: { value?: string } } } | undefined;
+    let received:
+      | {
+          context?: {
+            tenantId?: { kind: { value?: string } };
+            zoneId?: { value?: string };
+            actor?: { value?: string };
+          };
+        }
+      | undefined;
     const client = Client.usingTransport(
       {
         transport: unaryTransport((method, input) => {
@@ -463,7 +652,9 @@ describe("Client", () => {
     expect(builds).toBe(1);
     const abort = new AbortController();
     abort.abort(new Error("caller stopped"));
-    await expect(client.asGuest().send(query, { signal: abort.signal })).rejects.toThrow("caller stopped");
+    await expect(client.asGuest().send(query, { signal: abort.signal })).rejects.toThrow(
+      "caller stopped",
+    );
     expect(reads).toBe(1);
     await client.close();
     await expect(client.asGuest().send(query)).rejects.toThrow("client is closing");
@@ -567,7 +758,9 @@ describe("Client", () => {
     const subscription = await client.asGuest().createSubscription(create(TopicSchema));
     const abort = new AbortController();
     abort.abort(new Error("activation stopped"));
-    await expect(subscription.activate({ signal: abort.signal })).rejects.toThrow("activation stopped");
+    await expect(subscription.activate({ signal: abort.signal })).rejects.toThrow(
+      "activation stopped",
+    );
     expect(subscribes).toBe(0);
     await client.close();
   });
@@ -591,7 +784,9 @@ function unaryTransport(
         trailer: new Headers(),
         service: method.parent,
         message:
-          method.name === "Read" && read !== undefined ? await read() : await handler(method, input, signal),
+          method.name === "Read" && read !== undefined
+            ? await read()
+            : await handler(method, input, signal),
       } as never;
     },
     async stream(method) {
@@ -608,5 +803,86 @@ function unaryTransport(
 }
 
 function source(): { transport: Transport; createRequestId(): string } {
-  return { transport: unaryTransport(() => create(QueryResponseSchema)), createRequestId: () => "source" };
+  return {
+    transport: unaryTransport(() => create(QueryResponseSchema)),
+    createRequestId: () => "source",
+  };
+}
+
+interface BrowserCall {
+  readonly protocol: "connect" | "grpc-web";
+  readonly method: string;
+  readonly metadata: string | null;
+}
+
+function browserTransport(
+  protocol: BrowserCall["protocol"],
+  interceptors: readonly Interceptor[],
+  calls: BrowserCall[],
+): Transport {
+  const invoke = runInterceptors(
+    [...interceptors],
+    async (request: UnaryRequest): Promise<UnaryResponse> => {
+      calls.push({
+        protocol,
+        method: request.method.name,
+        metadata: request.header.get("x-application-call"),
+      });
+      return {
+        stream: false,
+        method: request.method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: request.service,
+        message: browserResponse(request.method.name, request.message),
+      } as never;
+    },
+  );
+  return {
+    async unary(method, signal, _timeoutMs, header, input) {
+      return invoke({
+        stream: false,
+        method,
+        service: method.parent,
+        requestMethod: "POST",
+        url: "https://gateway.example",
+        signal: signal ?? new AbortController().signal,
+        header: new Headers(header),
+        contextValues: undefined,
+        message: input,
+      } as never) as never;
+    },
+    async stream(method) {
+      return {
+        stream: true,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message: (async function* () {})(),
+      } as never;
+    },
+  };
+}
+
+function runInterceptors(
+  interceptors: readonly Interceptor[],
+  next: (request: UnaryRequest) => Promise<UnaryResponse>,
+): (request: UnaryRequest) => Promise<UnaryResponse> {
+  return interceptors.reduceRight(
+    (current, interceptor) => interceptor(current as never) as unknown as typeof current,
+    next,
+  );
+}
+
+function browserResponse(
+  method: string,
+  input: { readonly id?: { readonly uuid?: string } },
+): Message {
+  if (method !== "Post") return create(QueryResponseSchema);
+  const command = input as { id?: { uuid?: string } };
+  return create(AckSchema, {
+    messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: command.id?.uuid })),
+    status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+  });
 }

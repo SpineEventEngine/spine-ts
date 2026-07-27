@@ -183,6 +183,7 @@ const expectedClientExports = [
   "lt",
 ];
 const expectedClientWebExports = [
+  "BrowserClientOptions",
   "Client",
   "ClientOperationOptions",
   "ClientOptions",
@@ -190,6 +191,7 @@ const expectedClientWebExports = [
   "ClientProtocolError",
   "ClientRequest",
   "ClientTransport",
+  "OnRequestMetadata",
   "Subscription",
 ];
 const expectedDeliveryClientExports = [

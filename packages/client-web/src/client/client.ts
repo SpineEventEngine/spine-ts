@@ -1,7 +1,8 @@
 import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
-import { createClient, type Transport } from "@connectrpc/connect";
+import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
+import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
 import { packAny, packCommand, unpackAny, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -45,6 +46,14 @@ export interface ClientOptions {
   readonly zoneId?: string | ZoneId;
 }
 
+/** Supplies fresh application-owned request metadata synchronously for one outbound call. */
+export type OnRequestMetadata = () => HeadersInit;
+
+/** Browser factory options, including an optional per-call metadata supplier. */
+export interface BrowserClientOptions extends ClientOptions {
+  readonly onRequestMetadata?: OnRequestMetadata;
+}
+
 /** Transport and request-ID source injected by an application or platform adapter. */
 export interface ClientTransport {
   readonly transport: Transport;
@@ -85,6 +94,22 @@ export class Client {
   /** Create a client from an injected transport and request-ID source. */
   static usingTransport(source: ClientTransport, options: ClientOptions = {}): Client {
     return new Client(source, options);
+  }
+
+  /** Create a browser client that always uses the gRPC-Web protocol. */
+  static forGrpcWeb(baseUrl: string, options: BrowserClientOptions = {}): Client {
+    return new Client(
+      browserSource(createGrpcWebTransport(browserTransportOptions(baseUrl, options))),
+      options,
+    );
+  }
+
+  /** Create a browser client that always uses the Connect protocol. */
+  static forConnect(baseUrl: string, options: BrowserClientOptions = {}): Client {
+    return new Client(
+      browserSource(createConnectTransport(browserTransportOptions(baseUrl, options))),
+      options,
+    );
   }
 
   /** Create an immutable request scope for the guest actor. */
@@ -245,7 +270,9 @@ class ClientOwner {
       const settled = await Promise.allSettled(
         [...this.#subscriptions].map((subscription) => subscription.cancel()),
       );
-      failures.push(...settled.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])));
+      failures.push(
+        ...settled.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
+      );
     } finally {
       try {
         this.#source.close?.();
@@ -308,9 +335,12 @@ class TopicSubscription implements Subscription {
       if (this.#cancelled) {
         throw new ClientProtocolError("subscription is cancelled.");
       }
-      const updates = createClient(SubscriptionService, this.#owner.transport).activate(subscription, {
-        signal: this.#controller.signal,
-      });
+      const updates = createClient(SubscriptionService, this.#owner.transport).activate(
+        subscription,
+        {
+          signal: this.#controller.signal,
+        },
+      );
       const iterator = updates[Symbol.asyncIterator]();
       this.#streamIterator = iterator;
       this.#updates = this.validatedUpdates(iterator, subscription);
@@ -325,7 +355,10 @@ class TopicSubscription implements Subscription {
         this.#owner.remove(this);
       }
       if (cleanupFailure !== undefined)
-        throw new AggregateError([error, cleanupFailure], "Subscription activation cleanup failed.");
+        throw new AggregateError(
+          [error, cleanupFailure],
+          "Subscription activation cleanup failed.",
+        );
       throw error;
     } finally {
       signal?.removeEventListener("abort", abort);
@@ -380,7 +413,9 @@ class TopicSubscription implements Subscription {
         const update = next.value;
         validateSubscription(update.subscription, subscription.topic!);
         if (update.subscription?.id?.value !== subscription.id?.value)
-          throw new ClientProtocolError("subscription update ID does not match the accepted subscription.");
+          throw new ClientProtocolError(
+            "subscription update ID does not match the accepted subscription.",
+          );
         yield update;
       }
     } catch (error) {
@@ -425,13 +460,51 @@ class TopicSubscription implements Subscription {
 
 const CLEANUP_TIMEOUT_MS = 1_000;
 
+function browserSource(transport: Transport): ClientTransport {
+  return { transport, createRequestId: browserRequestId };
+}
+
+function browserTransportOptions(
+  baseUrl: string,
+  options: BrowserClientOptions,
+): { baseUrl: string; interceptors: Interceptor[] } {
+  return {
+    baseUrl,
+    interceptors:
+      options.onRequestMetadata === undefined ? [] : [requestMetadata(options.onRequestMetadata)],
+  };
+}
+
+function requestMetadata(onRequestMetadata: OnRequestMetadata): Interceptor {
+  return (next) => async (request) => {
+    const metadata = new Headers(onRequestMetadata());
+    for (const [name, value] of metadata) request.header.set(name, value);
+    return next(request);
+  };
+}
+
+function browserRequestId(): string {
+  const crypto = globalThis.crypto;
+  if (typeof crypto?.randomUUID === "function") return crypto.randomUUID();
+  if (typeof crypto?.getRandomValues !== "function")
+    throw new ClientProtocolError("secure random browser API is unavailable for request IDs.");
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function cloneTopic(topic: Topic, context: ActorContext): Topic {
   const prepared = structuredClone(topic);
   prepared.context = context;
   return prepared;
 }
 
-function validateSubscription(subscription: WireSubscription | undefined, expectedTopic: Topic): void {
+function validateSubscription(
+  subscription: WireSubscription | undefined,
+  expectedTopic: Topic,
+): void {
   if (subscription === undefined || subscription.id?.value.length === 0)
     throw new ClientProtocolError("subscription ID is missing or invalid.");
   if (subscription.topic === undefined || !sameTopic(subscription.topic, expectedTopic))
