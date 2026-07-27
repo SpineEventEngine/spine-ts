@@ -3,7 +3,7 @@
   "entryPoints": [
     "packages/proto-tools/src/index.ts",
     "packages/proto/src/index.ts",
-    "packages/client/src/index.ts",
+    "packages/client-node/src/index.ts",
     "packages/delivery-client/src/index.ts",
     "packages/delivery-server/src/index.ts",
     "packages/core/src/index.ts",

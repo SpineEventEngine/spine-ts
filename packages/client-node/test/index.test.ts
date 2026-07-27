@@ -16,7 +16,7 @@ import type {
 
 type ClientRoot = typeof import("../src/index.js");
 
-describe("@spine-event-engine/client", () => {
+describe("@spine-event-engine/client-node", () => {
   it("exports the public client facade alongside Entity query construction", () => {
     expect(clientRoot.Client).toBeTypeOf("function");
     expect(clientRoot.ClientProtocolError).toBeTypeOf("function");

@@ -6,7 +6,7 @@ import {
   isColumnField,
   entityMessages,
   resolveSpineOptionDescriptors,
-} from "../packages/client/codegen/generate-entity-columns.mjs";
+} from "../packages/client-node/codegen/generate-entity-columns.mjs";
 import { column, entity } from "../packages/proto/src/index.ts";
 import {
   AggregateStateSchema,
@@ -14,7 +14,7 @@ import {
   projectionFieldWithRawColumnOption,
   projectionSchemaWithRawEntityOption,
   ProcessManagerStateSchema,
-} from "../packages/client/test-fixtures/entity-column-fixtures.ts";
+} from "../packages/client-node/test-fixtures/entity-column-fixtures.ts";
 
 const columnOption = {
   $unknown: [{ no: column.number, wireType: 0, data: new Uint8Array([1]) }],
@@ -144,7 +144,7 @@ describe("Entity column companion generator", () => {
 
     expect(generatedFiles).toEqual(["spine/example/todo/v1/task_list_columns.ts"]);
     expect(output.imports).toContainEqual({
-      from: "@spine-event-engine/client/codegen",
+      from: "@spine-event-engine/client-node/codegen",
       name: "defineGeneratedEntityColumns",
     });
     const source = output.printed.flat().join("");

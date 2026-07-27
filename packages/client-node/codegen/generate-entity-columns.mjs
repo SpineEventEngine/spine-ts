@@ -93,11 +93,11 @@ export function generateEntityColumnCompanions(schema) {
     const output = schema.generateFile(`${file.name}_columns.ts`);
     const defineColumns = output.import(
       "defineGeneratedEntityColumns",
-      "@spine-event-engine/client/codegen",
+      "@spine-event-engine/client-node/codegen",
     );
     const definitionType = output.import(
       "EntityColumnDefinition",
-      "@spine-event-engine/client/codegen",
+      "@spine-event-engine/client-node/codegen",
       true,
     );
     output.preamble(file);

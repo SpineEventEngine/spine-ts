@@ -1,5 +1,5 @@
 {
-  "name": "@spine-event-engine/client",
+  "name": "@spine-event-engine/client-node",
   "version": "0.0.0",
   "private": true,
   "type": "module",

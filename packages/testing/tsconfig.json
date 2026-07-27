@@ -11,7 +11,7 @@
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
-    { "path": "../client" },
+    { "path": "../client-node" },
     { "path": "../core" },
     { "path": "../proto" },
     { "path": "../server" }

@@ -6,7 +6,15 @@ import * as clientRoot from "../dist/index.js";
 import { defineGeneratedEntityColumns } from "../dist/codegen/index.js";
 import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
 
-describe("@spine-event-engine/client built exports", () => {
+describe("@spine-event-engine/client-node built exports", () => {
+  it("declares the Node-only client package identity", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+    ) as { readonly name?: string };
+
+    expect(manifest.name).toBe("@spine-event-engine/client-node");
+  });
+
   it("keeps public declarations independent of server, test, and wire implementation types", () => {
     const declarations = readFileSync(new URL("../dist/index.d.ts", import.meta.url), "utf8");
     for (const forbidden of [

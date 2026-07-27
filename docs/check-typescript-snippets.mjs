@@ -8,7 +8,7 @@ import ts from "typescript";
 const documents = [
   "README.md",
   "docs/USER_GUIDE.md",
-  "packages/client/README.md",
+  "packages/client-node/README.md",
   "packages/delivery-client/README.md",
   "packages/delivery-server/README.md",
   "packages/proto/README.md",

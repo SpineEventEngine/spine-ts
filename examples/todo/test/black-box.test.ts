@@ -28,7 +28,10 @@ import {
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
 import { SubscriptionService } from "@spine-event-engine/proto/client";
-import { type StateSubscriptionUpdate, type SubscriptionEvent } from "@spine-event-engine/client";
+import {
+  type StateSubscriptionUpdate,
+  type SubscriptionEvent,
+} from "@spine-event-engine/client-node";
 import { SignalMetadata } from "@spine-event-engine/server";
 import { BlackBox, type BlackBoxScope } from "@spine-event-engine/testing";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";

@@ -348,3 +348,83 @@ execution was part of either verification attempt.
 
 P1 is accepted for commit and push. The final Wave 4 security concern remains
 open for the release gate, as recorded above.
+
+## A1 consolidated review-wave assignments
+
+The A1 boundary is the behavior-preserving rename of `packages/client` to
+`packages/client-node`, the public package identity change to
+`@spine-event-engine/client-node`, and migration of all live workspace
+consumers, tooling, and current documentation.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  `gpt-5.6-terra` / `high`, both explicit in dispatch. Review rename cohesion,
+  repository organization, test maintainability, and accidental non-mechanical
+  changes.
+- Documentation: existing `documentation_reviewer`, immutable configured
+  `gpt-5.6-luna` / `medium`. Review current public prose, snippets, package
+  ownership claims, and preservation of intentional historical records.
+- TypeScript/API: existing `typescript_api_docs_reviewer`, expected
+  `gpt-5.6-terra` / `high`, both explicit in dispatch. Review package exports,
+  declarations, dependency/reference migration, executable identity checks,
+  and public compatibility within the approved rename.
+- Performance/reliability: N/A for A1 because the implementation moves the
+  existing source and preserves its runtime behavior, transport lifecycle,
+  bounds, and tests without changing execution logic.
+- Security: no new credential, trust-boundary, parser, or runtime behavior is
+  introduced. The current threat-model path was migrated; the mandatory final
+  Wave 4 security gate remains open.
+
+All reviewers are read-only, must preserve shared worktree changes, must not
+spawn children, and must not build or run Spine JVM. They return `CLEAN` or
+exact P0-P2 findings. Independent runtime self-introspection is unavailable on
+this surface, so configured role/profile plus explicit dispatch fields are the
+runtime metadata evidence unless a visible mismatch occurs.
+
+## A1 consolidated review-wave results
+
+- Style/maintainability: `CLEAN`, under the explicitly dispatched existing
+  reviewer and `gpt-5.6-terra` / `high` profile.
+- Documentation: `CLEAN`, under the existing reviewer's immutable configured
+  `gpt-5.6-luna` / `medium` profile. The dispatch surface does not accept a
+  redundant model override for this fixed role; the exact required role/profile
+  was explicit in the assignment.
+- TypeScript/API: `CLEAN`, under the explicitly dispatched existing reviewer
+  and `gpt-5.6-terra` / `high` profile.
+- Performance/reliability: N/A for the reason recorded in the assignment.
+- Security: deferred to the mandatory final Wave 4 gate for the reason recorded
+  in the assignment.
+
+Independent runtime self-introspection was unavailable for all three invoked
+reviewers; no visible mismatch or inherited fallback occurred. No reviewer
+built or ran Spine JVM.
+
+After the review wave, independent deterministic verification found one
+mechanical migration omission not reported as a reviewer finding:
+`scripts/check-api-docs.mjs` still constructed `clientIndexPath` from
+`packages/client/src/index.ts`, causing `pnpm docs:check` to fail with `ENOENT`.
+This single path correction returns to an existing `implementer`, expected and
+explicitly dispatched as `gpt-5.6-terra` / `medium`. It may update only the
+stale checker path plus durable evidence, must rerun the affected docs/API
+checks and precise stale-reference scans, and may not commit, push, merge,
+spawn children, or build/run Spine JVM. The clean reviewer lanes do not reopen
+because this is deterministic path correction with no public declaration,
+prose, or runtime change.
+
+## A1 final disposition
+
+The deterministic checker-path correction passed the affected TypeDoc/API,
+snippet, formatting, stale-reference, and diff checks. A fresh full Spine TS
+gate passed 141 test files / 2,650 tests, with 3 files / 25 tests skipped.
+The preceding unchanged delivery-server signal-test transient passed all 4
+cases in focused reproduction before the clean full rerun.
+
+Final A1 concerns:
+
+- Style/maintainability: `CLEAN`.
+- Documentation: `CLEAN`.
+- TypeScript/API: `CLEAN`.
+- Performance/reliability: N/A; runtime behavior is unchanged.
+- Security: no A1-specific finding; mandatory Wave 4 final gate remains open.
+
+A1 is accepted for commit and immediate push. No Spine JVM build or execution
+was used for implementation, review, or verification.

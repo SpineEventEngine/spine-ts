@@ -307,7 +307,7 @@ that application source file. The final property-access lines illustrate the
 inferred column API and are not part of that source file:
 
 ```ts
-import { EntityColumn } from "@spine-event-engine/client";
+import { EntityColumn } from "@spine-event-engine/client-node";
 import { TaskListColumnDefinition } from "../generated/spine/example/todo/v1/task_list_columns.js";
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
 
@@ -330,7 +330,7 @@ application code construct arbitrary string columns or authored definitions.
 The high-level Entity Query API targets the current state of Aggregates,
 Projections, and Process Managers. The low-level ID query paths are unchanged.
 The repository's `proto:generate` workflow runs the
-`protoc-gen-spine-entity-columns` executable shipped by `@spine-event-engine/client`
+`protoc-gen-spine-entity-columns` executable shipped by `@spine-event-engine/client-node`
 after Protobuf-ES for every example target. Installed projects can add that bin
 as a local plugin in their Buf generation template.
 
@@ -630,7 +630,7 @@ Protobuf-ES modules.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-event-engine/client";
+import { Client } from "@spine-event-engine/client-node";
 import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 
@@ -668,7 +668,17 @@ state masks, repeated ordering, and positive limits:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, EntityQuery, all, either, eq, ge, gt, le, lt } from "@spine-event-engine/client";
+import {
+  Client,
+  EntityQuery,
+  all,
+  either,
+  eq,
+  ge,
+  gt,
+  le,
+  lt,
+} from "@spine-event-engine/client-node";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 
 const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
@@ -768,7 +778,7 @@ Asynchronous activation failures reject pending and future iterator reads.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, EntityColumn, all, eq } from "@spine-event-engine/client";
+import { Client, EntityColumn, all, eq } from "@spine-event-engine/client-node";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";

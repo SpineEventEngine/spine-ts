@@ -13,7 +13,7 @@ import {
   type ObservedClientOutcome,
   type StateSubscription,
   type StateSubscriptionOptions,
-} from "@spine-event-engine/client";
+} from "@spine-event-engine/client-node";
 import { packEvent, type MessageSchema } from "@spine-event-engine/core";
 import {
   ActorContextSchema,

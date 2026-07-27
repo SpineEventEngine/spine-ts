@@ -535,7 +535,7 @@ const expectedServerExports = [
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
-const clientIndexPath = join("packages", "client", "src", "index.ts");
+const clientIndexPath = join("packages", "client-node", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
 const deliveryServerIndexPath = join("packages", "delivery-server", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
@@ -576,7 +576,7 @@ if (typedocResult.status !== 0) {
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
-const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client/src");
+const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
 const deliveryServerModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
@@ -1012,21 +1012,21 @@ if (missingCoreExports.length > 0) {
 
 if (missingClientExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-event-engine/client exports: ${missingClientExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/client-node exports: ${missingClientExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (missingDeclaredClientExports.length > 0) {
   console.error(
-    `@spine-event-engine/client root is missing expected exports: ${missingDeclaredClientExports.join(", ")}`,
+    `@spine-event-engine/client-node root is missing expected exports: ${missingDeclaredClientExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (unexpectedClientExports.length > 0) {
   console.error(
-    "@spine-event-engine/client root exports changed without updating docs expectations: " +
+    "@spine-event-engine/client-node root exports changed without updating docs expectations: " +
       unexpectedClientExports.join(", "),
   );
   process.exit(1);
@@ -1271,7 +1271,7 @@ console.log(
   [
     `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-event-engine/proto exports`,
     `${expectedCoreExports.length} expected @spine-event-engine/core exports`,
-    `${expectedClientExports.length} expected @spine-event-engine/client exports`,
+    `${expectedClientExports.length} expected @spine-event-engine/client-node exports`,
     `${expectedDeliveryClientExports.length} expected @spine-event-engine/delivery-client exports`,
     `${expectedDeliveryServerExports.length} expected @spine-event-engine/delivery-server exports`,
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,

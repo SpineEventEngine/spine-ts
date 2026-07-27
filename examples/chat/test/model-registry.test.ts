@@ -4,7 +4,7 @@ import {
   EntityQuery,
   type EventSubscription,
   type StateSubscription,
-} from "@spine-event-engine/client";
+} from "@spine-event-engine/client-node";
 import { packAny } from "@spine-event-engine/core";
 import {
   ChatIdSchema,

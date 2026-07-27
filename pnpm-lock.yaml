@@ -56,9 +56,9 @@ importers:
       '@spine-event-engine/chat-model':
         specifier: 0.0.0
         version: link:../chat-model
-      '@spine-event-engine/client':
+      '@spine-event-engine/client-node':
         specifier: workspace:*
-        version: link:../../packages/client
+        version: link:../../packages/client-node
       '@spine-event-engine/core':
         specifier: 0.0.0
         version: link:../../packages/core
@@ -106,9 +106,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
-      '@spine-event-engine/client':
+      '@spine-event-engine/client-node':
         specifier: workspace:*
-        version: link:../../packages/client
+        version: link:../../packages/client-node
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -140,9 +140,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
-      '@spine-event-engine/client':
+      '@spine-event-engine/client-node':
         specifier: workspace:*
-        version: link:../../packages/client
+        version: link:../../packages/client-node
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -168,9 +168,9 @@ importers:
       '@connectrpc/connect-node':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
-      '@spine-event-engine/client':
+      '@spine-event-engine/client-node':
         specifier: workspace:*
-        version: link:../../packages/client
+        version: link:../../packages/client-node
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -204,7 +204,7 @@ importers:
         specifier: 0.0.0
         version: link:../../packages/proto-tools
 
-  packages/client:
+  packages/client-node:
     dependencies:
       '@bufbuild/protobuf':
         specifier: 2.12.1
@@ -373,9 +373,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
-      '@spine-event-engine/client':
+      '@spine-event-engine/client-node':
         specifier: workspace:*
-        version: link:../client
+        version: link:../client-node
       '@spine-event-engine/core':
         specifier: workspace:*
         version: link:../core

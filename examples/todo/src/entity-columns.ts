@@ -1,4 +1,4 @@
-import { EntityColumn, type EntityColumns } from "@spine-event-engine/client";
+import { EntityColumn, type EntityColumns } from "@spine-event-engine/client-node";
 
 import { TaskListColumnDefinition } from "../generated/spine/example/todo/v1/task_list_columns.js";
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";

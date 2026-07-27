@@ -1,4 +1,4 @@
-# @spine-event-engine/client
+# @spine-event-engine/client-node
 
 Node client facade and descriptor-backed Entity query foundations for Spine.
 
@@ -13,7 +13,7 @@ work is finished; it is idempotent and rejects work started after close begins.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-event-engine/client";
+import { Client } from "@spine-event-engine/client-node";
 import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
 
 const client = Client.connectTo("http://127.0.0.1:8080", {
@@ -34,7 +34,7 @@ configuration; it is still copied at construction:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-event-engine/client";
+import { Client } from "@spine-event-engine/client-node";
 import { TenantIdSchema, ZoneIdSchema } from "@spine-event-engine/proto";
 
 const client = Client.connectTo("http://127.0.0.1:8080", {
@@ -92,7 +92,7 @@ criteria or mask.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, EntityColumn, all, either, eq } from "@spine-event-engine/client";
+import { Client, EntityColumn, all, either, eq } from "@spine-event-engine/client-node";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
@@ -168,7 +168,7 @@ import {
   gt,
   le,
   lt,
-} from "@spine-event-engine/client";
+} from "@spine-event-engine/client-node";
 import { ActorContextSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
@@ -238,7 +238,7 @@ const states = response.message.map(({ state }) => {
 ```
 
 Generated sources obtain their definition constructor from the dedicated
-`@spine-event-engine/client/codegen` subpath. Application code should import only the
+`@spine-event-engine/client-node/codegen` subpath. Application code should import only the
 resulting generated definition and the root Entity API.
 
 The package also installs `protoc-gen-spine-entity-columns` for Buf-based
