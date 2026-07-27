@@ -9,9 +9,10 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   cleanupStagedTargets,
@@ -20,6 +21,9 @@ import {
   modelAtomicTargets,
   generateTargets,
   prepareGeneratedOutput,
+  prepareProtoToolsBootstrap,
+  protoToolsExecutable,
+  releaseProtoToolsBootstrap,
   publishGeneratedTargets,
   stageGeneratedTargets,
   writeStagedTemplate,
@@ -190,7 +194,238 @@ function applicationModelStageCommand(failure) {
   };
 }
 
+function bootstrapInChild(repoRoot) {
+  const workflowModule = new URL("./proto-workflow.mjs", import.meta.url).href;
+  const program = `
+    import {
+      prepareProtoToolsBootstrap,
+      releaseProtoToolsBootstrap,
+    } from ${JSON.stringify(workflowModule)};
+    const root = ${JSON.stringify(repoRoot)};
+    const executable = prepareProtoToolsBootstrap(root);
+    process.stdout.write(executable);
+    setTimeout(() => releaseProtoToolsBootstrap(root), 100);
+  `;
+
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, ["--input-type=module", "--eval", program], {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (status) => {
+      if (status === 0) {
+        resolve(stdout);
+      } else {
+        reject(new Error(`Bootstrap child failed with status ${String(status)}: ${stderr}`));
+      }
+    });
+  });
+}
+
+function generatedDescriptorModule(encoded, names) {
+  const schemas = names
+    .map(
+      (name, index) =>
+        `export interface ${name} {}\n` +
+        `export const ${name}Schema = messageDesc(file_model, ${String(index)});`,
+    )
+    .join("\n");
+  return [
+    "declare function fileDesc(source: string): unknown;",
+    "declare function messageDesc(file: unknown, index: number): unknown;",
+    `export const file_model = fileDesc(${JSON.stringify(encoded)});`,
+    schemas,
+  ].join("\n");
+}
+
+function stagedHandlerRegistryFixture() {
+  const cacheRoot = fileURLToPath(new URL("../node_modules/.cache/", import.meta.url));
+  mkdirSync(cacheRoot, { recursive: true });
+  const root = mkdtempSync(join(cacheRoot, "spine-handler-staged-model-"));
+  const appRoot = join(root, "app");
+  const modelRoot = join(root, "packages/model");
+  const liveRoot = join(modelRoot, "dist/generated");
+  const stagedRoot = join(modelRoot, ".generated-stage/generated");
+  const linkedModel = join(appRoot, "node_modules/@example/model");
+
+  mkdirSync(join(appRoot, "src"), { recursive: true });
+  mkdirSync(dirname(linkedModel), { recursive: true });
+  mkdirSync(liveRoot, { recursive: true });
+  mkdirSync(stagedRoot, { recursive: true });
+  writeFileSync(join(root, ".gitignore"), "app/generated/\n");
+  expect(spawnSync("git", ["init", "--quiet"], { cwd: root }).status).toBe(0);
+  writeFileSync(
+    join(modelRoot, "package.json"),
+    JSON.stringify({
+      name: "@example/model",
+      type: "module",
+      exports: {
+        "./generated/*.js": {
+          types: "./dist/generated/*.d.ts",
+          default: "./dist/generated/*.js",
+        },
+      },
+    }),
+  );
+  for (const [file, exports] of [
+    ["state_pb", ["Task", "TaskSchema"]],
+    ["commands_pb", ["CreateTask", "CreateTaskSchema"]],
+    ["events_pb", ["TaskCreated", "TaskCreatedSchema"]],
+  ]) {
+    writeFileSync(
+      join(liveRoot, `${file}.d.ts`),
+      exports
+        .map((name) =>
+          name.endsWith("Schema")
+            ? `export declare const ${name}: unknown;`
+            : `export interface ${name} {}`,
+        )
+        .join("\n"),
+    );
+  }
+  writeFileSync(
+    join(stagedRoot, "state_pb.ts"),
+    generatedDescriptorModule("ChNleGFtcGxlL3N0YXRlLnByb3RvIgYKBFRhc2s=", ["Task"]),
+  );
+  writeFileSync(
+    join(stagedRoot, "commands_pb.ts"),
+    generatedDescriptorModule("ChtleGFtcGxlL3Rhc2tfY29tbWFuZHMucHJvdG8iDAoKQ3JlYXRlVGFzaw==", [
+      "CreateTask",
+    ]),
+  );
+  writeFileSync(
+    join(stagedRoot, "events_pb.ts"),
+    generatedDescriptorModule("ChlleGFtcGxlL3Rhc2tfZXZlbnRzLnByb3RvIg0KC1Rhc2tDcmVhdGVk", [
+      "TaskCreated",
+    ]),
+  );
+  symlinkSync(modelRoot, linkedModel, "dir");
+  writeFileSync(
+    join(appRoot, "src/task.ts"),
+    `
+      import { Aggregate, Assign } from "@spine-event-engine/server";
+      import { TaskSchema } from "@example/model/generated/state_pb.js";
+      import { type CreateTask } from "@example/model/generated/commands_pb.js";
+      import { type TaskCreated } from "@example/model/generated/events_pb.js";
+
+      export class TaskAggregate extends Aggregate<string, typeof TaskSchema> {
+        @Assign
+        create(command: CreateTask): TaskCreated {
+          throw new Error(String(command));
+        }
+      }
+    `,
+  );
+  writeFileSync(
+    join(appRoot, "tsconfig.json"),
+    JSON.stringify({
+      compilerOptions: {
+        experimentalDecorators: true,
+        module: "NodeNext",
+        moduleResolution: "NodeNext",
+        target: "ES2024",
+      },
+      include: ["src/**/*.ts"],
+    }),
+  );
+
+  return { root, appRoot, modelRoot, liveRoot, stagedRoot };
+}
+
 describe("proto-workflow", () => {
+  it("builds and reuses a clean Proto Tools bootstrap executable", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-bootstrap-"));
+    let calls = 0;
+    const run = (label, executable, args, cwd) => {
+      calls += 1;
+      expect(label).toBe("Proto Tools bootstrap build");
+      expect(executable).toBe(process.execPath);
+      expect(args).toEqual([
+        join(repoRoot, "node_modules/typescript/bin/tsc"),
+        "--project",
+        join(repoRoot, "packages/proto-tools/tsconfig.bootstrap.json"),
+        "--outDir",
+        expect.stringMatching(/spine-proto-tools-bootstrap-/u),
+      ]);
+      expect(cwd).toBe(repoRoot);
+      const output = join(args.at(-1), "cli/spine-proto-bootstrap.js");
+      mkdirSync(dirname(output), { recursive: true });
+      writeFileSync(output, "export {};\n");
+      return 0;
+    };
+
+    try {
+      const expected = prepareProtoToolsBootstrap(repoRoot, run);
+      expect(expected).toMatch(/spine-proto-tools-bootstrap-.+\/cli\/spine-proto-bootstrap\.js$/u);
+      expect(prepareProtoToolsBootstrap(repoRoot, run)).toBe(expected);
+      expect(calls).toBe(1);
+      releaseProtoToolsBootstrap(repoRoot);
+      expect(existsSync(expected)).toBe(false);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("ignores stale compiled Proto Tools output for real workflows", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-stale-dist-"));
+    const stale = join(repoRoot, "packages/proto-tools/dist/src/cli/spine-proto.js");
+    const source = join(repoRoot, "packages/proto-tools/src/cli/spine-proto-bootstrap.ts");
+    mkdirSync(dirname(stale), { recursive: true });
+    mkdirSync(dirname(source), { recursive: true });
+    writeFileSync(stale, "stale\n");
+    writeFileSync(source, "current source\n");
+    const run = (_label, _executable, args) => {
+      const output = join(args.at(-1), "cli/spine-proto-bootstrap.js");
+      mkdirSync(dirname(output), { recursive: true });
+      writeFileSync(output, "current source bootstrap\n");
+      return 0;
+    };
+
+    try {
+      const selected = protoToolsExecutable(repoRoot, undefined, run);
+      expect(selected).not.toBe(stale);
+      expect(readFileSync(selected, "utf8")).toBe("current source bootstrap\n");
+      releaseProtoToolsBootstrap(repoRoot);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("retains the compiled CLI seam for source-free workflow fixtures", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-compiled-fixture-"));
+    const compiled = join(repoRoot, "packages/proto-tools/dist/src/cli/spine-proto.js");
+    mkdirSync(dirname(compiled), { recursive: true });
+    writeFileSync(compiled, "fixture\n");
+
+    try {
+      expect(protoToolsExecutable(repoRoot)).toBe(compiled);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("isolates simultaneous Proto Tools bootstrap builds by process", async () => {
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    const [first, second] = await Promise.all([bootstrapInChild(root), bootstrapInChild(root)]);
+
+    expect(first).not.toBe(second);
+    expect(first).toMatch(/spine-proto-tools-bootstrap-.+\/cli\/spine-proto-bootstrap\.js$/u);
+    expect(second).toMatch(/spine-proto-tools-bootstrap-.+\/cli\/spine-proto-bootstrap\.js$/u);
+    expect(existsSync(first)).toBe(false);
+    expect(existsSync(second)).toBe(false);
+  }, 30_000);
+
   it("keeps every application model inside the single atomic publication boundary", () => {
     expect(generatedTargets.map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
@@ -220,6 +455,112 @@ describe("proto-workflow", () => {
       handlerGeneratedPath: "examples/chat/generated",
       handlerProjectPath: "examples/chat/tsconfig.json",
     });
+  });
+
+  it("redirects Chat handler analysis from live schemas to the staged model schemas", () => {
+    const target = modelAtomicTargets.find(
+      (candidate) => candidate.packagePath === "examples/chat-model",
+    );
+    const repoRoot = applicationModelTransactionFixture(target);
+    let handlerArguments;
+
+    try {
+      const staged = stageGeneratedTargets({
+        repoRoot,
+        runCommand: rootStageCommand,
+        runModelCommand(label, _executable, args, cwd) {
+          if (label === "Chat model generation") {
+            mkdirSync(join(cwd, "generated"), { recursive: true });
+            writeFileSync(join(cwd, "generated/model.ts"), "export {};\n");
+            writeFileSync(join(cwd, "spine-proto-manifest.json"), "chat next\n");
+            return 0;
+          }
+          if (label === "Chat handler registry post-step") {
+            handlerArguments = args;
+            const output = args[args.indexOf("--out") + 1];
+            mkdirSync(dirname(output), { recursive: true });
+            writeFileSync(output, "handler\n");
+            return 0;
+          }
+          return 1;
+        },
+      });
+
+      expect(staged.status).toBe(0);
+      const redirects = JSON.parse(
+        handlerArguments[handlerArguments.indexOf("--source-generated-redirects") + 1],
+      );
+      expect(redirects).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            source: join(repoRoot, "packages/proto/dist"),
+            staged: expect.stringMatching(/packages\/proto\/\.generated-[^/]+$/u),
+          }),
+          expect.objectContaining({
+            source: join(repoRoot, "examples/chat-model/dist"),
+            staged: expect.stringMatching(/examples\/chat-model\/\.generated-[^/]+$/u),
+          }),
+          expect.objectContaining({
+            source: join(repoRoot, "examples/chat/node_modules/@example/model/dist"),
+            staged: expect.stringMatching(/examples\/chat-model\/\.generated-[^/]+$/u),
+            packageName: "@example/model",
+          }),
+        ]),
+      );
+      cleanupStagedTargets(staged.stagedTargets);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("executes handler analysis against staged schemas behind a workspace package symlink", () => {
+    const fixture = stagedHandlerRegistryFixture();
+    const generatedRoot = join(fixture.appRoot, "generated");
+    const output = join(generatedRoot, "handler-registry.ts");
+    const script = fileURLToPath(new URL("./generate-handler-registry.mjs", import.meta.url));
+    const commonArgs = [
+      script,
+      "--project",
+      join(fixture.appRoot, "tsconfig.json"),
+      "--generated-root",
+      generatedRoot,
+      "--out",
+      output,
+      "--repo-root",
+      fixture.root,
+    ];
+
+    try {
+      const stale = spawnSync(process.execPath, commonArgs, {
+        cwd: fixture.root,
+        encoding: "utf8",
+      });
+      expect(stale.status).toBe(1);
+
+      const redirected = spawnSync(
+        process.execPath,
+        [
+          ...commonArgs,
+          "--source-generated-redirects",
+          JSON.stringify([
+            {
+              source: fixture.liveRoot,
+              staged: fixture.stagedRoot,
+              packageName: "@example/model",
+              moduleRoot: fixture.stagedRoot,
+            },
+          ]),
+        ],
+        { cwd: fixture.root, encoding: "utf8" },
+      );
+      expect(redirected.stderr).toBe("");
+      expect(redirected.status).toBe(0);
+      expect(readFileSync(output, "utf8")).toContain("TaskAggregate");
+      expect(readFileSync(output, "utf8")).toContain("CreateTaskSchema");
+      expect(readFileSync(output, "utf8")).toContain("TaskCreatedSchema");
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
   });
 
   it.each(modelAtomicTargets.filter((target) => target.packagePath !== "examples/todo"))(

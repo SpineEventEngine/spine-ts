@@ -20,6 +20,7 @@ import { writeSpineProtoArtifacts } from "./generate-spine-proto-artifacts.mjs";
 
 const protoRoot = fileURLToPath(new URL("../packages/proto/proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const bootstrappedRoots = new Map();
 export const generatedTargets = [
   {
     displayPath: "packages/proto/generated",
@@ -130,6 +131,60 @@ function runCommandIn(label, executable, args, cwd) {
   }
 
   return result.status ?? 1;
+}
+
+export function prepareProtoToolsBootstrap(root = repoRoot, run = runCommandIn) {
+  const existing = bootstrappedRoots.get(root);
+  if (existing !== undefined && existsSync(existing.executable)) return existing.executable;
+
+  const cacheRoot = join(root, "packages/proto-tools/node_modules/.cache");
+  mkdirSync(cacheRoot, { recursive: true });
+  const outputRoot = mkdtempSync(join(cacheRoot, "spine-proto-tools-bootstrap-"));
+  const executable = join(outputRoot, "cli/spine-proto-bootstrap.js");
+  const status = run(
+    "Proto Tools bootstrap build",
+    process.execPath,
+    [
+      join(root, "node_modules/typescript/bin/tsc"),
+      "--project",
+      join(root, "packages/proto-tools/tsconfig.bootstrap.json"),
+      "--outDir",
+      outputRoot,
+    ],
+    root,
+  );
+  if (status !== 0 || !existsSync(executable)) {
+    rmSync(outputRoot, { recursive: true, force: true });
+    throw new Error(
+      status === 0
+        ? "Proto Tools bootstrap executable is missing"
+        : "Proto Tools bootstrap build failed",
+    );
+  }
+  bootstrappedRoots.set(root, { executable, outputRoot });
+  return executable;
+}
+
+export function releaseProtoToolsBootstrap(root = repoRoot) {
+  const bootstrap = bootstrappedRoots.get(root);
+  if (bootstrap === undefined) return;
+  bootstrappedRoots.delete(root);
+  rmSync(bootstrap.outputRoot, { recursive: true, force: true });
+}
+
+export function protoToolsExecutable(root, customRunner, bootstrapRunner = runCommandIn) {
+  const compiled = join(root, "packages/proto-tools/dist/src/cli/spine-proto.js");
+  const bootstrapSource = join(root, "packages/proto-tools/src/cli/spine-proto-bootstrap.ts");
+  return customRunner !== undefined || !existsSync(bootstrapSource)
+    ? compiled
+    : prepareProtoToolsBootstrap(root, bootstrapRunner);
+}
+
+function packageNameAt(packageRoot) {
+  const manifest = join(packageRoot, "package.json");
+  if (!existsSync(manifest)) return undefined;
+  const name = JSON.parse(readFileSync(manifest, "utf8")).name;
+  return typeof name === "string" ? name : undefined;
 }
 
 function resolveBufExecutable() {
@@ -671,7 +726,7 @@ export function stageGeneratedTargets(options = {}) {
     }
 
     for (const target of modelAtomicTargets) {
-      const modelStage = stageModel(target, root, options);
+      const modelStage = stageModel(target, root, options, stagedTargets);
       if (modelStage.status !== 0) {
         removeStagedTargets(stagedTargets);
         return { stagedTargets: [], status: modelStage.status };
@@ -694,10 +749,12 @@ export function stageGeneratedTargets(options = {}) {
       stagedTargets: [],
       status: 1,
     };
+  } finally {
+    if (options.retainBootstrap !== true) releaseProtoToolsBootstrap(root);
   }
 }
 
-function stageModel(target, root, options = {}) {
+function stageModel(target, root, options = {}, stagedTargets = []) {
   const livePackageRoot = join(root, target.packagePath);
   if (!existsSync(join(livePackageRoot, "spine-proto.json"))) return { status: 0 };
   const stageRoot = mkdtempSync(join(livePackageRoot, ".generated-"));
@@ -712,10 +769,15 @@ function stageModel(target, root, options = {}) {
         dereference: false,
       });
     }
+    const executable = protoToolsExecutable(
+      root,
+      options.runModelCommand,
+      options.runBootstrapCommand,
+    );
     const modelStatus = run(
       `${target.moduleName} model generation`,
       process.execPath,
-      [join(root, "packages/proto-tools/dist/src/cli/spine-proto.js")],
+      [executable],
       packageRoot,
     );
     if (modelStatus !== 0) throw new Error(`${target.moduleName} model generation failed`);
@@ -735,6 +797,67 @@ function stageModel(target, root, options = {}) {
         ? undefined
         : createHandlerStage(target.handlerGeneratedPath, root);
     const handlerOutput = handlerStagedTarget?.stagedOutputRoot ?? output;
+    const consumerRoot =
+      target.handlerProjectPath === undefined
+        ? undefined
+        : join(root, dirname(target.handlerProjectPath));
+    const sourceRedirects = [
+      ...stagedTargets.flatMap((candidate) => {
+        const packagePath =
+          candidate.target.packagePath ??
+          (candidate.target.displayPath === "packages/proto/generated"
+            ? "packages/proto"
+            : undefined);
+        if (packagePath === undefined) return [];
+        const packageName = packageNameAt(join(root, packagePath));
+        return [
+          {
+            source: join(root, packagePath, "dist"),
+            staged: candidate.stageRoot,
+            packageName,
+            moduleRoot: candidate.stagedOutputRoot,
+          },
+          {
+            source: join(root, packagePath, "generated"),
+            staged: candidate.stagedOutputRoot,
+            packageName,
+            moduleRoot: candidate.stagedOutputRoot,
+          },
+          ...(consumerRoot === undefined || typeof packageName !== "string"
+            ? []
+            : [
+                {
+                  source: join(consumerRoot, "node_modules", packageName, "dist"),
+                  staged: candidate.stageRoot,
+                  packageName,
+                  moduleRoot: candidate.stagedOutputRoot,
+                },
+              ]),
+        ];
+      }),
+      {
+        source: join(livePackageRoot, "dist"),
+        staged: packageRoot,
+        packageName: packageNameAt(livePackageRoot),
+        moduleRoot: output,
+      },
+      {
+        source: join(livePackageRoot, "generated"),
+        staged: output,
+        packageName: packageNameAt(livePackageRoot),
+        moduleRoot: output,
+      },
+      ...(consumerRoot === undefined
+        ? []
+        : [
+            {
+              source: join(consumerRoot, "node_modules", packageNameAt(livePackageRoot), "dist"),
+              staged: packageRoot,
+              packageName: packageNameAt(livePackageRoot),
+              moduleRoot: output,
+            },
+          ]),
+    ];
     const handlerStatus =
       target.handlerProjectPath === undefined
         ? 0
@@ -747,10 +870,8 @@ function stageModel(target, root, options = {}) {
               join(root, target.handlerProjectPath),
               "--generated-root",
               handlerOutput,
-              "--source-generated-root",
-              target.handlerGeneratedPath === undefined
-                ? join(livePackageRoot, "generated")
-                : join(root, target.handlerGeneratedPath),
+              "--source-generated-redirects",
+              JSON.stringify(sourceRedirects),
               "--out",
               join(handlerOutput, "handler/generated-handler-registry.ts"),
               "--published-out",
@@ -822,10 +943,15 @@ export function stageChatRegistry(root, options = {}) {
       dereference: false,
     });
     const run = options.runCompositionCommand ?? runCommandIn;
+    const executable = protoToolsExecutable(
+      root,
+      options.runCompositionCommand,
+      options.runBootstrapCommand,
+    );
     const status = run(
       "Chat model registry composition",
       process.execPath,
-      [join(root, "packages/proto-tools/dist/src/cli/spine-proto.js"), "compose"],
+      [executable, "compose"],
       stageRoot,
     );
     if (status !== 0) throw new Error("Chat model registry composition failed");
@@ -840,6 +966,8 @@ export function stageChatRegistry(root, options = {}) {
     rmSync(stageRoot, { recursive: true, force: true });
     if (fileStageRoot !== undefined) rmSync(fileStageRoot, { recursive: true, force: true });
     throw error;
+  } finally {
+    if (options.retainBootstrap !== true) releaseProtoToolsBootstrap(root);
   }
 }
 
@@ -867,12 +995,12 @@ export function generateTargets(options = {}) {
       primaryFailure = true;
       status = prepareStatus;
     } else {
-      staged = stageGeneratedTargets(options);
+      staged = stageGeneratedTargets({ ...options, retainBootstrap: true });
       if (staged.status !== 0) {
         primaryFailure = true;
         status = staged.status;
       } else {
-        chatRegistry = stageChatRegistry(root, options);
+        chatRegistry = stageChatRegistry(root, { ...options, retainBootstrap: true });
         const spineTarget = staged.stagedTargets.find(
           (candidate) => candidate.target.displayPath === "packages/proto/generated",
         );
@@ -958,6 +1086,7 @@ export function generateTargets(options = {}) {
         status = 1;
       }
     }
+    releaseProtoToolsBootstrap(root);
   }
   return status;
 }

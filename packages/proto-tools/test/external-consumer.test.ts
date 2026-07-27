@@ -383,7 +383,9 @@ describe("packed external model consumer", () => {
           'const user = create(UserIdSchema, { value: "author-1" });',
           'const chat = create(ChatSchema, { author: user, text: "Hello" });',
           'const commandId = create(CommandIdSchema, { uuid: "spine-1" });',
-          "for (const [schema, value] of [[UserIdSchema, user], [ChatSchema, chat], [CommandIdSchema, commandId]] as const) {",
+          "const values = [[UserIdSchema, user], [ChatSchema, chat], " +
+            "[CommandIdSchema, commandId]] as const;",
+          "for (const [schema, value] of values) {",
           "  const packed = packAny(schema, value);",
           "  if (unpackAny(packed, schema) === undefined || unpackAnyUsing(typeRegistry, packed) === undefined) {",
           "    throw new Error(`Registry/Any round trip failed for ${schema.typeName}.`);",

@@ -18,8 +18,12 @@ async function main(argv = process.argv.slice(2)) {
   try {
     const { analyzeBuildHandlers, GeneratedRegistryWriter } = await loadBuildTool(tempRoot);
     const program = createProgram(options.project, {
-      sourceGeneratedRoot: options.sourceGeneratedRoot,
-      stagedGeneratedRoot: options.generatedRoot,
+      redirects: options.sourceGeneratedRedirects ?? [
+        {
+          source: options.sourceGeneratedRoot ?? options.generatedRoot,
+          staged: options.stagedSourceGeneratedRoot ?? options.generatedRoot,
+        },
+      ],
     });
     const analysis = analyzeBuildHandlers(program);
 
@@ -51,6 +55,8 @@ function parseArgs(argv) {
     outputFile: undefined,
     publishedOutputFile: undefined,
     sourceGeneratedRoot: undefined,
+    stagedSourceGeneratedRoot: undefined,
+    sourceGeneratedRedirects: undefined,
   };
 
   for (let index = 0; index < argv.length; index += 2) {
@@ -73,6 +79,12 @@ function parseArgs(argv) {
         break;
       case "--source-generated-root":
         options.sourceGeneratedRoot = resolve(value);
+        break;
+      case "--staged-source-generated-root":
+        options.stagedSourceGeneratedRoot = resolve(value);
+        break;
+      case "--source-generated-redirects":
+        options.sourceGeneratedRedirects = parseGeneratedSourceRedirects(value);
         break;
       case "--out":
         options.outputFile = resolve(value);
@@ -97,6 +109,30 @@ function parseArgs(argv) {
   }
 
   return options;
+}
+
+function parseGeneratedSourceRedirects(value) {
+  const parsed = JSON.parse(value);
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every(
+      (entry) =>
+        entry !== null &&
+        typeof entry === "object" &&
+        typeof entry.source === "string" &&
+        typeof entry.staged === "string" &&
+        (entry.packageName === undefined || typeof entry.packageName === "string") &&
+        (entry.moduleRoot === undefined || typeof entry.moduleRoot === "string"),
+    )
+  ) {
+    throw new Error("Generated source redirects must be source/staged path pairs.");
+  }
+  return parsed.map((entry) => ({
+    source: resolve(entry.source),
+    staged: resolve(entry.staged),
+    ...(entry.packageName === undefined ? {} : { packageName: entry.packageName }),
+    ...(entry.moduleRoot === undefined ? {} : { moduleRoot: resolve(entry.moduleRoot) }),
+  }));
 }
 
 async function loadBuildTool(tempRoot) {
@@ -157,11 +193,7 @@ function createProgram(project, generatedRoots) {
     throw new Error(formatConfigDiagnostics(parsed.errors));
   }
 
-  const host = createGeneratedRootRedirectHost(
-    parsed.options,
-    generatedRoots.sourceGeneratedRoot ?? generatedRoots.stagedGeneratedRoot,
-    generatedRoots.stagedGeneratedRoot,
-  );
+  const host = createGeneratedRootRedirectHost(parsed.options, generatedRoots.redirects);
 
   return ts.createProgram({
     rootNames: parsed.fileNames,
@@ -171,10 +203,48 @@ function createProgram(project, generatedRoots) {
   });
 }
 
-function createGeneratedRootRedirectHost(options, sourceGeneratedRoot, stagedGeneratedRoot) {
+function createGeneratedRootRedirectHost(options, redirects) {
   const host = ts.createCompilerHost(options);
+  const moduleRoots = new Map(
+    redirects.flatMap((redirect) =>
+      redirect.packageName === undefined || redirect.moduleRoot === undefined
+        ? []
+        : [[redirect.packageName, redirect.moduleRoot]],
+    ),
+  );
+  host.resolveModuleNameLiterals = (
+    moduleLiterals,
+    containingFile,
+    redirectedReference,
+    compilerOptions,
+  ) =>
+    moduleLiterals.map((literal) => {
+      for (const [packageName, moduleRoot] of moduleRoots) {
+        const prefix = `${packageName}/generated/`;
+        if (literal.text.startsWith(prefix) && literal.text.endsWith(".js")) {
+          const source = join(moduleRoot, `${literal.text.slice(prefix.length, -".js".length)}.ts`);
+          if (host.fileExists(source)) {
+            return {
+              resolvedModule: {
+                resolvedFileName: source,
+                extension: ts.Extension.Ts,
+                isExternalLibraryImport: false,
+              },
+            };
+          }
+        }
+      }
+      return ts.resolveModuleName(
+        literal.text,
+        containingFile,
+        compilerOptions,
+        host,
+        undefined,
+        redirectedReference,
+      );
+    });
 
-  if (sourceGeneratedRoot === stagedGeneratedRoot) {
+  if (redirects.every((redirect) => redirect.source === redirect.staged)) {
     return host;
   }
 
@@ -182,8 +252,7 @@ function createGeneratedRootRedirectHost(options, sourceGeneratedRoot, stagedGen
   const originalFileExists = host.fileExists.bind(host);
   const originalReadFile = host.readFile.bind(host);
   const originalRealpath = host.realpath?.bind(host);
-  const redirectPath = (path) =>
-    redirectGeneratedPath(path, sourceGeneratedRoot, stagedGeneratedRoot);
+  const redirectPath = (path) => redirectGeneratedPath(path, redirects);
 
   host.fileExists = (path) => originalFileExists(redirectPath(path));
   host.readFile = (path) => originalReadFile(redirectPath(path));
@@ -197,14 +266,18 @@ function createGeneratedRootRedirectHost(options, sourceGeneratedRoot, stagedGen
   return host;
 }
 
-function redirectGeneratedPath(path, sourceGeneratedRoot, stagedGeneratedRoot) {
-  const value = relative(sourceGeneratedRoot, resolve(path));
+function redirectGeneratedPath(path, redirects) {
+  for (const redirect of redirects) {
+    const value = relative(redirect.source, resolve(path));
 
-  if (value === "" || value.startsWith("..") || isAbsolute(value)) {
-    return path;
+    if (value === "") {
+      return redirect.staged;
+    }
+    if (!value.startsWith("..") && !isAbsolute(value)) {
+      return join(redirect.staged, ...value.split(sep));
+    }
   }
-
-  return join(stagedGeneratedRoot, ...value.split(sep));
+  return path;
 }
 
 function printDiagnostics(diagnostics) {

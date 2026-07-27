@@ -1546,3 +1546,150 @@ and mechanical formatting of the immediately preceding Chat foundation.
   as static assets instead of imported as ESM. Its 13 focused tests and the
   complete gate pass. It does not reopen any specialist lane.
 - T-0073 has no open review finding and is accepted for integration.
+
+## Post-merge clean-checkout correction assignments
+
+- Style/maintainability: existing `style_maintainability_reviewer`; expected
+  model explicitly `gpt-5.6-terra`, expected reasoning explicitly `high`.
+  Review only the clean-checkout Proto Tools bootstrap, staged generated-module
+  redirects, and analyzer use of TypeScript's authoritative program
+  resolution. Check for unnecessary duplication, speculative public API, and
+  maintainability regressions.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`; expected model explicitly
+  `gpt-5.6-terra`, expected reasoning explicitly `high`. Review only clean
+  bootstrap determinism, atomic staged-output preservation, source/compiled and
+  workspace-symlink redirect behavior, bounded maps, cleanup, and absence of
+  stale-build dependence.
+- Both roles are read-only and may not edit, spawn children, commit, push, or
+  merge. Model and reasoning are explicit in dispatch. The Desktop surface
+  exposes immutable configured role/profile metadata but not independent
+  runtime self-introspection; any visible mismatch requires redispatch.
+
+## Post-merge clean-checkout review results and correction
+
+- Style/maintainability accepted one P2: the workflow test asserted only the
+  serialized redirect arguments and did not execute handler analysis against
+  deliberately divergent live and staged schemas through a workspace package
+  symlink. The existing role ran under its explicitly configured
+  `gpt-5.6-terra` / `high` profile; independent runtime self-introspection was
+  unavailable.
+- Performance/reliability accepted one P1: the initial bootstrap rebuilt a
+  shared directory that concurrent generation and clean checks could remove or
+  partially observe. The existing role ran under its explicitly configured
+  `gpt-5.6-terra` / `high` profile; independent runtime self-introspection was
+  unavailable.
+- The correction gives each process a unique bootstrap directory beneath
+  Proto Tools' package-local ignored dependency cache, reuses it only within
+  that process, and removes it after the workflow. A two-process regression
+  proves distinct paths and cleanup.
+- The staged-schema regression now executes the real registry generator
+  through a workspace package symlink. It proves stale live declarations fail,
+  staged descriptor sources succeed, and command/event schemas reach the
+  generated registry.
+- Coordinator evidence is GREEN for all 52 workflow tests, the complete
+  affected batch of 5 files / 91 tests, and a cold `proto:generate` with the
+  compiled Proto Tools CLI absent and no bootstrap directory left afterward.
+- Focused style re-review reuses the existing
+  `style_maintainability_reviewer`, whose immutable configured role is
+  explicitly `gpt-5.6-terra` / `high`. Focused reliability re-review reuses the
+  existing `performance_reliability_reviewer`, whose immutable configured role
+  is explicitly `gpt-5.6-terra` / `high`. Both assignments are read-only,
+  prohibit child dispatch and mutation, and cover only their accepted finding.
+  The follow-up surface does not accept new model fields; the original explicit
+  dispatch and immutable role profile remain authoritative. Independent runtime
+  introspection remains unavailable, and any visible mismatch requires
+  redispatch.
+- Focused style/maintainability re-review is CLEAN. The executed fixture proves
+  stale live schemas fail and the real registry generator succeeds with staged
+  schemas through the workspace symlink, closing the accepted P2. The role
+  retained its explicit `gpt-5.6-terra` / `high` profile; independent runtime
+  introspection was unavailable.
+- Focused reliability re-review confirms the shared-bootstrap race is closed,
+  but accepts one remaining P1: real workflow paths prefer any existing
+  compiled Proto Tools CLI without establishing that it matches current source.
+  A branch switch or partial build could therefore bypass the source bootstrap
+  and atomically publish output produced by stale semantics. The role retained
+  its explicit `gpt-5.6-terra` / `high` profile; independent runtime
+  introspection was unavailable.
+- The existing `implementer` owns this single correction: real workflow paths
+  must always select the source bootstrap, injected test runners may retain
+  their non-executed compiled-path seam, and a selector regression must prove a
+  stale compiled CLI cannot win. Expected immutable role/profile is explicitly
+  `gpt-5.6-terra` / `medium`; the follow-up surface cannot restate model fields,
+  so the original explicit dispatch and immutable profile remain
+  authoritative. The assignment prohibits child dispatch, protocol edits,
+  commits, pushes, merges, and unrelated changes. Independent runtime
+  introspection remains unavailable; any visible mismatch requires redispatch.
+- The first implementer follow-up is rejected: it edited the already-merged
+  task worktree rather than the named integration worktree and selected an
+  uncompiled `.ts` entry for direct Node execution. Its reported verification
+  therefore did not cover the correction candidate. Those isolated
+  agent-owned edits were removed, leaving the pushed task endpoint unchanged.
+- Coordinator correction in the active integration context retains the tested
+  compiled source bootstrap, makes it authoritative whenever no injected test
+  command is present, and adds a selector regression with deliberately stale
+  `dist` output. The injected runner seam still receives its conventional
+  non-executed compiled path. Focused mechanical verification and reliability
+  redispatch follow; no rejected child result is accepted as evidence.
+- The first selector correction passed its 53-test workflow suite and received
+  a CLEAN reliability result, but the complete affected batch showed that
+  source-free generated-clean fixture repositories intentionally depend on
+  their injected compiled CLI. The external packed-consumer failure in that
+  same run was caused by the coordinator's deliberate pre-run removal of the
+  package `dist`, not by runtime behavior; the acceptance contract packs a
+  built Proto Tools package.
+- The reconciled selector treats the tracked bootstrap source as the repository
+  identity: when it exists, the current source bootstrap is authoritative even
+  if stale `dist` exists; when it does not exist, source-free fixture
+  repositories retain their compiled CLI seam. Injected command runners remain
+  unchanged. The complete affected batch passes 5 files / 93 tests after
+  rebuilding the package payload, and workflow plus generated-clean fixtures
+  pass 62/62.
+- The same existing `performance_reliability_reviewer` receives one final
+  read-only closure review in the exact integration worktree. Its immutable
+  configured role/profile remains explicitly `gpt-5.6-terra` / `high`;
+  independent runtime introspection is unavailable. It may not edit, spawn
+  children, commit, push, or merge.
+- Final performance/reliability re-review is CLEAN. With tracked bootstrap
+  source present, real model and Chat workflows select a fresh source
+  bootstrap despite stale `dist`; source-free fixtures retain the compiled CLI
+  seam, and both cases have focused tests. No P0-P2 correction finding remains.
+  The reviewer retained its explicit `gpt-5.6-terra` / `high` profile;
+  independent runtime introspection was unavailable.
+- Definitive elevated verification passed native tests at 139 files / 2,634
+  tests, but the added production branches reduced aggregate branch coverage
+  to 89.95% (8,406/9,345), five covered outcomes below the unchanged 90%
+  threshold. This is a deterministic coverage correction and does not reopen a
+  specialist concern.
+- The existing `implementer` owns only focused behavioral coverage for the
+  source-bootstrap CLI command dispatch in
+  `packages/proto-tools/test/bootstrap-cli.test.ts`. Expected immutable
+  role/profile is explicitly `gpt-5.6-terra` / `medium`; the assignment names
+  the exact integration worktree, prohibits production/config/threshold edits,
+  child dispatch, protocol edits, commits, pushes, and merges. Independent
+  runtime introspection is unavailable; any visible mismatch or wrong-worktree
+  edit is rejected.
+
+## Post-merge correction closure
+
+- The expected Terra/medium implementer added four focused bootstrap CLI
+  dispatch tests in the exact integration worktree. Independent runtime
+  introspection was unavailable and no profile mismatch was exposed.
+- Definitive elevated `verify` is GREEN. Native and coverage phases each pass
+  140 files / 2,638 tests, with 3 files / 25 intentional opt-in tests skipped.
+  Coverage is 94.05% statements (15,527/16,508), 90.01% branches
+  (8,412/9,345), 94.29% functions (3,832/4,064), and 94.73% lines
+  (14,762/15,583).
+- Typechecking, ESLint, cleanup enforcement, formatting, TypeDoc/API inventory,
+  Proto source and descriptor integrity, generated cleanliness, 61 runtime
+  package imports, 43 static package assets, and 121 relative Markdown links
+  all pass.
+- The sandboxed native attempt is not accepted because loopback listeners and
+  ZeroMQ IPC were explicitly denied with `EPERM`; elevated execution removed
+  that environmental limitation.
+- Post-merge style/maintainability and performance/reliability corrections are
+  CLEAN. The original four specialist lanes and final security gate remain
+  CLEAN because the deterministic CLI coverage correction changes no
+  production behavior. T-0073 has no open P0-P2 finding or verification
+  limitation.

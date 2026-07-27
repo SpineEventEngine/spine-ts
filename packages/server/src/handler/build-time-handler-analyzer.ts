@@ -1169,6 +1169,10 @@ function generatedModuleSource(
   moduleSpecifier: string,
   program: ts.Program,
 ): ts.SourceFile | undefined {
+  const imported = importedModuleSource(source, moduleSpecifier, program);
+  if (imported !== undefined) {
+    return imported;
+  }
   const resolved = ts.resolveModuleName(
     moduleSpecifier,
     source.fileName,
@@ -1196,6 +1200,26 @@ function generatedModuleSource(
   }
 
   return undefined;
+}
+
+function importedModuleSource(
+  source: ts.SourceFile,
+  moduleSpecifier: string,
+  program: ts.Program,
+): ts.SourceFile | undefined {
+  const declaration = source.statements.find(
+    (statement): statement is ts.ImportDeclaration =>
+      ts.isImportDeclaration(statement) &&
+      ts.isStringLiteral(statement.moduleSpecifier) &&
+      statement.moduleSpecifier.text === moduleSpecifier,
+  );
+  if (declaration === undefined) return undefined;
+
+  const symbol = program.getTypeChecker().getSymbolAtLocation(declaration.moduleSpecifier);
+  const imported = symbol?.declarations
+    ?.map((candidate) => candidate.getSourceFile())
+    .find((candidate) => candidate !== source);
+  return imported;
 }
 
 function uniqueStrings(values: readonly string[]): readonly string[] {

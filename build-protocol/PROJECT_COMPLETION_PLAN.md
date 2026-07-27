@@ -1,14 +1,13 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release and post-release JVM parity Waves 1 and 2 complete;
-Wave 3 active
+Status: Initial release and post-release JVM parity Waves 1 through 3 complete;
+Wave 4 Q&A pending
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0073 Proto model modules and external
-generation tooling
+Active implementation frontier: Wave 4 browser access and interoperability Q&A
 
 ## Purpose
 
@@ -71,6 +70,16 @@ post-merge verification as `74d0192a` and `bfa2418f`. All specialist and final
 security reviews are clean. The definitive full native gate on `bfa2418f`
 passes with 130 files / 2,466 tests and 90.02% branch coverage, and
 `origin/main` contains that verified endpoint.
+
+T-0073 Proto model modules and external generation tooling was committed as
+`5240b44f` and merged as `7eb1a616`. A clean-checkout correction in the commit
+containing this record removes stale-build dependencies from repository Proto
+generation and handler analysis. All specialist and security concerns are
+clean. Definitive post-merge verification passes 140 files / 2,638 tests in
+both native and coverage phases, with 90.01% branch coverage (8,412/9,345);
+`origin/main` contains the verified correction endpoint. Wave 3 is durably
+closed. Wave 4 requires the previously requested human Q&A before planning or
+implementation starts.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a

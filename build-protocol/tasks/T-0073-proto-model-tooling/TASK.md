@@ -1,10 +1,11 @@
 # T-0073: Proto Model Modules and External Generation Tooling
 
-Status: Accepted for integration
+Status: Complete
 
-Implementation status: implemented, fully reviewed, and branch-verified. The
-task is ready to commit, push, merge into `main`, post-merge verify, and
-remotely synchronize.
+Implementation status: implemented, fully reviewed, merged into `main`,
+post-merge verified, and remotely synchronized. The task endpoint is
+`5240b44f`, the merge is `7eb1a616`, and the post-merge correction is the commit
+containing this completion record.
 
 ## Objective
 

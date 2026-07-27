@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "isolatedDeclarations": false,
+    "outDir": "dist/bootstrap",
+    "rootDir": "src",
+    "sourceMap": false,
+    "types": ["node"]
+  },
+  "files": ["src/cli/spine-proto-bootstrap.ts"]
+}
