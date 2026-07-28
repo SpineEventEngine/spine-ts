@@ -18,11 +18,14 @@ import {
 } from "@spine-event-engine/proto";
 import {
   QueryResponseSchema,
+  QueryIdSchema,
   QuerySchema,
+  ResponseFormatSchema,
   EventUpdatesSchema,
   SubscriptionSchema,
   SubscriptionIdSchema,
   SubscriptionUpdateSchema,
+  TargetSchema,
   type Topic,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
@@ -242,10 +245,17 @@ describe("Client", () => {
     await client.close();
   });
 
-  it("treats unexpected wire EOF as one terminal failure", async () => {
+  it("retries unexpected wire EOF once before emitting one terminal failure", async () => {
     const client = Client.usingTransport(
       { transport: updateTransport(2), createRequestId: () => "drain" },
-      { subscriptions: { updateBufferCapacity: 2, updateBufferByteCapacity: 10_000 } },
+      {
+        subscriptions: {
+          updateBufferCapacity: 10,
+          updateBufferByteCapacity: 10_000,
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: { now: () => 0, wait: async () => {} },
+        },
+      },
     );
     const subscription = await client
       .asGuest()
@@ -257,12 +267,1050 @@ describe("Client", () => {
     const updateError = await updates.next().catch((error: unknown) => error);
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "gapPossible" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
     const failed = await lifecycle.next();
     expect(failed).toMatchObject({ value: { state: "failed" } });
     if (!failed.done && failed.value.state === "failed")
       expect(failed.value.error).toBe(updateError);
     await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
     await client.close();
+  });
+
+  it("retries a rejected Subscribe and attaches the next accepted wire", async () => {
+    let subscribes = 0;
+    let cancels = 0;
+    let active = 0;
+    const topic = create(TopicSchema);
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              if (subscribes === 2) throw new Error("transient subscribe failure");
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `retry-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel") cancels++;
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => {
+            active++;
+            return active < 2 ? (async function* () {})() : neverEndingUpdates();
+          },
+        ),
+        createRequestId: () => "retry-subscribe",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(subscribes).toBe(3));
+    expect(cancels).toBe(1);
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connecting", generation: 1 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connected", generation: 1 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connecting", generation: 2, attempt: 1 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connecting", generation: 3, attempt: 2 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "gapPossible", generation: 3 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connected", generation: 3 },
+    });
+    await subscription.cancel();
+    expect(cancels).toBe(2);
+    await client.close();
+  });
+
+  it("retries an initial rejected Subscribe before exposing a connected stream", async () => {
+    let subscribes = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              if (subscribes === 1) throw new Error("initial subscribe failure");
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "initial-subscribe" }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => neverEndingUpdates(),
+        ),
+        createRequestId: () => "initial-subscribe-retry",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await expect(subscription.activate()).resolves.toBeUndefined();
+    expect(subscribes).toBe(2);
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connecting", generation: 1, attempt: 0 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connecting", generation: 2, attempt: 1 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "gapPossible", generation: 2 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connected", generation: 2 },
+    });
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it("resynchronizes an Entity subscription before delivering an update held during Read", async () => {
+    let subscribes = 0;
+    let active = 0;
+    let topic: Topic | undefined;
+    let queryCalls = 0;
+    let readQuery: Message | undefined;
+    let releaseRead: (() => void) | undefined;
+    let queryFactoryCalls = 0;
+    let builtQuery: Message | undefined;
+    const target = create(TargetSchema, {
+      type: "type.example/Entity",
+      criterion: { case: "includeAll", value: true },
+    });
+    const entityTopic = create(TopicSchema, { target });
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              topic = input as Topic;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `entity-${subscribes}` }),
+                topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          (query) => {
+            queryCalls++;
+            readQuery = query;
+            return new Promise<Message>((resolve) => {
+              releaseRead = () => {
+                const response = create(QueryResponseSchema, {
+                  response: create(ResponseSchema, {
+                    status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                  }),
+                });
+                expect(response.response?.status?.status.case).toBe("ok");
+                resolve(response);
+              };
+            });
+          },
+          () => {
+            active++;
+            if (active === 1) return (async function* () {})();
+            return (async function* () {
+              yield create(SubscriptionUpdateSchema, {
+                subscription: create(SubscriptionSchema, {
+                  id: create(SubscriptionIdSchema, { value: "entity-2" }),
+                  topic: topic!,
+                }),
+              });
+              await new Promise<void>(() => {});
+            })();
+          },
+        ),
+        createRequestId: () => "entity-recovery",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(entityTopic, {
+      kind: "entity",
+      authoritativeQuery: () => ({
+        build: () => {
+          queryFactoryCalls++;
+          return (builtQuery = create(QuerySchema, {
+            id: create(QueryIdSchema, { value: "authoritative-query" }),
+            target,
+            format: create(ResponseFormatSchema, { limit: 7 }),
+          }));
+        },
+      }),
+    });
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    expect(queryFactoryCalls).toBe(0);
+    await subscription.activate();
+    await vi.waitFor(() => expect(queryCalls).toBe(1));
+    expect(queryFactoryCalls).toBe(1);
+    expect(readQuery).toMatchObject({
+      id: { value: "authoritative-query" },
+      target,
+      format: { limit: 7 },
+      context: topic?.context,
+    });
+    expect(readQuery).not.toBe(builtQuery);
+    expect((readQuery as { target?: unknown }).target).not.toBe(target);
+    expect((readQuery as { context?: unknown }).context).not.toBe(topic?.context);
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connecting", generation: 1 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connected", generation: 1 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connecting", generation: 2 },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "resynchronizing", generation: 2 },
+    });
+    releaseRead?.();
+    const resynchronization = await updates.next();
+    expect(resynchronization).toMatchObject({ value: { kind: "resynchronization" } });
+    if (!resynchronization.done && resynchronization.value.kind === "resynchronization") {
+      expect(Object.isFrozen(resynchronization.value)).toBe(true);
+      expect(Object.isFrozen(resynchronization.value.response)).toBe(true);
+      expect(Object.isFrozen(resynchronization.value.response.response)).toBe(true);
+      expect(Object.isFrozen(resynchronization.value.response.response?.status)).toBe(true);
+    }
+    await expect(updates.next()).resolves.toMatchObject({ value: { kind: "update" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connected", generation: 2 },
+    });
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it("treats Entity recovery query contract failures as terminal without retrying or rereading", async () => {
+    const target = create(TargetSchema, {
+      type: "type.example/Entity",
+      criterion: { case: "includeAll", value: true },
+    });
+    const cases: readonly {
+      readonly name: string;
+      readonly query: () => unknown;
+      readonly reads: number;
+      readonly calls: number;
+    }[] = [
+      {
+        name: "byte-different target",
+        query: () =>
+          create(QuerySchema, {
+            target: create(TargetSchema, {
+              type: "type.example/Entity",
+              criterion: { case: "includeAll", value: false },
+            }),
+          }),
+        reads: 0,
+        calls: 1,
+      },
+      {
+        name: "non-OK response",
+        query: () => create(QuerySchema, { target }),
+        reads: 1,
+        calls: 1,
+      },
+      {
+        name: "factory throw",
+        query: () => {
+          throw new Error("factory failed");
+        },
+        reads: 0,
+        calls: 1,
+      },
+      {
+        name: "builder throw",
+        query: () => ({
+          build: () => {
+            throw new Error("builder failed");
+          },
+        }),
+        reads: 0,
+        calls: 1,
+      },
+    ];
+
+    for (const testCase of cases) {
+      let subscribes = 0;
+      let reads = 0;
+      let queryCalls = 0;
+      const cancelled: string[] = [];
+      const client = Client.usingTransport(
+        {
+          transport: unaryTransport(
+            (method, input) => {
+              if (method.name === "Subscribe") {
+                subscribes++;
+                return create(SubscriptionSchema, {
+                  id: create(SubscriptionIdSchema, { value: `terminal-${subscribes}` }),
+                  topic: input as Topic,
+                });
+              }
+              if (method.name === "Cancel")
+                cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+              return create(ResponseSchema);
+            },
+            () => {
+              reads++;
+              return create(QueryResponseSchema, {
+                response: create(ResponseSchema, {
+                  status: create(StatusSchema, {
+                    status: { case: "error", value: create(ErrorSchema, { message: "not OK" }) },
+                  }),
+                }),
+              });
+            },
+            () => (async function* () {})(),
+          ),
+          createRequestId: () => `terminal-${testCase.name}`,
+        },
+        {
+          subscriptions: {
+            retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+            scheduler: immediateScheduler(),
+          },
+        },
+      );
+      const subscription = await client
+        .asGuest()
+        .createSubscription(create(TopicSchema, { target }), {
+          kind: "entity",
+          authoritativeQuery: () => {
+            queryCalls++;
+            return testCase.query();
+          },
+        });
+      const updates = subscription.updates[Symbol.asyncIterator]();
+
+      await subscription.activate();
+      await expect(updates.next()).rejects.toThrow();
+      expect(queryCalls, testCase.name).toBe(testCase.calls);
+      expect(reads, testCase.name).toBe(testCase.reads);
+      expect(subscribes, testCase.name).toBe(2);
+      expect(cancelled, testCase.name).toEqual(["terminal-1", "terminal-2"]);
+      await client.close();
+      expect(cancelled, testCase.name).toEqual(["terminal-1", "terminal-2"]);
+    }
+  });
+
+  it("retries a transient authoritative Read on a fresh Entity wire and reevaluates the query", async () => {
+    let subscribes = 0;
+    let reads = 0;
+    let queryCalls = 0;
+    let activations = 0;
+    const cancelled: string[] = [];
+    const target = create(TargetSchema, {
+      type: "type.example/Entity",
+      criterion: { case: "includeAll", value: true },
+    });
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `read-retry-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel")
+              cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+            return create(ResponseSchema);
+          },
+          () => {
+            reads++;
+            if (reads === 1) throw new Error("transient read failure");
+            return create(QueryResponseSchema, {
+              response: create(ResponseSchema, {
+                status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+              }),
+            });
+          },
+          () => {
+            activations++;
+            return activations === 1 ? (async function* () {})() : neverEndingUpdates();
+          },
+        ),
+        createRequestId: () => "read-retry",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema, { target }), {
+        kind: "entity",
+        authoritativeQuery: () => {
+          queryCalls++;
+          return create(QuerySchema, { target });
+        },
+      });
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(reads).toBe(2));
+    expect(queryCalls).toBe(2);
+    expect(subscribes).toBe(3);
+    expect(cancelled).toEqual(["read-retry-1", "read-retry-2"]);
+    await expect(updates.next()).resolves.toMatchObject({ value: { kind: "resynchronization" } });
+    for (let index = 0; index < 6; index++) await lifecycle.next();
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: { state: "connected", generation: 3 },
+    });
+    await subscription.cancel();
+    expect(cancelled).toEqual(["read-retry-1", "read-retry-2", "read-retry-3"]);
+    await client.close();
+  });
+
+  it.each(["cancel", "close"] as const)(
+    "%s during a pending Entity Read is terminal before iterator consumption or resynchronization delivery",
+    async (operation) => {
+      let subscribes = 0;
+      let sourceCloses = 0;
+      let nextCalls = 0;
+      let activations = 0;
+      let releaseRead: (() => void) | undefined;
+      const cancelled: string[] = [];
+      const target = create(TargetSchema, {
+        type: "type.example/Entity",
+        criterion: { case: "includeAll", value: true },
+      });
+      const client = Client.usingTransport(
+        {
+          transport: unaryTransport(
+            (method, input) => {
+              if (method.name === "Subscribe") {
+                subscribes++;
+                return create(SubscriptionSchema, {
+                  id: create(SubscriptionIdSchema, { value: `pending-read-${subscribes}` }),
+                  topic: input as Topic,
+                });
+              }
+              if (method.name === "Cancel")
+                cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+              return create(ResponseSchema);
+            },
+            () =>
+              new Promise<Message>((resolve) => {
+                releaseRead = () =>
+                  resolve(
+                    create(QueryResponseSchema, {
+                      response: create(ResponseSchema, {
+                        status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+                      }),
+                    }),
+                  );
+              }),
+            () => {
+              activations++;
+              if (activations === 1) return (async function* () {})();
+              return {
+                [Symbol.asyncIterator]: () => ({
+                  next: () => {
+                    nextCalls++;
+                    return new Promise<IteratorResult<Message>>(() => {});
+                  },
+                }),
+              };
+            },
+          ),
+          createRequestId: () => `pending-read-${operation}`,
+          close: () => sourceCloses++,
+        },
+        {
+          subscriptions: {
+            retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+            scheduler: immediateScheduler(),
+          },
+        },
+      );
+      const subscription = await client
+        .asGuest()
+        .createSubscription(create(TopicSchema, { target }), {
+          kind: "entity",
+          authoritativeQuery: () => create(QuerySchema, { target }),
+        });
+      const updates = subscription.updates[Symbol.asyncIterator]();
+      const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+      await subscription.activate();
+      await vi.waitFor(() => expect(releaseRead).toBeTypeOf("function"));
+      if (operation === "cancel") await subscription.cancel();
+      else await client.close();
+      expect(nextCalls).toBe(0);
+      expect(subscribes).toBe(2);
+      expect(cancelled).toEqual(["pending-read-1", "pending-read-2"]);
+      expect(sourceCloses).toBe(operation === "close" ? 1 : 0);
+      releaseRead?.();
+      await Promise.resolve();
+      expect(nextCalls).toBe(0);
+      await expect(updates.next()).resolves.toMatchObject({ done: true });
+      for (let index = 0; index < 4; index++) await lifecycle.next();
+      await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "closed" } });
+      await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+      if (operation === "cancel") await client.close();
+    },
+  );
+
+  it("uses the shared terminal overflow error when a decoded update follows Entity resynchronization", async () => {
+    const target = create(TargetSchema, {
+      type: "type.example/Entity",
+      criterion: { case: "includeAll", value: true },
+    });
+    const response = create(QueryResponseSchema, {
+      response: create(ResponseSchema, {
+        status: create(StatusSchema, { status: { case: "ok", value: {} } }),
+      }),
+    });
+    for (const subscriptions of [
+      { updateBufferCapacity: 1 },
+      { updateBufferByteCapacity: toBinary(QueryResponseSchema, response).byteLength },
+    ]) {
+      let subscribes = 0;
+      let activations = 0;
+      let acceptedTopic: Topic | undefined;
+      let cancels = 0;
+      const client = Client.usingTransport(
+        {
+          transport: unaryTransport(
+            (method, input) => {
+              if (method.name === "Subscribe") {
+                subscribes++;
+                acceptedTopic = input as Topic;
+                return create(SubscriptionSchema, {
+                  id: create(SubscriptionIdSchema, { value: `overflow-${subscribes}` }),
+                  topic: acceptedTopic,
+                });
+              }
+              if (method.name === "Cancel") cancels++;
+              return create(ResponseSchema);
+            },
+            () => response,
+            () => {
+              activations++;
+              if (activations === 1) return (async function* () {})();
+              return (async function* () {
+                yield create(SubscriptionUpdateSchema, {
+                  subscription: create(SubscriptionSchema, {
+                    id: create(SubscriptionIdSchema, { value: "overflow-2" }),
+                    topic: acceptedTopic!,
+                  }),
+                });
+              })();
+            },
+          ),
+          createRequestId: () => "resync-overflow",
+        },
+        {
+          subscriptions: {
+            ...subscriptions,
+            retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+            scheduler: immediateScheduler(),
+          },
+        },
+      );
+      const subscription = await client
+        .asGuest()
+        .createSubscription(create(TopicSchema, { target }), {
+          kind: "entity",
+          authoritativeQuery: () => create(QuerySchema, { target }),
+        });
+      const updates = subscription.updates[Symbol.asyncIterator]();
+      const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+      await subscription.activate();
+      await vi.waitFor(() => expect(cancels).toBe(2));
+      const updateError = await updates.next().catch((error: unknown) => error);
+      const lifecycleError = await lifecycle.next().catch((error: unknown) => error);
+      expect(updateError).toBe(lifecycleError);
+      expect((updateError as Error).message).toContain("overflow");
+      expect(cancels).toBe(2);
+      await client.close();
+      expect(cancels).toBe(2);
+    }
+  });
+
+  it("cleans an initially accepted wire when Activate iterator setup fails before retrying", async () => {
+    let subscribes = 0;
+    const cancelled: string[] = [];
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `initial-wire-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel")
+              cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+            return create(ResponseSchema);
+          },
+          undefined,
+          () =>
+            subscribes === 1
+              ? (() => {
+                  throw new Error("initial Activate setup failed");
+                })()
+              : neverEndingUpdates(),
+        ),
+        createRequestId: () => "initial-activate-retry",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(subscribes).toBe(2));
+    expect(cancelled).toEqual(["initial-wire-1"]);
+    await subscription.cancel();
+    expect(cancelled).toEqual(["initial-wire-1", "initial-wire-2"]);
+    await client.close();
+  });
+
+  it("cleans each accepted retry wire once when Activate setup fails before a later retry", async () => {
+    let subscribes = 0;
+    const cancelled: string[] = [];
+    let active = 0;
+    const topic = create(TopicSchema);
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `wire-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel")
+              cancelled.push((input as { id?: { value?: string } }).id?.value ?? "");
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => {
+            active++;
+            if (active === 2)
+              return {
+                [Symbol.asyncIterator]: () => {
+                  throw new Error("iterator setup failed");
+                },
+              };
+            return active === 3 ? neverEndingUpdates() : (async function* () {})();
+          },
+        ),
+        createRequestId: () => "retry-activate",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(subscribes).toBe(3));
+    expect(cancelled).toEqual(["wire-1", "wire-2"]);
+    await subscription.cancel();
+    expect(cancelled).toEqual(["wire-1", "wire-2", "wire-3"]);
+    await client.close();
+  });
+
+  it("fails once after retry exhaustion and cleans the final accepted wire", async () => {
+    let subscribes = 0;
+    let cancels = 0;
+    const topic = create(TopicSchema);
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `exhaust-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel") cancels++;
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "retry-exhaustion",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    const error = await updates.next().catch((value: unknown) => value);
+    await vi.waitFor(() => expect(subscribes).toBe(2));
+    expect(cancels).toBe(2);
+    for (let index = 0; index < 5; index++) await lifecycle.next();
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "failed", error } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await client.close();
+    expect(cancels).toBe(2);
+  });
+
+  it("expires elapsed retry time after the scheduler wait with one failure and cleanup", async () => {
+    let now = 0;
+    let subscribes = 0;
+    let cancels = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "elapsed" }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel") cancels++;
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "retry-elapsed",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 5, delayMs: () => 1 },
+          scheduler: {
+            now: () => now,
+            wait: async () => {
+              now = 5;
+            },
+          },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    const error = await updates.next().catch((value: unknown) => value);
+    expect(subscribes).toBe(1);
+    expect(cancels).toBe(1);
+    await lifecycle.next();
+    await lifecycle.next();
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "failed", error } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await client.close();
+    expect(cancels).toBe(1);
+  });
+
+  it("cancels a scheduler wait promptly, emits only closed, and starts no later RPC", async () => {
+    let subscribes = 0;
+    let cancels = 0;
+    let waiting: Promise<void> | undefined;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "waiting" }),
+                topic: input as Topic,
+              });
+            }
+            if (method.name === "Cancel") cancels++;
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "retry-wait-cancel",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: {
+            now: () => 0,
+            wait: (_delay, signal) =>
+              (waiting = new Promise<void>((_resolve, reject) =>
+                signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+              )),
+          },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(waiting).toBeDefined());
+    await subscription.cancel();
+    expect(subscribes).toBe(1);
+    expect(cancels).toBe(1);
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "closed" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await Promise.resolve();
+    expect(subscribes).toBe(1);
+    await client.close();
+  });
+
+  it("client close aborts a scheduler wait promptly without starting a later retry RPC", async () => {
+    let subscribes = 0;
+    let waiting: Promise<void> | undefined;
+    let sourceCloses = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "close-wait" }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "retry-wait-close",
+        close: () => sourceCloses++,
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: {
+            now: () => 0,
+            wait: (_delay, signal) =>
+              (waiting = new Promise<void>((_resolve, reject) =>
+                signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+              )),
+          },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(waiting).toBeDefined());
+    await client.close();
+    expect(subscribes).toBe(1);
+    expect(sourceCloses).toBe(1);
+    await lifecycle.next();
+    await lifecycle.next();
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "closed" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await Promise.resolve();
+    expect(subscribes).toBe(1);
+  });
+
+  it("rejects pending initial activation when cancellation aborts its retry wait", async () => {
+    let waiting: Promise<void> | undefined;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport((method) => {
+          if (method.name === "Subscribe") throw new Error("initial retry failure");
+          return create(ResponseSchema);
+        }),
+        createRequestId: () => "initial-wait-cancel",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: {
+            now: () => 0,
+            wait: (_delay, signal) =>
+              (waiting = new Promise<void>((_resolve, reject) =>
+                signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+              )),
+          },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    const activation = subscription.activate();
+
+    await vi.waitFor(() => expect(waiting).toBeDefined());
+    await subscription.cancel();
+    await expect(activation).rejects.toThrow("aborted");
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "closed" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await client.close();
+  });
+
+  it("fences an abort-ignoring retry wait after caller activation abort", async () => {
+    let subscribes = 0;
+    let releaseWait: (() => void) | undefined;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport((method) => {
+          if (method.name === "Subscribe") {
+            subscribes++;
+            throw new Error("initial retry failure");
+          }
+          return create(ResponseSchema);
+        }),
+        createRequestId: () => "abort-ignoring-wait",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: {
+            now: () => 0,
+            wait: () => new Promise<void>((resolve) => (releaseWait = resolve)),
+          },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    const abort = new AbortController();
+    const activation = subscription.activate({ signal: abort.signal });
+
+    await vi.waitFor(() => expect(releaseWait).toBeTypeOf("function"));
+    abort.abort(new Error("activation interrupted"));
+    releaseWait?.();
+    await expect(activation).rejects.toThrow("activation interrupted");
+    expect(subscribes).toBe(1);
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: {
+        state: "failed",
+        error: expect.objectContaining({ message: "activation interrupted" }),
+      },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await client.close();
+    expect(subscribes).toBe(1);
+  });
+
+  it("settles an initial retry when its scheduler wait never observes caller abort", async () => {
+    vi.useFakeTimers();
+    let subscribes = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport((method) => {
+          if (method.name === "Subscribe") {
+            subscribes++;
+            throw new Error("initial retry failure");
+          }
+          return create(ResponseSchema);
+        }),
+        createRequestId: () => "never-settling-wait",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: { now: () => 0, wait: () => new Promise<void>(() => {}) },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    const abort = new AbortController();
+    const activation = subscription.activate({ signal: abort.signal });
+
+    await vi.runAllTicks();
+    abort.abort(new Error("activation interrupted"));
+    const deadline = new Promise<never>((_resolve, reject) =>
+      setTimeout(() => reject(new Error("activation did not settle")), 1),
+    );
+    const settlement = expect(Promise.race([activation, deadline])).rejects.toThrow(
+      "activation interrupted",
+    );
+    await vi.advanceTimersByTimeAsync(1);
+    await settlement;
+    expect(subscribes).toBe(1);
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({
+      value: {
+        state: "failed",
+        error: expect.objectContaining({ message: "activation interrupted" }),
+      },
+    });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await expect(client.close()).resolves.toBeUndefined();
+    vi.useRealTimers();
   });
 
   it("preserves binary event payloads while freezing a delivered update", async () => {
@@ -580,29 +1628,85 @@ describe("Client", () => {
     expect(calls).toEqual(["Subscribe", "Cancel"]);
   });
 
-  it("cancels unexpected EOF once and does not re-cancel it during client close", async () => {
+  it("exhausts EOF retries and does not re-cancel accepted wires during client close", async () => {
     let cancels = 0;
     const topic = create(TopicSchema);
-    const client = Client.usingTransport({
-      transport: unaryTransport((method, input) => {
-        if (method.name === "Subscribe")
-          return create(SubscriptionSchema, {
-            id: create(SubscriptionIdSchema, { value: "s-done" }),
-            topic: input as Topic,
-          });
-        if (method.name === "Cancel") cancels++;
-        return create(ResponseSchema);
-      }),
-      createRequestId: () => "request-done",
-    });
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport((method, input) => {
+          if (method.name === "Subscribe")
+            return create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "s-done" }),
+              topic: input as Topic,
+            });
+          if (method.name === "Cancel") cancels++;
+          return create(ResponseSchema);
+        }),
+        createRequestId: () => "request-done",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: { now: () => 0, wait: async () => {} },
+        },
+      },
+    );
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     await subscription.activate();
     await expect(subscription.updates[Symbol.asyncIterator]().next()).rejects.toThrow(
       "ended unexpectedly",
     );
-    expect(cancels).toBe(1);
+    expect(cancels).toBe(2);
     await client.close();
-    expect(cancels).toBe(1);
+    expect(cancels).toBe(2);
+  });
+
+  it("reconnects an event subscription after EOF through the injected scheduler", async () => {
+    let subscribes = 0;
+    let releaseRetry: (() => void) | undefined;
+    const topic = create(TopicSchema);
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `s-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "event-reconnect",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: {
+            now: () => 0,
+            wait: () => new Promise<void>((resolve) => (releaseRetry = resolve)),
+          },
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(releaseRetry).toBeTypeOf("function"));
+    releaseRetry?.();
+    await vi.waitFor(() => expect(subscribes).toBe(2));
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "gapPossible" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await subscription.cancel();
+    await client.close();
   });
 
   it("normalizes a non-Error stream rejection into one failed lifecycle notice", async () => {
@@ -1021,14 +2125,22 @@ describe("Client", () => {
 
   it("fails activation without attempting cleanup when Subscribe rejects before a wire exists", async () => {
     let cancels = 0;
-    const client = Client.usingTransport({
-      transport: unaryTransport((method) => {
-        if (method.name === "Subscribe") throw new Error("subscribe failed");
-        if (method.name === "Cancel") cancels++;
-        return create(ResponseSchema);
-      }),
-      createRequestId: () => "subscribe-reject",
-    });
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport((method) => {
+          if (method.name === "Subscribe") throw new Error("subscribe failed");
+          if (method.name === "Cancel") cancels++;
+          return create(ResponseSchema);
+        }),
+        createRequestId: () => "subscribe-reject",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: immediateScheduler(),
+        },
+      },
+    );
     const subscription = await client
       .asGuest()
       .createSubscription(create(TopicSchema), eventSubscription);
@@ -1426,7 +2538,7 @@ function unaryTransport(
     input: Message,
     signal: AbortSignal,
   ) => Message | Promise<Message>,
-  read?: () => Promise<Message>,
+  read?: (query: Message) => Message | Promise<Message>,
   updates?: () => AsyncIterable<Message>,
 ): Transport {
   return {
@@ -1439,7 +2551,7 @@ function unaryTransport(
         service: method.parent,
         message:
           method.name === "Read" && read !== undefined
-            ? await read()
+            ? await read(input as Message)
             : await handler(method, input, signal),
       } as never;
     },
@@ -1566,4 +2678,16 @@ function updateTransport(count = 2, beforeSecond?: () => Promise<void>): Transpo
         }
       })(),
   );
+}
+
+function immediateScheduler(): { now(): number; wait(): Promise<void> } {
+  return { now: () => 0, wait: async () => {} };
+}
+
+function neverEndingUpdates(): AsyncIterable<Message> {
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<Message> {
+      return { next: () => new Promise<IteratorResult<Message>>(() => {}) };
+    },
+  };
 }

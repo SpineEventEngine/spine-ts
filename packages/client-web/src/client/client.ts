@@ -19,9 +19,11 @@ import {
 import {
   CommandService,
   QuerySchema,
+  QueryResponseSchema,
   QueryService,
   SubscriptionService,
   SubscriptionUpdateSchema,
+  TargetSchema,
   TopicSchema,
   type Query,
   type QueryResponse,
@@ -48,7 +50,7 @@ export interface ClientOptions {
   readonly subscriptions?: SubscriptionRuntimeOptions;
 }
 
-/** Bounded retry and scheduling configuration reserved for the A4 lifecycle runtime. */
+/** Bounded queues, retry policy, and scheduling for subscription recovery. */
 export interface SubscriptionRuntimeOptions {
   readonly updateBufferCapacity?: number;
   readonly updateBufferByteCapacity?: number;
@@ -64,7 +66,7 @@ export interface SubscriptionRetryPolicy {
   delayMs(attempt: number): number;
 }
 
-/** Timer seam reserved for deterministic A4 reconnect scheduling. */
+/** Clock and abortable-wait seam used by deterministic reconnect scheduling. */
 export interface SubscriptionScheduler {
   now(): number;
   wait(delayMs: number, signal: AbortSignal): Promise<void>;
@@ -149,6 +151,9 @@ export class ClientProtocolError extends Error {
 
 /** Internal marker selecting the terminal overflow path without inspecting error text. */
 class SubscriptionBufferOverflowError extends ClientProtocolError {}
+
+/** Internal marker for a transport stream that ended without terminal cancellation. */
+class SubscriptionStreamEndedError extends ClientProtocolError {}
 
 /** Browser-safe Spine client whose transport and ID source are supplied by the caller. */
 export class Client {
@@ -370,9 +375,9 @@ class TopicSubscription implements Subscription {
   readonly #owner: ClientOwner;
   readonly #topic: Topic;
   readonly #signal: AbortSignal;
-  /** Retained for generation-aware entity recovery in A4.3. */
+  /** Subscription kind and optional authoritative Entity recovery query. */
   readonly #options: CreateSubscriptionOptions;
-  /** Retained for generation-owned retry and scheduling in A4.2/A4.3. */
+  /** Validated bounded-queue, retry, and scheduler settings. */
   readonly #runtime: RequiredSubscriptionRuntimeOptions;
   readonly #updates: BoundedChannel<SubscriptionDelivery>;
   readonly #lifecycle: BoundedChannel<SubscriptionLifecycle>;
@@ -385,6 +390,8 @@ class TopicSubscription implements Subscription {
   #activation: Promise<void> | undefined;
   #cancellation: Promise<void> | undefined;
   #streamIterator: AsyncIterator<SubscriptionUpdate> | undefined;
+  #retryAttempt = 0;
+  #retryStartedAt: number | undefined;
 
   constructor(
     owner: ClientOwner,
@@ -462,6 +469,10 @@ class TopicSubscription implements Subscription {
       this.#pushLifecycle({ state: "connected", generation });
     } catch (error) {
       if (this.#cancelled) throw error;
+      if (this.#retryable(error) && this.#canRetry()) {
+        await this.#recover(error, this.#wire);
+        return;
+      }
       this.#failStreams(error, generation);
       let cleanupFailure: unknown;
       try {
@@ -503,10 +514,12 @@ class TopicSubscription implements Subscription {
     subscription: WireSubscription,
     generation: number,
   ): Promise<void> {
+    let recovering = false;
     try {
       while (true) {
         const next = await raceTerminal(updates.next(), this.#controller.signal);
-        if (next.done) throw new ClientProtocolError("subscription stream ended unexpectedly.");
+        if (next.done)
+          throw new SubscriptionStreamEndedError("subscription stream ended unexpectedly.");
         if (this.#cancelled || generation !== this.#generation) return;
         const update = next.value;
         validateSubscription(update.subscription, subscription.topic!);
@@ -514,13 +527,20 @@ class TopicSubscription implements Subscription {
           throw new ClientProtocolError(
             "subscription update ID does not match the accepted subscription.",
           );
-        this.#pushUpdate(
-          freezeDelivery({ kind: "update", update: clone(SubscriptionUpdateSchema, update) }),
-          toBinary(SubscriptionUpdateSchema, update).byteLength,
-        );
+        const delivery = freezeDelivery({
+          kind: "update",
+          update: clone(SubscriptionUpdateSchema, update),
+        });
+        const bytes = toBinary(SubscriptionUpdateSchema, update).byteLength;
+        this.#pushUpdate(delivery, bytes);
       }
     } catch (error) {
       if (this.#cancelled) return;
+      if (this.#retryable(error) && this.#canRetry()) {
+        recovering = true;
+        void this.#recover(error, subscription).catch(() => undefined);
+        return;
+      }
       this.#failStreams(error, generation);
       try {
         await this.#cancelAfterFailure();
@@ -528,11 +548,133 @@ class TopicSubscription implements Subscription {
         // The stream's original terminal error remains observable; cleanup is best effort.
       }
     } finally {
+      if (recovering) return;
       this.#updates.close();
       this.#lifecycle.close();
       this.#owner.remove(this);
       if (this.#streamIterator === updates) this.#streamIterator = undefined;
     }
+  }
+
+  #retryable(error: unknown): boolean {
+    return (
+      error instanceof SubscriptionStreamEndedError ||
+      (error instanceof Error && !(error instanceof ClientProtocolError))
+    );
+  }
+
+  #canRetry(): boolean {
+    const now = this.#runtime.scheduler.now();
+    this.#retryStartedAt ??= now;
+    return this.#retryAttempt < this.#runtime.retryPolicy.maxAttempts && !this.#elapsed();
+  }
+
+  #elapsed(): boolean {
+    return (
+      this.#runtime.scheduler.now() - (this.#retryStartedAt ?? 0) >=
+      this.#runtime.retryPolicy.maxElapsedMs
+    );
+  }
+
+  async #recover(error: unknown, previousWire: WireSubscription | undefined): Promise<void> {
+    let failure = error;
+    let wire: WireSubscription | undefined = previousWire;
+    let generation = this.#generation;
+    try {
+      while (this.#retryable(failure) && this.#canRetry()) {
+        const attempt = ++this.#retryAttempt;
+        generation = ++this.#generation;
+        this.#disposeLateIterator();
+        if (wire !== undefined) await this.#cancelWireOnce(wire);
+        const delay = this.#runtime.retryPolicy.delayMs(attempt);
+        if (!Number.isSafeInteger(delay) || delay <= 0)
+          throw new ClientProtocolError(
+            "subscription retry delay must be a positive safe integer.",
+          );
+        await raceTerminal(
+          this.#runtime.scheduler.wait(delay, this.#controller.signal),
+          this.#controller.signal,
+        );
+        if (this.#controller.signal.aborted) throw this.#controller.signal.reason;
+        if (this.#cancelled) return;
+        if (this.#elapsed()) throw failure;
+        this.#pushLifecycle({ state: "connecting", generation, attempt });
+        try {
+          const pending = createClient(SubscriptionService, this.#owner.transport).subscribe(
+            this.#topic,
+            { signal: this.#controller.signal },
+          );
+          const subscription = await raceTerminal(pending, this.#controller.signal, () =>
+            cancelLateSubscription(pending, this.#owner.transport),
+          );
+          this.#wire = subscription;
+          validateSubscription(subscription, this.#topic);
+          const updates = createClient(SubscriptionService, this.#owner.transport).activate(
+            subscription,
+            { signal: this.#controller.signal },
+          );
+          const iterator = updates[Symbol.asyncIterator]();
+          this.#streamIterator = iterator;
+          if (this.#options.kind === "entity") await this.#resynchronize(generation);
+          void this.consumeUpdates(iterator, subscription, generation).catch(() => undefined);
+          if (this.#options.kind === "event")
+            this.#pushLifecycle({ state: "gapPossible", generation });
+          this.#pushLifecycle({ state: "connected", generation });
+          return;
+        } catch (retryFailure) {
+          failure = retryFailure;
+          wire = this.#wire;
+        }
+      }
+      throw failure;
+    } catch (recoveryError) {
+      if (this.#cancelled) throw recoveryError;
+      const terminalError = recoveryError instanceof Error ? recoveryError : error;
+      this.#disposeLateIterator();
+      this.#failStreams(terminalError, generation);
+      try {
+        await this.#cancelAfterFailure();
+      } catch {
+        // The terminal failure remains observable when cleanup fails.
+      } finally {
+        this.#updates.close();
+        this.#lifecycle.close();
+        this.#owner.remove(this);
+      }
+      throw terminalError;
+    }
+  }
+
+  async #resynchronize(generation: number): Promise<void> {
+    let query: Query;
+    try {
+      const source =
+        this.#options.kind === "entity" ? this.#options.authoritativeQuery() : undefined;
+      if (source === undefined) throw new Error("entity recovery query is missing.");
+      query = clone(QuerySchema, "build" in source ? source.build() : source);
+    } catch (error) {
+      throw new ClientProtocolError(`authoritative query could not be prepared: ${String(error)}`);
+    }
+    if (!sameTarget(query.target, this.#topic.target))
+      throw new ClientProtocolError(
+        "authoritative query target does not match the subscription topic.",
+      );
+    query.context = clone(ActorContextSchema, this.#topic.context!);
+    this.#pushLifecycle({ state: "resynchronizing", generation });
+    const pending = createClient(QueryService, this.#owner.transport).read(query, {
+      signal: this.#controller.signal,
+    });
+    const response = await raceTerminal(pending, this.#controller.signal);
+    if (response.response?.status?.status.case !== "ok")
+      throw new ClientProtocolError("authoritative query response is not OK.");
+    if (this.#cancelled || generation !== this.#generation) return;
+    this.#pushUpdate(
+      freezeResynchronization({
+        kind: "resynchronization",
+        response: clone(QueryResponseSchema, response),
+      }),
+      toBinary(QueryResponseSchema, response).byteLength,
+    );
   }
 
   async #cancelAfterFailure(): Promise<void> {
@@ -587,6 +729,7 @@ class TopicSubscription implements Subscription {
   #disposeLateIterator(): void {
     const iterator = this.#streamIterator;
     if (iterator === undefined) return;
+    this.#streamIterator = undefined;
     try {
       void Promise.resolve(iterator.return?.()).catch(() => undefined);
     } catch {
@@ -868,6 +1011,12 @@ function freezeDelivery(
   return Object.freeze({ ...delivery, update: deepFreeze(delivery.update) });
 }
 
+function freezeResynchronization(
+  delivery: Extract<SubscriptionDelivery, { readonly kind: "resynchronization" }>,
+): SubscriptionDelivery {
+  return Object.freeze({ ...delivery, response: deepFreeze(delivery.response) });
+}
+
 function deepFreeze<Value>(value: Value): Value {
   if (value === null || typeof value !== "object" || ArrayBuffer.isView(value)) return value;
   for (const child of Object.values(value)) deepFreeze(child);
@@ -928,6 +1077,13 @@ function validateSubscription(
 function sameTopic(left: Topic, right: Topic): boolean {
   const a = toBinary(TopicSchema, left);
   const b = toBinary(TopicSchema, right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function sameTarget(left: Query["target"], right: Topic["target"]): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  const a = toBinary(TargetSchema, left);
+  const b = toBinary(TargetSchema, right);
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 

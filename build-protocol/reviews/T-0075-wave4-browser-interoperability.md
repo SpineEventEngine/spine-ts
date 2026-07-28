@@ -1141,6 +1141,132 @@ already clean review lanes.
   140 runnable files / 2,612 tests and 90.00% branches (8,356/9,284). No
   reviewer-profile mismatch and no Spine JVM project operation occurred.
 
+## A4.3 specialist review assignments
+
+The review base is pushed A4.2 commit `f36d0926`; the review package is the
+complete uncommitted A4.3 runtime/test/evidence diff. Classification is
+high-risk because finite retries, generation fencing, Entity authoritative
+recovery, bounded queues, and cancellation interact.
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  explicit `gpt-5.6-terra` / `high`.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`,
+  expected explicit `gpt-5.6-terra` / `high`.
+- Performance/reliability: existing
+  `performance_reliability_reviewer`, expected explicit
+  `gpt-5.6-terra` / `high`.
+- Documentation completeness: N/A for this runtime slice because A4.4 is the
+  immediately following public-guide/README regression-closure slice. Public
+  TSDoc is still in API-review scope now; A4.3 may not be released or merged
+  without A4.4.
+
+All dispatched fields are explicit. The Desktop surface exposes configured
+immutable role/profile metadata but not independent runtime
+self-introspection; any visible mismatch invalidates a result. Reviewers are
+read-only, own distinct concerns, and may run focused Spine TS checks only.
+The permanent Wave 4 rule permits static read-only Spine JVM references only
+and forbids JVM builds, tests, generation, dependency resolution, launch, or
+other project execution.
+
+## A4.3 complete review wave and correction batch
+
+All three affected existing concerns completed under their explicit
+Terra/high assignments. Independent runtime self-introspection was unavailable;
+the immutable configured roles/profiles matched, no reviewer edited files, and
+no Spine JVM operation occurred. Focused client tests passed 63/63 and diff
+hygiene passed.
+
+Accepted and deduplicated findings:
+
+1. P1: a caller abort can still permit a later retry Subscribe when an injected
+   scheduler ignores its abort signal, because recovery checks `#cancelled`
+   rather than the controller's aborted state after the wait. Fence attempt
+   admission and RPC dispatch on `#controller.signal.aborted` before and after
+   every wait.
+2. P1: retryable stream failure clears the current iterator without invoking
+   its best-effort `return()`; failed Entity resynchronization can overwrite an
+   attached replacement iterator; and terminal non-cancellation cleanup does
+   not dispose it. Generation fencing prevents delivery but does not release
+   the transport/local reader resource. Dispose and clear each abandoned
+   iterator without awaiting a non-cooperative `return()`.
+
+One consolidated correction returns to the existing productive `implementer`
+context, expected explicit `gpt-5.6-terra` / `medium`. It owns only the A4.3
+client runtime/tests/evidence and must add abort-ignoring-scheduler plus
+return-spy regressions for stream retry, failed Entity Read retry/exhaustion,
+and terminal cleanup. It may not begin A4.4, commit, push, merge, spawn
+children, or execute any Spine JVM project operation.
+
+### A4.3 review-regression correction evidence
+
+- The retry path retains the failed stream iterator until `#recover()` calls
+  the existing clear-before-return disposal helper. Mocked Connect regressions
+  prove exactly-once, non-blocking disposal for retryable stream failure and
+  the Entity transient-Read retry/final-non-OK path; rejecting and
+  never-settling returns do not delay local terminal behavior, and later close
+  does not duplicate return.
+- The abort-ignoring scheduler regression proves caller activation abort fences
+  retry admission after the wait resolves: `activate()` rejects, only the
+  initial Subscribe occurs, and lifecycle terminates as `failed`.
+- Focused two-file test run passed 67/67. Scoped coverage measured `client.ts`
+  at 95.64% statements, 92.55% branches, 95.32% functions, and 97.73% lines;
+  its nonzero exit is limited to unchanged workspace-global coverage thresholds
+  for unexecuted packages. Root `typecheck:build`, diff hygiene, and Prettier
+  passed. The correction is ready for the existing targeted re-review; no JVM
+  project operation occurred.
+
+### A4.3 API P1 bounded scheduler-wait correction
+
+- A direct scheduler wait could remain pending forever after caller abort when
+  a custom scheduler ignored its signal. Recovery now routes that wait through
+  `raceTerminal()` using the subscription controller, preserving the existing
+  post-wait elapsed and controller checks and observing any later raw wait
+  rejection.
+- The exact initial-retry regression passed: a never-settling scheduler wait
+  yields prompt activation rejection on caller abort, no second Subscribe, one
+  `failed` lifecycle terminal then done, and a settling client close. Focused
+  tests passed 68/68; root `typecheck:build`, Prettier, and diff hygiene passed.
+
+## A4.3 targeted final re-review assignments
+
+The existing style, TypeScript/API, and performance/reliability concerns are
+reopened only for the two accepted P1 findings and their regressions. Expected
+profiles remain explicitly `gpt-5.6-terra` / `high` for each existing reviewer.
+The Desktop surface exposes immutable configured profiles but not independent
+runtime self-introspection; visible mismatches invalidate results. Review is
+read-only, focused Spine TS checks only, with the permanent no-Spine-JVM-
+execution rule in force.
+
+## A4.3 targeted re-review result and final correction
+
+- Style/maintainability is clean for clear-before-return iterator ownership and
+  the focused mocked-Connect seams.
+- Performance/reliability is clean for exactly-once nonblocking iterator
+  disposal across Event and Entity retry/exhaustion paths.
+- TypeScript/API confirms the released-wait abort fence but finds one P1:
+  directly awaiting an injected scheduler that ignores abort and never settles
+  can keep initial `activate()` pending forever. Race the scheduler wait against
+  the controller signal while retaining rejection observation, and prove
+  prompt activation rejection/terminal lifecycle/no later Subscribe with a
+  never-settling scheduler.
+
+This final bounded correction returns to the existing `implementer`, expected
+explicit `gpt-5.6-terra` / `medium`. It changes only the wait race, its focused
+regression, and evidence. Clean iterator lanes do not reopen.
+
+## A4.3 review convergence
+
+- The final scheduler correction races even a never-settling injected wait
+  against the controller signal while observing the raw promise. Focused
+  regression proves prompt activation rejection, no later Subscribe, one
+  `failed` terminal notice, and settled client close.
+- Targeted TypeScript/API confirmation is clean. Previously clean
+  style/maintainability and reliability iterator lanes were unaffected and
+  remain clean.
+- All accepted P1 findings are resolved. Focused correction evidence passed
+  68/68 tests, root typechecking/frozen Proto checks, formatting, and diff
+  hygiene. No reviewer-profile mismatch or Spine JVM operation occurred.
+
 ### A4.1 consolidated correction evidence
 
 - The bounded channel now distinguishes graceful `close()` (drain admitted
