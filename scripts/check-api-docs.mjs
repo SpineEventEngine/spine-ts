@@ -116,6 +116,30 @@ const expectedProtoToolsExports = [
   "readManifest",
   "createManifest",
 ];
+const expectedAuthExports = [
+  "AuthenticatedPrincipal",
+  "Authenticator",
+  "AuthorizationPolicy",
+  "AuthorizedRequestContext",
+  "Clock",
+  "CommandRequestInput",
+  "ContextResolver",
+  "IncomingCommand",
+  "IncomingQuery",
+  "IncomingRequest",
+  "IncomingRequestInput",
+  "IncomingSubscription",
+  "IncomingSubscriptionActivation",
+  "IncomingSubscriptionCancellation",
+  "RequestCredential",
+  "RequestDecoder",
+  "ResolvedSession",
+  "SessionResolver",
+  "TransportFactsInput",
+  "TransportRequestContext",
+  "decodeIncomingRequest",
+  "transportFacts",
+];
 const expectedCoreExports = [
   "DEFAULT_TYPE_URL_PREFIX",
   "TypeRegistry",
@@ -548,6 +572,7 @@ const expectedServerExports = [
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
+const authIndexPath = join("packages", "auth", "src", "index.ts");
 const clientIndexPath = join("packages", "client-node", "src", "index.ts");
 const clientWebIndexPath = join("packages", "client-web", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
@@ -590,6 +615,7 @@ if (typedocResult.status !== 0) {
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
+const authModuleNames = collectDirectModuleNames(apiDocs, "packages/auth/src");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
 const clientWebModuleNames = collectDirectModuleNames(apiDocs, "packages/client-web/src");
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
@@ -900,6 +926,7 @@ const forbiddenStorageTypeDocNames = [
   "createEventStore",
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
+const declaredAuthExports = collectNamedExports(authIndexPath);
 const declaredProtoToolsExports = collectNamedExports(protoToolsIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
 const declaredClientWebExports = collectNamedExports(clientWebIndexPath);
@@ -911,6 +938,13 @@ const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
+const missingAuthExports = expectedAuthExports.filter((name) => !authModuleNames.has(name));
+const missingDeclaredAuthExports = expectedAuthExports.filter(
+  (name) => !declaredAuthExports.includes(name),
+);
+const unexpectedAuthExports = declaredAuthExports.filter(
+  (name) => !expectedAuthExports.includes(name),
+);
 const missingDeclaredProtoToolsExports = expectedProtoToolsExports.filter(
   (name) => !declaredProtoToolsExports.includes(name),
 );
@@ -1024,6 +1058,21 @@ if (missingDeclaredProtoToolsExports.length > 0 || unexpectedProtoToolsExports.l
   console.error(
     "@spine-event-engine/proto-tools exports changed without updating docs expectations: " +
       [...missingDeclaredProtoToolsExports, ...unexpectedProtoToolsExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingAuthExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-event-engine/auth exports: ${missingAuthExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredAuthExports.length > 0 || unexpectedAuthExports.length > 0) {
+  console.error(
+    "@spine-event-engine/auth root export inventory mismatch: " +
+      [...missingDeclaredAuthExports, ...unexpectedAuthExports].join(", "),
   );
   process.exit(1);
 }
@@ -1311,6 +1360,7 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 console.log(
   [
     `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-event-engine/proto exports`,
+    `${expectedAuthExports.length} expected @spine-event-engine/auth exports`,
     `${expectedCoreExports.length} expected @spine-event-engine/core exports`,
     `${expectedClientExports.length} expected @spine-event-engine/client-node exports`,
     `${expectedClientWebExports.length} expected @spine-event-engine/client-web exports`,

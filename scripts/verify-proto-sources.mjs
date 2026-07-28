@@ -171,6 +171,56 @@ function validateSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
   };
 }
 
+function validateOwnedSource(source, repoRoot, protoRoot, seenLocalPaths, failures) {
+  if (source === null || typeof source !== "object" || Array.isArray(source)) {
+    failures.push("owned manifest source entry must be an object");
+    return undefined;
+  }
+
+  const localPath = validateStringField(source, "localPath", failures);
+  const sha256 = validateStringField(source, "sha256", failures);
+
+  if (localPath === undefined || sha256 === undefined) return undefined;
+  if (seenLocalPaths.has(localPath)) {
+    failures.push(`${localPath}: duplicate manifest localPath`);
+    return undefined;
+  }
+  seenLocalPaths.add(localPath);
+  if (
+    isAbsolute(localPath) ||
+    localPath.includes("\\") ||
+    localPath.split("/").includes("..") ||
+    !localPath.startsWith("packages/proto/proto/") ||
+    !localPath.endsWith(".proto")
+  ) {
+    failures.push(
+      `${localPath}: localPath must be a relative packages/proto/proto/**/*.proto path without '..'`,
+    );
+    return undefined;
+  }
+  if (!/^[0-9a-f]{64}$/.test(sha256)) {
+    failures.push(`${localPath}: sha256 must be a 64-character lowercase hex digest`);
+  }
+
+  const filePath = resolve(repoRoot, localPath);
+  if (!isUnderPath(filePath, protoRoot) && filePath !== protoRoot) {
+    failures.push(`${localPath}: resolved path escapes proto`);
+    return undefined;
+  }
+  try {
+    const stat = lstatSync(filePath);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      failures.push(`${localPath}: owned file must be a non-symlink regular file`);
+      return undefined;
+    }
+  } catch (error) {
+    failures.push(`${localPath}: unable to stat owned file (${error.message})`);
+    return undefined;
+  }
+
+  return { localPath, filePath, sha256 };
+}
+
 export function verifyProtoSources(options = {}) {
   const repoRoot = resolve(options.repoRoot ?? defaultRepoRoot);
   const manifestPath = resolve(
@@ -180,7 +230,11 @@ export function verifyProtoSources(options = {}) {
   const failures = [];
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
-  if (manifest.schemaVersion !== 1 || !Array.isArray(manifest.sources)) {
+  if (
+    manifest.schemaVersion !== 1 ||
+    !Array.isArray(manifest.sources) ||
+    (manifest.ownedSources !== undefined && !Array.isArray(manifest.ownedSources))
+  ) {
     throw new Error("Invalid proto source manifest format.");
   }
 
@@ -193,6 +247,10 @@ export function verifyProtoSources(options = {}) {
     if (validated !== undefined) {
       validatedSources.push(validated);
     }
+  }
+  for (const source of manifest.ownedSources ?? []) {
+    const validated = validateOwnedSource(source, repoRoot, protoRoot, seenLocalPaths, failures);
+    if (validated !== undefined) validatedSources.push(validated);
   }
 
   const actualProtoFiles = new Set(enumerateProtoFiles(protoRoot, repoRoot));
@@ -233,7 +291,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     const options = parseArgs(process.argv.slice(2));
     const verifiedCount = verifyProtoSources(options);
 
-    console.log(`Verified ${verifiedCount} copied Spine proto source file checksums.`);
+    console.log(`Verified ${verifiedCount} Spine proto source file checksums.`);
   } catch (error) {
     console.error(error.message);
     process.exit(1);

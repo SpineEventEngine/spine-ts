@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { spineProtoModule as packageModule, type ProtoModule } from "@spine-event-engine/proto";
 
 import * as clientSchemas from "../src/client/index.js";
+import * as authSchemas from "../src/auth/index.js";
 import * as deliverySchemas from "../src/delivery/index.js";
 import * as deliveryServerSchemas from "../src/delivery-server/index.js";
 import * as errorSchemas from "../generated/spine/base/error_pb.js";
@@ -72,7 +73,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(39);
+    expect(manifest.protoFiles).toHaveLength(40);
     expect(Object.keys(manifest.generatedExports)).toEqual(manifest.protoFiles);
     expect(Object.values(manifest.generatedExports)).toEqual(
       manifest.protoFiles.map((path) => `generated/${path.replace(/\.proto$/, "_pb.js")}`),
@@ -111,6 +112,7 @@ describe("spineProtoModule", () => {
       ...schemaNames(timeOptionSchemas),
       ...schemaNames(languageSchemas),
       ...schemaNames(validationSchemas),
+      ...schemaNames(authSchemas),
       ...schemaNames(clientSchemas),
       ...schemaNames(deliverySchemas),
       ...schemaNames(deliveryServerSchemas),

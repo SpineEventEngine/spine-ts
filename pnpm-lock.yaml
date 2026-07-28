@@ -204,6 +204,18 @@ importers:
         specifier: 0.0.0
         version: link:../../packages/proto-tools
 
+  packages/auth:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/core':
+        specifier: workspace:*
+        version: link:../core
+      '@spine-event-engine/proto':
+        specifier: workspace:*
+        version: link:../proto
+
   packages/client-node:
     dependencies:
       '@bufbuild/protobuf':

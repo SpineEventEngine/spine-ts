@@ -20,6 +20,7 @@ describe("@spine-event-engine/proto package entrypoints", () => {
     expect(Object.keys(packageJson.exports).sort()).toEqual(
       [
         ".",
+        "./auth",
         "./client",
         "./delivery",
         "./delivery-server",
@@ -33,6 +34,7 @@ describe("@spine-event-engine/proto package entrypoints", () => {
   it("resolves every supported package entrypoint and rejects private paths", () => {
     for (const supported of [
       "@spine-event-engine/proto",
+      "@spine-event-engine/proto/auth",
       "@spine-event-engine/proto/client",
       "@spine-event-engine/proto/delivery",
       "@spine-event-engine/proto/delivery-server",

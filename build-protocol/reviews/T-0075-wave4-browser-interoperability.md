@@ -1382,3 +1382,152 @@ children, or execute Spine JVM.
   adds no production behavior. The sandbox cannot bind the BlackBox loopback
   port (`listen EPERM`); the exact elevated focused run and the elevated full
   TypeScript coverage gate passed. No Spine JVM project was executed.
+
+## B1 auth contract foundation review wave
+
+Coordinator mechanical evidence is clean: focused Vitest passed 3 files / 10
+tests; generated TypeScript build/typecheck passed; 40 Proto source checksums
+and 49 frozen descriptor digests passed; TypeDoc/API inventories, formatting,
+and `git diff --check` passed. No Spine JVM project operation occurred.
+
+### Style/maintainability assignment
+
+- Existing role: `style_maintainability_reviewer`.
+- Concern: simplicity, declaration/layout clarity, package boundary, decoder
+  maintainability, and avoidance of speculative B2/C abstractions in the B1
+  diff.
+- Expected model: `gpt-5.6-terra`.
+- Expected reasoning: `high`.
+- Both fields are explicit in dispatch. Read-only review; no edits, commit,
+  push, merge, child dispatch, or Spine JVM execution.
+
+### Documentation assignment
+
+- Existing role: `documentation_reviewer`.
+- Concern: auth README/TSDoc/report accuracy, exact B1 limitations,
+  informational-not-credential claims, allowlisted transport facts, registry
+  fallback behavior, and no unsupported forwarding/session/JVM claims.
+- Expected model: `gpt-5.6-luna`.
+- Expected reasoning: `medium`.
+- Both fields are explicit in dispatch. Read-only review; no edits, commit,
+  push, merge, child dispatch, or Spine JVM execution.
+
+### TypeScript/API assignment
+
+- Existing role: `typescript_api_docs_reviewer`.
+- Concern: public exports and declarations, exhaustive discriminated request
+  contract, generated Protobuf service shape, exact optional typing, registry
+  decoding, package export/build shape, compatibility, and extension-seam
+  usability.
+- Expected model: `gpt-5.6-terra`.
+- Expected reasoning: `high`.
+- Both fields are explicit in dispatch. Read-only review; no edits, commit,
+  push, merge, child dispatch, or Spine JVM execution.
+
+### Deferred/N/A concerns
+
+- Performance/reliability: N/A for B1. This slice introduces contracts and
+  bounded synchronous envelope decoding only; it has no concurrency,
+  persistence, lifecycle, retry, streaming, cancellation, or resource
+  ownership. B2-B4 and C-series runtime slices retain their required
+  reliability lanes.
+- Security: deferred to the protocol-mandated final Wave 4 release-readiness
+  security gate. B1 reviewers still reject obviously unsafe public/serialized
+  contracts, but no separate early security role is invoked without a human
+  request.
+
+### B1 complete review wave and correction batch
+
+All dispatched profiles match their existing immutable roles: style and
+TypeScript/API used explicit `gpt-5.6-terra` / `high`; documentation used
+explicit `gpt-5.6-luna` / `medium`. Independent runtime self-introspection is
+unavailable on Desktop, and no visible mismatch or inherited fallback
+occurred. Reviewers made no edits and performed no Spine JVM operation.
+
+Accepted findings, returned as one batch:
+
+1. P1 API: `packages/proto/test/entrypoints.test.ts` still freezes the
+   pre-auth package exports/subpaths. Add and resolve `./auth` /
+   `@spine-event-engine/proto/auth`.
+2. P2 API: add `@spine-event-engine/auth` to TypeDoc entrypoints and to the
+   exact checked API export inventory; the existing docs gate does not yet
+   cover the new public package.
+3. P2 maintainability/testing: add malformed outer-envelope rejection and
+   assert decoded context/target facts for Query, Subscribe, Activate, and
+   Cancel rather than checking only discriminants.
+4. P2 documentation: state that an `IncomingRequestInput` command variant may
+   carry the optional registry; do not imply a separate optional
+   `decodeIncomingRequest()` parameter.
+
+The same existing `implementer` receives this complete bounded correction
+batch. Expected model `gpt-5.6-terra`, expected reasoning `medium`, both
+explicit. It may change only B1 tests, README/TSDoc if needed, TypeDoc/API
+inventory/configuration, and B1 evidence. It may not begin B2+, commit, push,
+merge, spawn children, or execute any Spine JVM project operation.
+
+### B1 correction evidence and targeted re-review
+
+- Canonical Proto entrypoint coverage now freezes and resolves `./auth`.
+  TypeDoc and the API checker now cover the exact 22-export auth package root.
+- Malformed outer envelopes and per-kind Query/Subscribe/Activate/Cancel
+  target/context facts have focused regressions. README wording now accurately
+  locates the optional registry on the command input variant.
+- Coordinator evidence passed 4 files / 15 tests, generated build/typecheck, 40
+  source checksums, 49 descriptor digests, exact TypeDoc/API inventories,
+  formatting, and diff hygiene.
+- Reopen only substantively affected concerns:
+  - style/maintainability reviewer, expected explicit
+    `gpt-5.6-terra` / `high`, for the decoder regressions;
+  - TypeScript/API reviewer, expected explicit
+    `gpt-5.6-terra` / `high`, for entrypoint and exact inventory closure.
+- Documentation wording was a deterministic one-line precision correction and
+  is directly confirmed; its otherwise-clean lane is not reopened.
+- Review remains read-only with no edits, commit, push, merge, child dispatch,
+  or Spine JVM execution.
+
+### B1 review convergence
+
+- Targeted style/maintainability re-review is clean: malformed envelope
+  rejection and every non-command request's decoded target/context facts are
+  covered.
+- Targeted TypeScript/API re-review is clean: the canonical auth Proto subpath
+  resolves, its entrypoint test passes, and the exact 22-export auth TypeDoc
+  inventory is enforced.
+- The documentation precision correction is directly confirmed. All accepted
+  B1 findings are resolved.
+- Actual role/profile evidence matches every explicit dispatch. Independent
+  runtime self-introspection remains unavailable; no visible mismatch or
+  inherited fallback occurred.
+- No reviewer edited files or performed any Spine JVM operation.
+
+### B1 coverage-found transport correction
+
+- The first post-review full suite passed all 2,637 executed tests but reached
+  8,430/9,370 branches (89.96%), three branches below the 90% gate.
+- Meaningful auth fallback coverage exposed a real defect: an explicitly
+  undefined allowlisted header became an empty request/correlation ID.
+  Normalization now omits undefined headers and retains present mixed-case
+  allowlisted values; credentials and unknown headers remain excluded.
+- Focused fallback tests cover absent message/context/target/topic facts and
+  transport optionality. Coordinator verification passed 1 file / 5 tests,
+  generated build/typecheck, formatting, and diff hygiene.
+- Because production behavior changed, reopen only:
+  - style/maintainability for the normalization shape and regression quality,
+    expected explicit `gpt-5.6-terra` / `high`;
+  - TypeScript/API for exact `TransportRequestContext` observable behavior,
+    expected explicit `gpt-5.6-terra` / `high`.
+- Both reviews are read-only. No edits, commit, push, merge, child dispatch, or
+  Spine JVM execution is permitted.
+
+### B1 transport correction review convergence
+
+- Targeted style/maintainability review is clean for the normalization shape
+  and fallback regressions.
+- Targeted TypeScript/API review is clean: undefined allowlisted IDs are
+  omitted, present IDs are case-insensitive, and credential/unknown headers
+  remain excluded.
+- Immutable reviewer profiles match explicit Terra/high dispatches;
+  independent runtime self-introspection is unavailable and no mismatch was
+  visible.
+- All B1 review findings are resolved. No reviewer edited files or executed
+  Spine JVM.

@@ -29,6 +29,10 @@ function manifestSource(localPath) {
   };
 }
 
+function ownedSource(localPath) {
+  return { localPath, sha256: copiedProtoSha };
+}
+
 function runVerifier(repoRoot, manifest) {
   const manifestPath = join(repoRoot, "packages/proto/proto/spine-sources.json");
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
@@ -43,6 +47,19 @@ function runVerifier(repoRoot, manifest) {
 }
 
 describe("verify-proto-sources", () => {
+  it("accepts checksum-pinned Spine TS-owned contracts without inventing upstream provenance", () => {
+    const repoRoot = createFixture();
+    writeFileSync(join(repoRoot, "packages/proto/proto/spine/present.proto"), copiedProtoContents);
+
+    const result = runVerifier(repoRoot, {
+      schemaVersion: 1,
+      sources: [],
+      ownedSources: [ownedSource("packages/proto/proto/spine/present.proto")],
+    });
+
+    expect(result.status).toBe(0);
+  });
+
   it("accepts frozen non-Spine service contracts under the canonical package Proto root", () => {
     const repoRoot = createFixture();
     const localPath = "packages/proto/proto/grpc/health/v1/health.proto";

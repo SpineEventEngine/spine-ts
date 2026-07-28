@@ -39,6 +39,10 @@ describe("package metadata", () => {
         types: "./dist/src/index.d.ts",
         default: "./dist/src/index.js",
       },
+      "./auth": {
+        types: "./dist/src/auth/index.d.ts",
+        default: "./dist/src/auth/index.js",
+      },
       "./client": {
         types: "./dist/src/client/index.d.ts",
         default: "./dist/src/client/index.js",
