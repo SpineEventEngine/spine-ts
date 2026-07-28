@@ -2654,3 +2654,144 @@ Final affected-lane results:
 - Final canonical verification passed 147 runnable test files / 2,750 tests
   with 90.04% branch coverage (8,977/9,970). No Spine JVM command ran. C1 is
   accepted for commit.
+
+## C2 signed-session architecture assignment
+
+- C1 is committed and remotely synchronized at `c765409f`.
+- C2 is high-risk because it freezes a public self-contained token contract,
+  ES256 verification and issuance, bounded key selection/rotation, temporal and
+  audience validation, revocation semantics, and secret-retention behavior.
+- The existing `requirements_splitter` is assigned read-only with explicit
+  `gpt-5.6-sol` / `high`. It must return the smallest non-overengineered C2
+  contract and behavior-first slices without editing, Git mutation, children,
+  C3+, or any Spine JVM project command.
+- The execution surface supports explicit child model/reasoning dispatch.
+  Runtime self-introspection may be unavailable; the explicit dispatch and
+  immutable configured role/profile are the acceptance metadata unless a
+  visible mismatch or fallback occurs.
+- The planner supplied a useful checkpoint and reported no blocker, but did not
+  finish the exact public unions/defaults inside the bounded planning window.
+  It was interrupted rather than falsely recorded complete. Its checkpoint
+  froze one Node-only `SignedSessions`, bearer-only compact ES256, mandatory
+  bounded claims, P-256 keys, a bounded active/retired ring, optional explicit
+  revocation, and no C3/C5 scope. Runtime self-introspection was unavailable;
+  the explicit Sol/high dispatch showed no visible mismatch.
+- The coordinator froze the remaining finite defaults and exact behavior in
+  `C2_TASK_BRIEF.md`, preserving the checkpoint and existing Wave 4 decisions
+  without adding a JOSE dependency or speculative abstraction.
+
+### C2 implementation assignment
+
+- One existing `implementer` owns C2 source/tests, auth exports/README,
+  generated API inventory, and C2 implementation evidence under explicit
+  `gpt-5.6-terra` / `medium`.
+- It must execute the frozen behavior-first order, make no Git mutation, spawn
+  no children, preserve the local progress ledger, remain inside C2, and run no
+  Spine JVM project command. Runtime self-introspection may be unavailable;
+  explicit dispatch and immutable role/profile are the acceptance metadata.
+
+## C2 implementation evidence awaiting review
+
+- The existing implementer was explicitly dispatched as `gpt-5.6-terra` /
+  `medium`; self-introspection is unavailable and no profile mismatch was
+  visible. The bounded C2 owner added local Node ES256 signed sessions only.
+- Its behavior-first evidence is RED 4/4 (missing constructor) followed by
+  GREEN focused sessions 23/23 and auth typecheck. Specialist review remains
+  pending; the dedicated security gate remains reserved for final Wave 4.
+- The checkpoint is not accepted for review: the owner itself reported the
+  broader frozen matrix, finite initial retired-key deadlines, safe retention
+  arithmetic, and code-quality refactor remain. The same existing implementer
+  is reassigned the single completion batch under its explicit
+  `gpt-5.6-terra` / `medium` profile so it retains implementation context.
+
+### C2 coordinator completion and mechanical gate
+
+- The same implementation owner returned multiple truthful partial checkpoints
+  but could not complete the finite table matrix inside its execution windows.
+  This repeated limitation was not a technical blocker. After the writer was
+  complete, the coordinator became sole writer for the remaining tests/fixes;
+  there was no overlapping file ownership.
+- RED exposed array-valued attributes being accepted as an empty map and
+  terminal close losing to a late revocation failure. Both are corrected.
+- Coordinator inspection also bounded retired-key admission before imports,
+  made attribute enumeration incremental, required the exact 16-byte `jti`
+  encoding, released the active private-key reference on close, swept retired
+  keys during logout, and removed an unnecessary public signer hook.
+- Mechanical verification passed the 17-test signed suite, full auth 7 files /
+  133 tests, auth typecheck, generated TypeDoc/API inventory with 76 auth
+  exports, targeted Prettier, explicit C2 line bounds, and diff hygiene.
+- C2 is ready for one complete relevant specialist review wave. No Spine JVM
+  project command ran; final Wave 4 security remains reserved.
+
+### C2 specialist review assignments
+
+- Style/maintainability: existing reviewer, explicit
+  `gpt-5.6-terra` / `high`, limited to C2 module depth, readability, naming,
+  duplication, and avoidance of speculative auth/JOSE abstractions.
+- TypeScript/API docs: existing reviewer, explicit
+  `gpt-5.6-terra` / `high`, limited to public signed-session declarations,
+  Node `KeyObject` exposure, result unions, `SessionResolver` compatibility,
+  TSDoc, and the 76-export inventory.
+- Performance/reliability: existing reviewer, explicit
+  `gpt-5.6-terra` / `high`, limited to finite parsing/key/attribute bounds,
+  key retention/rotation atomicity, callback races, revocation fail-closed
+  behavior, secret/reference lifecycle, and test completeness.
+- Documentation: immutable existing `documentation_reviewer`
+  `gpt-5.6-luna` / `medium`, limited to availability, configuration/defaults,
+  bearer/claims/key lifecycle, revocation trade-offs, extension seam,
+  limitations, and evidence. Desktop cannot accept a redundant override.
+- All lanes are read-only, childless, Git-read-only, C2-only, and prohibited
+  from any Spine JVM project execution. Runtime self-introspection may be
+  unavailable; explicit dispatch or immutable role/profile and absence of a
+  visible mismatch are the acceptance metadata.
+- Security is N/A for this slice as a standalone lane because the protocol
+  reserves the dedicated security reviewer for the final complete Wave 4
+  release boundary; C2 findings are retained for that gate.
+
+### C2 specialist review results and correction batch
+
+All lanes used the recorded explicit or immutable profiles. Runtime
+self-introspection was unavailable, with no visible mismatch or fallback.
+
+- Style/maintainability: two P2 findings—deduplicate resolve/logout token
+  verification and replace an inert conditional rejection type.
+- TypeScript/API docs: two P2 findings—complete member/option TSDoc and add the
+  frozen README decision table.
+- Performance/reliability: one P1 finding—close must win when random/clock
+  callbacks close and then throw or return invalid, while ordinary callback
+  failures keep their specific reason.
+- Documentation: one P1 stale signed-session deferral and P2 omissions for
+  `retiredKeys` plus the revocation callback contract.
+
+The single correction batch:
+
+- extracts one private verified-claims path shared by resolve/logout and uses a
+  plain internal issue-rejection alias;
+- distinguishes callback-induced terminal close from ordinary clock/entropy
+  failure and adds close-then-throw/invalid regressions for issue/rotate;
+- completes public member/default/unit/ownership TSDoc;
+- corrects signed-session availability, documents `retiredKeys` and revocation
+  callbacks, and adds an opaque-versus-signed decision table.
+
+Targeted correction verification passed 17 signed tests, auth typecheck,
+generated TypeDoc/API inventory at 76 auth exports, Prettier, and diff hygiene.
+All four affected concerns reopen read-only under their original recorded
+profiles; no Spine JVM project command may run.
+
+### C2 targeted re-review closure
+
+- Style/maintainability: clean.
+- Performance/reliability: clean; callback-induced close is distinct from
+  ordinary clock/entropy failure and shared verification preserves fail-closed
+  resolution/logout behavior.
+- TypeScript/API docs: clean; public TSDoc and the curated 76-export surface
+  agree.
+- Documentation: clean after compacting the decision table, assigning browser
+  CSRF to `OpaqueSessionCookies`, and making shared revocation conditional on
+  enabling revocation.
+- All reviewers retained their recorded profiles. Runtime self-introspection
+  remained unavailable, with no visible mismatch or fallback. C2 has no open
+  review finding and proceeds to the canonical full gate.
+- Final canonical verification passed 148 runnable test files / 2,767 tests
+  with 90.06% branch coverage (9,206/10,221). No Spine JVM command ran. C2 is
+  accepted for commit.

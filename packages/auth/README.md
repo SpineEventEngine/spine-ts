@@ -28,8 +28,9 @@ request never includes a credential and a unary request is forwarded once.
 `AuthenticationService.ResolveContext` validates the application session and
 returns only informational actor, tenant, and expiry data. It does not invoke a
 Spine backend, it is not a credential, and every later request is independently
-authenticated and authorized. Signed sessions, OIDC/provider transactions, and
-browser reconnect integration remain later Wave 4 slices.
+authenticated and authorized. It can use the signed-session strategy documented
+below. OIDC/provider transactions and browser reconnect integration remain
+later Wave 4 slices.
 
 `OpaqueSessions` is the C1 process-local `SessionResolver`: it produces 32-byte
 base64url cookie credentials, retains at most 10,000 sessions for eight hours,
@@ -128,3 +129,53 @@ backend failure, explicit Cancel, disconnect, and expiry retain no binding,
 native call, timer, backend subscription, waiting consumer, or queued payload.
 A failed cleanup deliberately retains only the private binding in its retryable
 `cancelling` state for a later authorized Cancel.
+
+Choose the application-session strategy by its operational contract:
+
+| Strategy         | Credential       | Server state              | Logout                          |
+| ---------------- | ---------------- | ------------------------- | ------------------------------- |
+| `OpaqueSessions` | Cookie           | Process-local sessions    | Deletes the retained session    |
+| `SignedSessions` | Bearer ES256 JWT | Keys; optional revocation | `expiryOnly` without revocation |
+
+For browser CSRF protection, pair `OpaqueSessions` with
+`OpaqueSessionCookies`. Multi-node applications replace the opaque reference
+store with a shared `SessionResolver`, or distribute the same signing keys and
+when revocation is enabled, use the same shared revocation implementation on
+every signed-session node.
+
+`SignedSessions` is the C2 Node-only alternative `SessionResolver`. It issues
+compact ES256 bearer JWTs with one locally configured P-256 signing key; an
+application supplies exact canonical issuer and audience strings. Issuance
+sets `iss`, `aud`, `sub`, `iat`, `nbf`, `exp`, and a random 16-byte `jti`.
+The default lifetime is 28,800 seconds, clock skew is 60 seconds, token input
+and issued output are capped at 8,192 characters, and at most 16 local keys are
+retained. `maxPrincipalIdCharacters` defaults to 256, `maxAttributes` to 32,
+and total attribute name/value characters to 4,096. The corresponding options
+are positive safe integers except the skew and attribute bounds, which may be
+zero. An injected clock returns safe Unix epoch milliseconds; invalid or
+throwing values fail closed. An injected random callback receives exactly 16,
+must return exactly 16 bytes, and its returned mutable buffer is zeroed. Parsing
+accepts only unpadded three-segment base64url JWTs with the exact framework
+header `{ alg: "ES256", typ: "JWT", kid }`, a configured local key ID, a
+64-byte P1363 signature, exact issuer/audience, and bounded integer time claims.
+Token headers never select algorithms, keys, or URLs.
+
+Rotate with a distinct P-256 private key before retiring an active key.
+`retiredKeys` defaults to an empty list; each supplied key and the previous
+active verification key are retained for `ttlSeconds + clockSkewSeconds`. A
+full finite ring rejects rotation before copying another key and without
+changing the active key. `SignedTokenRevocation.isRevoked(jti)` runs during
+resolution and fails closed; `revoke(jti, expiresAt)` receives the Protobuf
+Timestamp through which the application-owned store must retain the ID.
+Applications own that store's persistence, cleanup, availability, and
+atomicity. Supplying this capability makes valid logout persist the `jti`;
+without it, logout returns `expiryOnly` and a token remains usable until expiry
+or key retirement. Revocation lookup errors fail closed during resolution,
+while logout storage errors report `unavailable` without exposing token
+validity. `close()` is terminal and wins races after injected callbacks. The
+strategy copies exported P-256 material into owned Node `KeyObject`s and clears
+both the active private-key and verification-key references on close, but Node
+does not offer explicit `KeyObject` memory zeroing; caller-owned keys are never
+zeroed. It provides neither remote key
+discovery nor durable revocation storage, OIDC, browser storage, or request
+authorization.
