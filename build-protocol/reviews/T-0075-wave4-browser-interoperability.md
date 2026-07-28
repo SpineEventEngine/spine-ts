@@ -2387,6 +2387,210 @@ for their respective deterministic P2 corrections.
 - B4 is mechanically verified and review-converged. No Spine JVM project
   command ran.
 
+## C1 opaque-session review assignments
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`. Scope is module depth,
+  names, ownership, atomic transitions, test maintainability, and avoidance of
+  speculative framework/persistence seams.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected and
+  explicitly dispatched `gpt-5.6-terra` / `high`. Scope is public contracts,
+  result unions, declaration/runtime agreement, root exports, TSDoc, cookie
+  serialization contract, and API inventory.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected and explicitly dispatched `gpt-5.6-terra` / `high`. Scope is finite
+  capacity/collision work, lazy expiry, rotate/logout/resolve linearization,
+  close/retention, defensive copies, secret ownership, and bounded behavior.
+- Documentation: existing immutable `documentation_reviewer`,
+  `gpt-5.6-luna` / `medium`; Desktop cannot accept a redundant override for the
+  fixed role. Scope is README/TSDoc/report accuracy for sessions, cookies,
+  Origin/CSRF, logout, limitations, and future C2/C3/C5 boundaries.
+- Security-sensitive findings from these concern reviews are resolved in C1;
+  the existing final `security_reviewer` remains reserved for the mandatory
+  Wave 4 release gate.
+- Independent runtime self-introspection is unavailable. Explicit dispatch and
+  immutable configured role/profile are the acceptance metadata unless a
+  visible mismatch/fallback appears. All reviewers are read-only, may not edit,
+  commit, push, merge, spawn children, begin C2+, or execute any Spine JVM
+  project command.
+
+Pre-review mechanical evidence independently passes 6 auth files / 109 tests,
+auth typecheck, generated TypeDoc/API inventory, Prettier, cleanup rules, and
+diff hygiene.
+
+### C1 complete review wave
+
+Runtime metadata:
+
+- Style/maintainability, TypeScript/API docs, and performance/reliability ran
+  under explicitly dispatched `gpt-5.6-terra` / `high`.
+- Documentation ran under the immutable `gpt-5.6-luna` / `medium` profile;
+  Desktop cannot accept a redundant fixed-role override.
+- Independent self-introspection was unavailable. No visible role/profile
+  mismatch or inherited fallback occurred. No reviewer edited files or ran a
+  Spine JVM project command.
+
+Accepted, deduplicated correction batch:
+
+- P1: parse unrelated cookie values at the first `=` and accept valid padded
+  values while retaining exact 43-character base64url constraints for the two
+  Spine cookies.
+- P1: preserve capacity, close, and old-record atomicity across re-entrant
+  injected randomness. Re-check store state, capacity, collision, and the
+  original rotation record after every external callback. Add forced
+  create/create, create/close, rotate/logout, and rotate/close regressions.
+- P1: add forced synchronous call-order tests for rotate/rotate,
+  logout/rotate, resolve/rotate, and resolve/logout without awaiting the first
+  returned Promise before invoking the second operation.
+- P1: bound cookie-request processing with positive-safe-integer defaults of 32
+  header values, 16 KiB total header characters, and 64 cookie pairs. Reject
+  over-limit input as `"request-too-large"`, stop on a second target cookie,
+  and avoid repeated accumulator copies. Test oversized and mass-duplicate
+  input.
+- P1/P2: validate every injected clock result as a finite safe-integer
+  millisecond value and every computed expiry as a valid Protobuf Timestamp
+  instant. Invalid/throwing clocks fail closed, clear retained sessions, and
+  return `undefined` or a `"clock-failure"` creation/rotation rejection.
+  Throwing/wrong-length randomness consumes bounded attempts and maps to
+  `"entropy-exhausted"` rather than escaping the result contract.
+- P2: normalize negative millisecond timestamps so nanos are non-negative, and
+  add a pre-epoch regression.
+- P2: document every public option member: units, defaults, exact callback
+  requirements, secret copying/minimum, canonical origins, cookie names, and
+  parsing bounds.
+- P2: correct the README's stale blanket deferral of concrete session
+  strategies and document expired resolve/rotate plus capacity outcomes.
+- P2: correct the implementation report to the generated 64-export inventory.
+
+All four concerns reopen because the contract, bounded parsing, lifecycle,
+tests, TSDoc, and README change. One implementation owner receives this single
+batch before targeted re-review.
+
+### C1 correction verification and re-review assignments
+
+- The implementation owner and replacement lifecycle-test owner ran under
+  explicit `gpt-5.6-terra` / `medium`. Runtime self-introspection was
+  unavailable; no visible mismatch or fallback occurred.
+- Independent coordinator verification passed 6 auth files / 114 tests, auth
+  typecheck, generated TypeDoc/API inventory, Prettier, cleanup rules, and diff
+  hygiene. The subordinate cleanup warning was an invocation-context artifact;
+  the canonical cleanup command is green.
+- Style/maintainability reopens under the existing reviewer with explicit
+  `gpt-5.6-terra` / `high`, limited to unrelated `=` cookies, forced lifecycle
+  tests, module shape, and direct correction effects.
+- TypeScript/API docs reopens under the existing reviewer with explicit
+  `gpt-5.6-terra` / `high`, limited to clock/entropy result contracts,
+  Timestamp normalization, bounded parser options/rejection, TSDoc, inventory,
+  and report evidence.
+- Performance/reliability reopens under the existing reviewer with explicit
+  `gpt-5.6-terra` / `high`, limited to callback reentrancy, synchronous
+  call-order, post-callback expiry, entropy zeroing, finite parsing, invalid
+  clock behavior, and retention.
+- Documentation reopens under immutable `gpt-5.6-luna` / `medium`, limited to
+  corrected session-strategy availability, expiry/capacity behavior, options,
+  limitations, and report evidence. Desktop cannot accept a redundant fixed
+  role override.
+- All reviewers are read-only with no edits, commits, pushes, merges, children,
+  C2+, or Spine JVM project execution. Explicit dispatch and immutable profile
+  are the metadata evidence.
+
+### C1 targeted re-review results
+
+All four concerns ran under their recorded explicit or immutable profiles.
+Runtime self-introspection remained unavailable; no visible mismatch or
+fallback occurred.
+
+- Style/maintainability: clean.
+- TypeScript/API docs: no P0/P1 contract defect; accepted P2 option/README/report
+  documentation corrections.
+- Performance/reliability: accepted one P1 finite-processing defect and two P2
+  direct-effect test gaps.
+- Documentation: accepted the same deterministic P2 batch.
+
+Accepted final correction batch:
+
+- P1: replace `Object.keys()` materialization with own-property incremental
+  enumeration, charge/count each supplied header field before inspecting its
+  value (including `undefined`), and stop at the existing finite limits.
+- P2: retain a 31-byte random buffer and prove it is zeroed after the bounded
+  entropy rejection.
+- P2: advance the clock inside random callbacks and prove post-callback create
+  cleanup/capacity behavior plus rotation expiry rejection/removal.
+- P2: complete public TSDoc for CSRF-secret copy/minimum/close-zeroing, canonical
+  non-empty exact Origins, distinct valid default/custom `__Host-` names,
+  clock units/fail-closed behavior, exact `randomBytes(32)` calls,
+  returned-buffer zeroing, and bounded entropy mapping.
+- P2: narrow the README deferral to signed/OIDC/provider/reconnect work,
+  document configurable option names/units/defaults/callback requirements and
+  cookie-name constraints, and call three the default collision-attempt bound.
+- P2: make the 109-test checkpoint explicitly historical, record 114 as current,
+  and remove the stale contradictory cleanup-failure claim because independent
+  canonical cleanup enforcement passes.
+
+Reliability reopens for the field-bound behavior and direct-effect tests.
+TypeScript/API docs and documentation reopen for their deterministic text;
+style remains clean unless the implementation shape changes substantively.
+
+### C1 final acceptance re-review assignments
+
+- Independent coordinator verification passed 6 auth files / 116 tests, auth
+  typecheck, generated TypeDoc/API inventory, Prettier, diff hygiene, and an
+  explicit 120-column scan over all untracked C1 files.
+- Performance/reliability reopens under the existing reviewer with explicit
+  `gpt-5.6-terra` / `high`, limited to incremental own-field bounds,
+  wrong-length entropy zeroing, and create/rotate clock-advance regressions.
+- TypeScript/API docs reopens under the existing reviewer with explicit
+  `gpt-5.6-terra` / `high`, limited to final option/callback TSDoc,
+  result/inventory agreement, and report evidence.
+- Documentation reopens under immutable `gpt-5.6-luna` / `medium`, limited to
+  README availability/options/defaults/boundaries and staged report evidence.
+  Desktop cannot accept a redundant fixed-role override.
+- Style remains clean because the final changes preserve the reviewed module
+  shape; deterministic line wrapping is independently verified.
+- All reviews are read-only with no edits, commits, pushes, merges, children,
+  C2+, or Spine JVM project execution. Explicit dispatch and immutable profile
+  are the metadata evidence.
+
+### C1 lifecycle correction evidence
+
+- The explicitly assigned existing `implementer` (`gpt-5.6-terra` / `medium`)
+  added the two missing close-re-entrancy cases and all four non-awaited
+  call-order regressions. Independent model self-introspection is unavailable;
+  explicit dispatch and immutable configured role/profile show no visible
+  mismatch or inherited fallback.
+- No production defect was exposed: focused opaque-session tests passed 17
+  tests and the full auth suite passed 6 files / 114 tests. The regressions
+  prove terminal `closed` results after create/close and rotate/close callbacks;
+  then prove rotate/rotate first-winner/new-credential liveness, logout/rotate
+  `not-found`, and resolve snapshots before later rotation/logout.
+- Auth typecheck, generated API/docs checking, Prettier, and diff hygiene
+  passed. The final repository-wide cleanup command reports unrelated existing
+  subscription/native/client findings; the owned lifecycle test has no local
+  cleanup violation. The remaining targeted re-review may inspect these tests
+  and the already-existing lifecycle guards; no source correction is pending
+  from this slice.
+
+### C1 final targeted correction implementation evidence
+
+- The existing `implementer` completed the accepted final C1 batch under the
+  explicitly assigned `gpt-5.6-terra` / `medium` profile. Runtime model
+  self-introspection is unavailable on this surface; the explicit dispatch and
+  immutable configured profile are the available metadata, with no visible
+  mismatch or inherited-profile fallback.
+- RED reproduced the finite-processing defect: after an `undefined` own field
+  exhausted `maxHeaderValues`, parsing still read a later accessor value.
+  GREEN uses own-property incremental enumeration, charges/counts each field
+  before value inspection, and stops at the existing bounds.
+- Direct-effect regressions retain and inspect a zeroed 31-byte buffer, and
+  advance the injected clock inside randomness to prove post-callback create
+  capacity/expiry cleanup: a nested credential expires at a one-session limit,
+  then only the outer session remains live. The rotation case still proves
+  expiry rejection/removal. README, exact public TSDoc, and
+  historical-versus-current evidence are corrected in the same batch.
+  Validation passes: focused opaque sessions 1 file / 19 tests; full
+  auth 6 files / 116 tests; auth typecheck; generated TypeDoc/API checking;
+  Prettier; canonical cleanup enforcement; and `git diff --check`.
+
 ### B4 full-gate coverage correction implementation evidence
 
 - The existing `implementer` completed the bounded test-only correction under
@@ -2408,3 +2612,45 @@ for their respective deterministic P2 corrections.
   `linkWorkspacePackages` setting. No dependency install was run; the installed
   Vitest binary was used for focused validation. No commit, push, merge, C+,
   child dispatch, or Spine JVM project command ran.
+
+### C1 final acceptance dispositions and affected-lane recheck
+
+- Performance/reliability accepted the final implementation as clean under its
+  explicitly assigned `gpt-5.6-terra` / `high` profile. Incremental field
+  charging, wrong-length entropy zeroing, nested expiry/capacity behavior, and
+  rotation expiry/removal all passed.
+- Documentation accepted availability, configuration, callback, cookie,
+  deferral, and staged 109/114/116 evidence under the immutable
+  `documentation_reviewer` `gpt-5.6-luna` / `medium` profile. Desktop cannot
+  accept a redundant override; runtime self-introspection is unavailable, with
+  no visible mismatch or fallback.
+- TypeScript/API docs accepted behavior and found two bounded corrections under
+  its explicitly assigned `gpt-5.6-terra` / `high` profile:
+  successful opaque-session create/rotate results must expose a cookie-only
+  credential type, and the report must record the unrelated canonical cleanup
+  baseline honestly.
+- The correction exports `CookieCredential`, narrows both success unions,
+  updates the generated API inventory to 65 auth exports, and records the
+  cleanup baseline limitation plus the passing explicit C1-owned line scan.
+  Verification passed 6 auth files / 116 tests, auth typecheck, generated
+  TypeDoc/API checking, and diff hygiene.
+- TypeScript/API docs reopens only for the narrowed result contract and API
+  inventory under explicit `gpt-5.6-terra` / `high`. Documentation reopens
+  only for the corrected cleanup-evidence sentence under immutable
+  `gpt-5.6-luna` / `medium`. Both are read-only; runtime self-introspection is
+  unavailable, while dispatch/profile metadata shows no visible mismatch.
+
+Final affected-lane results:
+
+- TypeScript/API docs: clean. `CookieCredential`, both success-union
+  narrowings, the 65-name inventory, and type-only/runtime export behavior
+  agree.
+- Documentation: clean after removing one later contradictory cleanup
+  sentence. The report now consistently distinguishes the passing C1-owned
+  scan from unrelated canonical cleanup baseline findings.
+- Both reviewers retained their recorded profiles. Runtime self-introspection
+  remained unavailable, with no visible mismatch or fallback. C1 has no open
+  review finding.
+- Final canonical verification passed 147 runnable test files / 2,750 tests
+  with 90.04% branch coverage (8,977/9,970). No Spine JVM command ran. C1 is
+  accepted for commit.

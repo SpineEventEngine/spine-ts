@@ -94,6 +94,10 @@ export interface RequestCredential {
   readonly kind: "bearer" | "cookie";
   readonly value: string;
 }
+/** Cookie credential issued by an application-session strategy. */
+export interface CookieCredential extends RequestCredential {
+  readonly kind: "cookie";
+}
 /** Session validated by an application-selected session strategy. */
 export interface ResolvedSession {
   readonly principal: AuthenticatedPrincipal;
@@ -198,6 +202,8 @@ function compactFacts(
 }
 
 export { UnaryGateway } from "./gateway/index.js";
+export { OpaqueSessionCookies } from "./sessions/cookies.js";
+export { OpaqueSessions } from "./sessions/opaque.js";
 export { InMemorySubscriptionBindings, SubscriptionGateway } from "./subscriptions/index.js";
 export {
   createNativeGatewayServices,
@@ -234,3 +240,17 @@ export type {
   NativeGatewayServicesOptions,
   SubscriptionRelayLimits,
 } from "./native/index.js";
+export type {
+  OpaqueCredentialExtraction,
+  OpaqueCredentialRejection,
+  OpaqueSessionCookiesOptions,
+  OpaqueSessionHeaders,
+} from "./sessions/cookies.js";
+export type {
+  OpaqueSessionClock,
+  OpaqueSessionCreateResult,
+  OpaqueSessionLogoutResult,
+  OpaqueSessionRandom,
+  OpaqueSessionRotateResult,
+  OpaqueSessionsOptions,
+} from "./sessions/opaque.js";

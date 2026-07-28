@@ -28,8 +28,46 @@ request never includes a credential and a unary request is forwarded once.
 `AuthenticationService.ResolveContext` validates the application session and
 returns only informational actor, tenant, and expiry data. It does not invoke a
 Spine backend, it is not a credential, and every later request is independently
-authenticated and authorized. Concrete session strategies, OIDC providers, and
-browser integration remain later Wave 4 slices.
+authenticated and authorized. Signed sessions, OIDC/provider transactions, and
+browser reconnect integration remain later Wave 4 slices.
+
+`OpaqueSessions` is the C1 process-local `SessionResolver`: it produces 32-byte
+base64url cookie credentials, retains at most 10,000 sessions for eight hours,
+and lazily removes expiry. Its `ttlMilliseconds`, `maxSessions`, and
+`collisionAttempts` options are positive safe integers, defaulting to 28,800,000
+milliseconds, 10,000 sessions, and three collision attempts. An injected clock
+returns safe-integer Unix milliseconds and fails closed when invalid or
+throwing; its random callback receives exactly 32 and must return exactly 32
+bytes, with failures mapped through the configured collision-attempt bound
+(three by default). Creation,
+lookup, rotation, and logout are atomic
+method-local transitions. Rotation deletes the old credential before returning
+the replacement; logout is enumeration-safe and idempotent. Principal identity
+and attributes are copied on admission and resolution. `close()` is terminal
+and drops all retained records. It does not provide persistence, sharing,
+signed tokens, OIDC transactions, or a background cleanup timer.
+Invalid or throwing injected clocks fail closed and clear retained sessions;
+invalid or throwing randomness is consumed only through the configured
+collision-attempt bound and returns an entropy rejection. Expired resolution is
+empty, expired rotation rejects, and creation after live capacity is full
+rejects without retaining another principal.
+
+`OpaqueSessionCookies` is a framework-neutral browser-boundary helper. It
+requires a copied 32-byte-or-larger HMAC secret and canonical non-empty exact
+Origins; its owned secret copy is zeroed on close. The distinct valid `__Host-`
+cookie-name options default to `__Host-spine-session` and `__Host-spine-csrf`.
+It serializes only host-only `Secure` `SameSite=Lax` cookies, with the session
+cookie also `HttpOnly`. A present Authorization header takes precedence over
+cookies and malformed/duplicate bearer inputs do not fall back. Cookie use
+requires one session cookie, one CSRF cookie, one exact Origin, and one
+`X-Spine-CSRF`; the HMAC-SHA-256 CSRF values are fixed-length compared in
+constant time. The helper rejects duplicate or malformed browser facts and
+zeroes its owned mutable secret at terminal close. Callers must install the
+serialized strings in their chosen HTTP adapter; this package is not one.
+Parsing is finite by default: at most 32 header fields/array values, 16,384
+total header characters, and 64 cookie pairs; callers may lower or raise each
+with a positive-safe-integer `maxHeaderValues`, `maxHeaderCharacters`, or
+`maxCookiePairs` option. Over-limit input rejects as `request-too-large`.
 
 `SubscriptionGateway` is the bounded B3 ownership boundary for the exact
 `SubscriptionService.Subscribe`, `Activate`, and `Cancel` RPCs. Its admission
