@@ -1706,3 +1706,441 @@ execute Spine JVM.
 - Return these narrow changes to the replacement `implementer`, expected
   explicit `gpt-5.6-terra` / `medium`; no B3+, commit, push, merge, child
   dispatch, or Spine JVM execution.
+
+## B3 atomic subscription ownership review wave
+
+- Coordinator evidence passed 3 auth files / 21 tests, generated
+  build/typecheck, 40 source checksums, 49 descriptor digests, exact 34-export
+  auth TypeDoc inventory, formatting, and diff hygiene.
+- Style/maintainability: existing reviewer, expected explicit
+  `gpt-5.6-terra` / `high`; inspect store/gateway simplicity, semantic layout,
+  and avoidance of premature B4/C scope.
+- TypeScript/API: existing reviewer, expected explicit
+  `gpt-5.6-terra` / `high`; inspect injectable store contract, public/private
+  subscription identities, B4-mappable authorized backend access, result
+  types, and compatibility.
+- Performance/reliability: existing reviewer, expected explicit
+  `gpt-5.6-terra` / `high`; inspect atomic transitions/races, ownership/tenant/
+  expiry checks, stale-context handling, clock snapshots, copies/zeroization,
+  idempotent cleanup, rejection propagation, and retained resources.
+- Documentation: existing reviewer, expected explicit
+  `gpt-5.6-luna` / `medium`; inspect README/TSDoc/report claims and B3/B4
+  boundary.
+- All reviews are read-only with no edits, commit, push, merge, child dispatch,
+  or Spine JVM execution. Security remains the final Wave 4 release gate; the
+  B3 API/reliability lanes still reject unsafe trust-boundary behavior.
+
+### B3 complete review wave and correction batch
+
+- Expected explicit profiles matched all immutable roles: style/API/reliability
+  used `gpt-5.6-terra` / `high`; docs used `gpt-5.6-luna` / `medium`.
+  Independent runtime self-introspection is unavailable, with no visible
+  mismatch. No reviewer edited files or executed Spine JVM.
+- Accepted findings:
+  1. P1: use an untouched private byte source, identity snapshot, and
+     independent decoded/frozen collaborator views; reject stale actor/tenant
+     on every operation and rewrite Subscribe/Activate/Cancel context with a
+     fresh trusted value before any backend callback/public topic.
+  2. P1: replace the concrete store dependency with an injectable atomic store
+     contract. Authorized transitions return defensive backend-envelope copies
+     only to injected B4-mappable backend callbacks; browser/public results
+     never contain them.
+  3. P1: use one coherent clock snapshot, reject already-expired sessions
+     before backend work, support optional single-tenant context, and purge all
+     expired bindings lazily on gateway activity plus explicit store close so
+     abandoned payloads are not retained indefinitely. There is no background
+     timer and docs must say so.
+  4. P1: if backend Subscribe succeeds but store creation fails, invoke the
+     injected backend cancellation/cleanup seam. Activate/Cancel callback
+     failures must have deterministic state/cleanup and never leak a binding or
+     payload.
+  5. P2: move the subsystem under `src/subscriptions/`, keep the root a public
+     re-export, and add stale/rewrite/mutating-collaborator, expiry-at-Subscribe,
+     moving-clock, backend/store rejection, callback cleanup, unattended purge,
+     shutdown close, defensive-copy, race, and zero-retention regressions.
+- One consolidated correction returns to the replacement `implementer`,
+  expected explicit `gpt-5.6-terra` / `medium`. It owns only auth B3
+  modules/tests/docs/inventory/evidence; no B4 native implementation, C+,
+  commit, push, merge, children, or Spine JVM execution.
+
+### B3 correction re-review assignments
+
+- Coordinator verification passed 3 auth files / 26 tests, the auth package
+  typecheck, exact 35-export TypeDoc/API inventory, formatting, and diff
+  hygiene.
+- Style/maintainability re-review uses the existing
+  `style_maintainability_reviewer`, expected explicit `gpt-5.6-terra` /
+  `high`, limited to the semantic module move, collaborator isolation,
+  context-rewrite clarity, and correction maintainability.
+- TypeScript/API re-review uses the existing
+  `typescript_api_docs_reviewer`, expected explicit `gpt-5.6-terra` / `high`,
+  limited to injectable store/public contracts, optional tenant semantics,
+  private backend envelope ownership, and B4-mappable callbacks.
+- Performance/reliability re-review uses the existing
+  `performance_reliability_reviewer`, expected explicit `gpt-5.6-terra` /
+  `high`, limited to atomic transitions, one-clock behavior, stale identity,
+  expiry/purge/close, defensive copies, failure cleanup, races, and retained
+  resources.
+- Documentation re-review uses the existing `documentation_reviewer`,
+  expected immutable `gpt-5.6-luna` / `medium`, limited to lazy expiry/no
+  background timer, ownership/rewriting claims, and the B3/B4 boundary.
+- The Desktop dispatch adapter rejected a redundant explicit
+  `gpt-5.6-luna` override because only Sol/Terra are accepted as override
+  values; the existing `documentation_reviewer` role itself immutably
+  configures Luna/medium. The re-dispatch therefore names that fixed role
+  explicitly and relies on its immutable configured profile. Independent
+  runtime self-introspection remains unavailable; this surface limitation is
+  recorded rather than misreporting a Terra substitution.
+- All dispatches set model and reasoning explicitly and are read-only: no
+  edits, commit, push, merge, child dispatch, or Spine JVM build, test,
+  generation, dependency resolution, launch, or project execution.
+
+### B3 correction re-review results and second correction batch
+
+- Style, TypeScript/API, and performance/reliability ran under their explicit
+  immutable existing roles with the expected `gpt-5.6-terra` / `high`
+  profile. Independent runtime self-introspection was unavailable; no
+  mismatch or fallback was visible. Reviews were read-only and performed no
+  Spine JVM execution.
+- Accepted reliability findings:
+  1. serialize or lease activation and cancellation backend effects so a
+     delayed Activate cannot complete after Cancel and leave unowned live
+     backend work; test both callback orderings;
+  2. retain retry-safe cancellation state/envelope until backend cleanup
+     succeeds, make the required cleanup seam non-optional, and prove retry
+     after rejection;
+  3. make store close terminal so concurrent or late creation cannot retain a
+     backend envelope after shutdown;
+  4. capture transport facts once at admission and derive independent
+     collaborator snapshots from that stable source.
+- Accepted style/test findings: split the 67-line security pipeline into named
+  preparation/operation phases and replace the misleading defensive-copy test
+  with mutations that prove source/store/callback byte isolation.
+- Accepted API finding: the trusted infrastructure store contract currently
+  exposes backend envelopes through ordinary exported transition results.
+  Redesign the store/gateway seam so only gateway-controlled native callbacks
+  receive transition bytes, while retaining an injectable store abstraction
+  and an in-memory reference implementation. Public/browser gateway results
+  must remain opaque.
+- Accepted API-documentation finding: use named/discriminated raw-wire inputs
+  for Topic, public Subscription, and opaque backend bytes; document exact RPC,
+  optional-tenant, ownership/copy, result, and callback failure semantics.
+- Inventory adjudication: the coordinator's generated TypeDoc check reports
+  exactly 35 auth exports and the inventory contains 35 names. The B3 report's
+  stale “34” claim must be corrected; the review log's “35” evidence is
+  accurate.
+- Documentation ran through the immutable existing `documentation_reviewer`
+  role at its fixed `gpt-5.6-luna` / `medium` profile after the adapter
+  rejected a redundant Luna override. Independent runtime self-introspection
+  was unavailable; no visible mismatch occurred. It found two P2 defects:
+  correct the stale 34-export claims in the B3 report/work log, and add exact
+  public TSDoc for raw-wire shapes, optional tenant matching, copy ownership,
+  opaque results, and callback cleanup/failure semantics. Other README claims
+  and the B3/B4 boundary are accurate.
+- One fresh existing `implementer` receives this complete batch. Expected
+  explicit model `gpt-5.6-terra`, reasoning `medium`; both dispatch fields are
+  set. Ownership is limited to B3 auth runtime/tests/docs/API inventory and
+  durable B3 evidence. It may not begin B4/C+, commit, push, merge, spawn
+  children, or execute Spine JVM.
+
+### B3 second-correction verification and re-review
+
+- Coordinator verification passed 3 auth files / 25 tests, auth package
+  typecheck, exact 35-export TypeDoc/API inventory, formatting, and diff
+  hygiene.
+- Reopen style/maintainability, TypeScript/API, and
+  performance/reliability with fresh existing reviewer roles, each expected
+  explicit `gpt-5.6-terra` / `high`. Documentation follows under the existing
+  immutable `gpt-5.6-luna` / `medium` role.
+- Re-review is limited to the complete accepted correction batch and
+  regressions. All dispatches are read-only with no edits, commit, push,
+  merge, children, or Spine JVM execution.
+
+### B3 second-correction re-review findings
+
+- Style/API/reliability used fresh existing reviewer roles with explicit
+  `gpt-5.6-terra` / `high`; independent runtime self-introspection was
+  unavailable with no visible mismatch. Reviews were read-only and performed
+  no Spine JVM execution.
+- Accepted P1 correctness/API findings:
+  1. copy and normalize route, wire bytes, credential, and transport facts
+     synchronously at `handle()` admission before any queued/awaited work;
+  2. make gateway-controlled backend transition callbacks mandatory and add a
+     private-envelope-only compensation seam for Subscribe success followed by
+     binding-create failure, including compensation-failure evidence;
+  3. export every named wire/envelope/callback type used by public contracts
+     and freeze its exact TypeDoc inventory;
+  4. replace gateway-wide/store-wide promise chains with bounded per-binding
+     coordination so a hung backend effect cannot block unrelated bindings or
+     retain an unbounded queue; define finite queue/shutdown behavior and test
+     independent bindings plus overflow;
+  5. add finite admission-wire, backend-envelope, and retained-binding limits
+     before copying/retaining bytes, with deterministic rejection and cleanup.
+- Accepted P2 style/test/evidence findings: split the still-63-line security
+  pipeline into named preparation and operation phases; mirror the semantic
+  test folder; restore both Activate/Cancel orderings, owner/tenant/expiry and
+  stale Activate/Cancel regressions; prove queued-input mutation, pre-binding
+  cleanup success/failure, independent binding progress, queue bounds,
+  defensive copies, terminal close, and zero retention; correct the stale
+  focused-test count and any overclaims.
+- Documentation re-review is assigned to the existing immutable
+  `documentation_reviewer` (`gpt-5.6-luna` / `medium`, adapter limitation
+  already recorded), limited to claims affected by these findings. Read-only;
+  no edits or Spine JVM execution.
+- Documentation completed under that immutable profile and confirmed the
+  current README/TSDoc/report overclaim immediate admission, mandatory cleanup,
+  and complete serialization; omit finite limits/overflow/shutdown and
+  compensation; and describe named wire types not exported by the root. The
+  final 3-file/25-test count is accurate; older counts are historical.
+
+### B3 bounded-correction mechanical rejection
+
+- Independent focused tests and auth typecheck passed 3 files / 28 tests, but
+  generated docs/API checking failed because exported
+  `SubscriptionAbortSignal` is absent from the frozen auth inventory.
+- Coordinator inspection also found accepted design items still mechanically
+  absent: expiry purge and terminal close do not call mandatory private
+  disposal; successful timeout races leave live timers that can later abort a
+  reused binding controller; close does not own per-binding cleanup; the
+  security pipeline remains over 35 lines; and tests were not moved under the
+  mirrored `test/subscriptions/` folder.
+- These are deterministic omissions from the already accepted design, not a
+  new review wave. They return to the same existing implementation context,
+  expected unchanged explicit `gpt-5.6-terra` / `medium`, before specialist
+  review. No B4/C+, commit, push, merge, children, or Spine JVM execution.
+
+### B3 final bounded verification and review assignments
+
+- Coordinator verification passed 3 auth files / 33 tests, auth typecheck,
+  exact 41-export TypeDoc/API inventory, formatting, and diff hygiene.
+- Final style/maintainability, TypeScript/API, and performance/reliability
+  re-reviews use fresh existing roles with explicit `gpt-5.6-terra` / `high`.
+  Documentation follows under the immutable existing
+  `documentation_reviewer` (`gpt-5.6-luna` / `medium`; adapter limitation
+  already recorded).
+- The final reliability lens includes callback timeouts for Subscribe and
+  compensation, expiry racing active/queued work, bounded aggregate close,
+  capacity/queue limits, copies/zeroing, and independent binding progress.
+- All reviews are read-only with no edits, commit, push, merge, children, or
+  Spine JVM build, test, generation, dependency resolution, launch, or project
+  execution.
+
+### B3 final bounded review results and correction
+
+- Style/API/reliability ran through fresh existing roles with explicit
+  `gpt-5.6-terra` / `high`. Documentation ran through the immutable existing
+  `gpt-5.6-luna` / `medium` role under the recorded adapter limitation.
+  Independent runtime self-introspection was unavailable; no visible mismatch
+  or fallback occurred. All reviews were read-only and executed no JVM work.
+- Accepted P1 correction batch:
+  1. bound `creator.subscribe` and every pre-binding `dispose` compensation by
+     `operationTimeoutMs`, abort on timeout, clear timers, and zero every
+     B3-owned copy; use a standard event-capable `AbortSignal` suitable for B4;
+  2. export/name the binding transition result and every public signature type;
+  3. validate owner/tenant before queue reservation and recheck inside the
+     coordinator; foreign Cancel is denied (not idempotent success) and consumes
+     no pending slot;
+  4. coordinate expiry with running/queued operations so disposal cannot race a
+     live activation into unowned backend work;
+  5. reserve finite binding capacity before backend Subscribe, release the
+     reservation on every failure, and prevent concurrent in-flight creations
+     from exceeding `bindingLimit`.
+- Accepted P2 correction batch: perform real ≤35-line method decomposition;
+  add gateway-level admission/collaborator mutation and stale
+  Subscribe/Activate/Cancel coverage; add true concurrent cancel-first,
+  unauthorized queue, Subscribe/compensation timeout+abort, expiry-versus-
+  active/queued, close-abort, capacity-reservation, failure/zeroing tests;
+  update exact API inventory and truthful evidence. Docs must state standard
+  AbortSignal/cooperative callback limits and use serialized-tenant-fingerprint
+  wording.
+- One fresh existing `implementer` owns this single final B3 correction,
+  expected explicit `gpt-5.6-terra` / `medium`. B3 auth runtime/tests/docs/API
+  inventory/evidence only; no B4/C+, commit, push, merge, children, or Spine JVM
+  execution.
+
+### B3 final-correction verification and targeted acceptance
+
+- Coordinator verification passed 3 auth files / 36 tests, auth typecheck,
+  exact 43-export TypeDoc/API inventory, formatting, and diff hygiene.
+- Reopen only correction-affected style, TypeScript/API, reliability, and
+  documentation concerns under their already explicitly dispatched immutable
+  profiles. Reviews remain read-only with no edits, commit, push, merge,
+  children, or Spine JVM execution.
+
+### B3 targeted final findings
+
+- API P1: export the actual platform `AbortSignal` type, not a reduced
+  module-private lookalike; B4 must be able to pass it directly to standard
+  abort-aware APIs.
+- Reliability P1: terminal close must also own, abort, settle, and release
+  in-flight pre-binding Subscribe reservations/controllers within the global
+  shutdown bound.
+- Style/test P2: remove the forwarding-only wrapper and split actual
+  `#perform`/`#subscribe` responsibilities below 35 lines. Add true
+  interleavings for queued foreign owner and tenant denial, pending gateway
+  input/transport mutation and stale Activate/Cancel, Subscribe and
+  compensation timeout/abort/reservation release, concurrent cancel-first,
+  expiry-versus-active/queued, and close-aborts-active work.
+- Documentation P2: use serialized-tenant-fingerprint wording and remove or
+  explicitly supersede the stale 33-test/41-export evidence block.
+- One existing `implementer`, expected explicit `gpt-5.6-terra` / `medium`,
+  owns this tightly scoped final correction. No B4/C+, commit, push, merge,
+  children, or Spine JVM execution.
+
+### B3 last targeted correction
+
+- API acceptance is clean: the exported signal now aliases the actual platform
+  `AbortSignal`.
+- Reliability P1: race pending Subscribe and its pre-binding compensation
+  against the gateway-owned abort event as well as the operation timeout, so
+  `close()` settles the public handle and zeros admitted bytes within
+  `shutdownTimeoutMs`; compensation must use/track the same close-owned
+  controller rather than an untracked one.
+- Style/reliability P2: remove the redundant forwarding-only `#handle` wrapper.
+  Add real gateway/interleaving regressions for a queued foreign owner and
+  tenant consuming no slot, pending caller wire/transport mutation,
+  stale Activate and Cancel, Subscribe timeout+abort+reservation release,
+  compensation timeout+abort, concurrent cancel-first, expiry-versus-active
+  and queued work, close-aborts-active work, and close settlement of the
+  pending Subscribe handle. Correct report wording/evidence accordingly.
+- Return this narrow batch to the existing `implementer` under its original
+  explicit `gpt-5.6-terra` / `medium` dispatch. No B4/C+, commit, push, merge,
+  children, or Spine JVM execution.
+
+### B3 terminal race correction
+
+- The exact eight-test matrix is present and passes. Remaining findings are
+  limited to:
+  1. ensure post-Subscribe/pre-binding compensation receives a fresh usable
+     controller even when gateway close already aborted the Subscribe
+     controller, while remaining bounded by shutdown;
+  2. add the close-versus-just-completed-Subscribe compensation regression;
+  3. reduce `#subscribe` from 37 to at most 35 lines;
+  4. prove timed-out compensation releases a capacity-one lease with a
+     successful follow-up Subscribe;
+  5. mark the initial 33-test/41-export block historical/superseded by 45/43.
+- Return this minimal correction to an existing `implementer` under explicit
+  `gpt-5.6-terra` / `medium`. No B4/C+, commit, push, merge, children, or Spine
+  JVM execution.
+
+### B3 terminal-race acceptance assignments
+
+- Independent coordinator verification passed 3 auth files / 47 tests, auth
+  typecheck, generated TypeDoc/API checking with the frozen 43-export
+  inventory, formatting, and diff hygiene.
+- Final style/maintainability acceptance uses the existing
+  `style_maintainability_reviewer` role with explicit `gpt-5.6-terra` /
+  `high`, limited to the corrected `#subscribe` decomposition and the
+  capacity-one follow-up regression.
+- Final performance/reliability acceptance uses the existing
+  `performance_reliability_reviewer` role with explicit `gpt-5.6-terra` /
+  `high`, limited to close versus just-completed Subscribe, live bounded
+  compensation, lease release, and zero retained bindings.
+- Final documentation acceptance uses the existing `documentation_reviewer`
+  role with its immutable `gpt-5.6-luna` / `medium` profile. The Desktop
+  adapter does not accept a redundant model override for this fixed role; the
+  immutable configured profile is the available evidence. Its scope is the
+  historical/superseded evidence wording and final 47-test/43-export claims.
+- All three reviews are read-only. They may not edit, commit, push, merge,
+  spawn children, or execute any Spine JVM project command.
+
+### B3 terminal-race acceptance results
+
+- Style/maintainability is clean. `#subscribe` is meaningfully decomposed
+  below the 35-line limit, and the capacity-one follow-up test proves the
+  operation-timeout compensation path releases its lease.
+- Documentation is clean. The 33-test/41-export checkpoint is explicitly
+  historical and superseded; the current evidence consistently records 47
+  tests and the frozen 43-export inventory.
+- Performance/reliability accepted one P2 regression gap: the
+  close-versus-completed-Subscribe test proves the fresh compensation signal
+  starts live, but does not prove a hung disposer is aborted at
+  `shutdownTimeoutMs`, the public handle settles, capacity is reusable, and no
+  binding remains.
+
+### B3 terminal-race P2 regression closure
+
+- The accepted P2 regression now holds pre-binding creation, closes after
+  Subscribe completes, then holds mandatory disposal. It proves the fresh
+  compensation signal starts live, aborts at `shutdownTimeoutMs`, settles the
+  public handle, releases the capacity-one reservation, and leaves no binding.
+- No production change was required: the existing fresh-controller and bounded
+  compensation implementation satisfied the stronger interleaving.
+- The existing `implementer` owns that single test/evidence correction under
+  its original explicit `gpt-5.6-terra` / `medium` assignment. No production
+  redesign, B4/C+, commit, push, merge, child dispatch, or Spine JVM project
+  command is permitted.
+
+### B3 reliability P2 correction verification
+
+- The existing implementer completed the test-only correction under its
+  original explicit `gpt-5.6-terra` / `medium` dispatch. Independent runtime
+  self-introspection remains unavailable; the immutable configured role/profile
+  shows no mismatch or fallback.
+- Independent coordinator verification passed 3 auth files / 47 tests, auth
+  typecheck, generated TypeDoc/API checking with the 43-export inventory,
+  formatting, and diff hygiene.
+- Re-review reopens only performance/reliability under the existing
+  `performance_reliability_reviewer` role and its original explicit
+  `gpt-5.6-terra` / `high` assignment. It is limited to the new
+  close-raced hung-disposer regression and remains read-only with no commit,
+  push, merge, children, or Spine JVM project command.
+
+### B3 final review disposition
+
+- Performance/reliability re-review is clean. The new regression proves the
+  fresh compensation signal starts live, aborts at `shutdownTimeoutMs`, the
+  pending handle settles, the capacity-one reservation is reusable, and no
+  binding remains.
+- Style/maintainability: clean.
+- Documentation completeness: clean.
+- TypeScript/API docs: clean from the preceding targeted acceptance; the
+  test-only reliability correction changed no public contract.
+- Performance/reliability: clean.
+- All dispatched models/reasoning were explicit except the immutable
+  documentation role's recorded Desktop adapter limitation. No visible role,
+  profile, or fallback mismatch occurred. B3 review is converged.
+
+### B3 full-gate coverage correction
+
+- The sandboxed full gate was mechanically invalid for network/IPC acceptance:
+  187 tests failed with explicit loopback-listener and ZeroMQ IPC `EPERM`
+  errors. The identical unrestricted TypeScript gate then passed every runnable
+  test: 144 files / 2,681 tests, with 25 skipped.
+- The unrestricted gate still failed the branch threshold at 89.77%
+  (8,637/9,621). The new subscription module reports 77.43% branch coverage
+  and exposes a focused test gap; production correctness review remains clean.
+- The existing `implementer` owns behavior-focused B3 test expansion under its
+  original explicit `gpt-5.6-terra` / `medium` assignment. It must cover real
+  uncovered outcomes until the global branch gate is at least 90%, without
+  threshold changes, ignore annotations, production redesign, B4/C+, commit,
+  push, merge, children, or Spine JVM project execution.
+
+### B3 full-gate acceptance
+
+- The implementer added four behavior-focused subscription tests without
+  changing production code, coverage thresholds, or ignore directives.
+  Independent focused verification passed 3 auth files / 51 tests, auth
+  typecheck, generated TypeDoc/API checking, formatting, and diff hygiene.
+- The first unrestricted full-gate rerun encountered one transient existing
+  delivery-client child-readiness timeout; its isolated file immediately
+  passed 3/3. The repeated full unrestricted gate passed 144 runnable files /
+  2,685 tests with 25 skipped.
+- Final coverage is 94.07% statements, 90.00% branches (8,659/9,621), 94.30%
+  functions, and 94.79% lines. The subscription module is 88.71% branches.
+- B3 is mechanically verified and review-converged. No Spine JVM project
+  command was run.
+
+### B3 coverage test expansion
+
+- Four gateway/store behavior tests now cover terminal and malformed routing,
+  invalid time, unauthenticated/forbidden/expired security outcomes, optional
+  trusted context plus present allowlisted transport facts, invalid backend/ID
+  storage inputs, and public capacity-failure mapping. No production code,
+  threshold, or coverage-ignore configuration changed.
+- Focused coverage reports `subscriptions/index.ts` at 88.71% branches, up from
+  77.43%, adding 22 exercised branches. Applied to the unrestricted baseline,
+  this is 8,659/9,621 branches, exactly 90.00%. The local unrestricted rerun
+  returned successfully but emitted neither a final coverage summary nor an
+  LCOV artifact, so that post-change global total remains arithmetic evidence
+  pending the coordinator's next unrestricted report.
