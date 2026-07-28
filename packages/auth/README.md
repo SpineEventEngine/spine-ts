@@ -179,3 +179,132 @@ does not offer explicit `KeyObject` memory zeroing; caller-owned keys are never
 zeroed. It provides neither remote key
 discovery nor durable revocation storage, OIDC, browser storage, or request
 authorization.
+
+## Generic OIDC authorization-code flow
+
+`OidcFlow` is the framework-neutral, in-memory authorization-code flow for a
+Node application gateway. It coordinates a provider adapter with application
+identity mapping and an existing session strategy; it is not an HTTP server,
+does not perform discovery or JWKS fetching, and does not provide Google or
+GitHub integrations. Use one flow instance per application process and place
+the application-specific HTTP adapter in front of it.
+
+```ts
+import {
+  OidcFlow,
+  type ApplicationSessionIssuer,
+  type IdentityMapping,
+  type OidcVerifiedIdentityProvider,
+} from "@spine-event-engine/auth";
+
+const provider: OidcVerifiedIdentityProvider = {
+  issuer: "https://issuer.example",
+  async exchangeAuthorizationCode(input) {
+    // Exchange input.code and verify issuer, audience/client ID, nonce,
+    // redirect URI, and the provider verifier before returning identity only.
+    void input;
+    return { issuer: "https://issuer.example", subject: "user-42" };
+  },
+};
+const identities: IdentityMapping = {
+  async resolve(externalIdentity) {
+    return { externalIdentity, principal: { id: "user-42" } };
+  },
+};
+const sessions: ApplicationSessionIssuer = {
+  async issue() {
+    return undefined;
+  },
+};
+
+const oidc = new OidcFlow({
+  authorizationEndpoint: "https://issuer.example/authorize",
+  callbackUri: "https://app.example/auth/callback",
+  clientId: "chat-web",
+  scopes: ["openid", "profile"],
+  allowedPostLoginRedirects: ["https://app.example/chat"],
+  provider,
+  identityMapping: identities,
+  sessionIssuer: sessions,
+});
+```
+
+The browser generates an RFC 7636 verifier and sends its S256 challenge only
+to the start endpoint. The adapter calls `start()` with that challenge and one
+exact configured post-login redirect, then redirects to the returned URL. The
+provider callback adapter calls `callback()` once with state and either code or
+provider error; on success it redirects using the returned post-login redirect
+and keeps the returned grant out of URL fragments and query strings. Hand the
+grant to the browser either in a `Cache-Control: no-store` callback response
+body consumed by same-origin code, or as a short-lived, one-time HttpOnly
+cookie/server-side handoff keyed to that browser; never expose it in the
+redirect URL. The browser sends the grant and verifier by POST to the application exchange
+endpoint, which calls `exchange()` and installs the returned application
+credential using the selected strategy.
+
+```ts
+import { createHash } from "node:crypto";
+
+const verifier = "browser-generated-rfc7636-verifier-at-least-43-characters";
+const challenge = createHash("sha256").update(verifier, "ascii").digest("base64url");
+const started = oidc.start({
+  browserCodeChallenge: challenge,
+  postLoginRedirect: "https://app.example/chat",
+});
+if (started.kind === "started") {
+  // Redirect to started.authorizationUrl.
+}
+```
+
+`start()` creates a distinct 32-byte random state, nonce, and provider PKCE
+verifier. State is consumed before any callback action, including an error;
+callback and exchange are one-time operations. Exchange failures intentionally
+all return `{ kind: "rejected" }`, so an HTTP adapter must not infer whether a
+grant existed. `close()` is terminal, clears retained state, and aborts active
+provider, mapping, or session callbacks.
+
+| Option                         |    Default | Meaning                                 |
+| ------------------------------ | ---------: | --------------------------------------- |
+| `transactionTtlMilliseconds`   |    300,000 | State/nonce/provider-PKCE lifetime.     |
+| `grantTtlMilliseconds`         |     60,000 | One-time application grant lifetime.    |
+| `maxTransactions`, `maxGrants` | 1,000 each | Per-process retained-record bounds.     |
+| `collisionAttempts`            |          3 | Bounded random-ID retry count.          |
+| `operationTimeoutMilliseconds` |     30,000 | Provider, mapping, and issuer deadline. |
+| `maxAuthorizationUrlLength`    |      4,096 | Maximum serialized provider URL length. |
+
+All numeric options are positive safe integers. Endpoints, callback URI, and
+post-login redirects must be exact HTTPS URLs without credentials or fragments;
+scopes are unique, non-empty tokens and must include `openid`. Browser code
+challenges are exactly the 43-character base64url S256 form, and exchanged
+verifiers use the RFC 7636 43–128-character alphabet.
+
+Every callback code, error, state, grant, verifier, and redirect input is
+limited to 4,096 characters before parsing. A verified external identity may
+carry at most 32 string claims totaling 4,096 name/value characters; token-like
+claim names (`access_token`, `refresh_token`, `id_token`, and token variants)
+are rejected so provider credentials cannot enter the retained transaction.
+
+### Extension boundaries and deployment requirements
+
+The provider adapter owns authorization-code exchange, discovery/JWKS caching,
+ID-token signature and claim verification, issuer/client-ID/audience/nonce
+binding, and provider-specific errors. It returns only bounded identity claims;
+never return access, refresh, or ID tokens. `IdentityMapping` owns provisioning,
+disabled-user policy, and principal attributes. `ApplicationSessionIssuer`
+selects opaque cookies, signed sessions, or an application strategy and must
+return a valid `RequestCredential` plus `ResolvedSession`.
+
+The HTTP adapter owns the callback and exchange endpoints. Require POST for the
+grant exchange, apply `Cache-Control: no-store` to callback and exchange
+responses, do not put application credentials in redirects, and use the
+cookie/CSRF helper when issuing browser cookies. Provider adapters must honor
+the supplied `AbortSignal`; a non-cooperative dependency is still bounded from
+the flow's perspective but may continue its own background work until it ends.
+
+This is process-local finite coordination, not a distributed session or OIDC
+transaction store. Multiple nodes therefore need an application-selected shared
+session strategy and either sticky routing or an external transaction design.
+It provides no browser reconnect guarantee, no delivery/subscription update
+guarantee, no authorization policy, no identity-provider UI, and no automatic
+credential refresh. Every later Spine request is authenticated and authorized
+by the gateway independently of this sign-in flow.

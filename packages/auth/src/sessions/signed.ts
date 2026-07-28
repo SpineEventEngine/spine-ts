@@ -456,7 +456,8 @@ export class SignedSessions implements SessionResolver {
       )
         return undefined;
       const signature = Buffer.from(encodedSignature, "base64url");
-      if (signature.byteLength !== 64) return undefined;
+      if (signature.byteLength !== 64 || signature.toString("base64url") !== encodedSignature)
+        return undefined;
       return {
         kid: header.kid,
         input: `${encodedHeader}.${encodedClaims}`,

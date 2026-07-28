@@ -2795,3 +2795,347 @@ profiles; no Spine JVM project command may run.
 - Final canonical verification passed 148 runnable test files / 2,767 tests
   with 90.06% branch coverage (9,206/10,221). No Spine JVM command ran. C2 is
   accepted for commit.
+
+## C3 generic OIDC architecture assignment
+
+- C2 is committed and remotely synchronized at `4a570520`.
+- C3 is high-risk because it freezes public external-identity, atomic
+  state/nonce/PKCE transaction, redirect, provider-token validation, identity
+  mapping, one-time exchange-grant, and secret lifecycle contracts.
+- Primary standards grounding is RFC 9700, RFC 7636, and OpenID Connect Core:
+  exact pre-registered redirects, authorization code only, transaction-specific
+  state/nonce/PKCE, S256 only, single consumption, issuer validation, and no
+  bearer credential in redirect URLs.
+- The existing `requirements_splitter` is assigned read-only with explicit
+  `gpt-5.6-sol` / `high`. It must return the smallest non-overengineered C3
+  contract/slices without edits, Git mutation, children, C4+, or any Spine JVM
+  project command. Runtime self-introspection may be unavailable; explicit
+  dispatch and immutable role/profile are the acceptance metadata.
+- The planner did not return a checkpoint or final within the bounded planning
+  window and was interrupted. No result or blocker is claimed. The coordinator
+  froze the minimal standards-grounded contract in `C3_TASK_BRIEF.md`, keeping
+  provider networking/JWKS in C4 adapters and HTTP/browser integration out of
+  C3.
+
+### C3 implementation assignment
+
+- The existing `implementer` is the sole C3 production-code owner, explicitly
+  dispatched as `gpt-5.6-terra` / `medium`.
+- Its bounded first slice is C3 behavior-first slice 1 in
+  `C3_TASK_BRIEF.md`: finite construction and `start()` transaction behavior,
+  its focused tests, and an append-only implementation report. It owns only
+  the new OIDC source/test paths and the C3 report during this slice.
+- The implementer must use RED/GREEN TDD, may not mutate Git, spawn children,
+  start C4+, or execute any Spine JVM project command. Subsequent C3 slices
+  return to the same implementation context.
+- Runtime self-introspection may be unavailable. Acceptance requires the
+  explicit dispatch fields, the configured existing role/profile, and no
+  visible mismatch or fallback.
+- Slice 1 returned from the configured existing `implementer`. Runtime
+  self-introspection was unavailable; the explicit `gpt-5.6-terra` /
+  `medium` dispatch fields and immutable role profile show no mismatch or
+  fallback. Focused tests and auth typecheck passed independently; the
+  coordinator found formatting drift in the new brief/report and returned
+  that deterministic correction to the same owner before Slice 2.
+- Slice 2 returned from the same configured role/profile with runtime
+  self-introspection still unavailable and no visible mismatch. The owner
+  disclosed one accidental read-only `git diff --check`; it made no repository
+  change and does not invalidate the result. Independent verification passed
+  9/9 focused tests, auth typecheck, changed-file Prettier, and diff hygiene.
+  Slice 3 returns to the same implementation context.
+- Slice 3 completed browser-PKCE grant exchange, burn-before-check replay
+  safety, session issuance, expiry/failure behavior, and terminal close races.
+  Independent verification passed 12/12 focused tests, auth typecheck,
+  changed-file Prettier, and diff hygiene. Runtime self-introspection remains
+  unavailable with no visible mismatch. The same owner now completes the
+  public surface, documentation, and a shallow maintainability split before
+  specialist review.
+
+### C3 mechanical gate and specialist assignments
+
+- C3 is complete as a shallow contracts/runtime pair with package-root exports
+  and generic OIDC documentation. The implementation owner used the recorded
+  explicit `gpt-5.6-terra` / `medium` profile; runtime self-introspection was
+  unavailable with no visible mismatch or fallback.
+- The owner's first full-auth run observed one unrelated signed-session
+  assertion flake; its immediate confirmation and the coordinator rerun both
+  passed. The coordinator gate passes 8 auth files / 145 tests, auth
+  typecheck, generated TypeDoc/API checking at 93 auth exports, changed-file
+  Prettier, and diff hygiene.
+- Style/maintainability: existing reviewer, explicit
+  `gpt-5.6-terra` / `high`, limited to C3 module cohesion, naming, duplication,
+  method size, test quality, and avoiding speculative OIDC/HTTP/provider
+  abstractions.
+- TypeScript/API docs: existing reviewer, explicit
+  `gpt-5.6-terra` / `high`, limited to the 17 new root exports, result unions,
+  provider/mapping/session seams, runtime/type agreement, TSDoc, and the
+  93-export inventory.
+- Performance/reliability: existing reviewer, explicit
+  `gpt-5.6-terra` / `high`, limited to finite admission/storage, atomic
+  state/grant consumption, deadlines/abort/close races, collision/expiry,
+  defensive copying/zeroing, and behavior-test completeness.
+- Documentation: immutable existing `documentation_reviewer`
+  `gpt-5.6-luna` / `medium`, limited to the generic flow, exact defaults,
+  extension ownership, POST/`no-store`, provider-token handling, limitations,
+  and compile-valid examples. Desktop cannot accept a redundant override.
+- All lanes are read-only, childless, Git-read-only, C3-only, and prohibited
+  from any Spine JVM project execution. Runtime self-introspection may be
+  unavailable; explicit dispatch or immutable role/profile and absence of a
+  visible mismatch are the acceptance metadata. Dedicated security remains
+  the final complete Wave 4 gate.
+
+### C3 specialist review results
+
+- Style/maintainability ran under the explicitly dispatched existing
+  `gpt-5.6-terra` / `high` role. Runtime self-introspection was unavailable,
+  with no visible mismatch or fallback. It found one P1 fail-closed defect:
+  malformed `sessionIssuer` session data can throw, plus P2 stale class TSDoc
+  and missing cross-transaction nonce/provider-verifier uniqueness coverage.
+  Spec and quality are not approved pending the aggregated correction batch.
+- TypeScript/API docs ran under the explicitly dispatched existing
+  `gpt-5.6-terra` / `high` role. Runtime self-introspection was unavailable,
+  with no visible mismatch or fallback. It confirmed the malformed-session and
+  stale-TSDoc findings and additionally found that the 93-export inventory was
+  not frozen, provider-token-like claim names can enter retained identity data,
+  callback input does not type exactly-one code/error, and negative Timestamp
+  nanos are accepted. Spec and quality are not approved pending the same
+  aggregated correction batch.
+- Performance/reliability ran under the explicitly dispatched existing
+  `gpt-5.6-terra` / `high` role. Runtime self-introspection was unavailable,
+  with no visible mismatch or fallback. It confirmed malformed-session and
+  Timestamp findings, found that re-entrant clock/random callbacks can make
+  terminal close lose to lesser rejection reasons, and requested direct
+  grant-capacity reclamation, collision exhaustion, mapping/session deadline,
+  and close-race coverage.
+- Documentation ran under the existing immutable
+  `documentation_reviewer` `gpt-5.6-luna` / `medium` profile. The Desktop
+  surface rejected a redundant explicit Luna override, so the immutable role
+  configuration is the runtime metadata; no mismatch or fallback was visible.
+  It found that the documented redirect plus browser exchange lacks a safe
+  grant-handoff mechanism and that exact input/claim bounds are omitted.
+- The single correction batch therefore covers: structural malformed-session
+  rejection; close precedence for re-entrant clock/random callbacks; claim-name
+  rejection for token material; canonical Timestamp nanos; callback XOR types;
+  frozen 93-export inventory; current class TSDoc; transaction uniqueness and
+  finite grant/deadline/race tests; and actionable grant handoff plus exact
+  bounds documentation. All affected concerns reopen once after focused
+  correction evidence.
+- The owner completed the runtime, public-contract, inventory, TSDoc, and README
+  corrections with 14/14 focused and 147/147 full-auth tests, typecheck,
+  generated docs/API checking, and Prettier, but explicitly did not add the
+  requested cross-transaction uniqueness, grant-capacity reclamation/collision,
+  mapping/session deadline, and re-entrant-close matrix. This is an incomplete
+  checkpoint, not an accepted correction or re-review boundary. The same
+  Terra/medium owner receives the exact remaining test-first batch.
+- The next checkpoint adds cross-transaction state/nonce/provider-challenge
+  uniqueness and mapping/session deadline settlement, passing 17/17 focused and
+  150/150 full-auth tests plus typecheck, docs/API, and formatting. It remains
+  incomplete because direct grant capacity/collision and the close-reentrancy
+  table are absent. Those two concerns are split into smaller sequential
+  completions in the same implementation context.
+- The grant-lifecycle completion adds direct expiry/capacity reclamation and
+  finite grant-ID collision exhaustion, including preservation of the
+  original one-use grant. Focused OIDC passes 19/19 with auth typecheck and
+  formatting. Only the close-reentrancy matrix remains before correction
+  acceptance.
+- The final close-reentrancy matrix completes at 23/23 focused OIDC tests and
+  156/156 owner-run full-auth tests, with typecheck, docs/API, and formatting
+  green. Coordinator verification then reproduced the pre-existing signed
+  session tamper failure at 155/156. Root-cause evidence proves Node accepts a
+  non-canonical final base64url character with changed unused padding bits as
+  the same 64 signature bytes. This creates signature-string malleability and
+  is a real deterministic verification concern, not a C3 regression.
+- Before C3 re-review, the same existing `implementer` is assigned a bounded
+  regression fix under explicit `gpt-5.6-terra` / `medium`: make the signed
+  signature mutation deterministic, reject non-canonical signature encoding,
+  and rerun signed/auth/C3 gates. It may touch only the signed source/test and
+  append-only C3 evidence/logs, with no Git, children, C4+, or JVM execution.
+- RED proved the non-canonical signature text was accepted; GREEN requires the
+  decoded 64-byte signature to round-trip to the exact encoded segment.
+  Independent correction verification passes signed plus OIDC 41/41, full auth
+  157/157, auth typecheck, generated TypeDoc/API checking at 93 auth exports,
+  Prettier, and diff hygiene.
+- The complete corrected package reopens style, TypeScript/API,
+  performance/reliability, and documentation once under their original
+  recorded profiles. Review scope is limited to the prior findings and
+  correction side effects; the final Wave 4 security gate remains deferred.
+- Targeted style re-review used the original explicit Terra/high profile;
+  runtime self-introspection was unavailable with no visible mismatch. It
+  closes malformed-session, TSDoc, deadline/capacity/close, and signed
+  canonicality findings, but finds two P2 residuals: runtime/test coverage
+  proves only state uniqueness, not transaction-specific nonce/provider
+  verifier uniqueness, and the collision test cannot prove the original grant
+  survives because its verifier/session path cannot succeed.
+- Targeted TypeScript/API re-review used the original explicit Terra/high
+  profile; runtime self-introspection was unavailable with no visible
+  mismatch. It approves the inventory, XOR type, Timestamp, TSDoc, session
+  object, and signed-canonicality corrections but finds one P1 residual:
+  null/array/non-record or throwing `ExternalIdentity.claims` can escape or be
+  normalized instead of returning the callback rejection union.
+- Targeted performance/reliability re-review used the original explicit
+  Terra/high profile; runtime self-introspection was unavailable with no
+  visible mismatch. It approves close precedence, finite stores/collisions,
+  deadlines, Timestamp, cleanup, and signed canonicality, but finds one P1
+  residual: throwing getters/Proxies in adapter-issued session data can escape
+  after the bounded callback, and it independently confirms that grant
+  collision survival is not behaviorally proven.
+- Targeted documentation re-review ran under the immutable Luna/medium role;
+  no visible mismatch or fallback was exposed. It is clean: safe grant handoff,
+  exact bounds, provider-token exclusions, adapter ownership, POST/`no-store`,
+  limitations, and snippets now agree with C3.
+- The final C3 correction batch is therefore limited to guarded plain-record
+  external claims; one guarded snapshot of hostile session-issuer output;
+  active-transaction nonce/provider-verifier uniqueness; and a collision test
+  that proves the pre-existing grant succeeds once before replay rejection.
+  Only style, API, and reliability reopen after focused evidence;
+  documentation remains clean.
+- The owner implemented guarded claim/session snapshots and active transaction
+  uniqueness but returned before verification after correcting a TypeScript
+  snapshot-typing seam. This is an incomplete checkpoint, not a blocker or
+  accepted correction. The same Terra/medium context must finish the hostile
+  object, uniqueness, collision-preservation, and full gate evidence.
+- The completed final batch safely rejects hostile claim/session objects,
+  finitely enforces active nonce/provider-verifier uniqueness, and proves the
+  original collision-surviving grant issues exactly once with a real S256
+  proof. Independent verification passes signed plus OIDC 44/44, full auth
+  160/160, auth typecheck, generated TypeDoc/API checking at 93 exports,
+  Prettier, and diff hygiene. Only style, API, and reliability reopen for a
+  final targeted verdict; documentation remains clean.
+- Final TypeScript/API re-review uses the original explicit Terra/high profile;
+  runtime self-introspection is unavailable with no visible mismatch. It
+  approves every prior API concern but finds one last P1 hostile-adapter seam:
+  mapping output is validated and copied through separate unguarded getter/
+  Proxy reads, allowing callback rejection escape or changed data. One guarded
+  mapping snapshot must be both validated and retained as `mapping-failed`.
+- Final style re-review uses the original explicit Terra/high profile; runtime
+  self-introspection is unavailable with no visible mismatch. It independently
+  confirms the mapping-output P1 and adds one P2 test residual: the material
+  retry case combines nonce and verifier reuse, so it does not independently
+  prove verifier-only collision detection. Grant survival, claim/session
+  guards, and signature canonicality are approved.
+- Final reliability re-review uses the original explicit Terra/high profile;
+  runtime self-introspection is unavailable with no visible mismatch. It
+  independently confirms both remaining items and approves every other
+  lifecycle, capacity, deadline, cleanup, and signed-canonicality path.
+- The last micro-batch is exactly one guarded single mapping snapshot plus
+  separate nonce-only and verifier-only active-collision tests. No other
+  concern or documentation reopens.
+- The micro-batch captures mapping output once under guarded code and adds
+  independent nonce-only/verifier-only collision tests. Independent
+  verification passes signed plus OIDC 47/47, full auth 163/163, auth
+  typecheck, generated TypeDoc/API checking at 93 exports, Prettier, and diff
+  hygiene. Style, API, and reliability perform one residual-only closure
+  check; documentation remains clean.
+- Residual-only style and API checks use their original explicit Terra/high
+  profiles with unavailable self-introspection and no visible mismatch. Both
+  find the mapping "snapshot" still validates getter-backed nested objects and
+  then rereads them for retention, allowing changing getters to alter accepted
+  data. Style also finds the nonce-only/verifier-only tests assert only
+  `started`, so they do not prove a retry produced different nonce/challenge
+  output. Spec/quality remain unapproved pending the reliability closure result
+  and one exact correction.
+- Residual-only reliability uses the original explicit Terra/high profile with
+  unavailable self-introspection and no visible mismatch. It confirms exactly
+  the same P1/P2 and no additional finding. The correction must read every
+  nested mapping field into locals once, validate/copy only those locals, add
+  changing/late-throw getter regressions, and assert changed URL nonce or
+  provider challenge after the corresponding isolated collision.
+- The owner corrects the single-read mapping snapshot and adds a changing-getter
+  regression. Independent gates pass signed plus OIDC 48/48, full auth
+  164/164, typecheck, generated docs/API, Prettier, and diff hygiene. However,
+  direct inspection confirms the nonce-only/verifier-only parameterized test
+  still asserts only two successful starts and does not compare the relevant
+  URL parameter. The correction is not accepted until those exact assertions
+  are present.
+- The test-only closure now compares the successful retry URL: nonce differs
+  for nonce-only reuse and provider S256 challenge differs for verifier-only
+  reuse. Independent focused verification passes OIDC 30/30, auth typecheck,
+  Prettier, and diff hygiene. The prior full-auth 164/164 gate remains current
+  because no runtime changed after it. Style/API/reliability perform only the
+  residual closure check.
+- Residual-only closure is clean in style, TypeScript/API, and
+  performance/reliability. Each used its original explicit Terra/high profile;
+  runtime self-introspection was unavailable with no visible mismatch or
+  fallback. The reviewers confirm the single-read frozen mapping snapshot and
+  meaningful isolated nonce/verifier retry assertions. Documentation remains
+  clean under its immutable Luna/medium profile.
+- All four canonical C3 concerns have clean dispositions. The final Wave 4
+  security reviewer remains correctly deferred. C3 proceeds to the canonical
+  full generated-coverage gate; no Spine JVM command has run.
+- The first canonical gate attempt was invalidated by sandbox `EPERM` on
+  loopback listeners, ZeroMQ IPC sockets, and child processes. The identical
+  permission-enabled run executes correctly and passes 149 runnable files /
+  2,798 tests, but global branch coverage is 89.62% (9,509/10,610), below the
+  required 90%; OIDC is 77.77% (301/387 branches).
+- C3 therefore remains unaccepted. The existing `implementer` is assigned one
+  behavior-focused coverage completion under explicit `gpt-5.6-terra` /
+  `medium`, using the generated OIDC LCOV misses. It may add only meaningful
+  input-boundary, fail-closed, expiry/capacity, and lifecycle tests (runtime
+  changes only for a demonstrated defect) until the global canonical threshold
+  is restored. No Git, children, C4+, or JVM execution is allowed.
+- The first coverage checkpoint adds 15 constructor-validation cases, passes
+  45 focused tests, and raises OIDC branches only from 77.77% to 79.58%.
+  It is incomplete. The remaining work is split into callback/provider/mapping
+  rejection behavior, then exchange/lifecycle behavior, in the same
+  Terra/medium context.
+- Repeated bounded owner resumptions advance meaningful tests to 61 and remove
+  dead helpers, but return partial matrices without the required BRH/BRF
+  measurement. With that writer complete and no overlapping ownership, the
+  coordinator becomes sole owner of the remaining test-only coverage matrix.
+  This is not a blocker or a new role; it avoids another context rebuild and
+  will stop immediately once the permission-enabled canonical threshold passes.
+- Coordinator-owned RED exposed array-valued session attributes being spread
+  into an empty object and accepted. GREEN requires a plain record before the
+  single defensive copy. The coordinator also completes behavior matrices for
+  mapping/session bounds and removes three proven-dead identity helpers.
+- Focused OIDC passes 87/87 at 90.05% branches (317/352), full auth passes
+  8 files / 221 tests, auth typecheck, generated TypeDoc/API checking at 93
+  exports, Prettier, and diff hygiene pass.
+- Style, TypeScript/API, and performance/reliability reopen narrowly under
+  their original explicit Terra/high profiles for dead-code cleanup,
+  fail-closed provider/session snapshots, clock-result simplification, and
+  behavior-test quality. Documentation is N/A because no documentation changed
+  after its clean closure and all public claims remain unchanged.
+- Narrow style review is clean under its original explicit Terra/high profile;
+  runtime self-introspection is unavailable with no visible mismatch. It
+  approves the cleanup, snapshots, clock simplification, and behavior-focused
+  tests.
+- Narrow TypeScript/API review uses its original explicit Terra/high profile;
+  runtime self-introspection is unavailable with no visible mismatch. It finds
+  one P1 regression from dead-helper removal: mapping now preserves issuer and
+  subject but may replace or omit provider-verified claims. Exact normalized
+  claim equality must be restored without rereading hostile mapping data.
+- Narrow reliability review uses its original explicit Terra/high profile;
+  runtime self-introspection is unavailable with no visible mismatch. It
+  independently confirms the same P1 and approves all other slice behavior.
+- The correction compares the guarded mapped-claims snapshot to the frozen
+  provider snapshot, rejects dropped/altered claims, and retains the provider
+  snapshot. OIDC passes 89/89 at 90.22% branches (323/358), full auth 223/223,
+  typecheck, Prettier, and diff hygiene. Only API and reliability reopen.
+- The API and reliability residual recheck uses the original explicit
+  `gpt-5.6-terra` / `high` profiles. Runtime self-introspection remains
+  unavailable with no visible mismatch. Both concerns find one exact P1:
+  assigning an own enumerable `__proto__` provider claim into `{}` changes the
+  target prototype instead of preserving the claim, so the provider-to-mapping
+  snapshot is not lossless for a valid hostile key.
+- The correction defines copied keys as own enumerable data properties and adds
+  a provider-to-mapping-to-grant regression for an own `__proto__` claim.
+  Focused OIDC passes 90/90 at 90.50% branches (324/358); full auth passes
+  224/224. TypeScript, generated TypeDoc/API inventory at 93 auth exports,
+  C3-scoped Prettier, and diff hygiene pass. Two formatter warnings in gateway
+  tests are confirmed in the committed C2 baseline and are not C3 changes.
+  Only API and reliability reopen for this correction.
+- The residual TypeScript/API and performance/reliability rechecks are clean.
+  Both use the existing explicit `gpt-5.6-terra` / `high` profiles; runtime
+  self-introspection is unavailable with no visible mismatch. They confirm
+  that `__proto__` is an own enumerable data property without prototype
+  mutation, remains bounded and frozen, and is retained through mapping and
+  one-time grant issuance. No API, TypeDoc, lifecycle, or fail-closed concern
+  reopens. All C3 specialist concerns are closed; final Wave 4 security remains
+  deferred to the Wave boundary.
+- The permission-enabled canonical gate first reports one timing-dependent
+  delivery-server signal-test failure outside C3 after 2,857 passing tests.
+  The unchanged focused lifecycle suite passes 4/4, and one identical canonical
+  rerun passes 149 files / 2,858 tests with 3 files / 25 tests skipped and
+  90.08% branches (9,532/10,581). C3 is accepted for commit. No Spine JVM
+  command ran.

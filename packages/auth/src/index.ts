@@ -209,6 +209,7 @@ export { UnaryGateway } from "./gateway/index.js";
 export { OpaqueSessionCookies } from "./sessions/cookies.js";
 export { OpaqueSessions } from "./sessions/opaque.js";
 export { SignedSessions } from "./sessions/signed.js";
+export { OidcFlow } from "./oidc/index.js";
 export { InMemorySubscriptionBindings, SubscriptionGateway } from "./subscriptions/index.js";
 export {
   createNativeGatewayServices,
@@ -270,3 +271,21 @@ export type {
   SignedSessionsOptions,
   SignedTokenRevocation,
 } from "./sessions/signed.js";
+export type {
+  ApplicationSessionIssue,
+  ApplicationSessionIssuer,
+  ExternalIdentity,
+  IdentityMapping,
+  OidcAuthorizationCodeExchange,
+  OidcFlowCallbackInput,
+  OidcFlowCallbackResult,
+  OidcFlowClock,
+  OidcFlowExchangeInput,
+  OidcFlowExchangeResult,
+  OidcFlowOptions,
+  OidcFlowRandom,
+  OidcFlowStartInput,
+  OidcFlowStartResult,
+  OidcVerifiedIdentityProvider,
+  ResolvedApplicationIdentity,
+} from "./oidc/contracts.js";

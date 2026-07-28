@@ -98,6 +98,25 @@ describe("SignedSessions", () => {
     expect(await sessions.resolve(issued.credential)).toBeUndefined();
   });
 
+  it("rejects a non-canonical ES256 signature segment with altered unused base64url bits", async () => {
+    const key = keys();
+    const sessions = new SignedSessions({
+      issuer: "issuer",
+      audience: "aud",
+      activeKey: { kid: "a", privateKey: key.privateKey },
+    });
+    const issued = await sessions.issue({ id: "principal" });
+    if (issued.kind !== "issued") throw new Error("expected issued");
+    const segments = issued.credential.value.split(".");
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    const signature = segments[2]!;
+    const last = alphabet.indexOf(signature.at(-1)!);
+    const altered = `${signature.slice(0, -1)}${alphabet[(last & 0b11_0000) | ((last + 1) & 0b1111)]!}`;
+    await expect(
+      sessions.resolve({ kind: "bearer", value: `${segments[0]!}.${segments[1]!}.${altered}` }),
+    ).resolves.toBeUndefined();
+  });
+
   it("retains the old public key through the finite rotation deadline and rejects excess capacity", async () => {
     const time = clock();
     const first = keys();
