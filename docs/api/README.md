@@ -28,6 +28,49 @@ server core; constructing a replacement core intentionally loses its state.
 The delivery client facade owns curated delivery-server Inbox/Shard/Admin operations and remote
 delivery ports; generated delivery RPC clients remain internal.
 
+## Browser client lifecycle contract
+
+`@spine-event-engine/client-web` exports `Client` and the transport-neutral
+request/subscription contracts. Compose a browser client with
+`Client.forGrpcWeb(baseUrl, options)` for universal gRPC-Web, or with
+`Client.forConnect(baseUrl, options)` only for a separately configured
+Connect-capable endpoint. The factories never probe or fall back. Applications
+may use local composition helpers such as `createGrpcWebClient` and
+`createConnectClient`; those names are not additional package exports. The
+package remains browser-safe: no Node transport, React, or Entity-column
+generation dependency is exposed.
+
+`ClientRequest.post()` and `send()` cover commands and raw `QueryResponse`
+queries. Commands are never retried. `createSubscription()` returns an inactive
+handle; `activate()` begins remote work, and `cancel()` is terminal and makes
+at most one bounded remote cancellation attempt per accepted wire; reconnects
+can therefore clean multiple wires. Each remote cancellation is bounded to
+1,000 ms. `updates` and `lifecycle` are separate bounded single-consumer
+streams, with no cross-stream order guarantee. Defaults are 64 update
+deliveries, 1,048,576 update bytes, 32 lifecycle notices, five retries after
+the initial attempt, and 30,000 ms total retry elapsed time. The default delay
+uses a 250 ms exponential base, ±20% jitter, and a 5,000 ms cap (minimum 1 ms).
+Capacities, retry counts, elapsed time, and returned custom delay values are
+positive safe integers; the scheduler clock is a non-negative safe integer.
+Overflow is terminal, never a silent drop, and directly fails both streams with
+the same error rather than enqueueing `failed`.
+
+Each reconnect increments the lifecycle generation. Event recovery reports
+`connecting`, `gapPossible`, then `connected` and continues; it does not replay
+or establish cluster-complete delivery, so gaps remain possible. Entity recovery
+evaluates the supplied raw/builder `authoritativeQuery` only on recovery,
+requires a byte-equivalent Topic target, replaces only its request context,
+reports `resynchronizing`, enqueues its authoritative raw `QueryResponse`
+before held wire updates, then reports `connected`. Cancellation/client close
+emits one `closed` notice before lifecycle completion only when no earlier
+terminal state has won. Non-overflow terminal errors emit one `failed` notice
+with the exact error before both streams fail. Signals scope an operation and
+injected schedulers own retry timing; neither supplies a durable cursor, cache,
+replay, ordering, or auth/session policy. Browser factories select/create their
+transport but do not provide a platform close hook; `Client.close()` closes
+owned subscription work, while an injected `ClientTransport.close()` is called
+when supplied.
+
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
 validation, core signal envelope, actor/tenant/user/version context, time, net,

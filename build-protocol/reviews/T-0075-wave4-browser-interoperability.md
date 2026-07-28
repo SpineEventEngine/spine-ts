@@ -1267,6 +1267,82 @@ regression, and evidence. Clean iterator lanes do not reopen.
   68/68 tests, root typechecking/frozen Proto checks, formatting, and diff
   hygiene. No reviewer-profile mismatch or Spine JVM operation occurred.
 
+## A4.4 documentation-closure review assignments
+
+- Documentation completeness: existing `documentation_reviewer`; immutable
+  configured profile `gpt-5.6-luna` / `medium`.
+- TypeScript/API documentation: existing `typescript_api_docs_reviewer`;
+  expected explicit `gpt-5.6-terra` / `high`.
+- Style/maintainability: N/A because A4.4 changes prose/snippets/evidence only
+  and all edited Markdown is covered by repository formatting/docs checks.
+- Performance/reliability: N/A because A4.4 changes no runtime, scheduling,
+  queue, transport, or resource-ownership behavior.
+
+The Desktop surface exposes immutable configured profiles but not independent
+runtime self-introspection; visible mismatch invalidates a result. Both
+reviewers are read-only and may run focused Spine TS documentation/snippet
+checks only. The permanent no-Spine-JVM-execution rule remains in force.
+
+## A4.4 complete review wave and correction batch
+
+Documentation and TypeScript/API concerns completed under the expected
+Luna/medium and explicit Terra/high profiles. Independent runtime
+self-introspection was unavailable, no visible mismatch occurred, no reviewer
+edited files, and no Spine JVM operation occurred.
+
+Accepted findings:
+
+1. P1: cancellation is deduplicated at most once per accepted wire, not once
+   globally for a logical subscription that may reconnect across multiple
+   wires.
+2. P1: update/lifecycle buffer overflow fails both channels directly with the
+   shared overflow error; it does not enqueue a lifecycle `failed` notice.
+   Other non-cancellation terminal failures do enqueue `failed`.
+3. P2: exact bounded remote cleanup is 1,000 ms per accepted wire and must be
+   documented.
+4. P2: the Event snippet uses an empty Topic that a real server rejects; use a
+   valid event target fixture.
+5. P2: browser factories select/create transports but their source has no
+   platform transport close hook. `Client.close()` closes owned subscription
+   work; only injected sources with `close()` close a platform transport.
+6. Coordinator precision: state the actual default delay formula: 250 ms
+   exponential base, ±20% jitter, and a 5,000 ms final cap; custom returned
+   delays remain positive safe integers.
+
+One consolidated prose/snippet correction returns to the existing
+`implementer`, expected explicit `gpt-5.6-terra` / `medium`. It may change only
+the A4.4 docs/evidence, run the same deterministic docs/snippet gates, and may
+not modify runtime, begin later Wave 4 features, commit, push, merge, spawn
+children, or execute Spine JVM.
+
+## A4.4 correction evidence and targeted re-review
+
+- The docs now state at-most-once cleanup per accepted wire and the exact
+  1,000 ms bound; distinguish direct shared-error overflow from other
+  `failed` terminal paths; qualify `closed` as pre-terminal; use the actual
+  default backoff formula; build a valid Event target; and describe browser
+  transport close ownership accurately.
+- Documentation inventory, semantic snippets, browser dependency isolation,
+  68 focused tests, formatting, and diff hygiene passed. No runtime or Spine
+  JVM work occurred.
+- The existing documentation and TypeScript/API reviewers are reopened only
+  for their accepted findings. Expected profiles remain immutable
+  `gpt-5.6-luna` / `medium` and explicit `gpt-5.6-terra` / `high`.
+
+## A4.4 review convergence
+
+- Targeted documentation completeness re-review is clean across per-wire
+  cleanup, the 1,000 ms bound, overflow/terminal distinctions, exact retry
+  defaults, valid Event targeting, and browser transport ownership.
+- Targeted TypeScript/API documentation re-review is clean for every edited
+  identifier, snippet, default, sequence, export/helper distinction, and
+  limitation.
+- All accepted documentation findings are resolved. Direct coordinator
+  `docs:check` passed frozen Proto validation, TypeDoc generation, and exact API
+  inventory including 17 client-web exports. Semantic snippets, dependency
+  isolation, focused tests, formatting, and diff hygiene are clean. No runtime
+  or Spine JVM project operation occurred.
+
 ### A4.1 consolidated correction evidence
 
 - The bounded channel now distinguishes graceful `close()` (drain admitted

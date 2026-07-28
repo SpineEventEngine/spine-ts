@@ -665,12 +665,14 @@ const browserOptions: BrowserClientOptions = {
   tenant: "tasks",
   onRequestMetadata: () => ({ "x-application-version": "web-1" }),
 };
-const browserClient = Client.forGrpcWeb("https://api.example.test", browserOptions);
+const createGrpcWebClient = (baseUrl: string) => Client.forGrpcWeb(baseUrl, browserOptions);
+const createConnectClient = (baseUrl: string) => Client.forConnect(baseUrl, browserOptions);
+const browserClient = createGrpcWebClient("https://api.example.test");
 const result = await browserClient.onBehalfOf("alice").send(create(QuerySchema));
 await browserClient.close();
 
 // Use this only for a separately configured Connect-compatible endpoint:
-const connectClient = Client.forConnect("https://connect.example.test", browserOptions);
+const connectClient = createConnectClient("https://connect.example.test");
 await connectClient.close();
 void result;
 ```
@@ -684,10 +686,21 @@ IDs require Web Crypto: it prefers `crypto.randomUUID()`, falls back to
 `crypto.getRandomValues()`, and rejects before transport invocation when
 neither secure API is available.
 
-The browser client now provides bounded update and lifecycle queues; overflow
-terminates both streams and triggers bounded cleanup rather than silently
-dropping data. Reconnect, entity resynchronization, gap recovery, and
-signal-lifetime composition remain later A4 work.
+Browser subscriptions have independent, single-consumer update and lifecycle
+queues. Their defaults are 64 updates, 1,048,576 update bytes, and 32 lifecycle
+notices; every supplied capacity must be a positive safe integer. Overflow is
+terminal for both streams with the same overflow error and triggers bounded
+cleanup rather than silently dropping data; it does not enqueue a `failed`
+lifecycle notice. Retries begin only after the initial attempt. The default
+policy permits five retry attempts within 30,000 ms, using a 250 ms exponential
+base, ±20% jitter, and a 5,000 ms cap (minimum 1 ms); supplied retry counts,
+elapsed time, and returned delays must be positive safe integers. `connecting`
+carries a monotonic reconnect generation and retry attempt. A caller owns
+signal composition and, when it needs deterministic timing, the injected
+scheduler; neither provides a cursor, cache, replay log, or cross-stream
+ordering guarantee. Browser factories select/create their transport, while
+`Client.close()` closes subscription work; an injected source closes a platform
+transport only when it supplies `close()`.
 
 ## 8. Query and subscribe to state
 
@@ -820,11 +833,12 @@ Asynchronous activation failures reject pending and future iterator reads.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-event-engine/client-node";
+import { Client } from "@spine-event-engine/client-web";
 import { deriveTypeUrl } from "@spine-event-engine/core";
 import {
   QueryIdSchema,
   QuerySchema,
+  type QueryResponse,
   TargetSchema,
   TopicIdSchema,
   TopicSchema,
@@ -832,7 +846,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
-const subscriptionClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
+const subscriptionClient = Client.forGrpcWeb("https://api.example.test", { tenant: "tasks" });
 const query = create(QuerySchema, {
   id: create(QueryIdSchema, { value: "task-list-query" }),
   target: create(TargetSchema, {
@@ -849,10 +863,12 @@ const topic = create(TopicSchema, {
 });
 const subscription = await subscriptionClient.onBehalfOf("alice").createSubscription(topic, {
   kind: "entity",
+  // A raw Query or an object with build(): Query is accepted. It is evaluated only on recovery.
   authoritativeQuery: () => query,
 });
 await subscription.activate();
 for await (const delivery of subscription.updates) {
+  if (delivery.kind === "resynchronization") handleResynchronization(delivery.response);
   if (delivery.kind === "update") handleUpdate(delivery.update);
 }
 await subscription.cancel();
@@ -861,17 +877,33 @@ await subscriptionClient.close();
 function handleUpdate(update: SubscriptionUpdate): void {
   if (update.update.case === "entityUpdates") console.log(update.update.value);
 }
+
+function handleResynchronization(response: QueryResponse): void {
+  console.log(response.message.length);
+}
 ```
 
 Await `cancel()` when the application needs bounded remote cleanup
 confirmation. A caller-provided signal can stop an individual `post`, `send`,
 or `activate` operation. Updates and lifecycle notices have independent bounded
-queues; overflow terminates both streams and triggers bounded cleanup rather
-than silently dropping a delivery. Reconnect, authoritative entity
-resynchronization, and `gapPossible` handling remain A4.3/A4.4 work, so an
-application must still query current state before opening a new subscription
-after disconnection. `connectTo()` owns and closes its HTTP/2 transport;
-`usingTransport()` leaves the caller's transport open.
+queues and no cross-stream ordering guarantee. An invalid recovery response or
+exhausted retry bounds emits exactly one `{ state: "failed", generation, error
+}` lifecycle notice before both streams fail. Queue overflow instead fails both
+streams directly with one shared overflow error and no `failed` notice. Before
+another terminal state, explicit
+cancellation or client close emits exactly one `{ state: "closed", generation
+}` before lifecycle completion. Every accepted wire gets at most one remote
+Cancel bounded to 1,000 ms; reconnect can accept and clean more than one wire.
+Each reconnect begins a new generation. An Event reconnect emits `connecting`,
+`gapPossible`, then `connected` and continues; `gapPossible` only notifies of a
+possible gap and makes no cluster-complete or replay-completeness promise.
+An Entity reconnect evaluates its raw/builder `authoritativeQuery`, requires a
+byte-equivalent Topic target, replaces only request context, emits
+`resynchronizing`, delivers the authoritative raw `QueryResponse` before held
+wire updates, then emits `connected`. Re-query Entity state after recovery;
+commands are never retried. Browser factories select/create their transport;
+`Client.close()` closes its subscription work, while `usingTransport()` invokes
+an injected source's platform close hook only when supplied.
 
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.
@@ -1006,8 +1038,10 @@ try {
 the correct assertion boundary for asynchronous projections. State and event
 subscriptions expose the same bounded `updates` and `lifecycle` streams as the
 client; update deliveries wrap raw validated `SubscriptionUpdate` messages, so
-tests should not depend on private server types. Reconnect, entity
-resynchronization, and gap handling remain A4.3/A4.4 work.
+tests should not depend on private server types. Event reconnect may notify
+`gapPossible` and continue with gaps; Entity reconnect delivers authoritative
+resynchronization before held updates. Neither stream pair promises cross-stream
+ordering or cluster-complete delivery.
 `postEvent(EventSchema, message)` injects a generated domain event directly
 with the calling scope's fixed actor, tenant, and zone; use it for test setup
 when a command is not the behavior under test.
