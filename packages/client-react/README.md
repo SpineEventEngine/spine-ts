@@ -31,6 +31,14 @@ declare function buildMessageQuery(): Parameters<typeof request.send>[0];
 void App;
 ```
 
+`useEntityQuery` forwards each effect generation's `AbortSignal` to the public
+`request.send(query, { signal })` call. For a generic `useRequest` factory,
+accept and forward its required signal to the cancellable operation. Cancellation
+is cooperative: a factory that does not forward the signal can continue its
+underlying work, though a retired generation never publishes its result. As
+with every hook dependency list, callers remain responsible for supplying the
+dependencies that make their factory stable.
+
 ## Subscription observation
 
 The subscription factory runs after commit. It must call only the public

@@ -87,3 +87,36 @@ SSR, Suspense, cache, Git, or Spine JVM work was performed. Browser engine
 acceptance remains D5. Runtime metadata is not self-introspectable on this
 surface; the explicit assigned role/profile is `implementer`,
 `gpt-5.6-terra` / `medium`, with no visible mismatch.
+
+## Query cancellation prerequisite
+
+- `useRequest` now requires its factory to accept the platform `AbortSignal`.
+  Each committed effect generation creates one `AbortController`; cleanup first
+  retires publication and then aborts that controller once. Factories remain
+  post-commit, so immediate cleanup invokes no factory.
+- `useEntityQuery` forwards that exact signal through the public
+  `request.send(query(), { signal })` call. No overload, options wrapper,
+  optional signal, exported factory alias, or client-web contract change was
+  introduced. Generic cancellation remains cooperative and the README/TSDoc
+  state that factories must forward the signal; dependency ownership is
+  unchanged.
+- RED: four added focused cases failed against the prior implementation: the
+  generic factory and Entity request observed no signal, final Strict Mode
+  cleanup retained one active request, and a dependency replacement left the
+  retired signal unaborted. GREEN: 28/28 focused tests pass, including active
+  generic abort-once, Entity `{ signal }` forwarding with active count `1 → 0`,
+  immediate-unmount no-send, Strict Mode live-generation-only/final-zero,
+  old-before-new dependency cleanup, and active late success/rejection fences.
+- Focused coverage is 97.82% statements (90/92), 93.75% branches (30/32),
+  100% functions (34/34), and 97.36% lines (74/76). Package TypeScript build,
+  typed ESLint over owned source/tests, dependency isolation, README snippets,
+  package metadata (2/2), TypeDoc/API inventory (unchanged at 11 exports),
+  Prettier, and diff hygiene pass.
+- `pnpm exec vitest` is currently blocked before execution by the existing
+  workspace `linkWorkspacePackages` setting mismatch; the installed local
+  Vitest binary ran the same focused command successfully. The repository-wide
+  `tsc --noEmit -p tsconfig.eslint.json` has unrelated existing/concurrent
+  diagnostics in examples, auth, and client-web; the focused package build and
+  typed ESLint pass. Runtime self-introspection remains unavailable; configured
+  existing-role metadata is `implementer`, `gpt-5.6-terra` / `medium`, with no
+  visible mismatch.

@@ -3773,3 +3773,254 @@ profiles; no Spine JVM project command may run.
   poisoned-wide-sibling regression are accepted. Together with the already
   clean TypeScript/API and documentation dispositions, C5.3 is
   review-converged.
+
+## C5.4 browser Chat review dispatch
+
+- Mechanically accepted candidate: private
+  `@spine-event-engine/example-chat-web`, 4/4 component tests, package
+  TypeScript, ESLint, formatting, diff hygiene, and 3/3 Playwright projects in
+  Chromium, Firefox, and WebKit.
+- Style/maintainability, documentation, and performance/reliability are
+  relevant. Existing style and reliability roles are explicitly dispatched at
+  `gpt-5.6-terra` / `high`; existing documentation is explicitly dispatched at
+  immutable `gpt-5.6-luna` / `medium`. TypeScript/API is N/A because this
+  private example adds no published framework contract. Reviewers are
+  read-only and may not spawn, edit, inspect Slice E/F, or run any Spine JVM
+  command.
+
+### Complete C5.4 findings and correction disposition
+
+- Style/maintainability and performance/reliability ran under explicit existing
+  `gpt-5.6-terra` / `high` profiles. Documentation ran under its explicit
+  immutable `gpt-5.6-luna` / `medium` profile. Runtime self-introspection was
+  unavailable with no visible mismatch; no reviewer edited, spawned, or ran
+  Spine JVM work.
+- Accepted P1: the app launches an independent Query on
+  `resynchronizing` while client-web already executes the entity
+  subscription's authoritative Query, ignores the resulting
+  `resynchronization` delivery, and launches an unbounded independent Query for
+  every raw update. Establish one recovery owner, consume authoritative
+  recovery state, and coalesce/bound update-triggered refresh.
+- Accepted P1: sign-in rejection/late completion and command rejection are
+  unhandled. Guard sign-in lifetime and show retryable error state. Retain a
+  failed command's payload and deterministic MessageId for retry, and prevent
+  concurrent resubmission.
+- Accepted P1 evidence: Playwright currently proves render/post/status only.
+  In every engine observe exactly one recovery Query, authoritative recovery
+  state, unmount cancellation/zero active subscription, and no stale
+  publication. Attribute request/timer race evidence honestly to component and
+  frozen adapter suites where browser instrumentation does not directly
+  observe it.
+- Accepted P2 docs: the work log overclaims that Playwright itself proves all
+  request/subscription/timer cleanup; correct attribution. README/report are
+  otherwise clean.
+- Mechanical correction joins the batch: root coverage must include TSX, and
+  behavior tests must raise `chat-web/src/index.tsx` from 80% branches and
+  86.95% statements to at least 90% without ignore markers.
+- One consolidated batch returns to the existing implementer at explicit
+  `gpt-5.6-terra` / `medium`, with `examples/chat-web/**`, minimal coverage
+  config, report/log ownership. Framework production stays frozen unless a
+  separately evidenced blocker is reported. No children, Git, Slice E/F, or
+  Spine JVM work is allowed. All three review concerns reopen.
+
+### C5.4 corrected residual dispatch
+
+- Coordinator evidence passes 12/12 focused tests; 96.03% statements, 91.22%
+  branches, 100% functions, and 98.85% lines for `index.tsx`; package
+  TypeScript, ESLint, formatting, and diff hygiene; and 3/3 real-browser
+  projects.
+- The corrected application consumes one `resynchronization` response,
+  coalesces raw hints to one in-flight plus one pending refresh, guards
+  sign-in lifetime/error/retry, retains deterministic command payload/ID across
+  rejected or error outcomes, and exposes browser-observed recovery query
+  count/state and subscription teardown.
+- Style, documentation, and reliability reopen only for these corrections
+  under their explicit existing `gpt-5.6-terra` / `high`,
+  `gpt-5.6-luna` / `medium`, and `gpt-5.6-terra` / `high` profiles.
+  TypeScript/API remains N/A/closed; no Spine JVM work is permitted.
+
+### C5.4 documentation residual result
+
+- CLEAN under the explicit immutable existing `gpt-5.6-luna` / `medium`
+  profile; runtime self-introspection was unavailable with no visible
+  mismatch.
+- Recovery/retry semantics, bounded hint behavior, browser-versus-component
+  evidence attribution, exact test/coverage/browser counts, setup, and later
+  slice/JVM limitations are accepted.
+
+### C5.4 style residual result
+
+- The existing style role ran under explicit `gpt-5.6-terra` / `high`;
+  runtime self-introspection was unavailable with no visible mismatch.
+- Recovery ownership, bounded coalescing, sign-in behavior, TSX coverage, and
+  browser query/subscription teardown are accepted. One P1 remains: direct
+  command post work has no abort/liveness boundary and both completion branches
+  can update state after `ChatRoom` unmount. Add a component-owned abort signal
+  to `ClientRequest.post`, suppress stale completion, and prove deferred-post
+  teardown.
+
+### C5.4 reliability residual result and final correction
+
+- The existing reliability role ran under explicit `gpt-5.6-terra` / `high`;
+  runtime self-introspection was unavailable with no visible mismatch.
+- P1: the refresh ref is cleared while `query.status` still reflects the
+  previous terminal render, before `useEntityQuery` publishes loading. A second
+  raw hint can therefore start a concurrent Query. The current test checks only
+  the eventual count; it must assert no second send before the active refresh
+  settles.
+- One final batch returns to the existing implementer at explicit
+  `gpt-5.6-terra` / `medium`: establish a real deferred-query serialization
+  boundary with at most one pending follow-up, and add component-owned
+  Post abort/liveness with deferred unmount proof. Style and reliability reopen
+  only; documentation/API remain closed. No framework/later-slice/JVM/Git/
+  child work is allowed.
+
+### C5.4 final lifecycle sign-off dispatch
+
+- Coordinator evidence passes 17/17 focused tests and `index.tsx` at 95.12%
+  statements, 90% branches, 100% functions, and 98.13% lines; TypeScript,
+  ESLint, formatting, diff hygiene; and 3/3 real-browser projects.
+- Raw-hint refresh now owns a truly serialized public `request.send` loop with
+  one pending flag and unmount abort. Direct Post passes a component-owned
+  abort signal and suppresses stale completion after unmount.
+- Style and reliability reopen only for these corrections under their explicit
+  existing `gpt-5.6-terra` / `high` profiles. Documentation remains clean;
+  TypeScript/API remains N/A/closed.
+
+### C5.4 final style result
+
+- The existing style role ran under explicit `gpt-5.6-terra` / `high`;
+  runtime self-introspection was unavailable with no visible mismatch.
+- P1: room-transition cleanup aborts old refresh/post generations but leaves
+  `refreshInFlight`, pending flags/payload, and `posting` ownership state set.
+  The new room can permanently queue refreshes and retain a disabled Post
+  button/old payload. Add a rerender-to-new-room regression with deferred
+  refresh and Post, and reset/remount all room-owned state on room transition.
+
+### C5.4 room/tooling correction evidence
+
+- The keyed room remount now aborts old deferred refresh/Post work, cancels the
+  old subscription, discards old payload/latches, and creates a fresh Query,
+  subscription, enabled Post UI, payload, and hint path for the new room.
+- Focused evidence is 18/18 at 95.12% statements, 90% branches, 100% functions,
+  and 98.13% lines. Package TypeScript, ESLint, formatting, and diff hygiene
+  pass.
+- `tsconfig.eslint.json` now enables JSX and chat-web mocks use callable public
+  operation signatures with safe signal narrowing. The broad tooling
+  typecheck has zero `examples/chat-web` diagnostics; unrelated baseline
+  diagnostics remain separately recorded.
+
+### C5.4 final reliability result and framework prerequisite
+
+- The existing reliability role ran under explicit `gpt-5.6-terra` / `high`;
+  runtime self-introspection was unavailable with no visible mismatch.
+- It confirms the room-transition P1 and adds one P1 architectural blocker:
+  initial `useEntityQuery` calls `ClientRequest.send` without an abort signal.
+  The frozen hook suppresses stale publication but cannot terminate the active
+  transport request after unmount, so C5.4 cannot meet its explicit invariant.
+- Because this requires changing a public React contract, the demonstrated
+  blocker goes to the existing `requirements_splitter` under explicit
+  `gpt-5.6-sol` / `high` for the smallest idiomatic API/compatibility design.
+  The role is read-only and may not edit, spawn, inspect later slices, or run
+  Spine JVM work. Implementation resumes only after the prerequisite is
+  bounded and recorded.
+
+### Client-react query cancellation prerequisite plan
+
+- The existing requirements splitter ran read-only under explicit
+  `gpt-5.6-sol` / `high`; runtime self-introspection was unavailable with no
+  visible mismatch.
+- Accepted minimal contract: `useRequest` receives
+  `(signal: AbortSignal) => Promise<Result>`. Every committed effect generation
+  owns one fresh `AbortController`; cleanup retires publication then aborts
+  once. `useEntityQuery` forwards the signal through
+  `request.send(query(), { signal })`.
+- No options shape, overload, optional signal, exported factory alias, or
+  client-web change is added. Generic cancellation is documented as
+  cooperative; `useEntityQuery` guarantees forwarding. Dependency arrays
+  remain caller-owned and unchanged.
+- One existing implementer is explicitly assigned at
+  `gpt-5.6-terra` / `medium` to client-react source/tests/README/report evidence
+  only. Acceptance covers render/immediate-unmount safety, active query abort,
+  generic hook signal, Strict Mode, dependency transition, late
+  success/rejection fencing, focused coverage/types/lint/dependency/API/docs/
+  format/diff. All four C5.2 concerns reopen for this public lifecycle change.
+
+### Client-react query cancellation prerequisite dispatch
+
+- Existing implementer completed the exact planned contract under explicit
+  `gpt-5.6-terra` / `medium`; runtime self-introspection was unavailable with
+  no visible mismatch. No client-web or generalized cancellation change was
+  made.
+- Coordinator evidence passes 28/28 focused tests and 93.75% branches, package
+  TypeScript, owned typed ESLint, dependency isolation, snippets, package
+  metadata, TypeDoc/API inventory with unchanged 11 exports, formatting, and
+  diff hygiene.
+- Style/maintainability, TypeScript/API, documentation, and reliability reopen
+  for this public lifecycle correction. Existing style/API/reliability roles
+  are explicitly dispatched at `gpt-5.6-terra` / `high`; existing
+  documentation is explicit immutable `gpt-5.6-luna` / `medium`. Review is
+  read-only; no edits, children, later slices, or Spine JVM work.
+
+### Client-react cancellation API/reliability results
+
+- TypeScript/API and performance/reliability are CLEAN under their explicitly
+  dispatched existing `gpt-5.6-terra` / `high` profiles. Runtime
+  self-introspection was unavailable with no visible mismatch.
+- The accepted exact declaration, unchanged 11-export inventory, cleanup
+  ordering, abort-once behavior, immediate unmount, Strict Mode, dependency
+  transition, late-result fencing, cooperative generic semantics, guaranteed
+  Entity forwarding, and current TSDoc/README are accepted.
+
+### Client-react cancellation style/documentation results
+
+- Style/maintainability is CLEAN under explicit existing
+  `gpt-5.6-terra` / `high`; documentation is CLEAN under explicit immutable
+  `gpt-5.6-luna` / `medium`. Runtime self-introspection was unavailable with no
+  visible mismatch.
+- Minimality, lifecycle ownership, tests, cooperative/guaranteed cancellation
+  distinction, dependency responsibility, TSDoc, README, and superseding
+  report evidence are accepted. The prerequisite is review-converged.
+
+### C5.4 combined final verification and sign-off dispatch
+
+- Coordinator verification after both lifecycle corrections passes the
+  established package gates independently: client-react is 28/28 tests at
+  93.75% branch coverage and chat-web is 18/18 tests at 90% branch coverage.
+  Package TypeScript, ESLint, dependency isolation, documentation snippets,
+  supported-file formatting, and diff hygiene pass.
+- Real Playwright acceptance passes 3/3 in Chromium, Firefox, and WebKit,
+  proving one authoritative recovery response and subscription teardown. The
+  broad tooling typecheck still reports 139 unrelated baseline diagnostics but
+  zero diagnostics under `examples/chat-web`.
+- The existing style/maintainability and performance/reliability concerns
+  reopen only for the combined room-remount and initial-query cancellation
+  corrections. Both roles are explicitly dispatched read-only with expected
+  `gpt-5.6-terra` / `high`; runtime metadata or the immutable profile and
+  self-introspection limitation must be recorded before acceptance.
+  Documentation remains CLEAN and TypeScript/API remains N/A because C5.4 is a
+  private example and changes no published declaration beyond the separately
+  accepted client-react prerequisite. No edits, children, later slices, or
+  Spine JVM commands are allowed.
+
+### C5.4 combined final style result
+
+- CLEAN. The existing style/maintainability reviewer ran under the explicitly
+  dispatched `gpt-5.6-terra` / `high` profile. Runtime self-introspection was
+  unavailable and no visible mismatch occurred.
+- The keyed room remount resolves the prior stale room state/latch ownership
+  defect. The client-react request generation owns and forwards its abort
+  signal without adding an unnecessary abstraction. No P0-P2 finding remains.
+
+### C5.4 combined final reliability result
+
+- CLEAN. The existing performance/reliability reviewer ran under the
+  explicitly dispatched `gpt-5.6-terra` / `high` profile. Runtime
+  self-introspection was unavailable and no visible mismatch occurred.
+- Combined room remount/reset, old-room refresh and Post abort, subscription
+  cancellation, fresh-room resources, and initial `useEntityQuery` transport
+  abort forwarding are accepted. Deferred-transition regressions cover the
+  critical lifecycle boundaries. No P0-P2 finding remains.
+- C5.4 is review-converged. Documentation remains CLEAN; TypeScript/API remains
+  justified N/A for the private example. The separately public client-react
+  prerequisite has clean dispositions in all four canonical concerns.

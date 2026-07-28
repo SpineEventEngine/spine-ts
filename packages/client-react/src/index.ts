@@ -58,18 +58,20 @@ export function useSpineClient(): ClientRequest {
 
 /**
  * Starts one asynchronous request after commit and observes only its live generation.
- * The factory must be stable for the supplied dependency list.
+ * The factory must be stable for the supplied dependency list and forward the provided signal.
+ * Cancellation is cooperative: a factory that ignores the signal may continue its underlying work.
  */
 export function useRequest<Result>(
-  request: () => Promise<Result>,
+  request: (signal: AbortSignal) => Promise<Result>,
   dependencies: readonly unknown[],
 ): RequestObservation<Result> {
   const [state, setState] = useState<RequestObservation<Result>>(idle);
   useEffect(() => {
     let live = true;
+    const controller = new AbortController();
     setState({ status: "loading" });
     void Promise.resolve()
-      .then(() => (live ? request() : undefined))
+      .then(() => (live ? request(controller.signal) : undefined))
       .then(
         (value) => {
           if (live) setState({ status: "success", value: value as Result });
@@ -80,6 +82,7 @@ export function useRequest<Result>(
       );
     return () => {
       live = false;
+      if (!controller.signal.aborted) controller.abort();
     };
   }, dependencies);
   return state;
@@ -91,7 +94,7 @@ export function useEntityQuery(
   dependencies: readonly unknown[],
 ): RequestObservation<Awaited<ReturnType<ClientRequest["send"]>>> {
   const request = useSpineClient();
-  return useRequest(() => request.send(query()), [request, ...dependencies]);
+  return useRequest((signal) => request.send(query(), { signal }), [request, ...dependencies]);
 }
 
 /**

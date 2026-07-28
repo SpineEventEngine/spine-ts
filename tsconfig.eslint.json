@@ -6,14 +6,20 @@
     "declarationMap": false,
     "isolatedDeclarations": false,
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "types": ["node", "vitest"],
     "noEmit": true
   },
   "include": [
     "packages/*/src/**/*.ts",
+    "packages/*/src/**/*.tsx",
     "packages/*/test/**/*.ts",
+    "packages/*/test/**/*.tsx",
     "examples/*/src/**/*.ts",
+    "examples/*/src/**/*.tsx",
     "examples/*/test/**/*.ts",
+    "examples/*/test/**/*.tsx",
+    "examples/*/playwright.config.ts",
     "vitest.config.ts"
   ]
 }

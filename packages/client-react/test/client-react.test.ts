@@ -8,6 +8,7 @@ import {
   useEntityQuery,
   useEntitySubscription,
   useEventSubscription,
+  useRequest,
   useSpineClient,
   useSubscriptionDelivery,
   useSubscriptionLifecycle,
@@ -29,6 +30,112 @@ describe("client-react", () => {
       expect(screen.getByText("success")).toBeTruthy();
     });
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts a live generic request exactly once when its generation is cleaned up", async () => {
+    const request = vi.fn((signal: AbortSignal) => {
+      signal.addEventListener("abort", aborted);
+      return new Promise<never>(() => undefined);
+    });
+    const aborted = vi.fn();
+    function View() {
+      useRequest(request, []);
+      return null;
+    }
+
+    const rendered = render(createElement(View));
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledTimes(1);
+    });
+    const signal = request.mock.calls[0]?.[0];
+    expect(signal?.aborted).toBe(false);
+    rendered.unmount();
+    expect(signal?.aborted).toBe(true);
+    expect(aborted).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards an Entity query signal and aborts its active request without late publication", async () => {
+    const deferred = Promise.withResolvers<{ message: unknown[] }>();
+    let active = 0;
+    const send = vi.fn((_query: unknown, options: { signal: AbortSignal }) => {
+      active++;
+      options.signal.addEventListener("abort", () => active--, { once: true });
+      return deferred.promise;
+    });
+    const published = vi.fn();
+    function View() {
+      const state = useEntityQuery(() => createQuery(), []);
+      useEffect(() => {
+        published(state.status);
+      }, [state.status]);
+      return null;
+    }
+
+    const rendered = render(
+      createElement(SpineClientProvider, { request: { send } as never }, createElement(View)),
+    );
+    await waitFor(() => {
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+    expect(send.mock.calls[0]?.[1]?.signal.aborted).toBe(false);
+    expect(active).toBe(1);
+    rendered.unmount();
+    expect(send.mock.calls[0]?.[1]?.signal.aborted).toBe(true);
+    expect(active).toBe(0);
+    deferred.resolve({ message: [] });
+    await Promise.resolve();
+    expect(published).not.toHaveBeenCalledWith("success");
+    expect(published).not.toHaveBeenCalledWith("error");
+  });
+
+  it("retains only the live Strict Mode query request and aborts it on final cleanup", async () => {
+    let active = 0;
+    const send = vi.fn((_query: unknown, options: { signal: AbortSignal }) => {
+      active++;
+      options.signal.addEventListener("abort", () => active--, { once: true });
+      return new Promise<never>(() => undefined);
+    });
+    function View() {
+      useEntityQuery(() => createQuery(), []);
+      return null;
+    }
+
+    const rendered = render(
+      createElement(
+        StrictMode,
+        undefined,
+        createElement(SpineClientProvider, { request: { send } as never }, createElement(View)),
+      ),
+    );
+    await waitFor(() => {
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+    expect(active).toBe(1);
+    rendered.unmount();
+    expect(active).toBe(0);
+  });
+
+  it("aborts a retired dependency generation before starting its replacement", async () => {
+    const signals: AbortSignal[] = [];
+    const request = vi.fn((signal: AbortSignal) => {
+      signals.push(signal);
+      return new Promise<never>(() => undefined);
+    });
+    function View({ dependency }: { readonly dependency: number }) {
+      useRequest(request, [dependency]);
+      return null;
+    }
+
+    const rendered = render(createElement(View, { dependency: 1 }));
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledTimes(1);
+    });
+    rendered.rerender(createElement(View, { dependency: 2 }));
+    expect(signals[0]?.aborted).toBe(true);
+    await waitFor(() => {
+      expect(request).toHaveBeenCalledTimes(2);
+    });
+    expect(signals[1]?.aborted).toBe(false);
   });
 
   it("does not invoke a scheduled request after immediate unmount", async () => {
@@ -83,20 +190,25 @@ describe("client-react", () => {
   it("suppresses a late query rejection after unmount", async () => {
     const deferred = Promise.withResolvers<never>();
     void deferred.promise.catch(() => undefined);
+    const send = vi.fn(() => deferred.promise);
+    const published = vi.fn();
     function View() {
-      useEntityQuery(() => createQuery(), []);
+      const state = useEntityQuery(() => createQuery(), []);
+      useEffect(() => {
+        published(state.status);
+      }, [state.status]);
       return null;
     }
     const rendered = render(
-      createElement(
-        SpineClientProvider,
-        { request: { send: () => deferred.promise } as never },
-        createElement(View),
-      ),
+      createElement(SpineClientProvider, { request: { send } as never }, createElement(View)),
     );
+    await waitFor(() => {
+      expect(send).toHaveBeenCalledTimes(1);
+    });
     rendered.unmount();
     deferred.reject(new Error("late failure"));
     await Promise.resolve();
+    expect(published).not.toHaveBeenCalledWith("error");
   });
 
   it("publishes a query failure and rejects providerless client access", async () => {

@@ -5,14 +5,21 @@ export default defineConfig({
     include: [
       "packages/*/test/**/*.test.ts",
       "examples/*/src/**/*.test.ts",
+      "examples/*/src/**/*.test.tsx",
       "examples/*/test/**/*.test.ts",
+      "examples/*/test/**/*.test.tsx",
       "scripts/**/*.test.mjs",
       "interop/jvm/**/*.test.mjs",
     ],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
-      include: ["packages/*/src/**/*.ts", "examples/*/src/**/*.ts"],
+      include: [
+        "packages/*/src/**/*.ts",
+        "packages/*/src/**/*.tsx",
+        "examples/*/src/**/*.ts",
+        "examples/*/src/**/*.tsx",
+      ],
       exclude: [
         "**/*.test.ts",
         "packages/*/generated/**",

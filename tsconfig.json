@@ -21,6 +21,7 @@
     { "path": "./examples/datastore-orders" },
     { "path": "./examples/users-model" },
     { "path": "./examples/chat-model" },
-    { "path": "./examples/chat" }
+    { "path": "./examples/chat" },
+    { "path": "./examples/chat-web" }
   ]
 }
