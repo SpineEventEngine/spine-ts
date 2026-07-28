@@ -1452,6 +1452,33 @@ describe("Client", () => {
     await client.close();
   });
 
+  it("passes configured browser credentials to the explicitly selected transport", async () => {
+    const browserFetch = vi.fn(async () => new Response());
+    vi.stubGlobal("fetch", browserFetch);
+    browserFactories.grpcWeb.mockReturnValue(source().transport);
+
+    const client = Client.forGrpcWeb("https://gateway.example", { credentials: "include" });
+    const factoryOptions = browserFactories.grpcWeb.mock.calls[0]?.[0] as {
+      fetch?: typeof globalThis.fetch;
+    };
+    await factoryOptions.fetch?.("https://gateway.example/session", { credentials: "omit" });
+
+    expect(browserFetch).toHaveBeenCalledWith(
+      "https://gateway.example/session",
+      expect.objectContaining({ credentials: "include" }),
+    );
+    await client.close();
+  });
+
+  it("rejects an invalid browser Fetch credential mode before constructing a transport", () => {
+    expect(() =>
+      Client.forGrpcWeb("https://gateway.example", {
+        credentials: "invalid" as RequestCredentials,
+      }),
+    ).toThrow("credentials");
+    expect(browserFactories.grpcWeb).not.toHaveBeenCalled();
+  });
+
   it("generates a UUID v4 with getRandomValues when randomUUID is unavailable", async () => {
     const originalCrypto = globalThis.crypto;
     const random = new Uint8Array(16).fill(0);
@@ -1706,6 +1733,249 @@ describe("Client", () => {
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "gapPossible" } });
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
     await subscription.cancel();
+    await client.close();
+  });
+
+  it("reauthenticates with the live cancellation signal before reconnecting", async () => {
+    let subscribes = 0;
+    const reauthenticate = vi.fn(async (_signal: AbortSignal) => {});
+    const topic = create(TopicSchema);
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `reauth-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "reauthenticate",
+      },
+      {
+        onReauthenticateBeforeReconnect: reauthenticate,
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: { now: () => 0, wait: async () => {} },
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(subscribes).toBe(2));
+
+    expect(reauthenticate).toHaveBeenCalledTimes(1);
+    expect(reauthenticate.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it("aborts an in-progress reauthentication hook on cancel and never starts a second Subscribe", async () => {
+    let subscribes = 0;
+    let releaseRetry: (() => void) | undefined;
+    let hookSignal: AbortSignal | undefined;
+    let rejectHook: ((error: Error) => void) | undefined;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `cancel-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "cancel-reauthentication",
+      },
+      {
+        onReauthenticateBeforeReconnect: (signal) => {
+          hookSignal = signal;
+          return new Promise<void>((_resolve, reject) => (rejectHook = reject));
+        },
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: {
+            now: () => 0,
+            wait: () => new Promise<void>((resolve) => (releaseRetry = resolve)),
+          },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(releaseRetry).toBeTypeOf("function"));
+    releaseRetry?.();
+    await vi.waitFor(() => expect(hookSignal).toBeDefined());
+    await subscription.cancel();
+    rejectHook?.(new Error("late hook rejection"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(hookSignal?.aborted).toBe(true);
+    expect(subscribes).toBe(1);
+    await client.close();
+  });
+
+  it("ignores a late successful reauthentication hook after terminal cancellation", async () => {
+    let subscribes = 0;
+    let releaseRetry: (() => void) | undefined;
+    let hookSignal: AbortSignal | undefined;
+    let resolveHook: (() => void) | undefined;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `late-success-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "late-success-reauthentication",
+      },
+      {
+        onReauthenticateBeforeReconnect: (signal) => {
+          hookSignal = signal;
+          return new Promise<void>((resolve) => (resolveHook = resolve));
+        },
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
+          scheduler: {
+            now: () => 0,
+            wait: () => new Promise<void>((resolve) => (releaseRetry = resolve)),
+          },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    await vi.waitFor(() => expect(releaseRetry).toBeTypeOf("function"));
+    releaseRetry?.();
+    await vi.waitFor(() => expect(hookSignal).toBeDefined());
+    await subscription.cancel();
+    resolveHook?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(hookSignal?.aborted).toBe(true);
+    expect(subscribes).toBe(1);
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "closed" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
+    await client.close();
+  });
+
+  it("rechecks the scheduler deadline after a successful reauthentication before Subscribe", async () => {
+    let now = 0;
+    let subscribes = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `deadline-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "deadline-after-reauthentication",
+      },
+      {
+        onReauthenticateBeforeReconnect: () => {
+          now = 1;
+          return Promise.resolve();
+        },
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1, delayMs: () => 1 },
+          scheduler: { now: () => now, wait: async () => {} },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    await expect(updates.next()).rejects.toThrow("ended unexpectedly");
+
+    expect(subscribes).toBe(1);
+    await client.close();
+  });
+
+  it("exhausts a never-settling reauthentication hook without a second Subscribe", async () => {
+    let subscribes = 0;
+    let hookSignal: AbortSignal | undefined;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `timeout-${subscribes}` }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => (async function* () {})(),
+        ),
+        createRequestId: () => "timeout-reauthentication",
+      },
+      {
+        onReauthenticateBeforeReconnect: (signal) => {
+          hookSignal = signal;
+          return new Promise<void>(() => {});
+        },
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 1, delayMs: () => 1 },
+          scheduler: { now: () => 0, wait: async () => {} },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    await expect(updates.next()).rejects.toThrow("reauthentication");
+
+    expect(hookSignal?.aborted).toBe(true);
+    expect(subscribes).toBe(1);
     await client.close();
   });
 

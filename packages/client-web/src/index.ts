@@ -1,4 +1,11 @@
 export {
+  BrowserSession,
+  type BearerBrowserSessionOptions,
+  type OnBrowserSessionContext,
+  type BrowserSessionContext,
+  type BrowserSessionOptions,
+} from "./client/browser-session.js";
+export {
   Client,
   ClientProtocolError,
   type BrowserClientOptions,

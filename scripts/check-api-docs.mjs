@@ -290,7 +290,11 @@ const expectedClientExports = [
   "lt",
 ];
 const expectedClientWebExports = [
+  "BearerBrowserSessionOptions",
   "BrowserClientOptions",
+  "BrowserSession",
+  "BrowserSessionContext",
+  "BrowserSessionOptions",
   "Client",
   "ClientOperationOptions",
   "ClientOptions",
@@ -300,6 +304,7 @@ const expectedClientWebExports = [
   "ClientTransport",
   "CreateSubscriptionOptions",
   "OnRequestMetadata",
+  "OnBrowserSessionContext",
   "Subscription",
   "SubscriptionDelivery",
   "SubscriptionLifecycle",

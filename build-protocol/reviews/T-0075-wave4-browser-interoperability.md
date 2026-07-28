@@ -3244,3 +3244,197 @@ profiles; no Spine JVM project command may run.
   files / 25 tests skipped and 90.11% branch coverage (9,786/10,859). C4 is
   accepted; final Wave 4 security remains deferred to the complete Wave
   boundary.
+
+## C5.1 browser session integration review
+
+- C5.1 is high-risk because it adds public browser credential/session and
+  reconnect lifecycle contracts.
+- Style/maintainability: existing reviewer, explicitly expected
+  `gpt-5.6-terra` / `high`.
+- TypeScript/API: existing reviewer, explicitly expected `gpt-5.6-terra` /
+  `high`.
+- Performance/reliability: existing reviewer, explicitly expected
+  `gpt-5.6-terra` / `high`.
+- Documentation: existing reviewer with immutable expected
+  `gpt-5.6-luna` / `medium`.
+- Each dispatch is read-only and limited to `packages/client-web` C5.1 source,
+  tests, README, export inventory, and implementation report. Runtime metadata
+  will be recorded before acceptance; final Wave 4 security remains deferred.
+
+### Complete wave findings
+
+- Style/maintainability used the explicitly dispatched existing
+  `gpt-5.6-terra` / `high` profile; runtime self-introspection was unavailable
+  with no visible mismatch. It reports two accepted P2 findings: the public
+  callback/type names violate the required `on`/`On` convention, and the
+  cancellation test does not prove that the live hook signal aborts or that a
+  second Subscribe is suppressed.
+- TypeScript/API used the explicitly dispatched existing
+  `gpt-5.6-terra` / `high` profile; runtime self-introspection was unavailable
+  with no visible mismatch. It reports one accepted P2: a public `readonly`
+  parameter property is still mutable at JavaScript runtime, allowing a bearer
+  session's credential mode to be changed after construction.
+- Performance/reliability used the explicitly dispatched existing
+  `gpt-5.6-terra` / `high` profile; runtime self-introspection was unavailable
+  with no visible mismatch. It reports one accepted P1: a non-cooperative
+  reconnect hook is awaited directly and can keep recovery pending forever
+  despite the finite retry policy.
+- Documentation used the immutable existing `gpt-5.6-luna` / `medium`
+  profile; runtime self-introspection was unavailable. README snippets compile
+  and the documented session behavior is otherwise current. It reports two
+  accepted P2s: generic hooks are described as inherently bounded although
+  only the session helper bounds its own HTTP work, and token redaction is
+  described more broadly than the errors wrapped by session HTTP handling.
+- One deduplicated correction batch resolves all accepted findings. Only style,
+  TypeScript/API, and performance/reliability reopen for substantive runtime
+  and public-contract changes. Documentation wording is mechanically
+  verifiable through the semantic snippet gate and does not require another
+  documentation review unless the correction changes the documented contract.
+
+### Corrected candidate and targeted re-review
+
+- The original implementer used its explicitly dispatched
+  `gpt-5.6-terra` / `medium` profile; runtime self-introspection remained
+  unavailable with no visible mismatch. It resolves the complete batch with a
+  child cancellation signal, remaining-retry-budget deadline, private
+  credential mode, corrected callback names, exact cancellation/exhaustion
+  regressions, and qualified README claims.
+- Independent evidence passes 2 files / 86 tests, 347/383 focused branches
+  (90.60%), root generated TypeScript build, client-web dependency boundary,
+  semantic snippets, API inventory at 22 client-web exports, Prettier, and diff
+  hygiene.
+- Style/maintainability, TypeScript/API, and performance/reliability reopen
+  narrowly against the corrected C5.1-owned files. Each uses the existing
+  reviewer role with explicitly expected `gpt-5.6-terra` / `high`.
+  Documentation stays closed because the accepted wording changes are
+  mechanically verified and introduce no new behavioral claim. Runtime
+  metadata will be recorded before accepting each result.
+
+### Targeted re-review findings
+
+- TypeScript/API uses its explicit existing `gpt-5.6-terra` / `high` profile;
+  runtime self-introspection is unavailable with no visible mismatch. It finds
+  one P1: after the reconnect callback resolves, recovery does not re-sample
+  the injected scheduler, so callback work that consumes the remaining elapsed
+  budget may still be followed by a second Subscribe.
+- Style/maintainability uses its explicit existing `gpt-5.6-terra` / `high`
+  profile; runtime self-introspection is unavailable with no visible mismatch.
+  It finds one P1 test gap: cancellation never settles the ignored callback
+  afterward, so the test does not prove that late completion is detached and
+  cannot reconnect.
+- Performance/reliability uses its explicit existing `gpt-5.6-terra` / `high`
+  profile; runtime self-introspection is unavailable with no visible mismatch.
+  It confirms the scheduler-budget P1 and finds one additional P1:
+  `BrowserSession.#run()` attaches its late-rejection sink only after the race
+  succeeds, allowing an abort-ignoring Fetch/adapter that rejects after
+  timeout, cancellation, or close to become an unhandled rejection.
+- One final targeted batch adds the post-hook elapsed guard and
+  scheduler-advance regression, attaches the session operation rejection sink
+  immediately, and proves late completion/rejection after cancel/timeout. No
+  other API, style, or reliability concern remains open.
+
+### Final correction evidence and residual closure
+
+- The original implementer used its explicit existing
+  `gpt-5.6-terra` / `medium` profile; runtime self-introspection is unavailable
+  with no visible mismatch. The three-item batch is implemented.
+- Independent evidence passes 2 files / 89 tests, 349/385 focused branches
+  (90.64%), root generated TypeScript build, client-web dependency boundary,
+  semantic snippets, API inventory at 22 exports, Prettier, and diff hygiene.
+  Full client-web ESLint still reports the documented pre-existing package
+  baseline; the correction introduces no new violation.
+- Style, TypeScript/API, and performance/reliability perform residual-only
+  checks of the post-hook scheduler guard, immediate late-rejection sink, and
+  deferred-callback cancellation regression under their original explicit
+  `gpt-5.6-terra` / `high` profiles. Documentation remains mechanically
+  closed. Runtime metadata will be recorded before final acceptance.
+- Residual TypeScript/API is clean under its explicit existing Terra/high
+  profile. Residual style and reliability accept all runtime corrections but
+  identify one final test-only item: the deferred cancellation regression
+  rejects late but does not resolve late and prove that lifecycle remains
+  terminal without later `connecting`/`connected` notices.
+- The original implementer receives exactly one deterministic late-success
+  lifecycle regression. This test-only correction reopens style and reliability
+  for residual closure only; API and documentation remain clean.
+- The late-success regression is implemented without a runtime/API change.
+  Independent evidence passes 2 files / 90 tests, 349/385 branches (90.64%),
+  client-web typecheck, Prettier, and diff hygiene. Style and reliability
+  perform one residual-only sign-off against this test; their explicit expected
+  profiles remain Terra/high.
+- The first final style dispatch is rejected as invalid: it reports duplicate
+  files under `packages/client/**`, but that path does not exist in the T-0075
+  worktree and has no tracked or changed files. `git status`, `git ls-files`,
+  and `git diff --name-only` confirm the only scoped paths are
+  `packages/client-web/**`. This is a visible workspace/scope mismatch under the
+  protocol's acceptance gate, so the result is not a finding. Style is
+  redispatched with the absolute task-worktree path and exact files.
+- Correct-scope final style and reliability sign-offs are clean under their
+  explicit Terra/high profiles; runtime self-introspection is unavailable with
+  no visible mismatch. The late-success test proves one Subscribe, child-signal
+  abort, terminal `closed`, iterator completion, and no later reconnect state.
+  TypeScript/API remains clean; documentation remains mechanically closed.
+  C5.1 review is converged.
+
+## C5.3 Chat Projection backend review
+
+- C5.3 changes public application Protobuf models, Aggregate/Projection
+  behavior, Query/subscription example behavior, finite input validation, and
+  public example documentation. Style/maintainability, TypeScript/API,
+  documentation, and performance/reliability are all relevant.
+- Each reviewer uses its existing role. Expected and explicit profiles are
+  `gpt-5.6-terra` / `high` for style, TypeScript/API, and
+  performance/reliability, and the immutable `gpt-5.6-luna` / `medium` for
+  documentation. Runtime metadata will be recorded before acceptance.
+- Pre-review lint confirms no forbidden end-user envelopes, `packCommand`,
+  `packEvent`, schema-bearing decorators, `@Apply`, manual transactions,
+  internal event IDs, default-route ID extraction, or handler materialization
+  in the changed Chat application source/docs. Chat ESLint and Prettier pass.
+  The repository-wide cleanup script exits nonzero only on already committed
+  auth/client-node findings outside this slice and reports no Chat path.
+- Independent evidence passes model/handler generation, both package builds,
+  the real loopback integration plus direct validation suite at 2 files /
+  25 tests, and 18/18 validation branches (100%). The real integration retains
+  generated-`dist` execution because Vitest cannot collect the standard
+  decorator-bearing source; no fake handler invocation replaces it.
+- Review scope is limited to the changed Chat Proto sources, application
+  source/tests/README, C5.3 report, and the frozen C5/parent plan. Historical
+  text and concurrent C5.1 files are not findings. No Spine JVM command is
+  permitted; final Wave 4 security remains deferred.
+
+### Complete C5.3 wave findings and dispositions
+
+- Style/maintainability used its explicit existing Terra/high profile; runtime
+  self-introspection was unavailable with no visible mismatch. It reports an
+  accepted P1 for the missing D3 trusted author/room policy, plus accepted P2s
+  for accidental public validation-limit exports and missing multibyte
+  UTF-8-boundary tests.
+- TypeScript/API used its explicit existing Terra/high profile; runtime
+  self-introspection was unavailable with no visible mismatch. It confirms the
+  room-subscription negative-delivery and UTF-8/no-publication gaps. It also
+  reports an in-place v1 wire-compatibility P1. That compatibility finding is
+  rejected for this unpublished example because the human explicitly removed
+  migration/deprecation compatibility requirements and no npm package or
+  persisted production data exists; README/report must nevertheless state that
+  the example model was intentionally reset without migration compatibility.
+  D3 remains mandatory and is not waived.
+- Documentation used the existing role's immutable Luna/medium profile; the
+  dispatch surface does not accept a Luna model override, and runtime
+  self-introspection was unavailable. Its single accepted P2 requires the
+  README/report to state the current client-supplied author limitation and the
+  application gateway's auth/identity ownership; the final corrected text must
+  describe the implemented D3 policy rather than merely defer the gap.
+- Performance/reliability used its explicit existing Terra/high profile;
+  runtime self-introspection was unavailable with no visible mismatch. It
+  confirms the D3 and room-negative-delivery P1s, adds a P1 for unrestricted
+  deterministic `MessageId` reuse overwriting state and republishing events,
+  and adds a P2 to prove no Aggregate/Projection/subscription publication for
+  rejection classes.
+- Accepted correction behavior is one bounded D3/example batch:
+  application-owned gateway policy and context resolver validate mapped actor
+  and permitted room for Post/Query/Subscribe; spoofed/cross-room access is
+  denied before forwarding; reused message IDs are rejected atomically before
+  mutation/publication; room-B produces no room-A delivery; multibyte bounds
+  and rejection non-publication are proved; internal constants stop leaking;
+  docs state trust ownership and the intentional unpublished model reset.
+  Activate/Cancel retain the already implemented gateway binding-owner checks
+  and do not invent handler-level authentication.

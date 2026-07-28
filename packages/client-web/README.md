@@ -12,11 +12,13 @@ Connect is an optional optimization for an endpoint that is separately known to
 support Connect. There is no protocol probe or fallback.
 
 ```ts
-import { Client, type BrowserClientOptions } from "@spine-event-engine/client-web";
+import { BrowserSession, Client, type BrowserClientOptions } from "@spine-event-engine/client-web";
 
+const session = BrowserSession.cookie({ maxRequestMs: 10_000 });
 const options: BrowserClientOptions = {
   tenant: "tasks",
-  onRequestMetadata: () => ({ authorization: "Bearer application-owned-token" }),
+  credentials: session.credentials,
+  onRequestMetadata: () => session.requestMetadata(),
 };
 
 // Local names make the explicit protocol choice visible at composition time.
@@ -30,10 +32,102 @@ await Promise.all([grpcWebClient.close(), connectClient.close()]);
 
 `onRequestMetadata` is called synchronously for every outbound call. It returns
 fresh application-owned headers; the client neither logs them nor includes them
-in request IDs. Browser request IDs prefer `crypto.randomUUID()`, otherwise use
-`crypto.getRandomValues()` to create a UUID v4, and fail before a transport call
-when secure Web Crypto is unavailable. Credential, session, and identity
-provider policy remains the application’s responsibility.
+in request IDs. `credentials` explicitly controls browser Fetch credentials for
+the selected gRPC-Web or Connect transport. Browser request IDs prefer
+`crypto.randomUUID()`, otherwise use `crypto.getRandomValues()` to create a UUID
+v4, and fail before a transport call when secure Web Crypto is unavailable.
+
+## Browser sessions and authentication
+
+`BrowserSession` is a provider-neutral browser-only resource. `cookie()` uses
+browser-managed cookies with `credentials: "include"`; no cookie value enters
+JavaScript metadata. `bearer()` retains one bearer token only in memory and
+returns a fresh `Authorization` header for each call. `replaceBearer()` and
+`clearBearer()` change that memory value; neither session mode uses local or
+session storage. Actor, tenant, and expiry returned by an application gateway
+are informational facts, never credentials.
+
+Application code owns sign-in and `AuthenticationService.ResolveContext` HTTP
+or RPC composition. It can use `session.fetch()` for an application endpoint:
+the call combines the selected cookie/bearer behavior with an abort signal and
+a bounded deadline (default 10 seconds, maximum 60 seconds). No identity
+provider, redirect, token exchange, or storage policy is included here.
+
+```ts
+import {
+  BrowserSession,
+  Client,
+  type OnBrowserSessionContext,
+} from "@spine-event-engine/client-web";
+
+type ApplicationSignInExchange = Readonly<{ bearerToken: unknown }>;
+interface SignedInBrowserClient {
+  readonly client: Client;
+  close(): Promise<void>;
+}
+
+async function createBrowserClient(
+  signInAndExchange: () => Promise<ApplicationSignInExchange>,
+): Promise<SignedInBrowserClient> {
+  // The application owns its provider sign-in and one-time session exchange.
+  const exchange = await signInAndExchange();
+  if (
+    typeof exchange.bearerToken !== "string" ||
+    exchange.bearerToken.length === 0 ||
+    exchange.bearerToken.length > 16_384
+  )
+    throw new Error("application sign-in returned an invalid bearer token");
+  const session = BrowserSession.bearer({ token: exchange.bearerToken, maxRequestMs: 10_000 });
+  const onBrowserSessionContext: OnBrowserSessionContext = async ({ signal }) => {
+    // Application-owned call to its gateway's ResolveContext endpoint.
+    const response = await session.fetch("/session/context", { signal });
+    const body: unknown = await response.json();
+    if (body === null || typeof body !== "object")
+      throw new Error("gateway returned invalid informational context");
+    const context = body as Record<string, unknown>;
+    if (
+      typeof context.actor !== "string" ||
+      typeof context.expiresAt !== "string" ||
+      (context.tenant !== undefined && typeof context.tenant !== "string")
+    )
+      throw new Error("gateway returned invalid informational context");
+    const expiresAt = new Date(context.expiresAt);
+    if (!Number.isFinite(expiresAt.getTime())) throw new Error("gateway returned invalid expiry");
+    return {
+      actor: context.actor,
+      ...(context.tenant === undefined ? {} : { tenant: context.tenant }),
+      expiresAt,
+    };
+  };
+  const client = Client.forGrpcWeb("https://api.example.test", {
+    credentials: session.credentials,
+    onRequestMetadata: () => session.requestMetadata(),
+    onReauthenticateBeforeReconnect: (signal) =>
+      session.reauthenticate(onBrowserSessionContext, { signal }),
+  });
+
+  return {
+    client,
+    close: async () => {
+      await client.close();
+      await session.close();
+    },
+  };
+}
+```
+
+`onReauthenticateBeforeReconnect` runs once before each bounded reconnect
+attempt with a child signal. The client races the callback against cancellation
+and the remaining subscription retry budget, so recovery terminates without a
+second Subscribe when that budget expires or the subscription is cancelled. A
+callback that ignores its signal can still continue its own detached work;
+applications own that work's cleanup. Concurrent session-context refreshes
+publish only the newest informational context. Closing a session aborts its
+owned HTTP/refresh work and clears its bearer value. When `session.fetch()`
+wraps a rejected Fetch call, its error message replaces the captured bearer
+value with `[REDACTED]`; it does not redact arbitrary transport or application
+callback errors. Applications must avoid placing credentials in request URLs or
+their own logs.
 
 The browser factories create and select their Connect-Web transport, but that
 source has no platform-transport close hook. `client.close()` closes owned

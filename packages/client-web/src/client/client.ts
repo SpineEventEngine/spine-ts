@@ -48,6 +48,8 @@ export interface ClientOptions {
   readonly tenant?: string | TenantId;
   readonly zoneId?: string | ZoneId;
   readonly subscriptions?: SubscriptionRuntimeOptions;
+  /** Application-owned session refresh invoked once before every reconnect attempt. */
+  readonly onReauthenticateBeforeReconnect?: (signal: AbortSignal) => Promise<void>;
 }
 
 /** Bounded queues, retry policy, and scheduling for subscription recovery. */
@@ -118,6 +120,8 @@ export type OnRequestMetadata = () => HeadersInit;
 /** Browser factory options, including an optional per-call metadata supplier. */
 export interface BrowserClientOptions extends ClientOptions {
   readonly onRequestMetadata?: OnRequestMetadata;
+  /** Browser Fetch credential mode for this explicit protocol transport. */
+  readonly credentials?: RequestCredentials;
 }
 
 /** Transport and request-ID source injected by an application or platform adapter. */
@@ -163,7 +167,7 @@ export class Client {
   readonly #subscriptions: RequiredSubscriptionRuntimeOptions;
 
   protected constructor(source: ClientTransport, options: ClientOptions) {
-    this.#owner = new ClientOwner(source);
+    this.#owner = new ClientOwner(source, options.onReauthenticateBeforeReconnect);
     this.#tenant = tenant(options.tenant);
     this.#zoneId = zoneId(options.zoneId);
     this.#subscriptions = subscriptionRuntimeOptions(options.subscriptions);
@@ -300,17 +304,53 @@ class Request implements ClientRequest {
 class ClientOwner {
   readonly transport: Transport;
   readonly #source: ClientTransport;
+  readonly #onReauthenticateBeforeReconnect: ((signal: AbortSignal) => Promise<void>) | undefined;
   readonly #controllers = new Set<AbortController>();
   readonly #subscriptions = new Set<TopicSubscription>();
   #closed = false;
   #close: Promise<void> | undefined;
 
-  constructor(source: ClientTransport) {
+  constructor(
+    source: ClientTransport,
+    onReauthenticateBeforeReconnect: ((signal: AbortSignal) => Promise<void>) | undefined,
+  ) {
     this.#source = source;
+    this.#onReauthenticateBeforeReconnect = onReauthenticateBeforeReconnect;
     this.transport = source.transport;
   }
   createRequestId(): string {
     return this.#source.createRequestId();
+  }
+  async onReauthenticateBeforeReconnect(signal: AbortSignal, remainingMs: number): Promise<void> {
+    this.assertOpen();
+    const callback = this.#onReauthenticateBeforeReconnect;
+    if (callback === undefined) return;
+    if (!Number.isSafeInteger(remainingMs) || remainingMs <= 0)
+      throw new ClientProtocolError("subscription reauthentication retry deadline is exhausted.");
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal.reason);
+    const timeout = setTimeout(
+      () => controller.abort(new ClientProtocolError("subscription reauthentication timed out.")),
+      remainingMs,
+    );
+    signal.addEventListener("abort", abort, { once: true });
+    const pending = Promise.resolve().then(() => callback(controller.signal));
+    const terminal = Promise.withResolvers<never>();
+    const rejectTerminal = () =>
+      terminal.reject(
+        controller.signal.reason ??
+          new ClientProtocolError("subscription reauthentication aborted."),
+      );
+    controller.signal.addEventListener("abort", rejectTerminal, { once: true });
+    try {
+      await Promise.race([pending, terminal.promise]);
+      this.assertOpen();
+    } finally {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", abort);
+      controller.signal.removeEventListener("abort", rejectTerminal);
+      void pending.catch(() => undefined);
+    }
   }
   async run<Result>(
     signal: AbortSignal | undefined,
@@ -598,6 +638,12 @@ class TopicSubscription implements Subscription {
         if (this.#controller.signal.aborted) throw this.#controller.signal.reason;
         if (this.#cancelled) return;
         if (this.#elapsed()) throw failure;
+        await this.#owner.onReauthenticateBeforeReconnect(
+          this.#controller.signal,
+          this.#remainingRetryMs(),
+        );
+        if (this.#cancelled) return;
+        if (this.#elapsed()) throw failure;
         this.#pushLifecycle({ state: "connecting", generation, attempt });
         try {
           const pending = createClient(SubscriptionService, this.#owner.transport).subscribe(
@@ -643,6 +689,14 @@ class TopicSubscription implements Subscription {
       }
       throw terminalError;
     }
+  }
+
+  #remainingRetryMs(): number {
+    const elapsed = this.#runtime.scheduler.now() - (this.#retryStartedAt ?? 0);
+    const remaining = this.#runtime.retryPolicy.maxElapsedMs - elapsed;
+    if (!Number.isSafeInteger(remaining) || remaining <= 0)
+      throw new ClientProtocolError("subscription reauthentication retry deadline is exhausted.");
+    return remaining;
   }
 
   async #resynchronize(generation: number): Promise<void> {
@@ -1030,12 +1084,19 @@ function browserSource(transport: Transport): ClientTransport {
 function browserTransportOptions(
   baseUrl: string,
   options: BrowserClientOptions,
-): { baseUrl: string; interceptors: Interceptor[] } {
+): { baseUrl: string; interceptors: Interceptor[]; fetch?: typeof globalThis.fetch } {
   return {
     baseUrl,
     interceptors:
       options.onRequestMetadata === undefined ? [] : [requestMetadata(options.onRequestMetadata)],
+    ...(options.credentials === undefined ? {} : { fetch: credentialedFetch(options.credentials) }),
   };
+}
+
+function credentialedFetch(credentials: RequestCredentials): typeof globalThis.fetch {
+  if (credentials !== "omit" && credentials !== "same-origin" && credentials !== "include")
+    throw new TypeError("Browser Fetch credentials must be omit, same-origin, or include.");
+  return (input, init) => globalThis.fetch(input, { ...init, credentials });
 }
 
 function requestMetadata(onRequestMetadata: OnRequestMetadata): Interceptor {
