@@ -1,0 +1,407 @@
+import { create, toBinary } from "@bufbuild/protobuf";
+import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
+import { AckSchema } from "@spine-event-engine/proto";
+import {
+  CommandService,
+  EventUpdatesSchema,
+  QueryService,
+  SubscriptionSchema,
+  SubscriptionService,
+  SubscriptionUpdateSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
+import { describe, expect, it } from "vitest";
+import {
+  createNativeGatewayServices,
+  type NativeGatewayRequestContext,
+  type SubscriptionGateway,
+  type SubscriptionGatewayRequest,
+  type SubscriptionGatewayResult,
+  type UnaryGateway,
+  type UnaryGatewayRequest,
+  type UnaryGatewayResult,
+} from "../src/index.js";
+
+type UnaryFake = Pick<UnaryGateway, "handle">;
+type SubscriptionFake = Pick<SubscriptionGateway, "handle">;
+
+const credential = { kind: "bearer" as const, value: "session" };
+const transport = {
+  service: "ignored",
+  method: "ignored",
+  requestId: "request-1",
+};
+
+function context(signal = new AbortController().signal): HandlerContext {
+  return { signal } as unknown as HandlerContext;
+}
+
+function requests(): NativeGatewayRequestContext {
+  return {
+    credential: () => credential,
+    transport: () => transport,
+  };
+}
+
+function services(unary: UnaryFake, subscriptions: SubscriptionFake) {
+  return createNativeGatewayServices({
+    unary: unary as UnaryGateway,
+    subscriptions: subscriptions as SubscriptionGateway,
+    requests: requests(),
+  });
+}
+
+function unary(result: UnaryGatewayResult): {
+  readonly fake: UnaryFake;
+  readonly calls: UnaryGatewayRequest[];
+} {
+  const calls: UnaryGatewayRequest[] = [];
+  return { fake: { handle: async (request) => (calls.push(request), result) }, calls };
+}
+
+function subscriptions(
+  handler: (request: SubscriptionGatewayRequest) => Promise<SubscriptionGatewayResult>,
+): { readonly fake: SubscriptionFake; readonly calls: SubscriptionGatewayRequest[] } {
+  const calls: SubscriptionGatewayRequest[] = [];
+  return { fake: { handle: async (request) => (calls.push(request), handler(request)) }, calls };
+}
+
+async function errorCode(effect: Promise<unknown>): Promise<Code> {
+  try {
+    await effect;
+    throw new Error("expected Connect rejection");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConnectError);
+    return (error as ConnectError).code;
+  }
+}
+
+describe("createNativeGatewayServices", () => {
+  it("forwards Post and Read through UnaryGateway with application request facts", async () => {
+    const post = unary({ kind: "forwarded", value: toBinary(AckSchema, create(AckSchema)) });
+    const read = unary({
+      kind: "forwarded",
+      value: toBinary(QueryService.method.read.output, create(QueryService.method.read.output)),
+    });
+    const subscription = subscriptions(async () => ({ kind: "cancelled" }));
+    const gateway = services(
+      {
+        handle: async (request) =>
+          request.method === "Post" ? post.fake.handle(request) : read.fake.handle(request),
+      },
+      subscription.fake,
+    );
+
+    await gateway.command.post(create(CommandService.method.post.input), context());
+    await gateway.query.read(create(QueryService.method.read.input), context());
+
+    expect(post.calls[0]).toMatchObject({
+      service: "spine.client.CommandService",
+      method: "Post",
+      credential,
+      transport,
+    });
+    expect(read.calls[0]).toMatchObject({
+      service: "spine.client.QueryService",
+      method: "Read",
+      credential,
+      transport,
+    });
+    expect(post.calls[0].signal).toBeDefined();
+    expect(read.calls[0].signal).toBeDefined();
+  });
+
+  it.each([
+    ["unauthenticated", Code.Unauthenticated],
+    ["forbidden", Code.PermissionDenied],
+    ["request-too-large", Code.ResourceExhausted],
+    ["unknown-operation", Code.Unimplemented],
+    ["malformed-request", Code.InvalidArgument],
+    ["context-stale", Code.InvalidArgument],
+  ] as const)("maps UnaryGateway %s rejection to Connect status", async (reason, code) => {
+    const unaryGateway = unary({ kind: "rejected", reason });
+    const subscription = subscriptions(async () => ({ kind: "cancelled" }));
+    const gateway = services(unaryGateway.fake, subscription.fake);
+
+    expect(
+      await errorCode(gateway.command.post(create(CommandService.method.post.input), context())),
+    ).toBe(code);
+    expect(
+      await errorCode(gateway.query.read(create(QueryService.method.read.input), context())),
+    ).toBe(code);
+  });
+
+  it("forwards Subscribe and Cancel through SubscriptionGateway", async () => {
+    const subscribed = toBinary(
+      SubscriptionSchema,
+      create(SubscriptionSchema, { id: { value: "subscription-1" } }),
+    );
+    const fake = subscriptions(async (request) =>
+      request.method === "Subscribe"
+        ? { kind: "subscribed", wire: { kind: "public-subscription", bytes: subscribed } }
+        : { kind: "cancelled" },
+    );
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+    const subscription = create(SubscriptionSchema, { id: { value: "subscription-1" } });
+
+    await expect(
+      gateway.subscription.subscribe(create(TopicSchema), context()),
+    ).resolves.toMatchObject({
+      id: { value: "subscription-1" },
+    });
+    await expect(gateway.subscription.cancel(subscription, context())).resolves.toEqual(
+      create(SubscriptionService.method.cancel.output),
+    );
+    expect(fake.calls.map((call) => call.method)).toEqual(["Subscribe", "Cancel"]);
+    expect(
+      fake.calls.every((call) => call.credential === credential && call.transport === transport),
+    ).toBe(true);
+  });
+
+  it.each([
+    ["unauthenticated", Code.Unauthenticated],
+    ["forbidden", Code.PermissionDenied],
+    ["denied", Code.PermissionDenied],
+    ["request-too-large", Code.ResourceExhausted],
+    ["binding-capacity-exceeded", Code.ResourceExhausted],
+    ["binding-busy", Code.Aborted],
+    ["unknown-operation", Code.Unimplemented],
+    ["malformed-request", Code.InvalidArgument],
+    ["backend-envelope-too-large", Code.InvalidArgument],
+  ] as const)("maps SubscriptionGateway %s rejection to Connect status", async (reason, code) => {
+    const fake = subscriptions(async () => ({ kind: "rejected", reason }));
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+
+    expect(await errorCode(gateway.subscription.subscribe(create(TopicSchema), context()))).toBe(
+      code,
+    );
+    expect(
+      await errorCode(gateway.subscription.cancel(create(SubscriptionSchema), context())),
+    ).toBe(code);
+  });
+
+  it("activates only through SubscriptionGateway, forwards its signal and relays FIFO updates", async () => {
+    const controller = new AbortController();
+    const source = [
+      toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema)),
+      toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema)),
+    ];
+    const fake = subscriptions(async (request) => {
+      expect(request.method).toBe("Activate");
+      expect(request.signal).toBeDefined();
+      await request.updates?.({ kind: "subscription-update", bytes: source[0] });
+      await request.updates?.({ kind: "subscription-update", bytes: source[1] });
+      return { kind: "activated" };
+    });
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+    const stream = gateway.subscription.activate(
+      create(SubscriptionSchema),
+      context(controller.signal),
+    );
+    const iterator = stream[Symbol.asyncIterator]();
+
+    expect((await iterator.next()).done).toBe(false);
+    expect((await iterator.next()).done).toBe(false);
+    expect(await iterator.next()).toEqual({ done: true, value: undefined });
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it.each([
+    [
+      "context abort before an update",
+      async (iterator: AsyncIterator<unknown>, controller: AbortController) => {
+        controller.abort();
+        await expect(iterator.next()).rejects.toMatchObject({ code: Code.Canceled });
+      },
+    ],
+    [
+      "iterator return",
+      async (iterator: AsyncIterator<unknown>) => {
+        await expect(iterator.return?.()).resolves.toEqual({ done: true, value: undefined });
+      },
+    ],
+    [
+      "iterator throw",
+      async (iterator: AsyncIterator<unknown>) => {
+        const failure = new Error("consumer failed");
+        await expect(iterator.throw?.(failure)).rejects.toBe(failure);
+      },
+    ],
+  ])("converges %s through one terminal relay path", async (_name, terminate) => {
+    let release: (() => void) | undefined;
+    const running = new Promise<void>((resolve) => (release = resolve));
+    const fake = subscriptions(async (request) => {
+      await request.updates?.({
+        kind: "subscription-update",
+        bytes: toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema)),
+      });
+      await running;
+      return { kind: "activated" };
+    });
+    const controller = new AbortController();
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+    const iterator = gateway.subscription
+      .activate(create(SubscriptionSchema), context(controller.signal))
+      [Symbol.asyncIterator]();
+
+    const pending = iterator.next();
+    await expect(pending).resolves.toMatchObject({ done: false });
+    await terminate(iterator, controller);
+    release?.();
+    expect(fake.calls).toHaveLength(1);
+  });
+
+  it("rejects an already-aborted external signal before SubscriptionGateway activation", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fake = subscriptions(async () => {
+      throw new Error("pre-aborted activation must not reach B3");
+    });
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+    const iterator = gateway.subscription
+      .activate(create(SubscriptionSchema), context(controller.signal))
+      [Symbol.asyncIterator]();
+
+    await expect(iterator.next()).rejects.toMatchObject({ code: Code.Canceled });
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it.each(["return", "throw"] as const)(
+    "aborts a quiet native activation when the public iterator uses %s",
+    async (terminal) => {
+      let signal: AbortSignal | undefined;
+      let settle: (() => void) | undefined;
+      const settled = new Promise<void>((resolve) => (settle = resolve));
+      const fake = subscriptions(async (request) => {
+        signal = request.signal;
+        await new Promise<void>((finish) =>
+          signal?.addEventListener("abort", finish, { once: true }),
+        );
+        settle?.();
+        return { kind: "activated" };
+      });
+      const gateway = services(
+        unary({ kind: "forwarded", value: new Uint8Array() }).fake,
+        fake.fake,
+      );
+      const iterator = gateway.subscription
+        .activate(create(SubscriptionSchema), context())
+        [Symbol.asyncIterator]();
+      const pending = iterator.next();
+      await new Promise((finish) => setTimeout(finish, 0));
+
+      if (terminal === "return") await iterator.return?.();
+      else
+        await expect(iterator.throw?.(new Error("consumer stopped"))).rejects.toThrow(
+          "consumer stopped",
+        );
+      await pending.catch(() => undefined);
+
+      await settled;
+      expect(signal?.aborted).toBe(true);
+    },
+  );
+
+  it("maps Activate gateway rejection and backend failure through the stream terminal", async () => {
+    const rejected = subscriptions(async () => ({ kind: "rejected", reason: "binding-busy" }));
+    const rejectedGateway = services(
+      unary({ kind: "forwarded", value: new Uint8Array() }).fake,
+      rejected.fake,
+    );
+    await expect(
+      rejectedGateway.subscription
+        .activate(create(SubscriptionSchema), context())
+        [Symbol.asyncIterator]()
+        .next(),
+    ).rejects.toMatchObject({ code: Code.Aborted });
+
+    const failure = new Error("native backend failed");
+    const failed = subscriptions(async () => {
+      throw failure;
+    });
+    const failedGateway = services(
+      unary({ kind: "forwarded", value: new Uint8Array() }).fake,
+      failed.fake,
+    );
+    await expect(
+      failedGateway.subscription
+        .activate(create(SubscriptionSchema), context())
+        [Symbol.asyncIterator]()
+        .next(),
+    ).rejects.toBe(failure);
+  });
+
+  it("maps an unexpected Activate acknowledgement to an internal stream failure", async () => {
+    const fake = subscriptions(async () => ({ kind: "cancelled" }));
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+
+    await expect(
+      gateway.subscription
+        .activate(create(SubscriptionSchema), context())
+        [Symbol.asyncIterator]()
+        .next(),
+    ).rejects.toMatchObject({ code: Code.Internal });
+  });
+
+  it("lets iterator termination purge updates after native completion begins graceful drain", async () => {
+    const fake = subscriptions(async (request) => {
+      await request.updates?.({
+        kind: "subscription-update",
+        bytes: toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema, {
+          update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+        })),
+      });
+      await request.updates?.({
+        kind: "subscription-update",
+        bytes: toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema, {
+          update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+        })),
+      });
+      return { kind: "activated" };
+    });
+    const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
+    const iterator = gateway.subscription.activate(create(SubscriptionSchema), context())[Symbol.asyncIterator]();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await iterator.return?.();
+    await expect(iterator.next()).rejects.toMatchObject({ code: Code.Canceled });
+  });
+
+  it.each([
+    ["message", { maxMessages: 1, maxBytes: 100 }, 3, Code.ResourceExhausted],
+    ["byte", { maxMessages: 3, maxBytes: 1 }, 2, Code.ResourceExhausted],
+  ] as const)(
+    "terminates Activate relay on %s overflow without another gateway call",
+    async (dimension, relay, count, code) => {
+      const fake = subscriptions(async (request) => {
+        const update = toBinary(
+          SubscriptionUpdateSchema,
+          create(SubscriptionUpdateSchema, {
+            update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+          }),
+        );
+        for (let index = 0; index < count; index++)
+          await request.updates?.({
+            kind: "subscription-update",
+            bytes: update,
+          });
+        return { kind: "activated" };
+      });
+      const gateway = createNativeGatewayServices({
+        unary: unary({ kind: "forwarded", value: new Uint8Array() }).fake as UnaryGateway,
+        subscriptions: fake.fake as SubscriptionGateway,
+        requests: requests(),
+        relay,
+      });
+      const iterator = gateway.subscription
+        .activate(create(SubscriptionSchema), context())
+        [Symbol.asyncIterator]();
+
+      if (dimension === "message") {
+        await new Promise((finish) => setTimeout(finish, 0));
+        await expect(iterator.next()).rejects.toMatchObject({ code });
+      } else await expect(iterator.next()).rejects.toMatchObject({ code });
+      expect(fake.calls).toHaveLength(1);
+    },
+  );
+});

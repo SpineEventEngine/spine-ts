@@ -199,6 +199,11 @@ function compactFacts(
 
 export { UnaryGateway } from "./gateway/index.js";
 export { InMemorySubscriptionBindings, SubscriptionGateway } from "./subscriptions/index.js";
+export {
+  createNativeGatewayServices,
+  NativeSubscriptionCreator,
+  SubscriptionUpdateRelay,
+} from "./native/index.js";
 export type {
   UnaryForwarder,
   UnaryGatewayOptions,
@@ -220,4 +225,12 @@ export type {
   PublicSubscriptionWire,
   BackendSubscriptionEnvelope,
   OnBackendSubscription,
+  SubscriptionUpdateSink,
+  SubscriptionUpdateWire,
 } from "./subscriptions/index.js";
+export type {
+  NativeGatewayRequestContext,
+  NativeGatewayServices,
+  NativeGatewayServicesOptions,
+  SubscriptionRelayLimits,
+} from "./native/index.js";

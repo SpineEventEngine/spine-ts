@@ -32,6 +32,8 @@ export interface UnaryGatewayRequest {
   readonly value: Uint8Array;
   readonly credential: RequestCredential;
   readonly transport: TransportRequestContext;
+  /** Downstream cancellation capability forwarded only to the admitted native effect. */
+  readonly signal?: AbortSignal;
 }
 /** B4-mappable forwarding boundary; credentials and transport extras are never supplied. */
 export interface UnaryForwarder {
@@ -39,6 +41,7 @@ export interface UnaryForwarder {
     readonly service: string;
     readonly method: string;
     readonly value: Uint8Array;
+    readonly signal?: AbortSignal;
   }): Promise<Uint8Array>;
 }
 /** Gateway collaborators and finite byte ownership limit. */
@@ -117,11 +120,15 @@ export class UnaryGateway {
     if (!matches(requestedContext, trusted)) return reject("context-stale");
     return {
       kind: "forwarded",
-      value: await this.#options.forward({
-        service: operation.service,
-        method: operation.method,
-        value: rewrite(source, trusted),
-      }),
+      value: await abortable(
+        this.#options.forward({
+          service: operation.service,
+          method: operation.method,
+          value: rewrite(source, trusted),
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
+        }),
+        request.signal,
+      ),
     };
   }
   async #resolveContext(request: UnaryGatewayRequest): Promise<UnaryGatewayResult> {
@@ -226,4 +233,13 @@ function rewrite(
   const query = clone(QuerySchema, source.query);
   query.context = context;
   return toBinary(QuerySchema, query);
+}
+function abortable<T>(effect: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (signal === undefined) return effect;
+  if (signal.aborted) return Promise.reject(new Error("unary operation aborted"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Error("unary operation aborted"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    void effect.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }

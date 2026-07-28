@@ -2144,3 +2144,267 @@ execute Spine JVM.
   returned successfully but emitted neither a final coverage summary nor an
   LCOV artifact, so that post-change global total remains arithmetic evidence
   pending the coordinator's next unrestricted report.
+
+## B4 native forwarding review assignments
+
+- Style/maintainability: existing `style_maintainability_reviewer`, expected
+  and explicitly dispatched `gpt-5.6-terra` / `high`. Scope is the B3 update
+  sink seam, native adapter/module shape, handler and relay clarity, ownership,
+  tests, and avoidance of speculative abstractions.
+- TypeScript/API docs: existing `typescript_api_docs_reviewer`, expected and
+  explicitly dispatched `gpt-5.6-terra` / `high`. Scope is public exports,
+  Connect descriptor/runtime agreement, declarations, browser-safe contracts,
+  error mapping, and generated API inventory.
+- Performance/reliability: existing `performance_reliability_reviewer`,
+  expected and explicitly dispatched `gpt-5.6-terra` / `high`. Scope is finite
+  relay bounds, FIFO/backpressure, abort propagation, iterator termination,
+  failure convergence, cleanup, retention, and backend-call ownership.
+- Documentation: existing `documentation_reviewer` with its immutable
+  `gpt-5.6-luna` / `medium` profile. Desktop does not accept a redundant model
+  override for this fixed role; this limitation and the immutable configured
+  profile are the dispatch metadata. Scope is package README, TSDoc, limits,
+  lifecycle claims, API inventory, and B4 evidence.
+- Independent runtime self-introspection is unavailable. Explicit dispatch and
+  immutable configured role/profile are the acceptance metadata unless a
+  visible mismatch or fallback appears. All reviewers are read-only, may not
+  edit, commit, push, merge, spawn children, begin C+, or execute any Spine JVM
+  project command. They must return `CLEAN` or exact P0-P2 findings.
+
+Pre-review mechanical evidence is 5 auth files / 85 tests, auth TypeScript
+typecheck, generated TypeDoc/API checking, Prettier, and `git diff --check`,
+all independently passing.
+
+### B4 complete review wave
+
+Runtime metadata:
+
+- Style/maintainability, TypeScript/API docs, and performance/reliability ran as
+  their existing roles under explicitly dispatched `gpt-5.6-terra` / `high`.
+- Documentation ran as the existing immutable `gpt-5.6-luna` / `medium` role;
+  Desktop cannot accept a redundant override for that fixed role.
+- Independent self-introspection was unavailable. No visible role/profile
+  mismatch or inherited fallback occurred. No reviewer edited files or ran a
+  Spine JVM project command.
+
+Accepted, deduplicated correction batch:
+
+- P1: reject an already-aborted downstream Activate before any B3/native
+  activation starts, and make the injected `SubscriptionBindings` contract
+  explicitly require propagation of the admitted signal to its active effect.
+  Prove the real B3 gateway/in-memory binding path makes zero native Activate
+  calls for a pre-aborted request.
+- P1: natural native-stream completion must converge through bounded B3
+  cancellation/disposal, remove the binding, and retain no relay queue. A later
+  context abort or iterator `return()`/`throw()` must be able to supersede
+  graceful drain and purge buffered updates.
+- P1: carry `HandlerContext.signal` through `UnaryGateway` and `UnaryForwarder`
+  to native Post/Read Connect calls. Prove aborted and non-cooperative unary
+  work is cancelled without losing B2 security/copy semantics.
+- P1: a live activation must terminate when its admitted ActorContext session
+  expires, abort its native effect, perform bounded cleanup, and retain no
+  binding; expiry cannot depend on a later unrelated request.
+- P1: malformed backend update bytes must terminally fail the relay, reject any
+  pending consumer, purge queued bytes, and abort B3 work. Cover both a waiting
+  consumer and a queued malformed update.
+- P2: use distinct non-empty update payloads to prove copied bytes and FIFO
+  order in both relay and handler tests.
+- P2: document the complete terminal lifecycle in `packages/auth/README.md`,
+  including disconnect, context abort, iterator termination, expiry, explicit
+  Cancel, normal completion, backend/gateway error, gateway close, and overflow.
+- P2: expand public native TSDoc for relay defaults, independent count/byte
+  bounds, validation, `ResourceExhausted`, graceful drain versus failure purge,
+  iterator cancellation, creator descriptor mappings and AbortSignals,
+  request-context extractors, service properties, and named factory options.
+
+All four concerns reopen because the P1 contract/lifecycle changes affect
+public declarations, reliability, structure, and documentation. One bounded
+implementation owner receives this single correction batch before targeted
+re-review.
+
+### B4 correction verification and re-review assignments
+
+- The implementer completed the accepted batch under explicit
+  `gpt-5.6-terra` / `medium`. Independent self-introspection was unavailable;
+  the immutable role/profile showed no mismatch or fallback.
+- Independent coordinator verification passed 5 auth files / 93 tests, auth
+  TypeScript typecheck, generated TypeDoc/API checking, Prettier, and
+  `git diff --check`.
+- Style/maintainability reopens under the existing
+  `style_maintainability_reviewer`, explicitly `gpt-5.6-terra` / `high`.
+- TypeScript/API docs reopens under the existing
+  `typescript_api_docs_reviewer`, explicitly `gpt-5.6-terra` / `high`.
+- Performance/reliability reopens under the existing
+  `performance_reliability_reviewer`, explicitly `gpt-5.6-terra` / `high`.
+- Documentation reopens under the existing immutable
+  `documentation_reviewer` profile, `gpt-5.6-luna` / `medium`; Desktop cannot
+  accept a redundant fixed-role override.
+- Re-review is limited to the accepted correction batch and its direct
+  effects. All reviewers are read-only, may not edit, commit, push, merge,
+  spawn children, begin C+, or execute any Spine JVM project command. Runtime
+  self-introspection is unavailable; explicit dispatch and immutable profile
+  are the metadata evidence.
+
+### B4 targeted re-review results
+
+All four reviewers ran under the recorded explicit or immutable profiles.
+Independent self-introspection remained unavailable; no visible mismatch or
+fallback occurred.
+
+Accepted final correction batch:
+
+- P1: after an Activate waits behind a prior binding operation, re-check its
+  admitted expiry/abort signal before changing state or starting native work.
+  Add a forced interleaving where the queued Activate expires while waiting and
+  prove zero native invocation.
+- P2: reflow the three authored package/test lines over 120 columns.
+- P2: add `NativeGatewayServicesOptions` to the frozen auth API inventory.
+- P2: qualify README zero-retention claims: natural completion, overflow,
+  malformed/backend failure, explicit Cancel, disconnect, and expiry remove the
+  binding after successful cleanup; a failed cleanup deliberately retains the
+  private binding in retryable cancelling state for a later authorized Cancel.
+- P2: finish public native TSDoc for every `NativeSubscriptionCreator` method,
+  request-context extractor, service-bundle property, factory/status mapping,
+  relay iterator cancellation, and graceful-drain versus failure-purge
+  behavior.
+
+The distinct non-empty copy/FIFO correction is accepted. Reliability reopens
+for the P1 interleaving; style, TypeScript/API docs, and documentation reopen
+for their respective deterministic P2 corrections.
+
+### B4 complete-review correction implementation evidence
+
+- The assigned existing `implementer` completed the entire accepted batch under
+  explicit `gpt-5.6-terra` / `medium` dispatch. Runtime self-introspection is
+  unavailable; immutable configured role/profile and explicit dispatch are the
+  available metadata, with no visible mismatch or fallback.
+- RED/GREEN coverage now proves pre-aborted B3/native prevention, active-effect
+  abort contract, bounded normal-completion cleanup/removal, drain supersession,
+  unary abort forwarding, live expiry, malformed-update terminal purge, and
+  distinct non-empty copied FIFO payloads.
+- README and public TSDoc/nameable factory options describe the correction
+  semantics. Focused auth tests (5 files / 92), auth typecheck, generated
+  TypeDoc/API checking, Prettier, and diff hygiene pass. No Spine JVM project
+  command ran. The four reopened concerns await their targeted re-review.
+
+### B4 targeted re-review final correction implementation
+
+- The existing `implementer` completed the accepted final batch under explicit
+  `gpt-5.6-terra` / `medium` dispatch. Independent self-introspection remains
+  unavailable; immutable configured role/profile and dispatch are the metadata
+  evidence, with no visible mismatch or inherited fallback.
+- RED/GREEN proves a queued real in-memory B3 Activate that aborts while behind
+  a first failed operation re-checks its admitted signal after the queue await,
+  returns `denied`, and makes zero queued native calls before state transition.
+- The deterministic P2 correction reflows overlength authored lines, adds
+  `NativeGatewayServicesOptions` to the frozen inventory, distinguishes
+  successful cleanup from retryable failed cancellation cleanup in the README,
+  and completes the specified public native TSDoc.
+- Focused implementation validation passed the subscription file (40 tests).
+  Full auth mechanical validation then passed 5 files / 94 tests, auth
+  typecheck, generated TypeDoc/API checking, Prettier, and diff hygiene.
+  Targeted reviewer re-review remains pending. No Spine JVM project command
+  ran.
+
+### B4 final acceptance re-review assignments
+
+- Independent coordinator verification passed 5 auth files / 94 tests, auth
+  TypeScript typecheck, generated TypeDoc/API inventory, Prettier, cleanup-rule
+  enforcement, and diff hygiene.
+- Performance/reliability reopens under the existing reviewer with explicit
+  `gpt-5.6-terra` / `high`, limited to the queued-Activate expiry interleaving.
+- Style/maintainability reopens under the existing reviewer with explicit
+  `gpt-5.6-terra` / `high`, limited to authored line length and accurate
+  retention wording.
+- TypeScript/API docs reopens under the existing reviewer with explicit
+  `gpt-5.6-terra` / `high`, limited to the frozen export inventory and completed
+  native TSDoc.
+- Documentation reopens under its immutable `gpt-5.6-luna` / `medium` profile,
+  limited to cleanup-success versus retryable-failure wording and native TSDoc.
+  Desktop cannot accept a redundant fixed-role override.
+- All reviews are read-only with no edits, commits, pushes, merges, children,
+  C+, or Spine JVM project execution. Runtime self-introspection is unavailable;
+  explicit dispatch and immutable profile are the metadata evidence.
+
+### B4 final acceptance results and API documentation correction
+
+- Style/maintainability: clean.
+- Performance/reliability: clean.
+- Documentation: clean.
+- TypeScript/API docs accepted one P2 omission: the factory TSDoc promised
+  rejection-to-Connect status mapping without enumerating the public mapping.
+  The frozen inventory and all other native TSDoc surfaces are clean.
+- This is a deterministic documentation-only correction: enumerate
+  Unauthenticated, PermissionDenied, ResourceExhausted, Aborted, Unimplemented,
+  and InvalidArgument mappings on `createNativeGatewayServices`. It does not
+  change runtime behavior and reopens TypeScript/API docs only.
+- Final acceptance re-review uses the existing `typescript_api_docs_reviewer`
+  with explicit `gpt-5.6-terra` / `high`, limited to that corrected paragraph.
+  It remains read-only with no edits, commits, pushes, merges, children, C+, or
+  Spine JVM project execution. Runtime self-introspection is unavailable;
+  explicit dispatch and immutable role/profile are the metadata evidence.
+
+### B4 final review disposition
+
+- Style/maintainability: clean.
+- Documentation completeness: clean.
+- TypeScript/API docs: clean.
+- Performance/reliability: clean.
+- The final API re-review confirmed that the factory TSDoc accurately
+  enumerates every public rejection status category; the unexpected internal
+  result remains correctly outside rejection mapping.
+- All dispatched model/reasoning profiles were explicit except the documented
+  immutable documentation-role limitation. No visible mismatch or fallback
+  occurred. B4 specialist review is converged.
+
+### B4 full-gate coverage correction
+
+- Two full-gate attempts encountered unrelated timing/readiness failures; all
+  affected files passed immediately in isolation. The third canonical run
+  passed all 146 runnable files / 2,728 tests with 25 skipped.
+- The third run failed only the branch threshold at 89.99% (8,756/9,729),
+  one hundredth below the required 90%. Statements are 94.05%, functions
+  94.23%, and lines 94.77%.
+- Review correctness remains converged. One existing `implementer` owns
+  behavior-focused B4 test expansion for real uncovered branches until the
+  global branch threshold is at least 90%, without production changes,
+  threshold changes, ignore directives, C+, commit, push, merge, children, or
+  Spine JVM project execution.
+- Expected model is explicitly `gpt-5.6-terra`; expected reasoning is
+  explicitly `medium`. Runtime self-introspection may be unavailable; explicit
+  dispatch and immutable role/profile are the acceptance metadata.
+
+### B4 full-gate acceptance
+
+- The implementer added three behavior-only tests for delivery to an already
+  waiting relay consumer, push rejection after graceful closure, and unexpected
+  Activate acknowledgement mapping to Connect `Internal`. No production,
+  threshold, or ignore-directive change was made.
+- Independent focused verification passed 5 auth files / 97 tests, auth
+  typecheck, generated TypeDoc/API checking, formatting, and diff hygiene.
+- The final canonical full gate passed 146 runnable files / 2,731 tests with 25
+  skipped. Coverage is 94.08% statements, 90.04% branches (8,760/9,729),
+  94.26% functions, and 94.80% lines.
+- B4 is mechanically verified and review-converged. No Spine JVM project
+  command ran.
+
+### B4 full-gate coverage correction implementation evidence
+
+- The existing `implementer` completed the bounded test-only correction under
+  explicit `gpt-5.6-terra` / `medium` assignment. Runtime self-introspection
+  is unavailable; explicit dispatch and immutable configured profile are the
+  available metadata, with no visible mismatch or inherited fallback.
+- The added behavior tests cover direct relay admission to a waiting consumer,
+  backend update rejection after graceful closure, and the public `Internal`
+  failure for an unexpected Activate acknowledgement. Production behavior and
+  all coverage policy remain unchanged.
+- Focused direct Vitest validation passed 2 files / 38 tests; the focused auth
+  suite passed 5 files / 97 tests. Focused V8 coverage covered the targeted
+  native branches, but its global threshold fails by design with 84/9,729
+  covered branches because only two files ran. The canonical full coverage gate
+  remains the required acceptance evidence. Prettier for the added relay test
+  and durable records plus `git diff --check` pass; standalone ESLint reports
+  existing errors elsewhere in the already-untracked B4 test files.
+- `pnpm exec vitest` could not start due to a changed installed-workspace
+  `linkWorkspacePackages` setting. No dependency install was run; the installed
+  Vitest binary was used for focused validation. No commit, push, merge, C+,
+  child dispatch, or Spine JVM project command ran.

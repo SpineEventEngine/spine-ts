@@ -66,5 +66,27 @@ failure compensates with `dispose`, reporting an ordered `AggregateError` if
 both actions fail. `close()` is terminal, aborts effects, zeroes private
 envelopes, clears retention, and reports cleanup failures as an `AggregateError`.
 The reference store owns no background timer;
-gateway activity lazily purges expiry. B3 has no native gRPC or stream relay:
-B4 owns transport mapping and stream lifecycle.
+gateway activity lazily purges expiry, while an admitted live Activate owns an
+expiry timer so it terminates without a later request.
+
+`NativeSubscriptionCreator` maps the B2 unary seam and B3 opaque lifecycle to
+the shared Connect descriptors using an injected `Transport`. It forwards no
+credential or browser transport facts. `SubscriptionUpdateRelay` is the B4
+public stream seam: it copies serialized updates, preserves FIFO order, and
+uses independent positive-safe-integer bounds (defaults: 64 messages and
+1,048,576 bytes). Count is checked before bytes; either overflow ends the
+stream with Connect `ResourceExhausted` and a deterministic message. The
+adapter remains behind `SubscriptionGateway`; it does not call
+`SubscriptionCreator` from a public handler.
+
+The terminal lifecycle is idempotent. Browser disconnect and handler-context
+abort, iterator `return()`/`throw()`, session expiry, explicit Cancel,
+overflow, malformed update bytes, backend or gateway error, and gateway close
+abort native work, purge relay bytes, and perform bounded B3 cleanup. Natural
+native completion starts graceful FIFO drain, but a later disconnect, context
+abort, or iterator terminal operation supersedes that drain and purges queued
+bytes. After successful cleanup, natural completion, overflow, malformed or
+backend failure, explicit Cancel, disconnect, and expiry retain no binding,
+native call, timer, backend subscription, waiting consumer, or queued payload.
+A failed cleanup deliberately retains only the private binding in its retryable
+`cancelling` state for a later authorized Cancel.

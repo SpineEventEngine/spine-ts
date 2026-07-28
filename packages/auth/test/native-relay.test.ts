@@ -1,0 +1,207 @@
+import { create, toBinary } from "@bufbuild/protobuf";
+import type { Transport } from "@connectrpc/connect";
+import { AckSchema } from "@spine-event-engine/proto";
+import {
+  CommandService,
+  EntityUpdatesSchema,
+  EventUpdatesSchema,
+  QueryService,
+  SubscriptionSchema,
+  SubscriptionService,
+  SubscriptionUpdateSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
+import { describe, expect, it } from "vitest";
+import { NativeSubscriptionCreator, SubscriptionUpdateRelay } from "../src/index.js";
+
+describe("SubscriptionUpdateRelay", () => {
+  it("copies updates and delivers them in FIFO order", async () => {
+    const relay = new SubscriptionUpdateRelay({ maxMessages: 2, maxBytes: 100 });
+    const first = toBinary(
+      SubscriptionUpdateSchema,
+      create(SubscriptionUpdateSchema, {
+        update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+      }),
+    );
+    const second = toBinary(
+      SubscriptionUpdateSchema,
+      create(SubscriptionUpdateSchema, {
+        update: { case: "entityUpdates", value: create(EntityUpdatesSchema) },
+      }),
+    );
+    await relay.push({ kind: "subscription-update", bytes: first });
+    await relay.push({ kind: "subscription-update", bytes: second });
+    first.fill(9);
+    expect((await relay[Symbol.asyncIterator]().next()).value.update.case).toBe("eventUpdates");
+    expect((await relay[Symbol.asyncIterator]().next()).value.update.case).toBe("entityUpdates");
+  });
+
+  it("delivers an update directly to a waiting consumer", async () => {
+    const relay = new SubscriptionUpdateRelay();
+    const iterator = relay[Symbol.asyncIterator]();
+    const waiting = iterator.next();
+
+    await relay.push({
+      kind: "subscription-update",
+      bytes: toBinary(
+        SubscriptionUpdateSchema,
+        create(SubscriptionUpdateSchema, {
+          update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+        }),
+      ),
+    });
+
+    await expect(waiting).resolves.toMatchObject({
+      done: false,
+      value: { update: { case: "eventUpdates" } },
+    });
+  });
+
+  it("rejects further backend updates after graceful relay closure", async () => {
+    const relay = new SubscriptionUpdateRelay();
+    relay.close();
+
+    await expect(
+      relay.push({ kind: "subscription-update", bytes: new Uint8Array() }),
+    ).rejects.toMatchObject({ code: 1 });
+  });
+
+  it("rejects count overflow before byte overflow with a deterministic error", async () => {
+    const relay = new SubscriptionUpdateRelay({ maxMessages: 1, maxBytes: 1 });
+    await relay.push({ kind: "subscription-update", bytes: new Uint8Array() });
+    await expect(
+      relay.push({ kind: "subscription-update", bytes: new Uint8Array([1, 2]) }),
+    ).rejects.toMatchObject({
+      code: 8,
+      rawMessage: "subscription relay message limit 1 exceeded by 2",
+    });
+  });
+
+  it("maps byte overflow after the message count remains within its limit", async () => {
+    const relay = new SubscriptionUpdateRelay({ maxMessages: 2, maxBytes: 1 });
+    const update = toBinary(
+      SubscriptionUpdateSchema,
+      create(SubscriptionUpdateSchema, {
+        update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+      }),
+    );
+    await expect(relay.push({ kind: "subscription-update", bytes: update })).rejects.toMatchObject({
+      code: 8,
+      rawMessage: "subscription relay byte limit 1 exceeded by 2",
+    });
+  });
+
+  it("rejects a pending consumer when the relay fails", async () => {
+    const relay = new SubscriptionUpdateRelay();
+    const next = relay[Symbol.asyncIterator]().next();
+    const error = new Error("backend failed");
+    relay.fail(error);
+    await expect(next).rejects.toBe(error);
+  });
+
+  it("rejects a waiting consumer when malformed update bytes arrive", async () => {
+    const relay = new SubscriptionUpdateRelay();
+    const pending = relay[Symbol.asyncIterator]().next();
+    await expect(
+      relay.push({ kind: "subscription-update", bytes: new Uint8Array([255]) }),
+    ).rejects.toThrow();
+    await expect(pending).rejects.toThrow();
+  });
+
+  it("purges queued updates when malformed update bytes arrive", async () => {
+    const relay = new SubscriptionUpdateRelay();
+    await relay.push({
+      kind: "subscription-update",
+      bytes: toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema)),
+    });
+    await expect(
+      relay.push({ kind: "subscription-update", bytes: new Uint8Array([255]) }),
+    ).rejects.toThrow();
+    await expect(relay[Symbol.asyncIterator]().next()).rejects.toThrow();
+  });
+});
+
+describe("NativeSubscriptionCreator", () => {
+  it("uses shared descriptors and preserves supplied abort signals", async () => {
+    const calls: Array<{ method: string; signal: AbortSignal | undefined }> = [];
+    const transport = {
+      unary: async (method: { name: string; parent: unknown }, signal: AbortSignal | undefined) => {
+        calls.push({ method: method.name, signal });
+        const message =
+          method.name === "Subscribe"
+            ? create(SubscriptionSchema, { id: { value: "one" } })
+            : method.name === "Post"
+              ? create(AckSchema)
+              : method.name === "Read"
+                ? create(QueryService.method.read.output)
+                : create(SubscriptionService.method.cancel.output);
+        return {
+          stream: false,
+          method,
+          service: method.parent,
+          header: new Headers(),
+          trailer: new Headers(),
+          message,
+        };
+      },
+      stream: async (
+        method: { name: string; parent: unknown },
+        signal: AbortSignal | undefined,
+      ) => {
+        calls.push({ method: method.name, signal });
+        return {
+          stream: true,
+          method,
+          service: method.parent,
+          header: new Headers(),
+          trailer: new Headers(),
+          message: (async function* () {
+            yield create(SubscriptionUpdateSchema);
+          })(),
+        };
+      },
+    } as unknown as Transport;
+    const native = new NativeSubscriptionCreator(transport);
+    await native.forward({
+      service: "spine.client.CommandService",
+      method: "Post",
+      value: toBinary(CommandService.method.post.input, create(CommandService.method.post.input)),
+    });
+    await native.forward({
+      service: "spine.client.QueryService",
+      method: "Read",
+      value: toBinary(QueryService.method.read.input, create(QueryService.method.read.input)),
+    });
+    const signal = new AbortController().signal;
+    const backend = await native.subscribe(
+      { kind: "subscription-topic", bytes: toBinary(TopicSchema, create(TopicSchema)) },
+      signal,
+    );
+    const updates: Uint8Array[] = [];
+    await native.activate(
+      {
+        wire: { kind: "public-subscription", bytes: backend.bytes },
+        backend,
+        updates: async (update) => {
+          updates.push(update.bytes);
+        },
+      },
+      signal,
+    );
+    await native.cancel(
+      { wire: { kind: "public-subscription", bytes: backend.bytes }, backend },
+      signal,
+    );
+    await native.dispose(backend, signal);
+    expect(calls.map((call) => call.method)).toEqual([
+      "Post",
+      "Read",
+      "Subscribe",
+      "Activate",
+      "Cancel",
+      "Cancel",
+    ]);
+    expect(calls.slice(2).every((call) => call.signal === signal)).toBe(true);
+    expect(updates).toHaveLength(1);
+  });
+});

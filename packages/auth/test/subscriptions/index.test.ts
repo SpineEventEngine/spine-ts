@@ -1,11 +1,17 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { ActorContextSchema, TenantIdSchema } from "@spine-event-engine/proto";
-import { SubscriptionSchema, TargetSchema, TopicSchema } from "@spine-event-engine/proto/client";
+import {
+  SubscriptionSchema,
+  SubscriptionUpdateSchema,
+  TargetSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 import {
   InMemorySubscriptionBindings,
   SubscriptionGateway,
+  SubscriptionUpdateRelay,
   transportFacts,
 } from "../../src/index.js";
 
@@ -122,6 +128,130 @@ function subscriptionWire(id: string, actor = "owner-a", tenantId = "tenant-a") 
 }
 
 describe("SubscriptionGateway", () => {
+  it("does not start native activation for a pre-aborted downstream request", async () => {
+    const fixture = setup();
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      subscriptionGateway.handle({ ...request("Activate", wire), signal: controller.signal }),
+    ).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(fixture.calls).toEqual(["subscribe"]);
+    expect(fixture.bindings.size).toBe(1);
+  });
+
+  it("does not start queued native activation after its downstream signal aborts", async () => {
+    let releaseFirst: (() => void) | undefined;
+    const firstMayFinish = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "queued-activation",
+      dispose: async () => undefined,
+    });
+    await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "owner",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    const first = bindings.activate({
+      id: "queued-activation",
+      principalFingerprint: "owner",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onBackend: async () => {
+        await firstMayFinish;
+        throw new Error("first activation failed");
+      },
+    });
+    await tick();
+    const controller = new AbortController();
+    let queuedNativeCalls = 0;
+    const queued = bindings.activate({
+      id: "queued-activation",
+      principalFingerprint: "owner",
+      tenant: undefined,
+      nowMs: 1,
+      signal: controller.signal,
+      onBackend: async () => {
+        queuedNativeCalls++;
+      },
+    });
+    controller.abort();
+    releaseFirst!();
+
+    await expect(first).rejects.toThrow("first activation failed");
+    await expect(queued).resolves.toEqual({ kind: "denied" });
+    expect(queuedNativeCalls).toBe(0);
+    expect(bindings.size).toBe(1);
+  });
+
+  it("disposes a naturally completed native activation and removes its binding", async () => {
+    const fixture = setup();
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+
+    await expect(subscriptionGateway.handle(request("Activate", wire))).resolves.toEqual({
+      kind: "activated",
+    });
+    expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
+    expect(fixture.bindings.size).toBe(0);
+  });
+
+  it("expires a live activation without another gateway request", async () => {
+    let aborted = false;
+    const fixture = setup();
+    fixture.options.sessions.resolve = async () => ({
+      principal: { id: "owner-a" },
+      expiresAt: create(TimestampSchema, { seconds: 10n, nanos: 20_000_000 }),
+    });
+    fixture.options.clock = { now: () => create(TimestampSchema, { seconds: 10n }) };
+    fixture.options.creator.activate = async (_request, signal) => {
+      await new Promise<void>((resolve) =>
+        signal.addEventListener(
+          "abort",
+          () => {
+            aborted = true;
+            resolve();
+          },
+          { once: true },
+        ),
+      );
+    };
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+
+    await expect(subscriptionGateway.handle(request("Activate", wire))).rejects.toThrow("aborted");
+    expect(aborted).toBe(true);
+    expect(fixture.bindings.size).toBe(0);
+  });
+
+  it("aborts B3 work and removes the binding when its update sink rejects malformed bytes", async () => {
+    const fixture = setup();
+    let activated = false;
+    fixture.options.creator.activate = async ({ updates }) => {
+      activated = true;
+      await updates({ kind: "subscription-update", bytes: new Uint8Array([255]) });
+    };
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const relay = new SubscriptionUpdateRelay();
+
+    await expect(
+      subscriptionGateway.handle({
+        ...request("Activate", wire),
+        updates: (update) => relay.push(update),
+      }),
+    ).rejects.toThrow();
+    expect(activated).toBe(true);
+    expect(fixture.calls).toEqual(["subscribe", "cancel"]);
+    expect(fixture.bindings.size).toBe(0);
+  });
+
   it("passes the platform AbortSignal to subscription callbacks", async () => {
     let received: AbortSignal | undefined;
     const fixture = setup();
@@ -134,7 +264,48 @@ describe("SubscriptionGateway", () => {
     expect(received?.addEventListener).toBeTypeOf("function");
   });
 
-  it("rejects terminal, unknown, malformed, invalid-time, unauthenticated, forbidden, and expired requests", async () => {
+  it("forwards copied public updates through the activation sink for the backend stream lifetime", async () => {
+    const fixture = setup();
+    let received: Uint8Array | undefined;
+    fixture.options.creator.activate = async ({ updates }) => {
+      const source = toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema));
+      await updates({ kind: "subscription-update", bytes: source });
+      source.fill(9);
+    };
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const result = await subscriptionGateway.handle({
+      ...request("Activate", wire),
+      updates: async (update) => {
+        received = update.bytes;
+      },
+    });
+    expect(result).toEqual({ kind: "activated" });
+    expect(received).toEqual(toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema)));
+  });
+
+  it("aborts a quiet activation through the admitted downstream signal and cleans up once", async () => {
+    const fixture = setup();
+    fixture.options.creator.activate = async (_request, signal) => {
+      await new Promise<void>((_resolve, reject) =>
+        signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }),
+      );
+    };
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    const controller = new AbortController();
+    const activating = subscriptionGateway.handle({
+      ...request("Activate", wire),
+      signal: controller.signal,
+    });
+    await tick();
+    controller.abort();
+    await expect(activating).rejects.toThrow("aborted");
+    expect(fixture.calls).toEqual(["subscribe", "cancel"]);
+    expect(fixture.bindings.size).toBe(0);
+  });
+
+  it("rejects terminal, invalid, and unauthorized gateway requests", async () => {
     const closed = gateway(setup());
     await closed.close();
     await expect(closed.handle(request("Subscribe", topic))).resolves.toEqual({
@@ -754,7 +925,7 @@ describe("SubscriptionGateway", () => {
     expect(fixture.calls).toEqual(["subscribe"]);
   });
 
-  it("denies foreign owner and tenant Cancels without consuming the pending slot before legitimate Cancel", async () => {
+  it("denies foreign Cancels before the legitimate queued Cancel", async () => {
     let release: (() => void) | undefined;
     const active = new Promise<void>((resolve) => (release = resolve));
     const fixture = setup({ activate: async () => active });

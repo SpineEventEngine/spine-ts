@@ -45,6 +45,7 @@ function setup(
     readonly resolve?: (request: IncomingRequest) => void;
     readonly clock?: () => Timestamp;
     readonly forwardReject?: Error;
+    readonly forward?: (request: { readonly signal?: AbortSignal }) => Promise<Uint8Array>;
   } = {},
 ) {
   const calls: string[] = [];
@@ -89,6 +90,7 @@ function setup(
       calls.push("forward");
       forwarded.push(request);
       if (overrides.forwardReject !== undefined) throw overrides.forwardReject;
+      if (overrides.forward !== undefined) return overrides.forward(request);
       return new Uint8Array([1]);
     },
   });
@@ -106,6 +108,31 @@ function request(service: string, method: string, value: Uint8Array): UnaryGatew
 }
 
 describe("UnaryGateway", () => {
+  it("forwards downstream abort capability and cancels noncooperative unary work", async () => {
+    let received: AbortSignal | undefined;
+    const { gateway } = setup({
+      forward: async (request) => {
+        received = request.signal;
+        await new Promise<void>(() => undefined);
+        return new Uint8Array();
+      },
+    });
+    const controller = new AbortController();
+    const command = toBinary(
+      CommandSchema,
+      create(CommandSchema, { context: create(CommandContextSchema, { actorContext: requestedContext }) }),
+    );
+    const pending = gateway.handle({
+      ...request("spine.client.CommandService", "Post", command),
+      signal: controller.signal,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+
+    await expect(pending).rejects.toThrow("aborted");
+    expect(received).toBe(controller.signal);
+  });
+
   it("owns a byte snapshot while session resolution is pending", async () => {
     let releaseSession: (() => void) | undefined;
     const pendingSession = new Promise<void>((resolve) => {
