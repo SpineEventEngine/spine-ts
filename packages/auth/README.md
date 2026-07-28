@@ -24,6 +24,10 @@ non-`ActorContext` envelope field, including unknown Protobuf fields, is
 preserved byte-equivalently. Its forwarding and rejection seams intentionally do
 not select a gRPC status; B4 owns native transport mapping. The forwarded
 request never includes a credential and a unary request is forwarded once.
+An optional fixed `UnaryGatewayOptions.registry` decodes packed command content
+for policy and context collaborators only. It is not forwarded; each
+collaborator receives an independent decoded instance. Without it, or for
+unknown/malformed packed content, policy retains the safe type-URL-only view.
 
 `AuthenticationService.ResolveContext` validates the application session and
 returns only informational actor, tenant, and expiry data. It does not invoke a

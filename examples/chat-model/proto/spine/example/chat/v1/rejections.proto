@@ -1,0 +1,11 @@
+syntax = "proto3";
+package spine.example.chat.v1;
+
+import "spine/example/chat/v1/chat.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.example.chat";
+
+message MessageAlreadyPosted {
+  MessageId id = 1 [(required) = true, (validate) = true];
+}

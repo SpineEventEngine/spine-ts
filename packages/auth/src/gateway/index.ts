@@ -12,6 +12,7 @@ import {
   ResolveContextResponseSchema,
 } from "@spine-event-engine/proto/auth";
 import { QuerySchema } from "@spine-event-engine/proto/client";
+import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type {
   AuthorizedRequestContext,
   AuthorizationPolicy,
@@ -46,6 +47,8 @@ export interface UnaryForwarder {
 }
 /** Gateway collaborators and finite byte ownership limit. */
 export interface UnaryGatewayOptions {
+  /** Fixed application registry used only to decode command content for policy and context collaborators. */
+  readonly registry?: TypeRegistryLookup;
   readonly maxRequestBytes: number;
   readonly sessions: SessionResolver;
   readonly authorize: AuthorizationPolicy["authorize"];
@@ -91,7 +94,7 @@ export class UnaryGateway {
   constructor(options: UnaryGatewayOptions) {
     if (!Number.isSafeInteger(options.maxRequestBytes) || options.maxRequestBytes < 0)
       throw new RangeError("maxRequestBytes must be a finite non-negative integer");
-    this.#options = options;
+    this.#options = Object.freeze({ ...options });
   }
   async handle(request: UnaryGatewayRequest): Promise<UnaryGatewayResult> {
     if (request.value.byteLength > this.#options.maxRequestBytes)
@@ -101,16 +104,28 @@ export class UnaryGateway {
     if (operation.kind === "resolve-context") return this.#resolveContext(request);
     const value = request.value.slice();
     const transport = snapshotTransport(operation, request.transport);
-    const source = decode(operation, value, transport);
+    const source = decode(operation, value, transport, this.#options.registry);
     if (source === undefined) return reject("malformed-request");
     const requestedContext = clone(ActorContextSchema, source.requestedContext);
     const session = await this.#options.sessions.resolve(request.credential);
     if (session === undefined) return reject("unauthenticated");
-    const authorizationRequest = decode(operation, value, snapshotTransport(operation, transport));
+    const authorizationRequest = decode(
+      operation,
+      value,
+      snapshotTransport(operation, transport),
+      this.#options.registry,
+    );
+    // The same immutable owned bytes and fixed registry decoded above already proved this shape.
+    /* v8 ignore next */
     if (authorizationRequest === undefined) return reject("malformed-request");
     if (!(await this.#options.authorize(session.principal, authorizationRequest)))
       return reject("forbidden");
-    const contextRequest = decode(operation, value, snapshotTransport(operation, transport));
+    const contextRequest = decode(
+      operation,
+      value,
+      snapshotTransport(operation, transport),
+      this.#options.registry,
+    );
     if (contextRequest === undefined) return reject("malformed-request");
     const trusted = await this.#options.contexts.resolve(
       session.principal,
@@ -190,8 +205,13 @@ function decode(
   operation: ForwardOperation,
   value: Uint8Array,
   transport: TransportRequestContext,
+  registry: TypeRegistryLookup | undefined,
 ): IncomingCommand | IncomingQuery | undefined {
-  const result = decodeIncomingRequest({ kind: operation.kind, value, transport });
+  const input =
+    operation.kind === "command"
+      ? { kind: operation.kind, value, transport, ...(registry === undefined ? {} : { registry }) }
+      : { kind: operation.kind, value, transport };
+  const result = decodeIncomingRequest(input);
   return result?.kind === "command" || result?.kind === "query" ? result : undefined;
 }
 function matches(requested: ActorContext, trusted: AuthorizedRequestContext): boolean {
@@ -238,8 +258,12 @@ function abortable<T>(effect: Promise<T>, signal: AbortSignal | undefined): Prom
   if (signal === undefined) return effect;
   if (signal.aborted) return Promise.reject(new Error("unary operation aborted"));
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(new Error("unary operation aborted"));
+    const onAbort = () => {
+      reject(new Error("unary operation aborted"));
+    };
     signal.addEventListener("abort", onAbort, { once: true });
-    void effect.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+    void effect.then(resolve, reject).finally(() => {
+      signal.removeEventListener("abort", onAbort);
+    });
   });
 }

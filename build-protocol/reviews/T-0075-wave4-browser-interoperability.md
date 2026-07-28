@@ -3438,3 +3438,338 @@ profiles; no Spine JVM project command may run.
   docs state trust ownership and the intentional unpublished model reset.
   Activate/Cancel retain the already implemented gateway binding-owner checks
   and do not invent handler-level authentication.
+
+## C5.2 React adapter review
+
+- Coordinator pre-review evidence passes 13/13 focused tests at 24/24 branches
+  and 100% lines, typed ESLint, package TypeScript, dependency isolation,
+  package metadata, semantic snippets, exact TypeDoc/API inventory, formatting,
+  and diff hygiene.
+- Style/maintainability ran read-only under an explicit CLI runtime banner of
+  `gpt-5.6-terra` / `high`; runtime self-introspection was unavailable. It
+  reports one accepted P1: a request scheduled in the effect microtask can
+  still be invoked after immediate cleanup because liveness is checked only
+  when publishing.
+- TypeScript/API ran read-only under an explicit CLI runtime banner of
+  `gpt-5.6-terra` / `high`; runtime self-introspection was unavailable. It is
+  clean for the public package contract, declarations, TypeDoc/export
+  inventory, peer dependency, and runtime/type agreement.
+- Performance/reliability ran read-only under an explicit CLI runtime banner
+  of `gpt-5.6-terra` / `high`; runtime self-introspection was unavailable. It
+  reports an accepted P1 because activation or iterator terminal failures
+  publish an error but do not cancel the live subscription. It reports two
+  accepted P2s: synchronous `cancel()` throws escape the current cleanup
+  expression, and the React test proves only entity factory arguments rather
+  than observed reconnect/resynchronization behavior.
+- Documentation ran read-only under an explicit CLI runtime banner of
+  `gpt-5.6-luna` / `medium`; runtime self-introspection was unavailable. Its
+  accepted P2 corrects stale pre-correction test/coverage figures presented
+  alongside final evidence in the implementation report.
+- One consolidated correction batch returns to the original C5.2 implementer:
+  guard liveness before request invocation; cancel exactly once on activation
+  or either iterator's fatal failure while retaining the original error; make
+  cancellation safe for synchronous throws and rejected promises; prove the
+  browser client's authoritative Entity reconnect produces an observed
+  `resynchronization` delivery while Event gaps remain notification-only; and
+  mark/remove superseded report figures. Style and reliability reopen after
+  behavior correction. TypeScript/API stays clean; the report-only docs fix is
+  mechanically verified and does not reopen documentation.
+
+## C5.3 S1 Aggregate latest-state review
+
+- S1 is package-internal but changes Aggregate persistence/read-after-write,
+  lifecycle restoration, and same-context ordering. Style/maintainability and
+  performance/reliability are relevant. TypeScript/API is N/A because no
+  public declaration/export changes. Documentation is N/A because S1 changes
+  no end-user workflow or current concurrency claim; C5.3 example docs remain
+  in the parent review.
+- Existing `style_maintainability_reviewer` is explicitly dispatched read-only
+  as `gpt-5.6-terra` / `high`; existing
+  `performance_reliability_reviewer` is explicitly dispatched read-only as
+  `gpt-5.6-terra` / `high`. Scope is only the S1 report and exact Stand,
+  repository, and focused-test diff. Reviewers may not edit, spawn, inspect
+  unfinished Chat/auth/React, or run any Spine JVM command. Runtime metadata
+  will be recorded before accepting results.
+
+### Complete S1 findings and disposition
+
+- Both runtime banners confirm the explicit existing reviewer profiles:
+  style/maintainability and performance/reliability used
+  `gpt-5.6-terra` / `high`. Runtime self-introspection was unavailable with no
+  visible mismatch.
+- Both reviewers accept the Stand-authoritative internal design and report no
+  implementation defect. Accepted test findings are consolidated as one
+  correction: exercise archived/deleted lifecycle restoration through a
+  generated Aggregate handler; exercise concurrent same-ID FIFO behavior with
+  exactly one accepted update and one domain rejection and no rejected
+  overwrite/publication; and exercise same-ID, second-command rehydration
+  independently in two tenants.
+- TypeScript/API remains N/A because no public declaration/export changed.
+  Documentation remains N/A because this internal correction changes no
+  end-user workflow or current public claim. Style and reliability reopen only
+  for the residual generated-handler regressions.
+
+## C5.2 residual and C5.3 A1 review dispatch
+
+- C5.2 residual style/reliability and complete A1 style/reliability are assigned
+  to the existing concern roles with explicit `gpt-5.6-terra` / `high`
+  profiles. Review is read-only and scoped to the recorded findings, exact
+  changed React/auth files, implementation reports, and current mechanical
+  evidence.
+- A1 TypeScript/API and documentation remain relevant because the optional
+  fixed registry is a public constructor contract and its safe scope is an
+  end-user claim. Expected profiles are explicitly
+  `gpt-5.6-terra` / `high` for TypeScript/API and
+  `gpt-5.6-luna` / `medium` for documentation. They dispatch when capacity is
+  available.
+- C5.2 TypeScript/API retains its earlier clean disposition. Its evidence-only
+  documentation finding is mechanically closed by the superseding final
+  report section and does not reopen documentation.
+
+### Style and reliability results
+
+- Both reviewers ran under explicit existing `gpt-5.6-terra` / `high`
+  profiles; runtime self-introspection was unavailable with no visible
+  mismatch.
+- A1 is clean in both concerns: the fixed registry remains bounded to
+  independent policy/context command decodes, real native composition forwards
+  once, and registry/credential data is not forwarded.
+- C5.2 accepts one P1: check generation liveness before invoking the scheduled
+  subscription factory, with an immediate-unmount regression proving no
+  invocation. Accepted P2 test evidence must prove activation, delivery, and
+  lifecycle fatal paths each request exactly one safe cancellation and retain
+  the primary error even when cleanup throws or rejects. One consolidated
+  correction reopens style and reliability only.
+- S1 accepts one residual evidence correction: observe exactly one normal
+  event and exactly one `TaskAlreadyDone` rejection in the EventStore for the
+  concurrent same-ID pair, alongside the existing FIFO/final-state/version
+  assertions. Production design remains accepted; style and reliability reopen
+  only for this test.
+
+### A1 TypeScript/API result
+
+- The reviewer ran under the explicit existing `gpt-5.6-terra` / `high`
+  profile; runtime self-introspection was unavailable with no visible
+  mismatch.
+- Accepted P1: capture `UnaryGatewayOptions.registry` immutably at construction
+  instead of rereading the caller-owned options object after an await. Add a
+  mutation-during-session-resolution regression proving all independent views
+  retain the construction-time registry.
+- Accepted P2: TSDoc must explicitly include both authorization policy and
+  context resolver collaborators. Type-only declaration resolution, exact
+  public inventory, unknown/malformed behavior, native composition, and
+  registry/credential non-forwarding are otherwise clean.
+
+### A1 documentation result and complete disposition
+
+- The existing documentation concern used its immutable configured
+  `gpt-5.6-luna` / `medium` role; the generic spawn surface did not accept a
+  literal Luna override. Runtime self-introspection was unavailable with no
+  visible mismatch.
+- README and report claims are clean. The single accepted P2 duplicates the
+  API finding that TSDoc must name both policy and context collaborators.
+- A1's one correction batch is therefore: capture the registry immutably at
+  construction, prove options mutation during awaited session resolution
+  cannot change any request view, and correct TSDoc. Style/reliability remain
+  clean. TypeScript/API and documentation reopen for these residual items only.
+
+## C5.2/S1 residual review result
+
+- Style/maintainability is clean for both scopes under explicit
+  `gpt-5.6-terra` / `high`; runtime self-introspection was unavailable with no
+  visible mismatch.
+- Reliability is clean for S1 under the same explicit profile. S1 review is
+  converged.
+- React accepts one final P2 test correction: for activation-, delivery-, and
+  lifecycle-fatal sources crossed with synchronous-throwing and rejected
+  cancellation, assert the observed error is the exact original fatal object
+  and cancellation occurs once. Production behavior is not reopened.
+
+## C5.3 A1 residual sign-off
+
+- TypeScript/API is clean under the explicit
+  `gpt-5.6-terra` / `high` profile. Documentation is clean under its immutable
+  `gpt-5.6-luna` / `medium` profile. Runtime self-introspection was unavailable
+  with no visible mismatch.
+- The construction-time registry snapshot, caller-mutation regression,
+  independent source/policy/context views, corrected public TSDoc,
+  README/report agreement, exact export inventory, and non-forwarding behavior
+  are accepted. A1 review is converged.
+
+## C5.2 final reliability assertion
+
+- Reliability retains one P2 test-only finding: after observing each fatal
+  path's one cancellation, unmount the render and prove effect cleanup does not
+  invoke cancellation again. All six fatal-source/cancel-mode cases require
+  the post-unmount exactly-once assertion. Production, API, style, and
+  documentation are not reopened.
+
+## C5.3 corrected Chat final review dispatch
+
+- Final candidate evidence is 32/32 focused real tests, 18/18 validation
+  branches, generated model/handler workflows, both package builds, typed lint,
+  snippets, formatting, and diff hygiene. Domain rejection is correctly
+  asserted through EventStore while transport post remains acknowledged.
+- Style/maintainability, TypeScript/API, documentation, and
+  performance/reliability all reopen for the corrected complete application
+  slice. Explicit expected profiles are `gpt-5.6-terra` / `high` for style,
+  API, and reliability, and immutable `gpt-5.6-luna` / `medium` for
+  documentation. Review is read-only and no Spine JVM command is permitted.
+
+### Complete C5.3 findings and disposition
+
+- All configured profiles match the dispatch: Terra/high for style, API, and
+  reliability; immutable Luna/medium for documentation. Runtime
+  self-introspection was unavailable with no visible mismatch.
+- P1: replace first-match room authorization with a compositional guarantee.
+  `ALL` is constrained when any child guarantees an authorized room;
+  `EITHER` is constrained only when every non-empty branch does. Add mixed and
+  nested bypass regressions for Query and Subscribe.
+- P1: prove native Query denial via the real configured unary gateway and
+  native Subscribe denial via a real configured subscription gateway before
+  backend forwarding/creation. Direct policy calls remain useful but
+  insufficient.
+- P2: sequential duplicates assert one normal plus one rejection event;
+  concurrent duplicates additionally prove no second Projection subscription
+  update. Cleanup aggregates and reports failures after attempting every
+  resource, and subscription timeout races clear the losing timer.
+- P2: add `ChatServerOptions` TSDoc; document the full finite validation set and
+  duplicate transport-ack/stored-rejection/no-update behavior; replace stale
+  implementation-report evidence with final counts.
+- All other Protobuf model/reset, column, generated workflow, public export,
+  registry, Post composition, validation, and Projection/event distinctions
+  are clean.
+
+## C5.3 residual sign-off dispatch
+
+- The complete corrected candidate passes 3 real-loopback files / 36 tests,
+  policy and validation coverage at 100% across every metric, model and handler
+  generation, both package builds, typed lint, semantic snippets, formatting,
+  and diff hygiene.
+- Style/maintainability, TypeScript/API, documentation, and
+  performance/reliability reopen only for the consolidated correction:
+  recursive/fail-closed room guarantees, real native Query/Subscribe proof,
+  exact duplicate event/update assertions, ordered all-attempt cleanup and
+  timeout disposal, `ChatServerOptions` TSDoc, README validation/duplicate
+  semantics, and final report evidence.
+- Existing style, API, and reliability roles are explicitly dispatched at
+  `gpt-5.6-terra` / `high`; the existing documentation role is explicitly
+  dispatched at its immutable `gpt-5.6-luna` / `medium` configuration.
+  Reviewers are read-only, may not spawn children or inspect later Wave 4
+  slices, and may not run any Spine JVM command.
+
+### TypeScript/API residual result
+
+- CLEAN under the explicitly dispatched existing
+  `typescript_api_docs_reviewer` at `gpt-5.6-terra` / `high`. Runtime
+  self-introspection was unavailable with no visible profile mismatch.
+- The reviewer accepts the recursive filter contract, configured native
+  registry composition, direct test-only Connect dependency,
+  `ChatServerOptions` defaults/TSDoc, unpublished Proto reset scope, and
+  README/report contract claims.
+
+### Style/maintainability residual result
+
+- The explicitly dispatched existing `style_maintainability_reviewer` ran at
+  `gpt-5.6-terra` / `high`; runtime self-introspection was unavailable with no
+  visible mismatch.
+- P1 is accepted only for decoding forwarded Query/Subscribe bytes and proving
+  a freshly resolver-owned timestamp/context object. Its instruction to
+  forward conflicting actor/tenant values is rejected: the frozen Wave 4
+  contract requires mismatched caller actor/tenant to receive
+  `context-stale`/denied before forwarding and forbids silently changing them
+  into another identity. Correct evidence therefore proves both mismatch
+  rejection before backend work and fresh reconstruction after matching
+  actor/tenant hints.
+
+### Documentation residual result
+
+- The existing `documentation_reviewer` ran at its explicitly dispatched
+  immutable `gpt-5.6-luna` / `medium` profile; runtime self-introspection was
+  unavailable with no visible mismatch.
+- Accepted P2: source TSDoc describes `ChatServerOptions`, but the end-user
+  README and final implementation report do not explain
+  `startChatServer({ host, port })`, the `127.0.0.1`/ephemeral-port defaults, or
+  the 1,000-subscription service limit. Add the bounded user workflow/API text.
+  Validation, duplicate acknowledgement/rejection/no-update, Projection/event,
+  auth ownership, and final 36/36 claims are otherwise consistent.
+
+### Reliability residual result and consolidated correction
+
+- The explicitly dispatched existing `performance_reliability_reviewer` ran at
+  `gpt-5.6-terra` / `high`; runtime self-introspection was unavailable with no
+  visible mismatch.
+- Accepted P1 evidence: correlate the concurrent duplicate winner with final
+  Aggregate text and version 1, not only room; exercise mixed/nested
+  `EITHER(authorized, unauthorized)` Subscribe through the real
+  `SubscriptionGateway` and prove denial before creator invocation.
+- Accepted P2 production hardening: the authorization tree is untrusted input,
+  so recursive evaluation needs a finite depth/node budget and fail-closed
+  regression rather than unbounded stack/work.
+- One complete correction batch also includes the corrected style P1
+  mismatch-rejection plus matching-context reconstruction assertions and the
+  documentation P2 server-start workflow.
+  Existing implementer is explicitly assigned at `gpt-5.6-terra` / `medium`;
+  it owns only Chat/model/tests/README/report/log files, uses behavior-first
+  evidence for the traversal bound, and may not spawn, commit, inspect later
+  Wave 4 slices, or run any Spine JVM command.
+
+### Residual correction re-review dispatch
+
+- Corrected evidence passes 21/21 policy/validation tests at 100% coverage in
+  every metric and 3 real-loopback files / 37 tests, plus generation, builds,
+  typed lint, snippets, formatting, and diff hygiene.
+- Style, documentation, and reliability reopen only for their substantively
+  affected findings. Existing style and reliability roles are explicitly
+  dispatched at `gpt-5.6-terra` / `high`; the existing documentation role is
+  explicitly dispatched at immutable `gpt-5.6-luna` / `medium`.
+  TypeScript/API remains clean and closed.
+
+### Documentation residual re-review
+
+- The existing documentation role ran at its explicitly configured immutable
+  `gpt-5.6-luna` / `medium` profile; runtime self-introspection was unavailable
+  with no visible mismatch.
+- Server workflow/defaults/limit and matching-versus-mismatched context claims
+  are accepted. One P2 stale `36/36` report count is deterministically
+  corrected to the verified `37/37`; this record-only correction does not
+  reopen implementation or another documentation review.
+
+### Style/reliability residual re-review
+
+- Both existing roles ran under their explicit `gpt-5.6-terra` / `high`
+  profiles; runtime self-introspection was unavailable with no visible
+  mismatch.
+- Style accepts the security and native composition corrections but finds one
+  P2: fail-closed decision state is not yet bounded work because array
+  `map()` and the top-level loop continue visiting remaining siblings after
+  budget exhaustion.
+- Reliability accepts native Subscribe denial, mismatch
+  rejection/matching-context reconstruction, and duplicate winner
+  correlation, and adds one P2 boundary matrix: prove 8 versus 9 composites
+  and 16 versus 17 simple filters.
+- One final correction returns to the existing implementer context, explicitly
+  `gpt-5.6-terra` / `medium`: stop traversal immediately when either budget is
+  exhausted and add exact plus wide-tree boundary regressions. Only style and
+  reliability reopen. No framework/later-slice edits, children, Git mutation,
+  or Spine JVM work are permitted.
+
+### Final bounded-work sign-off dispatch
+
+- Corrected evidence passes 23/23 policy/validation tests at 98.55% branches
+  and 100% functions/lines, 3 real-loopback files / 39 tests, typed lint,
+  formatting, and diff hygiene.
+- Style and reliability reopen only for immediate traversal termination and
+  the exact/wide boundary matrix under their explicit existing
+  `gpt-5.6-terra` / `high` profiles. Documentation and TypeScript/API remain
+  closed.
+
+### Final bounded-work sign-off result
+
+- Style/maintainability and performance/reliability are CLEAN under their
+  explicitly dispatched existing `gpt-5.6-terra` / `high` profiles. Runtime
+  self-introspection was unavailable with no visible mismatch.
+- Immediate traversal termination, exact 8/9 and 16/17 boundaries, and the
+  poisoned-wide-sibling regression are accepted. Together with the already
+  clean TypeScript/API and documentation dispositions, C5.3 is
+  review-converged.

@@ -5,6 +5,7 @@
     { "path": "./packages/proto" },
     { "path": "./packages/auth" },
     { "path": "./packages/client-web" },
+    { "path": "./packages/client-react" },
     { "path": "./packages/client-node" },
     { "path": "./packages/delivery-client" },
     { "path": "./packages/delivery-server" },

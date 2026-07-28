@@ -4,19 +4,21 @@ import {
   Aggregate,
   Assign,
   BoundedContext,
+  Projection,
   Server,
-  type EventDispatcher,
+  Subscribe,
   type RunningServer,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 import {
-  ChatIdSchema,
-  ChatSchema,
-  MessageSchema,
-  type ChatId,
-  type Message,
+  ChatMessageSchema,
+  ChatMessageViewSchema,
+  MessageIdSchema,
+  type ChatMessage,
+  type ChatMessageView,
+  type MessageId,
 } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/chat_pb.js";
 import { type PostMessage } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/commands_pb.js";
 import {
@@ -29,26 +31,70 @@ import {
 } from "@spine-event-engine/users-model/generated/spine/example/users/v1/users_pb.js";
 
 import { typeRegistry } from "./model-registry.js";
+import { validateChatMessageInput } from "./message-validation.js";
+import { MessageAlreadyPosted } from "./rejections.js";
 
 export { typeRegistry } from "./model-registry.js";
 export { chatProtoModule } from "@spine-event-engine/chat-model";
+export { ChatAuthorizationPolicy, ChatContextResolver } from "./chat-policy.js";
 
-const chatEventEndpoint: EventDispatcher = Object.freeze({
-  messageSchemas: () => [MessagePostedSchema],
-  dispatch: () => Promise.resolve(),
-});
-
-/** Aggregate state and behavior for one chat identified by `ChatId`. */
-export class ChatAggregate extends Aggregate<ChatId, typeof ChatSchema> {
-  /** Add one message to the Chat and publish its matching domain event. */
+/** Command-side state for one bounded chat message identified by `MessageId`. */
+export class ChatMessageAggregate extends Aggregate<MessageId, typeof ChatMessageSchema> {
+  /** Persist one message and publish its read-side input event. */
   @Assign
   postMessage(command: PostMessage): MessagePosted {
-    const id = clone(ChatIdSchema, this.id);
-    const message = create(MessageSchema, { author: command.author, text: command.text });
+    validateChatMessageInput({
+      id: command.id?.value,
+      room: command.room?.value,
+      author: command.author?.value,
+      text: command.text,
+      postedAt: command.postedAt,
+    });
+    // The handler generator accepts synchronous `@Assign` methods only. The
+    // aggregate's visible state is the only application-level existence fact.
+    if (this.state.room !== undefined) {
+      throw MessageAlreadyPosted.create({ id: this.id });
+    }
+    const id = clone(MessageIdSchema, this.id);
     this.update((draft) =>
-      Object.assign(draft, create(ChatSchema, { id, messages: [...draft.messages, message] })),
+      Object.assign(
+        draft,
+        create(ChatMessageSchema, {
+          id,
+          room: command.room,
+          author: command.author,
+          text: command.text,
+          postedAt: command.postedAt,
+        }),
+      ),
     );
-    return create(MessagePostedSchema, { id, author: command.author, text: command.text });
+    return create(MessagePostedSchema, {
+      id,
+      room: command.room,
+      author: command.author,
+      text: command.text,
+      postedAt: command.postedAt,
+    });
+  }
+}
+
+/** Full-visible read-side entity for one chat message. */
+export class ChatMessageViewProjection extends Projection<MessageId, typeof ChatMessageViewSchema> {
+  /** Materialize each posted message as its own Projection row. */
+  @Subscribe
+  onMessagePosted(event: MessagePosted): void {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ChatMessageViewSchema, {
+          id: clone(MessageIdSchema, event.id ?? this.id),
+          room: event.room,
+          author: event.author,
+          text: event.text,
+          postedAt: event.postedAt,
+        }),
+      ),
+    );
   }
 }
 
@@ -59,11 +105,12 @@ export async function createChatContext(
   return BoundedContext.singleTenant("Chat")
     .withStorageFactory(storageFactory)
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
-    .add(ChatAggregate)
-    .addEventDispatcher(chatEventEndpoint)
+    .add(ChatMessageAggregate)
+    .add(ChatMessageViewProjection)
     .buildAsync();
 }
 
+/** Optional listener overrides; host defaults to loopback and port defaults to an ephemeral port. */
 export interface ChatServerOptions {
   readonly host?: string;
   readonly port?: number;
@@ -79,11 +126,6 @@ export async function startChatServer(options: ChatServerOptions = {}): Promise<
     .start();
 }
 
-/** Creates a neutral Chat message for application-level model composition. */
-export function postMessage(author: UserId, text: string): Message {
-  return create(MessageSchema, { author, text });
-}
-
 /** Dynamically decodes registered application model values. */
 export function unpackChatValue(
   value: Parameters<typeof unpackAnyUsing>[1],
@@ -95,3 +137,5 @@ export function unpackChatValue(
 export function packUserId(user: UserId): Parameters<typeof unpackAnyUsing>[1] {
   return packAny(UserIdSchema, user);
 }
+
+export type { ChatMessage, ChatMessageView };

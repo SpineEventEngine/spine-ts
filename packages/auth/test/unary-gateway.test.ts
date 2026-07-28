@@ -1,5 +1,5 @@
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -11,6 +11,7 @@ import {
   ResolveContextResponseSchema,
 } from "@spine-event-engine/proto/auth";
 import { QuerySchema } from "@spine-event-engine/proto/client";
+import { TypeRegistry, packAny, type TypeRegistryLookup } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -46,11 +47,13 @@ function setup(
     readonly clock?: () => Timestamp;
     readonly forwardReject?: Error;
     readonly forward?: (request: { readonly signal?: AbortSignal }) => Promise<Uint8Array>;
+    readonly registry?: TypeRegistryLookup;
   } = {},
 ) {
   const calls: string[] = [];
   const forwarded: { service: string; method: string; value: Uint8Array }[] = [];
   const gateway = new UnaryGateway({
+    ...(overrides.registry === undefined ? {} : { registry: overrides.registry }),
     maxRequestBytes: overrides.maxRequestBytes ?? 1024,
     sessions: {
       resolve: async () => {
@@ -108,6 +111,156 @@ function request(service: string, method: string, value: Uint8Array): UnaryGatew
 }
 
 describe("UnaryGateway", () => {
+  it("retains its construction-time registry while session resolution is pending", async () => {
+    const registered = new TypeRegistry([TenantIdSchema]);
+    const replacement = new TypeRegistry();
+    let releaseSession: (() => void) | undefined;
+    const seen: unknown[] = [];
+    const options = {
+      registry: registered,
+      maxRequestBytes: 1024,
+      sessions: {
+        resolve: () =>
+          new Promise<{ principal: { id: string }; expiresAt: Timestamp }>((resolve) => {
+            releaseSession = () =>
+              resolve({ principal: { id: "principal" }, expiresAt: sessionExpiry });
+          }),
+      },
+      authorize: (_principal: unknown, incoming: IncomingRequest) => {
+        seen.push(incoming.kind === "command" ? incoming.message : undefined);
+        return Promise.resolve(true);
+      },
+      contexts: {
+        resolve: (_principal: unknown, incoming: IncomingRequest) => {
+          seen.push(incoming.kind === "command" ? incoming.message : undefined);
+          return Promise.resolve({
+            actor: { value: "actor-1" },
+            tenant: tenant("tenant-1"),
+            timestamp: create(TimestampSchema, { seconds: 2n }),
+          });
+        },
+        resolveContext: () =>
+          Promise.resolve({ actor: { value: "actor-1" }, timestamp: create(TimestampSchema) }),
+      },
+      clock: { now: () => clockTimestamp },
+      forward: () => Promise.resolve(new Uint8Array([1])),
+    };
+    const gateway = new UnaryGateway(options);
+    const command = create(CommandSchema, {
+      context: create(CommandContextSchema, { actorContext: requestedContext }),
+      message: packAny(TenantIdSchema, tenant("fixed")),
+    });
+    const pending = gateway.handle(
+      request("spine.client.CommandService", "Post", toBinary(CommandSchema, command)),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    options.registry = replacement;
+    releaseSession?.();
+
+    await expect(pending).resolves.toMatchObject({ kind: "forwarded" });
+    expect(seen).toHaveLength(2);
+    expect(
+      seen.every(
+        (message) =>
+          (message as { $typeName?: string } | undefined)?.$typeName === TenantIdSchema.typeName,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects malformed ResolveContext bytes before session resolution", async () => {
+    const { calls, gateway } = setup();
+    await expect(
+      gateway.handle(
+        request("spine.auth.AuthenticationService", "ResolveContext", new Uint8Array([255])),
+      ),
+    ).resolves.toEqual({ kind: "rejected", reason: "malformed-request" });
+    expect(calls).toEqual([]);
+  });
+
+  it("decodes registered command content independently for policy and context without changing forwarded bytes", async () => {
+    const registry = new TypeRegistry([TenantIdSchema]);
+    let policyMessage: unknown;
+    let contextMessage: unknown;
+    const command = create(CommandSchema, {
+      context: create(CommandContextSchema, { actorContext: requestedContext }),
+      message: packAny(TenantIdSchema, tenant("application")),
+    });
+    const original = toBinary(CommandSchema, command);
+    const { forwarded, gateway } = setup({
+      registry,
+      authorize: (incoming) => {
+        policyMessage = incoming.kind === "command" ? incoming.message : undefined;
+        if (incoming.kind === "command" && incoming.message !== undefined)
+          (incoming.message as { kind?: unknown }).kind = undefined;
+        return true;
+      },
+      resolve: (incoming) => {
+        contextMessage = incoming.kind === "command" ? incoming.message : undefined;
+      },
+    });
+    await expect(
+      gateway.handle(request("spine.client.CommandService", "Post", original)),
+    ).resolves.toMatchObject({ kind: "forwarded" });
+    expect(policyMessage).toBeDefined();
+    expect(contextMessage).toBeDefined();
+    expect(contextMessage).not.toBe(policyMessage);
+    const [forwardedRequest] = forwarded;
+    if (forwardedRequest === undefined) throw new Error("Expected one forwarded request.");
+    const forwardedCommand = fromBinary(CommandSchema, forwardedRequest.value);
+    expect(forwardedCommand.message).toEqual(command.message);
+  });
+
+  it("keeps missing, unknown, and malformed application content undecoded while retaining type URLs", async () => {
+    const base = create(CommandSchema, {
+      context: create(CommandContextSchema, { actorContext: requestedContext }),
+    });
+    const registry = new TypeRegistry([TenantIdSchema]);
+    const knownTypeUrl = packAny(TenantIdSchema, tenant("known")).typeUrl;
+    for (const entry of [
+      { value: toBinary(CommandSchema, base), typeUrl: "" },
+      {
+        value: toBinary(
+          CommandSchema,
+          create(CommandSchema, {
+            ...base,
+            message: create(AnySchema, {
+              typeUrl: "type.spine.io/unknown",
+              value: new Uint8Array([1]),
+            }),
+          }),
+        ),
+        typeUrl: "type.spine.io/unknown",
+      },
+      {
+        value: toBinary(
+          CommandSchema,
+          create(CommandSchema, {
+            ...base,
+            message: create(AnySchema, { typeUrl: knownTypeUrl, value: new Uint8Array([255]) }),
+          }),
+        ),
+        typeUrl: knownTypeUrl,
+      },
+    ]) {
+      let message: unknown = "not-called";
+      let messageType = "not-called";
+      const { gateway } = setup({
+        registry,
+        authorize: (incoming) => {
+          if (incoming.kind === "command") {
+            message = incoming.message;
+            messageType = incoming.messageType;
+          }
+          return true;
+        },
+      });
+      await expect(
+        gateway.handle(request("spine.client.CommandService", "Post", entry.value)),
+      ).resolves.toMatchObject({ kind: "forwarded" });
+      expect(message).toBeUndefined();
+      expect(messageType).toBe(entry.typeUrl);
+    }
+  });
   it("forwards downstream abort capability and cancels noncooperative unary work", async () => {
     let received: AbortSignal | undefined;
     const { gateway } = setup({

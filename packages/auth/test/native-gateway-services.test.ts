@@ -1,6 +1,14 @@
 import { create, toBinary } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
-import { AckSchema } from "@spine-event-engine/proto";
+import {
+  AckSchema,
+  ActorContextSchema,
+  CommandContextSchema,
+  CommandSchema,
+  TenantIdSchema,
+} from "@spine-event-engine/proto";
+import { TypeRegistry, packAny } from "@spine-event-engine/core";
 import {
   CommandService,
   EventUpdatesSchema,
@@ -13,11 +21,11 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   createNativeGatewayServices,
+  UnaryGateway,
   type NativeGatewayRequestContext,
   type SubscriptionGateway,
   type SubscriptionGatewayRequest,
   type SubscriptionGatewayResult,
-  type UnaryGateway,
   type UnaryGatewayRequest,
   type UnaryGatewayResult,
 } from "../src/index.js";
@@ -77,6 +85,70 @@ async function errorCode(effect: Promise<unknown>): Promise<Code> {
 }
 
 describe("createNativeGatewayServices", () => {
+  it("composes a configured UnaryGateway so native Post policy receives decoded application content", async () => {
+    const registry = new TypeRegistry([TenantIdSchema]);
+    let policyMessage: unknown;
+    const forwarded: unknown[] = [];
+    const unaryGateway = new UnaryGateway({
+      registry,
+      maxRequestBytes: 1_024,
+      sessions: {
+        resolve: () =>
+          Promise.resolve({
+            principal: { id: "ada" },
+            expiresAt: create(TimestampSchema, { seconds: 10n }),
+          }),
+      },
+      authorize: (_principal, incoming) => {
+        policyMessage = incoming.kind === "command" ? incoming.message : undefined;
+        return Promise.resolve(true);
+      },
+      contexts: {
+        resolve: () =>
+          Promise.resolve({
+            actor: { value: "ada" },
+            timestamp: create(TimestampSchema, { seconds: 2n }),
+          }),
+        resolveContext: () =>
+          Promise.resolve({
+            actor: { value: "ada" },
+            timestamp: create(TimestampSchema, { seconds: 2n }),
+          }),
+      },
+      clock: { now: () => create(TimestampSchema, { seconds: 2n }) },
+      forward: (request) => {
+        forwarded.push(request);
+        return Promise.resolve(toBinary(AckSchema, create(AckSchema)));
+      },
+    });
+    const gateway = createNativeGatewayServices({
+      unary: unaryGateway,
+      subscriptions: subscriptions(() => Promise.resolve({ kind: "cancelled" }))
+        .fake as SubscriptionGateway,
+      requests: requests(),
+    });
+    const command = create(CommandSchema, {
+      context: create(CommandContextSchema, {
+        actorContext: create(ActorContextSchema, { actor: { value: "ada" } }),
+      }),
+      message: packAny(
+        TenantIdSchema,
+        create(TenantIdSchema, { kind: { case: "value", value: "application" } }),
+      ),
+    });
+
+    await gateway.command.post(command, context());
+
+    expect(policyMessage).toMatchObject({ $typeName: TenantIdSchema.typeName });
+    expect(forwarded).toHaveLength(1);
+    expect(forwarded[0]).toMatchObject({
+      service: "spine.client.CommandService",
+      method: "Post",
+    });
+    expect(forwarded[0]).not.toHaveProperty("registry");
+    expect(forwarded[0]).not.toHaveProperty("credential");
+  });
+
   it("forwards Post and Read through UnaryGateway with application request facts", async () => {
     const post = unary({ kind: "forwarded", value: toBinary(AckSchema, create(AckSchema)) });
     const read = unary({

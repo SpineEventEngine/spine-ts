@@ -1079,7 +1079,6 @@ async function replayProjectionEvent(
 
 interface LoadedAggregate {
   readonly entity: object;
-  readonly current: EntityRecordStorage<unknown, Message>;
   readonly states: EntityStateHistoryPort<unknown, Message>;
   readonly events: EntityEventHistoryPort<unknown>;
   readonly version: bigint;
@@ -1106,13 +1105,19 @@ class AggregateExecutionSupport {
       this.#runtime.storageFactory,
       entityStorageInput(this.#repository, this.#storageContext),
     );
-    const current = await storage.current.read(entityId);
+    const current = await standAccess.readCurrent(
+      this.#runtime.stand,
+      this.#repository.stateSchema,
+      entityId,
+      this.#storageContext.tenantId === undefined
+        ? {}
+        : { tenantId: this.#storageContext.tenantId },
+    );
     const entity = this.#instantiateAggregate(entityId, current);
     bindEntityHistory(entity, storage, entityId);
 
     return Object.freeze({
       entity,
-      current: storage.current,
       states: storage.states,
       events: storage.events,
       version: current?.version ?? 0n,

@@ -1,0 +1,26 @@
+{
+  "name": "@spine-event-engine/client-react",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "React observers for the browser-safe Spine client.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "check:dependencies": "node ../../scripts/check-client-react-dependencies.mjs"
+  },
+  "peerDependencies": {
+    "react": "^19.2.8"
+  },
+  "dependencies": {
+    "@spine-event-engine/client-web": "workspace:*"
+  }
+}

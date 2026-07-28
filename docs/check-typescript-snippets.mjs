@@ -10,6 +10,7 @@ const documents = [
   "docs/USER_GUIDE.md",
   "packages/client-node/README.md",
   "packages/client-web/README.md",
+  "packages/client-react/README.md",
   "packages/auth/README.md",
   "packages/delivery-client/README.md",
   "packages/delivery-server/README.md",

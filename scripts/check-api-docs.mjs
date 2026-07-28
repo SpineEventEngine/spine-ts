@@ -313,6 +313,19 @@ const expectedClientWebExports = [
   "SubscriptionRuntimeOptions",
   "SubscriptionScheduler",
 ];
+const expectedClientReactExports = [
+  "RequestObservation",
+  "SpineClientProvider",
+  "SpineClientProviderProps",
+  "SubscriptionObservation",
+  "useEntityQuery",
+  "useEntitySubscription",
+  "useEventSubscription",
+  "useRequest",
+  "useSpineClient",
+  "useSubscriptionDelivery",
+  "useSubscriptionLifecycle",
+];
 const expectedDeliveryClientExports = [
   "DeliveryClient",
   "DeliveryClientOptions",
@@ -660,6 +673,7 @@ const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
 const authIndexPath = join("packages", "auth", "src", "index.ts");
 const clientIndexPath = join("packages", "client-node", "src", "index.ts");
 const clientWebIndexPath = join("packages", "client-web", "src", "index.ts");
+const clientReactIndexPath = join("packages", "client-react", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
 const deliveryServerIndexPath = join("packages", "delivery-server", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
@@ -703,6 +717,7 @@ const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src
 const authModuleNames = collectDirectModuleNames(apiDocs, "packages/auth/src");
 const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
 const clientWebModuleNames = collectDirectModuleNames(apiDocs, "packages/client-web/src");
+const clientReactModuleNames = collectDirectModuleNames(apiDocs, "packages/client-react/src");
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
 const deliveryServerModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
@@ -1040,6 +1055,16 @@ const missingClientExports = expectedClientExports.filter((name) => !clientModul
 const missingClientWebExports = expectedClientWebExports.filter(
   (name) => !clientWebModuleNames.has(name),
 );
+const declaredClientReactExports = collectNamedExports(clientReactIndexPath);
+const missingClientReactExports = expectedClientReactExports.filter(
+  (name) => !clientReactModuleNames.has(name),
+);
+const missingDeclaredClientReactExports = expectedClientReactExports.filter(
+  (name) => !declaredClientReactExports.includes(name),
+);
+const unexpectedClientReactExports = declaredClientReactExports.filter(
+  (name) => !expectedClientReactExports.includes(name),
+);
 const missingDeclaredClientWebExports = expectedClientWebExports.filter(
   (name) => !declaredClientWebExports.includes(name),
 );
@@ -1188,6 +1213,22 @@ if (unexpectedClientWebExports.length > 0) {
   console.error(
     "@spine-event-engine/client-web exports changed without updating docs expectations: " +
       unexpectedClientWebExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingClientReactExports.length > 0 || missingDeclaredClientReactExports.length > 0) {
+  console.error(
+    "@spine-event-engine/client-react is missing expected exports: " +
+      [...missingClientReactExports, ...missingDeclaredClientReactExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedClientReactExports.length > 0) {
+  console.error(
+    "@spine-event-engine/client-react exports changed without updating docs expectations: " +
+      unexpectedClientReactExports.join(", "),
   );
   process.exit(1);
 }
@@ -1449,6 +1490,7 @@ console.log(
     `${expectedCoreExports.length} expected @spine-event-engine/core exports`,
     `${expectedClientExports.length} expected @spine-event-engine/client-node exports`,
     `${expectedClientWebExports.length} expected @spine-event-engine/client-web exports`,
+    `${expectedClientReactExports.length} expected @spine-event-engine/client-react exports`,
     `${expectedDeliveryClientExports.length} expected @spine-event-engine/delivery-client exports`,
     `${expectedDeliveryServerExports.length} expected @spine-event-engine/delivery-server exports`,
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,
