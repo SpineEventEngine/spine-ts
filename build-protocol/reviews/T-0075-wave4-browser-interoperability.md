@@ -3139,3 +3139,108 @@ profiles; no Spine JVM project command may run.
   rerun passes 149 files / 2,858 tests with 3 files / 25 tests skipped and
   90.08% branches (9,532/10,581). C3 is accepted for commit. No Spine JVM
   command ran.
+
+## C4 provider adapter review
+
+- C4 is high-risk. One complete review wave covers the existing
+  style/maintainability, TypeScript/API, documentation, and
+  performance/reliability concerns.
+- Style/maintainability expected profile: existing role,
+  `gpt-5.6-terra` / `high`.
+- TypeScript/API expected profile: existing role, `gpt-5.6-terra` / `high`.
+- Performance/reliability expected profile: existing role,
+  `gpt-5.6-terra` / `high`.
+- Documentation expected profile: existing role, immutable
+  `gpt-5.6-luna` / `medium`.
+- Each dispatch explicitly supplies its role/profile. Actual runtime metadata
+  will be recorded before accepting results; unavailable self-introspection
+  will be recorded honestly. Final Wave 4 security review remains deferred.
+- Style/maintainability uses its explicit Terra/high profile; runtime
+  self-introspection is unavailable with no visible mismatch. It reports two
+  P1s: enterprise GitHub web/API endpoints may use unrelated origins, and JWKS
+  cache entries never expire or follow response cache directives. It also
+  reports finite URL/scope/API-version bounds and the Google-scope README
+  contradiction as P2.
+- TypeScript/API uses its explicit Terra/high profile with unavailable
+  self-introspection and no visible mismatch. It reports a P2 contract defect:
+  string-valued `email_verified` is retained although only verified booleans
+  may be normalized. It independently confirms the README scope contradiction
+  and finds no other export/dependency/declaration issue.
+- Documentation uses its immutable Luna/medium profile; runtime
+  self-introspection is unavailable. It reports four P2s: the Google scope
+  contradiction, missing runnable custom/Google/GitHub examples, missing
+  finite/cache/endpoint/token-zeroing guidance, and missing per-field public
+  provider TSDoc.
+- Performance/reliability uses its explicit Terra/high profile with unavailable
+  self-introspection and no visible mismatch. It reports two P1s: losing async
+  HTTP/body work may resume after the bounded operation returns, and permanent,
+  unsynchronized JWKS caching permits stale trust and out-of-order publication.
+  Its focused pnpm command was blocked by the workspace link-config change; it
+  made no changes and ran no JVM command.
+- One aggregated correction batch will gate/cancel late HTTP/body work, add
+  cache-directive-aware expiring single-flight JWKS publication, require
+  coherent enterprise origins, bound public strings/collections, enforce
+  boolean-only `email_verified`, and complete README/TSDoc/examples. All four
+  concerns reopen once on the corrected package.
+- Residual style/maintainability and performance/reliability review both find
+  that the first waiter's abort signal owns the shared JWKS single-flight and
+  can invalidate a concurrent valid exchange. Reliability also requires body
+  cancellation when status, media type, or declared size rejects a response
+  before reader acquisition.
+- Residual TypeScript/API review finds that runtime object spreading permits a
+  hidden Google `discoveryEndpoint`, and GitHub needs exact runtime array/
+  boolean validation for scopes and verified-primary-email lookup.
+- The final correction uses operation-owned shared JWKS cancellation with
+  independently abortable waiters, cancels all early-rejected bodies, forwards
+  only declared Google options, and validates exact GitHub runtime shapes.
+  Provider tests pass 73/73 at 90.51% branches; the full auth suite passes
+  297/297. TypeScript, TypeDoc/API inventory at 102 exports, semantic snippets,
+  repository formatting, and diff hygiene pass. Style, API, reliability, and
+  documentation receive the exact final C4 package for closure.
+- TypeScript/API closure is clean. The existing reviewer ran with its explicitly
+  dispatched `gpt-5.6-terra` / `high` profile; runtime self-introspection was
+  unavailable with no visible mismatch. It confirms the Google allowlist,
+  GitHub runtime-shape validation, exports, and TypeDoc contract without a
+  substantive regression.
+- Reliability confirms the implementation correction but requests one P2
+  regression for last-waiter cancellation and subsequent fresh JWKS fetch. The
+  deterministic test is added and passes. Focused provider evidence is now
+  74/74 at 91.24% branches and 100% lines; only reliability reopens for this
+  test-only correction.
+- Reliability closure is clean under its explicitly dispatched existing
+  `gpt-5.6-terra` / `high` profile; runtime self-introspection is unavailable
+  with no visible mismatch.
+- Style closure reports one P2: a supplied client secret is not bounded when
+  PKCE-only mode does not use it, and the raw option remains captured. The
+  correction validates any supplied secret and captures only the validated
+  value. Provider tests pass 76/76 at 91.36% branches and 100% lines;
+  TypeScript and diff hygiene pass. Only style and API reopen.
+- Style closure is clean under its explicitly dispatched existing
+  `gpt-5.6-terra` / `high` profile; runtime self-introspection is unavailable
+  with no visible mismatch. The reviewer confirms supplied-secret bounds,
+  required secret-auth behavior, validated-value capture, and regressions.
+- Final API review reports that GitHub still captures its raw options object
+  through the email flag and asks for missing-secret coverage in Basic mode.
+  Documentation reports that the advertised runnable provider example leaves
+  application mapping/session seams undeclared and constructs only a Google
+  flow. The correction copies the validated GitHub flag, covers both required
+  secret modes, defines typed application seams, and constructs explicit/
+  discovered custom, Google, and GitHub flows. The auth README now participates
+  in semantic snippet checking. API, style, and documentation reopen only.
+- Final style re-review is clean under its explicit existing
+  `gpt-5.6-terra` / `high` profile; runtime self-introspection is unavailable
+  with no visible mismatch. The returned GitHub provider captures validated
+  locals rather than the raw options object or secret.
+- Final TypeScript/API re-review is clean under its explicit existing
+  `gpt-5.6-terra` / `high` profile; runtime self-introspection is unavailable.
+  GitHub retains validated locals only, both secret-auth modes reject a missing
+  secret, and no public type, export, or TypeDoc regression remains.
+- Final documentation re-review is clean under its immutable existing
+  `gpt-5.6-luna` / `medium` profile; runtime self-introspection is unavailable.
+  The typed application seams and all four provider-flow paths compile
+  semantically, and no limits/defaults/security guidance regression remains.
+  All relevant C4 specialist concerns are closed.
+- Canonical generated coverage passes 150 test files / 2,935 tests, with 3
+  files / 25 tests skipped and 90.11% branch coverage (9,786/10,859). C4 is
+  accepted; final Wave 4 security remains deferred to the complete Wave
+  boundary.

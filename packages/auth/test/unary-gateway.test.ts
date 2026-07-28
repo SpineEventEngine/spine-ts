@@ -120,7 +120,9 @@ describe("UnaryGateway", () => {
     const controller = new AbortController();
     const command = toBinary(
       CommandSchema,
-      create(CommandSchema, { context: create(CommandContextSchema, { actorContext: requestedContext }) }),
+      create(CommandSchema, {
+        context: create(CommandContextSchema, { actorContext: requestedContext }),
+      }),
     );
     const pending = gateway.handle({
       ...request("spine.client.CommandService", "Post", command),

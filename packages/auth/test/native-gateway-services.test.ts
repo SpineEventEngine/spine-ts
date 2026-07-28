@@ -347,20 +347,28 @@ describe("createNativeGatewayServices", () => {
     const fake = subscriptions(async (request) => {
       await request.updates?.({
         kind: "subscription-update",
-        bytes: toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema, {
-          update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
-        })),
+        bytes: toBinary(
+          SubscriptionUpdateSchema,
+          create(SubscriptionUpdateSchema, {
+            update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+          }),
+        ),
       });
       await request.updates?.({
         kind: "subscription-update",
-        bytes: toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema, {
-          update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
-        })),
+        bytes: toBinary(
+          SubscriptionUpdateSchema,
+          create(SubscriptionUpdateSchema, {
+            update: { case: "eventUpdates", value: create(EventUpdatesSchema) },
+          }),
+        ),
       });
       return { kind: "activated" };
     });
     const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
-    const iterator = gateway.subscription.activate(create(SubscriptionSchema), context())[Symbol.asyncIterator]();
+    const iterator = gateway.subscription
+      .activate(create(SubscriptionSchema), context())
+      [Symbol.asyncIterator]();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     await iterator.return?.();

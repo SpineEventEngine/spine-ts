@@ -210,6 +210,12 @@ export { OpaqueSessionCookies } from "./sessions/cookies.js";
 export { OpaqueSessions } from "./sessions/opaque.js";
 export { SignedSessions } from "./sessions/signed.js";
 export { OidcFlow } from "./oidc/index.js";
+export {
+  createGitHubProvider,
+  createGoogleProvider,
+  createOidcProvider,
+  discoverOidcProvider,
+} from "./providers/index.js";
 export { InMemorySubscriptionBindings, SubscriptionGateway } from "./subscriptions/index.js";
 export {
   createNativeGatewayServices,
@@ -289,3 +295,10 @@ export type {
   OidcVerifiedIdentityProvider,
   ResolvedApplicationIdentity,
 } from "./oidc/contracts.js";
+export type {
+  ConfiguredOidcProvider,
+  GitHubProviderOptions,
+  OidcClientAuthentication,
+  OidcProviderOptions,
+  ProviderFetch,
+} from "./providers/index.js";

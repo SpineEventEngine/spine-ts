@@ -10,6 +10,7 @@ const documents = [
   "docs/USER_GUIDE.md",
   "packages/client-node/README.md",
   "packages/client-web/README.md",
+  "packages/auth/README.md",
   "packages/delivery-client/README.md",
   "packages/delivery-server/README.md",
   "packages/proto/README.md",
@@ -101,20 +102,23 @@ function importStubs(code) {
   const source = ts.createSourceFile("snippet.ts", code, ts.ScriptTarget.ESNext, true);
   const imports = new Map();
   for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier))
+      continue;
     const names = imports.get(statement.moduleSpecifier.text) ?? new Set();
     const clause = statement.importClause;
     if (clause?.name !== undefined) names.add(clause.name.text);
     if (clause?.namedBindings !== undefined && ts.isNamedImports(clause.namedBindings)) {
-      for (const element of clause.namedBindings.elements) names.add((element.propertyName ?? element.name).text);
+      for (const element of clause.namedBindings.elements)
+        names.add((element.propertyName ?? element.name).text);
     }
     imports.set(statement.moduleSpecifier.text, names);
   }
   return [...imports]
-    .map(([specifier, names]) =>
-      `declare module ${JSON.stringify(specifier)} { ${[...names]
-        .map((name) => `export const ${name}: any;`)
-        .join(" ")} }`,
+    .map(
+      ([specifier, names]) =>
+        `declare module ${JSON.stringify(specifier)} { ${[...names]
+          .map((name) => `export const ${name}: any;`)
+          .join(" ")} }`,
     )
     .join("\n");
 }

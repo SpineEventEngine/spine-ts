@@ -308,3 +308,135 @@ It provides no browser reconnect guarantee, no delivery/subscription update
 guarantee, no authorization policy, no identity-provider UI, and no automatic
 credential refresh. Every later Spine request is authenticated and authorized
 by the gateway independently of this sign-in flow.
+
+## Provider adapters
+
+`createOidcProvider()` accepts explicit HTTPS issuer, authorization, token,
+and JWKS endpoints. `discoverOidcProvider()` reads those values only from the
+issuer's discovery document and requires the returned issuer to match exactly.
+Both expose an authorization endpoint and an `OidcVerifiedIdentityProvider`
+for `OidcFlow`; inject `fetch` for tests or controlled network policy. The
+adapter uses authorization-code plus S256 PKCE only, validates RS256/ES256
+ID-token signatures against JWKS, and returns bounded identity claims only.
+It never returns or retains a provider access, refresh, or ID token.
+
+`createGoogleProvider()` uses Google's official issuer discovery and defaults
+to the recommended `openid profile email` scopes; applications may deliberately
+narrow or extend them. Google `sub` is the identity key; email is metadata,
+never a tenant or identity inference input.
+
+`createGitHubProvider()` implements OAuth rather than OIDC. It binds the code
+exchange to C3 state/S256 PKCE, then immediately calls GitHub's authenticated
+`/user` endpoint and uses its stable numeric `id` as the subject. It does not
+have an ID-token signature or nonce guarantee. The provider access token exists
+only during those calls and is discarded; it is not exposed to the flow or an
+`ExternalIdentity`. Request `user:email` only when an application needs the
+separate email endpoint and treat any email as metadata. The default public
+GitHub and API origins move together for GitHub Enterprise configuration.
+
+The factories return the exact facts consumed by `OidcFlow`:
+
+```ts
+import {
+  OidcFlow,
+  createGitHubProvider,
+  createGoogleProvider,
+  createOidcProvider,
+  discoverOidcProvider,
+  type ApplicationSessionIssuer,
+  type ConfiguredOidcProvider,
+  type IdentityMapping,
+} from "@spine-event-engine/auth";
+
+function requiredEnvironment(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing ${name}.`);
+  return value;
+}
+
+const identityMapping: IdentityMapping = {
+  async resolve(externalIdentity) {
+    return {
+      externalIdentity,
+      principal: { id: externalIdentity.subject },
+    };
+  },
+};
+const sessionIssuer: ApplicationSessionIssuer = {
+  async issue() {
+    // Delegate to the application's signed-token or server-session strategy.
+    return undefined;
+  },
+};
+const flowFor = (configured: ConfiguredOidcProvider) =>
+  new OidcFlow({
+    authorizationEndpoint: configured.authorizationEndpoint,
+    callbackUri: "https://app.example/auth/callback",
+    clientId: "chat-web",
+    scopes: configured.recommendedScopes,
+    allowedPostLoginRedirects: ["https://app.example/chat"],
+    provider: configured.provider,
+    identityMapping,
+    sessionIssuer,
+  });
+
+const custom = createOidcProvider({
+  issuer: "https://identity.example",
+  authorizationEndpoint: "https://identity.example/authorize",
+  tokenEndpoint: "https://identity.example/token",
+  jwksEndpoint: "https://identity.example/keys",
+  clientId: "chat-web",
+  clientSecret: requiredEnvironment("OIDC_CLIENT_SECRET"),
+  clientAuthentication: "client_secret_post",
+});
+const customFlow = flowFor(custom);
+
+const discovered = await discoverOidcProvider({
+  issuer: "https://identity.example",
+  clientId: "chat-web",
+  clientSecret: requiredEnvironment("OIDC_CLIENT_SECRET"),
+  clientAuthentication: "client_secret_post",
+});
+if (!discovered) throw new Error("OIDC discovery failed.");
+const discoveredFlow = flowFor(discovered);
+
+const google = await createGoogleProvider({
+  clientId: "chat-web",
+  clientSecret: requiredEnvironment("GOOGLE_CLIENT_SECRET"),
+  clientAuthentication: "client_secret_post",
+});
+if (!google) throw new Error("Google OIDC discovery failed.");
+const googleFlow = flowFor(google);
+
+const github = createGitHubProvider({
+  clientId: "chat-web",
+  clientSecret: requiredEnvironment("GITHUB_CLIENT_SECRET"),
+  includeVerifiedPrimaryEmail: true,
+});
+const githubFlow = flowFor(github);
+
+void [customFlow, discoveredFlow, googleFlow, githubFlow];
+```
+
+Use either explicit custom metadata or discovery, not both for the same
+provider configuration. Explicit endpoints, discovery URLs, enterprise
+origins, and injected HTTP implementations are trust decisions made by the
+deploying application. Token, JWKS, and identity requests reject redirects,
+require successful JSON responses, and cap each streamed body at 1 MiB by
+default. The shared operation deadline defaults to 30 seconds.
+
+`client_secret_basic`, `client_secret_post`, and PKCE-only `none` are supported;
+select only a method advertised and required by the provider. JWKS sets are
+limited to 32 keys. Cache `max-age`/`Age` directives are honored up to one day;
+`no-store`, `no-cache`, missing, or invalid cache directives cause re-fetching.
+An unknown key ID permits one finite rotation refresh, and concurrent cold
+loads share one fetch.
+
+Provider secrets, codes, PKCE verifiers, and access/ID tokens are never returned
+as `ExternalIdentity` claims or application credentials. JavaScript strings
+cannot be reliably zeroed: the adapters retain provider tokens only in the
+narrowest exchange scope, but applications must still protect process memory,
+configuration, injected HTTP instrumentation, and logs. An injected HTTP
+function that ignores abort may continue its own promise after the adapter
+returns; late responses are cancelled/gated and cannot trigger body processing
+or follow-up provider calls.
