@@ -7,7 +7,12 @@ import {
   CommandSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
-import { QuerySchema, SubscriptionSchema, TargetSchema, TopicSchema } from "@spine-event-engine/proto/client";
+import {
+  QuerySchema,
+  SubscriptionSchema,
+  TargetSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
 import { decodeIncomingRequest, transportFacts } from "../src/index.js";
@@ -36,11 +41,27 @@ describe("decodeIncomingRequest", () => {
     });
 
     const requests = [
-      decodeIncomingRequest({ kind: "command", value: toBinary(CommandSchema, command), transport }),
+      decodeIncomingRequest({
+        kind: "command",
+        value: toBinary(CommandSchema, command),
+        transport,
+      }),
       decodeIncomingRequest({ kind: "query", value: toBinary(QuerySchema, query), transport }),
-      decodeIncomingRequest({ kind: "subscribe", value: toBinary(TopicSchema, subscription.topic!), transport }),
-      decodeIncomingRequest({ kind: "activate", value: toBinary(SubscriptionSchema, subscription), transport }),
-      decodeIncomingRequest({ kind: "cancel", value: toBinary(SubscriptionSchema, subscription), transport }),
+      decodeIncomingRequest({
+        kind: "subscribe",
+        value: toBinary(TopicSchema, subscription.topic!),
+        transport,
+      }),
+      decodeIncomingRequest({
+        kind: "activate",
+        value: toBinary(SubscriptionSchema, subscription),
+        transport,
+      }),
+      decodeIncomingRequest({
+        kind: "cancel",
+        value: toBinary(SubscriptionSchema, subscription),
+        transport,
+      }),
     ];
 
     expect(requests.map((request) => request?.kind)).toEqual([
@@ -69,11 +90,16 @@ describe("packed command decoding", () => {
     const transport = transportFacts({ service: "spine.client.CommandService", method: "Post" });
     const registered = create(CommandSchema, {
       context: create(CommandContextSchema, { actorContext: context }),
-      message: packAny(UserIdSchema, create(UserIdSchema, { value: "user-1" }), { validate: false }),
+      message: packAny(UserIdSchema, create(UserIdSchema, { value: "user-1" }), {
+        validate: false,
+      }),
     });
     const unknown = create(CommandSchema, {
       context: create(CommandContextSchema, { actorContext: context }),
-      message: create(AnySchema, { typeUrl: "type.example.test/Unknown", value: new Uint8Array([8, 1]) }),
+      message: create(AnySchema, {
+        typeUrl: "type.example.test/Unknown",
+        value: new Uint8Array([8, 1]),
+      }),
     });
     const malformed = create(CommandSchema, {
       context: create(CommandContextSchema, { actorContext: context }),
@@ -99,7 +125,11 @@ describe("packed command decoding", () => {
         transport,
         registry,
       }),
-    ).toMatchObject({ kind: "command", message: undefined, messageType: "type.example.test/Unknown" });
+    ).toMatchObject({
+      kind: "command",
+      message: undefined,
+      messageType: "type.example.test/Unknown",
+    });
     expect(
       decodeIncomingRequest({
         kind: "command",
@@ -107,7 +137,11 @@ describe("packed command decoding", () => {
         transport,
         registry,
       }),
-    ).toMatchObject({ kind: "command", message: undefined, messageType: "type.spine.io/spine.core.UserId" });
+    ).toMatchObject({
+      kind: "command",
+      message: undefined,
+      messageType: "type.spine.io/spine.core.UserId",
+    });
   });
 });
 
@@ -144,21 +178,30 @@ describe("outer envelope decoding", () => {
     });
     for (const kind of ["activate", "cancel"] as const) {
       expect(
-        decodeIncomingRequest({ kind, value: toBinary(SubscriptionSchema, subscription), transport }),
+        decodeIncomingRequest({
+          kind,
+          value: toBinary(SubscriptionSchema, subscription),
+          transport,
+        }),
       ).toMatchObject({
         kind,
         requestedContext: { actor: { value: "topic-actor" } },
       });
     }
     for (const kind of ["query", "subscribe", "activate", "cancel"] as const) {
-      expect(decodeIncomingRequest({ kind, value: new Uint8Array([255]), transport })).toBeUndefined();
+      expect(
+        decodeIncomingRequest({ kind, value: new Uint8Array([255]), transport }),
+      ).toBeUndefined();
     }
   });
 });
 
 describe("fallback request facts", () => {
   it("uses safe empty facts for envelopes that omit optional context, target, topic, or packed message", () => {
-    const transport = transportFacts({ service: "spine.client.SubscriptionService", method: "Activate" });
+    const transport = transportFacts({
+      service: "spine.client.SubscriptionService",
+      method: "Activate",
+    });
     const command = decodeIncomingRequest({
       kind: "command",
       value: toBinary(CommandSchema, create(CommandSchema)),
@@ -195,7 +238,11 @@ describe("fallback request facts", () => {
     });
     for (const kind of ["activate", "cancel"] as const) {
       expect(
-        decodeIncomingRequest({ kind, value: toBinary(SubscriptionSchema, subscription), transport }),
+        decodeIncomingRequest({
+          kind,
+          value: toBinary(SubscriptionSchema, subscription),
+          transport,
+        }),
       ).toMatchObject({ kind, requestedContext: { language: 0 } });
     }
   });
@@ -218,7 +265,9 @@ describe("fallback request facts", () => {
       peerAddress: "127.0.0.1",
       userAgent: "test-agent",
     });
-    expect(transportFacts({ service: "spine.client.QueryService", method: "Read", headers: undefined })).toEqual({
+    expect(
+      transportFacts({ service: "spine.client.QueryService", method: "Read", headers: undefined }),
+    ).toEqual({
       service: "spine.client.QueryService",
       method: "Read",
     });

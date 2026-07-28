@@ -137,6 +137,12 @@ const expectedAuthExports = [
   "SessionResolver",
   "TransportFactsInput",
   "TransportRequestContext",
+  "UnaryForwarder",
+  "UnaryGateway",
+  "UnaryGatewayOptions",
+  "UnaryGatewayRejection",
+  "UnaryGatewayRequest",
+  "UnaryGatewayResult",
   "decodeIncomingRequest",
   "transportFacts",
 ];

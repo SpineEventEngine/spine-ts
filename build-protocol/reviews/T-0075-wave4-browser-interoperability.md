@@ -1531,3 +1531,178 @@ merge, spawn children, or execute any Spine JVM project operation.
   visible.
 - All B1 review findings are resolved. No reviewer edited files or executed
   Spine JVM.
+
+## B2 unary authentication pipeline review wave
+
+Coordinator evidence is clean: focused auth tests passed 2 files / 12 tests;
+generated TypeScript build/typecheck passed; 40 Proto source checksums and 49
+descriptor digests passed; TypeDoc enforces the exact 28-export auth inventory;
+formatting and diff hygiene passed. No Spine JVM operation occurred.
+
+### Style/maintainability assignment
+
+- Existing role: `style_maintainability_reviewer`.
+- Concern: minimal gateway structure, pipeline readability, error/result
+  simplicity, clone/rewrite clarity, and avoidance of B3/B4/C scope.
+- Expected model: `gpt-5.6-terra`.
+- Expected reasoning: `high`.
+- Both fields explicit; read-only, no edits/commit/push/merge/children/JVM
+  execution.
+
+### TypeScript/API assignment
+
+- Existing role: `typescript_api_docs_reviewer`.
+- Concern: public request/result/options/resolver/forwarder contracts, exact
+  operation narrowing, context/stale semantics, ResolveContext declarations,
+  package inventory, and B4-mappable compatibility.
+- Expected model: `gpt-5.6-terra`.
+- Expected reasoning: `high`.
+- Both fields explicit; read-only, no edits/commit/push/merge/children/JVM
+  execution.
+
+### Performance/reliability assignment
+
+- Existing role: `performance_reliability_reviewer`.
+- Concern: strict pipeline order, bounded input, no-work/no-forward failures,
+  at-most-once forwarding, credential isolation, trusted-clock/context
+  replacement, byte preservation, promise rejection behavior, and retained
+  resources.
+- Expected model: `gpt-5.6-terra`.
+- Expected reasoning: `high`.
+- Both fields explicit; read-only, no edits/commit/push/merge/children/JVM
+  execution.
+
+### Documentation assignment
+
+- Existing role: `documentation_reviewer`.
+- Concern: README/TSDoc/report exactness, rejection and ordering claims,
+  informational ResolveContext semantics, trusted context, and B2 deferrals.
+- Expected model: `gpt-5.6-luna`.
+- Expected reasoning: `medium`.
+- Both fields explicit; read-only, no edits/commit/push/merge/children/JVM
+  execution. Dispatch may wait for surface capacity, but no correction begins
+  until the complete four-concern wave returns.
+
+### Security disposition
+
+- Dedicated security review remains deferred to final Wave 4 release readiness
+  per protocol. B2's API and reliability reviewers must still reject obviously
+  unsafe trust-boundary behavior; no early security role is invoked without a
+  human request.
+
+### B2 complete review wave and correction batch
+
+All expected profiles were explicit and match the existing immutable roles:
+style, API, and reliability used `gpt-5.6-terra` / `high`; documentation used
+`gpt-5.6-luna` / `medium`. Independent runtime self-introspection is
+unavailable, with no visible mismatch or fallback. Reviewers made no edits and
+performed no Spine JVM operation.
+
+Accepted and deduplicated findings:
+
+1. P1: operation identity is duplicated between top-level routing fields and
+   caller-supplied transport facts. Policy/diagnostics can observe a different
+   service/method than the gateway forwards. Use one canonical operation source
+   and snapshot only immutable allowlisted transport facts before any await;
+   runtime extra/credential fields must not survive.
+2. P1: the mutable decoded request is shared with authorization and context
+   collaborators. Either can alter actor/tenant to bypass stale rejection or
+   change fields later forwarded. Isolate collaborator views and preserve an
+   untouched source plus requested-identity snapshot for stale comparison and
+   rewrite.
+3. P1: `AuthorizedRequestContext.timestamp` is ignored and the clock is read a
+   second time, allowing forwarded trusted context to differ from what the
+   resolver authorized. Make the resolver-returned timestamp authoritative
+   (using the injected clock during resolution) and test a changing clock.
+4. P2: move the B2 gateway/runtime contracts from the now-mixed 500-line barrel
+   into a semantic `src/gateway/` module; keep the package root a public
+   re-export.
+5. P2: remove the test's `as never` contract bypass and assert exact
+   `request-too-large`, `malformed-request`, and `unknown-operation` results.
+6. P2: add actual unknown-Protobuf-field preservation and collaborator/forward
+   promise-rejection/no-later-work/no-retry regressions.
+7. P2 documentation: state the now-authoritative trusted timestamp rule and
+   byte-equivalent preservation of every non-ActorContext envelope field.
+
+One consolidated correction batch returns to the replacement existing
+`implementer`, expected explicit `gpt-5.6-terra` / `medium`. It owns only
+`packages/auth/**`, auth API inventory, B2 report/evidence, and must use RED
+regressions first. It may not begin B3+, commit, push, merge, spawn children, or
+execute Spine JVM.
+
+### B2 correction evidence and targeted re-review
+
+- Canonical route-bound transport facts, collaborator decode isolation,
+  untouched rewrite/identity sources, resolver-authoritative timestamps,
+  unknown-field preservation, exact rejections/no-retry tests, semantic gateway
+  module, README claims, and API inventory corrections are present.
+- Coordinator evidence passed 2 files / 15 tests, generated build/typecheck, 40
+  source checksums, 49 descriptor digests, exact 28-export auth TypeDoc
+  inventory, formatting, and diff hygiene.
+- Reopen the four affected concerns with their original explicit profiles:
+  style/API/reliability use `gpt-5.6-terra` / `high`; documentation uses
+  `gpt-5.6-luna` / `medium`. Capacity may sequence documentation, but no new
+  correction begins until the complete targeted wave returns.
+- Re-review is read-only. No edits, commit, push, merge, child dispatch, or
+  Spine JVM execution.
+
+### B2 targeted re-review remaining batch
+
+- Documentation is clean. Resolver-authoritative time, unknown/non-context
+  field preservation, rejection/ResolveContext behavior, and deferrals are
+  accurate.
+- Style confirms timestamp ownership and typed exact-rejection tests are
+  closed, but finds a P2 runtime import cycle between the public barrel and
+  gateway implementation.
+- API and reliability deduplicate one remaining P1: the nominal transport
+  snapshot is mutable and shared by authorization and context resolution.
+  Freeze and/or independently clone allowlisted facts per collaborator and
+  prove mutation cannot change later facts.
+- Reliability P1: after the first await, later decodes still read the
+  caller-owned mutable request byte buffer. Take one private byte snapshot
+  immediately after the bound check and use it throughout; test a pending
+  session/mutation interleaving.
+- Reliability P2: explicitly cover rejected session, authorization, and context
+  promises with no later work; forward rejection/no retry is already covered.
+- API P2: restore TSDoc for every public gateway request/options/forward/result
+  and rejection declaration, including operation identity, byte ownership,
+  rejection meanings, and B4 mapping.
+- One final bounded correction returns to the replacement `implementer`,
+  expected explicit `gpt-5.6-terra` / `medium`. It may change only auth
+  modules/tests/docs/inventory/evidence, may not begin B3+, commit, push, merge,
+  spawn children, or execute Spine JVM.
+
+### B2 final correction evidence
+
+- Gateway runtime no longer imports the public barrel; one private byte snapshot
+  feeds all decodes and rewrite; each collaborator receives independently
+  frozen canonical transport facts.
+- Pending-session buffer mutation and session/authorization/context/forward
+  promise rejection regressions prove stable ownership, original error
+  propagation, exact stopping points, and no retry.
+- Public gateway declarations have restored TSDoc. Documentation's already
+  clean lane is unchanged.
+- Coordinator evidence passed 2 files / 17 tests, generated build/typecheck, 40
+  source checksums, 49 descriptor digests, exact 28-export TypeDoc inventory,
+  formatting, and diff hygiene.
+- Reopen only style, API, and reliability for their remaining findings, each
+  under the original explicit `gpt-5.6-terra` / `high` profile. Read-only; no
+  edits, commit, push, merge, children, or Spine JVM execution.
+
+### B2 final targeted findings
+
+- No remaining runtime P1 defect was found. The cycle, byte ownership,
+  transport isolation implementation, timestamp, mutation, unknown-field, and
+  covered rejection paths are correct.
+- API P1 / reliability P2: add the explicitly required policy-side transport
+  mutation attempt and prove context resolution receives an independent frozen
+  canonical snapshot.
+- Reliability P2: add `ContextResolver.resolveContext()` rejection coverage
+  proving one session call, one context-resolution call, no policy/forwarding,
+  and no retry.
+- Style P2: remove duplicated command/query parsing by making the semantic
+  request module the single `decodeIncomingRequest` implementation, re-exported
+  by the public root and directly consumed by the gateway.
+- Return these narrow changes to the replacement `implementer`, expected
+  explicit `gpt-5.6-terra` / `medium`; no B3+, commit, push, merge, child
+  dispatch, or Spine JVM execution.
