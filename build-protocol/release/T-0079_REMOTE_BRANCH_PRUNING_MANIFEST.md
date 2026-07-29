@@ -10,8 +10,10 @@ committing this manifest advances that branch. At execution, verify that its
 name exists and resolves live, rather than comparing it to a recorded tip.
 
 Execution is complete. The 17 preservation tags were created and verified at
-their mapped SHAs before deletion. An initial ambiguous `git push --delete`
-attempt failed atomically with no remote changes; a retry using fully qualified
+their mapped SHAs before deletion. An initial ambiguous
+`git push --atomic --force-with-lease origin --delete …` attempt failed
+atomically with no remote changes; a retry beginning
+`git push --atomic --force-with-lease origin` and using fully qualified
 `:refs/heads/<head>` deletions succeeded atomically for all 81 branches.
 After fetch/prune, only `main` and T-0079 remain. Final review, merge, and the
 eventual T-0079 branch deletion are outside this completed prune operation.
@@ -45,13 +47,14 @@ guidance.
    test "$(git ls-remote --tags origin "refs/tags/<tag>" | awk '{print $1}')" = "<full-40-character-tip>"
    ```
 
-3. An ambiguous `git push origin --delete …` attempt failed atomically; it
-   made no remote change. The retry used fully qualified deletion refspecs and
-   succeeded atomically for exactly the 81 manifest branches. `main` and
-   T-0079 were excluded:
+3. An ambiguous `git push --atomic --force-with-lease origin --delete …`
+   attempt failed atomically; it made no remote change. The retry began
+   `git push --atomic --force-with-lease origin`, used fully qualified deletion
+   refspecs, and succeeded atomically for exactly the 81 manifest branches.
+   `main` and T-0079 were excluded:
 
    ```sh
-   git push origin :refs/heads/<head> [:refs/heads/<head> ...]
+   git push --atomic --force-with-lease origin :refs/heads/<head> [:refs/heads/<head> ...]
    git fetch --prune origin
    ```
 
@@ -69,6 +72,39 @@ guidance.
    git ls-remote --tags origin 'archive/*'
    git merge-base --is-ancestor <redundant-tip> origin/main
    git cherry -v origin/main 384dd719da09f2792374cdd86cce24b0544b47e6
+   ```
+
+5. Verify the closed-world post-prune state. The committed
+   [`T-0079_REMOTE_BRANCH_PRUNING_EXPECTED_REFS.tsv`](T-0079_REMOTE_BRANCH_PRUNING_EXPECTED_REFS.tsv)
+   has the exact `main` SHA, exact two-head name set, and exact sorted
+   17-archive-tag name/SHA set. Its active T-0079 row is deliberately
+   `DYNAMIC`: the command requires one valid full live SHA. It uses only direct
+   read-only remote queries, fails on any missing or extra head/archive-tag
+   ref, and asserts both counts.
+
+   ```sh
+   set -eu
+   expected=build-protocol/release/T-0079_REMOTE_BRANCH_PRUNING_EXPECTED_REFS.tsv
+   scratch=$(mktemp -d "${TMPDIR:-/tmp}/t0079-remote-refs.XXXXXX")
+   trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+   awk -F '\t' '$1 == "head" { print $2 }' "$expected" | LC_ALL=C sort > "$scratch/expected-head-names"
+   git ls-remote --heads origin |
+     awk '{ sub("^refs/heads/", "", $2); print $2 "\t" $1 }' | LC_ALL=C sort > "$scratch/live-heads"
+   cut -f 1 "$scratch/live-heads" | LC_ALL=C sort > "$scratch/live-head-names"
+   diff -u "$scratch/expected-head-names" "$scratch/live-head-names"
+   test "$(wc -l < "$scratch/live-heads" | tr -d ' ')" = 2
+   main_expected=$(awk -F '\t' '$1 == "head" && $2 == "main" { print $3 }' "$expected")
+   main_live=$(awk -F '\t' '$1 == "main" { print $2 }' "$scratch/live-heads")
+   test "$main_live" = "$main_expected"
+   dynamic_name=$(awk -F '\t' '$1 == "head" && $3 == "DYNAMIC" { print $2 }' "$expected")
+   test "$(awk -F '\t' '$1 == "head" && $3 == "DYNAMIC" { count++ } END { print count + 0 }' "$expected")" = 1
+   dynamic_live=$(awk -F '\t' -v name="$dynamic_name" '$1 == name { print $2 }' "$scratch/live-heads")
+   printf '%s\n' "$dynamic_live" | LC_ALL=C grep -Eq '^[0-9a-f]{40}$'
+   awk -F '\t' '$1 == "tag" { print $2 "\t" $3 }' "$expected" | LC_ALL=C sort > "$scratch/expected-tags"
+   git ls-remote --tags --refs origin 'refs/tags/archive/*' |
+     awk '{ sub("^refs/tags/", "", $2); print $2 "\t" $1 }' | LC_ALL=C sort > "$scratch/live-tags"
+   diff -u "$scratch/expected-tags" "$scratch/live-tags"
+   test "$(wc -l < "$scratch/live-tags" | tr -d ' ')" = 17
    ```
 
 ## Restoration from a preservation tag

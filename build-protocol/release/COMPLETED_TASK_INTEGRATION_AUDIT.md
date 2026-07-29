@@ -71,7 +71,8 @@ At this audit's 2026-07-29 baseline, the following names were remote branches.
 T-0079 preserved them under the exact tags recorded in
 [`T-0079_REMOTE_BRANCH_PRUNING_MANIFEST.md`](T-0079_REMOTE_BRANCH_PRUNING_MANIFEST.md).
 The tags were pushed and verified before the historical branches were deleted
-as part of the successful atomic 81-branch prune. The branch column remains
+as part of the successful `git push --atomic --force-with-lease origin`
+81-branch prune. The branch column remains
 historical baseline evidence; the tag column is the current preservation ref.
 
 | Item                               | Historical branch / exact tip                                                  | Current preservation tag                                  | Disposition                                                                                                     |
@@ -142,7 +143,7 @@ This is a repository-history audit. At the captured baseline, a direct
 both rescue **branches**, and all 15 `archive/legacy/*` **branches** at their
 recorded SHAs. T-0079 then verified all 17 replacement tags at their mapped
 SHAs and exactly two remaining heads (`main` and active T-0079) after the
-successful atomic prune. The audit does not verify
+successful `git push --atomic --force-with-lease origin` prune. The audit does not verify
 hosting-provider retention policy or rerun application behavior. The result
 therefore establishes no missing committed/integrated behavior, not a fresh
 runtime release certification.

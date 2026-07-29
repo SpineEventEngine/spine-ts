@@ -125,11 +125,22 @@ every unique historical or rescue tip under an immutable remote tag.
   exact/frozen; T-0079 is intentionally verified only as a live retained name.
 - Manifest table counts: 17 preservation mappings, two retained heads, and 81
   initial deletion rows.
-- Remote execution result: all 17 tags were verified at mapped SHAs; an
-  ambiguous deletion attempt failed atomically without changes; fully qualified
-  `:refs/heads/...` retry then deleted all 81 target branches atomically.
+- Remote execution result: all 17 tags were verified at mapped SHAs; the
+  ambiguous `git push --atomic --force-with-lease origin --delete ...` attempt
+  failed atomically without changes; the retry began
+  `git push --atomic --force-with-lease origin` and used fully qualified
+  `:refs/heads/...` refspecs to delete all 81 target branches atomically.
   Post-fetch verification found only `main` at
-  `0fa0b39c14768abac26d466ba721f9c9297a56c3` and moving active T-0079 at
-  `f191ee5a271b2f94abd0a37b30cfc4f8cb14b4d4`.
+  `0fa0b39c14768abac26d466ba721f9c9297a56c3` and the moving active T-0079
+  head.
 - Final review, integration/merge, post-merge verification, push, and eventual
   T-0079 branch deletion remain pending and are not claimed complete here.
+- `T-0079_REMOTE_BRANCH_PRUNING_EXPECTED_REFS.tsv` records closed-world
+  expectations: exact `main` SHA, exactly two head names with T-0079 marked
+  `DYNAMIC`, and 17 exact archive-tag name/SHA pairs. T-0079 must resolve to a
+  valid direct-query live SHA, not a stale committed SHA.
+- Review Wave 1 P1/P2 correction: every atomic execution claim now records
+  `--atomic --force-with-lease`; the manifest contains macOS-portable
+  read-only `ls-remote`/sort/diff/count commands that compare the committed
+  expectations and fail on missing or extra head/tag refs. A fresh direct query
+  was blocked by transient DNS; no local refs are used as published evidence.

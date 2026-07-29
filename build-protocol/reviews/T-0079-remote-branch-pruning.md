@@ -26,9 +26,12 @@ recovery guidance.
   branch by live name/resolution. The correction was validated against the
   current `a7aeed1a1333eed4d7a58090bfef1534129d7de6` remote-tracking tip.
 - Implementer result: updated the manifest, historical audit, and task/work
-  records after the completed remote execution. The first ambiguous deletion
-  attempt failed atomically with no ref change; the fully qualified retry
-  deleted all 81 target branches atomically after all 17 tags were verified.
+  records after the completed remote execution. The first
+  `git push --atomic --force-with-lease origin --delete ...` attempt failed
+  atomically with no ref change; the retry began
+  `git push --atomic --force-with-lease origin`, used fully qualified deletion
+  refspecs, and deleted all 81 target branches atomically after all 17 tags
+  were verified.
 - Existing role and explicit expected profile: implementer,
   `gpt-5.6-terra` / medium, recorded at
   `a7aeed1a1333eed4d7a58090bfef1534129d7de6`.
@@ -44,6 +47,11 @@ recovery guidance.
   tested `awk` parser. Pinned Prettier 3.9.0 write/check commands ran across
   all changed Markdown files; the execution surface suppressed their usual
   diagnostic text, while the subsequent deterministic checks remained clean.
+- Review-wave correction batch: added exact command flags everywhere atomicity
+  is claimed and committed closed-world expectations for two head names,
+  exact `main`, dynamic T-0079, and 17 exact archive tags. The macOS-portable
+  read-only `ls-remote` verification checks name/SHA/count closure without
+  freezing T-0079 or inspecting local refs.
 
 ## Review Assignments
 
@@ -77,6 +85,22 @@ the available evidence.
   expected refs and do not assert closed-world equality for the complete head
   and archive-tag sets. Add deterministic exact-name/count/SHA assertions.
   Accepted.
+
+## Review Wave 1 correction result
+
+- P1 corrected: all execution records now distinguish the failed
+  `git push --atomic --force-with-lease origin --delete ...` invocation from
+  the successful `git push --atomic --force-with-lease origin` invocation with
+  fully qualified `:refs/heads/...` deletion refspecs.
+- P2 corrected: added the committed
+  `T-0079_REMOTE_BRANCH_PRUNING_EXPECTED_REFS.tsv` expectations and a
+  macOS-portable read-only `ls-remote`/sort/diff/count guide that fails on
+  missing or extra head/archive-tag refs. The no-ref-mutation local equivalent
+  passed: exactly two head names, exact `main`, dynamic valid T-0079 SHA, and
+  17 exact archive tag name/SHA pairs.
+- Fresh direct `git ls-remote` verification was limited by transient DNS.
+  Runtime self-metadata remains unavailable; the explicitly configured
+  Terra-medium implementer profile is the acceptance evidence.
 
 Return the complete accepted batch to the existing implementer. The
 expected/configured profile remains `gpt-5.6-terra`, medium reasoning,

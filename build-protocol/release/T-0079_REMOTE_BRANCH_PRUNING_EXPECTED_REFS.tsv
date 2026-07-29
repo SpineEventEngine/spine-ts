@@ -1,0 +1,21 @@
+# T-0079 post-prune closed-world expectations.
+# kind	name	exact_full_40_character_sha_or_DYNAMIC
+head	main	0fa0b39c14768abac26d466ba721f9c9297a56c3
+head	task/T-0079-remote-branch-pruning	DYNAMIC
+tag	archive/legacy/T-0012-write-side-command-execution-foundation	5dd57cbe3fa257e4e50b6ab4e93730a5a59ca861
+tag	archive/legacy/T-0012a-minimal-command-post-enqueue	39f555386883facf725e7fbf8a08b8d77936c02d
+tag	archive/legacy/T-0012b-command-routing-dispatch-outcome	05594ef790dc109719567fc0adef6e5f94597fae
+tag	archive/legacy/T-0012c-aggregate-command-handler-invocation	da8ae0cfef99bddc2d9f2f168cd780090edb966b
+tag	archive/legacy/T-0012d-aggregate-transaction-commit-event-application	2711d5e136d4453590299c54d11715e9b84c1542
+tag	archive/legacy/T-0012e-event-production-rejection-normalization	b3ceb051c75f2ce8f70e5c40f906d24185ead844
+tag	archive/legacy/T-0012f-event-publication-boundary	f73a0321ae6907a92731fde9a0b0da7cb1ee9c27
+tag	archive/legacy/T-0012g-storage-delivery-integration	6cf7f617327c2343fff1254cae82d6ed43565016
+tag	archive/legacy/T-0013-1-aggregate-state-store	d40c95a43bcdfeb1efc62e0e114ab8aa48a8ff7d
+tag	archive/legacy/T-0013-2-handler-contracts	6211502232414b7f72679900251fb7b7190333a1
+tag	archive/legacy/T-0013-3-app-registry-gen	39da4ef954ffd043677be3bcc53ec708354b4a78
+tag	archive/legacy/T-0013-4-bare-decorators	57085ab711842fa1f10522158f041a2ecf375a88
+tag	archive/legacy/T-0013-5-aggregate-cutover	dd560e001c028ce5a6b4ecda57d52d31660c0e65
+tag	archive/legacy/T-0013-6-reactors-subscribers	714640ef7d784237aba431f3c6c25ea64765fd55
+tag	archive/legacy/T-0013-registry-and-aggregate-cutover	d210fae569883f2dda0fb0d61587bb97184b0dc5
+tag	archive/rescue/T-0048-planning-20260729	cf608c7b4dadfa75cb1ea4631cdca8760e21c123
+tag	archive/rescue/dirty-root-20260729	def03a41dc187205ede71c1101afba05a7f603f4
