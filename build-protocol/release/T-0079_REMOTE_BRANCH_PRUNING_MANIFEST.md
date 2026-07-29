@@ -74,13 +74,13 @@ guidance.
    git cherry -v origin/main 384dd719da09f2792374cdd86cce24b0544b47e6
    ```
 
-5. Verify the closed-world post-prune state. The committed
+5. Verify the final closed-world post-prune state. The committed
    [`T-0079_REMOTE_BRANCH_PRUNING_EXPECTED_REFS.tsv`](T-0079_REMOTE_BRANCH_PRUNING_EXPECTED_REFS.tsv)
-   has the exact `main` SHA, exact two-head name set, and exact sorted
-   17-archive-tag name/SHA set. Its active T-0079 row is deliberately
-   `DYNAMIC`: the command requires one valid full live SHA. It uses only direct
-   read-only remote queries, fails on any missing or extra head/archive-tag
-   ref, and asserts both counts.
+   has the exact final one-head name set and exact sorted 17-archive-tag
+   name/SHA set. The remaining `main` row is deliberately `DYNAMIC` because
+   committing the closure advances it; the command requires one valid full
+   live SHA. It uses only direct read-only remote queries, fails on any missing
+   or extra head/archive-tag ref, and asserts both counts.
 
    ```sh
    set -eu
@@ -92,10 +92,7 @@ guidance.
      awk '{ sub("^refs/heads/", "", $2); print $2 "\t" $1 }' | LC_ALL=C sort > "$scratch/live-heads"
    cut -f 1 "$scratch/live-heads" | LC_ALL=C sort > "$scratch/live-head-names"
    diff -u "$scratch/expected-head-names" "$scratch/live-head-names"
-   test "$(wc -l < "$scratch/live-heads" | tr -d ' ')" = 2
-   main_expected=$(awk -F '\t' '$1 == "head" && $2 == "main" { print $3 }' "$expected")
-   main_live=$(awk -F '\t' '$1 == "main" { print $2 }' "$scratch/live-heads")
-   test "$main_live" = "$main_expected"
+   test "$(wc -l < "$scratch/live-heads" | tr -d ' ')" = 1
    dynamic_name=$(awk -F '\t' '$1 == "head" && $3 == "DYNAMIC" { print $2 }' "$expected")
    test "$(awk -F '\t' '$1 == "head" && $3 == "DYNAMIC" { count++ } END { print count + 0 }' "$expected")" = 1
    dynamic_live=$(awk -F '\t' -v name="$dynamic_name" '$1 == name { print $2 }' "$scratch/live-heads")

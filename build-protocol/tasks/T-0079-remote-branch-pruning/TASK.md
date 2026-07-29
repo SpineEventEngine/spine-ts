@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete; reviewed and final verification passed; ready for `main` integration.
+Complete; merged, post-merge verified, remotely synchronized, and cleaned up.
 
 ## Classification
 
@@ -147,3 +147,7 @@ every unique historical or rescue tip under an immutable remote tag.
 - Final live verification later succeeded with exactly two head names, exact
   `main`, one valid dynamic T-0079 tip, and all 17 exact archive tag mappings.
 - Documentation and style/maintainability Review Wave 2 are CLEAN.
+- `main` fast-forwarded to reviewed endpoint `92f8c50a`, passed the post-merge
+  tree/format gate, and was pushed.
+- The merged T-0079 remote task branch was deleted. Final expected state is one
+  dynamic `main` head plus the 17 exact archive tags.

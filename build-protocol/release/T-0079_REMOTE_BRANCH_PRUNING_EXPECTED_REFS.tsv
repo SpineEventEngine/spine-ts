@@ -1,7 +1,6 @@
 # T-0079 post-prune closed-world expectations.
 # kind	name	exact_full_40_character_sha_or_DYNAMIC
-head	main	0fa0b39c14768abac26d466ba721f9c9297a56c3
-head	task/T-0079-remote-branch-pruning	DYNAMIC
+head	main	DYNAMIC
 tag	archive/legacy/T-0012-write-side-command-execution-foundation	5dd57cbe3fa257e4e50b6ab4e93730a5a59ca861
 tag	archive/legacy/T-0012a-minimal-command-post-enqueue	39f555386883facf725e7fbf8a08b8d77936c02d
 tag	archive/legacy/T-0012b-command-routing-dispatch-outcome	05594ef790dc109719567fc0adef6e5f94597fae
