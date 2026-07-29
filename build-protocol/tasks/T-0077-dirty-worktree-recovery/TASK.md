@@ -1,5 +1,9 @@
 # T-0077: Recover and reconcile the dirty root worktree
 
+## Status
+
+Accepted for integration.
+
 ## Classification
 
 High-risk maintenance. The task handles a large uncommitted snapshot, branch
@@ -128,8 +132,20 @@ Git evidence uses the snapshot range `f826acec..def03a41` and the canonical
 
 ## Verification
 
-Recovery-state verification passed. `git diff --check` and the root-installed
-Prettier check passed for the protocol change.
+Recovery-state verification passed:
+
+- local `main` and `origin/main` had zero divergence before integration;
+- local and remote rescue refs both resolved to `def03a41`;
+- root status contained only the two protected untracked human-review files;
+- every old and new path in `f826acec..def03a41` occurs in the rescue
+  inventory;
+- parent content and cited T-0072/T-0073/T-0075 commits resolve through Git;
+- the root-installed Prettier check and `git diff --check` passed.
+
+Archived worktrees whose visible dirtiness is only the requested
+`.superpowers` deletion are not force-removed because ignored local artifacts
+cannot be proven disposable. Their branches and checkout contents remain
+preserved. Worktrees with unrelated dirtiness remain untouched.
 
 ## Recovery Guard
 
@@ -145,3 +161,8 @@ this process rule and recovery records; expected `gpt-5.6-terra` with `medium`
 reasoning; both fields were explicit in dispatch. The execution surface does
 not expose actual runtime-model metadata, so the immutable configured profile
 is the available evidence under the protocol.
+
+All acceptance criteria are satisfied. No rescued product implementation needs
+integration because maintained descendants are already canonical on `main`;
+unique research and planning scratch remains recoverable from the pushed rescue
+branch.
