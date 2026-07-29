@@ -2487,6 +2487,46 @@
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPredicate.column:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPredicate.ids:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPredicate.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPredicate.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPredicate.kind#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPredicate.operator:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPredicate.predicates:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPredicate.value:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
     "name": "StorageQueryCapabilities.comparisons:PropertySignature"
   },
   {

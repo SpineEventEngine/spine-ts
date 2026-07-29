@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -63,6 +63,12 @@ function track(repoRoot) {
 
 function runChecker(repoRoot) {
   return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], { encoding: "utf8" });
+}
+
+function writeObservedDebt(repoRoot) {
+  return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot, "--write-debt"], {
+    encoding: "utf8",
+  });
 }
 
 describe("check-tsdoc", () => {
@@ -615,5 +621,171 @@ describe("check-tsdoc", () => {
     const result = runChecker(repoRoot);
     expect(result.status).toBe(1);
     expect(result.stderr.indexOf(":: z")).toBeLessThan(result.stderr.indexOf(":: é"));
+  });
+
+  it("rejects inheritDoc when the inherited callable documentation is incomplete", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Describes a contract. */",
+        "export interface Contract {",
+        "  /** Finds a value. */",
+        "  finds(value: string): string;",
+        "}",
+        "/** Implements the contract. */",
+        "export class Implementation implements Contract {",
+        "  /** @inheritDoc */",
+        "  finds(value: string): string { return value; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("invalid-inheritdoc");
+    expect(result.stderr).toContain("Implementation.finds");
+  });
+
+  it("checks shorthand and referenced callable properties in nested object APIs", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "const run = (value: string): string => value;",
+        "const maps = (value: string): string => value;",
+        "/** Provides operations. */",
+        "export const api = { run, nested: { maps: run, shorthand: maps } };",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("api.run");
+    expect(result.stderr).toContain("api.nested.maps");
+    expect(result.stderr).toContain("api.nested.shorthand");
+  });
+
+  it("gives class interface and type-literal member overloads distinct identities", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Represents a class contract. */",
+        "export class ClassContract {",
+        "  finds(value: string): string;",
+        "  finds(value: number): string;",
+        "  finds(value: string | number): string { return String(value); }",
+        "}",
+        "/** Describes an interface contract. */",
+        "export interface InterfaceContract {",
+        "  finds(value: string): string;",
+        "  finds(value: number): string;",
+        "}",
+        "/** Describes a type-literal contract. */",
+        "export type LiteralContract = { finds(value: string): string; finds(value: number): string };",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("ClassContract.finds#1");
+    expect(result.stderr).toContain("ClassContract.finds#2");
+    expect(result.stderr).toContain("ClassContract.finds#3");
+    expect(result.stderr).toContain("InterfaceContract.finds#1");
+    expect(result.stderr).toContain("InterfaceContract.finds#2");
+    expect(result.stderr).toContain("LiteralContract.finds#1");
+    expect(result.stderr).toContain("LiteralContract.finds#2");
+
+    const written = writeObservedDebt(repoRoot);
+    expect(written.status).toBe(0);
+    const entries = JSON.parse(
+      readFileSync(join(repoRoot, "build-protocol/tsdoc-debt/T-0080H.json"), "utf8"),
+    );
+    const keys = entries.map((entry) => `${entry.rule}\u0000${entry.file}\u0000${entry.name}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(entries.some((entry) => entry.rule === "duplicate-observed-failure")).toBe(false);
+  });
+
+  it("traverses wrapped union intersection and parenthesized inline APIs", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "export type Wrapped = Readonly<({ run(value: string): string } & { nested: { finds: (value: string) => string } }) | { creates: new (value: string) => Wrapped }> ;",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Wrapped.run");
+    expect(result.stderr).toContain("Wrapped.nested.finds");
+    expect(result.stderr).toContain("Wrapped.creates");
+  });
+
+  it("checks callable object properties referenced through property and element access", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "const helpers = { run: (value: string): string => value };",
+        "/** Provides public operations. */",
+        "export const api = { run: helpers.run, maps: helpers['run'] };",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("api.run(value)");
+    expect(result.stderr).toContain("api.maps(value)");
+  });
+
+  it("checks recursively referenced object-literal bindings in public object APIs", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "const run = (value: string): string => value;",
+        "const nested = { run };",
+        "/** Provides public operations. */",
+        "export const api = { nested };",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("api.nested.run");
+  });
+
+  it("bounds cyclic object bindings exposed through a public object API", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "const a = { b };",
+        "const b = { a };",
+        "/** Provides public operations. */",
+        "export const api = { a };",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).not.toContain("Maximum call stack size exceeded");
+    expect(result.stderr).toContain("api.a");
   });
 });

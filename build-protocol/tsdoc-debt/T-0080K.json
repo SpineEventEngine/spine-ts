@@ -132,6 +132,16 @@
   {
     "rule": "missing-returns",
     "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.signIn#1()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.signIn#2()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat-web/src/index.tsx",
     "name": "ChatBrowserApp(props)"
   },
   {
@@ -193,6 +203,41 @@
     "rule": "missing-returns",
     "file": "examples/chat/src/index.ts",
     "name": "unpackChatValue(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.actor:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.signIn#1()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.signIn#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.signIn#2()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.signIn#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.status#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat-web/src/index.tsx",
+    "name": "BrowserChatSession.status#2:PropertySignature"
   },
   {
     "rule": "missing-summary",

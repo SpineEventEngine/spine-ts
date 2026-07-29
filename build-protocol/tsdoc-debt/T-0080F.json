@@ -1191,6 +1191,11 @@
   },
   {
     "rule": "callable-summary",
+    "file": "packages/server/src/repository/repository.ts",
+    "name": "RepositoryEntityType(args)"
+  },
+  {
+    "rule": "callable-summary",
     "file": "packages/server/src/runtime/runtime-routing.ts",
     "name": "createRoutingPlan(input)"
   },
@@ -3422,6 +3427,11 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/repository/repository.ts",
+    "name": "RepositoryEntityType(args)(args)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/repository/repository.ts",
     "name": "RepositoryIdentityError.constructor(code,message)(code)"
   },
   {
@@ -5597,6 +5607,11 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/repository/repository.ts",
+    "name": "RepositoryEntityType(args)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/repository/repository.ts",
     "name": "RepositoryIdentityError.constructor(code,message)"
   },
   {
@@ -7182,6 +7197,26 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
+    "name": "ParkedOwner.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
+    "name": "ParkedOwner.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
+    "name": "ParkedOwner.kind#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
+    "name": "ParkedOwner.token:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
     "name": "ParkedOwner:TypeAliasDeclaration"
   },
   {
@@ -8373,6 +8408,46 @@
     "rule": "missing-summary",
     "file": "packages/server/src/services/subscription-records.ts",
     "name": "DurableSubscriptionRecord.tenantId:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/services/subscription-records.ts",
+    "name": "DurableSubscriptionState.id#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/services/subscription-records.ts",
+    "name": "DurableSubscriptionState.id#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/services/subscription-records.ts",
+    "name": "DurableSubscriptionState.id#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/services/subscription-records.ts",
+    "name": "DurableSubscriptionState.owner:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/services/subscription-records.ts",
+    "name": "DurableSubscriptionState.record:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/services/subscription-records.ts",
+    "name": "DurableSubscriptionState.type#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/services/subscription-records.ts",
+    "name": "DurableSubscriptionState.type#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/services/subscription-records.ts",
+    "name": "DurableSubscriptionState.type#3:PropertySignature"
   },
   {
     "rule": "missing-summary",

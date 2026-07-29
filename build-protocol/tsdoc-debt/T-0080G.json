@@ -1466,6 +1466,36 @@
   },
   {
     "rule": "missing-summary",
+    "file": "packages/auth/src/gateway/index.ts",
+    "name": "UnaryGatewayResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/gateway/index.ts",
+    "name": "UnaryGatewayResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/gateway/index.ts",
+    "name": "UnaryGatewayResult.kind#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/gateway/index.ts",
+    "name": "UnaryGatewayResult.reason:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/gateway/index.ts",
+    "name": "UnaryGatewayResult.value#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/gateway/index.ts",
+    "name": "UnaryGatewayResult.value#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
     "file": "packages/auth/src/index.ts",
     "name": "AuthenticatedPrincipal.attributes:PropertySignature"
   },
@@ -1608,6 +1638,66 @@
     "rule": "missing-summary",
     "file": "packages/auth/src/index.ts",
     "name": "IncomingQuery.transport:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.kind#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.kind#4:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.transport#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.transport#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.transport#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.transport#4:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.value#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.value#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.value#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/index.ts",
+    "name": "IncomingRequestInput.value#4:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -1837,6 +1927,76 @@
   {
     "rule": "missing-summary",
     "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackInput.code#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackInput.code#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackInput.error#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackInput.error#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackResult.expiresAt:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackResult.grant:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackResult.postLoginRedirect:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowCallbackResult.reason:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowExchangeResult.credential:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowExchangeResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowExchangeResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowExchangeResult.session:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
     "name": "OidcFlowOptions.allowedPostLoginRedirects:PropertySignature"
   },
   {
@@ -1922,6 +2082,31 @@
   {
     "rule": "missing-summary",
     "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowStartResult.authorizationUrl:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowStartResult.expiresAt:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowStartResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowStartResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowStartResult.reason:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
     "name": "OidcVerifiedIdentityProvider.exchangeAuthorizationCode(input)"
   },
   {
@@ -1962,7 +2147,57 @@
   {
     "rule": "missing-summary",
     "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionCreateResult.credential:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionCreateResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionCreateResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionCreateResult.reason:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionCreateResult.session:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
     "name": "OpaqueSessionLogoutResult.kind:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionRotateResult.credential:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionRotateResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionRotateResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionRotateResult.reason:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionRotateResult.session:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -1972,7 +2207,47 @@
   {
     "rule": "missing-summary",
     "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionIssueResult.credential:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionIssueResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionIssueResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionIssueResult.reason:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionIssueResult.session:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
     "name": "SignedSessionLogoutResult.kind:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionRotationResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionRotationResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionRotationResult.reason:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2182,6 +2457,36 @@
   {
     "rule": "missing-summary",
     "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionGatewayResult.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionGatewayResult.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionGatewayResult.kind#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionGatewayResult.kind#4:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionGatewayResult.reason:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionGatewayResult.wire:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
     "name": "SubscriptionTopicWire.bytes:PropertySignature"
   },
   {
@@ -2198,6 +2503,31 @@
     "rule": "missing-summary",
     "file": "packages/auth/src/subscriptions/index.ts",
     "name": "SubscriptionUpdateWire.kind:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-react/src/index.ts",
+    "name": "RequestObservation.error:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-react/src/index.ts",
+    "name": "RequestObservation.status#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-react/src/index.ts",
+    "name": "RequestObservation.status#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-react/src/index.ts",
+    "name": "RequestObservation.status#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-react/src/index.ts",
+    "name": "RequestObservation.value:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2282,6 +2612,31 @@
   {
     "rule": "missing-summary",
     "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOutcome.error:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOutcome.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOutcome.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOutcome.kind#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "ClientOutcome.rejection:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
     "name": "ClientProtocolError.constructor(message)"
   },
   {
@@ -2308,6 +2663,76 @@
     "rule": "missing-summary",
     "file": "packages/client-web/src/client/client.ts",
     "name": "EventSubscriptionOptions.kind:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionDelivery.kind#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionDelivery.kind#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionDelivery.response:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionDelivery.update:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.attempt:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.error:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.generation#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.generation#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.generation#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.generation#4:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.state#1:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.state#2:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.state#3:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "SubscriptionLifecycle.state#4:PropertySignature"
   },
   {
     "rule": "missing-summary",

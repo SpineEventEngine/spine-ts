@@ -294,7 +294,9 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
 function writeDebt(repoRoot) {
   const root = realpathSync(resolve(repoRoot));
   const debtRoot = join(root, "build-protocol", "tsdoc-debt");
-  const sourceFailures = scanTsdoc(root);
+  const sourceFailures = rejectDuplicateFailures(scanTsdoc(root)).filter(
+    (failure) => failure.rule !== "duplicate-observed-failure",
+  );
   const partitions = new Map();
   for (const failure of sourceFailures) {
     const partition = debtPartition(failure.file);
@@ -387,8 +389,8 @@ function inspectDeclaration(node, file, owner, checker, failures, suffix = "") {
   if (isCallable(node)) inspectCallable(node, file, name, checker, failures);
 
   if (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) {
-    for (const member of node.members) {
-      if (isPublicMember(member)) inspectDeclaration(member, file, name, checker, failures);
+    for (const [member, suffix] of memberSuffixes(node.members)) {
+      if (isPublicMember(member)) inspectDeclaration(member, file, name, checker, failures, suffix);
     }
   }
 
@@ -414,7 +416,15 @@ function inspectDeclaration(node, file, owner, checker, failures, suffix = "") {
   if (ts.isExportAssignment(node)) inspectExportAssignment(node, file, checker, failures);
 
   if (ts.isTypeAliasDeclaration(node))
-    inspectTypeNode(node.type, file, name, checker, failures, node);
+    inspectTypeNode(
+      node.type,
+      file,
+      name,
+      checker,
+      failures,
+      node,
+      typeMemberOccurrences(node.type, name),
+    );
 
   if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node)) {
     const callable =
@@ -457,11 +467,11 @@ function inspectVariable(declaration, file, owner, checker, failures, documentat
   }
   if (initializer !== undefined && ts.isObjectLiteralExpression(initializer)) {
     for (const member of initializer.properties)
-      inspectObjectMember(member, file, name, checker, failures);
+      inspectObjectMember(member, file, name, checker, failures, new Set());
   }
 }
 
-function inspectObjectMember(member, file, owner, checker, failures) {
+function inspectObjectMember(member, file, owner, checker, failures, visited = new Set()) {
   const memberName = member.name === undefined ? undefined : propertyName(member.name);
   if (memberName === undefined) return;
   const name = `${owner}.${memberName}`;
@@ -475,10 +485,90 @@ function inspectObjectMember(member, file, owner, checker, failures) {
     inspectDocumentation(member, file, name, checker, failures);
     if (ts.isArrowFunction(member.initializer) || ts.isFunctionExpression(member.initializer))
       inspectCallable(member.initializer, file, name, checker, failures, member);
+    else inspectReferencedCallable(member.initializer, file, name, checker, failures, visited);
     if (ts.isObjectLiteralExpression(member.initializer)) {
       for (const nested of member.initializer.properties)
-        inspectObjectMember(nested, file, name, checker, failures);
+        inspectObjectMember(nested, file, name, checker, failures, new Set(visited));
     }
+  } else if (ts.isShorthandPropertyAssignment(member)) {
+    inspectDocumentation(member, file, name, checker, failures);
+    inspectReferencedCallable(member, file, name, checker, failures, visited);
+  }
+}
+
+function inspectReferencedCallable(expression, file, name, checker, failures, visited = new Set()) {
+  const symbol = ts.isShorthandPropertyAssignment(expression)
+    ? checker.getShorthandAssignmentValueSymbol(expression)
+    : ts.isElementAccessExpression(expression) &&
+        (ts.isStringLiteral(expression.argumentExpression) ||
+          ts.isNumericLiteral(expression.argumentExpression))
+      ? checker
+          .getTypeAtLocation(expression.expression)
+          .getProperty(expression.argumentExpression.text)
+      : ts.isIdentifier(expression) ||
+          ts.isPropertyAccessExpression(expression) ||
+          ts.isElementAccessExpression(expression)
+        ? checker.getSymbolAtLocation(expression)
+        : undefined;
+  const resolved =
+    symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0
+      ? checker.getAliasedSymbol(symbol)
+      : symbol;
+  for (const declaration of resolved?.declarations ?? []) {
+    if (declaration.getSourceFile() !== expression.getSourceFile() || visited.has(declaration))
+      continue;
+    visited.add(declaration);
+    if (ts.isFunctionDeclaration(declaration)) {
+      inspectCallable(declaration, file, name, checker, failures);
+      return;
+    }
+    if (ts.isVariableDeclaration(declaration) && declaration.initializer !== undefined) {
+      inspectReferencedInitializer(
+        declaration.initializer,
+        declaration,
+        file,
+        name,
+        checker,
+        failures,
+        visited,
+      );
+      return;
+    }
+    if (ts.isPropertyAssignment(declaration)) {
+      inspectReferencedInitializer(
+        declaration.initializer,
+        declaration,
+        file,
+        name,
+        checker,
+        failures,
+        visited,
+      );
+      return;
+    }
+    if (ts.isMethodDeclaration(declaration)) {
+      inspectCallable(declaration, file, name, checker, failures);
+      return;
+    }
+  }
+}
+
+function inspectReferencedInitializer(
+  initializer,
+  documentationNode,
+  file,
+  name,
+  checker,
+  failures,
+  visited,
+) {
+  if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+    inspectCallable(initializer, file, name, checker, failures, documentationNode);
+  } else if (ts.isObjectLiteralExpression(initializer)) {
+    for (const member of initializer.properties)
+      inspectObjectMember(member, file, name, checker, failures, new Set(visited));
+  } else {
+    inspectReferencedCallable(initializer, file, name, checker, failures, visited);
   }
 }
 
@@ -496,14 +586,44 @@ function inspectExportAssignment(node, file, checker, failures) {
   }
 }
 
-function inspectTypeNode(node, file, owner, checker, failures, documentationNode) {
+function inspectTypeNode(
+  node,
+  file,
+  owner,
+  checker,
+  failures,
+  documentationNode,
+  memberOccurrences = new Map(),
+) {
   if (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node)) {
     inspectCallable(node, file, owner, checker, failures, documentationNode);
     return;
   }
+  if (ts.isParenthesizedTypeNode(node)) {
+    inspectTypeNode(
+      node.type,
+      file,
+      owner,
+      checker,
+      failures,
+      documentationNode,
+      memberOccurrences,
+    );
+    return;
+  }
+  if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) {
+    for (const type of node.types)
+      inspectTypeNode(type, file, owner, checker, failures, documentationNode, memberOccurrences);
+    return;
+  }
+  if (ts.isTypeReferenceNode(node)) {
+    for (const type of node.typeArguments ?? [])
+      inspectTypeNode(type, file, owner, checker, failures, documentationNode, memberOccurrences);
+    return;
+  }
   if (!ts.isTypeLiteralNode(node)) return;
-  for (const member of node.members) {
-    const name = declarationName(member, owner);
+  for (const [member, suffix] of typeMemberSuffixes(node.members, owner, memberOccurrences)) {
+    const name = declarationName(member, owner, suffix);
     if (name !== undefined && !isCallable(member))
       inspectDocumentation(
         member,
@@ -514,8 +634,64 @@ function inspectTypeNode(node, file, owner, checker, failures, documentationNode
       );
     if (isCallable(member)) inspectCallable(member, file, name, checker, failures, member);
     if (ts.isPropertySignature(member) && member.type !== undefined)
-      inspectTypeNode(member.type, file, name, checker, failures, member);
+      inspectTypeNode(member.type, file, name, checker, failures, member, memberOccurrences);
   }
+}
+
+function typeMemberOccurrences(node, owner) {
+  const counts = new Map();
+  collectTypeMemberOccurrences(node, owner, counts);
+  return { counts, seen: new Map() };
+}
+
+function collectTypeMemberOccurrences(node, owner, occurrences) {
+  if (ts.isParenthesizedTypeNode(node)) {
+    collectTypeMemberOccurrences(node.type, owner, occurrences);
+    return;
+  }
+  if (ts.isUnionTypeNode(node) || ts.isIntersectionTypeNode(node)) {
+    for (const type of node.types) collectTypeMemberOccurrences(type, owner, occurrences);
+    return;
+  }
+  if (ts.isTypeReferenceNode(node)) {
+    for (const type of node.typeArguments ?? [])
+      collectTypeMemberOccurrences(type, owner, occurrences);
+    return;
+  }
+  if (!ts.isTypeLiteralNode(node)) return;
+  for (const member of node.members) {
+    const name = declarationName(member, owner);
+    if (name === undefined) continue;
+    occurrences.set(name, (occurrences.get(name) ?? 0) + 1);
+    if (ts.isPropertySignature(member) && member.type !== undefined)
+      collectTypeMemberOccurrences(member.type, name, occurrences);
+  }
+}
+
+function typeMemberSuffixes(members, owner, occurrences) {
+  return members.map((member) => {
+    const name = declarationName(member, owner);
+    if (name === undefined || occurrences.counts.get(name) === 1) return [member, ""];
+    const occurrence = (occurrences.seen.get(name) ?? 0) + 1;
+    occurrences.seen.set(name, occurrence);
+    return [member, `#${occurrence}`];
+  });
+}
+
+function memberSuffixes(members) {
+  const occurrences = new Map();
+  for (const member of members) {
+    const key = declarationName(member, undefined);
+    if (key !== undefined) occurrences.set(key, (occurrences.get(key) ?? 0) + 1);
+  }
+  const seen = new Map();
+  return members.map((member) => {
+    const key = declarationName(member, undefined);
+    if (key === undefined || occurrences.get(key) === 1) return [member, ""];
+    const occurrence = (seen.get(key) ?? 0) + 1;
+    seen.set(key, occurrence);
+    return [member, `#${occurrence}`];
+  });
 }
 
 function variableStatementFor(node) {
@@ -558,13 +734,48 @@ function hasDocumentedInheritedMember(node, checker) {
       const property = inherited.getProperty(name);
       if (property === undefined) return false;
       const declaration = property.valueDeclaration ?? property.declarations?.[0];
-      if (declaration === undefined || documentationFor(declaration).summary === undefined)
+      if (declaration === undefined || !hasCompleteCallableDocumentation(declaration, checker))
         return false;
       return checker.isTypeAssignableTo(
         memberType,
         checker.getTypeOfSymbolAtLocation(property, declaration),
       );
     });
+}
+
+function hasCompleteCallableDocumentation(node, checker) {
+  if (!isCallable(node)) return false;
+  const documentation = documentationFor(node);
+  if (
+    documentation.summary === undefined ||
+    isPlaceholder(documentation.summary) ||
+    !startsWithCallableVerb(documentation.summary) ||
+    documentation.duplicateParameters.length > 0
+  )
+    return false;
+  const parameters = node.parameters.flatMap(parameterNames);
+  const tags = documentation.tags.filter((tag) => tag.name === "param");
+  const documented = new Set();
+  for (const tag of tags) {
+    if (
+      tag.parameterName === undefined ||
+      documented.has(tag.parameterName) ||
+      isPlaceholder(tag.description)
+    )
+      return false;
+    documented.add(tag.parameterName);
+  }
+  if (
+    parameters.length !== documented.size ||
+    parameters.some((parameter) => !documented.has(parameter))
+  )
+    return false;
+  const returns = documentation.tags.filter(
+    (tag) => tag.name === "returns" || tag.name === "return",
+  );
+  return isVoidResult(node, checker)
+    ? returns.length === 0
+    : returns.length === 1 && !isPlaceholder(returns[0].description);
 }
 
 function inspectCallable(node, file, name, checker, failures, documentationNode = node) {

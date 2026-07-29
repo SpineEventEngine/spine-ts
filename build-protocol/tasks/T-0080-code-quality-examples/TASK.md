@@ -2,7 +2,7 @@
 
 ## Status
 
-Requirements split accepted; T-0080A is next.
+In progress. T-0080A is complete; T-0080B is next.
 
 ## Classification
 

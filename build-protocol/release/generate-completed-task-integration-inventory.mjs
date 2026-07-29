@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import process from "node:process";
 
 const baseline = "e6bdc0653a55c5c09a1af3742e74626b81c43217";
 const inventoryPath = "build-protocol/release/COMPLETED_TASK_INTEGRATION_INVENTORY.tsv";

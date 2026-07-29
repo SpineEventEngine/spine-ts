@@ -1547,6 +1547,21 @@
   {
     "rule": "missing-summary",
     "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumns.archived:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumns.deleted:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumns.version:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
     "name": "defineGeneratedEntityColumns(_schema,entries)"
   },
   {

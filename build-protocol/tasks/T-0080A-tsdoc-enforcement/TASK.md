@@ -2,8 +2,7 @@
 
 ## Status
 
-Implementation and focused mechanical verification complete; awaiting the
-parent's review wave.
+Complete. Reviewed and mechanically verified on the T-0080 umbrella branch.
 
 ## Parent And Dependency
 
@@ -140,3 +139,22 @@ but not runtime behavior or a public package contract.
 - Independent focused tests, direct checker, pinned Prettier, and
   `git diff --check` pass. Implementer evidence also records scoped ESLint,
   tooling typecheck, and canonical `pnpm lint` passes.
+
+## Final Acceptance Evidence
+
+- Final traversal covers wrapped inline public types, shorthand and referenced
+  object callables, dot and literal-element access, referenced object literals,
+  and cyclic same-source bindings with stable identities.
+- Focused checker suite passes 34/34. The direct checker passes against exact
+  debt D 537, E 205, F 1,694, G 558, H 440, K 58, L 39, M 130, and N 79:
+  3,740 entries total.
+- Independent tooling typecheck, scoped ESLint, pinned Prettier,
+  release-inventory reproducibility, `git diff --check`, and canonical
+  `pnpm lint` pass. No Spine JVM build was invoked.
+- Documentation, TypeScript/API documentation, and style/maintainability
+  concerns are CLEAN after corrections. Performance/reliability is N/A because
+  the checker is repository-only, bounded to tracked authored sources, and
+  changes no runtime code.
+- Child runtime self-introspection was unavailable. Every implementation and
+  review dispatch explicitly used its immutable configured existing
+  role/profile; no visible mismatch or fallback appeared.
