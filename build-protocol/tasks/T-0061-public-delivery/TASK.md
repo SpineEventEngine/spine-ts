@@ -1,6 +1,6 @@
 # T-0061: Public DeliveryBuilder and Delivery
 
-Status: Accepted for integration
+Status: Complete — committed, pushed, and represented on canonical `main`
 
 Baseline: `3f284a4a`
 

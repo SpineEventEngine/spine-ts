@@ -128,15 +128,24 @@ Before dispatch:
   historical chronology.
 - Expected profile: `gpt-5.6-terra`, medium reasoning.
 - Model and reasoning must be explicit in dispatch.
-- Actual runtime metadata and result: pending.
+- Actual runtime metadata: the execution surface does not expose child
+  self-introspection; the explicitly dispatched immutable configured profile is
+  the available evidence.
+- Result: the implementer created the durable audit matrix and reconciled only
+  unambiguous modern status headers. No runtime, test, or production code was
+  changed.
+
+A direct `git ls-remote origin` query verified canonical `main`, T-0078, both
+rescue branches, and all 15 legacy archive refs at the recorded exact SHAs.
 
 ## Review Dispositions
 
-- Style/maintainability: pending status-reconciliation implementation.
-- Documentation: pending audit matrix and status reconciliation.
-- TypeScript/API: N/A unless a genuine missing implementation is found.
-- Performance/reliability: N/A unless a genuine missing implementation is
-  found.
+- Style/maintainability: pending review of the audit matrix/status package.
+- Documentation: pending factual review of the audit matrix/status package.
+- TypeScript/API: N/A because no source, export, declaration, generated model,
+  or public API changes.
+- Performance/reliability: N/A because no runtime, persistence, concurrency,
+  lifecycle, resource, retry, or performance behavior changes.
 - Security: N/A unless the audit exposes missing security-boundary work.
 
 ## Verification

@@ -1,6 +1,6 @@
 # T-0060: Runner-neutral BlackBox
 
-Status: Accepted for integration
+Status: Complete — committed, pushed, and represented on canonical `main`
 
 Baseline: `de0a5867`
 

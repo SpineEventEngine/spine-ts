@@ -1,6 +1,6 @@
 # T-0065: Delivery Server Lifecycle And Admin
 
-Status: Awaiting mechanical pre-review gate
+Status: Complete; committed, pushed, and represented on canonical `main`
 
 Branch: `task/T-0065-delivery-server-lifecycle`
 

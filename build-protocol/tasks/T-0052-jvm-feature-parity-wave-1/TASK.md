@@ -1,6 +1,6 @@
 # T-0052: JVM Feature Parity — Wave 1
 
-Status: Planning packet accepted, merged, verified, and pushed; T-0053/T-0054 integrated, T-0055 next
+Status: Complete; Wave 1 tasks through T-0067 are committed, pushed, and represented on canonical `main`
 
 ## Objective
 

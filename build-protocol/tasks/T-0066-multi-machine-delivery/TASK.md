@@ -1,6 +1,6 @@
 # T-0066 — Multi-Machine TS-to-TS Delivery Parity
 
-Status: consolidated review corrections complete; affected re-review ready.
+Status: Complete; committed, pushed, and represented on canonical `main`.
 
 Baseline: `93ebf880`
 

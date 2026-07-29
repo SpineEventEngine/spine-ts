@@ -1,6 +1,6 @@
 # T-0057: Projection Query DSL And Server Execution
 
-Status: Complete — integration pending
+Status: Complete — committed, pushed, and represented on canonical `main`
 
 ## Objective
 

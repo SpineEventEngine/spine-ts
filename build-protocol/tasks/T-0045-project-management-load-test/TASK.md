@@ -1,6 +1,6 @@
 # T-0045: Project-management load-test example
 
-Status: Complete; committed and ready for remote synchronization
+Status: Complete; committed, pushed, and represented on canonical `main`
 
 ## Objective
 

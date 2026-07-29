@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for integration.
+Complete; committed, pushed, and represented on canonical `main`.
 
 ## Classification
 

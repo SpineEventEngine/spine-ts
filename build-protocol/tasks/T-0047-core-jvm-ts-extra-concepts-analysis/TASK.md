@@ -1,6 +1,6 @@
 # T-0047: Core JVM versus Spine TS extra-concepts analysis
 
-Status: Complete; committed and ready for remote synchronization
+Status: Complete; committed, pushed, and represented on canonical `main`
 
 ## Objective
 

@@ -1,6 +1,6 @@
 # T-0062: Public Delivery Client And Remote Adapters
 
-Status: Complete; reviewed and fully verified before integration
+Status: Complete; reviewed, committed, pushed, and represented on canonical `main`
 
 Branch: `task/T-0062-delivery-client`
 

@@ -1,7 +1,6 @@
 # T-0050: Risk-tiered convergent review protocol
 
-Status: Completed, merged, and post-merge verified; closure record requires
-`origin/main` push
+Status: Complete; committed, pushed, and represented on canonical `main`
 
 ## Objective
 

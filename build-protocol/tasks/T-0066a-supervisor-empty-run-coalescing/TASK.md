@@ -1,6 +1,6 @@
 # T-0066a — Supervisor Empty-Run Coalescing
 
-Status: complete review-wave correction implemented; focused re-review ready.
+Status: Complete; committed, pushed, and represented on canonical `main`.
 
 Baseline: `93ebf880`
 
