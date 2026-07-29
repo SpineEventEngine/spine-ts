@@ -60,6 +60,36 @@ every unique historical or rescue tip under an immutable remote tag.
 - Runtime metadata will be recorded if exposed; otherwise the immutable
   configured profile is the available evidence.
 
+## Investigation Result
+
+- The existing documentation reviewer completed a read-only classification of
+  all 83 remote heads.
+- Actual runtime self-metadata was unavailable; the immutable configured
+  `gpt-5.6-luna`/medium profile is the accepted evidence.
+- `main`: one retained head.
+- Active T-0079: one retained head until task closure.
+- Merged task heads: 61, all ancestors of `main`.
+- Merged integration heads: 2, both ancestors of `main`.
+- Patch-equivalent communication head: 1, with no unique patch according to
+  `git cherry`.
+- Unique legacy heads: 15, requiring exact archive tags.
+- Unique rescue heads: 2, requiring exact archive tags.
+- A subsequent live `git fetch --prune --tags origin` and
+  `git ls-remote --heads origin` succeeded and matched the classification
+  exactly.
+
+## Implementation Assignment
+
+- Existing implementer role.
+- Scope: create the exact committed manifest and recovery guidance, update the
+  historical audit to point to preservation tags after execution, and record
+  deterministic verification commands. Do not create/delete remote refs,
+  commit, or push.
+- Expected/configured profile: `gpt-5.6-terra`, medium reasoning, explicitly
+  dispatched.
+- Runtime metadata will be recorded if exposed; otherwise the immutable
+  configured profile is the available evidence.
+
 ## Verification
 
 Pending.
