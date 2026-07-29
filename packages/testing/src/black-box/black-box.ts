@@ -2,19 +2,15 @@ import { clone, create, type Message, type MessageShape } from "@bufbuild/protob
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
-  Client,
+  Client as NodeClient,
+  type ClientKernel,
   type ClientOperationOptions,
-  type ClientObserveOptions,
   type ClientOutcome,
-  type ClientPostOptions,
-  type ClientQueryOutcome,
   type ClientRequest,
-  type EventSubscription,
-  type ObservedClientOutcome,
-  type StateSubscription,
-  type StateSubscriptionOptions,
-} from "@spine-event-engine/client";
-import { packEvent, type MessageSchema } from "@spine-event-engine/core";
+  type Subscription,
+  type CreateSubscriptionOptions,
+} from "@spine-event-engine/client-node";
+import { packEvent } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   EventContextSchema,
@@ -25,7 +21,7 @@ import {
   type TenantId,
   type ZoneId,
 } from "@spine-event-engine/proto";
-import type { Query } from "@spine-event-engine/proto/client";
+import type { Query, Topic } from "@spine-event-engine/proto/client";
 import {
   BoundedContext,
   type BoundedContextBuilder,
@@ -93,7 +89,7 @@ function internalsOf(blackBox: BlackBox): BlackBoxInternal {
 export class BlackBox {
   readonly #context: BoundedContext;
   readonly #server: RunningServer;
-  readonly #client: Client;
+  readonly #client: ClientKernel;
   readonly #tenant: TenantId | undefined;
   readonly #zoneId: ZoneId;
   readonly #timeoutMs: number;
@@ -106,7 +102,7 @@ export class BlackBox {
   private constructor(
     context: BoundedContext,
     server: RunningServer,
-    client: Client,
+    client: ClientKernel,
     options: NormalizedBlackBoxOptions,
   ) {
     this.#context = context;
@@ -143,7 +139,7 @@ export class BlackBox {
       normalized,
       () => new Server({ contexts: [context] }).start(),
       (server) =>
-        Client.connectTo(server.baseUrl, {
+        NodeClient.connectTo(server.baseUrl, {
           ...(normalized.tenant === undefined ? {} : { tenant: normalized.tenant }),
           zoneId: normalized.zoneId,
         }),
@@ -256,7 +252,7 @@ export function createTestBlackBox(resources: {
   const blackBox = instantiateBlackBox(
     {} as BoundedContext,
     resources.server as RunningServer,
-    resources.client as Client,
+    resources.client as ClientKernel,
     defaultNormalizedOptions(),
   );
   for (const subscription of resources.subscriptions ?? [])
@@ -284,7 +280,7 @@ export function openTestBlackBox(resources: {
     {} as BoundedContext,
     defaultNormalizedOptions(),
     resources.start as () => Promise<RunningServer>,
-    resources.connect as unknown as (server: RunningServer) => Client,
+    resources.connect as unknown as (server: RunningServer) => ClientKernel,
   );
 }
 
@@ -292,10 +288,10 @@ async function openBlackBox(
   context: BoundedContext,
   options: NormalizedBlackBoxOptions,
   start: () => Promise<RunningServer>,
-  connect: (server: RunningServer) => Client,
+  connect: (server: RunningServer) => ClientKernel,
 ): Promise<BlackBox> {
   let server: RunningServer | undefined;
-  let client: Client | undefined;
+  let client: ClientKernel | undefined;
   try {
     server = await start();
     client = connect(server);
@@ -318,13 +314,13 @@ async function openBlackBox(
 function instantiateBlackBox(
   context: BoundedContext,
   server: RunningServer,
-  client: Client,
+  client: ClientKernel,
   options: NormalizedBlackBoxOptions,
 ): BlackBox {
   const BlackBoxConstructor = BlackBox as unknown as new (
     context: BoundedContext,
     server: RunningServer,
-    client: Client,
+    client: ClientKernel,
     options: NormalizedBlackBoxOptions,
   ) => BlackBox;
   return new BlackBoxConstructor(context, server, client, options);
@@ -344,27 +340,10 @@ class Request implements BlackBoxScope {
   post<Schema extends GenMessage<Message>>(
     schema: Schema,
     message: MessageShape<Schema>,
-    options: ClientObserveOptions,
-  ): Promise<ObservedClientOutcome>;
-  post<Schema extends GenMessage<Message>>(
-    schema: Schema,
-    message: MessageShape<Schema>,
-    options?: ClientOperationOptions & { readonly observe?: undefined },
-  ): Promise<ClientOutcome>;
-  post<Schema extends GenMessage<Message>>(
-    schema: Schema,
-    message: MessageShape<Schema>,
-    options: ClientPostOptions,
-  ): Promise<ClientOutcome | ObservedClientOutcome>;
-  async post<Schema extends GenMessage<Message>>(
-    schema: Schema,
-    message: MessageShape<Schema>,
-    options: ClientPostOptions | (ClientOperationOptions & { readonly observe?: undefined }) = {},
-  ): Promise<ClientOutcome | ObservedClientOutcome> {
+    options: ClientOperationOptions = {},
+  ): Promise<ClientOutcome> {
     this.#internals.assertOpen();
-    const outcome = await this.#request.post(schema, message, options as never);
-    if (outcome.kind !== "ok" || !("events" in outcome)) return outcome;
-    return Object.freeze({ kind: "ok" as const, events: this.track(outcome.events) });
+    return this.#request.post(schema, message, options);
   }
 
   postEvent<Schema extends GenMessage<Message>>(
@@ -374,37 +353,102 @@ class Request implements BlackBoxScope {
     return this.#internals.postEvent(this.#actor, schema, message);
   }
 
-  query<Schema extends GenMessage<Message>>(
-    schema: Schema,
-    query: Query | { build(): Query },
-    options?: ClientOperationOptions,
-  ): Promise<ClientQueryOutcome<Schema>> {
+  send(query: Query | { build(): Query }, options?: ClientOperationOptions) {
     this.#internals.assertOpen();
-    return this.#request.query(schema, query, options);
+    return this.#request.send(query, options);
   }
 
-  async subscribeToState<Schema extends MessageSchema, IdSchema extends MessageSchema>(
-    schema: Schema,
-    idSchema: IdSchema,
-    options?: StateSubscriptionOptions<Schema, IdSchema>,
-  ): Promise<StateSubscription<Schema, IdSchema>> {
+  async createSubscription(
+    topic: Topic,
+    options: CreateSubscriptionOptions,
+  ): Promise<Subscription> {
     this.#internals.assertOpen();
-    return this.track(await this.#request.subscribeToState(schema, idSchema, options));
-  }
-
-  async subscribeToEvents<Schema extends MessageSchema>(
-    schema: Schema,
-    options?: ClientOperationOptions,
-  ): Promise<EventSubscription<Schema>> {
-    this.#internals.assertOpen();
-    return this.track(await this.#request.subscribeToEvents(schema, options));
-  }
-
-  private track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle {
-    const tracked = new Tracked(handle, () => {
+    const subscription = await this.#request.createSubscription(topic, options);
+    const tracked = new TrackedSubscription(subscription, () => {
       this.#internals.onRelease(tracked);
     });
-    return this.#internals.track(tracked) as unknown as Handle;
+    return this.#internals.track(tracked);
+  }
+}
+
+class TrackedSubscription implements Subscription {
+  readonly #handle: Subscription;
+  readonly #onRelease: () => void;
+  #released = false;
+  #cancellation: Promise<void> | undefined;
+
+  constructor(handle: Subscription, onRelease: () => void) {
+    this.#handle = handle;
+    this.#onRelease = onRelease;
+  }
+
+  get updates(): AsyncIterable<import("@spine-event-engine/client-node").SubscriptionDelivery> {
+    return this.trackStream(this.#handle.updates);
+  }
+
+  get lifecycle(): AsyncIterable<import("@spine-event-engine/client-node").SubscriptionLifecycle> {
+    return this.trackStream(this.#handle.lifecycle);
+  }
+
+  activate(options?: ClientOperationOptions): Promise<void> {
+    return this.#handle.activate(options);
+  }
+
+  async cancel(): Promise<void> {
+    try {
+      this.#cancellation ??= this.#handle.cancel();
+      await this.#cancellation;
+    } finally {
+      this.release();
+    }
+  }
+
+  private trackStream<Value>(source: AsyncIterable<Value>): AsyncIterable<Value> {
+    const onRelease = () => {
+      this.release();
+    };
+    const onCancel = () => this.cancel();
+    return {
+      [Symbol.asyncIterator](): AsyncIterator<Value> {
+        const iterator = source[Symbol.asyncIterator]();
+        return {
+          next: async () => {
+            try {
+              const result = await iterator.next();
+              if (result.done) onRelease();
+              return result;
+            } catch (error) {
+              onRelease();
+              throw error;
+            }
+          },
+          return: async (value) => {
+            try {
+              await onCancel();
+              const returned = await iterator.return?.(value);
+              return returned ?? { done: true, value: undefined };
+            } finally {
+              onRelease();
+            }
+          },
+          throw: async (error) => {
+            try {
+              await onCancel();
+              if (iterator.throw === undefined) throw error;
+              return await iterator.throw(error);
+            } finally {
+              onRelease();
+            }
+          },
+        };
+      },
+    };
+  }
+
+  private release(): void {
+    if (this.#released) return;
+    this.#released = true;
+    this.#onRelease();
   }
 }
 
@@ -415,6 +459,13 @@ class Tracked<Handle extends { cancel(): Promise<void> }> {
   constructor(handle: Handle, onRelease: () => void) {
     this.#handle = handle;
     this.#onRelease = onRelease;
+  }
+  async activate(...arguments_: []): Promise<void> {
+    const subscription = this.#handle as Handle & { activate?: () => Promise<void> };
+    if (subscription.activate === undefined) {
+      throw new TypeError("Tracked handle does not support activation.");
+    }
+    await subscription.activate(...arguments_);
   }
   [Symbol.asyncIterator](): AsyncIterator<unknown> {
     const iterator = (this.#handle as Handle & AsyncIterable<unknown>)[Symbol.asyncIterator]();

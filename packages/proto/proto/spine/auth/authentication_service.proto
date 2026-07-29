@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package spine.auth;
+
+import "google/protobuf/timestamp.proto";
+import "spine/core/tenant_id.proto";
+import "spine/core/user_id.proto";
+
+// The provider-neutral gateway contract for informational browser context.
+service AuthenticationService {
+  // Resolves the current actor, tenant, and application-session expiry.
+  rpc ResolveContext(ResolveContextRequest) returns (ResolveContextResponse);
+}
+
+// The session credential travels in transport metadata, not in this message.
+message ResolveContextRequest {}
+
+// Informational session context; each later request is independently authorized.
+message ResolveContextResponse {
+  spine.core.UserId actor = 1;
+  spine.core.TenantId tenant = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}

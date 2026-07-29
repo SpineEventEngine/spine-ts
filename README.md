@@ -31,7 +31,7 @@ registration or handler materialization, and broader production verification.
 - Package manager: `pnpm@11.9.0` via the `packageManager` field.
 - Node.js engine target: Node 24 LTS or newer.
 - TypeScript module target: ESM-first `NodeNext`.
-- Package boundaries: `packages/proto`, `packages/client`, `packages/core`, `packages/server`,
+- Package boundaries: `packages/proto`, `packages/client-web`, `packages/client-node`, `packages/core`, `packages/server`,
   `packages/delivery-client`, `packages/delivery-server`, `packages/transport`, `packages/storage`, `packages/storage-datastore`,
   `packages/storage-rdbms`, and `packages/testing`.
 - Example boundary: `examples/todo`.
@@ -39,8 +39,9 @@ registration or handler materialization, and broader production verification.
   `proto/spine-sources.json`.
 - `@spine-event-engine/proto` exposes curated Protobuf-ES schemas, descriptors, message
   types, and Spine custom options for the first intake set.
-- `@spine-event-engine/client` owns the Node command, Entity-query, and subscription
-  facade, plus descriptor-backed typed Entity columns and Query DSL.
+- `@spine-event-engine/client-web` owns the browser-safe injected-transport
+  protocol kernel; `@spine-event-engine/client-node` owns Node transport factories,
+  descriptor-backed typed Entity columns, and the Query DSL.
 - `@spine-event-engine/delivery-server` provides the in-memory simple-server core and a
   standalone cleartext HTTP/2 listener with Inbox, Shard, Admin, and health
   services. State is lost on restart; it is trusted-network infrastructure,

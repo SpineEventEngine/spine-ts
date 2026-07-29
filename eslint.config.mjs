@@ -43,5 +43,31 @@ export default tseslint.config(
       },
     },
   },
+  {
+    files: ["examples/chat-web/test/interop/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        AbortController: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
+        URL: "readonly",
+        window: "readonly",
+      },
+    },
+  },
+  {
+    files: ["interop/jvm/**/*.mjs", "interop/envoy/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        AbortController: "readonly",
+        Buffer: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+        fetch: "readonly",
+        process: "readonly",
+        setTimeout: "readonly",
+      },
+    },
+  },
   eslintConfigPrettier,
 );

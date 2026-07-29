@@ -1,0 +1,27 @@
+{
+  "name": "@spine-event-engine/client-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-safe Spine client transport kernel.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "check:dependencies": "node ../../scripts/check-client-web-dependencies.mjs"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-web": "2.1.2",
+    "@spine-event-engine/core": "workspace:*",
+    "@spine-event-engine/proto": "workspace:*"
+  }
+}

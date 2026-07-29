@@ -143,6 +143,7 @@ export class Stand {
     deferredUpdates.set(this, (schema, state, updateOptions) =>
       this.#deferUpdate(schema, state, updateOptions),
     );
+    currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
   }
 
   /** Register one known entity state schema. Re-registering the same schema is idempotent. */
@@ -368,6 +369,29 @@ export class Stand {
     } catch (error) {
       finish();
       throw error;
+    }
+  }
+
+  /** Repository-only full current-record read, including lifecycle metadata. */
+  async #readCurrent<Schema extends MessageSchema>(
+    schema: Schema,
+    id: unknown,
+    options: StandReadOptions,
+  ): Promise<StandCurrentRecord<Schema> | undefined> {
+    const finish = this.#beginOperation();
+    try {
+      const registration = this.#registration(schema, "read");
+      const tenantId = this.#tenantId(options.tenantId);
+      const stored = await this.#openCurrent(registration, tenantId).read(id);
+      if (stored === undefined) return undefined;
+      return Object.freeze({
+        state: clone(schema, stored.state as MessageShape<Schema>),
+        version: stored.version,
+        archived: stored.archived,
+        deleted: stored.deleted,
+      });
+    } finally {
+      finish();
     }
   }
 
@@ -696,7 +720,20 @@ interface DeferredStandUpdate {
   cancel(): void;
 }
 
+interface StandCurrentRecord<Schema extends MessageSchema> {
+  readonly state: MessageShape<Schema>;
+  readonly version: bigint;
+  readonly archived: boolean;
+  readonly deleted: boolean;
+}
+
 interface StandAccess {
+  readCurrent<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    id: unknown,
+    options: StandReadOptions,
+  ): Promise<StandCurrentRecord<Schema> | undefined>;
   deferUpdate<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -707,6 +744,16 @@ interface StandAccess {
 
 /** @internal Repository-only persistence seam which defers subscriber delivery. */
 export const standAccess: StandAccess = Object.freeze({
+  readCurrent<Schema extends MessageSchema>(
+    stand: Stand,
+    schema: Schema,
+    id: unknown,
+    options: StandReadOptions,
+  ): Promise<StandCurrentRecord<Schema> | undefined> {
+    const read = currentReads.get(stand);
+    if (read === undefined) throw new TypeError("Stand current read requires a Stand instance.");
+    return read(schema, id, options);
+  },
   deferUpdate<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -727,6 +774,15 @@ const deferredUpdates = new WeakMap<
     state: MessageShape<Schema>,
     options: StandUpdateOptions,
   ) => Promise<DeferredStandUpdate>
+>();
+
+const currentReads = new WeakMap<
+  Stand,
+  <Schema extends MessageSchema>(
+    schema: Schema,
+    id: unknown,
+    options: StandReadOptions,
+  ) => Promise<StandCurrentRecord<Schema> | undefined>
 >();
 
 function openEntityStorage<I, S extends Message>(

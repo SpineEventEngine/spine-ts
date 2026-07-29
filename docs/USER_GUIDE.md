@@ -307,7 +307,7 @@ that application source file. The final property-access lines illustrate the
 inferred column API and are not part of that source file:
 
 ```ts
-import { EntityColumn } from "@spine-event-engine/client";
+import { EntityColumn } from "@spine-event-engine/client-node";
 import { TaskListColumnDefinition } from "../generated/spine/example/todo/v1/task_list_columns.js";
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
 
@@ -330,7 +330,7 @@ application code construct arbitrary string columns or authored definitions.
 The high-level Entity Query API targets the current state of Aggregates,
 Projections, and Process Managers. The low-level ID query paths are unchanged.
 The repository's `proto:generate` workflow runs the
-`protoc-gen-spine-entity-columns` executable shipped by `@spine-event-engine/client`
+`protoc-gen-spine-entity-columns` executable shipped by `@spine-event-engine/client-node`
 after Protobuf-ES for every example target. Installed projects can add that bin
 as a local plugin in their Buf generation template.
 
@@ -630,32 +630,81 @@ Protobuf-ES modules.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client } from "@spine-event-engine/client";
+import { Client } from "@spine-event-engine/client-node";
 import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
-import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
 
 const abortController = new AbortController();
-const client = Client.connectTo(running.baseUrl, { tenant: "tasks" });
+const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
 const outcome = await client
   .onBehalfOf("alice")
   .post(CreateTaskSchema, create(CreateTaskSchema, { title: "First task" }), {
-    observe: [TaskCreatedSchema],
     signal: abortController.signal,
   });
 if (outcome.kind === "ok") {
-  for await (const event of outcome.events) {
-    console.log(event.message, event.context);
-    await outcome.events.cancel();
-  }
+  console.log("command accepted");
 }
 await client.close();
 ```
 
-Subscription and activation occur before posting. Refusal, transport failure,
-caller abort, overflow, and client close clean up automatically; after an OK
-result, the caller cancels the single-consumer bounded iterable. Network and
-deadline failures remain Connect errors, while caller abort rejects with the
-`AbortSignal` reason.
+Commands are never retried by this client. Caller abort and client close abort
+admitted work; network and deadline failures remain Connect errors.
+
+### Browser client protocol and metadata
+
+Browser applications choose a protocol explicitly when composing the client:
+`Client.forGrpcWeb()` is the universal gRPC-Web route, while
+`Client.forConnect()` is an optimization only for an endpoint known to support
+Connect. Neither factory probes or falls back to the other protocol.
+
+`forConnect()` uses binary Connect (`application/proto`). Configure that
+gateway to allow binary Connect and packed `Any` command/query bodies; choose
+it explicitly because the client does not probe or fall back to gRPC-Web.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { Client, type BrowserClientOptions } from "@spine-event-engine/client-web";
+import { QuerySchema } from "@spine-event-engine/proto/client";
+
+const browserOptions: BrowserClientOptions = {
+  tenant: "tasks",
+  onRequestMetadata: () => ({ "x-application-version": "web-1" }),
+};
+const createGrpcWebClient = (baseUrl: string) => Client.forGrpcWeb(baseUrl, browserOptions);
+const createConnectClient = (baseUrl: string) => Client.forConnect(baseUrl, browserOptions);
+const browserClient = createGrpcWebClient("https://api.example.test");
+const result = await browserClient.onBehalfOf("alice").send(create(QuerySchema));
+await browserClient.close();
+
+// Use this only for a separately configured Connect-compatible endpoint:
+const connectClient = createConnectClient("https://connect.example.test");
+await connectClient.close();
+void result;
+```
+
+`onRequestMetadata` runs synchronously for every outbound call and returns
+fresh application-owned headers. It is the A3 extension point for adding a
+credential header, but it is not a session, cookie, or identity-provider
+implementation; C5 integrates the auth gateway, sessions, and provider flows.
+The client never logs these header values or uses them in request IDs. Request
+IDs require Web Crypto: it prefers `crypto.randomUUID()`, falls back to
+`crypto.getRandomValues()`, and rejects before transport invocation when
+neither secure API is available.
+
+Browser subscriptions have independent, single-consumer update and lifecycle
+queues. Their defaults are 64 updates, 1,048,576 update bytes, and 32 lifecycle
+notices; every supplied capacity must be a positive safe integer. Overflow is
+terminal for both streams with the same overflow error and triggers bounded
+cleanup rather than silently dropping data; it does not enqueue a `failed`
+lifecycle notice. Retries begin only after the initial attempt. The default
+policy permits five retry attempts within 30,000 ms, using a 250 ms exponential
+base, ±20% jitter, and a 5,000 ms cap (minimum 1 ms); supplied retry counts,
+elapsed time, and returned delays must be positive safe integers. `connecting`
+carries a monotonic reconnect generation and retry attempt. A caller owns
+signal composition and, when it needs deterministic timing, the injected
+scheduler; neither provides a cursor, cache, replay log, or cross-stream
+ordering guarantee. Browser factories select/create their transport, while
+`Client.close()` closes subscription work; an injected source closes a platform
+transport only when it supplies `close()`.
 
 ## 8. Query and subscribe to state
 
@@ -663,13 +712,42 @@ Use `EntityQuery` to compile descriptor-backed columns to the frozen
 `spine.client.Query`, then pass that message to an immutable `Client` request
 scope. `Client.connectTo()` owns its Node HTTP/2 session; use
 `Client.usingTransport()` when the caller owns the Connect transport.
+
+### Browser gateway / Envoy reference
+
+The browser route terminates at an application-owned authentication gateway;
+Spine backend listeners are not public browser endpoints. The repository
+provides a customizable Envoy reference that accepts only `ResolveContext`,
+`Post`, `Read`, `Subscribe`, `Activate`, and `Cancel`, sends upstream requests
+over HTTP/2, and supports gRPC-Web plus explicitly selected binary Connect.
+It is a template, not a deployment policy or managed service.
+
+The gateway owns its listener lifecycle, credential resolution, trusted context,
+TLS files, and network controls. Do not add a browser-to-backend bypass. See
+[the Envoy reference](../interop/envoy/README.md) for its required render inputs,
+TLS mount, exact pinned-image validation command, and customization boundaries.
 The DSL supports IDs, nested `all()` / `either()`, equality and range helpers,
 state masks, repeated ordering, and positive limits:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, EntityQuery, all, either, eq, ge, gt, le, lt } from "@spine-event-engine/client";
+import type { Any } from "@bufbuild/protobuf/wkt";
+import { unpackAny } from "@spine-event-engine/core";
+import {
+  Client,
+  EntityQuery,
+  all,
+  either,
+  eq,
+  ge,
+  gt,
+  le,
+  lt,
+} from "@spine-event-engine/client-node";
 import { ActorContextSchema } from "@spine-event-engine/proto";
+import type { QueryResponse } from "@spine-event-engine/proto/client";
+import { TaskListColumns } from "@example/tasks-proto/task_list_columns";
+import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
 const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
 
@@ -695,12 +773,14 @@ const taskListQuery = EntityQuery.select({
   .limit(20)
   .build();
 
-const result = await client.onBehalfOf("alice").query(TaskListSchema, taskListQuery);
-if (result.kind === "ok") {
-  const states = result.states.map(({ state }) => state);
-  const versions = result.states.map(({ version }) => version);
-}
+const result = await client.onBehalfOf("alice").send(taskListQuery);
+const packedState = firstState(result);
+if (packedState !== undefined) console.log(unpackAny(packedState, TaskListSchema));
 await client.close();
+
+function firstState(response: QueryResponse): Any | undefined {
+  return response.message[0]?.state;
+}
 ```
 
 Here `TaskListSchema` comes from the consumer's generated Protobuf-ES module,
@@ -755,59 +835,93 @@ containing its ID can retry persistence cleanup. Active streams and their queues
 disconnection or process restart, so clients must query current state when they
 need a fresh view.
 
-Use the public client facade for application subscriptions. It creates the
-frozen topic and opaque subscription internally, keeps actor/tenant context
-consistent with `post()` and `query()`, and decodes immutable values instead of
-exposing wire envelopes. State topics permit IDs, equality predicates, nested
+Use the public client facade for application subscriptions. It applies the
+frozen actor/tenant context to the caller-provided `Topic`. Its bounded,
+single-consumer `updates` stream delivers validated raw `SubscriptionUpdate`
+messages as `{ kind: "update", update }` deliveries, while its separate
+single-consumer `lifecycle` stream reports local lifecycle notifications. State topics permit IDs, equality predicates, nested
 `all()` / `either()` groups, and masks; ordered comparisons, ordering, and
 limits are not subscription criteria. Event topics currently take only an
-`AbortSignal` because the server accepts neither event criteria nor masks.
-Creation returns after `Subscribe` and after the activation consumer has locally
-issued its first read; it does not claim a remote activation acknowledgement.
+explicit `{ kind: "event" }` option (and an optional `AbortSignal`) because
+the server accepts neither event criteria nor masks.
+Creation returns an inactive local handle without sending `Subscribe`.
+`activate()` sends `Subscribe`, then opens the activation stream; it does not
+claim a remote activation acknowledgement.
 Asynchronous activation failures reject pending and future iterator reads.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { Client, EntityColumn, all, eq } from "@spine-event-engine/client";
-import { TaskListColumnDefinition } from "@example/tasks-proto/task_list_columns";
-import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
-import { TaskIdSchema } from "@example/tasks-proto/task_id_pb";
+import { Client } from "@spine-event-engine/client-web";
+import { deriveTypeUrl } from "@spine-event-engine/core";
+import {
+  QueryIdSchema,
+  QuerySchema,
+  type QueryResponse,
+  TargetSchema,
+  TopicIdSchema,
+  TopicSchema,
+  type SubscriptionUpdate,
+} from "@spine-event-engine/proto/client";
 import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
-const TaskListColumns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
-const subscriptionClient = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
-const states = await subscriptionClient
-  .onBehalfOf("alice")
-  .subscribeToState(TaskListSchema, TaskIdSchema, {
-    ids: [create(TaskIdSchema, { value: "list-1" })],
-    where: all(eq(TaskListColumns.archived, false)),
-    mask: ["id", "openTaskCount"],
-  });
-for await (const update of states) {
-  if (update.kind === "state") console.log(update.state);
-  else console.log(update.id);
-  await states.cancel();
+const subscriptionClient = Client.forGrpcWeb("https://api.example.test", { tenant: "tasks" });
+const query = create(QuerySchema, {
+  id: create(QueryIdSchema, { value: "task-list-query" }),
+  target: create(TargetSchema, {
+    type: deriveTypeUrl(TaskListSchema),
+    criterion: { case: "includeAll", value: true },
+  }),
+});
+const topic = create(TopicSchema, {
+  id: create(TopicIdSchema, { value: "task-list-topic" }),
+  target: create(TargetSchema, {
+    type: deriveTypeUrl(TaskListSchema),
+    criterion: { case: "includeAll", value: true },
+  }),
+});
+const subscription = await subscriptionClient.onBehalfOf("alice").createSubscription(topic, {
+  kind: "entity",
+  // A raw Query or an object with build(): Query is accepted. It is evaluated only on recovery.
+  authoritativeQuery: () => query,
+});
+await subscription.activate();
+for await (const delivery of subscription.updates) {
+  if (delivery.kind === "resynchronization") handleResynchronization(delivery.response);
+  if (delivery.kind === "update") handleUpdate(delivery.update);
+}
+await subscription.cancel();
+await subscriptionClient.close();
+
+function handleUpdate(update: SubscriptionUpdate): void {
+  if (update.update.case === "entityUpdates") console.log(update.update.value);
 }
 
-const events = await subscriptionClient.asGuest().subscribeToEvents(TaskCreatedSchema);
-for await (const { message, context } of events) {
-  console.log(message, context);
-  await events.cancel();
+function handleResynchronization(response: QueryResponse): void {
+  console.log(response.message.length);
 }
-await subscriptionClient.close();
 ```
 
-Await `cancel()` when the application needs remote cleanup confirmation, or
-provide `signal: abortController.signal` in either options object for automatic
-cleanup. The client keeps at most 32 decoded updates per handle; a 33rd update
-ends iteration with `ClientProtocolError` and sends `Cancel`, rather than
-silently losing an update. Normal stream completion is terminal but cannot be
-identified as server overflow by this frozen protocol. Active updates are not
-replayed or reconnected after disconnect, so query current state before making
-a new subscription. `noLongerMatching` identifies an entity that had matched
-the state topic and subsequently stopped matching. `connectTo()` owns and
-closes its HTTP/2 transport; `usingTransport()` leaves the caller's transport
-open.
+Await `cancel()` when the application needs bounded remote cleanup
+confirmation. A caller-provided signal can stop an individual `post`, `send`,
+or `activate` operation. Updates and lifecycle notices have independent bounded
+queues and no cross-stream ordering guarantee. An invalid recovery response or
+exhausted retry bounds emits exactly one `{ state: "failed", generation, error
+}` lifecycle notice before both streams fail. Queue overflow instead fails both
+streams directly with one shared overflow error and no `failed` notice. Before
+another terminal state, explicit
+cancellation or client close emits exactly one `{ state: "closed", generation
+}` before lifecycle completion. Every accepted wire gets at most one remote
+Cancel bounded to 1,000 ms; reconnect can accept and clean more than one wire.
+Each reconnect begins a new generation. An Event reconnect emits `connecting`,
+`gapPossible`, then `connected` and continues; `gapPossible` only notifies of a
+possible gap and makes no cluster-complete or replay-completeness promise.
+An Entity reconnect evaluates its raw/builder `authoritativeQuery`, requires a
+byte-equivalent Topic target, replaces only request context, emits
+`resynchronizing`, delivers the authoritative raw `QueryResponse` before held
+wire updates, then emits `connected`. Re-query Entity state after recovery;
+commands are never retried. Browser factories select/create their transport;
+`Client.close()` closes its subscription work, while `usingTransport()` invokes
+an injected source's platform close hook only when supplied.
 
 This client setup is illustrative: supply generated `Query` and `Topic`
 fixtures targeting a registered state schema, then use the three clients.
@@ -817,7 +931,7 @@ import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { QueryService, SubscriptionService } from "@spine-event-engine/proto/client";
 
-const transport = createGrpcTransport({ baseUrl: running.baseUrl });
+const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
 const queries = createClient(QueryService, transport);
 const subscriptions = createClient(SubscriptionService, transport);
 declare const query: Parameters<typeof queries.read>[0];
@@ -890,6 +1004,8 @@ message fixtures from the consumer test-support package.
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { BlackBox } from "@spine-event-engine/testing";
+import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TargetSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { taskListQuery, tasksContext } from "@example/tasks-test-support";
 import { CreateTaskSchema } from "../generated/acme/tasks/v1/task_commands_pb.js";
 import { TaskCreatedSchema } from "../generated/acme/tasks/v1/task_events_pb.js";
@@ -908,13 +1024,21 @@ try {
   );
   if (outcome.kind !== "ok") throw new Error(`CreateTask failed: ${outcome.kind}`);
   const observed = await blackBox.eventually(
-    () => actor.query(TaskListSchema, taskListQuery),
-    (candidate) =>
-      candidate.kind === "ok" && candidate.states.some((row) => row.state.id?.value === "task-1"),
+    () => actor.send(taskListQuery),
+    () => true,
   );
-  if (observed.kind !== "ok") throw new Error(`TaskList failed: ${observed.kind}`);
-  const updates = await actor.subscribeToState(TaskListSchema, TaskIdSchema);
-  const events = await actor.subscribeToEvents(TaskCreatedSchema);
+  console.log(observed.message);
+  const taskListTopic = create(TopicSchema, {
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(TaskListSchema),
+      criterion: { case: "includeAll", value: true },
+    }),
+  });
+  const subscription = await actor.createSubscription(taskListTopic, {
+    kind: "entity",
+    authoritativeQuery: () => taskListQuery,
+  });
+  await subscription.activate();
   await actor.postEvent(
     TaskCreatedSchema,
     create(TaskCreatedSchema, {
@@ -922,8 +1046,7 @@ try {
       title: "Imported task",
     }),
   );
-  await updates.cancel();
-  await events.cancel();
+  await subscription.cancel();
 } finally {
   await blackBox.close();
 }
@@ -931,8 +1054,12 @@ try {
 
 `eventually()` has a bounded timeout (`BlackBoxTimeoutError` on expiry) and is
 the correct assertion boundary for asynchronous projections. State and event
-subscriptions yield decoded immutable observations; do not depend on raw
-Connect envelopes or private server types in application tests.
+subscriptions expose the same bounded `updates` and `lifecycle` streams as the
+client; update deliveries wrap raw validated `SubscriptionUpdate` messages, so
+tests should not depend on private server types. Event reconnect may notify
+`gapPossible` and continue with gaps; Entity reconnect delivers authoritative
+resynchronization before held updates. Neither stream pair promises cross-stream
+ordering or cluster-complete delivery.
 `postEvent(EventSchema, message)` injects a generated domain event directly
 with the calling scope's fixed actor, tenant, and zone; use it for test setup
 when a command is not the behavior under test.
@@ -1678,3 +1805,6 @@ It creates and removes only the adapter tables; do not log credentials.
 - [To-do application guide](../examples/todo/USER_GUIDE.md) for the runnable
   local application workflow and its distinct topology limits.
 - [API documentation](api/README.md) for public API semantics.
+- [Browser client, authentication, and gateway extension guide](BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+  for browser protocol selection, sessions, provider flows, gateway policy,
+  subscription recovery, Envoy, and the Wave 4 limits.

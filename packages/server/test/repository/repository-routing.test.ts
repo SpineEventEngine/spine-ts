@@ -376,6 +376,9 @@ class MessageIdRejectingAggregate extends Aggregate<TaskId, typeof TaskSchema, b
 class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static argumentCounts: number[] = [];
   static contexts: CommandContext[] = [];
+  static observedStateNames: string[] = [];
+  static observedLifecycles: { readonly archived: boolean; readonly deleted: boolean }[] = [];
+  static rejectWhenStatePresent = false;
   static assigneeStarted = 0;
   static #releaseAssignee: (() => void) | undefined;
   static #assigneeCanFinish: Promise<void> | undefined;
@@ -383,6 +386,9 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
   static reset(options: { readonly pauseAssignee?: boolean } = {}): void {
     this.argumentCounts = [];
     this.contexts = [];
+    this.observedStateNames = [];
+    this.observedLifecycles = [];
+    this.rejectWhenStatePresent = false;
     this.assigneeStarted = 0;
     this.#releaseAssignee = undefined;
     this.#assigneeCanFinish =
@@ -403,8 +409,20 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
   async assignTask(command: AggregateState, context: CommandContext): Promise<AggregateState> {
     GeneratedTwoArgAggregate.argumentCounts.push(arguments.length);
     GeneratedTwoArgAggregate.contexts.push(context);
+    GeneratedTwoArgAggregate.observedStateNames.push(this.state.name);
+    GeneratedTwoArgAggregate.observedLifecycles.push(this.lifecycle);
     GeneratedTwoArgAggregate.assigneeStarted++;
     await GeneratedTwoArgAggregate.#assigneeCanFinish;
+    if (GeneratedTwoArgAggregate.rejectWhenStatePresent && this.state.name.length > 0) {
+      throw TaskAlreadyDone.create({ id: create(GeneratedTaskIdSchema, { value: command.id }) });
+    }
+    if (this.isArchived || this.isDeleted) {
+      return create(AggregateStateSchema, {
+        id: command.id,
+        name: `${command.name} event`,
+        archived: false,
+      });
+    }
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1884,6 +1902,115 @@ describe("repository signal routing", () => {
 
     expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgAggregate.contexts).toEqual([create(CommandContextSchema)]);
+  });
+
+  it("loads the committed state for each later generated Aggregate command", async () => {
+    GeneratedTwoArgAggregate.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedTwoArgAggregateRepository())
+      .withStorageFactory(new InMemoryStorageFactory())
+      .build();
+
+    await context.commandBus().post(createAggregateCommand("command-first", "same-id", "First"));
+    await context.commandBus().post(createAggregateCommand("command-second", "same-id", "Second"));
+
+    expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["", "First (generated)"]);
+  });
+
+  it("processes concurrent same-ID generated commands FIFO and rejects the rehydrated duplicate", async () => {
+    GeneratedTwoArgAggregate.reset();
+    GeneratedTwoArgAggregate.rejectWhenStatePresent = true;
+    const published: string[] = [];
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedTwoArgAggregateRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          published.push(event.id?.value ?? "missing");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      Promise.all([
+        context.commandBus().post(createAggregateCommand("concurrent-first", "duplicate", "First")),
+        context
+          .commandBus()
+          .post(createAggregateCommand("concurrent-second", "duplicate", "Second")),
+      ]),
+    ).resolves.toEqual([undefined, undefined]);
+
+    expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["", "First (generated)"]);
+    await expect(
+      context.stand().readVersioned(AggregateStateSchema, "duplicate"),
+    ).resolves.toMatchObject({
+      state: { name: "First (generated)" },
+      version: { number: 1 },
+    });
+    expect(published).toEqual(["concurrent-first-1"]);
+    const storedEvents = await waitForStoredEvents(eventStore, 2);
+    const normalEvents = storedEvents.filter((event) => event.context?.rejection === undefined);
+    const rejectionEvents = storedEvents.filter((event) => event.context?.rejection !== undefined);
+    expect(normalEvents).toHaveLength(1);
+    expect(normalEvents[0]?.id?.value).toBe("concurrent-first-1");
+    expect(rejectionEvents).toHaveLength(1);
+    expect(rejectionEvents[0]?.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+  });
+
+  it("rehydrates archived and deleted lifecycle flags for generated Aggregate handlers", async () => {
+    GeneratedTwoArgAggregate.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedTwoArgAggregateRepository())
+      .withStorageFactory(new InMemoryStorageFactory())
+      .build();
+    await context
+      .stand()
+      .update(
+        AggregateStateSchema,
+        create(AggregateStateSchema, { id: "lifecycle-id", name: "Stored", archived: true }),
+        {
+          version: create(VersionSchema, { number: 7 }),
+          lifecycle: { archived: true, deleted: true },
+        },
+      );
+
+    await context.commandBus().post(createAggregateCommand("command-lifecycle", "lifecycle-id"));
+
+    expect(GeneratedTwoArgAggregate.observedStateNames).toEqual(["Stored"]);
+    expect(GeneratedTwoArgAggregate.observedLifecycles).toEqual([
+      { archived: true, deleted: true },
+    ]);
+  });
+
+  it("rehydrates the same Aggregate ID independently in each tenant", async () => {
+    GeneratedTwoArgAggregate.reset();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createGeneratedTwoArgAggregateRepository())
+      .withStorageFactory(new InMemoryStorageFactory())
+      .build();
+    await context
+      .commandBus()
+      .post(createAggregateCommand("tenant-a-first", "same", "A", "tenant-a"));
+    await context
+      .commandBus()
+      .post(createAggregateCommand("tenant-b-first", "same", "B", "tenant-b"));
+    await context
+      .commandBus()
+      .post(createAggregateCommand("tenant-a-next", "same", "A2", "tenant-a"));
+    await context
+      .commandBus()
+      .post(createAggregateCommand("tenant-b-next", "same", "B2", "tenant-b"));
+
+    expect(GeneratedTwoArgAggregate.observedStateNames).toEqual([
+      "",
+      "",
+      "A (generated)",
+      "B (generated)",
+    ]);
   });
 
   it("dispatches events committed by accepted command work before close resolves", async () => {

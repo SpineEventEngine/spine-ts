@@ -116,6 +116,110 @@ const expectedProtoToolsExports = [
   "readManifest",
   "createManifest",
 ];
+const expectedAuthExports = [
+  "ApplicationSessionIssue",
+  "ApplicationSessionIssuer",
+  "AuthenticatedPrincipal",
+  "Authenticator",
+  "AuthorizationPolicy",
+  "AuthorizedRequestContext",
+  "Clock",
+  "CookieCredential",
+  "BearerCredential",
+  "CommandRequestInput",
+  "ContextResolver",
+  "ConfiguredOidcProvider",
+  "createGitHubProvider",
+  "createGoogleProvider",
+  "createOidcProvider",
+  "discoverOidcProvider",
+  "ExternalIdentity",
+  "GitHubProviderOptions",
+  "IdentityMapping",
+  "IncomingCommand",
+  "IncomingQuery",
+  "IncomingRequest",
+  "IncomingRequestInput",
+  "IncomingSubscription",
+  "IncomingSubscriptionActivation",
+  "IncomingSubscriptionCancellation",
+  "RequestCredential",
+  "RequestDecoder",
+  "ResolvedSession",
+  "ResolvedApplicationIdentity",
+  "SessionResolver",
+  "InMemorySubscriptionBindings",
+  "SubscriptionBindings",
+  "SubscriptionAbortSignal",
+  "SubscriptionBindingTransition",
+  "SubscriptionCapacityReservation",
+  "SubscriptionTopicWire",
+  "PublicSubscriptionWire",
+  "BackendSubscriptionEnvelope",
+  "createNativeGatewayServices",
+  "NativeGatewayRequestContext",
+  "NativeGatewayServices",
+  "NativeGatewayServicesOptions",
+  "NativeSubscriptionCreator",
+  "OpaqueCredentialExtraction",
+  "OpaqueCredentialRejection",
+  "OpaqueSessionClock",
+  "OpaqueSessionCookies",
+  "OpaqueSessionCookiesOptions",
+  "OpaqueSessionCreateResult",
+  "OpaqueSessionHeaders",
+  "OpaqueSessionLogoutResult",
+  "OpaqueSessionRandom",
+  "OpaqueSessionRotateResult",
+  "OpaqueSessions",
+  "OpaqueSessionsOptions",
+  "OidcAuthorizationCodeExchange",
+  "OidcClientAuthentication",
+  "OidcFlow",
+  "OidcFlowCallbackInput",
+  "OidcFlowCallbackResult",
+  "OidcFlowClock",
+  "OidcFlowExchangeInput",
+  "OidcFlowExchangeResult",
+  "OidcFlowOptions",
+  "OidcFlowRandom",
+  "OidcFlowStartInput",
+  "OidcFlowStartResult",
+  "OidcVerifiedIdentityProvider",
+  "OidcProviderOptions",
+  "ProviderFetch",
+  "SignedSessionClock",
+  "SignedSessionIssueResult",
+  "SignedSessionLogoutResult",
+  "SignedSessionRandom",
+  "SignedSessionRotationResult",
+  "SignedSessionSigningKey",
+  "SignedSessionVerificationKey",
+  "SignedSessions",
+  "SignedSessionsOptions",
+  "SignedTokenRevocation",
+  "OnBackendSubscription",
+  "SubscriptionGatewayLimits",
+  "SubscriptionCreator",
+  "SubscriptionGateway",
+  "SubscriptionGatewayOptions",
+  "SubscriptionGatewayRequest",
+  "SubscriptionGatewayResult",
+  "SubscriptionRelayLimits",
+  "SubscriptionUpdateRelay",
+  "SubscriptionUpdateSink",
+  "SubscriptionUpdateWire",
+  "TransportFactsInput",
+  "TransportRequestContext",
+  "UnaryForwarder",
+  "UnaryGateway",
+  "UnaryGatewayOptions",
+  "UnaryGatewayRejection",
+  "UnaryGatewayRequest",
+  "UnaryGatewayResult",
+  "decodeIncomingRequest",
+  "transportFacts",
+];
 const expectedCoreExports = [
   "DEFAULT_TYPE_URL_PREFIX",
   "TypeRegistry",
@@ -151,18 +255,17 @@ const expectedCoreExports = [
 ];
 const expectedClientExports = [
   "Client",
+  "ClientKernel",
   "ClientOperationOptions",
   "ClientOptions",
-  "ClientObserveOptions",
   "ClientOutcome",
-  "ClientPostOptions",
   "ClientProtocolError",
-  "ClientQueryOutcome",
   "ClientRequest",
-  "CommandEvent",
-  "CommandEvents",
-  "EventSubscription",
-  "ObservedClientOutcome",
+  "ClientTransport",
+  "CreateSubscriptionOptions",
+  "Subscription",
+  "SubscriptionDelivery",
+  "SubscriptionLifecycle",
   "EntityColumn",
   "EntityColumnDefinition",
   "EntityColumnDefinitionEntry",
@@ -178,11 +281,6 @@ const expectedClientExports = [
   "EntityPredicate",
   "EntityQuery",
   "EntityQueryBuilder",
-  "QueryState",
-  "StateSubscription",
-  "StateSubscriptionOptions",
-  "StateSubscriptionUpdate",
-  "SubscriptionEvent",
   "all",
   "either",
   "eq",
@@ -190,6 +288,43 @@ const expectedClientExports = [
   "gt",
   "le",
   "lt",
+];
+const expectedClientWebExports = [
+  "BearerBrowserSessionOptions",
+  "BrowserClientOptions",
+  "BrowserSession",
+  "BrowserSessionContext",
+  "BrowserSessionOptions",
+  "Client",
+  "ClientOperationOptions",
+  "ClientOptions",
+  "ClientOutcome",
+  "ClientProtocolError",
+  "ClientRequest",
+  "ClientTransport",
+  "CreateSubscriptionOptions",
+  "OnRequestMetadata",
+  "OnBrowserSessionContext",
+  "Subscription",
+  "SubscriptionDelivery",
+  "SubscriptionLifecycle",
+  "SubscriptionLifecycleState",
+  "SubscriptionRetryPolicy",
+  "SubscriptionRuntimeOptions",
+  "SubscriptionScheduler",
+];
+const expectedClientReactExports = [
+  "RequestObservation",
+  "SpineClientProvider",
+  "SpineClientProviderProps",
+  "SubscriptionObservation",
+  "useEntityQuery",
+  "useEntitySubscription",
+  "useEventSubscription",
+  "useRequest",
+  "useSpineClient",
+  "useSubscriptionDelivery",
+  "useSubscriptionLifecycle",
 ];
 const expectedDeliveryClientExports = [
   "DeliveryClient",
@@ -535,7 +670,10 @@ const expectedServerExports = [
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const protoToolsIndexPath = join("packages", "proto-tools", "src", "index.ts");
-const clientIndexPath = join("packages", "client", "src", "index.ts");
+const authIndexPath = join("packages", "auth", "src", "index.ts");
+const clientIndexPath = join("packages", "client-node", "src", "index.ts");
+const clientWebIndexPath = join("packages", "client-web", "src", "index.ts");
+const clientReactIndexPath = join("packages", "client-react", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
 const deliveryServerIndexPath = join("packages", "delivery-server", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
@@ -576,7 +714,10 @@ if (typedocResult.status !== 0) {
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
-const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client/src");
+const authModuleNames = collectDirectModuleNames(apiDocs, "packages/auth/src");
+const clientModuleNames = collectDirectModuleNames(apiDocs, "packages/client-node/src");
+const clientWebModuleNames = collectDirectModuleNames(apiDocs, "packages/client-web/src");
+const clientReactModuleNames = collectDirectModuleNames(apiDocs, "packages/client-react/src");
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
 const deliveryServerModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
@@ -885,8 +1026,10 @@ const forbiddenStorageTypeDocNames = [
   "createEventStore",
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
+const declaredAuthExports = collectNamedExports(authIndexPath);
 const declaredProtoToolsExports = collectNamedExports(protoToolsIndexPath);
 const declaredClientExports = collectNamedExports(clientIndexPath);
+const declaredClientWebExports = collectNamedExports(clientWebIndexPath);
 const declaredDeliveryClientExports = collectNamedExports(deliveryClientIndexPath);
 const declaredDeliveryServerExports = collectNamedExports(deliveryServerIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
@@ -895,6 +1038,13 @@ const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
 const declaredTestingExports = collectNamedExports(testingIndexPath);
 const declaredZeroMqExports = collectNamedExports(zeroMqIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
+const missingAuthExports = expectedAuthExports.filter((name) => !authModuleNames.has(name));
+const missingDeclaredAuthExports = expectedAuthExports.filter(
+  (name) => !declaredAuthExports.includes(name),
+);
+const unexpectedAuthExports = declaredAuthExports.filter(
+  (name) => !expectedAuthExports.includes(name),
+);
 const missingDeclaredProtoToolsExports = expectedProtoToolsExports.filter(
   (name) => !declaredProtoToolsExports.includes(name),
 );
@@ -902,6 +1052,25 @@ const unexpectedProtoToolsExports = declaredProtoToolsExports.filter(
   (name) => !expectedProtoToolsExports.includes(name),
 );
 const missingClientExports = expectedClientExports.filter((name) => !clientModuleNames.has(name));
+const missingClientWebExports = expectedClientWebExports.filter(
+  (name) => !clientWebModuleNames.has(name),
+);
+const declaredClientReactExports = collectNamedExports(clientReactIndexPath);
+const missingClientReactExports = expectedClientReactExports.filter(
+  (name) => !clientReactModuleNames.has(name),
+);
+const missingDeclaredClientReactExports = expectedClientReactExports.filter(
+  (name) => !declaredClientReactExports.includes(name),
+);
+const unexpectedClientReactExports = declaredClientReactExports.filter(
+  (name) => !expectedClientReactExports.includes(name),
+);
+const missingDeclaredClientWebExports = expectedClientWebExports.filter(
+  (name) => !declaredClientWebExports.includes(name),
+);
+const unexpectedClientWebExports = declaredClientWebExports.filter(
+  (name) => !expectedClientWebExports.includes(name),
+);
 const missingDeclaredClientExports = expectedClientExports.filter(
   (name) => !declaredClientExports.includes(name),
 );
@@ -1003,6 +1172,21 @@ if (missingDeclaredProtoToolsExports.length > 0 || unexpectedProtoToolsExports.l
   process.exit(1);
 }
 
+if (missingAuthExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-event-engine/auth exports: ${missingAuthExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredAuthExports.length > 0 || unexpectedAuthExports.length > 0) {
+  console.error(
+    "@spine-event-engine/auth root export inventory mismatch: " +
+      [...missingDeclaredAuthExports, ...unexpectedAuthExports].join(", "),
+  );
+  process.exit(1);
+}
+
 if (missingCoreExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-event-engine/core exports: ${missingCoreExports.join(", ")}`,
@@ -1012,21 +1196,53 @@ if (missingCoreExports.length > 0) {
 
 if (missingClientExports.length > 0) {
   console.error(
-    `TypeDoc JSON is missing expected @spine-event-engine/client exports: ${missingClientExports.join(", ")}`,
+    `TypeDoc JSON is missing expected @spine-event-engine/client-node exports: ${missingClientExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingClientWebExports.length > 0 || missingDeclaredClientWebExports.length > 0) {
+  console.error(
+    "@spine-event-engine/client-web is missing expected exports: " +
+      [...missingClientWebExports, ...missingDeclaredClientWebExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedClientWebExports.length > 0) {
+  console.error(
+    "@spine-event-engine/client-web exports changed without updating docs expectations: " +
+      unexpectedClientWebExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingClientReactExports.length > 0 || missingDeclaredClientReactExports.length > 0) {
+  console.error(
+    "@spine-event-engine/client-react is missing expected exports: " +
+      [...missingClientReactExports, ...missingDeclaredClientReactExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedClientReactExports.length > 0) {
+  console.error(
+    "@spine-event-engine/client-react exports changed without updating docs expectations: " +
+      unexpectedClientReactExports.join(", "),
   );
   process.exit(1);
 }
 
 if (missingDeclaredClientExports.length > 0) {
   console.error(
-    `@spine-event-engine/client root is missing expected exports: ${missingDeclaredClientExports.join(", ")}`,
+    `@spine-event-engine/client-node root is missing expected exports: ${missingDeclaredClientExports.join(", ")}`,
   );
   process.exit(1);
 }
 
 if (unexpectedClientExports.length > 0) {
   console.error(
-    "@spine-event-engine/client root exports changed without updating docs expectations: " +
+    "@spine-event-engine/client-node root exports changed without updating docs expectations: " +
       unexpectedClientExports.join(", "),
   );
   process.exit(1);
@@ -1270,8 +1486,11 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 console.log(
   [
     `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-event-engine/proto exports`,
+    `${expectedAuthExports.length} expected @spine-event-engine/auth exports`,
     `${expectedCoreExports.length} expected @spine-event-engine/core exports`,
-    `${expectedClientExports.length} expected @spine-event-engine/client exports`,
+    `${expectedClientExports.length} expected @spine-event-engine/client-node exports`,
+    `${expectedClientWebExports.length} expected @spine-event-engine/client-web exports`,
+    `${expectedClientReactExports.length} expected @spine-event-engine/client-react exports`,
     `${expectedDeliveryClientExports.length} expected @spine-event-engine/delivery-client exports`,
     `${expectedDeliveryServerExports.length} expected @spine-event-engine/delivery-server exports`,
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,

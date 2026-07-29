@@ -4,6 +4,7 @@
   "packageVersion": "0.0.0",
   "protoFiles": [
     "grpc/health/v1/health.proto",
+    "spine/auth/authentication_service.proto",
     "spine/base/error.proto",
     "spine/base/field_path.proto",
     "spine/client/command_service.proto",
@@ -45,6 +46,7 @@
   ],
   "generatedExports": {
     "grpc/health/v1/health.proto": "generated/grpc/health/v1/health_pb.js",
+    "spine/auth/authentication_service.proto": "generated/spine/auth/authentication_service_pb.js",
     "spine/base/error.proto": "generated/spine/base/error_pb.js",
     "spine/base/field_path.proto": "generated/spine/base/field_path_pb.js",
     "spine/client/command_service.proto": "generated/spine/client/command_service_pb.js",

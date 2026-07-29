@@ -13,6 +13,10 @@
       "types": "./dist/src/client/index.d.ts",
       "default": "./dist/src/client/index.js"
     },
+    "./auth": {
+      "types": "./dist/src/auth/index.d.ts",
+      "default": "./dist/src/auth/index.js"
+    },
     "./delivery": {
       "types": "./dist/src/delivery/index.d.ts",
       "default": "./dist/src/delivery/index.js"

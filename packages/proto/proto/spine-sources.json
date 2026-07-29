@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "Pinned upstream provenance for verbatim Spine proto files copied into this repository.",
+  "description": "Pinned upstream provenance for copied Spine contracts and checksums for Spine TS-owned contracts.",
   "sources": [
     {
       "localPath": "packages/proto/proto/grpc/health/v1/health.proto",
@@ -352,6 +352,12 @@
       "sourceUrl": "https://github.com/SpineEventEngine/validation/blob/6aec690168182866876584dab7c5a0b220b9b493/jvm-runtime/src/main/proto/spine/validation/validation_error.proto",
       "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/validation/6aec690168182866876584dab7c5a0b220b9b493/jvm-runtime/src/main/proto/spine/validation/validation_error.proto",
       "sha256": "0ee2bddfb0c540e0f248cb091eced211e9830863fac2a7063901269c8dd62110"
+    }
+  ],
+  "ownedSources": [
+    {
+      "localPath": "packages/proto/proto/spine/auth/authentication_service.proto",
+      "sha256": "a28d10348b25d64bd5ff1c2ae1beb61d2cfb0775e708dcd5ffa487d91f705a9a"
     }
   ]
 }

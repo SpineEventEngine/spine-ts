@@ -3,7 +3,10 @@
   "references": [
     { "path": "./packages/proto-tools" },
     { "path": "./packages/proto" },
-    { "path": "./packages/client" },
+    { "path": "./packages/auth" },
+    { "path": "./packages/client-web" },
+    { "path": "./packages/client-react" },
+    { "path": "./packages/client-node" },
     { "path": "./packages/delivery-client" },
     { "path": "./packages/delivery-server" },
     { "path": "./packages/core" },
@@ -18,6 +21,7 @@
     { "path": "./examples/datastore-orders" },
     { "path": "./examples/users-model" },
     { "path": "./examples/chat-model" },
-    { "path": "./examples/chat" }
+    { "path": "./examples/chat" },
+    { "path": "./examples/chat-web" }
   ]
 }

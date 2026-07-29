@@ -1,7 +1,10 @@
 .worktrees/
+interop/jvm/.cache/
 node_modules/
 dist/
 coverage/
+test-results/
+playwright-report/
 docs/api/reference/
 packages/*/generated/
 examples/*/generated/

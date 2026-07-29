@@ -74,7 +74,7 @@ optional `either`, nested-predicate, ordering, mask, and limit features. The
 shared policy rejects malformed or unsupported plans before provider execution;
 `RecordStorage.queryPlan()` then applies the shared complete evaluator for
 nested predicates, repeated ordering, the stable ID tie-breaker, masks, and
-limits. Application query construction remains in `@spine-event-engine/client`.
+limits. Application query construction remains in `@spine-event-engine/client-node`.
 Framework callers may set `candidateLimit` to bound provider materialization
 independently of the semantic result limit. Providers fetch at most one
 sentinel row beyond that bound, and `RecordStorage` raises
