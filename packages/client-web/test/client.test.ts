@@ -25,6 +25,7 @@ import {
   SubscriptionSchema,
   SubscriptionIdSchema,
   SubscriptionUpdateSchema,
+  TopicIdSchema,
   TargetSchema,
   type Topic,
   TopicSchema,
@@ -1429,6 +1430,7 @@ describe("Client", () => {
       expect.objectContaining({
         baseUrl: "https://gateway.example",
         interceptors: [expect.any(Function)],
+        useBinaryFormat: true,
       }),
     );
     await Promise.all([grpcWeb.close(), connect.close()]);
@@ -2674,7 +2676,10 @@ describe("Client", () => {
             accepted = input as Topic;
             return create(SubscriptionSchema, {
               id: create(SubscriptionIdSchema, { value: "sub-1" }),
-              topic: phase === 0 ? create(TopicSchema, { context: undefined }) : accepted,
+              topic:
+                phase === 0
+                  ? create(TopicSchema, { id: create(TopicIdSchema, { value: "wrong-topic" }) })
+                  : accepted,
             });
           }
           return create(ResponseSchema);

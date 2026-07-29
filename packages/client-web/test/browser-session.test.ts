@@ -7,6 +7,7 @@ describe("BrowserSession", () => {
 
   afterEach(async () => {
     await Promise.all(sessions.splice(0).map((session) => session.close()));
+    vi.unstubAllGlobals();
   });
 
   it("keeps bearer credentials in memory and returns fresh metadata after replacement or clear", () => {
@@ -24,6 +25,19 @@ describe("BrowserSession", () => {
 
     expect(session.credentials).toBe("include");
     expect(session.requestMetadata()).toEqual(new Headers());
+  });
+
+  it("binds the default browser fetch to its global receiver", async () => {
+    const fetch = vi.fn(function (this: typeof globalThis) {
+      expect(this).toBe(globalThis);
+      return Promise.resolve(new Response());
+    });
+    vi.stubGlobal("fetch", fetch);
+    const session = remember(BrowserSession.bearer({ token: "token", maxRequestMs: 100 }));
+
+    await session.fetch("https://gateway.example.test/context");
+
+    expect(fetch).toHaveBeenCalledOnce();
   });
 
   it("keeps its credential mode private when JavaScript attempts to mutate the public getter", async () => {

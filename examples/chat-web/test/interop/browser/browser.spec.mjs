@@ -1,0 +1,175 @@
+import { expect, test } from "@playwright/test";
+
+function cookies(setCookie, url) {
+  return JSON.parse(setCookie).map((value) => {
+    const [pair, ...attributes] = value.split("; ");
+    const [name, cookieValue] = pair.split("=");
+    return {
+      name,
+      value: cookieValue,
+      url,
+      httpOnly: attributes.includes("HttpOnly"),
+      secure: attributes.includes("Secure"),
+      sameSite: "Lax",
+    };
+  });
+}
+
+test("runs a CSRF-protected cookie Projection subscription through the real gRPC-Web client and Envoy", async ({
+  context,
+  page,
+}) => {
+  await context.addCookies(
+    cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
+  );
+  await page.goto(
+    `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}`,
+  );
+  await expect.poll(() => page.evaluate(() => Boolean(window.interopClient))).toBe(true);
+  await expect(page.evaluate(() => window.resolveContext())).resolves.toMatchObject({
+    actor: "ada",
+  });
+  await page.evaluate(() => window.post());
+  await expect
+    .poll(() => page.evaluate(async () => (await window.read()).message.length))
+    .toBeGreaterThan(0);
+  await expect(page.evaluate(() => window.subscribe())).resolves.toMatchObject({ done: false });
+});
+
+test("uses the explicit Connect browser client for resolver composition, Post, and authoritative Read", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "focused Chromium Connect smoke");
+  await page.goto(
+    `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&protocol=connect`,
+  );
+  await expect.poll(() => page.evaluate(() => window.interopProtocol)).toBe("connect");
+  const resolverRequestHeaders = [];
+  page.on("request", (request) => {
+    if (request.url().endsWith("/spine.auth.AuthenticationService/ResolveContext"))
+      resolverRequestHeaders.push(request.headers());
+  });
+  await expect(page.evaluate(() => window.resolveContext())).resolves.toMatchObject({ actor: "ada" });
+  expect(resolverRequestHeaders).toContainEqual(
+    expect.objectContaining({
+      "connect-protocol-version": "1",
+      "content-type": "application/json",
+    }),
+  );
+  await expect(page.evaluate(() => window.post())).resolves.toBeDefined();
+  await expect
+    .poll(() => page.evaluate(async () => (await window.read()).message.length))
+    .toBeGreaterThan(0);
+});
+
+test("rejects invalid, expired, and CSRF-invalid browser credentials before Post", async ({
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "focused Chromium security matrix");
+  const invalid = await browser.newContext({ ignoreHTTPSErrors: true });
+  const invalidPage = await invalid.newPage();
+  await invalidPage.goto(
+    `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&auth=invalid`,
+  );
+  await expect(invalidPage.evaluate(() => window.resolveContext())).rejects.toThrow();
+  await invalid.close();
+
+  const expired = await browser.newContext({ ignoreHTTPSErrors: true });
+  await expired.addCookies(
+    cookies(process.env.E1_EXPIRED_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
+  );
+  const expiredPage = await expired.newPage();
+  await expiredPage.goto(
+    `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}`,
+  );
+  await expect(expiredPage.evaluate(() => window.resolveContext())).rejects.toThrow();
+  await expired.close();
+
+  const csrf = await browser.newContext({ ignoreHTTPSErrors: true });
+  await csrf.addCookies(cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL));
+  const csrfPage = await csrf.newPage();
+  await csrfPage.goto(
+    `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=invalid`,
+  );
+  await expect(csrfPage.evaluate(() => window.resolveContext())).rejects.toThrow();
+  await csrf.close();
+});
+
+test("rejects a credentialed request from a real non-allowlisted browser Origin", async ({
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "focused Chromium security matrix");
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const page = await context.newPage();
+  await page.goto(
+    `https://localhost:4175/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}`,
+  );
+  await expect(page.evaluate(() => window.resolveContext())).rejects.toThrow();
+  await context.close();
+});
+
+test("prevents Bert from activating or cancelling Ada's public subscription", async ({
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "focused Chromium security matrix");
+  const ada = await browser.newContext({ ignoreHTTPSErrors: true });
+  await ada.addCookies(cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL));
+  const adaPage = await ada.newPage();
+  await adaPage.goto(
+    `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&actor=ada`,
+  );
+  const wire = await adaPage.evaluate(() => window.createPublicSubscription());
+
+  const bert = await browser.newContext({ ignoreHTTPSErrors: true });
+  await bert.addCookies(cookies(process.env.E1_COOKIE_B_SET_COOKIE, process.env.E1_ENVOY_BASE_URL));
+  const bertPage = await bert.newPage();
+  await bertPage.goto(
+    `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF_B)}&actor=bert`,
+  );
+  await expect(
+    bertPage.evaluate((bytes) => window.activatePublicSubscription(bytes), wire),
+  ).rejects.toThrow();
+  await expect(
+    bertPage.evaluate((bytes) => window.cancelPublicSubscription(bytes), wire),
+  ).rejects.toThrow();
+  await adaPage.evaluate((bytes) => window.cancelPublicSubscription(bytes), wire);
+  await bert.close();
+  await ada.close();
+});
+
+test("releases the native subscription after an abrupt browser disconnect", async ({
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "focused Chromium security matrix");
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  await context.addCookies(
+    cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
+  );
+  const page = await context.newPage();
+  await page.goto(
+    `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}`,
+  );
+  await expect(page.evaluate(() => window.startActiveSubscription())).resolves.toBe(true);
+  await page.close();
+  await context.close();
+});
+
+test("rejects unauthorized room and fabricated actor or tenant before public operations", async ({
+  browser,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium", "focused Chromium security matrix");
+  for (const suffix of ["room=room-b", "actor=mallory", "tenant=fabricated"]) {
+    const context = await browser.newContext({ ignoreHTTPSErrors: true });
+    await context.addCookies(
+      cookies(process.env.E1_COOKIE_SET_COOKIE, process.env.E1_ENVOY_BASE_URL),
+    );
+    const page = await context.newPage();
+    await page.goto(
+      `/?baseUrl=${encodeURIComponent(process.env.E1_ENVOY_BASE_URL)}&csrf=${encodeURIComponent(process.env.E1_CSRF)}&${suffix}`,
+    );
+    await expect(page.evaluate(() => window.post())).rejects.toThrow();
+    await expect(page.evaluate(() => window.read())).rejects.toThrow();
+    await expect(page.evaluate(() => window.createPublicSubscription())).rejects.toThrow();
+    await context.close();
+  }
+});

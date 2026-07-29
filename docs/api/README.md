@@ -40,6 +40,10 @@ may use local composition helpers such as `createGrpcWebClient` and
 package remains browser-safe: no Node transport, React, or Entity-column
 generation dependency is exposed.
 
+`forConnect()` uses binary Connect (`application/proto`) so a gateway must
+permit it, including packed `Any` command/query payloads. It is explicit-only
+and has no probing or fallback behavior.
+
 `ClientRequest.post()` and `send()` cover commands and raw `QueryResponse`
 queries. Commands are never retried. `createSubscription()` returns an inactive
 handle; `activate()` begins remote work, and `cancel()` is terminal and makes

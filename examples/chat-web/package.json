@@ -5,6 +5,8 @@
   "type": "module",
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
+    "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-web": "2.1.2",
     "@spine-event-engine/chat-model": "workspace:*",
     "@spine-event-engine/client-react": "workspace:*",
     "@spine-event-engine/client-web": "workspace:*",

@@ -62,6 +62,31 @@ describe("Client iterator disposal", () => {
     expect(closed).toBe(1);
   });
 
+  it("waits for a cooperative iterator return before cancelling its wire", async () => {
+    let settle: (() => void) | undefined;
+    connect.iterator = {
+      next: () => new Promise<IteratorResult<unknown>>(() => {}),
+      return: () =>
+        new Promise<IteratorResult<unknown>>((resolve) => {
+          settle = () => resolve({ done: true, value: undefined });
+        }),
+    };
+    const client = Client.usingTransport({
+      transport: {} as Transport,
+      createRequestId: () => "ordered",
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), { kind: "event" });
+    await subscription.activate();
+    const cancelling = subscription.cancel();
+    await vi.waitFor(() => expect(settle).toBeDefined());
+    expect(connect.cancel).not.toHaveBeenCalled();
+    settle?.();
+    await cancelling;
+    expect(connect.cancel).toHaveBeenCalledTimes(1);
+  });
+
   it("disposes a retryable failed stream once before reconnect and never returns it again", async () => {
     const firstReturn = vi.fn(() => Promise.reject(new Error("first return rejected")));
     const secondReturn = vi.fn(() => new Promise<IteratorResult<unknown>>(() => {}));

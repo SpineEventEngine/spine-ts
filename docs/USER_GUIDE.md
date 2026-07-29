@@ -656,6 +656,10 @@ Browser applications choose a protocol explicitly when composing the client:
 `Client.forConnect()` is an optimization only for an endpoint known to support
 Connect. Neither factory probes or falls back to the other protocol.
 
+`forConnect()` uses binary Connect (`application/proto`). Configure that
+gateway to allow binary Connect and packed `Any` command/query bodies; choose
+it explicitly because the client does not probe or fall back to gRPC-Web.
+
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { Client, type BrowserClientOptions } from "@spine-event-engine/client-web";
@@ -708,6 +712,20 @@ Use `EntityQuery` to compile descriptor-backed columns to the frozen
 `spine.client.Query`, then pass that message to an immutable `Client` request
 scope. `Client.connectTo()` owns its Node HTTP/2 session; use
 `Client.usingTransport()` when the caller owns the Connect transport.
+
+### Browser gateway / Envoy reference
+
+The browser route terminates at an application-owned authentication gateway;
+Spine backend listeners are not public browser endpoints. The repository
+provides a customizable Envoy reference that accepts only `ResolveContext`,
+`Post`, `Read`, `Subscribe`, `Activate`, and `Cancel`, sends upstream requests
+over HTTP/2, and supports gRPC-Web plus explicitly selected binary Connect.
+It is a template, not a deployment policy or managed service.
+
+The gateway owns its listener lifecycle, credential resolution, trusted context,
+TLS files, and network controls. Do not add a browser-to-backend bypass. See
+[the Envoy reference](../interop/envoy/README.md) for its required render inputs,
+TLS mount, exact pinned-image validation command, and customization boundaries.
 The DSL supports IDs, nested `all()` / `either()`, equality and range helpers,
 state masks, repeated ordering, and positive limits:
 

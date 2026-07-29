@@ -30,6 +30,16 @@ const connectClient = createConnectClient("https://connect.example.test");
 await Promise.all([grpcWebClient.close(), connectClient.close()]);
 ```
 
+`forConnect()` is binary Connect (`application/proto`), not a protocol probe.
+Configure its gateway to permit binary Connect and packed `Any` command/query
+payloads; it never falls back to gRPC-Web.
+
+The browser must reach an application gateway, not a public Spine backend.
+That gateway resolves credentials and owns its listener lifecycle. The
+[Envoy reference](../../interop/envoy/README.md) documents the six permitted
+gateway routes, TLS inputs, HTTP/2 upstream, pinned-image validation, and
+customizable-template boundary.
+
 `onRequestMetadata` is called synchronously for every outbound call. It returns
 fresh application-owned headers; the client neither logs them nor includes them
 in request IDs. `credentials` explicitly controls browser Fetch credentials for

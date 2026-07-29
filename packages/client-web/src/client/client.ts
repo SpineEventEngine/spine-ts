@@ -186,10 +186,20 @@ export class Client {
     );
   }
 
-  /** Create a browser client that always uses the Connect protocol. */
+  /**
+   * Create a browser client that always uses binary Connect (`application/proto`).
+   *
+   * The selected gateway must permit binary Connect, including packed `Any` command
+   * and query values. Selection is explicit: this method never probes or falls back.
+   */
   static forConnect(baseUrl: string, options: BrowserClientOptions = {}): Client {
     return new Client(
-      browserSource(createConnectTransport(browserTransportOptions(baseUrl, options))),
+      browserSource(
+        createConnectTransport({
+          ...browserTransportOptions(baseUrl, options),
+          useBinaryFormat: true,
+        }),
+      ),
       options,
     );
   }
@@ -488,7 +498,7 @@ class TopicSubscription implements Subscription {
         cancelLateSubscription(pendingSubscription, this.#owner.transport),
       );
       this.#wire = subscription;
-      validateSubscription(subscription, this.#topic);
+      validateSubscription(subscription, this.#topic, true);
       if (this.#cancelled || generation !== this.#generation) {
         await this.#cancelWireOnce(subscription);
         throw new ClientProtocolError("subscription is cancelled.");
@@ -541,7 +551,7 @@ class TopicSubscription implements Subscription {
     this.#updates.discard();
     this.#finishLifecycle({ state: "closed", generation: this.#generation - 1 });
     this.#controller.abort();
-    this.#disposeLateIterator();
+    await this.#disposeLateIterator();
     try {
       if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
     } finally {
@@ -562,7 +572,7 @@ class TopicSubscription implements Subscription {
           throw new SubscriptionStreamEndedError("subscription stream ended unexpectedly.");
         if (this.#cancelled || generation !== this.#generation) return;
         const update = next.value;
-        validateSubscription(update.subscription, subscription.topic!);
+        validateSubscription(update.subscription, subscription.topic!, true);
         if (update.subscription?.id?.value !== subscription.id?.value)
           throw new ClientProtocolError(
             "subscription update ID does not match the accepted subscription.",
@@ -624,7 +634,7 @@ class TopicSubscription implements Subscription {
       while (this.#retryable(failure) && this.#canRetry()) {
         const attempt = ++this.#retryAttempt;
         generation = ++this.#generation;
-        this.#disposeLateIterator();
+        await this.#disposeLateIterator();
         if (wire !== undefined) await this.#cancelWireOnce(wire);
         const delay = this.#runtime.retryPolicy.delayMs(attempt);
         if (!Number.isSafeInteger(delay) || delay <= 0)
@@ -654,7 +664,7 @@ class TopicSubscription implements Subscription {
             cancelLateSubscription(pending, this.#owner.transport),
           );
           this.#wire = subscription;
-          validateSubscription(subscription, this.#topic);
+          validateSubscription(subscription, this.#topic, true);
           const updates = createClient(SubscriptionService, this.#owner.transport).activate(
             subscription,
             { signal: this.#controller.signal },
@@ -676,7 +686,7 @@ class TopicSubscription implements Subscription {
     } catch (recoveryError) {
       if (this.#cancelled) throw recoveryError;
       const terminalError = recoveryError instanceof Error ? recoveryError : error;
-      this.#disposeLateIterator();
+      await this.#disposeLateIterator();
       this.#failStreams(terminalError, generation);
       try {
         await this.#cancelAfterFailure();
@@ -780,12 +790,22 @@ class TopicSubscription implements Subscription {
     return promise;
   }
 
-  #disposeLateIterator(): void {
+  async #disposeLateIterator(): Promise<void> {
     const iterator = this.#streamIterator;
     if (iterator === undefined) return;
     this.#streamIterator = undefined;
     try {
-      void Promise.resolve(iterator.return?.()).catch(() => undefined);
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          Promise.resolve(iterator.return?.()).catch(() => undefined),
+          new Promise<void>((resolve) => {
+            timeout = setTimeout(resolve, CLEANUP_TIMEOUT_MS);
+          }),
+        ]);
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+      }
     } catch {
       // Local terminal state must not depend on a non-cooperative iterator.
     }
@@ -1128,14 +1148,22 @@ function cloneTopic(topic: Topic, context: ActorContext): Topic {
 function validateSubscription(
   subscription: WireSubscription | undefined,
   expectedTopic: Topic,
+  allowRewrittenContext = false,
 ): void {
   if (subscription === undefined || subscription.id?.value.length === 0)
     throw new ClientProtocolError("subscription ID is missing or invalid.");
-  if (subscription.topic === undefined || !sameTopic(subscription.topic, expectedTopic))
+  if (
+    subscription.topic === undefined ||
+    !sameTopic(subscription.topic, expectedTopic, allowRewrittenContext)
+  )
     throw new ClientProtocolError("subscription topic does not match the requested topic.");
 }
 
-function sameTopic(left: Topic, right: Topic): boolean {
+function sameTopic(left: Topic, right: Topic, ignoreContext = false): boolean {
+  if (ignoreContext) {
+    left = { ...left, context: undefined };
+    right = { ...right, context: undefined };
+  }
   const a = toBinary(TopicSchema, left);
   const b = toBinary(TopicSchema, right);
   return a.length === b.length && a.every((value, index) => value === b[index]);

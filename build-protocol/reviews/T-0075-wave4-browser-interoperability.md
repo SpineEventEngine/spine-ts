@@ -4024,3 +4024,347 @@ profiles; no Spine JVM project command may run.
 - C5.4 is review-converged. Documentation remains CLEAN; TypeScript/API remains
   justified N/A for the private example. The separately public client-react
   prerequisite has clean dispositions in all four canonical concerns.
+
+## Slice E planning gate
+
+- Classification: high-risk network/security/interoperability milestone.
+- Existing requirements-splitting role is explicitly dispatched read-only at
+  `gpt-5.6-sol` / `high` to produce the smallest implementable decomposition,
+  ownership boundaries, behavior-first acceptance, and relevant review lanes.
+- Binding scope: configurable Envoy reference, real
+  browser-to-gateway-to-Spine-TS behavior, and static-only JVM
+  source/descriptor/TS-fixture compatibility evidence. No JVM project build,
+  test, generation, dependency resolution, launch, or execution is permitted.
+  No edits, Git mutation, or child dispatch is permitted.
+- The initial planning turn was interrupted after failing to return a bounded
+  result; it made no edits. A narrowed retry retains the explicit
+  `gpt-5.6-sol` / `high` profile and asks only for the listener ownership
+  decision plus two review-sized implementation/acceptance slices.
+- The narrowed split completed under explicit `gpt-5.6-sol` / `high`; runtime
+  self-introspection was unavailable with no visible mismatch. No product
+  blocker exists. Application-owned listener lifecycle around the existing
+  `createNativeGatewayServices()` seam avoids a premature public deployment
+  API.
+- The durable E brief freezes E1 real Envoy/TS acceptance and E2 static
+  JVM/shared-wire evidence. The existing implementation role is explicitly
+  dispatched at `gpt-5.6-terra` / `medium` with disjoint owned paths,
+  behavior-first evidence, no Git/children, and the absolute no-JVM-operation
+  boundary.
+- The initial implementation result is not accepted: 4/4 renderer/static tests
+  and Envoy validation pass, but no real browser-to-Envoy-to-gateway-to-Chat
+  evidence exists. The same explicit `gpt-5.6-terra` / `medium` context is
+  narrowed to close this mandatory E1 gap before any specialist dispatch.
+- Focused RED proves `createNativeGatewayServices()` cannot register its
+  `UnaryGateway` ResolveContext path because it exposes no
+  `AuthenticationService` implementation. The brief's conditional public-seam
+  exception is activated.
+- The existing implementer retains explicit `gpt-5.6-terra` / `medium` and may
+  make only the minimal native auth service/export/test/doc correction before
+  resuming the real topology. All four canonical concerns reopen for that
+  public contract; E1 TypeScript/API is no longer N/A. No listener API or
+  unrelated auth redesign is permitted.
+- The minimal service seam is GREEN: auth build passes, native gateway tests
+  pass 31/31, and the E1 seam regression passes 1/1. It remains pending public
+  API/documentation/reliability/style review with the complete E1 candidate.
+- The real topology is still absent. The same explicit implementation context
+  now owns the next bounded infrastructure increment before browser expansion;
+  no specialist review begins yet.
+- The topology now starts its owners but the first smoke is red. Retained Envoy
+  logs prove a renderer defect rather than TLS/ALPN incompatibility:
+  `host.docker.internal` is invalid in the current STATIC cluster and causes
+  Envoy to exit. Readiness also needs container-liveness evidence rather than
+  TCP alone. The same owner receives this single root-cause correction before
+  any browser expansion or review.
+- The root-cause correction is mechanically GREEN: renderer 2/2, pinned Envoy
+  validation, and real gRPC-Web ResolveContext topology 1/1. DNS resolution,
+  explicit auth routing, Docker/TCP readiness, log capture, and cleanup are
+  present.
+- This is an intermediate milestone only. E1 review remains blocked on real
+  Post/Read, Projection subscription, browser/session/security, and Connect
+  acceptance.
+
+## E1 implementation update — review input
+
+- The existing implementer (`gpt-5.6-terra` / `medium`; runtime
+  self-introspection unavailable) now supplies serial cross-browser opaque
+  cookie lifecycle evidence plus a Chromium credential, origin, ownership,
+  context-rejection, and abrupt-disconnect matrix. No review disposition is
+  implied by this implementation record.
+- Explicit limitation for reviewers: Chat rejects tenant-bearing subscriptions,
+  and this candidate lacks per-operation zero-delta counter assertions and a
+  sanitized forwarded-context rewrite observation. Connect remains out of
+  scope.
+
+## Slice E complete specialist review dispatch
+
+- The preceding intermediate E1 limitations are superseded. The completed
+  candidate provides separated per-operation zero-delta negative groups,
+  sanitized forwarded-context evidence, and an explicit Chromium Connect
+  unary smoke without probing or fallback. Chat remains intentionally
+  tenantless, so a matching-tenant rewrite is not claimed; fabricated tenant
+  rejection is covered.
+- Coordinator mechanical evidence is green: the exact pinned Envoy image
+  validates the rendered configuration; real topology passes 1/1; the serial
+  browser matrix passes 9 tests with 12 intentional focused-engine skips;
+  focused auth/client evidence passes 169/169; static renderer/wire evidence
+  passes 6/6; fixture/descriptor evidence passes 13/13; Proto checksums pass
+  40/40; package TypeScript builds, dependency isolation, formatting, and diff
+  hygiene pass. The accepted Envoy CORS-field deprecation and bounded E2
+  provenance limitation are explicit.
+- Existing concern `style_maintainability_reviewer` is explicitly dispatched
+  read-only with expected/configured `gpt-5.6-terra` / `high`; existing concern
+  `typescript_api_docs_reviewer` with expected/configured
+  `gpt-5.6-terra` / `high`; existing concern
+  `performance_reliability_reviewer` with expected/configured
+  `gpt-5.6-terra` / `high`; and existing concern `documentation_reviewer` with
+  immutable expected/configured `gpt-5.6-luna` / `medium`.
+- Every dispatch field is explicit. Reviewers must inspect the complete Slice E
+  diff from `4a246df0`, the binding human-requirements ledger in
+  `E_TASK_BRIEF.md`, both implementation reports, and the affected auth,
+  client-web, browser/topology, Envoy, and static-wire paths. They may not edit,
+  spawn children, mutate Git, inspect later-slice work, or run any JVM-family
+  command, build, test, generation, launch, download, or dependency resolution.
+  Runtime self-introspection or the immutable configured profile plus its
+  limitation must be recorded before accepting a result.
+
+### Slice E style/maintainability result
+
+- One P2 is confirmed. The TLS Vite configuration at
+  `examples/chat-web/test/interop/browser/vite.config.mjs:3` is compressed into
+  a 184-character line, and the new candidate must correct it together with
+  any other new non-literal lines reported by the repository's 120-character
+  line-length gate.
+- Runtime self-introspection is unavailable. The immutable configured existing
+  role/profile is `style_maintainability_reviewer`,
+  `gpt-5.6-terra` / `high`; no visible mismatch or fallback occurred.
+
+### Slice E documentation dispatch surface limitation
+
+- The documentation dispatch explicitly requested the required
+  `gpt-5.6-luna` / `medium` profile, but the desktop subagent override API
+  rejected `gpt-5.6-luna` before creating an agent because its override
+  allowlist exposes only Sol and Terra.
+- No wrong-profile agent was accepted. The existing
+  `documentation_reviewer` role is itself immutably configured to
+  `gpt-5.6-luna` / `medium`; it is redispatched through that fixed role with
+  both expected fields explicit in the assignment text and without an
+  incompatible model substitution. The API limitation remains part of the
+  acceptance record.
+
+### Slice E TypeScript/API result
+
+- One P2 is confirmed. `Client.forConnect()` now unconditionally selects
+  binary Connect, but its TypeDoc and public client documentation say only that
+  the endpoint must support Connect. The correction must state in
+  `packages/client-web/src/client/client.ts`,
+  `packages/client-web/README.md`, `docs/api/README.md`, and
+  `docs/USER_GUIDE.md` that it uses binary Connect
+  (`application/proto`), that the gateway must permit it, and that selection
+  remains explicit with no probing or fallback. Packed `Any` command/query
+  calls are the reason for the binary requirement.
+- No P0/P1 finding exists. The ResolveContext service addition, public native
+  service shape, subscription-update rewriting, and static Proto evidence
+  seams are contract-consistent.
+- Runtime self-introspection is unavailable. The immutable configured existing
+  role/profile is `typescript_api_docs_reviewer`,
+  `gpt-5.6-terra` / `high`; no visible mismatch or fallback occurred.
+
+### Slice E documentation result
+
+- One P2 is confirmed. Fresh-user/operator documentation does not explain the
+  configurable Envoy/gateway topology: renderer inputs, TLS files, gateway-only
+  routes, HTTP/2 upstream, pinned-image validation, and application-owned
+  gateway listener lifecycle. The correction must add a concise setup guide or
+  linked section with commands/code and the explicit customizable-template and
+  no-public-backend-route limits.
+- The reviewer independently corroborates the TypeScript/API binary Connect
+  documentation finding. No additional P0/P1/P2 finding exists, and the E2
+  report accurately limits its static compatibility claims.
+- Runtime self-introspection is unavailable. The immutable configured existing
+  role/profile is `documentation_reviewer`,
+  `gpt-5.6-luna` / `medium`; no visible mismatch or fallback occurred. The
+  documented desktop override limitation did not substitute another model.
+
+### Slice E performance/reliability result
+
+- One P1 is confirmed in
+  `examples/chat-web/test/interop/harness.mjs`. Cleanup ownership begins after
+  resources are acquired, the post-container failure path does not remove the
+  container, and returned cleanup short-circuits on its first rejection.
+  Correction requires one owner from the first acquired resource, unconditional
+  reverse-order cleanup, binding cancellation/closure before waiting for
+  gateway connection drain, a bounded shutdown, aggregate reporting after all
+  attempts, and fault-injection regressions for pre-listen failure,
+  post-container startup failure, and one cleanup rejection.
+- One P2 is confirmed in
+  `examples/chat-web/test/interop/browser/run.mjs`: the Playwright child promise
+  observes only `exit`, so a `spawn` error can leave the topology pending
+  indefinitely. Correction must reject on `error` and add a focused launch
+  failure regression or bounded injectable process seam.
+- Runtime self-introspection is unavailable. The immutable configured existing
+  role/profile is `performance_reliability_reviewer`,
+  `gpt-5.6-terra` / `high`; no visible mismatch or fallback occurred.
+
+### Slice E consolidated correction dispatch
+
+- One complete accepted batch returns to the original existing `implementer`
+  context. Expected/configured model is explicitly `gpt-5.6-terra`; reasoning
+  is explicitly `medium`. It owns only the affected Slice E implementation,
+  focused tests, public documentation, and evidence records.
+- Required corrections are: the P1 topology cleanup/fault-injection batch; the
+  P2 Playwright spawn-error path; the P2 new-line-length findings; the P2 binary
+  Connect public documentation; and the P2 Envoy/operator topology guide.
+  Corroboration of binary Connect is one finding, not a duplicate.
+- The owner must run focused mechanical and behavior verification, must not
+  commit/push/merge or spawn children, and must not run any JVM-family command,
+  build, test, generation, launch, download, or dependency resolution. All
+  four concerns reopen only where substantively affected; complete corrected
+  evidence returns to the coordinator before targeted re-review.
+
+### Slice E incomplete correction handoff
+
+- The original implementer returns after only reformatting the Vite
+  configuration and adding binary Connect/no-fallback TypeDoc. The P1 cleanup
+  ownership and fault injection, P2 Playwright spawn error, public binary
+  Connect documentation, operator topology guide, and focused verification are
+  all missing, so the result is rejected.
+- The same implementation context is redispatched with the complete remaining
+  batch under its unchanged explicitly configured
+  `gpt-5.6-terra` / `medium` profile. Runtime self-introspection was not
+  included in the incomplete handoff; the immutable configured role/profile is
+  retained and no visible mismatch occurred. No acceptance or re-review begins
+  until the full correction evidence returns.
+- The second turn completes the three public binary Connect documentation
+  updates but again returns before reliability work. This remains incomplete.
+  To fit the execution surface without changing ownership, the same context is
+  narrowed first to the P1 topology cleanup plus its three fault-injection
+  regressions. The P2 spawn error and operator guide remain queued immediately
+  afterward under the same profile and scope.
+- The third turn labels the bounded lifecycle refactor and dependency-injection
+  tests a blocker without identifying an environmental, authority, or product
+  decision impediment. Difficulty is not a protocol blocker, and no additional
+  P1 edit was made. Runtime self-introspection is unavailable; the reported
+  configured profile remains `gpt-5.6-terra` / `medium`.
+- After three incomplete correction turns, harness ownership transfers to a
+  replacement existing `implementer`, explicitly expected/configured
+  `gpt-5.6-terra` / `medium`, with the same narrow P1 paths and no-JVM/Git/child
+  constraints. The replacement must preserve valid current edits and need not
+  rediscover or redesign the already-recorded behavior.
+- The remaining independent P2 corrections are dispatched in parallel to a
+  second existing `implementer`, explicitly expected/configured
+  `gpt-5.6-terra` / `medium`, with disjoint ownership of
+  `examples/chat-web/test/interop/browser/run.mjs`, its focused process test,
+  the new Envoy operator guide and only the required documentation links.
+  This owner must preserve the completed binary Connect docs and must not edit
+  the harness P1 paths, commit/Git, spawn children, or run JVM-family work.
+
+### Slice E consolidated correction implementation results
+
+- The replacement P1 owner completed the harness lifecycle correction under
+  explicit existing implementer `gpt-5.6-terra` / `medium`. Runtime
+  self-introspection is unavailable; the immutable configured profile is the
+  available evidence, with no visible mismatch.
+- One cleanup owner now exists from first acquired resource, performs
+  dependency-safe bounded attempts across every acquired owner, continues
+  after failures, and raises an `AggregateError` only afterward. Startup
+  failures use the same path. Three deterministic regressions pass for
+  pre-listen failure, post-container readiness failure, and a cleanup rejection
+  with all later cleanup still attempted. Focused Node tests pass 3/3;
+  formatting, owned ESLint, and diff hygiene pass.
+- The independent P2 owner completed Playwright spawn-error rejection and
+  topology cleanup proof, added the Envoy/gateway operator guide and required
+  links, and preserved the binary Connect documentation. It ran under explicit
+  existing implementer `gpt-5.6-terra` / `medium`; runtime self-introspection
+  is unavailable and no mismatch is visible. Focused Node tests pass 4/4;
+  formatting, owned ESLint/syntax, and diff hygiene pass.
+- Coordinator verification and targeted re-review follow. Reliability reopens
+  for both lifecycle changes; style reopens for owned formatting/line length;
+  documentation reopens for operator/binary Connect text; TypeScript/API
+  reopens for the public TypeDoc and binary Connect contract wording.
+
+### Slice E clean-browser verification correction
+
+- Clean verification invalidated a stale Vite dependency-cache success:
+  `examples/chat-web/test/interop/browser/entry.ts` directly imports
+  `@connectrpc/connect` and `@connectrpc/connect-web`, but the example had not
+  declared them. Both already-pinned `2.1.2` dependencies and exact lockfile
+  importer entries are now present. A frozen-lockfile install passes
+  supply-chain verification and reuses all 370 packages locally; the clean
+  Vite production bundle transforms 244 modules successfully.
+- Playwright's implicit tsconfig discovery traversed the root project-reference
+  graph and failed on an unrelated package reference after its Vite server was
+  healthy. The interop Playwright configuration is JavaScript, explicitly pins
+  its local reference-free `tsconfig.json`, and matches only
+  `browser.spec.mjs`; the Node launcher regression remains a separate Node
+  test. The launcher regression passes 2/2.
+- Independent real topology passes 1/1. Each of the three negative browser
+  groups passes independently, and the complete serial browser matrix passes
+  9 tests with 12 intentional focused-engine skips. The corrected dependency
+  and configuration surface is included in targeted style, API, reliability,
+  and documentation re-review.
+
+### Slice E targeted re-review dispatch
+
+- Existing style/maintainability, TypeScript/API, and performance/reliability
+  reviewers are redispatched read-only with explicit
+  `gpt-5.6-terra` / `high`; existing documentation is redispatched through its
+  immutable `gpt-5.6-luna` / `medium` role with the already-recorded desktop
+  override limitation.
+- Re-review is limited to the consolidated corrections, clean-browser
+  dependency/configuration fixes, exact focused/real evidence, and disposition
+  of the original findings. No reviewer may edit, mutate Git, spawn children,
+  inspect Slice F, or invoke any JVM-family operation.
+
+### Slice E targeted style/API/reliability results
+
+- Style/maintainability is CLEAN. The multiline Vite configuration resolves
+  the original P2, and no new P0-P2 issue exists in the bounded correction.
+- TypeScript/API is CLEAN. TypeDoc and all three public documentation surfaces
+  state binary Connect `application/proto`, packed-`Any` gateway permission,
+  and no probing/fallback. Direct Connect dependencies and the lockfile
+  importer are correct; no new P0-P2 issue exists.
+- Performance/reliability is CLEAN. One per-resource-bounded cleanup owner
+  covers all acquired resources, startup failures, continued cleanup after
+  rejection, and correct dependency order. Spawn errors reject, detach the
+  competing listener, and reach topology `finally`. The five focused
+  regressions and real evidence support both resolved findings; local tsconfig
+  and `testMatch` isolate Playwright correctly.
+- Runtime self-introspection is unavailable for all three results. Immutable
+  configured existing profiles are respectively
+  `style_maintainability_reviewer`,
+  `typescript_api_docs_reviewer`, and
+  `performance_reliability_reviewer`, each
+  `gpt-5.6-terra` / `high`, with no visible mismatch or fallback.
+
+### Slice E targeted documentation result
+
+- Documentation is CLEAN. `interop/envoy/README.md` covers renderer inputs,
+  six gateway routes, TLS and HTTP/2, pinned-image validation,
+  application-owned lifecycle, customization, and the no-public-backend
+  boundary, with accurate links from the user, client-web, and Chat guides.
+  Binary Connect guidance states `application/proto`, packed `Any`, gateway
+  permission, and no probe/fallback. Reports and clean-browser dependency
+  wording are accurate; no new P0-P2 issue exists.
+- Runtime self-introspection is unavailable. The immutable configured existing
+  `documentation_reviewer` profile is `gpt-5.6-luna` / `medium`; no visible
+  mismatch or fallback occurred. The recorded desktop override limitation
+  remains honest.
+- Slice E is review-converged across all four canonical concerns. Final
+  deterministic verification, checkpoint commit, and immediate remote push
+  follow before Slice F begins.
+
+### Slice E final deterministic gate
+
+- Vitest passes 14 files / 418 tests across auth, client-web, frozen fixture,
+  and descriptor compatibility.
+- Node passes 12/12 lifecycle, spawn-error, real topology, Envoy renderer, and
+  static-wire tests. The immediately preceding complete browser matrix passes
+  all three separated negative groups and 9 tests with 12 intentional
+  focused-engine skips.
+- Auth and client-web TypeScript builds pass. Generated TypeDoc and API
+  inventory checks pass, including the unchanged 22-export client-web surface
+  and 102-export auth surface. Package metadata passes 2/2; dependency
+  isolation, formatting, and diff hygiene pass.
+- Slice E is accepted for checkpoint commit and immediate task-branch push. No
+  Spine JVM command, build, test, generation, dependency resolution, launch, or
+  download was invoked.

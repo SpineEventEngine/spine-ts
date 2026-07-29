@@ -2,6 +2,11 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
 import {
+  AuthenticationService,
+  ResolveContextRequestSchema,
+  ResolveContextResponseSchema,
+} from "@spine-event-engine/proto/auth";
+import {
   AckSchema,
   ActorContextSchema,
   CommandContextSchema,
@@ -12,15 +17,21 @@ import { TypeRegistry, packAny } from "@spine-event-engine/core";
 import {
   CommandService,
   EventUpdatesSchema,
+  CompositeFilterSchema,
+  FilterSchema,
   QueryService,
   SubscriptionSchema,
   SubscriptionService,
+  type SubscriptionUpdate,
   SubscriptionUpdateSchema,
+  TargetFiltersSchema,
+  TargetSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 import {
   createNativeGatewayServices,
+  SubscriptionUpdateRelay,
   UnaryGateway,
   type NativeGatewayRequestContext,
   type SubscriptionGateway,
@@ -42,6 +53,44 @@ const transport = {
 
 function context(signal = new AbortController().signal): HandlerContext {
   return { signal } as unknown as HandlerContext;
+}
+
+function updateWithNestedAny(): Uint8Array {
+  return toBinary(
+    SubscriptionUpdateSchema,
+    create(SubscriptionUpdateSchema, {
+      subscription: create(SubscriptionSchema, {
+        topic: create(TopicSchema, {
+          target: create(TargetSchema, {
+            type: "example.Target",
+            criterion: {
+              case: "filters",
+              value: create(TargetFiltersSchema, {
+                filter: [
+                  create(CompositeFilterSchema, {
+                    filter: [
+                      create(FilterSchema, {
+                        value: packAny(
+                          TenantIdSchema,
+                          create(TenantIdSchema, {
+                            kind: { case: "value", value: "nested-bytes" },
+                          }),
+                        ),
+                      }),
+                    ],
+                  }),
+                ],
+              }),
+            },
+          }),
+        }),
+      }),
+    }),
+  );
+}
+
+function nestedAnyValue(update: SubscriptionUpdate): Uint8Array | undefined {
+  return update.subscription?.topic?.target?.criterion.value?.filter[0]?.filter[0]?.value?.value;
 }
 
 function requests(): NativeGatewayRequestContext {
@@ -85,6 +134,18 @@ async function errorCode(effect: Promise<unknown>): Promise<Code> {
 }
 
 describe("createNativeGatewayServices", () => {
+  it("delegates ResolveContext through the configured unary gateway", async () => {
+    const response = create(ResolveContextResponseSchema);
+    const gateway = services(
+      unary({ kind: "resolved", value: toBinary(ResolveContextResponseSchema, response) }).fake,
+      subscriptions(() => Promise.resolve({ kind: "cancelled" })).fake,
+    );
+
+    await expect(
+      gateway.authentication.resolveContext(create(ResolveContextRequestSchema), context()),
+    ).resolves.toEqual(response);
+  });
+
   it("composes a configured UnaryGateway so native Post policy receives decoded application content", async () => {
     const registry = new TypeRegistry([TenantIdSchema]);
     let policyMessage: unknown;
@@ -276,6 +337,42 @@ describe("createNativeGatewayServices", () => {
     expect((await iterator.next()).done).toBe(false);
     expect(await iterator.next()).toEqual({ done: true, value: undefined });
     expect(fake.calls).toHaveLength(1);
+  });
+
+  it("detaches a waiting consumer update before wiping its owned source bytes", async () => {
+    const relay = new SubscriptionUpdateRelay();
+    const iterator = relay[Symbol.asyncIterator]();
+    const waiting = iterator.next();
+    const source = updateWithNestedAny();
+
+    await relay.push({ kind: "subscription-update", bytes: source });
+    source.fill(0);
+
+    const delivered = await waiting;
+    expect(delivered.done).toBe(false);
+    expect(nestedAnyValue(delivered.value!)).toEqual(
+      toBinary(
+        TenantIdSchema,
+        create(TenantIdSchema, { kind: { case: "value", value: "nested-bytes" } }),
+      ),
+    );
+  });
+
+  it("detaches a queued update before wiping its owned source bytes", async () => {
+    const relay = new SubscriptionUpdateRelay();
+    const source = updateWithNestedAny();
+
+    await relay.push({ kind: "subscription-update", bytes: source });
+    source.fill(0);
+
+    const delivered = await relay[Symbol.asyncIterator]().next();
+    expect(delivered.done).toBe(false);
+    expect(nestedAnyValue(delivered.value!)).toEqual(
+      toBinary(
+        TenantIdSchema,
+        create(TenantIdSchema, { kind: { case: "value", value: "nested-bytes" } }),
+      ),
+    );
   });
 
   it.each([

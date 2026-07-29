@@ -190,6 +190,43 @@ describe("SubscriptionGateway", () => {
     expect(bindings.size).toBe(1);
   });
 
+  it("cancels an active binding once after aborting its native effect", async () => {
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "active-cancel",
+      dispose: async () => undefined,
+    });
+    await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "owner",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    let cancels = 0;
+    const active = bindings.activate({
+      id: "active-cancel",
+      principalFingerprint: "owner",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onBackend: async (_backend, signal) =>
+        await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true })),
+    });
+    await tick();
+    const cancelled = bindings.cancel({
+      id: "active-cancel",
+      principalFingerprint: "owner",
+      tenant: undefined,
+      nowMs: 1,
+      onBackend: async () => {
+        cancels++;
+      },
+    });
+    await expect(active).resolves.toEqual({ kind: "activated" });
+    await expect(cancelled).resolves.toEqual({ kind: "closed" });
+    expect(cancels).toBe(1);
+    expect(bindings.size).toBe(0);
+  });
+
   it("disposes a naturally completed native activation and removes its binding", async () => {
     const fixture = setup();
     const subscriptionGateway = gateway(fixture);
@@ -268,7 +305,21 @@ describe("SubscriptionGateway", () => {
     const fixture = setup();
     let received: Uint8Array | undefined;
     fixture.options.creator.activate = async ({ updates }) => {
-      const source = toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema));
+      const source = toBinary(
+        SubscriptionUpdateSchema,
+        create(SubscriptionUpdateSchema, {
+          subscription: create(SubscriptionSchema, {
+            id: { value: "backend-owned" },
+            topic: create(TopicSchema, {
+              id: { value: "backend-topic" },
+              target: create(TargetSchema, {
+                type: "example.Backend",
+                criterion: { case: "includeAll", value: true },
+              }),
+            }),
+          }),
+        }),
+      );
       await updates({ kind: "subscription-update", bytes: source });
       source.fill(9);
     };
@@ -281,7 +332,12 @@ describe("SubscriptionGateway", () => {
       },
     });
     expect(result).toEqual({ kind: "activated" });
-    expect(received).toEqual(toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema)));
+    const emitted = fromBinary(SubscriptionUpdateSchema, received!);
+    const publicSubscription = fromBinary(SubscriptionSchema, wire);
+    expect(toBinary(TargetSchema, emitted.subscription!.topic!.target!)).toEqual(
+      toBinary(TargetSchema, publicSubscription.topic!.target!),
+    );
+    expect(emitted.subscription).toEqual(publicSubscription);
   });
 
   it("aborts a quiet activation through the admitted downstream signal and cleans up once", async () => {
@@ -600,7 +656,7 @@ describe("SubscriptionGateway", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const cancelling = subscriptionGateway.handle(request("Cancel", wire));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(fixture.calls).toEqual(["subscribe", "activate"]);
+    expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
     release!();
     await activating;
     await cancelling;
@@ -942,7 +998,7 @@ describe("SubscriptionGateway", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "denied" });
     const cancelling = subscriptionGateway.handle(request("Cancel", wire));
     await tick();
-    expect(fixture.calls).toEqual(["subscribe", "activate"]);
+    expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
     release!();
     await activating;
     await expect(cancelling).resolves.toEqual({ kind: "cancelled" });

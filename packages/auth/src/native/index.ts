@@ -1,4 +1,4 @@
-import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import {
   Code,
   ConnectError,
@@ -20,6 +20,7 @@ import {
   type Subscription,
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
+import { AuthenticationService } from "@spine-event-engine/proto/auth";
 import type { Command } from "@spine-event-engine/proto";
 import type { UnaryForwarder, UnaryGateway, UnaryGatewayResult } from "../gateway/index.js";
 import type { RequestCredential, TransportRequestContext } from "../index.js";
@@ -90,7 +91,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
     }
     const waiter = this.#waiters.shift();
     if (waiter !== undefined) {
-      waiter.resolve({ done: false, value: decoded });
+      waiter.resolve({ done: false, value: clone(SubscriptionUpdateSchema, decoded) });
       bytes.fill(0);
       return;
     }
@@ -128,7 +129,10 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
     if (bytes !== undefined) {
       this.#bytes -= bytes.byteLength;
       try {
-        return { done: false, value: fromBinary(SubscriptionUpdateSchema, bytes) };
+        return {
+          done: false,
+          value: clone(SubscriptionUpdateSchema, fromBinary(SubscriptionUpdateSchema, bytes)),
+        };
       } finally {
         bytes.fill(0);
       }
@@ -279,6 +283,8 @@ export interface NativeGatewayRequestContext {
 
 /** B4 Connect services. Each handler delegates to the reviewed B2/B3 gateway boundary. */
 export interface NativeGatewayServices {
+  /** Connect AuthenticationService implementation for informational context resolution. */
+  readonly authentication: ServiceImpl<typeof AuthenticationService>;
   /** Connect CommandService implementation whose Post handler delegates to the B2 unary gateway. */
   readonly command: ServiceImpl<typeof CommandService>;
   /** Connect QueryService implementation whose Read handler delegates to the B2 unary gateway. */
@@ -313,6 +319,9 @@ export function createNativeGatewayServices(
   options: NativeGatewayServicesOptions,
 ): NativeGatewayServices {
   return {
+    authentication: {
+      resolveContext: async (request, context) => resolveContext(options, request, context),
+    },
     command: {
       post: async (request, context) => commandResponse(options, request, context),
     },
@@ -347,6 +356,27 @@ export function createNativeGatewayServices(
       },
     },
   };
+}
+
+async function resolveContext(
+  options: NativeGatewayServicesOptions,
+  request: Parameters<ServiceImpl<typeof AuthenticationService>["resolveContext"]>[0],
+  context: HandlerContext,
+): Promise<
+  ReturnType<typeof fromBinary<typeof AuthenticationService.method.resolveContext.output>>
+> {
+  const result = await options.unary.handle({
+    service: "spine.auth.AuthenticationService",
+    method: "ResolveContext",
+    value: toBinary(AuthenticationService.method.resolveContext.input, request),
+    credential: options.requests.credential(context),
+    transport: options.requests.transport(context),
+    signal: context.signal,
+  });
+  if (result.kind === "rejected") throw unaryError(result);
+  if (result.kind !== "resolved")
+    throw new ConnectError("gateway forwarded ResolveContext unexpectedly", Code.Internal);
+  return fromBinary(AuthenticationService.method.resolveContext.output, result.value);
 }
 
 async function commandResponse(

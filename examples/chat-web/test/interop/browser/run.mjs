@@ -1,0 +1,120 @@
+import { spawn } from "node:child_process";
+import process from "node:process";
+import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { startTopology } from "../harness.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+export async function runBrowserAcceptance({
+  start = startTopology,
+  spawnChild = spawn,
+  requestedPlaywrightArguments = process.argv.slice(2),
+} = {}) {
+  const topology = await start();
+  try {
+    const binary = resolve(here, "../../../node_modules/.bin/playwright");
+    const environment = {
+      ...process.env,
+      E1_ENVOY_BASE_URL: topology.baseUrl,
+      E1_COOKIE_SET_COOKIE: JSON.stringify(topology.cookie.setCookie),
+      E1_EXPIRED_COOKIE_SET_COOKIE: JSON.stringify(topology.expiredCookie.setCookie),
+      E1_CSRF: topology.cookie.csrf,
+      E1_COOKIE_B_SET_COOKIE: JSON.stringify(topology.cookieB.setCookie),
+      E1_CSRF_B: topology.cookieB.csrf,
+      E1_VITE_TLS_KEY: topology.tls.key,
+      E1_VITE_TLS_CERT: topology.tls.cert,
+    };
+    const playwright = async (arguments_) =>
+      spawnPlaywright({
+        binary,
+        arguments_,
+        cwd: here,
+        environment,
+        spawnChild,
+      });
+    if (requestedPlaywrightArguments.length === 0) {
+      for (const pattern of [
+        "invalid, expired, and CSRF-invalid",
+        "non-allowlisted browser Origin",
+        "unauthorized room and fabricated",
+      ]) {
+        const before = topology.counters();
+        const code = await playwright(["--project", "chromium", "--grep", pattern]);
+        if (code !== 0) throw new Error(`negative browser group failed: ${pattern}`);
+        assertZeroDelta(before, topology.counters(), pattern);
+      }
+    }
+    const code = await playwright(requestedPlaywrightArguments);
+    if (code !== 0) process.exitCode = code ?? 1;
+    if (code === 0) await settled(topology);
+    const counters = topology.counters();
+    if (
+      code === 0 &&
+      requestedPlaywrightArguments.length === 0 &&
+      (counters.subscribe === 0 ||
+        counters.activate === 0 ||
+        counters.activeStreams !== 0 ||
+        counters.cancel + counters.dispose === 0)
+    )
+      throw new Error(`topology lifecycle counters incomplete: ${JSON.stringify(counters)}`);
+    if (
+      code === 0 &&
+      requestedPlaywrightArguments.length === 0 &&
+      !topology
+        .forwardedContexts()
+        .some(
+          (context) =>
+            context.actor === "ada" &&
+            context.tenant === false &&
+            context.timestamp === true &&
+            context.zone === false &&
+            context.language === false,
+        )
+    )
+      throw new Error("gateway did not forward a resolver-owned Ada context");
+  } finally {
+    await topology.close();
+  }
+}
+
+export function spawnPlaywright({ binary, arguments_, cwd, environment, spawnChild = spawn }) {
+  const child = spawnChild(binary, ["test", "-c", "playwright.config.mjs", ...arguments_], {
+    cwd,
+    env: environment,
+    stdio: "inherit",
+  });
+  return new Promise((resolveCode, reject) => {
+    const rejectSpawn = (error) => {
+      child.removeListener("exit", resolveExit);
+      reject(error);
+    };
+    const resolveExit = (code) => {
+      child.removeListener("error", rejectSpawn);
+      resolveCode(code);
+    };
+    child.once("error", rejectSpawn);
+    child.once("exit", resolveExit);
+  });
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url))
+  await runBrowserAcceptance();
+
+function assertZeroDelta(before, after, pattern) {
+  const keys = ["forward", "subscribe", "activate", "cancel", "dispose", "updates"];
+  const delta = Object.fromEntries(keys.map((key) => [key, after[key] - before[key]]));
+  if (Object.values(delta).some((value) => value !== 0))
+    throw new Error(`negative browser group forwarded work: ${pattern} ${JSON.stringify(delta)}`);
+}
+
+async function settled(topology) {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    if (topology.bindingCount() === 0 && topology.counters().activeStreams === 0) return;
+    await delay(20);
+  }
+  const state = { bindings: topology.bindingCount(), counters: topology.counters() };
+  throw new Error(`browser exit retained topology state: ${JSON.stringify(state)}`);
+}

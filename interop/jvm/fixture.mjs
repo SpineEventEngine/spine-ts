@@ -160,7 +160,7 @@ export async function prepareFixture({
     await mkdir(staging, { recursive: true });
     execute("unzip", ["-q", archive, "-d", staging]);
     const source = join(staging, lock.archiveRoot);
-    await afterExtraction(staging);
+    await afterExtraction(source);
     const sourceDigest = await treeDigest(source);
     if (lock.sourceTreeSha256 && sourceDigest !== lock.sourceTreeSha256)
       throw new Error(

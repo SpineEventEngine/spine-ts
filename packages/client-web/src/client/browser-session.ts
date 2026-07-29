@@ -39,7 +39,7 @@ export class BrowserSession {
     options: BrowserSessionOptions,
   ) {
     this.#credentials = credentials;
-    this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
     if (typeof this.#fetch !== "function")
       throw new TypeError("Browser session requires a fetch implementation.");
     this.#maxRequestMs = requestDeadline(options.maxRequestMs);

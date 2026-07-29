@@ -41,3 +41,14 @@ The configured fixture passed in Chromium, Firefox, and WebKit. A fresh
 checkout needs `pnpm install` and
 `pnpm exec playwright install chromium firefox webkit` before repeating that
 acceptance.
+
+## Real-browser topology
+
+The acceptance fixture uses an HTTPS browser route through Envoy to a separate
+application gateway, then to the Chat backend. The browser never reaches the
+backend directly. The gateway owns authentication context resolution and its
+listener lifecycle; Envoy only exposes `ResolveContext`, `Post`, `Read`,
+`Subscribe`, `Activate`, and `Cancel` over the public route. Deployment users
+can copy the [Envoy reference](../../interop/envoy/README.md), provide their
+TLS certificate/key paths and gateway address, then customize the template for
+their own network policy.

@@ -1,6 +1,10 @@
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { ActorContextSchema, TenantIdSchema, type ActorContext } from "@spine-event-engine/proto";
-import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
+import {
+  SubscriptionSchema,
+  SubscriptionUpdateSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
 import type {
   AuthenticatedPrincipal,
   AuthorizationPolicy,
@@ -27,6 +31,7 @@ interface Binding {
   tail: Promise<void>;
   pending: number;
   expiring: boolean;
+  cancelRequested: boolean;
 }
 
 /** Owned raw Topic protobuf bytes for the `SubscriptionService.Subscribe` RPC. The gateway copies them on admission. */
@@ -212,6 +217,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       tail: Promise.resolve(),
       pending: 0,
       expiring: false,
+      cancelRequested: false,
     });
     input.reservation?.release();
     return { id };
@@ -238,6 +244,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       try {
         await this.#runEffect(binding, input.onBackend);
       } catch (error) {
+        if (binding.cancelRequested) return { kind: "activated" };
         binding.state = "inactive";
         throw error;
       } finally {
@@ -257,6 +264,11 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     const admission = this.#precheck(input);
     if (admission === "absent") return { kind: "closed" };
     if (admission !== "owned") return { kind: "denied" };
+    const active = this.#bindings.get(input.id);
+    if (active?.state === "active") {
+      active.cancelRequested = true;
+      active.controller.abort();
+    }
     return this.#coordinate(input.id, async () => {
       const binding = await this.#owned(input);
       if (binding === undefined) return { kind: "closed" };
@@ -361,8 +373,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     });
     await previous;
     try {
-      if (this.#closed || binding.state === "closed")
-        throw new Error("subscription bindings are closed");
+      if (this.#closed) throw new Error("subscription bindings are closed");
       return await operation();
     } finally {
       binding.pending--;
@@ -750,7 +761,26 @@ export class SubscriptionGateway {
   ): Promise<void> {
     const privateWire = copyPublic(wire);
     try {
-      await this.#options.creator.activate({ wire: privateWire, backend, updates }, signal);
+      const publicSubscription = fromBinary(SubscriptionSchema, wire.bytes);
+      await this.#options.creator.activate(
+        {
+          wire: privateWire,
+          backend,
+          updates: async (update) => {
+            try {
+              const decoded = fromBinary(SubscriptionUpdateSchema, update.bytes);
+              decoded.subscription = clone(SubscriptionSchema, publicSubscription);
+              await updates({
+                kind: "subscription-update",
+                bytes: toBinary(SubscriptionUpdateSchema, decoded),
+              });
+            } finally {
+              update.bytes.fill(0);
+            }
+          },
+        },
+        signal,
+      );
     } finally {
       privateWire.bytes.fill(0);
     }
