@@ -1,0 +1,434 @@
+[
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transaction.ts",
+    "kind": "import-alias",
+    "identity": "import-alias:EntityStateTransitionValidationResult#1",
+    "name": "EntityStateTransitionValidationResult",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transition-validation.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:createSetOnceTransitionRule#1",
+    "name": "createSetOnceTransitionRule",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transition-validation.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:fieldValueShapeIsSafe#1",
+    "name": "fieldValueShapeIsSafe",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transition-validation.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:fieldValueShapeIsSafeUnchecked#1",
+    "name": "fieldValueShapeIsSafeUnchecked",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transition-validation.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:hasOnlyDenseIndexedDataProperties#1",
+    "name": "hasOnlyDenseIndexedDataProperties",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transition-validation.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:isUnsupportedSetOnceField#1",
+    "name": "isUnsupportedSetOnceField",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transition-validation.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:readSafeUint8ArrayBytes#1",
+    "name": "readSafeUint8ArrayBytes",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transition-validation.ts",
+    "kind": "InterfaceDeclaration",
+    "identity": "InterfaceDeclaration:EntityStateTransitionValidationRequest#1",
+    "name": "EntityStateTransitionValidationRequest",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity-transition-validation.ts",
+    "kind": "TypeAliasDeclaration",
+    "identity": "TypeAliasDeclaration:EntityStateTransitionValidationResult#1",
+    "name": "EntityStateTransitionValidationResult",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/entity/entity.ts",
+    "kind": "import-alias",
+    "identity": "import-alias:EntityStateTransitionValidationResult#1",
+    "name": "EntityStateTransitionValidationResult",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/command-registration-readiness.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:isAuthenticCommandRegistrationReadiness#1",
+    "name": "isAuthenticCommandRegistrationReadiness",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/command-registration-readiness.ts",
+    "kind": "MethodDeclaration",
+    "identity": "MethodDeclaration:registeredCommandMessageFullTypeNames#1",
+    "name": "registeredCommandMessageFullTypeNames",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/command-registration-readiness.ts",
+    "kind": "MethodSignature",
+    "identity": "MethodSignature:registeredCommandMessageFullTypeNames#1",
+    "name": "registeredCommandMessageFullTypeNames",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/command-registration-readiness.ts",
+    "kind": "parameter",
+    "identity": "parameter:assigneesByCommandFullTypeName#1",
+    "name": "assigneesByCommandFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/command-registration-readiness.ts",
+    "kind": "variable",
+    "identity": "variable:assigneesByCommandFullTypeName#1",
+    "name": "assigneesByCommandFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:isAuthenticEventRegistrationReadiness#1",
+    "name": "isAuthenticEventRegistrationReadiness",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "MethodDeclaration",
+    "identity": "MethodDeclaration:registeredEventMessageFullTypeNames#1",
+    "name": "registeredEventMessageFullTypeNames",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "MethodSignature",
+    "identity": "MethodSignature:registeredEventMessageFullTypeNames#1",
+    "name": "registeredEventMessageFullTypeNames",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "parameter",
+    "identity": "parameter:applicationsByEventFullTypeName#1",
+    "name": "applicationsByEventFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "parameter",
+    "identity": "parameter:reactorsByEventFullTypeName#1",
+    "name": "reactorsByEventFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "parameter",
+    "identity": "parameter:subscribersByEventFullTypeName#1",
+    "name": "subscribersByEventFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "PropertySignature",
+    "identity": "PropertySignature:entityStateFullTypeName#1",
+    "name": "entityStateFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "variable",
+    "identity": "variable:applicationsByEventFullTypeName#1",
+    "name": "applicationsByEventFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "variable",
+    "identity": "variable:reactorsByEventFullTypeName#1",
+    "name": "reactorsByEventFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/event-registration-readiness.ts",
+    "kind": "variable",
+    "identity": "variable:subscribersByEventFullTypeName#1",
+    "name": "subscribersByEventFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "MethodDeclaration",
+    "identity": "MethodDeclaration:findEntityHandlersByState#1",
+    "name": "findEntityHandlersByState",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "MethodDeclaration",
+    "identity": "MethodDeclaration:findHandlersByMessageFullTypeName#1",
+    "name": "findHandlersByMessageFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "MethodSignature",
+    "identity": "MethodSignature:findEntityHandlersByState#1",
+    "name": "findEntityHandlersByState",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "MethodSignature",
+    "identity": "MethodSignature:findHandlersByMessageFullTypeName#1",
+    "name": "findHandlersByMessageFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "parameter",
+    "identity": "parameter:entityStateFullTypeName#1",
+    "name": "entityStateFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "parameter",
+    "identity": "parameter:entityStateFullTypeName#2",
+    "name": "entityStateFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "parameter",
+    "identity": "parameter:entityStateFullTypeName#3",
+    "name": "entityStateFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "parameter",
+    "identity": "parameter:entityStateFullTypeName#4",
+    "name": "entityStateFullTypeName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "kind": "TypeAliasDeclaration",
+    "identity": "TypeAliasDeclaration:HandlerMetadataRegistryErrorCode#1",
+    "name": "HandlerMetadataRegistryErrorCode",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/runtime/runtime-routing.ts",
+    "kind": "import-alias",
+    "identity": "import-alias:isAuthenticCommandRegistrationReadiness#1",
+    "name": "isAuthenticCommandRegistrationReadiness",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/runtime/runtime-routing.ts",
+    "kind": "import-alias",
+    "identity": "import-alias:isAuthenticEventRegistrationReadiness#1",
+    "name": "isAuthenticEventRegistrationReadiness",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/server/server-environment.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:resetServerEnvironmentForTest#1",
+    "name": "resetServerEnvironmentForTest",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "import-alias",
+    "identity": "import-alias:EntityStateWithVersionSchema#1",
+    "name": "EntityStateWithVersionSchema",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_QUERY_FIELD_MASK_PATH_LENGTH#1",
+    "name": "MAX_QUERY_FIELD_MASK_PATH_LENGTH",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_QUERY_FIELD_MASK_PATHS#1",
+    "name": "MAX_QUERY_FIELD_MASK_PATHS",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_QUERY_ID_FILTER_IDS#1",
+    "name": "MAX_QUERY_ID_FILTER_IDS",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_SUBSCRIPTION_FIELD_MASK_PATH_LENGTH#1",
+    "name": "MAX_SUBSCRIPTION_FIELD_MASK_PATH_LENGTH",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_SUBSCRIPTION_FIELD_MASK_PATHS#1",
+    "name": "MAX_SUBSCRIPTION_FIELD_MASK_PATHS",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_SUBSCRIPTION_FIELD_PATH_COMPONENTS#1",
+    "name": "MAX_SUBSCRIPTION_FIELD_PATH_COMPONENTS",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH#1",
+    "name": "MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_SUBSCRIPTION_ID_FILTER_IDS#1",
+    "name": "MAX_SUBSCRIPTION_ID_FILTER_IDS",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/services/spine-services.ts",
+    "kind": "variable",
+    "identity": "variable:MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS#1",
+    "name": "MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/server/src/testing/index.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:resetServerEnvironmentForTest#1",
+    "name": "resetServerEnvironmentForTest",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  }
+]

@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. T-0080A is complete; T-0080B is next.
+In progress. T-0080A and T-0080B are complete; T-0080C is next.
 
 ## Classification
 

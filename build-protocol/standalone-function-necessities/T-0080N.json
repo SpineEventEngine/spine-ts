@@ -1,0 +1,119 @@
+[
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "createDatastoreOrdersContext()#1",
+    "name": "createDatastoreOrdersContext",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration createDatastoreOrdersContext()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "startDatastoreOrdersDatastoreServer()#1",
+    "name": "startDatastoreOrdersDatastoreServer",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration startDatastoreOrdersDatastoreServer()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "startDatastoreOrdersServer()#1",
+    "name": "startDatastoreOrdersServer",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration startDatastoreOrdersServer()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "classifyFailures()#1",
+    "name": "classifyFailures",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration classifyFailures()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "ignoreCancellation()#1",
+    "name": "ignoreCancellation",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration ignoreCancellation()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "percentile()#1",
+    "name": "percentile",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration percentile()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "percentiles()#1",
+    "name": "percentiles",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration percentiles()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "runDatastoreOrdersLoad()#1",
+    "name": "runDatastoreOrdersLoad",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration runDatastoreOrdersLoad()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "runUser()#1",
+    "name": "runUser",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration runUser()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "summarize()#1",
+    "name": "summarize",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration summarize()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "target()#1",
+    "name": "target",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration target()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "topic()#1",
+    "name": "topic",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration topic()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "kind": "function-declaration",
+    "identity": "withTimeout()#1",
+    "name": "withTimeout",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration withTimeout()#1 requires remediation by the assigned slice."
+  }
+]

@@ -1,0 +1,56 @@
+[
+  {
+    "rule": "semantic-name",
+    "file": "packages/delivery-server/src/core/in-memory-delivery-core.ts",
+    "kind": "FunctionDeclaration",
+    "identity": "FunctionDeclaration:createInMemoryDeliveryServerCore#1",
+    "name": "createInMemoryDeliveryServerCore",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/delivery-server/src/core/in-memory-delivery-core.ts",
+    "kind": "InterfaceDeclaration",
+    "identity": "InterfaceDeclaration:InMemoryDeliveryServerCore#1",
+    "name": "InMemoryDeliveryServerCore",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/delivery-server/src/core/in-memory-delivery-core.ts",
+    "kind": "InterfaceDeclaration",
+    "identity": "InterfaceDeclaration:InMemoryDeliveryServerCoreOptions#1",
+    "name": "InMemoryDeliveryServerCoreOptions",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/delivery-server/src/core/shard-service.ts",
+    "kind": "import-alias",
+    "identity": "import-alias:LiquorPickUpOutcomeSchema#1",
+    "name": "LiquorPickUpOutcomeSchema",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/delivery-server/src/core/shard-service.ts",
+    "kind": "import-alias",
+    "identity": "import-alias:ShardAlreadyPickedUpSchema#1",
+    "name": "ShardAlreadyPickedUpSchema",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  },
+  {
+    "rule": "semantic-name",
+    "file": "packages/delivery-server/src/health/health-service.ts",
+    "kind": "import-alias",
+    "identity": "import-alias:HealthCheckResponse_ServingStatus#1",
+    "name": "HealthCheckResponse_ServingStatus",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  }
+]

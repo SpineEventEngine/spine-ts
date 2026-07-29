@@ -1,0 +1,1523 @@
+[
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/client/node-client.ts",
+    "kind": "function-declaration",
+    "identity": "source()#1",
+    "name": "source",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration source()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "captureDefinitionFacts()#1",
+    "name": "captureDefinitionFacts",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration captureDefinitionFacts()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "captureFieldFacts()#1",
+    "name": "captureFieldFacts",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration captureFieldFacts()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "deepFreezeDescriptorGraph()#1",
+    "name": "deepFreezeDescriptorGraph",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration deepFreezeDescriptorGraph()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "defineGeneratedEntityColumns()#1",
+    "name": "defineGeneratedEntityColumns",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration defineGeneratedEntityColumns()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "describeField()#1",
+    "name": "describeField",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration describeField()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "isObject()#1",
+    "name": "isObject",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration isObject()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "operatorsFor()#1",
+    "name": "operatorsFor",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration operatorsFor()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "validateDefinition()#1",
+    "name": "validateDefinition",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration validateDefinition()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "kind": "function-declaration",
+    "identity": "validateEntitySchema()#1",
+    "name": "validateEntitySchema",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration validateEntitySchema()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "all()#1",
+    "name": "all",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration all()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "comparison()#1",
+    "name": "comparison",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration comparison()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "compileComparison()#1",
+    "name": "compileComparison",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration compileComparison()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "compileGroups()#1",
+    "name": "compileGroups",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration compileGroups()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "either()#1",
+    "name": "either",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration either()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "eq()#1",
+    "name": "eq",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration eq()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "findField()#1",
+    "name": "findField",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration findField()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "ge()#1",
+    "name": "ge",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration ge()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "group()#1",
+    "name": "group",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration group()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "gt()#1",
+    "name": "gt",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration gt()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "le()#1",
+    "name": "le",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration le()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "lt()#1",
+    "name": "lt",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration lt()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "nextQueryId()#1",
+    "name": "nextQueryId",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration nextQueryId()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "packColumn()#1",
+    "name": "packColumn",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration packColumn()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "packField()#1",
+    "name": "packField",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration packField()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "packMessage()#1",
+    "name": "packMessage",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration packMessage()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "requireOwnedColumn()#1",
+    "name": "requireOwnedColumn",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration requireOwnedColumn()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "requirePredicate()#1",
+    "name": "requirePredicate",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration requirePredicate()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "requireValue()#1",
+    "name": "requireValue",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration requireValue()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "scalarSchema()#1",
+    "name": "scalarSchema",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration scalarSchema()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "typeUrl()#1",
+    "name": "typeUrl",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration typeUrl()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "kind": "function-declaration",
+    "identity": "wireOperator()#1",
+    "name": "wireOperator",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration wireOperator()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "kind": "function-declaration",
+    "identity": "pause()#1",
+    "name": "pause",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration pause()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "kind": "function-declaration",
+    "identity": "retryableReadError()#1",
+    "name": "retryableReadError",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration retryableReadError()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "kind": "function-declaration",
+    "identity": "pause()#1",
+    "name": "pause",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration pause()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "kind": "function-declaration",
+    "identity": "pause/done()#1",
+    "name": "done",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration pause/done()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "exactAfter()#1",
+    "name": "exactAfter",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration exactAfter()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "fingerprint()#1",
+    "name": "fingerprint",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration fingerprint()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "freeze()#1",
+    "name": "freeze",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration freeze()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "inboxKey()#1",
+    "name": "inboxKey",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration inboxKey()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "pageAnchor()#1",
+    "name": "pageAnchor",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration pageAnchor()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "quarantineDelete()#1",
+    "name": "quarantineDelete",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration quarantineDelete()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "quarantineGet()#1",
+    "name": "quarantineGet",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration quarantineGet()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "quarantinePut()#1",
+    "name": "quarantinePut",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration quarantinePut()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "receiveMessage()#1",
+    "name": "receiveMessage",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration receiveMessage()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "sameAny()#1",
+    "name": "sameAny",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration sameAny()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "sameDate()#1",
+    "name": "sameDate",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration sameDate()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "sameMessage()#1",
+    "name": "sameMessage",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration sameMessage()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "sameShard()#1",
+    "name": "sameShard",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration sameShard()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "shardKey()#1",
+    "name": "shardKey",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration shardKey()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "kind": "function-declaration",
+    "identity": "workerFor()#1",
+    "name": "workerFor",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration workerFor()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "backoff()#1",
+    "name": "backoff",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration backoff()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "bounded()#1",
+    "name": "bounded",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration bounded()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "callOptions()#1",
+    "name": "callOptions",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration callOptions()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeDate()#1",
+    "name": "decodeDate",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeDate()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeInboxMessage()#1",
+    "name": "decodeInboxMessage",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeInboxMessage()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeLabel()#1",
+    "name": "decodeLabel",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeLabel()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodePayload()#1",
+    "name": "decodePayload",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodePayload()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodePickedUpSession()#1",
+    "name": "decodePickedUpSession",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodePickedUpSession()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeReleasedSession()#1",
+    "name": "decodeReleasedSession",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeReleasedSession()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeShard()#1",
+    "name": "decodeShard",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeShard()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeShardObservation()#1",
+    "name": "decodeShardObservation",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeShardObservation()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeShardStatus()#1",
+    "name": "decodeShardStatus",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeShardStatus()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeShardUpdate()#1",
+    "name": "decodeShardUpdate",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeShardUpdate()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeStatus()#1",
+    "name": "decodeStatus",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeStatus()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "decodeWorker()#1",
+    "name": "decodeWorker",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration decodeWorker()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeDuration()#1",
+    "name": "encodeDuration",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeDuration()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeInboxBatch()#1",
+    "name": "encodeInboxBatch",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeInboxBatch()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeInboxMessage()#1",
+    "name": "encodeInboxMessage",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeInboxMessage()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeLabel()#1",
+    "name": "encodeLabel",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeLabel()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeMessageId()#1",
+    "name": "encodeMessageId",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeMessageId()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodePayload()#1",
+    "name": "encodePayload",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodePayload()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeShard()#1",
+    "name": "encodeShard",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeShard()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeStatus()#1",
+    "name": "encodeStatus",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeStatus()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeTimestamp()#1",
+    "name": "encodeTimestamp",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeTimestamp()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "encodeWorker()#1",
+    "name": "encodeWorker",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration encodeWorker()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "finite()#1",
+    "name": "finite",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration finite()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "freeze()#1",
+    "name": "freeze",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration freeze()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "messageId()#1",
+    "name": "messageId",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration messageId()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "normalizeOptions()#1",
+    "name": "normalizeOptions",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration normalizeOptions()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "pageSize()#1",
+    "name": "pageSize",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration pageSize()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "protocol()#1",
+    "name": "protocol",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration protocol()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "requestBytes()#1",
+    "name": "requestBytes",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration requestBytes()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "responseBytes()#1",
+    "name": "responseBytes",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration responseBytes()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "retries()#1",
+    "name": "retries",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration retries()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "snapshotInboxMessage()#1",
+    "name": "snapshotInboxMessage",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration snapshotInboxMessage()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "snapshotShard()#1",
+    "name": "snapshotShard",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration snapshotShard()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "targetId()#1",
+    "name": "targetId",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration targetId()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "text()#1",
+    "name": "text",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration text()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "timeout()#1",
+    "name": "timeout",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration timeout()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "utf8Bytes()#1",
+    "name": "utf8Bytes",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration utf8Bytes()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "validateAlreadyPickedUp()#1",
+    "name": "validateAlreadyPickedUp",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration validateAlreadyPickedUp()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "kind": "function-declaration",
+    "identity": "validBaseUrl()#1",
+    "name": "validBaseUrl",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration validBaseUrl()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "acquireLock()#1",
+    "name": "acquireLock",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration acquireLock()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "assertBufResult()#1",
+    "name": "assertBufResult",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration assertBufResult()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "assertRegularFile()#1",
+    "name": "assertRegularFile",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration assertRegularFile()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "composeApplication()#1",
+    "name": "composeApplication",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration composeApplication()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "copyDependencySources()#1",
+    "name": "copyDependencySources",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration copyDependencySources()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "copyOwnedSources()#1",
+    "name": "copyOwnedSources",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration copyOwnedSources()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "fail()#1",
+    "name": "fail",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration fail()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "files()#1",
+    "name": "files",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration files()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "generateModel()#1",
+    "name": "generateModel",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration generateModel()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "probeGenerationClaimLiveness()#1",
+    "name": "probeGenerationClaimLiveness",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration probeGenerationClaimLiveness()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "publish()#1",
+    "name": "publish",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration publish()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "releaseLock()#1",
+    "name": "releaseLock",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration releaseLock()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "resolveExportedManifest()#1",
+    "name": "resolveExportedManifest",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration resolveExportedManifest()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "resolveExportedProto()#1",
+    "name": "resolveExportedProto",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration resolveExportedProto()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "resolveTool()#1",
+    "name": "resolveTool",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration resolveTool()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "rewriteDependencyImports()#1",
+    "name": "rewriteDependencyImports",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration rewriteDependencyImports()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "runBuf()#1",
+    "name": "runBuf",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration runBuf()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "kind": "function-declaration",
+    "identity": "writeModule()#1",
+    "name": "writeModule",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration writeModule()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/generation/handler-generator.ts",
+    "kind": "function-declaration",
+    "identity": "generateHandlers()#1",
+    "name": "generateHandlers",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration generateHandlers()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "assertNoSymlinkAncestor()#1",
+    "name": "assertNoSymlinkAncestor",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration assertNoSymlinkAncestor()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "assertRecordBound()#1",
+    "name": "assertRecordBound",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration assertRecordBound()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "bindingIdentifier()#1",
+    "name": "bindingIdentifier",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration bindingIdentifier()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "createManifest()#1",
+    "name": "createManifest",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration createManifest()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "discoverProtoFiles()#1",
+    "name": "discoverProtoFiles",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration discoverProtoFiles()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "exportPath()#1",
+    "name": "exportPath",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration exportPath()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "fail()#1",
+    "name": "fail",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration fail()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "isReservedOutput()#1",
+    "name": "isReservedOutput",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration isReservedOutput()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "manifestFromValue()#1",
+    "name": "manifestFromValue",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration manifestFromValue()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "manifestPath()#1",
+    "name": "manifestPath",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration manifestPath()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "objectValue()#1",
+    "name": "objectValue",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration objectValue()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "packageNameList()#1",
+    "name": "packageNameList",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration packageNameList()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "packageNameValue()#1",
+    "name": "packageNameValue",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration packageNameValue()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "packagePath()#1",
+    "name": "packagePath",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration packagePath()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "pathsOverlap()#1",
+    "name": "pathsOverlap",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration pathsOverlap()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "protoPath()#1",
+    "name": "protoPath",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration protoPath()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "readConfig()#1",
+    "name": "readConfig",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration readConfig()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "readJson()#1",
+    "name": "readJson",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration readJson()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "readManifest()#1",
+    "name": "readManifest",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration readManifest()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "readManifest()#2",
+    "name": "readManifest",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration readManifest()#2 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "readPackage()#1",
+    "name": "readPackage",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration readPackage()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "rejectKeys()#1",
+    "name": "rejectKeys",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration rejectKeys()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "stringList()#1",
+    "name": "stringList",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration stringList()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "stringRecord()#1",
+    "name": "stringRecord",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration stringRecord()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "stringValue()#1",
+    "name": "stringValue",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration stringValue()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "validateGeneratedExports()#1",
+    "name": "validateGeneratedExports",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration validateGeneratedExports()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/index.ts",
+    "kind": "function-declaration",
+    "identity": "validateRegistryDependencies()#1",
+    "name": "validateRegistryDependencies",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration validateRegistryDependencies()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "kind": "function-declaration",
+    "identity": "writeManifestAtomically()#1",
+    "name": "writeManifestAtomically",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration writeManifestAtomically()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "fail()#1",
+    "name": "fail",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration fail()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "findPackageRoot()#1",
+    "name": "findPackageRoot",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration findPackageRoot()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "isStringRecord()#1",
+    "name": "isStringRecord",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration isStringRecord()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "readPackageJson()#1",
+    "name": "readPackageJson",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration readPackageJson()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "resolveManifest()#1",
+    "name": "resolveManifest",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration resolveManifest()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "resolveModelGraph()#1",
+    "name": "resolveModelGraph",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration resolveModelGraph()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "resolveModelGraph/resolveNode()#1",
+    "name": "resolveNode",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration resolveModelGraph/resolveNode()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "satisfiesRegistrySpecifier()#1",
+    "name": "satisfiesRegistrySpecifier",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration satisfiesRegistrySpecifier()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "kind": "function-declaration",
+    "identity": "validateDeclaredDependencies()#1",
+    "name": "validateDeclaredDependencies",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration validateDeclaredDependencies()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/npm-package-name.ts",
+    "kind": "function-declaration",
+    "identity": "isNpmPackageName()#1",
+    "name": "isNpmPackageName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration isNpmPackageName()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/registry-dependency.ts",
+    "kind": "function-declaration",
+    "identity": "isNpmAlias()#1",
+    "name": "isNpmAlias",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration isNpmAlias()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/registry-dependency.ts",
+    "kind": "function-declaration",
+    "identity": "isPackageName()#1",
+    "name": "isPackageName",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration isPackageName()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/registry-dependency.ts",
+    "kind": "function-declaration",
+    "identity": "isRegistryDependencySpecifier()#1",
+    "name": "isRegistryDependencySpecifier",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration isRegistryDependencySpecifier()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/proto-tools/src/model/registry-dependency.ts",
+    "kind": "function-declaration",
+    "identity": "isRegistryVersion()#1",
+    "name": "isRegistryVersion",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration isRegistryVersion()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "cloneTenant()#1",
+    "name": "cloneTenant",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration cloneTenant()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "createTestBlackBox()#1",
+    "name": "createTestBlackBox",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration createTestBlackBox()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "defaultNormalizedOptions()#1",
+    "name": "defaultNormalizedOptions",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration defaultNormalizedOptions()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "instantiateBlackBox()#1",
+    "name": "instantiateBlackBox",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration instantiateBlackBox()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "internalsOf()#1",
+    "name": "internalsOf",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration internalsOf()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "normalizeOptions()#1",
+    "name": "normalizeOptions",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration normalizeOptions()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "openBlackBox()#1",
+    "name": "openBlackBox",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration openBlackBox()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "openTestBlackBox()#1",
+    "name": "openTestBlackBox",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration openTestBlackBox()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "positiveInteger()#1",
+    "name": "positiveInteger",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration positiveInteger()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "rejected()#1",
+    "name": "rejected",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration rejected()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "tenant()#1",
+    "name": "tenant",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration tenant()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "timestamp()#1",
+    "name": "timestamp",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration timestamp()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "trackTestHandle()#1",
+    "name": "trackTestHandle",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration trackTestHandle()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "wait()#1",
+    "name": "wait",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration wait()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "kind": "function-declaration",
+    "identity": "zoneId()#1",
+    "name": "zoneId",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration zoneId()#1 requires remediation by the assigned slice."
+  }
+]

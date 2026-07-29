@@ -1,0 +1,11 @@
+[
+  {
+    "rule": "semantic-name",
+    "file": "packages/auth/src/oidc/index.ts",
+    "kind": "variable",
+    "identity": "variable:BASE64URL_32_BYTES#1",
+    "name": "BASE64URL_32_BYTES",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+  }
+]

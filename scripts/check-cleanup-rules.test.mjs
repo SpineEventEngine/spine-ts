@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { baselineObservesStructureEntry } from "./check-cleanup-rules.mjs";
+
 const scriptPath = new URL("./check-cleanup-rules.mjs", import.meta.url).pathname;
 
 function createFixture() {
@@ -26,6 +28,17 @@ function createFixture() {
       "",
     ].join("\n"),
   );
+  writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+    {
+      rule: "standalone-function",
+      file: "packages/demo/src/index.ts",
+      kind: "function-declaration",
+      identity: "register()#1",
+      name: "register",
+      reason:
+        "JavaScript callback identity requires register to remain the registration entry point.",
+    },
+  ]);
   run("git", ["add", "."], repoRoot);
   run("git", ["commit", "-m", "fixture"], repoRoot);
 
@@ -35,6 +48,52 @@ function createFixture() {
 function writeExampleSource(repoRoot, source) {
   mkdirSync(join(repoRoot, "examples/todo/src"), { recursive: true });
   writeFileSync(join(repoRoot, "examples/todo/src/index.ts"), source);
+  const names = [...source.matchAll(/^\s*function\s+([A-Za-z_$][\w$]*)\s*\(/gm)].map(
+    ([, name]) => name,
+  );
+  writeStructureLedger(
+    repoRoot,
+    "standalone-function-necessities",
+    "T-0080L",
+    names.map((name) => ({
+      rule: "standalone-function",
+      file: "examples/todo/src/index.ts",
+      kind: "function-declaration",
+      identity: `${name}()#1`,
+      name,
+      disposition: "necessity",
+      reason: `TypeScript fixture boundary requires ${name} to remain an explicit standalone declaration.`,
+    })),
+  );
+}
+
+function writeStructureLedger(repoRoot, directory, partition, entries) {
+  mkdirSync(join(repoRoot, "build-protocol", directory), { recursive: true });
+  writeFileSync(
+    join(repoRoot, "build-protocol", directory, `${partition}.json`),
+    `${JSON.stringify(
+      entries.map((entry) =>
+        directory === "standalone-function-necessities"
+          ? { disposition: "necessity", ...entry }
+          : entry,
+      ),
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+function registerNecessity() {
+  return {
+    rule: "standalone-function",
+    file: "packages/demo/src/index.ts",
+    kind: "function-declaration",
+    identity: "register()#1",
+    name: "register",
+    disposition: "necessity",
+    reason:
+      "JavaScript callback identity requires register to remain the exported registration entry point.",
+  };
 }
 
 function run(command, args, cwd) {
@@ -165,6 +224,424 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("callback type names must start with On");
     expect(result.stderr).toContain("callback names must start with on");
     expect(result.stderr).toContain("semantic name components exceed 4");
+  });
+
+  it("checks every authored declaration binding member and import alias in package and example sources", () => {
+    const repoRoot = createFixture();
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      [
+        "import { source as importedSemanticNameWithTooManyParts } from './source.js';",
+        "export namespace NamespaceSemanticNameWithTooManyParts {",
+        "  export enum EnumSemanticNameWithTooManyParts {",
+        "    EnumMemberSemanticNameWithTooManyParts,",
+        "  }",
+        "}",
+        "export interface InterfaceSemanticNameWithTooManyParts {",
+        "  propertySemanticNameWithTooManyParts: string;",
+        "  methodSemanticNameWithTooManyParts(parameterSemanticNameWithTooManyParts: string): void;",
+        "  get accessorSemanticNameWithTooManyParts(): string;",
+        "}",
+        "const { destructuredSemanticNameWithTooManyParts } = { destructuredSemanticNameWithTooManyParts: '' };",
+        "void importedSemanticNameWithTooManyParts;",
+        "void destructuredSemanticNameWithTooManyParts;",
+        "",
+      ].join("\n"),
+    );
+    writeFileSync(join(repoRoot, "packages/demo/src/source.ts"), "export const source = '';\n");
+    writeExampleSource(repoRoot, "export const EXAMPLE_AUTHORED_NAME_WITH_FIVE_PARTS = '';\n");
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "complete semantic names"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("importedSemanticNameWithTooManyParts");
+    expect(result.stderr).toContain("EnumMemberSemanticNameWithTooManyParts");
+    expect(result.stderr).toContain("parameterSemanticNameWithTooManyParts");
+    expect(result.stderr).toContain("EXAMPLE_AUTHORED_NAME_WITH_FIVE_PARTS");
+  });
+
+  it("counts acronym digit and underscore components while excluding only generated provenance", () => {
+    const repoRoot = createFixture();
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      [
+        "export const HTTP2WireValueNamePart = '';",
+        "export const authored_name_with_five_parts = '';",
+        "export const GENERATED_NAME_WITH_FIVE_PARTS = '';",
+        "",
+      ].join("\n"),
+    );
+    mkdirSync(join(repoRoot, "packages/demo/generated"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/generated/demo_pb.ts"),
+      "export const GENERATED_NAME_WITH_FIVE_PARTS = '';\n",
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "semantic components"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("HTTP2WireValueNamePart");
+    expect(result.stderr).toContain("authored_name_with_five_parts");
+    expect(result.stderr).toContain("GENERATED_NAME_WITH_FIVE_PARTS");
+  });
+
+  it("requires one exact specific necessity for every standalone declaration including nested functions", () => {
+    const repoRoot = createFixture();
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      [
+        "export function requiredFrameworkBoundary(): void {",
+        "  function nestedCallbackIdentity(): void {}",
+        "  nestedCallbackIdentity();",
+        "}",
+        "export const namedObject = { ownedBehavior(): void {} };",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "standalone functions"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("standalone functions require exact necessity dispositions");
+    expect(result.stderr).toContain("requiredFrameworkBoundary()#1");
+    expect(result.stderr).toContain("nestedCallbackIdentity()#1");
+    expect(result.stderr).not.toContain("ownedBehavior()");
+  });
+
+  it("rejects stale duplicate broadened and owned-behavior structure ledger entries", () => {
+    const repoRoot = createFixture();
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      [
+        "export function register(onDone: () => void): void { onDone(); }",
+        "export const namedObject = { ownedBehavior(): void {} };",
+        "",
+      ].join("\n"),
+    );
+    writeStructureLedger(repoRoot, "typescript-structure-debt", "T-0080H", [
+      {
+        rule: "semantic-name",
+        file: "packages/demo/src/index.ts",
+        kind: "variable",
+        identity: "variable:missingName#1",
+        name: "missingName",
+        disposition: "compatibility-exception",
+        reason: "Wire contract requires the exact authored spelling.",
+        sourceContract: "Spine JVM io.spine.fixture.MissingName immutable wire contract.",
+      },
+    ]);
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+      {
+        rule: "standalone-function",
+        file: "packages/demo/src/index.ts",
+        kind: "object-method",
+        identity: "namedObject.ownedBehavior()",
+        name: "namedObject.ownedBehavior()",
+        reason:
+          "JavaScript callback identity requires namedObject.ownedBehavior() to remain this declaration.",
+      },
+    ]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "invalid structure ledgers"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("stale semantic-name exception");
+    expect(result.stderr).toContain(
+      "standalone necessity is already owned by a class or named object",
+    );
+  });
+
+  it("distinguishes exact migration debt from a specific retained-function necessity", () => {
+    const repoRoot = createFixture();
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      "export function retainedBoundary(): void {}\n",
+    );
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+      {
+        rule: "standalone-function",
+        file: "packages/demo/src/index.ts",
+        kind: "function-declaration",
+        identity: "retainedBoundary()#1",
+        name: "retainedBoundary",
+        disposition: "necessity",
+        reason:
+          "TypeScript fixture boundary requires retainedBoundary to remain the explicit standalone declaration.",
+      },
+    ]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "migration debt"], repoRoot);
+
+    const migration = runChecker(repoRoot);
+    expect(migration.status).toBe(0);
+
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+      {
+        rule: "standalone-function",
+        file: "packages/demo/src/index.ts",
+        kind: "function-declaration",
+        identity: "retainedBoundary()#1",
+        name: "retainedBoundary",
+        disposition: "necessity",
+        reason: "legacy helper",
+      },
+    ]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "generic necessity"], repoRoot);
+
+    const generic = runChecker(repoRoot);
+    expect(generic.status).toBe(1);
+    expect(generic.stderr).toContain("Generic standalone necessity reason");
+  });
+
+  it("rejects forged post-baseline semantic and standalone migration debt while accepting exact baseline debt", () => {
+    const repoRoot = createFixture();
+    const baselineSource = [
+      "export function register(onDone: OnDone, callback: () => void): void {",
+      "  onDone();",
+      "  callback();",
+      "}",
+      "export const baselineSemanticNameWithFiveParts = '';",
+      "export function baselineBoundary(): void {}",
+      "",
+    ].join("\n");
+    writeFileSync(join(repoRoot, "packages/demo/src/index.ts"), baselineSource);
+    writeStructureLedger(repoRoot, "typescript-structure-debt", "T-0080H", [
+      {
+        rule: "semantic-name",
+        file: "packages/demo/src/index.ts",
+        kind: "variable",
+        identity: "variable:baselineSemanticNameWithFiveParts#1",
+        name: "baselineSemanticNameWithFiveParts",
+        disposition: "compatibility-exception",
+        reason: "Fixture copied wire spelling requires this exact authored name.",
+        sourceContract: "Spine JVM io.spine.fixture.BaselineSemanticName immutable wire contract.",
+      },
+    ]);
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+      registerNecessity(),
+      {
+        rule: "standalone-function",
+        file: "packages/demo/src/index.ts",
+        kind: "function-declaration",
+        identity: "baselineBoundary()#1",
+        name: "baselineBoundary",
+        disposition: "necessity",
+        reason:
+          "TypeScript fixture boundary requires baselineBoundary to remain the explicit standalone declaration.",
+      },
+    ]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "baseline structure debt"], repoRoot);
+
+    expect(
+      baselineObservesStructureEntry(
+        {
+          rule: "semantic-name",
+          file: "packages/demo/src/index.ts",
+          kind: "variable",
+          identity: "variable:baselineSemanticNameWithFiveParts#1",
+        },
+        baselineSource,
+      ),
+    ).toBe(true);
+
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      baselineSource.replace(
+        "export function baselineBoundary(): void {}",
+        "export function baselineBoundary(): void {}\nexport const baselineSemanticNameWithFiveParts = '';\nexport function baselineBoundary(): void {}",
+      ),
+    );
+    writeStructureLedger(repoRoot, "typescript-structure-debt", "T-0080H", [
+      {
+        rule: "semantic-name",
+        file: "packages/demo/src/index.ts",
+        kind: "variable",
+        identity: "variable:baselineSemanticNameWithFiveParts#2",
+        name: "baselineSemanticNameWithFiveParts",
+        disposition: "compatibility-exception",
+        reason: "Fixture copied wire spelling requires this exact authored name.",
+        sourceContract: "Spine JVM io.spine.fixture.BaselineSemanticName immutable wire contract.",
+      },
+    ]);
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+      registerNecessity(),
+      {
+        rule: "standalone-function",
+        file: "packages/demo/src/index.ts",
+        kind: "function-declaration",
+        identity: "baselineBoundary()#2",
+        name: "baselineBoundary",
+        disposition: "necessity",
+        reason:
+          "TypeScript fixture boundary requires baselineBoundary to remain the explicit standalone declaration.",
+      },
+    ]);
+
+    expect(
+      baselineObservesStructureEntry(
+        {
+          rule: "semantic-name",
+          file: "packages/demo/src/index.ts",
+          kind: "variable",
+          identity: "variable:baselineSemanticNameWithFiveParts#2",
+        },
+        baselineSource,
+      ),
+    ).toBe(false);
+  });
+
+  it("requires a concrete immutable source contract for semantic compatibility exceptions", () => {
+    const repoRoot = createFixture();
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      "export const copiedWireSemanticNameWithFiveParts = '';\n",
+    );
+    const entry = {
+      rule: "semantic-name",
+      file: "packages/demo/src/index.ts",
+      kind: "variable",
+      identity: "variable:copiedWireSemanticNameWithFiveParts#1",
+      name: "copiedWireSemanticNameWithFiveParts",
+      disposition: "compatibility-exception",
+      reason: "Copied wire spelling must remain compatible with the source schema.",
+    };
+    writeStructureLedger(repoRoot, "typescript-structure-debt", "T-0080H", [entry]);
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", []);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "compatibility exception"], repoRoot);
+
+    expect(runChecker(repoRoot).stderr).toContain("Invalid semantic compatibility source contract");
+
+    writeStructureLedger(repoRoot, "typescript-structure-debt", "T-0080H", [
+      { ...entry, sourceContract: "Spine JVM wire contract" },
+    ]);
+    expect(runChecker(repoRoot).stderr).toContain("Invalid semantic compatibility source contract");
+
+    writeStructureLedger(repoRoot, "typescript-structure-debt", "T-0080H", [
+      {
+        ...entry,
+        sourceContract:
+          "Spine JVM io.spine.compat.CopiedWireSemanticNameWithFiveParts immutable wire contract.",
+      },
+    ]);
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("checks .cts import-equals aliases and authored generated-looking names but excludes generated paths", () => {
+    const repoRoot = createFixture();
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.cts"),
+      "import generatedXSemanticNameWithFiveParts = require('./source.cjs');\nexport { generatedXSemanticNameWithFiveParts };\n",
+    );
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      "export const file_spine_X_semantic_name_with_five_parts = '';\nexport const UPPERCASE_AUTHORED_NAME_WITH_FIVE_PARTS = '';\n",
+    );
+    mkdirSync(join(repoRoot, "packages/demo/generated"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "packages/demo/generated/generated.ts"),
+      "export const GENERATED_OUTPUT_NAME_WITH_FIVE_PARTS = '';\n",
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "authored names"], repoRoot);
+
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("generatedXSemanticNameWithFiveParts");
+    expect(result.stderr).toContain("file_spine_X_semantic_name_with_five_parts");
+    expect(result.stderr).toContain("UPPERCASE_AUTHORED_NAME_WITH_FIVE_PARTS");
+    expect(result.stderr).not.toContain("GENERATED_OUTPUT_NAME_WITH_FIVE_PARTS");
+  });
+
+  it("requires declaration-specific necessity reasons and preserves exact identities across unrelated lines", () => {
+    const repoRoot = createFixture();
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      ["", "", "export function retainedBoundary(): void {}", ""].join("\n"),
+    );
+    const entry = {
+      rule: "standalone-function",
+      file: "packages/demo/src/index.ts",
+      kind: "function-declaration",
+      identity: "retainedBoundary()#1",
+      name: "retainedBoundary",
+      disposition: "necessity",
+    };
+    for (const reason of [
+      "JavaScript",
+      "TypeScript",
+      "callback identity",
+      "framework boundary",
+      "Spine JVM",
+    ]) {
+      writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+        { ...entry, reason },
+      ]);
+      expect(runChecker(repoRoot).stderr).toContain("Generic standalone necessity reason");
+    }
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+      {
+        ...entry,
+        reason:
+          "JavaScript callback identity requires retainedBoundary to remain the named listener registration function.",
+      },
+    ]);
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "necessity identity"], repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", []);
+    const first = runChecker(repoRoot);
+    expect(first.stderr).toContain("packages/demo/src/index.ts:3 retainedBoundary()#1");
+    writeFileSync(
+      join(repoRoot, "packages/demo/src/index.ts"),
+      ["", "", "", "", "export function retainedBoundary(): void {}", ""].join("\n"),
+    );
+    const moved = runChecker(repoRoot);
+    expect(moved.stderr).toContain("packages/demo/src/index.ts:5 retainedBoundary()#1");
+  });
+
+  it("keeps ordinary fixture necessity records independent of the production baseline", () => {
+    const repoRoot = createFixture();
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080H", [
+      {
+        rule: "standalone-function",
+        file: "packages/demo/src/index.ts",
+        kind: "function-declaration",
+        identity: "register()#1",
+        name: "register",
+        disposition: "necessity",
+        reason:
+          "TypeScript fixture boundary requires register to remain the explicit standalone declaration.",
+      },
+    ]);
+    const result = spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], {
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(0);
+  });
+
+  it("rejects baseline overrides so operational checks cannot bypass the pinned baseline", () => {
+    const repoRoot = createFixture();
+    const result = spawnSync(
+      process.execPath,
+      [scriptPath, "--repo-root", repoRoot, "--structure-baseline", "HEAD"],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("--structure-baseline is forbidden");
   });
 
   it("escapes tracked filenames with control characters in diagnostics", () => {
@@ -1208,6 +1685,17 @@ describe("check-cleanup-rules", () => {
         "",
       ].join("\n"),
     );
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080L", [
+      {
+        rule: "standalone-function",
+        file: "examples/todo/src/index.ts",
+        kind: "function-declaration",
+        identity: "Assign()#1",
+        name: "Assign",
+        reason:
+          "TypeScript decorator callback identity requires Assign to remain this exact declaration.",
+      },
+    ]);
     run("git", ["add", "."], repoRoot);
     run("git", ["commit", "-m", "local decorator"], repoRoot);
 
@@ -1238,6 +1726,17 @@ describe("check-cleanup-rules", () => {
         "",
       ].join("\n"),
     );
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080L", [
+      {
+        rule: "standalone-function",
+        file: "examples/todo/src/index.ts",
+        kind: "function-declaration",
+        identity: "Assign()#1",
+        name: "Assign",
+        reason:
+          "TypeScript decorator callback identity requires Assign to remain this exact declaration.",
+      },
+    ]);
     run("git", ["add", "."], repoRoot);
     run("git", ["commit", "-m", "type only local decorator"], repoRoot);
 
@@ -1274,6 +1773,25 @@ describe("check-cleanup-rules", () => {
         "",
       ].join("\n"),
     );
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080L", [
+      {
+        rule: "standalone-function",
+        file: "examples/todo/src/index.ts",
+        kind: "function-declaration",
+        identity: "localScope()#1",
+        name: "localScope",
+        reason: "TypeScript fixture boundary requires localScope to remain this exact local scope.",
+      },
+      {
+        rule: "standalone-function",
+        file: "examples/todo/src/index.ts",
+        kind: "function-declaration",
+        identity: "localScope/Assign()#1",
+        name: "Assign",
+        reason:
+          "TypeScript decorator callback identity requires Assign to remain this exact declaration.",
+      },
+    ]);
     run("git", ["add", "."], repoRoot);
     run("git", ["commit", "-m", "inner local decorator"], repoRoot);
 
@@ -1306,6 +1824,16 @@ describe("check-cleanup-rules", () => {
         "",
       ].join("\n"),
     );
+    writeStructureLedger(repoRoot, "standalone-function-necessities", "T-0080L", [
+      {
+        rule: "standalone-function",
+        file: "examples/todo/src/index.ts",
+        kind: "function-declaration",
+        identity: "localScope()#1",
+        name: "localScope",
+        reason: "TypeScript fixture boundary requires localScope to remain this exact local scope.",
+      },
+    ]);
     run("git", ["add", "."], repoRoot);
     run("git", ["commit", "-m", "parameter local decorator"], repoRoot);
 
@@ -2667,6 +3195,9 @@ describe("check-cleanup-rules", () => {
     mkdirSync(join(externalRoot, "src"), { recursive: true });
     writeFileSync(join(externalRoot, "src/index.test.ts"), "export const leakedTest = true;\n");
     rmSync(join(repoRoot, "packages/demo/src"), { recursive: true, force: true });
+    rmSync(join(repoRoot, "build-protocol/standalone-function-necessities/T-0080H.json"), {
+      force: true,
+    });
     symlinkSync(join(externalRoot, "src"), join(repoRoot, "packages/demo/src"));
     run("git", ["add", "-A", "."], repoRoot);
     run("git", ["commit", "-m", "src symlink"], repoRoot);

@@ -1,17 +1,36 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
-import { lstatIfPresent } from "./generated-path-safety.mjs";
+import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const maxLineLength = 120;
 const maxSemanticComponents = 4;
 const maxTypeReferenceVisits = 200;
 const tooDeepTypeLabel = "too deep to audit";
-const generatedNamePatterns = [/^file_spine_/, /^generated[A-Z]/, /^[A-Z0-9_]+$/];
+const migrationBaseline = "1ed40826cf0465de59f7d1bcb8ef2963e1b1695e";
+const baselineSourceCache = new Map();
+const structurePartitions = [
+  "T-0080D",
+  "T-0080E",
+  "T-0080F",
+  "T-0080G",
+  "T-0080H",
+  "T-0080K",
+  "T-0080L",
+  "T-0080M",
+  "T-0080N",
+];
 const forbiddenEndUserServerApis = new Set([
   "defineEntityHandlers",
   "EntityHandlersMetadata",
@@ -50,136 +69,6 @@ const eventSuffixes = [
   "Stopped",
   "Updated",
 ];
-const inheritedSemanticNameExceptionOccurrences = new Set(
-  [
-    [
-      "applicationsByEventFullTypeName",
-      "packages/server/src/handler/event-registration-readiness.ts",
-      122,
-    ],
-    [
-      "applicationsByEventFullTypeName",
-      "packages/server/src/handler/event-registration-readiness.ts",
-      147,
-    ],
-    [
-      "assigneesByCommandFullTypeName",
-      "packages/server/src/handler/command-registration-readiness.ts",
-      61,
-    ],
-    [
-      "assigneesByCommandFullTypeName",
-      "packages/server/src/handler/command-registration-readiness.ts",
-      85,
-    ],
-    ["createInMemoryStorageAdapter", "packages/storage/src/index.ts", 237],
-    [
-      "createInMemoryDeliveryServerCore",
-      "packages/delivery-server/src/core/in-memory-delivery-core.ts",
-      34,
-    ],
-    [
-      "createSetOnceTransitionRule",
-      "packages/server/src/entity/entity-transition-validation.ts",
-      96,
-    ],
-    ["createZeroMqAdapterConfig", "packages/transport/src/zeromq/adapter-config.ts", 24],
-    ["entityStateFullTypeName", "packages/server/src/handler/handler-metadata.ts", 227],
-    ["entityStateFullTypeName", "packages/server/src/handler/handler-metadata.ts", 242],
-    ["entityStateFullTypeName", "packages/server/src/handler/handler-metadata.ts", 339],
-    ["entityStateFullTypeName", "packages/server/src/handler/handler-metadata.ts", 370],
-    [
-      "EntityStateTransitionValidationRequest",
-      "packages/server/src/entity/entity-transition-validation.ts",
-      28,
-    ],
-    [
-      "EntityStateTransitionValidationResult",
-      "packages/server/src/entity/entity-transition-validation.ts",
-      40,
-    ],
-    ["eventReceiverGroupToHandlerKind", "packages/server/src/runtime/runtime-routing.ts", 143],
-    ["expectedMessageFullTypeName", "packages/server/src/runtime/runtime-routing.ts", 589],
-    ["fieldValueShapeIsSafe", "packages/server/src/entity/entity-transition-validation.ts", 204],
-    [
-      "fieldValueShapeIsSafeUnchecked",
-      "packages/server/src/entity/entity-transition-validation.ts",
-      212,
-    ],
-    ["findEntityHandlersByState", "packages/server/src/handler/handler-metadata.ts", 339],
-    ["findHandlersByMessageFullTypeName", "packages/server/src/handler/handler-metadata.ts", 355],
-    ["HandlerMetadataRegistryErrorCode", "packages/server/src/handler/handler-metadata.ts", 192],
-    [
-      "hasOnlyDenseIndexedDataProperties",
-      "packages/server/src/entity/entity-transition-validation.ts",
-      388,
-    ],
-    ["InMemoryAggregateEventStore", "packages/storage/src/index.ts", 354],
-    [
-      "InMemoryDeliveryServerCore",
-      "packages/delivery-server/src/core/in-memory-delivery-core.ts",
-      24,
-    ],
-    [
-      "InMemoryDeliveryServerCoreOptions",
-      "packages/delivery-server/src/core/in-memory-delivery-core.ts",
-      10,
-    ],
-    ["InMemoryDiagnosticRecordStore", "packages/storage/src/index.ts", 414],
-    ["InMemoryTenantIndexStore", "packages/storage/src/index.ts", 400],
-    [
-      "isAuthenticCommandRegistrationReadiness",
-      "packages/server/src/handler/command-registration-readiness.ts",
-      132,
-    ],
-    [
-      "isAuthenticEventRegistrationReadiness",
-      "packages/server/src/handler/event-registration-readiness.ts",
-      239,
-    ],
-    [
-      "isUnsupportedSetOnceField",
-      "packages/server/src/entity/entity-transition-validation.ts",
-      431,
-    ],
-    [
-      "reactorsByEventFullTypeName",
-      "packages/server/src/handler/event-registration-readiness.ts",
-      121,
-    ],
-    [
-      "reactorsByEventFullTypeName",
-      "packages/server/src/handler/event-registration-readiness.ts",
-      146,
-    ],
-    ["readRepositoryEntityTypeOption", "packages/server/src/repository/repository.ts", 256],
-    ["readSafeUint8ArrayBytes", "packages/server/src/entity/entity-transition-validation.ts", 361],
-    ["resetServerEnvironmentForTest", "packages/server/src/server/server-environment.ts", 153],
-    ["resetServerEnvironmentForTest", "packages/server/src/testing/index.ts", 4],
-    [
-      "registeredCommandMessageFullTypeNames",
-      "packages/server/src/handler/command-registration-readiness.ts",
-      118,
-    ],
-    [
-      "registeredEventMessageFullTypeNames",
-      "packages/server/src/handler/event-registration-readiness.ts",
-      207,
-    ],
-    [
-      "subscribersByEventFullTypeName",
-      "packages/server/src/handler/event-registration-readiness.ts",
-      117,
-    ],
-    [
-      "subscribersByEventFullTypeName",
-      "packages/server/src/handler/event-registration-readiness.ts",
-      145,
-    ],
-    ["topicByEventFullTypeName", "packages/server/src/runtime/runtime-routing.ts", 265],
-    ["ZeroMqAdapterConfigInput", "packages/transport/src/zeromq/adapter-config.ts", 9],
-  ].map(([name, file, line]) => `${name}|${file}|${line}`),
-);
 const allowedFlatPackageSourceFiles = new Set([
   "packages/core/src/index.ts",
   "packages/proto/src/index.ts",
@@ -201,21 +90,33 @@ export function checkCleanupRules(repoRoot) {
     authoredCodeFiles(files),
     "authored code symlinks must resolve within the repository root",
   );
+  const examples = confinedTrackedFiles(
+    root,
+    resolvedRoot,
+    exampleSourceFiles(files),
+    "example source symlinks must resolve within the repository root",
+  );
 
   return [
     ...checkGeneratedLayout(root, files, packages),
     ...checkPackageTests(files),
     ...checkFlatSourceGrowth(files),
     ...code.failures,
+    ...examples.failures,
     ...checkLineLength(root, code.files),
-    ...checkTypeScriptNames(root, packageSourceFiles(code.files)),
-    ...checkExampleSourceGuardrails(root, exampleSourceFiles(files)),
+    ...checkTypeScriptStructure(root, [...packageSourceFiles(code.files), ...examples.files]),
+    ...checkExampleSourceGuardrails(root, examples.files),
   ];
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const { repoRoot } = parseArgs(process.argv.slice(2));
+    const { repoRoot, writeStructureDebt } = parseArgs(process.argv.slice(2));
+    if (writeStructureDebt) {
+      writeStructureDebtPartitions(repoRoot);
+      console.log("TypeScript structure debt partitions written.");
+      process.exit(0);
+    }
     const failures = checkCleanupRules(repoRoot);
 
     if (failures.length > 0) {
@@ -231,10 +132,17 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
 }
 
 function parseArgs(argv) {
+  if (argv.includes("--structure-baseline"))
+    throw new Error(
+      "--structure-baseline is forbidden; cleanup enforcement uses its immutable baseline.",
+    );
   const repoRootFlagIndex = argv.indexOf("--repo-root");
 
   if (repoRootFlagIndex < 0) {
-    return { repoRoot: defaultRepoRoot };
+    return {
+      repoRoot: defaultRepoRoot,
+      writeStructureDebt: argv.includes("--write-structure-debt"),
+    };
   }
 
   const repoRoot = argv[repoRootFlagIndex + 1];
@@ -243,7 +151,10 @@ function parseArgs(argv) {
     throw new Error("--repo-root requires a path argument.");
   }
 
-  return { repoRoot: resolve(repoRoot) };
+  return {
+    repoRoot: resolve(repoRoot),
+    writeStructureDebt: argv.includes("--write-structure-debt"),
+  };
 }
 
 function runGit(repoRoot, args) {
@@ -275,7 +186,12 @@ function trackedFiles(repoRoot) {
 
   return result.stdout
     .split("\0")
-    .filter((file) => file.length > 0 && lstatIfPresent(join(repoRoot, file)) !== undefined);
+    .filter(
+      (file) =>
+        file.length > 0 &&
+        lstatIfPresent(join(repoRoot, file)) !== undefined &&
+        findSymlinkedAncestors(repoRoot, file).length === 0,
+    );
 }
 
 function packageDirs(repoRoot) {
@@ -341,7 +257,7 @@ function authoredCodeFiles(files) {
       return false;
     }
 
-    if (!/\.(ts|mjs)$/.test(file)) {
+    if (!/\.(ts|tsx|mts|cts|mjs)$/.test(file)) {
       return false;
     }
 
@@ -353,10 +269,14 @@ function packageSourceFiles(files) {
   return files.filter(
     (file) =>
       /^packages\/[^/]+\/src\//.test(file) &&
-      file.endsWith(".ts") &&
+      /\.(ts|tsx|mts|cts)$/.test(file) &&
       !file.includes("/generated/") &&
-      !file.endsWith(".test.ts"),
+      !/\.test\.(ts|tsx|mts|cts)$/.test(file),
   );
+}
+
+function authoredTypeScriptSourceFiles(codeFiles, allFiles) {
+  return [...packageSourceFiles(codeFiles), ...exampleSourceFiles(allFiles)].sort();
 }
 
 function exampleSourceFiles(files) {
@@ -432,7 +352,7 @@ function checkFlatSourceGrowth(files) {
 function semanticComponents(name) {
   const trimmed = name.replace(/^_+/, "");
 
-  if (trimmed.length === 0 || generatedNamePatterns.some((pattern) => pattern.test(trimmed))) {
+  if (trimmed.length === 0) {
     return [];
   }
 
@@ -440,10 +360,6 @@ function semanticComponents(name) {
     .split("_")
     .flatMap((part) => part.match(/[A-Z]?[a-z0-9]+|[A-Z]+(?![a-z])/g) ?? [])
     .filter(Boolean);
-}
-
-function isAllowedInheritedSemanticName(name, file, line) {
-  return inheritedSemanticNameExceptionOccurrences.has(`${name}|${file}|${line}`);
 }
 
 function hasCallbackType(node) {
@@ -1920,10 +1836,342 @@ function lineDetail(source, file, node, label) {
   return `${file}:${position.line + 1} ${label}`;
 }
 
-function checkTypeScriptNames(repoRoot, files) {
-  const semanticViolations = [];
+function scanTypeScriptStructure(repoRoot, files, sourceTexts = new Map()) {
+  const failures = [];
+  for (const file of files) {
+    const source = ts.createSourceFile(
+      file,
+      sourceTexts.get(file) ?? readFileSync(join(repoRoot, file), "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+      scriptKindForFile(file),
+    );
+    const occurrences = new Map();
+    const ownedFunctions = new Set();
+    function recordName(name, kind, node) {
+      if (name === undefined || semanticComponents(name).length <= maxSemanticComponents) return;
+      const key = `${kind}\u0000${name}`;
+      const occurrence = (occurrences.get(key) ?? 0) + 1;
+      occurrences.set(key, occurrence);
+      failures.push({
+        rule: "semantic-name",
+        file,
+        kind,
+        identity: `${kind}:${name}#${occurrence}`,
+        name,
+        components: semanticComponents(name).length,
+        node,
+        line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+      });
+    }
+    function recordBinding(name, kind, node) {
+      if (ts.isIdentifier(name)) recordName(name.text, kind, node);
+      if (ts.isObjectBindingPattern(name) || ts.isArrayBindingPattern(name)) {
+        for (const element of name.elements) {
+          if (ts.isBindingElement(element)) recordBinding(element.name, "binding", element);
+        }
+      }
+    }
+    function functionIdentity(node) {
+      const names = [];
+      let current = node;
+      while (current.parent !== undefined) {
+        if (ts.isFunctionDeclaration(current) && current.name !== undefined)
+          names.push(current.name.text);
+        current = current.parent;
+      }
+      const base = `${names.reverse().join("/")}()`;
+      const key = `function-declaration\u0000${base}`;
+      const occurrence = (occurrences.get(key) ?? 0) + 1;
+      occurrences.set(key, occurrence);
+      return `${base}#${occurrence}`;
+    }
+    function visit(node) {
+      if (
+        ts.isClassDeclaration(node) ||
+        ts.isInterfaceDeclaration(node) ||
+        ts.isTypeAliasDeclaration(node) ||
+        ts.isEnumDeclaration(node) ||
+        ts.isFunctionDeclaration(node) ||
+        ts.isModuleDeclaration(node)
+      )
+        recordName(node.name?.text, ts.SyntaxKind[node.kind], node);
+      if (ts.isVariableDeclaration(node)) recordBinding(node.name, "variable", node);
+      if (ts.isParameter(node)) recordBinding(node.name, "parameter", node);
+      if (
+        ts.isPropertyDeclaration(node) ||
+        ts.isPropertySignature(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isMethodSignature(node) ||
+        ts.isGetAccessorDeclaration(node) ||
+        ts.isSetAccessorDeclaration(node) ||
+        ts.isEnumMember(node)
+      )
+        recordName(readPropertyName(node.name), ts.SyntaxKind[node.kind], node);
+      if (ts.isImportSpecifier(node)) recordName(node.name.text, "import-alias", node);
+      if (ts.isNamespaceImport(node) || (ts.isImportClause(node) && node.name !== undefined))
+        recordName(node.name.text, "import-alias", node);
+      if (ts.isImportEqualsDeclaration(node)) recordName(node.name.text, "import-alias", node);
+      if (ts.isFunctionDeclaration(node) && node.name !== undefined) {
+        failures.push({
+          rule: "standalone-function",
+          file,
+          kind: "function-declaration",
+          identity: functionIdentity(node),
+          name: node.name.text,
+          node,
+          line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+        });
+      }
+      if (
+        ts.isPropertyAssignment(node) ||
+        ts.isMethodDeclaration(node) ||
+        ts.isMethodSignature(node)
+      ) {
+        const parent = node.parent;
+        if (ts.isObjectLiteralExpression(parent)) {
+          const declaration = parent.parent;
+          if (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)) {
+            ownedFunctions.add(
+              `${file}\u0000${declaration.name.text}.${readPropertyName(node.name)}()`,
+            );
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(source);
+    for (const failure of failures) {
+      if (failure.file === file && failure.rule === "standalone-function")
+        failure.ownedFunctions = ownedFunctions;
+    }
+  }
+  return failures;
+}
+
+function structureFailureKey(entry) {
+  return `${entry.rule}\u0000${entry.file}\u0000${entry.kind}\u0000${entry.identity}`;
+}
+
+function structureFailureDetail(failure) {
+  const line = failure.line === undefined ? "" : `:${failure.line}`;
+  return failure.rule === "semantic-name"
+    ? `${failure.file}${line} ${failure.name} (${failure.components} components)`
+    : `${failure.file}${line} ${failure.identity}`;
+}
+
+function structurePartition(file) {
+  if (/^packages\/(?:proto|core|storage|transport)\//.test(file)) return "T-0080D";
+  if (/^packages\/(?:storage-datastore|storage-rdbms|delivery-server)\//.test(file))
+    return "T-0080E";
+  if (/^packages\/server\//.test(file)) return "T-0080F";
+  if (/^packages\/(?:auth|client-web|client-react)\//.test(file)) return "T-0080G";
+  if (/^packages\//.test(file)) return "T-0080H";
+  if (/^examples\/(?:chat|chat-web|chat-model|users-model)\//.test(file)) return "T-0080K";
+  if (/^examples\/todo\//.test(file)) return "T-0080L";
+  if (/^examples\/project-management\//.test(file)) return "T-0080M";
+  if (/^examples\/datastore-orders\//.test(file)) return "T-0080N";
+  throw new Error(`No TypeScript structure partition owns ${file}`);
+}
+
+function readStructureLedgers(repoRoot) {
+  const names = readStructureLedger(repoRoot, "typescript-structure-debt", "semantic-name");
+  const functions = readStructureLedger(
+    repoRoot,
+    "standalone-function-necessities",
+    "standalone-function",
+  );
+  return { names, functions };
+}
+
+function readStructureLedger(repoRoot, directory, rule) {
+  const root = join(repoRoot, "build-protocol", directory);
+  if (!existsSync(root)) return [];
+  const entries = [];
+  for (const filename of readdirSync(root).sort()) {
+    if (!filename.endsWith(".json") || !structurePartitions.includes(filename.slice(0, -5)))
+      throw new Error(`Unexpected ${rule} partition: ${relative(repoRoot, join(root, filename))}`);
+    let values;
+    try {
+      values = JSON.parse(readFileSync(join(root, filename), "utf8"));
+    } catch {
+      throw new Error(`Malformed ${rule} partition: ${relative(repoRoot, join(root, filename))}`);
+    }
+    if (!Array.isArray(values))
+      throw new Error(`Malformed ${rule} partition: ${relative(repoRoot, join(root, filename))}`);
+    for (const value of values) {
+      const required = ["rule", "file", "kind", "identity", "name", "reason"];
+      if (rule === "standalone-function") required.push("disposition");
+      if (rule === "semantic-name") required.push("disposition");
+      if (
+        Object.keys(value ?? {}).some(
+          (key) => !required.includes(key) && key !== "sourceContract",
+        ) ||
+        required.some((key) => typeof value?.[key] !== "string") ||
+        value.rule !== rule ||
+        !/^(packages|examples)\//.test(value.file) ||
+        value.file.includes("..") ||
+        value.file.includes("\\") ||
+        structurePartition(value.file) !== filename.slice(0, -5)
+      )
+        throw new Error(
+          `Malformed or broadened ${rule} entry: ${relative(repoRoot, join(root, filename))}`,
+        );
+      if (
+        rule === "semantic-name" &&
+        !["migration-debt", "compatibility-exception"].includes(value.disposition)
+      )
+        throw new Error(
+          `Malformed semantic-name disposition: ${relative(repoRoot, join(root, filename))}`,
+        );
+      if (
+        rule === "semantic-name" &&
+        value.disposition === "compatibility-exception" &&
+        (typeof value.sourceContract !== "string" ||
+          value.sourceContract.length < 12 ||
+          !/\b(Spine|JVM|wire|Proto)\b/.test(value.sourceContract) ||
+          !/\b[a-z][\w-]*(?:\.[a-z][\w-]*)+\.[A-Z][\w]*\b/.test(value.sourceContract))
+      )
+        throw new Error(
+          `Invalid semantic compatibility source contract: ${relative(repoRoot, join(root, filename))}`,
+        );
+      if (value.disposition === "migration-debt" && !baselineContains(repoRoot, value))
+        throw new Error(
+          `Migration debt was not observed at immutable baseline: ${value.file} ${value.identity}`,
+        );
+      if (
+        rule === "standalone-function" &&
+        !["migration-debt", "necessity"].includes(value.disposition)
+      )
+        throw new Error(
+          `Malformed standalone disposition: ${relative(repoRoot, join(root, filename))}`,
+        );
+      if (
+        rule === "standalone-function" &&
+        value.disposition === "necessity" &&
+        (!/\b(JavaScript|TypeScript|callback identity|framework boundary|Spine JVM)\b/i.test(
+          value.reason,
+        ) ||
+          /\b(helper|legacy)\b/i.test(value.reason) ||
+          value.reason.trim().split(/\s+/).length < 7 ||
+          !value.reason.includes(value.name))
+      )
+        throw new Error(
+          `Generic standalone necessity reason: ${relative(repoRoot, join(root, filename))}`,
+        );
+      if (
+        rule === "standalone-function" &&
+        value.disposition === "migration-debt" &&
+        !/^Pre-T-0080 observed standalone declaration /.test(value.reason)
+      )
+        throw new Error(
+          `Generic standalone migration disposition: ${relative(repoRoot, join(root, filename))}`,
+        );
+      entries.push(value);
+    }
+  }
+  const seen = new Set();
+  for (const entry of entries) {
+    const key = structureFailureKey(entry);
+    if (seen.has(key)) throw new Error(`Duplicate ${rule} entry: ${key}`);
+    seen.add(key);
+  }
+  return entries;
+}
+
+function baselineContains(repoRoot, entry) {
+  const key = `${repoRoot}\u0000${migrationBaseline}\u0000${entry.file}`;
+  let source = baselineSourceCache.get(key);
+  if (source === undefined) {
+    const result = runGit(repoRoot, ["show", `${migrationBaseline}:${entry.file}`]);
+    if (result.status !== 0)
+      throw new Error(`Immutable structure baseline ${migrationBaseline} is unavailable.`);
+    source = result.status === 0 ? result.stdout : "";
+    baselineSourceCache.set(key, source);
+  }
+  return baselineObservesStructureEntry(entry, source);
+}
+
+export function baselineObservesStructureEntry(entry, source) {
+  if (source.length === 0) return false;
+  return scanTypeScriptStructure("", [entry.file], new Map([[entry.file, source]])).some(
+    (failure) => structureFailureKey(failure) === structureFailureKey(entry),
+  );
+}
+
+function writeStructureDebtPartitions(repoRoot) {
+  const root = resolve(repoRoot);
+  const files = authoredTypeScriptSourceFiles(
+    authoredCodeFiles(trackedFiles(root)),
+    trackedFiles(root),
+  );
+  const failures = scanTypeScriptStructure(root, files);
+  for (const [directory, rule] of [
+    ["typescript-structure-debt", "semantic-name"],
+    ["standalone-function-necessities", "standalone-function"],
+  ]) {
+    const target = join(root, "build-protocol", directory);
+    mkdirSync(target, { recursive: true });
+    const byPartition = new Map(structurePartitions.map((partition) => [partition, []]));
+    for (const failure of failures.filter((item) => item.rule === rule)) {
+      const migrationReason = `Pre-T-0080 observed standalone declaration ${failure.identity}`;
+      const entry = {
+        rule,
+        file: failure.file,
+        kind: failure.kind,
+        identity: failure.identity,
+        name: failure.name,
+        disposition: "migration-debt",
+        reason:
+          rule === "semantic-name"
+            ? "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
+            : `${migrationReason} requires remediation by the assigned slice.`,
+      };
+      byPartition.get(structurePartition(failure.file)).push(entry);
+    }
+    for (const [partition, entries] of byPartition)
+      writeFileSync(
+        join(target, `${partition}.json`),
+        `${JSON.stringify(
+          entries.sort((a, b) => structureFailureKey(a).localeCompare(structureFailureKey(b))),
+          null,
+          2,
+        )}\n`,
+      );
+  }
+}
+
+function checkTypeScriptStructure(repoRoot, files) {
+  const failures = scanTypeScriptStructure(repoRoot, files);
+  const ledger = readStructureLedgers(repoRoot);
+  const observed = new Set(failures.map(structureFailureKey));
+  const nameDebt = new Set(ledger.names.map(structureFailureKey));
+  const functionDebt = new Set(ledger.functions.map(structureFailureKey));
+  const semanticViolations = failures
+    .filter(
+      (failure) => failure.rule === "semantic-name" && !nameDebt.has(structureFailureKey(failure)),
+    )
+    .map(structureFailureDetail);
   const callbackTypeViolations = [];
   const callbackNameViolations = [];
+  const standaloneViolations = failures
+    .filter(
+      (failure) =>
+        failure.rule === "standalone-function" && !functionDebt.has(structureFailureKey(failure)),
+    )
+    .map(structureFailureDetail);
+  const staleNames = ledger.names
+    .filter((entry) => !observed.has(structureFailureKey(entry)))
+    .map((entry) => `${entry.file} ${entry.identity}`);
+  const staleFunctions = ledger.functions
+    .filter((entry) => !observed.has(structureFailureKey(entry)))
+    .map((entry) => `${entry.file} ${entry.identity}`);
+  const ownedFunctionIdentities = new Set(
+    failures.flatMap((failure) => [...(failure.ownedFunctions ?? [])]),
+  );
+  const ownedFunctions = ledger.functions
+    .filter((entry) => ownedFunctionIdentities.has(`${entry.file}\u0000${entry.identity}`))
+    .map((entry) => `${entry.file} ${entry.identity}`);
 
   for (const file of files) {
     const source = ts.createSourceFile(
@@ -1934,25 +2182,6 @@ function checkTypeScriptNames(repoRoot, files) {
       ts.ScriptKind.TS,
     );
 
-    function checkName(name, node) {
-      if (name === undefined) {
-        return;
-      }
-
-      const components = semanticComponents(name);
-
-      if (components.length > maxSemanticComponents) {
-        const position = source.getLineAndCharacterOfPosition(node.getStart(source));
-        const line = position.line + 1;
-
-        if (isAllowedInheritedSemanticName(name, file, line)) {
-          return;
-        }
-
-        semanticViolations.push(`${file}:${line} ${name} (${components.length} components)`);
-      }
-    }
-
     function visit(node) {
       if (
         ts.isClassDeclaration(node) ||
@@ -1962,26 +2191,14 @@ function checkTypeScriptNames(repoRoot, files) {
         ts.isFunctionDeclaration(node)
       ) {
         const name = node.name?.text;
-        checkName(name, node);
-
         if (name?.endsWith("Callback") === true && !name.startsWith("On")) {
           const position = source.getLineAndCharacterOfPosition(node.name.getStart(source));
           callbackTypeViolations.push(`${file}:${position.line + 1} ${name}`);
         }
       }
 
-      if (
-        ts.isMethodDeclaration(node) ||
-        ts.isPropertyDeclaration(node) ||
-        ts.isVariableDeclaration(node)
-      ) {
-        checkName(readIdentifierName(node.name), node);
-      }
-
       if (ts.isParameter(node)) {
         const name = readIdentifierName(node.name);
-
-        checkName(name, node);
 
         if (
           name !== undefined &&
@@ -2012,6 +2229,19 @@ function checkTypeScriptNames(repoRoot, files) {
     callbackNameViolations.length > 0 && {
       title: "callback names must start with on",
       details: callbackNameViolations,
+    },
+    standaloneViolations.length > 0 && {
+      title: "standalone functions require exact necessity dispositions",
+      details: standaloneViolations,
+    },
+    staleNames.length > 0 && { title: "stale semantic-name exception", details: staleNames },
+    staleFunctions.length > 0 && {
+      title: "stale standalone necessity disposition",
+      details: staleFunctions,
+    },
+    ownedFunctions.length > 0 && {
+      title: "standalone necessity is already owned by a class or named object",
+      details: ownedFunctions,
     },
   ].filter(Boolean);
 }
