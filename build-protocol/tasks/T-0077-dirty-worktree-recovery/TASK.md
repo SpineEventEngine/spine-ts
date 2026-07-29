@@ -77,11 +77,29 @@ Implementation assignment:
 
 - Style/maintainability: pending classification of any integrated source.
 - Documentation: pending classification of any integrated prose.
-- TypeScript/API: pending classification of public-contract changes.
-- Performance/reliability: pending classification of runtime changes.
+- TypeScript/API: N/A because no source, export, declaration, generated model,
+  or public API changes.
+- Performance/reliability: N/A because no runtime, persistence, concurrency,
+  lifecycle, resource, retry, or performance behavior changes.
 - Security: not a separate task lane unless recovery exposes a security
   boundary; final release policy remains unchanged.
 
 ## Verification
 
-Recovery-state verification passed. Protocol-change verification is pending.
+Recovery-state verification passed. `git diff --check` and the root-installed
+Prettier check passed for the protocol change.
+
+## Recovery Guard
+
+The canonical branch/worktree rules now make the primary checkout
+coordination-only, require startup and post-integration primary-checkout and
+`main`/`origin/main` inspection, require safe synchronization after a `main`
+push, and require an immediate pushed rescue snapshot plus recovery task when
+unexpected dirtiness blocks synchronization. Protected human-owned files must
+never be staged.
+
+Implementation assignment acceptance: existing implementer role; bounded to
+this process rule and recovery records; expected `gpt-5.6-terra` with `medium`
+reasoning; both fields were explicit in dispatch. The execution surface does
+not expose actual runtime-model metadata, so the immutable configured profile
+is the available evidence under the protocol.

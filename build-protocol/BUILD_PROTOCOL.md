@@ -250,6 +250,14 @@ avoid a gate.
 
 ## Branch and Worktree Rules
 
+- The primary checkout is coordination-only. Keep implementation, exploratory
+  scratch, and task records in task worktrees rather than the primary
+  checkout. At session startup and after every task integration, inspect the
+  primary checkout's branch and status and compare local `main` with
+  `origin/main`. After pushing `main`, synchronize the primary checkout when
+  it is safe. If unexpected dirtiness prevents that synchronization, do not
+  silently route around it: immediately create and push a rescue snapshot,
+  open a recovery task, and never stage protected human-owned files.
 - Use one feature branch per sub-agent coding session.
 - Use worktrees to avoid sub-agents stepping on each other.
 - Do not share write ownership of files unless the orchestrator explicitly serializes the edits.

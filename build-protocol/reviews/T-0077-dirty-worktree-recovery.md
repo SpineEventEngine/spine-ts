@@ -17,4 +17,13 @@ stale uncommitted work from accumulating outside task worktrees.
 
 ## Review Assignments
 
-Pending implementation and mechanical pre-review checks.
+Before dispatch:
+
+- Existing style/maintainability reviewer, scoped to clarity, consistency, and
+  non-duplication of the recovery rule: expected `gpt-5.6-terra`, high
+  reasoning; explicit dispatch fields required.
+- Existing documentation reviewer, scoped to factual completeness of the root
+  cause, preservation evidence, and operational instructions: immutable
+  configured `gpt-5.6-luna`, medium reasoning.
+
+Actual runtime metadata and results are pending.
