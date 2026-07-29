@@ -62,3 +62,20 @@ verification method, added T-0045/T-0047 coverage, added qualifying-status
 evidence and explicit T-0077 rescue disposition, and corrected the stale
 pending wording and trailing whitespace. Focused diff/format verification is
 pending the correction review.
+
+## Review Wave 2 Assignments
+
+Review the immutable correction range `7de0331f..b51dfc31`:
+
+- Existing style/maintainability reviewer: verify that the accepted P1/P2
+  findings are closed and that the generator, TSV, reproduction commands, and
+  status records remain clear and maintainable. Expected/configured
+  `gpt-5.6-terra`, high reasoning.
+- Existing documentation reviewer: verify factual completeness and consistency
+  of the new per-record evidence, modern-task coverage, rescue disposition, and
+  reproduction instructions. Immutable configured `gpt-5.6-luna`, medium
+  reasoning.
+
+Both existing roles and configured profiles are explicit before dispatch.
+Runtime self-metadata will be recorded when returned; if unavailable, the
+configured immutable profile is the available evidence.
