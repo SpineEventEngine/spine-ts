@@ -54,7 +54,8 @@ Before dispatch:
 - Orchestrator-dispatched dirty-worktree uniqueness scan: expected
   `gpt-5.6-terra`, high reasoning; explicit dispatch fields required.
 
-Runtime metadata and results are pending.
+The three scans are complete. Runtime self-metadata was unavailable; the
+explicitly dispatched configured profiles are the available evidence.
 
 All three dispatches explicitly set the expected model and reasoning. Runtime
 self-metadata was unavailable; the configured profiles are the available
@@ -135,8 +136,29 @@ Before dispatch:
   unambiguous modern status headers. No runtime, test, or production code was
   changed.
 
+## Correction Batch
+
+- Existing implementer role; expected/configured `gpt-5.6-terra`, medium
+  reasoning, explicitly dispatched.
+- Runtime metadata remains unavailable from the execution surface; the
+  configured profile is the available evidence.
+- Result: added the deterministic 176-row task-record inventory and generator,
+  including top-level qualifying-status evidence and explicit T-0077
+  preservation-only rescue disposition; documented its reproduction method,
+  added T-0045/T-0047 coverage, and removed stale pending wording and audit
+  trailing whitespace. No runtime, test, or production code changed.
+
 A direct `git ls-remote origin` query verified canonical `main`, T-0078, both
 rescue branches, and all 15 legacy archive refs at the recorded exact SHAs.
+
+## Review Wave 1
+
+- Documentation: CLEAN.
+- Style/maintainability: one accepted P1 required a committed per-task
+  inventory; two accepted P2 findings required current-tense log wording and
+  removal of trailing whitespace.
+- The complete correction batch returned to the existing implementer context
+  at the same explicit `gpt-5.6-terra`/medium profile.
 
 ## Review Dispositions
 

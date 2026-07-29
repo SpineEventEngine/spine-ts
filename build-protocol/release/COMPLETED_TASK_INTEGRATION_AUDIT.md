@@ -1,6 +1,6 @@
 # Completed-task integration audit
 
-Audit date: 2026-07-29  
+Audit date: 2026-07-29
 Canonical baseline: `origin/main` = `e6bdc0653a55c5c09a1af3742e74626b81c43217`
 
 ## Result
@@ -9,6 +9,35 @@ No accepted runtime behavior is missing from canonical `main`. Every completed
 task with resolvable commit evidence is committed, pushed, and represented by
 `origin/main`. This is an evidence ledger, not a replacement for the dated
 task/work/review chronology.
+
+## Reproducible task-record inventory
+
+[`COMPLETED_TASK_INTEGRATION_INVENTORY.tsv`](COMPLETED_TASK_INTEGRATION_INVENTORY.tsv)
+contains exactly one data row for each of the 176 qualifying task records. It
+maps the task identifier, path, and deterministic first-twelve-line qualifying
+status evidence to every resolved SHA-like source literal, its `origin/main`
+ancestry result, unresolved literals, and the applicable canonical/legacy
+disposition. TSV fields escape backslashes, tabs, carriage returns, and
+newlines. The preservation-only T-0077 rescue literal is intentionally
+non-ancestral and is explicitly identified in its disposition as
+non-integration evidence.
+
+Regenerate and check the inventory from the audit worktree with:
+
+```sh
+node build-protocol/release/generate-completed-task-integration-inventory.mjs
+test "$(($(wc -l < build-protocol/release/COMPLETED_TASK_INTEGRATION_INVENTORY.tsv) - 1))" = 176
+awk -F '\t' 'NR > 1 && $5 == "contains-nonancestor-resolved-commit" { print $1, $7 }' build-protocol/release/COMPLETED_TASK_INTEGRATION_INVENTORY.tsv
+git diff --check
+```
+
+The generator reads every `TASK.md` blob from `origin/main`, selects a record
+when completion/acceptance language occurs in its first twelve lines, resolves
+each SHA-like literal unambiguously against the local object graph, and checks
+membership in `git rev-list origin/main`. The historical 722-token/708-resolved
+completion-evidence scan below remains the integration proof; the TSV also
+retains non-completion literals so each source record is independently
+inspectable.
 
 | Evidence set                                 | Result                             | Disposition                                                                                                                        |
 | -------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -27,7 +56,7 @@ canonical history.
 
 | Range                     | Canonical evidence                                                                                                                                                              | Result                                                        |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| T-0046, T-0048–T-0051     | Remote task tips are ancestors; T-0046 `cca9978e`, T-0048 `6262fe93`, T-0049 `659a13f7`, T-0050 `5564729d`, T-0051 `c4a0ba52`                                                   | Committed and pushed.                                         |
+| T-0045–T-0051             | Remote task tips are ancestors; T-0045 `799bf715`, T-0046 `cca9978e`, T-0047 `d7bb7aa4`, T-0048 `6262fe93`, T-0049 `659a13f7`, T-0050 `5564729d`, T-0051 `c4a0ba52`             | Committed and pushed.                                         |
 | T-0052–T-0067b (Wave 1)   | Wave closure `023234ee`; task tips including `0a22178b`, `f8c54821`, `a185a15d`, `f1256263`, `dee92556`, `f2558ec5`, `1717d319`, `96f7cc31`, `0acb1494`, `d6a5921b`, `2ac308c4` | Committed, integrated, and later task closures are on `main`. |
 | T-0068–T-0072 (Wave 2)    | `82510418`, `993aa4be`, `7e7dd199`, `dd6f5fac`, `fd932c20`, `608fb80a`; integration/verification corrections also ancestral                                                     | Committed and pushed; Wave 2 closure is canonical.            |
 | T-0073–T-0075 (Waves 3–4) | `5240b44f`, `8a627719`, `470cd41f`, `77105890`                                                                                                                                  | Committed, merged, post-merge verified, and pushed.           |

@@ -26,4 +26,39 @@ Before dispatch:
   remote-ref, rescue, capability-crosswalk, and limitation claims: immutable
   configured `gpt-5.6-luna`, medium reasoning.
 
-Actual runtime metadata and results are pending.
+Both configured profiles ran as recorded. Runtime self-metadata was unavailable
+on the execution surface.
+
+## Review Wave 1
+
+- Documentation: CLEAN. Counts, exact refs, crosswalk paths, rescues, status
+  corrections, and limitations were factually consistent.
+- Style/maintainability P1: the aggregate audit counts lacked a committed,
+  path-addressable record-to-commit/disposition inventory, so the universal
+  completion claim was not durably reproducible. T-0045 and T-0047 were also
+  omitted from the modern coverage table. Accepted.
+- Style/maintainability P2: task/work-log sections still said results were
+  pending after recording outcomes. Accepted.
+- Style/maintainability P2: the audit date line contained trailing whitespace.
+  Accepted.
+
+## Correction Assignment
+
+Return the complete accepted batch to the existing implementer context:
+
+- add a committed deterministic inventory for all 176 completed/accepted task
+  records, mapping each path to resolved commits, ancestry result, unresolved
+  tokens, and disposition;
+- document the exact generation/verification command and reference the
+  inventory from the audit;
+- include T-0045/T-0047 in modern coverage;
+- correct stale pending wording and trailing whitespace.
+
+Expected profile remains `gpt-5.6-terra`, medium reasoning, explicitly
+dispatched. Actual runtime metadata is unavailable from the execution surface;
+the immutable configured profile is the available evidence. The implementer
+added the deterministic 176-row inventory and generator, documented its
+verification method, added T-0045/T-0047 coverage, added qualifying-status
+evidence and explicit T-0077 rescue disposition, and corrected the stale
+pending wording and trailing whitespace. Focused diff/format verification is
+pending the correction review.
