@@ -44,3 +44,20 @@ recovery guidance.
   tested `awk` parser. Pinned Prettier 3.9.0 write/check commands ran across
   all changed Markdown files; the execution surface suppressed their usual
   diagnostic text, while the subsequent deterministic checks remained clean.
+
+## Review Assignments
+
+Review immutable range `0fa0b39c..ea59e78e`:
+
+- Existing style/maintainability reviewer; expected/configured
+  `gpt-5.6-terra`, high reasoning. Verify manifest clarity, deterministic
+  commands, tag/branch namespace handling, recovery guidance, accounting, and
+  consistency after the failed and successful atomic deletion attempts.
+- Existing documentation reviewer; immutable configured
+  `gpt-5.6-luna`, medium reasoning. Verify every factual remote-head/tag claim,
+  the historical-audit update, preservation mappings, and remaining closure
+  steps against live Git state.
+
+Both roles and profiles are explicit before dispatch. Runtime self-metadata
+will be recorded if returned; otherwise each immutable configured profile is
+the available evidence.
