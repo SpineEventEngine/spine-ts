@@ -2,16 +2,6 @@
   {
     "rule": "callable-summary",
     "file": "examples/todo/src/index.ts",
-    "name": "createTodoContext()"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "examples/todo/src/index.ts",
-    "name": "startTodoServer(options)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "examples/todo/src/index.ts",
     "name": "TaskAggregate.completeTask(command)"
   },
   {
@@ -60,9 +50,14 @@
     "name": "TaskListProjection.onTaskReopened(event)"
   },
   {
-    "rule": "missing-param",
+    "rule": "callable-summary",
     "file": "examples/todo/src/index.ts",
-    "name": "startTodoServer(options)(options)"
+    "name": "createTodoContext()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "examples/todo/src/index.ts",
+    "name": "startTodoServer(options)"
   },
   {
     "rule": "missing-param",
@@ -121,6 +116,11 @@
   },
   {
     "rule": "missing-param",
+    "file": "examples/todo/src/index.ts",
+    "name": "startTodoServer(options)(options)"
+  },
+  {
+    "rule": "missing-param",
     "file": "examples/todo/src/smoke-task-lists.ts",
     "name": "inspectTaskListRows(response)(response)"
   },
@@ -128,16 +128,6 @@
     "rule": "missing-param",
     "file": "examples/todo/src/smoke-task-lists.ts",
     "name": "sanitizeSmokeValue(value)(value)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "examples/todo/src/index.ts",
-    "name": "createTodoContext()"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "examples/todo/src/index.ts",
-    "name": "startTodoServer(options)"
   },
   {
     "rule": "missing-returns",
@@ -161,6 +151,16 @@
   },
   {
     "rule": "missing-returns",
+    "file": "examples/todo/src/index.ts",
+    "name": "createTodoContext()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/todo/src/index.ts",
+    "name": "startTodoServer(options)"
+  },
+  {
+    "rule": "missing-returns",
     "file": "examples/todo/src/smoke-task-lists.ts",
     "name": "inspectTaskListRows(response)"
   },
@@ -172,17 +172,17 @@
   {
     "rule": "missing-summary",
     "file": "examples/todo/src/smoke-task-lists.ts",
-    "name": "InspectedTaskListRows:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "examples/todo/src/smoke-task-lists.ts",
     "name": "InspectedTaskListRows.diagnostics:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "examples/todo/src/smoke-task-lists.ts",
     "name": "InspectedTaskListRows.taskLists:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/todo/src/smoke-task-lists.ts",
+    "name": "InspectedTaskListRows:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",

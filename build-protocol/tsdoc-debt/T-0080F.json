@@ -501,6 +501,11 @@
   },
   {
     "rule": "callable-summary",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "name": "OnDeliveryMessage(message)"
+  },
+  {
+    "rule": "callable-summary",
     "file": "packages/server/src/delivery/inbox-storage.ts",
     "name": "InboxStorage.constructor(options)"
   },
@@ -577,6 +582,11 @@
   {
     "rule": "callable-summary",
     "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "ShardSession.constructor(id,shard,node,pickedUpAt,expiresAt)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
     "name": "ShardedWorkRegistry.constructor(options)"
   },
   {
@@ -601,11 +611,6 @@
   },
   {
     "rule": "callable-summary",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "name": "ShardSession.constructor(id,shard,node,pickedUpAt,expiresAt)"
-  },
-  {
-    "rule": "callable-summary",
     "file": "packages/server/src/entity/entity-metadata.ts",
     "name": "describeEntityMetadata(schema)"
   },
@@ -618,11 +623,6 @@
     "rule": "callable-summary",
     "file": "packages/server/src/entity/entity-storage-descriptor.ts",
     "name": "entityStorageDescriptor(context,schema,idField,columns)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/server/src/entity/entity-transaction.ts",
-    "name": "createEntityTransaction(options)"
   },
   {
     "rule": "callable-summary",
@@ -712,7 +712,17 @@
   {
     "rule": "callable-summary",
     "file": "packages/server/src/entity/entity-transaction.ts",
+    "name": "EntityTransactionMutator(draft)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/server/src/entity/entity-transaction.ts",
     "name": "EntityTransactionStateError.constructor(status,operation)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/server/src/entity/entity-transaction.ts",
+    "name": "createEntityTransaction(options)"
   },
   {
     "rule": "callable-summary",
@@ -967,7 +977,12 @@
   {
     "rule": "callable-summary",
     "file": "packages/server/src/handler/handler-decorators.ts",
-    "name": "materializeDecoratedEntityHandlers(entityType,stateSchema)"
+    "name": "HandlerMethodDecorator(value,context)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "name": "HandlerMethodValue(this,parameters)"
   },
   {
     "rule": "callable-summary",
@@ -981,8 +996,8 @@
   },
   {
     "rule": "callable-summary",
-    "file": "packages/server/src/handler/handler-metadata.ts",
-    "name": "defineEntityHandlers(entityType,stateSchema,define)"
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "name": "materializeDecoratedEntityHandlers(entityType,stateSchema)"
   },
   {
     "rule": "callable-summary",
@@ -1091,6 +1106,11 @@
   },
   {
     "rule": "callable-summary",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "name": "defineEntityHandlers(entityType,stateSchema,define)"
+  },
+  {
+    "rule": "callable-summary",
     "file": "packages/server/src/repository/command-errors.ts",
     "name": "TransitionValidationError.constructor(validationError)"
   },
@@ -1177,7 +1197,22 @@
   {
     "rule": "callable-summary",
     "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "CommandRuntimeTransportHandler(command,route)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "EventRuntimeTransportHandler(event,route)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/server/src/runtime/runtime-transport.ts",
     "name": "RuntimeTransportBindingHandle.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/server/src/runtime/runtime.ts",
+    "name": "ServerRuntimeWork()"
   },
   {
     "rule": "callable-summary",
@@ -1507,26 +1542,6 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "configuredDeliveryEndpoint(message,endpoints)(endpoints)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "configuredDeliveryEndpoint(message,endpoints)(message)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "coordinateLocalInboxHandoff(options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "deliveryEndpoint(input)(input)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
     "name": "DeliveryHandoff.complete(onDrain)(onDrain)"
   },
   {
@@ -1562,6 +1577,36 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "LocalInboxDrainOptions.onReplay(message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "OnDeliveryReady(ready)(ready)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "configuredDeliveryEndpoint(message,endpoints)(endpoints)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "configuredDeliveryEndpoint(message,endpoints)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "coordinateLocalInboxHandoff(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "deliveryEndpoint(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
     "name": "deliveryReady(endpoint,tenantId)(endpoint)"
   },
   {
@@ -1573,11 +1618,6 @@
     "rule": "missing-param",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
     "name": "drainLocalInboxMessage(options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "LocalInboxDrainOptions.onReplay(message)(message)"
   },
   {
     "rule": "missing-param",
@@ -1697,12 +1737,12 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/context/tenant-index.ts",
-    "name": "createTenantIndex(input)(input)"
+    "name": "TenantIndex.keep(_tenantId)(_tenantId)"
   },
   {
     "rule": "missing-param",
     "file": "packages/server/src/context/tenant-index.ts",
-    "name": "TenantIndex.keep(_tenantId)(_tenantId)"
+    "name": "createTenantIndex(input)(input)"
   },
   {
     "rule": "missing-param",
@@ -1723,11 +1763,6 @@
     "rule": "missing-param",
     "file": "packages/server/src/delivery/delivery-attempts.ts",
     "name": "DeliveryAttempts.summarize(messageId)(messageId)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/delivery/delivery-builder.ts",
-    "name": "controlledDeliveryRunner(delivery)(delivery)"
   },
   {
     "rule": "missing-param",
@@ -1828,6 +1863,11 @@
     "rule": "missing-param",
     "file": "packages/server/src/delivery/delivery-builder.ts",
     "name": "UniformAcrossAllShards.shardFor(targetId,targetType)(targetType)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/delivery-builder.ts",
+    "name": "controlledDeliveryRunner(delivery)(delivery)"
   },
   {
     "rule": "missing-param",
@@ -2177,6 +2217,11 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/delivery/delivery.ts",
+    "name": "OnDeliveryMessage(message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/delivery.ts",
     "name": "deliveryOperationFence(options)(options)"
   },
   {
@@ -2427,31 +2472,6 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "name": "ShardedWorkRegistry.constructor(options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "name": "ShardedWorkRegistry.pickUp(shard,node)(node)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "name": "ShardedWorkRegistry.pickUp(shard,node)(shard)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "name": "ShardedWorkRegistry.release(session)(session)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "name": "ShardedWorkRegistry.renew(session)(session)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
     "name": "ShardSession.constructor(id,shard,node,pickedUpAt,expiresAt)(expiresAt)"
   },
   {
@@ -2476,8 +2496,28 @@
   },
   {
     "rule": "missing-param",
-    "file": "packages/server/src/entity/entity-metadata.ts",
-    "name": "describeEntityMetadata(schema)(schema)"
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "ShardedWorkRegistry.constructor(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "ShardedWorkRegistry.pickUp(shard,node)(node)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "ShardedWorkRegistry.pickUp(shard,node)(shard)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "ShardedWorkRegistry.release(session)(session)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "ShardedWorkRegistry.renew(session)(session)"
   },
   {
     "rule": "missing-param",
@@ -2488,6 +2528,11 @@
     "rule": "missing-param",
     "file": "packages/server/src/entity/entity-metadata.ts",
     "name": "DescriptorMetadataError.constructor(code,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/entity/entity-metadata.ts",
+    "name": "describeEntityMetadata(schema)(schema)"
   },
   {
     "rule": "missing-param",
@@ -2517,11 +2562,6 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/entity/entity-transaction.ts",
-    "name": "createEntityTransaction(options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/entity/entity-transaction.ts",
     "name": "DraftStateError.constructor(reason)(reason)"
   },
   {
@@ -2547,12 +2587,22 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/entity/entity-transaction.ts",
+    "name": "EntityTransactionMutator(draft)(draft)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/entity/entity-transaction.ts",
     "name": "EntityTransactionStateError.constructor(status,operation)(operation)"
   },
   {
     "rule": "missing-param",
     "file": "packages/server/src/entity/entity-transaction.ts",
     "name": "EntityTransactionStateError.constructor(status,operation)(status)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/entity/entity-transaction.ts",
+    "name": "createEntityTransaction(options)(options)"
   },
   {
     "rule": "missing-param",
@@ -2787,16 +2837,6 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/handler/handler-codegen.ts",
-    "name": "generateHandlerRegistry(options,operations)(operations)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/handler/handler-codegen.ts",
-    "name": "generateHandlerRegistry(options,operations)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/handler/handler-codegen.ts",
     "name": "HandlerCodegenOperations.mkdir(path)(path)"
   },
   {
@@ -2823,6 +2863,16 @@
     "rule": "missing-param",
     "file": "packages/server/src/handler/handler-codegen.ts",
     "name": "HandlerCodegenOperations.write(path,source)(source)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/handler/handler-codegen.ts",
+    "name": "generateHandlerRegistry(options,operations)(operations)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/handler/handler-codegen.ts",
+    "name": "generateHandlerRegistry(options,operations)(options)"
   },
   {
     "rule": "missing-param",
@@ -2877,12 +2927,22 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/handler/handler-decorators.ts",
-    "name": "materializeDecoratedEntityHandlers(entityType,stateSchema)(entityType)"
+    "name": "HandlerMethodDecorator(value,context)(context)"
   },
   {
     "rule": "missing-param",
     "file": "packages/server/src/handler/handler-decorators.ts",
-    "name": "materializeDecoratedEntityHandlers(entityType,stateSchema)(stateSchema)"
+    "name": "HandlerMethodDecorator(value,context)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "name": "HandlerMethodValue(this,parameters)(parameters)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "name": "HandlerMethodValue(this,parameters)(this)"
   },
   {
     "rule": "missing-param",
@@ -2926,18 +2986,13 @@
   },
   {
     "rule": "missing-param",
-    "file": "packages/server/src/handler/handler-metadata.ts",
-    "name": "defineEntityHandlers(entityType,stateSchema,define)(define)"
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "name": "materializeDecoratedEntityHandlers(entityType,stateSchema)(entityType)"
   },
   {
     "rule": "missing-param",
-    "file": "packages/server/src/handler/handler-metadata.ts",
-    "name": "defineEntityHandlers(entityType,stateSchema,define)(entityType)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/handler/handler-metadata.ts",
-    "name": "defineEntityHandlers(entityType,stateSchema,define)(stateSchema)"
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "name": "materializeDecoratedEntityHandlers(entityType,stateSchema)(stateSchema)"
   },
   {
     "rule": "missing-param",
@@ -3126,6 +3181,21 @@
   },
   {
     "rule": "missing-param",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "name": "defineEntityHandlers(entityType,stateSchema,define)(define)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "name": "defineEntityHandlers(entityType,stateSchema,define)(entityType)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "name": "defineEntityHandlers(entityType,stateSchema,define)(stateSchema)"
+  },
+  {
+    "rule": "missing-param",
     "file": "packages/server/src/handler/registration-readiness-metadata.ts",
     "name": "compareFullTypeNames(left,right)(left)"
   },
@@ -3188,21 +3258,6 @@
     "rule": "missing-param",
     "file": "packages/server/src/repository/primitive-id.ts",
     "name": "PrimitiveIdCodec.unpack(id)(id)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/repository/repository.ts",
-    "name": "createHistoryCache(load,versionOf,options)(load)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/repository/repository.ts",
-    "name": "createHistoryCache(load,versionOf,options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/repository/repository.ts",
-    "name": "createHistoryCache(load,versionOf,options)(versionOf)"
   },
   {
     "rule": "missing-param",
@@ -3377,6 +3432,21 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/repository/repository.ts",
+    "name": "createHistoryCache(load,versionOf,options)(load)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/repository/repository.ts",
+    "name": "createHistoryCache(load,versionOf,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/repository/repository.ts",
+    "name": "createHistoryCache(load,versionOf,options)(versionOf)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/repository/repository.ts",
     "name": "resolveRepositoryEntityFamily(entityType)(entityType)"
   },
   {
@@ -3388,6 +3458,26 @@
     "rule": "missing-param",
     "file": "packages/server/src/runtime/runtime-routing.ts",
     "name": "createRoutingPlan(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "CommandRuntimeTransportHandler(command,route)(command)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "CommandRuntimeTransportHandler(command,route)(route)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "EventRuntimeTransportHandler(event,route)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "EventRuntimeTransportHandler(event,route)(route)"
   },
   {
     "rule": "missing-param",
@@ -3797,22 +3887,22 @@
   {
     "rule": "missing-param",
     "file": "packages/server/src/server/retryable-close.ts",
-    "name": "collectCloseError(error,errors)(error)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/server/retryable-close.ts",
-    "name": "collectCloseError(error,errors)(errors)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/server/src/server/retryable-close.ts",
     "name": "RetryableCloseGroup.constructor(closeables,message)(closeables)"
   },
   {
     "rule": "missing-param",
     "file": "packages/server/src/server/retryable-close.ts",
     "name": "RetryableCloseGroup.constructor(closeables,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/retryable-close.ts",
+    "name": "collectCloseError(error,errors)(error)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/server/src/server/retryable-close.ts",
+    "name": "collectCloseError(error,errors)(errors)"
   },
   {
     "rule": "missing-param",
@@ -4252,21 +4342,6 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "configuredDeliveryEndpoint(message,endpoints)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "coordinateLocalInboxHandoff(options)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "deliveryEndpoint(input)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
     "name": "DeliveryReadiness.claim(ready)"
   },
   {
@@ -4282,12 +4357,32 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "deliveryReady(endpoint,tenantId)"
+    "name": "LocalInboxDrainOptions.onReplay(message)"
   },
   {
     "rule": "missing-returns",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "LocalInboxDrainOptions.onReplay(message)"
+    "name": "OnDeliveryReady(ready)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "configuredDeliveryEndpoint(message,endpoints)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "coordinateLocalInboxHandoff(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "deliveryEndpoint(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "deliveryReady(endpoint,tenantId)"
   },
   {
     "rule": "missing-returns",
@@ -4332,12 +4427,12 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/context/tenant-index.ts",
-    "name": "createTenantIndex(input)"
+    "name": "TenantIndex.all()"
   },
   {
     "rule": "missing-returns",
     "file": "packages/server/src/context/tenant-index.ts",
-    "name": "TenantIndex.all()"
+    "name": "createTenantIndex(input)"
   },
   {
     "rule": "missing-returns",
@@ -4353,11 +4448,6 @@
     "rule": "missing-returns",
     "file": "packages/server/src/delivery/delivery-attempts.ts",
     "name": "DeliveryAttempts.summarize(messageId)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/server/src/delivery/delivery-builder.ts",
-    "name": "controlledDeliveryRunner(delivery)"
   },
   {
     "rule": "missing-returns",
@@ -4438,6 +4528,11 @@
     "rule": "missing-returns",
     "file": "packages/server/src/delivery/delivery-builder.ts",
     "name": "UniformAcrossAllShards.singleShard()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/delivery-builder.ts",
+    "name": "controlledDeliveryRunner(delivery)"
   },
   {
     "rule": "missing-returns",
@@ -4657,12 +4752,17 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/delivery/delivery.ts",
-    "name": "deliveryOperationFence(options)"
+    "name": "DeliveryOptions.now()"
   },
   {
     "rule": "missing-returns",
     "file": "packages/server/src/delivery/delivery.ts",
-    "name": "DeliveryOptions.now()"
+    "name": "OnDeliveryMessage(message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "name": "deliveryOperationFence(options)"
   },
   {
     "rule": "missing-returns",
@@ -4787,6 +4887,11 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/delivery/sharded-work-registry.ts",
+    "name": "ShardSession.constructor(id,shard,node,pickedUpAt,expiresAt)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/delivery/sharded-work-registry.ts",
     "name": "ShardedWorkRegistry.constructor(options)"
   },
   {
@@ -4811,18 +4916,13 @@
   },
   {
     "rule": "missing-returns",
-    "file": "packages/server/src/delivery/sharded-work-registry.ts",
-    "name": "ShardSession.constructor(id,shard,node,pickedUpAt,expiresAt)"
+    "file": "packages/server/src/entity/entity-metadata.ts",
+    "name": "DescriptorMetadataError.constructor(code,message)"
   },
   {
     "rule": "missing-returns",
     "file": "packages/server/src/entity/entity-metadata.ts",
     "name": "describeEntityMetadata(schema)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/server/src/entity/entity-metadata.ts",
-    "name": "DescriptorMetadataError.constructor(code,message)"
   },
   {
     "rule": "missing-returns",
@@ -4833,11 +4933,6 @@
     "rule": "missing-returns",
     "file": "packages/server/src/entity/entity-storage-descriptor.ts",
     "name": "entityStorageDescriptor(context,schema,idField,columns)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/server/src/entity/entity-transaction.ts",
-    "name": "createEntityTransaction(options)"
   },
   {
     "rule": "missing-returns",
@@ -4923,6 +5018,11 @@
     "rule": "missing-returns",
     "file": "packages/server/src/entity/entity-transaction.ts",
     "name": "EntityTransactionStateError.constructor(status,operation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/entity/entity-transaction.ts",
+    "name": "createEntityTransaction(options)"
   },
   {
     "rule": "missing-returns",
@@ -5187,7 +5287,7 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/handler/handler-decorators.ts",
-    "name": "materializeDecoratedEntityHandlers(entityType,stateSchema)"
+    "name": "HandlerMethodValue(this,parameters)"
   },
   {
     "rule": "missing-returns",
@@ -5201,8 +5301,8 @@
   },
   {
     "rule": "missing-returns",
-    "file": "packages/server/src/handler/handler-metadata.ts",
-    "name": "defineEntityHandlers(entityType,stateSchema,define)"
+    "file": "packages/server/src/handler/handler-decorators.ts",
+    "name": "materializeDecoratedEntityHandlers(entityType,stateSchema)"
   },
   {
     "rule": "missing-returns",
@@ -5336,6 +5436,11 @@
   },
   {
     "rule": "missing-returns",
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "name": "defineEntityHandlers(entityType,stateSchema,define)"
+  },
+  {
+    "rule": "missing-returns",
     "file": "packages/server/src/handler/registration-readiness-metadata.ts",
     "name": "compareFullTypeNames(left,right)"
   },
@@ -5393,11 +5498,6 @@
     "rule": "missing-returns",
     "file": "packages/server/src/repository/primitive-id.ts",
     "name": "PrimitiveIdCodec.unpack(id)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/server/src/repository/repository.ts",
-    "name": "createHistoryCache(load,versionOf,options)"
   },
   {
     "rule": "missing-returns",
@@ -5502,6 +5602,11 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/repository/repository.ts",
+    "name": "createHistoryCache(load,versionOf,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/repository/repository.ts",
     "name": "resolveRepositoryEntityFamily(entityType)"
   },
   {
@@ -5517,12 +5622,27 @@
   {
     "rule": "missing-returns",
     "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "CommandRuntimeTransportHandler(command,route)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "EventRuntimeTransportHandler(event,route)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/runtime/runtime-transport.ts",
     "name": "RuntimeTransportEnvelopeError.constructor(result)"
   },
   {
     "rule": "missing-returns",
     "file": "packages/server/src/runtime/runtime.ts",
     "name": "ServerRuntimeStateError.constructor(operation,state)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/server/src/runtime/runtime.ts",
+    "name": "ServerRuntimeWork()"
   },
   {
     "rule": "missing-returns",
@@ -5826,6 +5946,11 @@
   },
   {
     "rule": "missing-returns",
+    "file": "packages/server/src/server/server-environment.ts",
+    "name": "ServerEnvironmentSettingsFactory()"
+  },
+  {
+    "rule": "missing-returns",
     "file": "packages/server/src/server/server.ts",
     "name": "Server.add(context)"
   },
@@ -5967,22 +6092,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/bus/event-bus.ts",
-    "name": "eventBusAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/bus/event-bus.ts",
-    "name": "EventSubscriber:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/bus/event-bus.ts",
     "name": "EventSubscriber.onEvent(event)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/bus/event-bus.ts",
-    "name": "EventSubscription:InterfaceDeclaration"
+    "name": "EventSubscriber:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -5993,6 +6108,16 @@
     "rule": "missing-summary",
     "file": "packages/server/src/bus/event-bus.ts",
     "name": "EventSubscription.unsubscribe()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/bus/event-bus.ts",
+    "name": "EventSubscription:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/bus/event-bus.ts",
+    "name": "eventBusAccess"
   },
   {
     "rule": "missing-summary",
@@ -6008,16 +6133,6 @@
     "rule": "missing-summary",
     "file": "packages/server/src/bus/event-dispatcher-registry.ts",
     "name": "EventDispatcherRegistry.schemas()"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/context/bounded-context.ts",
-    "name": "boundedContextAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/context/bounded-context.ts",
-    "name": "ContextDeliveryDescriptor:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6057,7 +6172,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/bounded-context.ts",
-    "name": "DeliveryTenantScope:InterfaceDeclaration"
+    "name": "ContextDeliveryDescriptor:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6066,18 +6181,13 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "configuredDeliveryEndpoint(message,endpoints)"
+    "file": "packages/server/src/context/bounded-context.ts",
+    "name": "DeliveryTenantScope:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "coordinateLocalInboxHandoff(options)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "DeliveryEndpoint:InterfaceDeclaration"
+    "file": "packages/server/src/context/bounded-context.ts",
+    "name": "boundedContextAccess"
   },
   {
     "rule": "missing-summary",
@@ -6097,12 +6207,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "deliveryEndpoint(input)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "DeliveryHandoff:InterfaceDeclaration"
+    "name": "DeliveryEndpoint:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6117,7 +6222,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "DeliveryReadiness:ClassDeclaration"
+    "name": "DeliveryHandoff:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6142,7 +6247,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "DeliveryReady:InterfaceDeclaration"
+    "name": "DeliveryReadiness:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6152,17 +6257,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "deliveryReady(endpoint,tenantId)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "drainLocalInboxMessage(options)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "LocalInboxDrainOptions:InterfaceDeclaration"
+    "name": "DeliveryReady:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6177,12 +6272,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "LocalInboxDrainOptions.onReplay:PropertySignature"
+    "name": "LocalInboxDrainOptions.onReplay(message)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "LocalInboxDrainOptions.onReplay(message)"
+    "name": "LocalInboxDrainOptions.onReplay:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -6207,12 +6302,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "localInboxHandoffKey(input,deliveryTenantId)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/context/local-inbox-handoff.ts",
-    "name": "LocalInboxKeyInput:InterfaceDeclaration"
+    "name": "LocalInboxDrainOptions:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6237,6 +6327,16 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "LocalInboxKeyInput:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "OnDeliveryReady(ready)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
     "name": "OnDeliveryReady:TypeAliasDeclaration"
   },
   {
@@ -6246,8 +6346,33 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/context/process-manager-handoff.ts",
-    "name": "LocalProcessManagerInbox:ClassDeclaration"
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "configuredDeliveryEndpoint(message,endpoints)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "coordinateLocalInboxHandoff(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "deliveryEndpoint(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "deliveryReady(endpoint,tenantId)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "drainLocalInboxMessage(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/context/local-inbox-handoff.ts",
+    "name": "localInboxHandoffKey(input,deliveryTenantId)"
   },
   {
     "rule": "missing-summary",
@@ -6276,8 +6401,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/context/projection-handoff.ts",
-    "name": "LocalProjectionInbox:ClassDeclaration"
+    "file": "packages/server/src/context/process-manager-handoff.ts",
+    "name": "LocalProcessManagerInbox:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6301,13 +6426,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/context/tenant-index.ts",
-    "name": "createTenantIndex(input)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/context/tenant-index.ts",
-    "name": "TenantIndex:InterfaceDeclaration"
+    "file": "packages/server/src/context/projection-handoff.ts",
+    "name": "LocalProjectionInbox:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6331,6 +6451,16 @@
   },
   {
     "rule": "missing-summary",
+    "file": "packages/server/src/context/tenant-index.ts",
+    "name": "TenantIndex:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/context/tenant-index.ts",
+    "name": "createTenantIndex(input)"
+  },
+  {
+    "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-attempts.ts",
     "name": "deliveryAttemptCapacity"
   },
@@ -6342,7 +6472,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-loop.ts",
-    "name": "deliveryLoopAccess"
+    "name": "DeliveryLoopAccess.progress(loop)"
   },
   {
     "rule": "missing-summary",
@@ -6352,17 +6482,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-loop.ts",
-    "name": "DeliveryLoopAccess.progress(loop)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery-loop.ts",
     "name": "DeliveryLoopOptions.completeAdmittedEmptyEpoch:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery-loop.ts",
-    "name": "DeliveryLoopProgress:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6396,6 +6516,16 @@
   },
   {
     "rule": "missing-summary",
+    "file": "packages/server/src/delivery/delivery-loop.ts",
+    "name": "DeliveryLoopProgress:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/delivery-loop.ts",
+    "name": "deliveryLoopAccess"
+  },
+  {
+    "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-ports.ts",
     "name": "ExclusiveDeliveryWorkSession.kind:PropertySignature"
   },
@@ -6403,11 +6533,6 @@
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-ports.ts",
     "name": "ExclusiveDeliveryWorkSession.shard:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery-run-control.ts",
-    "name": "DeliveryControlledRun:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6422,7 +6547,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-control.ts",
-    "name": "DeliveryRunControl:ClassDeclaration"
+    "name": "DeliveryControlledRun:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6436,8 +6561,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "DeliveryRunCoordinator:ClassDeclaration"
+    "file": "packages/server/src/delivery/delivery-run-control.ts",
+    "name": "DeliveryRunControl:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6502,7 +6627,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "DeliveryRunObligation:InterfaceDeclaration"
+    "name": "DeliveryRunCoordinator:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6512,7 +6637,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "DeliveryRunOwner:InterfaceDeclaration"
+    "name": "DeliveryRunObligation:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6522,7 +6647,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "DeliveryRunQuiescenceError:ClassDeclaration"
+    "name": "DeliveryRunOwner:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6537,7 +6662,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "DeliveryRunScope:InterfaceDeclaration"
+    "name": "DeliveryRunQuiescenceError:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6552,7 +6677,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "DeliveryRunSettlement:InterfaceDeclaration"
+    "name": "DeliveryRunScope:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6567,7 +6692,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "DeliveryRunWorker:InterfaceDeclaration"
+    "name": "DeliveryRunSettlement:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6577,12 +6702,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "deliveryRunWorker(worker)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
-    "name": "DeliveryScopeSettlement:InterfaceDeclaration"
+    "name": "DeliveryRunWorker:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6603,6 +6723,16 @@
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
     "name": "DeliveryScopeSettlement.scope:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
+    "name": "DeliveryScopeSettlement:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/delivery-run-coordinator.ts",
+    "name": "deliveryRunWorker(worker)"
   },
   {
     "rule": "missing-summary",
@@ -6627,17 +6757,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-worker.ts",
-    "name": "deliveryWorkerAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery-worker.ts",
     "name": "DeliveryWorkerAccess:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery-worker.ts",
-    "name": "DeliveryWorkerEvidence:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6652,12 +6772,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-worker.ts",
-    "name": "DeliveryWorkerObligation:TypeAliasDeclaration"
+    "name": "DeliveryWorkerEvidence:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-worker.ts",
-    "name": "FulfilledDeliveryShard:InterfaceDeclaration"
+    "name": "DeliveryWorkerObligation:TypeAliasDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6687,7 +6807,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery-worker.ts",
-    "name": "RejectedDeliveryShard:InterfaceDeclaration"
+    "name": "FulfilledDeliveryShard:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6716,18 +6836,18 @@
   },
   {
     "rule": "missing-summary",
+    "file": "packages/server/src/delivery/delivery-worker.ts",
+    "name": "RejectedDeliveryShard:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/delivery-worker.ts",
+    "name": "deliveryWorkerAccess"
+  },
+  {
+    "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery.ts",
     "name": "Delivery.runControlled(options)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "name": "deliveryAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/delivery.ts",
-    "name": "DeliveryAccess:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6742,7 +6862,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery.ts",
-    "name": "DeliveryDrainCursor:InterfaceDeclaration"
+    "name": "DeliveryAccess:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6752,7 +6872,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery.ts",
-    "name": "DeliveryDrainOutcome:InterfaceDeclaration"
+    "name": "DeliveryDrainCursor:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6777,7 +6897,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery.ts",
-    "name": "DeliveryEpochProgress:InterfaceDeclaration"
+    "name": "DeliveryDrainOutcome:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6792,7 +6912,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery.ts",
-    "name": "DeliveryEpochSlice:InterfaceDeclaration"
+    "name": "DeliveryEpochProgress:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6807,12 +6927,17 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/delivery.ts",
-    "name": "deliveryOperationFence(options)"
+    "name": "DeliveryEpochSlice:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/delivery/inbox-records.ts",
-    "name": "DedupGuardState:InterfaceDeclaration"
+    "file": "packages/server/src/delivery/delivery.ts",
+    "name": "deliveryAccess"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/delivery.ts",
+    "name": "deliveryOperationFence(options)"
   },
   {
     "rule": "missing-summary",
@@ -6832,6 +6957,11 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/inbox-records.ts",
+    "name": "DedupGuardState:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-records.ts",
     "name": "dedupRecordSpec"
   },
   {
@@ -6842,12 +6972,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/inbox-storage.ts",
-    "name": "inboxStorageAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/inbox-storage.ts",
-    "name": "InboxStorageAccess:InterfaceDeclaration"
+    "name": "InboxStorageAccess.claim(storage,message,session)"
   },
   {
     "rule": "missing-summary",
@@ -6857,7 +6982,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/inbox-storage.ts",
-    "name": "InboxStorageAccess.claim(storage,message,session)"
+    "name": "InboxStorageAccess.clear(storage,message)"
   },
   {
     "rule": "missing-summary",
@@ -6867,7 +6992,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/inbox-storage.ts",
-    "name": "InboxStorageAccess.clear(storage,message)"
+    "name": "InboxStorageAccess.markDelivered(storage,message)"
   },
   {
     "rule": "missing-summary",
@@ -6877,17 +7002,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/inbox-storage.ts",
-    "name": "InboxStorageAccess.markDelivered(storage,message)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/inbox-storage.ts",
     "name": "InboxStorageAccess.maxReadLimit:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/inbox-storage.ts",
-    "name": "InboxStorageAccess.readLimit:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -6897,7 +7012,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/inbox-storage.ts",
-    "name": "InboxStorageAccess.renew:PropertySignature"
+    "name": "InboxStorageAccess.readLimit:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -6906,13 +7021,23 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/delivery/inbox.ts",
-    "name": "InboxMessageError.constructor(message,options)"
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "InboxStorageAccess.renew:PropertySignature"
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
-    "name": "ParkedConfiguredObligation:InterfaceDeclaration"
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "InboxStorageAccess:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox-storage.ts",
+    "name": "inboxStorageAccess"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/inbox.ts",
+    "name": "InboxMessageError.constructor(message,options)"
   },
   {
     "rule": "missing-summary",
@@ -6927,7 +7052,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
-    "name": "ParkedDeliveryObligationOptions:InterfaceDeclaration"
+    "name": "ParkedConfiguredObligation:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6942,7 +7067,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
-    "name": "ParkedDeliveryObligationRecord:InterfaceDeclaration"
+    "name": "ParkedDeliveryObligationOptions:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -6982,7 +7107,27 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
-    "name": "ParkedDeliveryObligations:ClassDeclaration"
+    "name": "ParkedDeliveryObligationRecord:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
+    "name": "ParkedDeliveryObligationSelection.obligation:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
+    "name": "ParkedDeliveryObligationSelection.owner:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
+    "name": "ParkedDeliveryObligationSelection.units:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
+    "name": "ParkedDeliveryObligationSelection:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7032,22 +7177,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
-    "name": "ParkedDeliveryObligationSelection:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
-    "name": "ParkedDeliveryObligationSelection.obligation:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
-    "name": "ParkedDeliveryObligationSelection.owner:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/delivery/parked-delivery-obligations.ts",
-    "name": "ParkedDeliveryObligationSelection.units:PropertySignature"
+    "name": "ParkedDeliveryObligations:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7067,17 +7197,17 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/entity/entity.ts",
+    "name": "TransactionalEntityAccess:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/entity/entity.ts",
     "name": "entityHistoryAccess"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/entity/entity.ts",
     "name": "transactionalEntityAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/entity/entity.ts",
-    "name": "TransactionalEntityAccess:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7142,17 +7272,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/handler/handler-codegen.ts",
-    "name": "HandlerCodegenOperations.mkdir:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/handler/handler-codegen.ts",
     "name": "HandlerCodegenOperations.mkdir(path)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/handler/handler-codegen.ts",
-    "name": "HandlerCodegenOperations.remove:PropertySignature"
+    "name": "HandlerCodegenOperations.mkdir:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -7162,7 +7287,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/handler/handler-codegen.ts",
-    "name": "HandlerCodegenOperations.rename:PropertySignature"
+    "name": "HandlerCodegenOperations.remove:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -7172,12 +7297,17 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/handler/handler-codegen.ts",
-    "name": "HandlerCodegenOperations.write:PropertySignature"
+    "name": "HandlerCodegenOperations.rename:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/handler/handler-codegen.ts",
     "name": "HandlerCodegenOperations.write(path,source)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/handler/handler-codegen.ts",
+    "name": "HandlerCodegenOperations.write:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -7207,16 +7337,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/handler/handler-metadata.ts",
-    "name": "handlerMetadataAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/handler/handler-metadata.ts",
-    "name": "HandlerMetadataAccess:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/handler/handler-metadata.ts",
     "name": "HandlerMetadataAccess.copyEmittedSchemas(source,target)"
   },
   {
@@ -7237,6 +7357,11 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/handler/handler-metadata.ts",
+    "name": "HandlerMetadataAccess:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/handler/handler-metadata.ts",
     "name": "HandlerMetadataError.constructor(code,message)"
   },
   {
@@ -7246,28 +7371,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
-    "name": "compareFullTypeNames(left,right)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
-    "name": "copyMetadataArrayMap(map)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
-    "name": "copyReadinessMetadataFields(registeredHandler)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
-    "name": "createReadinessMetadataFields(registeredHandler)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
-    "name": "ReadinessMetadataFields:InterfaceDeclaration"
+    "file": "packages/server/src/handler/handler-metadata.ts",
+    "name": "handlerMetadataAccess"
   },
   {
     "rule": "missing-summary",
@@ -7296,8 +7401,28 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/repository/primitive-id.ts",
-    "name": "MessageId:InterfaceDeclaration"
+    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
+    "name": "ReadinessMetadataFields:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
+    "name": "compareFullTypeNames(left,right)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
+    "name": "copyMetadataArrayMap(map)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
+    "name": "copyReadinessMetadataFields(registeredHandler)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/handler/registration-readiness-metadata.ts",
+    "name": "createReadinessMetadataFields(registeredHandler)"
   },
   {
     "rule": "missing-summary",
@@ -7312,7 +7437,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/repository/primitive-id.ts",
-    "name": "MessageIdCodec:InterfaceDeclaration"
+    "name": "MessageId:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7332,17 +7457,17 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/repository/primitive-id.ts",
+    "name": "MessageIdCodec:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/repository/primitive-id.ts",
     "name": "MessageIds"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/repository/primitive-id.ts",
     "name": "PrimitiveId:TypeAliasDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/repository/primitive-id.ts",
-    "name": "PrimitiveIdCodec:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7367,12 +7492,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/repository/primitive-id.ts",
-    "name": "PrimitiveIds"
+    "name": "PrimitiveIdCodec:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/repository/repository.ts",
-    "name": "createHistoryCache(load,versionOf,options)"
+    "file": "packages/server/src/repository/primitive-id.ts",
+    "name": "PrimitiveIds"
   },
   {
     "rule": "missing-summary",
@@ -7393,16 +7518,6 @@
     "rule": "missing-summary",
     "file": "packages/server/src/repository/repository.ts",
     "name": "ProjectionInboxTarget:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/repository/repository.ts",
-    "name": "repositoryAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/repository/repository.ts",
-    "name": "RepositoryAccess:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7452,7 +7567,22 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/repository/repository.ts",
+    "name": "RepositoryAccess:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/repository/repository.ts",
     "name": "RepositoryIdentityError.constructor(code,message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/repository/repository.ts",
+    "name": "createHistoryCache(load,versionOf,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/repository/repository.ts",
+    "name": "repositoryAccess"
   },
   {
     "rule": "missing-summary",
@@ -7467,16 +7597,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/context-transport.ts",
-    "name": "contextTransportAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/runtime/context-transport.ts",
-    "name": "ContextTransportInput:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/runtime/context-transport.ts",
     "name": "ContextTransportInput.context:PropertySignature"
   },
   {
@@ -7486,13 +7606,18 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/runtime/runtime-routing.ts",
-    "name": "createContextRoutingPlan(context)"
+    "file": "packages/server/src/runtime/context-transport.ts",
+    "name": "ContextTransportInput:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/runtime/runtime-transport.ts",
-    "name": "runtimeTransportBindingAccess"
+    "file": "packages/server/src/runtime/context-transport.ts",
+    "name": "contextTransportAccess"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/runtime/runtime-routing.ts",
+    "name": "createContextRoutingPlan(context)"
   },
   {
     "rule": "missing-summary",
@@ -7501,8 +7626,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/runtime/runtime.ts",
-    "name": "runtimeAccess"
+    "file": "packages/server/src/runtime/runtime-transport.ts",
+    "name": "runtimeTransportBindingAccess"
   },
   {
     "rule": "missing-summary",
@@ -7531,8 +7656,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "ActorContextInput:InterfaceDeclaration"
+    "file": "packages/server/src/runtime/runtime.ts",
+    "name": "runtimeAccess"
   },
   {
     "rule": "missing-summary",
@@ -7547,7 +7672,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "Clock:InterfaceDeclaration"
+    "name": "ActorContextInput:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7557,7 +7682,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "CommandContextInput:InterfaceDeclaration"
+    "name": "Clock:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7572,7 +7697,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "EventContextInput:InterfaceDeclaration"
+    "name": "CommandContextInput:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7592,7 +7717,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "FixedClock:ClassDeclaration"
+    "name": "EventContextInput:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7607,7 +7732,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "SignalIds:ClassDeclaration"
+    "name": "FixedClock:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7627,7 +7752,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "SignalMetadata:ClassDeclaration"
+    "name": "SignalIds:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7702,7 +7827,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "SignalMetadataOptions:InterfaceDeclaration"
+    "name": "SignalMetadata:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7717,7 +7842,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/runtime/signal-metadata.ts",
-    "name": "SystemClock:ClassDeclaration"
+    "name": "SignalMetadataOptions:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7726,8 +7851,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/server/context-transport-group.ts",
-    "name": "ContextTransportGroup:ClassDeclaration"
+    "file": "packages/server/src/runtime/signal-metadata.ts",
+    "name": "SystemClock:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7746,13 +7871,28 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentAttachmentHandle:TypeAliasDeclaration"
+    "file": "packages/server/src/server/context-transport-group.ts",
+    "name": "ContextTransportGroup:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentAttachments:ClassDeclaration"
+    "name": "EnvironmentAttachOptions.descriptors:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/environment-attachment.ts",
+    "name": "EnvironmentAttachOptions.ownership:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/environment-attachment.ts",
+    "name": "EnvironmentAttachOptions:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/environment-attachment.ts",
+    "name": "EnvironmentAttachmentHandle:TypeAliasDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7837,12 +7977,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentAttachmentsOptions:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentAttachmentsOptions.createWorker:PropertySignature"
+    "name": "EnvironmentAttachments:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7852,7 +7987,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentAttachmentsOptions.report:PropertySignature"
+    "name": "EnvironmentAttachmentsOptions.createWorker:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -7862,27 +7997,17 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
+    "name": "EnvironmentAttachmentsOptions.report:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/environment-attachment.ts",
     "name": "EnvironmentAttachmentsOptions.transitionFaults:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentAttachOptions:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentAttachOptions.descriptors:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentAttachOptions.ownership:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentGeneration:InterfaceDeclaration"
+    "name": "EnvironmentAttachmentsOptions:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7892,12 +8017,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentOwnership:TypeAliasDeclaration"
+    "name": "EnvironmentGeneration:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentRegistrationClaim:InterfaceDeclaration"
+    "name": "EnvironmentOwnership:TypeAliasDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7912,7 +8037,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "EnvironmentRegistrations:ClassDeclaration"
+    "name": "EnvironmentRegistrationClaim:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7947,7 +8072,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "RegistrationReadiness:ClassDeclaration"
+    "name": "EnvironmentRegistrations:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -7987,12 +8112,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-attachment.ts",
-    "name": "startupObligations(token,scopes,settlement)"
+    "name": "RegistrationReadiness:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/server/environment-delivery-records.ts",
-    "name": "EnvironmentDeliveryRecords:ClassDeclaration"
+    "file": "packages/server/src/server/environment-attachment.ts",
+    "name": "startupObligations(token,scopes,settlement)"
   },
   {
     "rule": "missing-summary",
@@ -8046,8 +8171,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/server/src/server/environment-delivery-worker.ts",
-    "name": "EnvironmentDeliveryRuntime:InterfaceDeclaration"
+    "file": "packages/server/src/server/environment-delivery-records.ts",
+    "name": "EnvironmentDeliveryRecords:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -8082,7 +8207,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-delivery-worker.ts",
-    "name": "EnvironmentDeliveryWorker:ClassDeclaration"
+    "name": "EnvironmentDeliveryRuntime:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -8137,7 +8262,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/environment-delivery-worker.ts",
-    "name": "EnvironmentGenerationWorker:InterfaceDeclaration"
+    "name": "EnvironmentDeliveryWorker:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -8166,6 +8291,11 @@
   },
   {
     "rule": "missing-summary",
+    "file": "packages/server/src/server/environment-delivery-worker.ts",
+    "name": "EnvironmentGenerationWorker:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
     "file": "packages/server/src/server/environment.ts",
     "name": "EnvironmentType.Local:EnumMember"
   },
@@ -8182,17 +8312,27 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/retryable-close.ts",
-    "name": "collectCloseError(error,errors)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/server/retryable-close.ts",
     "name": "RetryableCloseGroup.close()"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/server/retryable-close.ts",
     "name": "RetryableCloseGroup.constructor(closeables,message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/retryable-close.ts",
+    "name": "collectCloseError(error,errors)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/server-environment.ts",
+    "name": "ServerEnvironmentSettingsFactory()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/server/src/server/server-environment.ts",
+    "name": "ServerEnvironmentSettingsFactory:TypeAliasDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -8203,11 +8343,6 @@
     "rule": "missing-summary",
     "file": "packages/server/src/server/server-environment.ts",
     "name": "serverEnvironmentAccess"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/server/src/server/server-environment.ts",
-    "name": "ServerEnvironmentSettingsFactory:TypeAliasDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -8252,11 +8387,11 @@
   {
     "rule": "missing-summary",
     "file": "packages/server/src/stand/stand.ts",
-    "name": "standAccess"
+    "name": "StandStateTypeError.constructor(typeUrl,operation)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/server/src/stand/stand.ts",
-    "name": "StandStateTypeError.constructor(typeUrl,operation)"
+    "name": "standAccess"
   }
 ]

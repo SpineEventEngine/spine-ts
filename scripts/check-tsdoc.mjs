@@ -125,7 +125,26 @@ const remediationPartitions = [
 
 export function checkTsdoc(repoRoot) {
   const root = realpathSync(resolve(repoRoot));
-  return applyDebt(root, scanTsdoc(root)).sort(compareFailures);
+  return applyDebt(root, rejectDuplicateFailures(scanTsdoc(root))).sort(compareFailures);
+}
+
+function rejectDuplicateFailures(failures) {
+  const occurrences = new Map();
+  return failures.flatMap((failure) => {
+    const key = failureKey(failure);
+    const occurrence = (occurrences.get(key) ?? 0) + 1;
+    occurrences.set(key, occurrence);
+    if (occurrence === 1) {
+      return [failure];
+    }
+    return [
+      {
+        ...failure,
+        rule: "duplicate-observed-failure",
+        name: `${failure.name}#duplicate-${occurrence}`,
+      },
+    ];
+  });
 }
 
 function scanTsdoc(root) {
@@ -319,58 +338,51 @@ function isAuthoredSource(file) {
 }
 
 function visitSource(source, file, checker, failures) {
-  const overloads = new Map();
-  for (const statement of source.statements) {
-    if (
-      isExported(statement) &&
-      ts.isFunctionDeclaration(statement) &&
-      statement.name !== undefined
-    ) {
-      overloads.set(statement.name.text, (overloads.get(statement.name.text) ?? 0) + 1);
-    }
-  }
-  const seen = new Map();
+  const declarations = new Set();
   const inspected = new Set();
   for (const statement of source.statements) {
-    if (isExported(statement)) {
-      const name =
-        ts.isFunctionDeclaration(statement) && statement.name !== undefined
-          ? statement.name.text
-          : undefined;
-      const occurrence = name === undefined ? undefined : (seen.get(name) ?? 0) + 1;
-      if (name !== undefined) seen.set(name, occurrence);
-      inspectDeclaration(
-        statement,
-        file,
-        undefined,
-        checker,
-        failures,
-        occurrence !== undefined && overloads.get(name) > 1 ? `#${occurrence}` : "",
-      );
-      inspected.add(statement);
-    }
+    if (isExported(statement) || ts.isExportAssignment(statement)) declarations.add(statement);
   }
   const module = checker.getSymbolAtLocation(source);
-  if (module === undefined) return;
-  for (const exported of checker.getExportsOfModule(module)) {
-    const symbol =
-      (exported.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(exported) : exported;
-    for (const declaration of symbol.declarations ?? []) {
-      const variableStatement = variableStatementFor(declaration);
-      if (declaration.getSourceFile() === source && !inspected.has(declaration)) {
-        if (variableStatement !== undefined && inspected.has(variableStatement)) continue;
-        inspectDeclaration(variableStatement ?? declaration, file, undefined, checker, failures);
-        if (variableStatement !== undefined) inspected.add(variableStatement);
-        inspected.add(declaration);
+  if (module !== undefined) {
+    for (const exported of checker.getExportsOfModule(module)) {
+      const symbol =
+        (exported.flags & ts.SymbolFlags.Alias) !== 0
+          ? checker.getAliasedSymbol(exported)
+          : exported;
+      for (const declaration of symbol.declarations ?? []) {
+        if (declaration.getSourceFile() === source) {
+          declarations.add(variableStatementFor(declaration) ?? declaration);
+        }
       }
     }
+  }
+
+  const ordered = [...declarations].sort(
+    (left, right) => left.getStart(source) - right.getStart(source),
+  );
+  const occurrences = new Map();
+  for (const declaration of ordered) {
+    const key =
+      declarationName(declaration, undefined) ?? `default@${declaration.getStart(source)}`;
+    occurrences.set(key, (occurrences.get(key) ?? 0) + 1);
+  }
+  const seen = new Map();
+  for (const declaration of ordered) {
+    const key =
+      declarationName(declaration, undefined) ?? `default@${declaration.getStart(source)}`;
+    const occurrence = (seen.get(key) ?? 0) + 1;
+    seen.set(key, occurrence);
+    const suffix = occurrences.get(key) > 1 ? `#${occurrence}` : "";
+    inspectDeclaration(declaration, file, undefined, checker, failures, suffix);
+    inspected.add(declaration);
   }
 }
 
 function inspectDeclaration(node, file, owner, checker, failures, suffix = "") {
   const name = declarationName(node, owner, suffix);
   if (name !== undefined && !isCallable(node))
-    inspectDocumentation(node, file, `${name}:${ts.SyntaxKind[node.kind]}`, failures);
+    inspectDocumentation(node, file, `${name}:${ts.SyntaxKind[node.kind]}`, checker, failures);
 
   if (isCallable(node)) inspectCallable(node, file, name, checker, failures);
 
@@ -383,7 +395,7 @@ function inspectDeclaration(node, file, owner, checker, failures, suffix = "") {
   if (ts.isEnumDeclaration(node)) {
     for (const member of node.members) {
       const memberName = ts.isIdentifier(member.name) ? member.name.text : member.name.getText();
-      inspectDocumentation(member, file, `${name}.${memberName}:EnumMember`, failures);
+      inspectDocumentation(member, file, `${name}.${memberName}:EnumMember`, checker, failures);
     }
   }
 
@@ -398,6 +410,11 @@ function inspectDeclaration(node, file, owner, checker, failures, suffix = "") {
       inspectVariable(declaration, file, owner, checker, failures, node);
     }
   }
+
+  if (ts.isExportAssignment(node)) inspectExportAssignment(node, file, checker, failures);
+
+  if (ts.isTypeAliasDeclaration(node))
+    inspectTypeNode(node.type, file, name, checker, failures, node);
 
   if (ts.isPropertyDeclaration(node) || ts.isPropertySignature(node)) {
     const callable =
@@ -436,7 +453,7 @@ function inspectVariable(declaration, file, owner, checker, failures, documentat
   ) {
     inspectCallable(initializer, file, name, checker, failures, documentationNode);
   } else {
-    inspectDocumentation(declaration, file, name, failures, documentationNode);
+    inspectDocumentation(declaration, file, name, checker, failures, documentationNode);
   }
   if (initializer !== undefined && ts.isObjectLiteralExpression(initializer)) {
     for (const member of initializer.properties)
@@ -455,9 +472,49 @@ function inspectObjectMember(member, file, owner, checker, failures) {
   ) {
     inspectCallable(member, file, name, checker, failures);
   } else if (ts.isPropertyAssignment(member)) {
-    inspectDocumentation(member, file, name, failures);
+    inspectDocumentation(member, file, name, checker, failures);
     if (ts.isArrowFunction(member.initializer) || ts.isFunctionExpression(member.initializer))
       inspectCallable(member.initializer, file, name, checker, failures, member);
+    if (ts.isObjectLiteralExpression(member.initializer)) {
+      for (const nested of member.initializer.properties)
+        inspectObjectMember(nested, file, name, checker, failures);
+    }
+  }
+}
+
+function inspectExportAssignment(node, file, checker, failures) {
+  const expression = node.expression;
+  if (ts.isIdentifier(expression)) return;
+  if (ts.isArrowFunction(expression) || ts.isFunctionExpression(expression)) {
+    inspectCallable(expression, file, "default", checker, failures, node);
+  } else if (ts.isObjectLiteralExpression(expression)) {
+    inspectDocumentation(node, file, "default:ExportAssignment", checker, failures);
+    for (const member of expression.properties)
+      inspectObjectMember(member, file, "default", checker, failures);
+  } else {
+    inspectDocumentation(node, file, "default:ExportAssignment", checker, failures);
+  }
+}
+
+function inspectTypeNode(node, file, owner, checker, failures, documentationNode) {
+  if (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node)) {
+    inspectCallable(node, file, owner, checker, failures, documentationNode);
+    return;
+  }
+  if (!ts.isTypeLiteralNode(node)) return;
+  for (const member of node.members) {
+    const name = declarationName(member, owner);
+    if (name !== undefined && !isCallable(member))
+      inspectDocumentation(
+        member,
+        file,
+        `${name}:${ts.SyntaxKind[member.kind]}`,
+        checker,
+        failures,
+      );
+    if (isCallable(member)) inspectCallable(member, file, name, checker, failures, member);
+    if (ts.isPropertySignature(member) && member.type !== undefined)
+      inspectTypeNode(member.type, file, name, checker, failures, member);
   }
 }
 
@@ -469,9 +526,12 @@ function variableStatementFor(node) {
     : undefined;
 }
 
-function inspectDocumentation(node, file, name, failures, documentationNode = node) {
+function inspectDocumentation(node, file, name, checker, failures, documentationNode = node) {
   const documentation = documentationFor(documentationNode);
-  if (documentation.inherited) return;
+  if (documentation.inherited) {
+    if (hasDocumentedInheritedMember(node, checker)) return;
+    failures.push({ rule: "invalid-inheritdoc", file, name });
+  }
   if (documentation.summary === undefined) {
     failures.push({ rule: "missing-summary", file, name });
     return;
@@ -480,11 +540,39 @@ function inspectDocumentation(node, file, name, failures, documentationNode = no
     failures.push({ rule: "placeholder-summary", file, name });
 }
 
+function hasDocumentedInheritedMember(node, checker) {
+  const owner = node.parent;
+  if (
+    !ts.isClassDeclaration(owner) ||
+    owner.heritageClauses === undefined ||
+    node.name === undefined
+  )
+    return false;
+  const name = propertyName(node.name);
+  if (name === undefined) return false;
+  const memberType = checker.getTypeAtLocation(node);
+  return owner.heritageClauses
+    .flatMap((clause) => clause.types)
+    .some((heritage) => {
+      const inherited = checker.getTypeAtLocation(heritage);
+      const property = inherited.getProperty(name);
+      if (property === undefined) return false;
+      const declaration = property.valueDeclaration ?? property.declarations?.[0];
+      if (declaration === undefined || documentationFor(declaration).summary === undefined)
+        return false;
+      return checker.isTypeAssignableTo(
+        memberType,
+        checker.getTypeOfSymbolAtLocation(property, declaration),
+      );
+    });
+}
+
 function inspectCallable(node, file, name, checker, failures, documentationNode = node) {
   if (name === undefined) return;
   const identity = `${name}(${node.parameters.map((parameter) => parameter.name.getText()).join(",")})`;
   const documentation = documentationFor(documentationNode);
-  if (documentation.inherited) return;
+  if (documentation.inherited && hasDocumentedInheritedMember(node, checker)) return;
+  if (documentation.inherited) failures.push({ rule: "invalid-inheritdoc", file, name: identity });
   if (documentation.summary === undefined) {
     failures.push({ rule: "missing-summary", file, name: identity });
   } else if (!startsWithCallableVerb(documentation.summary)) {
@@ -642,10 +730,14 @@ function isPlaceholder(summary) {
 
 function compareFailures(left, right) {
   return (
-    left.rule.localeCompare(right.rule) ||
-    left.file.localeCompare(right.file) ||
-    left.name.localeCompare(right.name)
+    compareText(left.rule, right.rule) ||
+    compareText(left.file, right.file) ||
+    compareText(left.name, right.name)
   );
+}
+
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function printFailures(failures) {

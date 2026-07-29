@@ -122,11 +122,6 @@
   {
     "rule": "missing-param",
     "file": "examples/project-management/src/index.ts",
-    "name": "startProjectManagementServer(options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "examples/project-management/src/index.ts",
     "name": "StatusCountersProjection.onTaskCreated(event)(event)"
   },
   {
@@ -186,8 +181,28 @@
   },
   {
     "rule": "missing-param",
+    "file": "examples/project-management/src/index.ts",
+    "name": "startProjectManagementServer(options)(options)"
+  },
+  {
+    "rule": "missing-param",
     "file": "examples/project-management/src/load-runner.ts",
     "name": "runProjectManagementLoad(options)(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/project-management/src/index.ts",
+    "name": "PersonAggregate.enrollPerson(command)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/project-management/src/index.ts",
+    "name": "ProjectAggregate.createProject(command)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/project-management/src/index.ts",
+    "name": "TaskAggregate.createTask(command)"
   },
   {
     "rule": "missing-returns",
@@ -197,22 +212,7 @@
   {
     "rule": "missing-returns",
     "file": "examples/project-management/src/index.ts",
-    "name": "PersonAggregate.enrollPerson(command)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "examples/project-management/src/index.ts",
-    "name": "ProjectAggregate.createProject(command)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "examples/project-management/src/index.ts",
     "name": "startProjectManagementServer(options)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "examples/project-management/src/index.ts",
-    "name": "TaskAggregate.createTask(command)"
   },
   {
     "rule": "missing-returns",
@@ -222,17 +222,12 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ActivityFeedProjection:ClassDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "examples/project-management/src/index.ts",
     "name": "ActivityFeedProjection.onProjectCreated(event)"
   },
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "AssigneeWorkloadProjection:ClassDeclaration"
+    "name": "ActivityFeedProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -242,7 +237,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "AssignmentManager:ClassDeclaration"
+    "name": "AssigneeWorkloadProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -252,7 +247,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "AssignmentViewProjection:ClassDeclaration"
+    "name": "AssignmentManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -262,7 +257,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "AuditManager:ClassDeclaration"
+    "name": "AssignmentViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -272,7 +267,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "AuditViewProjection:ClassDeclaration"
+    "name": "AuditManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -282,7 +277,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "CapacityViewProjection:ClassDeclaration"
+    "name": "AuditViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -292,7 +287,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "CleanupManager:ClassDeclaration"
+    "name": "CapacityViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -302,7 +297,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "CleanupViewProjection:ClassDeclaration"
+    "name": "CleanupManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -312,7 +307,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "DueDateManager:ClassDeclaration"
+    "name": "CleanupViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -322,7 +317,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "DueDateViewProjection:ClassDeclaration"
+    "name": "DueDateManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -332,7 +327,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "NotificationManager:ClassDeclaration"
+    "name": "DueDateViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -342,12 +337,12 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "PersonAggregate.enrollPerson(command)"
+    "name": "NotificationManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "PersonIndexProjection:ClassDeclaration"
+    "name": "PersonAggregate.enrollPerson(command)"
   },
   {
     "rule": "missing-summary",
@@ -357,7 +352,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "PriorityCountersProjection:ClassDeclaration"
+    "name": "PersonIndexProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -367,7 +362,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ProgressViewProjection:ClassDeclaration"
+    "name": "PriorityCountersProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -377,12 +372,12 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ProjectAggregate.createProject(command)"
+    "name": "ProgressViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ProjectIndexProjection:ClassDeclaration"
+    "name": "ProjectAggregate.createProject(command)"
   },
   {
     "rule": "missing-summary",
@@ -392,7 +387,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ProjectLifecycleManager:ClassDeclaration"
+    "name": "ProjectIndexProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -402,7 +397,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ProjectLifecycleViewProjection:ClassDeclaration"
+    "name": "ProjectLifecycleManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -412,12 +407,12 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ProjectManagementServer:TypeAliasDeclaration"
+    "name": "ProjectLifecycleViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ProjectManagementServerOptions:InterfaceDeclaration"
+    "name": "ProjectManagementServer:TypeAliasDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -432,7 +427,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "ProjectSummaryProjection:ClassDeclaration"
+    "name": "ProjectManagementServerOptions:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -442,7 +437,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "StatusCountersProjection:ClassDeclaration"
+    "name": "ProjectSummaryProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -452,7 +447,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "StatusManager:ClassDeclaration"
+    "name": "StatusCountersProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -462,7 +457,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "SubscriptionFanoutManager:ClassDeclaration"
+    "name": "StatusManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -472,7 +467,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "SubscriptionFanoutViewProjection:ClassDeclaration"
+    "name": "SubscriptionFanoutManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -482,12 +477,12 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "TaskAggregate.createTask(command)"
+    "name": "SubscriptionFanoutViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "TaskDependencyManager:ClassDeclaration"
+    "name": "TaskAggregate.createTask(command)"
   },
   {
     "rule": "missing-summary",
@@ -497,7 +492,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "TaskDependencyViewProjection:ClassDeclaration"
+    "name": "TaskDependencyManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -507,7 +502,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "TaskIndexProjection:ClassDeclaration"
+    "name": "TaskDependencyViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -517,7 +512,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "TaskListProjection:ClassDeclaration"
+    "name": "TaskIndexProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -527,7 +522,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "TenantViewProjection:ClassDeclaration"
+    "name": "TaskListProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -537,7 +532,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "UserViewProjection:ClassDeclaration"
+    "name": "TenantViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -547,7 +542,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/index.ts",
-    "name": "WorkloadManager:ClassDeclaration"
+    "name": "UserViewProjection:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -556,8 +551,8 @@
   },
   {
     "rule": "missing-summary",
-    "file": "examples/project-management/src/load-runner.ts",
-    "name": "LatencyPercentiles:InterfaceDeclaration"
+    "file": "examples/project-management/src/index.ts",
+    "name": "WorkloadManager:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -577,12 +572,12 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/load-runner.ts",
-    "name": "ProjectManagementLoadLevel:TypeAliasDeclaration"
+    "name": "LatencyPercentiles:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/load-runner.ts",
-    "name": "ProjectManagementLoadOptions:InterfaceDeclaration"
+    "name": "ProjectManagementLoadLevel:TypeAliasDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -602,7 +597,7 @@
   {
     "rule": "missing-summary",
     "file": "examples/project-management/src/load-runner.ts",
-    "name": "ProjectManagementLoadResult:InterfaceDeclaration"
+    "name": "ProjectManagementLoadOptions:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -648,5 +643,10 @@
     "rule": "missing-summary",
     "file": "examples/project-management/src/load-runner.ts",
     "name": "ProjectManagementLoadResult.users:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/project-management/src/load-runner.ts",
+    "name": "ProjectManagementLoadResult:InterfaceDeclaration"
   }
 ]

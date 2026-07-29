@@ -7,16 +7,6 @@
   {
     "rule": "callable-summary",
     "file": "packages/client-node/src/query/entity-query.ts",
-    "name": "all(first,rest)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/client-node/src/query/entity-query.ts",
-    "name": "either(first,rest)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/client-node/src/query/entity-query.ts",
     "name": "EntityQueryBuilder.build()"
   },
   {
@@ -43,6 +33,16 @@
     "rule": "callable-summary",
     "file": "packages/client-node/src/query/entity-query.ts",
     "name": "EntityQueryBuilder.where(predicate)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "all(first,rest)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "either(first,rest)"
   },
   {
     "rule": "callable-summary",
@@ -162,6 +162,11 @@
   {
     "rule": "callable-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "SubprocessRunner(command,arguments_,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
     "name": "composeApplication(packageRoot,operations)"
   },
   {
@@ -217,16 +222,6 @@
   {
     "rule": "missing-param",
     "file": "packages/client-node/src/entity/entity-column.ts",
-    "name": "defineGeneratedEntityColumns(_schema,entries)(_schema)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/client-node/src/entity/entity-column.ts",
-    "name": "defineGeneratedEntityColumns(_schema,entries)(entries)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/client-node/src/entity/entity-column.ts",
     "name": "EntityColumn.register(schema,definition)(definition)"
   },
   {
@@ -236,23 +231,13 @@
   },
   {
     "rule": "missing-param",
-    "file": "packages/client-node/src/query/entity-query.ts",
-    "name": "all(first,rest)(first)"
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "defineGeneratedEntityColumns(_schema,entries)(_schema)"
   },
   {
     "rule": "missing-param",
-    "file": "packages/client-node/src/query/entity-query.ts",
-    "name": "all(first,rest)(rest)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/client-node/src/query/entity-query.ts",
-    "name": "either(first,rest)(first)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/client-node/src/query/entity-query.ts",
-    "name": "either(first,rest)(rest)"
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "defineGeneratedEntityColumns(_schema,entries)(entries)"
   },
   {
     "rule": "missing-param",
@@ -288,6 +273,26 @@
     "rule": "missing-param",
     "file": "packages/client-node/src/query/entity-query.ts",
     "name": "EntityQueryBuilder.where(predicate)(predicate)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "all(first,rest)(first)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "all(first,rest)(rest)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "either(first,rest)(first)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "either(first,rest)(rest)"
   },
   {
     "rule": "missing-param",
@@ -757,37 +762,17 @@
   {
     "rule": "missing-param",
     "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validBaseUrl(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
     "name": "validateAlreadyPickedUp(value,expectedShard)(expectedShard)"
   },
   {
     "rule": "missing-param",
     "file": "packages/delivery-client/src/wire/codec.ts",
     "name": "validateAlreadyPickedUp(value,expectedShard)(value)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/delivery-client/src/wire/codec.ts",
-    "name": "validBaseUrl(value)(value)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "composeApplication(packageRoot,operations)(operations)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "composeApplication(packageRoot,operations)(packageRoot)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "generateModel(packageRoot,operations)(operations)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "generateModel(packageRoot,operations)(packageRoot)"
   },
   {
     "rule": "missing-param",
@@ -893,6 +878,41 @@
     "rule": "missing-param",
     "file": "packages/proto-tools/src/generation/generator.ts",
     "name": "GenerationOperations.writeModule(output,exportName,packageName,dependencies)(packageName)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "SubprocessRunner(command,arguments_,options)(arguments_)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "SubprocessRunner(command,arguments_,options)(command)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "SubprocessRunner(command,arguments_,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "composeApplication(packageRoot,operations)(operations)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "composeApplication(packageRoot,operations)(packageRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "generateModel(packageRoot,operations)(operations)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "generateModel(packageRoot,operations)(packageRoot)"
   },
   {
     "rule": "missing-param",
@@ -1067,22 +1087,12 @@
   {
     "rule": "missing-returns",
     "file": "packages/client-node/src/entity/entity-column.ts",
-    "name": "defineGeneratedEntityColumns(_schema,entries)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/client-node/src/entity/entity-column.ts",
     "name": "EntityColumn.register(schema,definition)"
   },
   {
     "rule": "missing-returns",
-    "file": "packages/client-node/src/query/entity-query.ts",
-    "name": "all(first,rest)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/client-node/src/query/entity-query.ts",
-    "name": "either(first,rest)"
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "defineGeneratedEntityColumns(_schema,entries)"
   },
   {
     "rule": "missing-returns",
@@ -1118,6 +1128,16 @@
     "rule": "missing-returns",
     "file": "packages/client-node/src/query/entity-query.ts",
     "name": "EntityQueryBuilder.where(predicate)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "all(first,rest)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "either(first,rest)"
   },
   {
     "rule": "missing-returns",
@@ -1412,6 +1432,11 @@
   {
     "rule": "missing-returns",
     "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "SubprocessRunner(command,arguments_,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/generation/generator.ts",
     "name": "probeGenerationClaimLiveness(pid,probe)"
   },
   {
@@ -1497,16 +1522,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/client-node/src/entity/entity-column.ts",
-    "name": "defineGeneratedEntityColumns(_schema,entries)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/client-node/src/entity/entity-column.ts",
-    "name": "EntityColumnDefinition:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/client-node/src/entity/entity-column.ts",
     "name": "EntityColumnDefinition.[generatedDefinitionBrand]:PropertySignature"
   },
   {
@@ -1517,12 +1532,22 @@
   {
     "rule": "missing-summary",
     "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumnDefinition:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
     "name": "EntityColumnDefinitionEntry.comparison:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "packages/client-node/src/entity/entity-column.ts",
     "name": "EntityColumnDefinitionEntry.field:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "defineGeneratedEntityColumns(_schema,entries)"
   },
   {
     "rule": "missing-summary",
@@ -1562,11 +1587,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-client/src/client/shard-observation.ts",
-    "name": "ShardObservationStream:ClassDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/delivery-client/src/client/shard-observation.ts",
     "name": "ShardObservationStream.[Symbol.asyncIterator]()"
   },
   {
@@ -1578,6 +1598,11 @@
     "rule": "missing-summary",
     "file": "packages/delivery-client/src/client/shard-observation.ts",
     "name": "ShardObservationStream.constructor(config)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "name": "ShardObservationStream:ClassDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -1927,12 +1952,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-client/src/wire/codec.ts",
-    "name": "validateAlreadyPickedUp(value,expectedShard)"
+    "name": "validBaseUrl(value)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/delivery-client/src/wire/codec.ts",
-    "name": "validBaseUrl(value)"
+    "name": "validateAlreadyPickedUp(value,expectedShard)"
   },
   {
     "rule": "missing-summary",
@@ -1942,17 +1967,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationLockOperations.create:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/proto-tools/src/generation/generator.ts",
     "name": "GenerationLockOperations.create(path,content)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationLockOperations.inspect:PropertySignature"
+    "name": "GenerationLockOperations.create:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -1962,7 +1982,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationLockOperations.list:PropertySignature"
+    "name": "GenerationLockOperations.inspect:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -1972,7 +1992,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationLockOperations.liveness:PropertySignature"
+    "name": "GenerationLockOperations.list:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -1982,7 +2002,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationLockOperations.read:PropertySignature"
+    "name": "GenerationLockOperations.liveness:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -1992,12 +2012,17 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationLockOperations.remove:PropertySignature"
+    "name": "GenerationLockOperations.read:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
     "name": "GenerationLockOperations.remove(path)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.remove:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2012,17 +2037,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationOperations.rename:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/proto-tools/src/generation/generator.ts",
     "name": "GenerationOperations.rename(from,to)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationOperations.rewriteImports:PropertySignature"
+    "name": "GenerationOperations.rename:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2032,7 +2052,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationOperations.runBuf:PropertySignature"
+    "name": "GenerationOperations.rewriteImports:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2042,17 +2062,22 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runBuf:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
     "name": "GenerationOperations.runProcess:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationOperations.writeModule:PropertySignature"
+    "name": "GenerationOperations.writeModule(output,exportName,packageName,dependencies)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/generation/generator.ts",
-    "name": "GenerationOperations.writeModule(output,exportName,packageName,dependencies)"
+    "name": "GenerationOperations.writeModule:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2077,11 +2102,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/model/model-graph.ts",
-    "name": "ProtoOwner:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/proto-tools/src/model/model-graph.ts",
     "name": "ProtoOwner.generatedExport:PropertySignature"
   },
   {
@@ -2092,7 +2112,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/model/model-graph.ts",
-    "name": "ResolvedModel:InterfaceDeclaration"
+    "name": "ProtoOwner:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -2117,7 +2137,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/model/model-graph.ts",
-    "name": "ResolvedModelGraph:InterfaceDeclaration"
+    "name": "ResolvedModel:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -2128,6 +2148,11 @@
     "rule": "missing-summary",
     "file": "packages/proto-tools/src/model/model-graph.ts",
     "name": "ResolvedModelGraph.protoOwners:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModelGraph:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",

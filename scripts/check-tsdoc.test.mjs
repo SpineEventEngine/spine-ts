@@ -484,4 +484,136 @@ describe("check-tsdoc", () => {
     track(repoRoot);
     expect(runChecker(repoRoot).status).toBe(0);
   });
+
+  it("rejects unverified inheritDoc while accepting a documented implemented member", () => {
+    const invalidRoot = createFixture();
+    writeSource(
+      invalidRoot,
+      "packages/demo/src/index.ts",
+      "/** @inheritDoc */\nexport function finds(value: string): string { return value; }\n",
+    );
+    track(invalidRoot);
+    const invalid = runChecker(invalidRoot);
+    expect(invalid.status).toBe(1);
+    expect(invalid.stderr).toContain("invalid-inheritdoc");
+    expect(invalid.stderr).toContain("missing-summary");
+    expect(invalid.stderr).toContain("missing-param");
+    expect(invalid.stderr).toContain("missing-returns");
+
+    const validRoot = createFixture();
+    writeSource(
+      validRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Describes a contract. */",
+        "export interface Contract {",
+        "  /** Finds a value.\n   * @param value The lookup value.\n   * @returns The found value.\n   */",
+        "  finds(value: string): string;",
+        "}",
+        "/** Implements the documented contract. */",
+        "export class Implementation implements Contract {",
+        "  /** @inheritDoc */",
+        "  finds(value: string): string { return value; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(validRoot);
+    expect(runChecker(validRoot).status).toBe(0);
+  });
+
+  it("checks default expression exports and recursive object and type-literal APIs", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/default-arrow.ts",
+      ["export default (value: string): string => value;", ""].join("\n"),
+    );
+    writeSource(
+      repoRoot,
+      "packages/demo/src/default-object.ts",
+      [
+        "export default { nested: { maps: (value: string): string => value } };",
+        "export type Mapper = (value: string) => string;",
+        "export type Factory = new (value: string) => Mapper;",
+        "export type Contract = { nested: { run: (value: string) => string; create: new (value: string) => Mapper } };",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("default");
+    expect(result.stderr).toContain("default.nested.maps");
+    expect(result.stderr).toContain("Mapper");
+    expect(result.stderr).toContain("Factory");
+    expect(result.stderr).toContain("Contract.nested.run");
+    expect(result.stderr).toContain("Contract.nested.create");
+  });
+
+  it("accepts a documented local callable exported through a default binding", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Finds a value.\n * @param value The lookup value.\n * @returns The found value.\n */",
+        "const finds = (value: string): string => value;",
+        "export default finds;",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("gives indirect overloads and merged members distinct debt identities", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "function finds(value: string): string;",
+        "function finds(value: number): string;",
+        "function finds(value: string | number): string { return String(value); }",
+        "interface Contract { run: string; }",
+        "interface Contract { run: string; }",
+        "export { finds, Contract };",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("finds#1");
+    expect(result.stderr).toContain("finds#2");
+    expect(result.stderr).toContain("finds#3");
+    expect(result.stderr).toContain("Contract#1.run");
+    expect(result.stderr).toContain("Contract#2.run");
+
+    writeDebt(repoRoot, [
+      {
+        rule: "missing-summary",
+        file: "packages/demo/src/index.ts",
+        name: "Contract#1:InterfaceDeclaration",
+      },
+    ]);
+    track(repoRoot);
+    const withOneDebtEntry = runChecker(repoRoot);
+    expect(withOneDebtEntry.status).toBe(1);
+    expect(withOneDebtEntry.stderr).toContain("Contract#2:InterfaceDeclaration");
+  });
+
+  it("orders non-ASCII diagnostics by ordinal code point", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      "export const é = 1;\nexport const z = 1;\n",
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr.indexOf(":: z")).toBeLessThan(result.stderr.indexOf(":: é"));
+  });
 });

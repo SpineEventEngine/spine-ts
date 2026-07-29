@@ -126,3 +126,17 @@ but not runtime behavior or a public package contract.
 - Existing implementer profile was explicitly configured as `gpt-5.6-terra`
   with medium reasoning. This child surface does not expose actual runtime
   model/reasoning introspection; no visible fallback or mismatch was exposed.
+
+## Wave 1 Correction Evidence
+
+- Accepted review findings are implemented: verified `@inheritDoc`, default
+  expression and binding exports, recursive object/type-literal APIs, callable
+  and constructor aliases, indirect overload/declaration-merge identities,
+  duplicate-observation protection, and ordinal non-ASCII ordering.
+- Focused fixtures pass 27/27, including a red-then-green documented local
+  binding exported as default without duplicate export-statement docs.
+- Exact corrected debt is D 529, E 205, F 1,679, G 473, H 437, K 49, L 39, M
+  130, and N 79: 3,620 total.
+- Independent focused tests, direct checker, pinned Prettier, and
+  `git diff --check` pass. Implementer evidence also records scoped ESLint,
+  tooling typecheck, and canonical `pnpm lint` passes.

@@ -2,56 +2,6 @@
   {
     "rule": "callable-summary",
     "file": "packages/core/src/index.ts",
-    "name": "checkValid(schema,message)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "createRejectionThrowable(schema,input)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "createSpineCoreRegistry()"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "createValidationError(violations)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "deriveTypeUrl(schema,options)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "getTypeUrlPrefix(schema,fallbackPrefix)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "isRejectionThrowable(value)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "packAny(schema,message,options)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "packCommand(input)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "packEvent(input)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
     "name": "RejectionThrowable.messageData()"
   },
   {
@@ -177,6 +127,66 @@
   {
     "rule": "callable-summary",
     "file": "packages/core/src/index.ts",
+    "name": "ValidationException.asMessage()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "ValidationException.constructor(messageData)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "checkValid(schema,message)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "createRejectionThrowable(schema,input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "createSpineCoreRegistry()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "createValidationError(violations)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "deriveTypeUrl(schema,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "getTypeUrlPrefix(schema,fallbackPrefix)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "isRejectionThrowable(value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "packCommand(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "packEvent(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
     "name": "unpackAny(packed,schema)"
   },
   {
@@ -193,16 +203,6 @@
     "rule": "callable-summary",
     "file": "packages/core/src/index.ts",
     "name": "validateTransition(request,rules)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "ValidationException.asMessage()"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/core/src/index.ts",
-    "name": "ValidationException.constructor(messageData)"
   },
   {
     "rule": "callable-summary",
@@ -227,17 +227,17 @@
   {
     "rule": "callable-summary",
     "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityHistoryConformanceAdapter.reopen(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
     "name": "assertCurrentQueryConformance(adapter)"
   },
   {
     "rule": "callable-summary",
     "file": "packages/storage/src/entity/history-conformance.ts",
     "name": "assertEntityHistoryConformance(adapter)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/storage/src/entity/history-conformance.ts",
-    "name": "EntityHistoryConformanceAdapter.reopen(input)"
   },
   {
     "rule": "callable-summary",
@@ -283,6 +283,11 @@
     "rule": "callable-summary",
     "file": "packages/storage/src/event/event-store.ts",
     "name": "EventStore.read(query)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "OnEventAccepted(event)"
   },
   {
     "rule": "callable-summary",
@@ -452,22 +457,12 @@
   {
     "rule": "callable-summary",
     "file": "packages/transport/src/index.ts",
-    "name": "createTransportSubscription(input)"
+    "name": "PublishTransportHandler(operation)"
   },
   {
     "rule": "callable-summary",
     "file": "packages/transport/src/index.ts",
-    "name": "createTransportTopic(input)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/transport/src/index.ts",
-    "name": "isTransportOperationKind(operation,signalKind)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "packages/transport/src/index.ts",
-    "name": "isTransportTopicKind(topic,signalKind)"
+    "name": "RequestTransportHandler(operation)"
   },
   {
     "rule": "callable-summary",
@@ -491,83 +486,28 @@
   },
   {
     "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportSubscription(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportTopic(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportOperationKind(operation,signalKind)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportTopicKind(topic,signalKind)"
+  },
+  {
+    "rule": "callable-summary",
     "file": "packages/transport/src/zeromq/signal-transport.ts",
     "name": "createZeroMqTransport(config,options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "checkValid(schema,message)(message)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "checkValid(schema,message)(schema)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "createRejectionThrowable(schema,input)(input)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "createRejectionThrowable(schema,input)(schema)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "createValidationError(violations)(violations)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "deriveTypeUrl(schema,options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "deriveTypeUrl(schema,options)(schema)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "getTypeUrlPrefix(schema,fallbackPrefix)(fallbackPrefix)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "getTypeUrlPrefix(schema,fallbackPrefix)(schema)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "isRejectionThrowable(value)(value)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "packAny(schema,message,options)(message)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "packAny(schema,message,options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "packAny(schema,message,options)(schema)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "packCommand(input)(input)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "packEvent(input)(input)"
   },
   {
     "rule": "missing-param",
@@ -677,6 +617,86 @@
   {
     "rule": "missing-param",
     "file": "packages/core/src/index.ts",
+    "name": "ValidationException.constructor(messageData)(messageData)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "checkValid(schema,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "checkValid(schema,message)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "createRejectionThrowable(schema,input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "createRejectionThrowable(schema,input)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "createValidationError(violations)(violations)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "deriveTypeUrl(schema,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "deriveTypeUrl(schema,options)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "getTypeUrlPrefix(schema,fallbackPrefix)(fallbackPrefix)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "getTypeUrlPrefix(schema,fallbackPrefix)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "isRejectionThrowable(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packCommand(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packEvent(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
     "name": "unpackAny(packed,schema)(packed)"
   },
   {
@@ -713,11 +733,6 @@
     "rule": "missing-param",
     "file": "packages/core/src/index.ts",
     "name": "validateTransition(request,rules)(rules)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/core/src/index.ts",
-    "name": "ValidationException.constructor(messageData)(messageData)"
   },
   {
     "rule": "missing-param",
@@ -817,22 +832,22 @@
   {
     "rule": "missing-param",
     "file": "packages/storage/src/entity/history-conformance.ts",
-    "name": "assertCurrentQueryConformance(adapter)(adapter)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/storage/src/entity/history-conformance.ts",
-    "name": "assertEntityHistoryConformance(adapter)(adapter)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/storage/src/entity/history-conformance.ts",
     "name": "EntityHistoryConformanceAdapter.create(input)(input)"
   },
   {
     "rule": "missing-param",
     "file": "packages/storage/src/entity/history-conformance.ts",
     "name": "EntityHistoryConformanceAdapter.reopen(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "assertCurrentQueryConformance(adapter)(adapter)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "assertEntityHistoryConformance(adapter)(adapter)"
   },
   {
     "rule": "missing-param",
@@ -878,6 +893,11 @@
     "rule": "missing-param",
     "file": "packages/storage/src/event/event-store.ts",
     "name": "EventStore.read(query)(query)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "OnEventAccepted(event)(event)"
   },
   {
     "rule": "missing-param",
@@ -1252,32 +1272,12 @@
   {
     "rule": "missing-param",
     "file": "packages/transport/src/index.ts",
-    "name": "createTransportSubscription(input)(input)"
+    "name": "PublishTransportHandler(operation)(operation)"
   },
   {
     "rule": "missing-param",
     "file": "packages/transport/src/index.ts",
-    "name": "createTransportTopic(input)(input)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/transport/src/index.ts",
-    "name": "isTransportOperationKind(operation,signalKind)(operation)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/transport/src/index.ts",
-    "name": "isTransportOperationKind(operation,signalKind)(signalKind)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/transport/src/index.ts",
-    "name": "isTransportTopicKind(topic,signalKind)(signalKind)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/transport/src/index.ts",
-    "name": "isTransportTopicKind(topic,signalKind)(topic)"
+    "name": "RequestTransportHandler(operation)(operation)"
   },
   {
     "rule": "missing-param",
@@ -1308,6 +1308,36 @@
     "rule": "missing-param",
     "file": "packages/transport/src/index.ts",
     "name": "SignalTransport.subscribe(subscription,handler)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportSubscription(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportTopic(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportOperationKind(operation,signalKind)(operation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportOperationKind(operation,signalKind)(signalKind)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportTopicKind(topic,signalKind)(signalKind)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportTopicKind(topic,signalKind)(topic)"
   },
   {
     "rule": "missing-param",
@@ -1398,56 +1428,6 @@
     "rule": "missing-param",
     "file": "packages/transport/src/zeromq/signal-transport.ts",
     "name": "zeroMqSocketAccess.sendRequest(socket,frames)(socket)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "checkValid(schema,message)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "createRejectionThrowable(schema,input)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "createSpineCoreRegistry()"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "createValidationError(violations)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "deriveTypeUrl(schema,options)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "getTypeUrlPrefix(schema,fallbackPrefix)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "isRejectionThrowable(value)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "packAny(schema,message,options)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "packCommand(input)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "packEvent(input)"
   },
   {
     "rule": "missing-returns",
@@ -1577,6 +1557,66 @@
   {
     "rule": "missing-returns",
     "file": "packages/core/src/index.ts",
+    "name": "ValidationException.asMessage()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "ValidationException.constructor(messageData)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "checkValid(schema,message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "createRejectionThrowable(schema,input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "createSpineCoreRegistry()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "createValidationError(violations)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "deriveTypeUrl(schema,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "getTypeUrlPrefix(schema,fallbackPrefix)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "isRejectionThrowable(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "packCommand(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "packEvent(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
     "name": "unpackAny(packed,schema)"
   },
   {
@@ -1593,16 +1633,6 @@
     "rule": "missing-returns",
     "file": "packages/core/src/index.ts",
     "name": "validateTransition(request,rules)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "ValidationException.asMessage()"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/core/src/index.ts",
-    "name": "ValidationException.constructor(messageData)"
   },
   {
     "rule": "missing-returns",
@@ -1668,6 +1698,11 @@
     "rule": "missing-returns",
     "file": "packages/storage/src/event/event-store.ts",
     "name": "EventStore.read(query)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "OnEventAccepted(event)"
   },
   {
     "rule": "missing-returns",
@@ -1932,6 +1967,31 @@
   {
     "rule": "missing-returns",
     "file": "packages/transport/src/index.ts",
+    "name": "PublishTransportHandler(operation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "RequestTransportHandler(operation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.request(operation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.respond(subscription,handler)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.subscribe(subscription,handler)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
     "name": "createTransportSubscription(input)"
   },
   {
@@ -1948,21 +2008,6 @@
     "rule": "missing-returns",
     "file": "packages/transport/src/index.ts",
     "name": "isTransportTopicKind(topic,signalKind)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/transport/src/index.ts",
-    "name": "SignalTransport.request(operation)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/transport/src/index.ts",
-    "name": "SignalTransport.respond(subscription,handler)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/transport/src/index.ts",
-    "name": "SignalTransport.subscribe(subscription,handler)"
   },
   {
     "rule": "missing-returns",
@@ -2077,12 +2122,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/entity/entity-history-storage.ts",
-    "name": "EntityStateHistoryStorage:InterfaceDeclaration"
+    "name": "EntityStateHistoryStorage.[entityStateHistoryState]:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/entity/entity-history-storage.ts",
-    "name": "EntityStateHistoryStorage.[entityStateHistoryState]:PropertySignature"
+    "name": "EntityStateHistoryStorage:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -2127,12 +2172,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/entity/history-conformance.ts",
-    "name": "EntityHistoryConformanceAdapter.create:PropertySignature"
+    "name": "EntityHistoryConformanceAdapter.create(input)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/entity/history-conformance.ts",
-    "name": "EntityHistoryConformanceAdapter.create(input)"
+    "name": "EntityHistoryConformanceAdapter.create:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2162,17 +2207,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/memory/in-memory-entity-history.ts",
-    "name": "EntityIdCodec.clone:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
     "name": "EntityIdCodec.clone(id)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/memory/in-memory-entity-history.ts",
-    "name": "EntityIdCodec.key:PropertySignature"
+    "name": "EntityIdCodec.clone:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2182,7 +2222,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/memory/in-memory-entity-history.ts",
-    "name": "EntityStorageInput:InterfaceDeclaration"
+    "name": "EntityIdCodec.key:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2208,6 +2248,11 @@
     "rule": "missing-summary",
     "file": "packages/storage/src/memory/in-memory-entity-history.ts",
     "name": "EntityStorageInput.storageKey:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -2272,22 +2317,22 @@
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/memory/in-memory-entity-history.ts",
-    "name": "InMemoryMaintenance.afterSelection:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
     "name": "InMemoryMaintenance.afterSelection()"
   },
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/memory/in-memory-entity-history.ts",
-    "name": "InMemoryMaintenance.onChunk:PropertySignature"
+    "name": "InMemoryMaintenance.afterSelection:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "packages/storage/src/memory/in-memory-entity-history.ts",
     "name": "InMemoryMaintenance.onChunk()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryMaintenance.onChunk:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2487,16 +2532,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/transport/src/zeromq/adapter-config.ts",
-    "name": "createZeroMqAdapterConfig(input)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/transport/src/zeromq/adapter-config.ts",
-    "name": "ZeroMqAdapterConfig:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/transport/src/zeromq/adapter-config.ts",
     "name": "ZeroMqAdapterConfig.adapterIdentity:PropertySignature"
   },
   {
@@ -2517,7 +2552,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/transport/src/zeromq/adapter-config.ts",
-    "name": "ZeroMqAdapterConfigInput:InterfaceDeclaration"
+    "name": "ZeroMqAdapterConfig:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -2532,12 +2567,22 @@
   {
     "rule": "missing-summary",
     "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfigInput:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
     "name": "ZeroMqNativeModule:TypeAliasDeclaration"
   },
   {
     "rule": "missing-summary",
     "file": "packages/transport/src/zeromq/adapter-config.ts",
     "name": "ZeroMqTransportScope:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "createZeroMqAdapterConfig(input)"
   },
   {
     "rule": "missing-summary",

@@ -312,12 +312,12 @@
   {
     "rule": "missing-returns",
     "file": "packages/delivery-server/src/core/in-memory-delivery-core.ts",
-    "name": "createInMemoryDeliveryServerCore(options)"
+    "name": "InMemoryDeliveryServerCoreOptions.now()"
   },
   {
     "rule": "missing-returns",
     "file": "packages/delivery-server/src/core/in-memory-delivery-core.ts",
-    "name": "InMemoryDeliveryServerCoreOptions.now()"
+    "name": "createInMemoryDeliveryServerCore(options)"
   },
   {
     "rule": "missing-returns",
@@ -522,11 +522,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/admin/admin-service.ts",
-    "name": "AdminPublisher:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/delivery-server/src/admin/admin-service.ts",
     "name": "AdminPublisher.close()"
   },
   {
@@ -548,6 +543,11 @@
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/admin/admin-service.ts",
     "name": "AdminPublisher.subscriberCount:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-server/src/admin/admin-service.ts",
+    "name": "AdminPublisher:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -607,11 +607,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/core/in-memory-delivery-state.ts",
-    "name": "ShardRecord:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/delivery-server/src/core/in-memory-delivery-state.ts",
     "name": "ShardRecord.shard:PropertySignature"
   },
   {
@@ -623,6 +618,11 @@
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/core/in-memory-delivery-state.ts",
     "name": "ShardRecord.worker:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-server/src/core/in-memory-delivery-state.ts",
+    "name": "ShardRecord:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -727,16 +727,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/server/assembly.ts",
-    "name": "createDeliveryAssembly(configuration)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/delivery-server/src/server/assembly.ts",
-    "name": "DeliveryAssembly:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/delivery-server/src/server/assembly.ts",
     "name": "DeliveryAssembly.admin:PropertySignature"
   },
   {
@@ -761,8 +751,13 @@
   },
   {
     "rule": "missing-summary",
-    "file": "packages/delivery-server/src/server/config.ts",
-    "name": "DeliveryConfiguration:InterfaceDeclaration"
+    "file": "packages/delivery-server/src/server/assembly.ts",
+    "name": "DeliveryAssembly:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-server/src/server/assembly.ts",
+    "name": "createDeliveryAssembly(configuration)"
   },
   {
     "rule": "missing-summary",
@@ -787,17 +782,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/server/config.ts",
+    "name": "DeliveryConfiguration:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-server/src/server/config.ts",
     "name": "resolveConfiguration(options)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/delivery-server/src/server/shutdown.ts",
-    "name": "DeliveryServerShutdownResources:InterfaceDeclaration"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/delivery-server/src/server/shutdown.ts",
-    "name": "DeliveryServerShutdownResources.closeAdmin:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -807,7 +797,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/server/shutdown.ts",
-    "name": "DeliveryServerShutdownResources.closeAdmission:PropertySignature"
+    "name": "DeliveryServerShutdownResources.closeAdmin:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -817,7 +807,7 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/server/shutdown.ts",
-    "name": "DeliveryServerShutdownResources.closeNetwork:PropertySignature"
+    "name": "DeliveryServerShutdownResources.closeAdmission:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -827,12 +817,22 @@
   {
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/server/shutdown.ts",
-    "name": "DeliveryServerShutdownResources.markNotServing:PropertySignature"
+    "name": "DeliveryServerShutdownResources.closeNetwork:PropertySignature"
   },
   {
     "rule": "missing-summary",
     "file": "packages/delivery-server/src/server/shutdown.ts",
     "name": "DeliveryServerShutdownResources.markNotServing()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-server/src/server/shutdown.ts",
+    "name": "DeliveryServerShutdownResources.markNotServing:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-server/src/server/shutdown.ts",
+    "name": "DeliveryServerShutdownResources:InterfaceDeclaration"
   },
   {
     "rule": "missing-summary",
@@ -912,26 +912,6 @@
   {
     "rule": "missing-summary",
     "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
-    "name": "entityHistorySchema"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
-    "name": "entityHistorySchema.columnNullable"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
-    "name": "entityHistorySchema.engine"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
-    "name": "entityHistorySchema.tables"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
     "name": "MysqlEntityConnectionProvider.acquire()"
   },
   {
@@ -998,6 +978,26 @@
     "rule": "missing-summary",
     "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
     "name": "MysqlEntityStorageHandle.states:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "name": "entityHistorySchema"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "name": "entityHistorySchema.columnNullable"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "name": "entityHistorySchema.engine"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage-rdbms/src/mysql/entity-history.ts",
+    "name": "entityHistorySchema.tables"
   },
   {
     "rule": "missing-summary",

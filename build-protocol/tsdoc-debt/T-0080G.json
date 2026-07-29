@@ -31,6 +31,11 @@
   },
   {
     "rule": "callable-summary",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowRandom(length)"
+  },
+  {
+    "rule": "callable-summary",
     "file": "packages/auth/src/oidc/index.ts",
     "name": "OidcFlow.callback(input)"
   },
@@ -47,12 +52,17 @@
   {
     "rule": "callable-summary",
     "file": "packages/auth/src/providers/index.ts",
-    "name": "createGoogleProvider(options)"
+    "name": "OidcProviderOptions.clock()"
   },
   {
     "rule": "callable-summary",
     "file": "packages/auth/src/providers/index.ts",
-    "name": "OidcProviderOptions.clock()"
+    "name": "ProviderFetch(input,init)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "createGoogleProvider(options)"
   },
   {
     "rule": "callable-summary",
@@ -77,12 +87,22 @@
   {
     "rule": "callable-summary",
     "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionRandom(length)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/auth/src/sessions/opaque.ts",
     "name": "OpaqueSessions.close()"
   },
   {
     "rule": "callable-summary",
     "file": "packages/auth/src/sessions/opaque.ts",
     "name": "OpaqueSessions.rotate(credentialInput)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionRandom(length)"
   },
   {
     "rule": "callable-summary",
@@ -136,6 +156,11 @@
   },
   {
     "rule": "callable-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionUpdateSink(update)"
+  },
+  {
+    "rule": "callable-summary",
     "file": "packages/client-react/src/index.ts",
     "name": "SpineClientProvider({ request, children })"
   },
@@ -176,6 +201,11 @@
   },
   {
     "rule": "callable-summary",
+    "file": "packages/client-web/src/client/browser-session.ts",
+    "name": "OnBrowserSessionContext(request)"
+  },
+  {
+    "rule": "callable-summary",
     "file": "packages/client-web/src/client/client.ts",
     "name": "Client.asGuest()"
   },
@@ -213,6 +243,11 @@
     "rule": "callable-summary",
     "file": "packages/client-web/src/client/client.ts",
     "name": "ClientTransport.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "OnRequestMetadata()"
   },
   {
     "rule": "callable-summary",
@@ -292,11 +327,6 @@
   {
     "rule": "missing-param",
     "file": "packages/auth/src/native/index.ts",
-    "name": "createNativeGatewayServices(options)(options)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "packages/auth/src/native/index.ts",
     "name": "NativeGatewayRequestContext.credential(context)(context)"
   },
   {
@@ -371,6 +401,11 @@
   },
   {
     "rule": "missing-param",
+    "file": "packages/auth/src/native/index.ts",
+    "name": "createNativeGatewayServices(options)(options)"
+  },
+  {
+    "rule": "missing-param",
     "file": "packages/auth/src/oidc/contracts.ts",
     "name": "ApplicationSessionIssuer.issue(principal,signal)(principal)"
   },
@@ -388,6 +423,11 @@
     "rule": "missing-param",
     "file": "packages/auth/src/oidc/contracts.ts",
     "name": "IdentityMapping.resolve(identity,signal)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowRandom(length)(length)"
   },
   {
     "rule": "missing-param",
@@ -413,6 +453,16 @@
     "rule": "missing-param",
     "file": "packages/auth/src/oidc/index.ts",
     "name": "OidcFlow.start(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "ProviderFetch(input,init)(init)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "ProviderFetch(input,init)(input)"
   },
   {
     "rule": "missing-param",
@@ -462,6 +512,11 @@
   {
     "rule": "missing-param",
     "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionRandom(length)(length)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/opaque.ts",
     "name": "OpaqueSessions.constructor(options)(options)"
   },
   {
@@ -483,6 +538,11 @@
     "rule": "missing-param",
     "file": "packages/auth/src/sessions/opaque.ts",
     "name": "OpaqueSessions.rotate(credentialInput)(credentialInput)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionRandom(length)(length)"
   },
   {
     "rule": "missing-param",
@@ -548,6 +608,16 @@
     "rule": "missing-param",
     "file": "packages/auth/src/subscriptions/index.ts",
     "name": "InMemorySubscriptionBindings.purgeExpired(nowMs)(nowMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "OnBackendSubscription(envelope,signal)(envelope)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "OnBackendSubscription(envelope,signal)(signal)"
   },
   {
     "rule": "missing-param",
@@ -623,6 +693,11 @@
     "rule": "missing-param",
     "file": "packages/auth/src/subscriptions/index.ts",
     "name": "SubscriptionGatewayOptions.fingerprint(principal)(principal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionUpdateSink(update)(update)"
   },
   {
     "rule": "missing-param",
@@ -723,6 +798,11 @@
     "rule": "missing-param",
     "file": "packages/client-web/src/client/browser-session.ts",
     "name": "BrowserSession.replaceBearer(token)(token)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-web/src/client/browser-session.ts",
+    "name": "OnBrowserSessionContext(request)(request)"
   },
   {
     "rule": "missing-param",
@@ -882,11 +962,6 @@
   {
     "rule": "missing-returns",
     "file": "packages/auth/src/native/index.ts",
-    "name": "createNativeGatewayServices(options)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/auth/src/native/index.ts",
     "name": "NativeGatewayRequestContext.credential(context)"
   },
   {
@@ -921,6 +996,11 @@
   },
   {
     "rule": "missing-returns",
+    "file": "packages/auth/src/native/index.ts",
+    "name": "createNativeGatewayServices(options)"
+  },
+  {
+    "rule": "missing-returns",
     "file": "packages/auth/src/oidc/contracts.ts",
     "name": "ApplicationSessionIssuer.issue(principal,signal)"
   },
@@ -933,6 +1013,11 @@
     "rule": "missing-returns",
     "file": "packages/auth/src/oidc/contracts.ts",
     "name": "OidcFlowClock.now()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/oidc/contracts.ts",
+    "name": "OidcFlowRandom(length)"
   },
   {
     "rule": "missing-returns",
@@ -962,6 +1047,16 @@
   {
     "rule": "missing-returns",
     "file": "packages/auth/src/providers/index.ts",
+    "name": "OidcProviderOptions.clock()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
+    "name": "ProviderFetch(input,init)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/providers/index.ts",
     "name": "createGitHubProvider(options)"
   },
   {
@@ -978,11 +1073,6 @@
     "rule": "missing-returns",
     "file": "packages/auth/src/providers/index.ts",
     "name": "discoverOidcProvider(options)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "packages/auth/src/providers/index.ts",
-    "name": "OidcProviderOptions.clock()"
   },
   {
     "rule": "missing-returns",
@@ -1022,6 +1112,11 @@
   {
     "rule": "missing-returns",
     "file": "packages/auth/src/sessions/opaque.ts",
+    "name": "OpaqueSessionRandom(length)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/opaque.ts",
     "name": "OpaqueSessions.constructor(options)"
   },
   {
@@ -1048,6 +1143,11 @@
     "rule": "missing-returns",
     "file": "packages/auth/src/sessions/signed.ts",
     "name": "SignedSessionClock.now()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/auth/src/sessions/signed.ts",
+    "name": "SignedSessionRandom(length)"
   },
   {
     "rule": "missing-returns",
@@ -1221,6 +1321,11 @@
   },
   {
     "rule": "missing-returns",
+    "file": "packages/client-web/src/client/browser-session.ts",
+    "name": "OnBrowserSessionContext(request)"
+  },
+  {
+    "rule": "missing-returns",
     "file": "packages/client-web/src/client/client.ts",
     "name": "Client.asGuest()"
   },
@@ -1273,6 +1378,11 @@
     "rule": "missing-returns",
     "file": "packages/client-web/src/client/client.ts",
     "name": "EntitySubscriptionOptions.authoritativeQuery()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-web/src/client/client.ts",
+    "name": "OnRequestMetadata()"
   },
   {
     "rule": "missing-returns",
@@ -1882,6 +1992,11 @@
   {
     "rule": "missing-summary",
     "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "OnBackendSubscription(envelope,signal)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
     "name": "OnBackendSubscription:TypeAliasDeclaration"
   },
   {
@@ -1893,6 +2008,11 @@
     "rule": "missing-summary",
     "file": "packages/auth/src/subscriptions/index.ts",
     "name": "PublicSubscriptionWire.kind:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/auth/src/subscriptions/index.ts",
+    "name": "SubscriptionBindingTransition.kind:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -1923,11 +2043,6 @@
     "rule": "missing-summary",
     "file": "packages/auth/src/subscriptions/index.ts",
     "name": "SubscriptionBindings.reserveCapacity()"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "packages/auth/src/subscriptions/index.ts",
-    "name": "SubscriptionBindingTransition.kind:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2022,12 +2137,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/auth/src/subscriptions/index.ts",
-    "name": "SubscriptionGatewayOptions.fingerprint:PropertySignature"
+    "name": "SubscriptionGatewayOptions.fingerprint(principal)"
   },
   {
     "rule": "missing-summary",
     "file": "packages/auth/src/subscriptions/index.ts",
-    "name": "SubscriptionGatewayOptions.fingerprint(principal)"
+    "name": "SubscriptionGatewayOptions.fingerprint:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -2177,12 +2292,12 @@
   {
     "rule": "missing-summary",
     "file": "packages/client-web/src/client/client.ts",
-    "name": "EntitySubscriptionOptions.authoritativeQuery:PropertySignature"
+    "name": "EntitySubscriptionOptions.authoritativeQuery()"
   },
   {
     "rule": "missing-summary",
     "file": "packages/client-web/src/client/client.ts",
-    "name": "EntitySubscriptionOptions.authoritativeQuery()"
+    "name": "EntitySubscriptionOptions.authoritativeQuery:PropertySignature"
   },
   {
     "rule": "missing-summary",

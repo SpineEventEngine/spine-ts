@@ -197,12 +197,12 @@
   {
     "rule": "missing-summary",
     "file": "examples/chat-web/src/index.tsx",
-    "name": "ChatBrowserAppProps.createMessageId:PropertySignature"
+    "name": "ChatBrowserAppProps.createMessageId()"
   },
   {
     "rule": "missing-summary",
     "file": "examples/chat-web/src/index.tsx",
-    "name": "ChatBrowserAppProps.createMessageId()"
+    "name": "ChatBrowserAppProps.createMessageId:PropertySignature"
   },
   {
     "rule": "missing-summary",
