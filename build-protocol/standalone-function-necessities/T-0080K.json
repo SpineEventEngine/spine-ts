@@ -1,7 +1,7 @@
 [
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/browser-fixture.tsx",
+    "file": "examples/chat/web/src/browser-fixture.tsx",
     "kind": "function-declaration",
     "identity": "asyncQueue()#1",
     "name": "asyncQueue",
@@ -10,7 +10,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/browser-fixture.tsx",
+    "file": "examples/chat/web/src/browser-fixture.tsx",
     "kind": "function-declaration",
     "identity": "response()#1",
     "name": "response",
@@ -19,7 +19,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/index.tsx",
+    "file": "examples/chat/web/src/index.tsx",
     "kind": "function-declaration",
     "identity": "ChatBrowserApp()#1",
     "name": "ChatBrowserApp",
@@ -28,7 +28,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/index.tsx",
+    "file": "examples/chat/web/src/index.tsx",
     "kind": "function-declaration",
     "identity": "ChatRoom()#1",
     "name": "ChatRoom",
@@ -37,7 +37,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/index.tsx",
+    "file": "examples/chat/web/src/index.tsx",
     "kind": "function-declaration",
     "identity": "createRoomQuery()#1",
     "name": "createRoomQuery",
@@ -46,7 +46,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/index.tsx",
+    "file": "examples/chat/web/src/index.tsx",
     "kind": "function-declaration",
     "identity": "createRoomTopic()#1",
     "name": "createRoomTopic",
@@ -55,7 +55,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/index.tsx",
+    "file": "examples/chat/web/src/index.tsx",
     "kind": "function-declaration",
     "identity": "defaultMessageId()#1",
     "name": "defaultMessageId",
@@ -64,7 +64,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/index.tsx",
+    "file": "examples/chat/web/src/index.tsx",
     "kind": "function-declaration",
     "identity": "lifecycleNotice()#1",
     "name": "lifecycleNotice",
@@ -73,7 +73,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/index.tsx",
+    "file": "examples/chat/web/src/index.tsx",
     "kind": "function-declaration",
     "identity": "postMessage()#1",
     "name": "postMessage",
@@ -82,7 +82,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat-web/src/index.tsx",
+    "file": "examples/chat/web/src/index.tsx",
     "kind": "function-declaration",
     "identity": "roomRows()#1",
     "name": "roomRows",
@@ -91,7 +91,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/chat-policy.ts",
+    "file": "examples/chat/app/src/chat-policy.ts",
     "kind": "function-declaration",
     "identity": "guaranteesAuthorizedRoom()#1",
     "name": "guaranteesAuthorizedRoom",
@@ -100,7 +100,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/chat-policy.ts",
+    "file": "examples/chat/app/src/chat-policy.ts",
     "kind": "function-declaration",
     "identity": "roomIsAuthorized()#1",
     "name": "roomIsAuthorized",
@@ -109,7 +109,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/index.ts",
+    "file": "examples/chat/app/src/index.ts",
     "kind": "function-declaration",
     "identity": "createChatContext()#1",
     "name": "createChatContext",
@@ -118,7 +118,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/index.ts",
+    "file": "examples/chat/app/src/index.ts",
     "kind": "function-declaration",
     "identity": "packUserId()#1",
     "name": "packUserId",
@@ -127,7 +127,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/index.ts",
+    "file": "examples/chat/app/src/index.ts",
     "kind": "function-declaration",
     "identity": "startChatServer()#1",
     "name": "startChatServer",
@@ -136,7 +136,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/index.ts",
+    "file": "examples/chat/app/src/index.ts",
     "kind": "function-declaration",
     "identity": "unpackChatValue()#1",
     "name": "unpackChatValue",
@@ -145,7 +145,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/message-validation.ts",
+    "file": "examples/chat/app/src/message-validation.ts",
     "kind": "function-declaration",
     "identity": "assertIdentifier()#1",
     "name": "assertIdentifier",
@@ -154,7 +154,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/message-validation.ts",
+    "file": "examples/chat/app/src/message-validation.ts",
     "kind": "function-declaration",
     "identity": "assertText()#1",
     "name": "assertText",
@@ -163,7 +163,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/message-validation.ts",
+    "file": "examples/chat/app/src/message-validation.ts",
     "kind": "function-declaration",
     "identity": "assertTimestamp()#1",
     "name": "assertTimestamp",
@@ -172,7 +172,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/chat/src/message-validation.ts",
+    "file": "examples/chat/app/src/message-validation.ts",
     "kind": "function-declaration",
     "identity": "validateChatMessageInput()#1",
     "name": "validateChatMessageInput",

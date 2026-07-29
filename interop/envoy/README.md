@@ -59,4 +59,4 @@ as certificates, hostnames, observability, external rate limits, or a different
 network topology; keep the gateway-only public boundary when doing so.
 
 See the [user guide](../../docs/USER_GUIDE.md#browser-gateway-envoy-reference)
-and the [Chat fixture](../../examples/chat-web/README.md#real-browser-topology).
+and the [Chat fixture](../../examples/chat/web/README.md#real-browser-topology).

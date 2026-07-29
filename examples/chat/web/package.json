@@ -1,0 +1,29 @@
+{
+  "name": "@spine-event-engine/example-chat-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-web": "2.1.2",
+    "@spine-event-engine/example-chat-model": "workspace:*",
+    "@spine-event-engine/client-react": "workspace:*",
+    "@spine-event-engine/client-web": "workspace:*",
+    "@spine-event-engine/core": "workspace:*",
+    "@spine-event-engine/proto": "workspace:*",
+    "@spine-event-engine/example-chat-users-model": "workspace:*",
+    "react": "19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.0",
+    "@testing-library/react": "16.3.2",
+    "jsdom": "30.0.0",
+    "react-dom": "19.2.8",
+    "vite": "8.1.0",
+    "vitest": "4.1.9"
+  },
+  "scripts": {
+    "test:browser": "playwright test -c test/browser/playwright.config.ts"
+  }
+}

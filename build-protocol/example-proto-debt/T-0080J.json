@@ -1,7 +1,7 @@
 [
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:author#1",
     "name": "author",
     "disposition": "migration-debt",
@@ -9,7 +9,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:author#2",
     "name": "author",
     "disposition": "migration-debt",
@@ -17,7 +17,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:id#1",
     "name": "id",
     "disposition": "migration-debt",
@@ -25,7 +25,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:id#2",
     "name": "id",
     "disposition": "migration-debt",
@@ -33,7 +33,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:posted_at#1",
     "name": "posted_at",
     "disposition": "migration-debt",
@@ -41,7 +41,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:posted_at#2",
     "name": "posted_at",
     "disposition": "migration-debt",
@@ -49,7 +49,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:room#1",
     "name": "room",
     "disposition": "migration-debt",
@@ -57,7 +57,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:room#2",
     "name": "room",
     "disposition": "migration-debt",
@@ -65,7 +65,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:text#1",
     "name": "text",
     "disposition": "migration-debt",
@@ -73,7 +73,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:text#2",
     "name": "text",
     "disposition": "migration-debt",
@@ -81,7 +81,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:value#1",
     "name": "value",
     "disposition": "migration-debt",
@@ -89,7 +89,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "field:value#2",
     "name": "value",
     "disposition": "migration-debt",
@@ -97,7 +97,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "message:ChatMessage#1",
     "name": "ChatMessage",
     "disposition": "migration-debt",
@@ -105,7 +105,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "message:ChatMessageView#1",
     "name": "ChatMessageView",
     "disposition": "migration-debt",
@@ -113,7 +113,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "message:ChatRoomId#1",
     "name": "ChatRoomId",
     "disposition": "migration-debt",
@@ -121,7 +121,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/chat.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/chat.proto",
     "identity": "message:MessageId#1",
     "name": "MessageId",
     "disposition": "migration-debt",
@@ -129,7 +129,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/commands.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/commands.proto",
     "identity": "field:author#1",
     "name": "author",
     "disposition": "migration-debt",
@@ -137,7 +137,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/commands.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/commands.proto",
     "identity": "field:id#1",
     "name": "id",
     "disposition": "migration-debt",
@@ -145,7 +145,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/commands.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/commands.proto",
     "identity": "field:posted_at#1",
     "name": "posted_at",
     "disposition": "migration-debt",
@@ -153,7 +153,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/commands.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/commands.proto",
     "identity": "field:room#1",
     "name": "room",
     "disposition": "migration-debt",
@@ -161,7 +161,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/commands.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/commands.proto",
     "identity": "field:text#1",
     "name": "text",
     "disposition": "migration-debt",
@@ -169,7 +169,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/commands.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/commands.proto",
     "identity": "message:PostMessage#1",
     "name": "PostMessage",
     "disposition": "migration-debt",
@@ -177,7 +177,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/events.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/events.proto",
     "identity": "field:author#1",
     "name": "author",
     "disposition": "migration-debt",
@@ -185,7 +185,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/events.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/events.proto",
     "identity": "field:id#1",
     "name": "id",
     "disposition": "migration-debt",
@@ -193,7 +193,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/events.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/events.proto",
     "identity": "field:posted_at#1",
     "name": "posted_at",
     "disposition": "migration-debt",
@@ -201,7 +201,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/events.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/events.proto",
     "identity": "field:room#1",
     "name": "room",
     "disposition": "migration-debt",
@@ -209,7 +209,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/events.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/events.proto",
     "identity": "field:text#1",
     "name": "text",
     "disposition": "migration-debt",
@@ -217,7 +217,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/events.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/events.proto",
     "identity": "message:MessagePosted#1",
     "name": "MessagePosted",
     "disposition": "migration-debt",
@@ -225,7 +225,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/rejections.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/rejections.proto",
     "identity": "field:id#1",
     "name": "id",
     "disposition": "migration-debt",
@@ -233,7 +233,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/chat-model/proto/spine/example/chat/v1/rejections.proto",
+    "file": "examples/chat/model/proto/spine/example/chat/v1/rejections.proto",
     "identity": "message:MessageAlreadyPosted#1",
     "name": "MessageAlreadyPosted",
     "disposition": "migration-debt",
@@ -241,7 +241,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/users-model/proto/spine/example/users/v1/users.proto",
+    "file": "examples/chat/users-model/proto/spine/example/users/v1/users.proto",
     "identity": "field:value#1",
     "name": "value",
     "disposition": "migration-debt",
@@ -249,7 +249,7 @@
   },
   {
     "rule": "missing-comment",
-    "file": "examples/users-model/proto/spine/example/users/v1/users.proto",
+    "file": "examples/chat/users-model/proto/spine/example/users/v1/users.proto",
     "identity": "message:UserId#1",
     "name": "UserId",
     "disposition": "migration-debt",

@@ -8,6 +8,10 @@ export default defineConfig({
       "examples/*/src/**/*.test.tsx",
       "examples/*/test/**/*.test.ts",
       "examples/*/test/**/*.test.tsx",
+      "examples/*/*/src/**/*.test.ts",
+      "examples/*/*/src/**/*.test.tsx",
+      "examples/*/*/test/**/*.test.ts",
+      "examples/*/*/test/**/*.test.tsx",
       "scripts/**/*.test.mjs",
       "interop/jvm/**/*.test.mjs",
     ],
@@ -19,11 +23,14 @@ export default defineConfig({
         "packages/*/src/**/*.tsx",
         "examples/*/src/**/*.ts",
         "examples/*/src/**/*.tsx",
+        "examples/*/*/src/**/*.ts",
+        "examples/*/*/src/**/*.tsx",
       ],
       exclude: [
         "**/*.test.ts",
         "packages/*/generated/**",
         "examples/*/generated/**",
+        "examples/*/*/generated/**",
         // The build-time handler analyzer is a TypeScript compiler integration
         // with focused tests; keep global thresholds centered on runtime code.
         "packages/server/src/handler/build-time-handler-analyzer.ts",

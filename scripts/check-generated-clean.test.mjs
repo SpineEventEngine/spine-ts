@@ -82,7 +82,7 @@ writeFileSync(new URL("proof.ts", \`file://\${output}/\`), "export {};\\n");
   );
   mkdirSync(join(repoRoot, "packages/proto/generated"), { recursive: true });
   writeFileSync(join(repoRoot, ".gitignore"), "packages/proto/generated/\n");
-  const chat = join(repoRoot, "examples/chat");
+  const chat = join(repoRoot, "examples/chat/app");
   mkdirSync(join(chat, "src"), { recursive: true });
   writeFileSync(join(chat, "package.json"), '{"name":"@example/chat"}\n');
   writeFileSync(join(chat, "spine-proto.json"), '{"formatVersion":1,"mode":"application"}\n');
@@ -96,9 +96,9 @@ describe("check-generated-clean", () => {
       "examples/todo/generated",
       "examples/project-management/generated",
       "examples/datastore-orders/generated",
-      "examples/users-model/generated",
-      "examples/chat-model/generated",
-      "examples/chat/generated",
+      "examples/chat/users-model/generated",
+      "examples/chat/model/generated",
+      "examples/chat/app/generated",
     ]);
   });
 
@@ -134,7 +134,7 @@ describe("check-generated-clean", () => {
       readdirSync(join(repoRoot, "examples/chat")).some((name) => name.startsWith(".generated-")),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat/src")).some((name) =>
+      readdirSync(join(repoRoot, "examples/chat/app/src")).some((name) =>
         name.startsWith(".generated-"),
       ),
     ).toBe(false);
@@ -144,7 +144,7 @@ describe("check-generated-clean", () => {
     const repoRoot = createCompositionFixture(
       'import { mkdirSync, writeFileSync } from "node:fs";\nmkdirSync("src", { recursive: true });\nwriteFileSync("src/model-registry.ts", "fresh registry\\n");\n',
     );
-    writeFileSync(join(repoRoot, "examples/chat/src/model-registry.ts"), "stale registry\n");
+    writeFileSync(join(repoRoot, "examples/chat/app/src/model-registry.ts"), "stale registry\n");
 
     const result = spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], {
       encoding: "utf8",
@@ -163,7 +163,7 @@ describe("check-generated-clean", () => {
       readdirSync(join(repoRoot, "examples/chat")).some((name) => name.startsWith(".generated-")),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat/src")).some((name) =>
+      readdirSync(join(repoRoot, "examples/chat/app/src")).some((name) =>
         name.startsWith(".generated-"),
       ),
     ).toBe(false);
@@ -196,7 +196,7 @@ describe("check-generated-clean", () => {
       readdirSync(join(repoRoot, "examples/chat")).some((name) => name.startsWith(".generated-")),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat/src")).some((name) =>
+      readdirSync(join(repoRoot, "examples/chat/app/src")).some((name) =>
         name.startsWith(".generated-"),
       ),
     ).toBe(false);

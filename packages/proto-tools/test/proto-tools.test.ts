@@ -158,8 +158,8 @@ function packedHandlerTarballs(): readonly string[] {
     "packages/core",
     "packages/storage",
     "packages/transport",
-    "examples/users-model",
-    "examples/chat-model",
+    "examples/chat/users-model",
+    "examples/chat/model",
   ];
   for (const packagePath of packages) {
     execFileSync(

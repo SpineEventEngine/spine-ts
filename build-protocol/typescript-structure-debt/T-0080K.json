@@ -1,7 +1,7 @@
 [
   {
     "rule": "semantic-name",
-    "file": "examples/chat/src/message-validation.ts",
+    "file": "examples/chat/app/src/message-validation.ts",
     "kind": "variable",
     "identity": "variable:maximumChatMessageTextBytes#1",
     "name": "maximumChatMessageTextBytes",

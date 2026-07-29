@@ -11,6 +11,7 @@ export default tseslint.config(
       "docs/api/reference/**",
       "packages/*/generated/**",
       "examples/*/generated/**",
+      "examples/*/*/generated/**",
       "eslint.config.mjs",
       "vitest.config.ts",
     ],
@@ -44,7 +45,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["examples/chat-web/test/interop/**/*.mjs"],
+    files: ["examples/chat/web/test/interop/**/*.mjs"],
     languageOptions: {
       globals: {
         AbortController: "readonly",

@@ -1,6 +1,7 @@
 packages:
   - "packages/*"
   - "examples/*"
+  - "examples/*/*"
 confirmModulesPurge: false
 engineStrict: true
 enableGlobalVirtualStore: false

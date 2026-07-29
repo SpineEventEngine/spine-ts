@@ -1,125 +1,54 @@
-# Runnable Chat
+# Chat example family
 
-For the browser, authentication-gateway, and Envoy extension path used by this
-example, see the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+This directory groups the complete Projection-backed Chat example. It is a
+four-package workspace family, not one published package:
 
-This is the Wave 4 Projection-backed application example:
-`@spine-event-engine/chat-model` owns Chat Protobuf messages and imports `UserId` from the separate
-`@spine-event-engine/users-model` package. The application package composes
-Chat's model module into a `TypeRegistry`; Users arrives as Chat's transitive
-model dependency. It does not copy Users Proto or generated output.
+- `app/` (`@spine-event-engine/example-chat-app`) is the in-memory server and
+  application handlers.
+- `model/` (`@spine-event-engine/example-chat-model`) owns Chat Proto messages,
+  commands, events, and rejections.
+- `users-model/` (`@spine-event-engine/example-chat-users-model`) independently
+  owns the User identifier model used by Chat.
+- `web/` (`@spine-event-engine/example-chat-web`) is the React browser fixture.
 
-`PostMessage` carries a browser-provided deterministic `MessageId`, a room,
-author, bounded text, and posting timestamp. `ChatMessageAggregate` stores one
-message per ID and emits `MessagePosted`; `ChatMessageViewProjection` reacts to
-that event and creates one `FULL`-visible `ChatMessageView` Projection row per
-message. The view indexes `room`, `author`, and `posted_at`. Browser delivery
-therefore uses room-filtered Projection Query and Projection subscription APIs,
-not event delivery or an unbounded aggregate message list.
+The app directly depends on `users-model` and `model`; `model` also depends on
+`users-model`, and `web` depends on both model packages. Registry composition
+may reach Users transitively through Chat's model module. The browser calls the
+application through public client APIs and does not import application handlers.
 
-Before state or event publication, command handling rejects missing, blank, or
-overlong UTF-8 message/room/author IDs (128 bytes); blank, missing, or overlong
-text (4,096 bytes); and missing timestamps, seconds outside the Protobuf
-`Timestamp` range, or nanoseconds outside `0..999,999,999`. The ID remains
-application provided: this example neither generates nor persists browser
-credentials.
+## Generate, build, and test
 
-Reusing a `MessageId`, including concurrently, leaves the first Aggregate and
-Projection state unchanged and produces no second Projection subscription
-update. The admitted command transport still resolves `{ kind: "ok" }`;
-domain outcome is represented by exactly one stored `MessageAlreadyPosted`
-rejection event alongside the first command's one normal event.
+From the repository root, regenerate all model output, the app registry, and
+handler metadata before a build or focused test:
 
-## Gateway trust boundary
-
-`ChatAuthorizationPolicy` and `ChatContextResolver` are application-owned
-implementations of the public auth contracts. A gateway integration must bind
-them after authentication: it admits a `PostMessage` only when the payload
-author matches the authenticated principal and the requested room is listed in
-that principal's `rooms` attribute. It likewise admits only a room-filtered
-`ChatMessageView` Query or subscription for an authorized room. The resolver,
-not browser input, supplies the trusted actor, optional `tenant` attribute, and
-gateway clock timestamp. Activation and cancellation remain bound to the
-gateway's authenticated subscription ownership.
-
-The native gateway is constructed with Chat's application `typeRegistry`, so
-registered `PostMessage` payload facts are independently decoded for the policy
-and context collaborators. They are not forwarded to the backend: forwarding
-retains only service, method, bytes, and cancellation capability. Command-post
-transport acknowledgement means the command was admitted; a later domain
-rejection is recorded as a stored rejection event rather than changing that
-acknowledgement.
-
-## Intentional v1 reset
-
-This unpublished example deliberately replaces the earlier incompatible Chat
-aggregate shape with the per-message aggregate and projection model. There is
-no production persisted data or published package compatibility promise, so no
-migration or deprecation bridge is supplied for this reset.
-
-## Build the example
-
-From the repository root, generate every example's model, application registry,
-and handler metadata, then compile and run the Chat test:
-
-```bash
+```sh
 pnpm proto:generate
 pnpm typecheck:build:generated
-pnpm exec vitest run examples/chat/test/model-registry.test.ts
+pnpm exec vitest run examples/chat/app/test examples/chat/web/test/chat-web.test.tsx
 ```
 
-For a local application-only iteration, run the exact build-time commands in
-this package after its model dependencies are generated and installed:
+`model/` and `users-model/` own generated Proto output. `app/` owns its
+composed model registry and generated handler registry. Generated directories
+are ignored and must be produced by the commands above, never edited by hand.
+For local package commands, use `pnpm --dir examples/chat/app proto:compose`,
+`pnpm --dir examples/chat/app handlers:generate`, or
+`pnpm --dir examples/chat/web test:browser` as appropriate.
 
-```bash
-pnpm proto:compose
-pnpm handlers:generate
-pnpm exec tsc -b
-```
+## Server, browser, and authentication topology
 
-## Start the server
+The app starts an in-memory, loopback Chat server. The browser fixture talks to
+an authentication gateway through Envoy; the browser never connects to the
+backend directly. The hosting application establishes its session, while the
+gateway resolves trusted actor, tenant, room permissions, and subscription
+ownership. See the app and web READMEs plus the
+[browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+for integration details.
 
-`startChatServer({ host, port })` starts the in-memory Chat application. Its
-defaults bind only to loopback (`127.0.0.1`) and request an ephemeral port
-(`0`); callers may override either value for an explicitly chosen local
-listener. The server allows at most 1,000 active subscriptions.
+`PostMessage` creates a message aggregate and a `ChatMessageView` Projection.
+The browser posts commands, queries room-filtered views, and subscribes to the
+same Projection topic. Duplicate message IDs record the domain rejection event
+without changing the admitted command transport acknowledgement.
 
-```ts
-const server = await startChatServer({ host: "127.0.0.1", port: 0 });
-// server.baseUrl contains the allocated loopback URL.
-```
-
-`src/model-registry.ts` is generated by `spine-proto compose` from this
-package's `spine-proto.json`:
-
-```json
-{
-  "formatVersion": 1,
-  "mode": "application",
-  "modelPackages": ["@spine-event-engine/chat-model"],
-  "registryOutput": "src/model-registry.ts"
-}
-```
-
-`spine-proto handlers` writes
-`generated/handler/generated-handler-registry.ts` from the decorated handler
-classes in `src/`. Neither generated file is authored by hand. The TypeScript
-configuration includes both `src/**/*.ts` and `generated/**/*.ts`, so the
-compiled handler registry is available at startup.
-
-The source package is intentionally in-memory by default:
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { packAny } from "@spine-event-engine/core";
-import { CommandIdSchema } from "@spine-event-engine/proto";
-
-const commandId = create(CommandIdSchema, { uuid: "command-1" });
-const packedCommandId = packAny(CommandIdSchema, commandId);
-
-void packedCommandId;
-```
-
-The repository packages are not published to npm yet. The Wave 3 external
-consumer test uses local tarballs to simulate a clean registry installation;
-publication is revisited after all waves.
+Subscriptions are best-effort notifications, not a complete event stream.
+Notifications may be duplicated, omitted, or reordered; clients reconnect and
+re-query the authoritative Projection state when a gap is possible.

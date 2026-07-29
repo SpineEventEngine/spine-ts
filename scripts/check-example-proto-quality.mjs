@@ -185,7 +185,7 @@ export function validateProtoDebtEntries(records, observed, observesBaseline) {
       !["missing-comment", "placeholder-comment", "semantic-name"].includes(entry.rule) ||
       entry.disposition !== "migration-debt" ||
       !/^Pre-T-0080C authored Proto quality debt /.test(entry.reason) ||
-      !/^examples\/[^/]+\/proto\/.+\.proto$/.test(entry.file) ||
+      !/^examples\/(?:[^/]+|chat\/(?:model|users-model))\/proto\/.+\.proto$/.test(entry.file) ||
       entry.file.includes("..") ||
       entry.file.includes("\\") ||
       protoPartition(entry.file) !== partition
@@ -208,8 +208,8 @@ export function validateProtoDebtEntries(records, observed, observesBaseline) {
 }
 
 function protoPartition(file) {
-  if (/^examples\/(?:chat-model|users-model)\//.test(file)) return "T-0080J";
-  if (/^examples\/(?:chat|chat-web)\//.test(file)) return "T-0080K";
+  if (/^examples\/chat\/(?:model|users-model)\//.test(file)) return "T-0080J";
+  if (/^examples\/chat\/(?:app|web)\//.test(file)) return "T-0080K";
   if (/^examples\/todo\//.test(file)) return "T-0080L";
   if (/^examples\/project-management\//.test(file)) return "T-0080M";
   if (/^examples\/datastore-orders\//.test(file)) return "T-0080N";
@@ -238,12 +238,13 @@ function parseDebtFailure(failure) {
 }
 
 function baselineContains(root, entry) {
-  const key = `${root}\u0000${entry.file}`;
+  const baselineFile = movedChatBaselinePath(entry.file);
+  const key = `${root}\u0000${baselineFile}`;
   let failures = baselineFailureCache.get(key);
   if (failures === undefined) {
     const result = spawnSync(
       "git",
-      ["--no-replace-objects", "show", `${migrationBaseline}:${entry.file}`],
+      ["--no-replace-objects", "show", `${migrationBaseline}:${baselineFile}`],
       {
         cwd: root,
         encoding: "utf8",
@@ -257,6 +258,12 @@ function baselineContains(root, entry) {
     baselineFailureCache.set(key, failures);
   }
   return failures.has(debtKey(entry));
+}
+
+function movedChatBaselinePath(file) {
+  return file
+    .replace(/^examples\/chat\/model\//, "examples/chat-model/")
+    .replace(/^examples\/chat\/users-model\//, "examples/users-model/");
 }
 
 export function baselineObservesExampleProtoEntry(entry, source) {

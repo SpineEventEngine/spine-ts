@@ -254,7 +254,8 @@ function debtPartition(file) {
   if (/^packages\/server\//.test(file)) return "T-0080F";
   if (/^packages\/(?:auth|client-web|client-react)\//.test(file)) return "T-0080G";
   if (/^packages\//.test(file)) return "T-0080H";
-  if (/^examples\/(?:chat|chat-web|chat-model|users-model)\//.test(file)) return "T-0080K";
+  if (/^examples\/chat\/(?:app|web)\//.test(file)) return "T-0080K";
+  if (/^examples\/chat\/(?:model|users-model)\//.test(file)) return "T-0080J";
   if (/^examples\/todo\//.test(file)) return "T-0080L";
   if (/^examples\/project-management\//.test(file)) return "T-0080M";
   if (/^examples\/datastore-orders\//.test(file)) return "T-0080N";

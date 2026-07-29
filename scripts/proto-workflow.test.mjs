@@ -91,7 +91,7 @@ function todoTransactionFixture() {
 
 function chatRegistryFixture() {
   const repoRoot = todoTransactionFixture();
-  const chatRoot = join(repoRoot, "examples/chat");
+  const chatRoot = join(repoRoot, "examples/chat/app");
   mkdirSync(join(chatRoot, "src"), { recursive: true });
   writeFileSync(join(chatRoot, "package.json"), '{"name":"@example/chat","version":"1.0.0"}\n');
   writeFileSync(
@@ -434,32 +434,32 @@ describe("proto-workflow", () => {
       "examples/todo/generated",
       "examples/project-management/generated",
       "examples/datastore-orders/generated",
-      "examples/users-model/generated",
-      "examples/chat-model/generated",
+      "examples/chat/users-model/generated",
+      "examples/chat/model/generated",
     ]);
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
       "examples/todo/generated",
       "examples/project-management/generated",
       "examples/datastore-orders/generated",
-      "examples/users-model/generated",
-      "examples/chat-model/generated",
-      "examples/chat/generated",
+      "examples/chat/users-model/generated",
+      "examples/chat/model/generated",
+      "examples/chat/app/generated",
     ]);
   });
 
   it("stages the Chat handler registry with its model output", () => {
     expect(
-      modelAtomicTargets.find((target) => target.packagePath === "examples/chat-model"),
+      modelAtomicTargets.find((target) => target.packagePath === "examples/chat/model"),
     ).toMatchObject({
-      handlerGeneratedPath: "examples/chat/generated",
-      handlerProjectPath: "examples/chat/tsconfig.json",
+      handlerGeneratedPath: "examples/chat/app/generated",
+      handlerProjectPath: "examples/chat/app/tsconfig.json",
     });
   });
 
   it("redirects Chat handler analysis from live schemas to the staged model schemas", () => {
     const target = modelAtomicTargets.find(
-      (candidate) => candidate.packagePath === "examples/chat-model",
+      (candidate) => candidate.packagePath === "examples/chat/model",
     );
     const repoRoot = applicationModelTransactionFixture(target);
     let handlerArguments;
@@ -497,12 +497,12 @@ describe("proto-workflow", () => {
             staged: expect.stringMatching(/packages\/proto\/\.generated-[^/]+$/u),
           }),
           expect.objectContaining({
-            source: join(repoRoot, "examples/chat-model/dist"),
-            staged: expect.stringMatching(/examples\/chat-model\/\.generated-[^/]+$/u),
+            source: join(repoRoot, "examples/chat/model/dist"),
+            staged: expect.stringMatching(/examples\/chat\/model\/\.generated-[^/]+$/u),
           }),
           expect.objectContaining({
-            source: join(repoRoot, "examples/chat/node_modules/@example/model/dist"),
-            staged: expect.stringMatching(/examples\/chat-model\/\.generated-[^/]+$/u),
+            source: join(repoRoot, "examples/chat/app/node_modules/@example/model/dist"),
+            staged: expect.stringMatching(/examples\/chat\/model\/\.generated-[^/]+$/u),
             packageName: "@example/model",
           }),
         ]),
@@ -673,14 +673,14 @@ describe("proto-workflow", () => {
     expect(readFileSync(join(repoRoot, "examples/todo/spine-proto-manifest.json"), "utf8")).toBe(
       "examples/todo/spine-proto-manifest.json\n",
     );
-    expect(readFileSync(join(repoRoot, "examples/chat/src/model-registry.ts"), "utf8")).toBe(
+    expect(readFileSync(join(repoRoot, "examples/chat/app/src/model-registry.ts"), "utf8")).toBe(
       "previous registry\n",
     );
     expect(
       readdirSync(join(repoRoot, "examples/chat")).some((name) => name.startsWith(".generated-")),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat/src")).some((name) =>
+      readdirSync(join(repoRoot, "examples/chat/app/src")).some((name) =>
         name.startsWith(".generated-"),
       ),
     ).toBe(false);
@@ -707,12 +707,12 @@ describe("proto-workflow", () => {
       }),
     ).toBe(1);
 
-    expect(readFileSync(join(repoRoot, "examples/chat/src/model-registry.ts"), "utf8")).toBe(
+    expect(readFileSync(join(repoRoot, "examples/chat/app/src/model-registry.ts"), "utf8")).toBe(
       "previous registry\n",
     );
     expect(existsSync(join(repoRoot, ".spine-proto-publication.json"))).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat/src")).some((name) =>
+      readdirSync(join(repoRoot, "examples/chat/app/src")).some((name) =>
         name.startsWith(".generated-"),
       ),
     ).toBe(false);
@@ -1004,10 +1004,10 @@ describe("proto-workflow", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const generatedRoot = join(repoRoot, "packages/proto/generated");
     const stagedOutputRoot = join(repoRoot, "packages/proto/.generated-root/generated");
-    const registry = join(repoRoot, "examples/chat/src/model-registry.ts");
+    const registry = join(repoRoot, "examples/chat/app/src/model-registry.ts");
     const stagedRegistry = join(
       repoRoot,
-      "examples/chat/src/.generated-registry/model-registry.ts",
+      "examples/chat/app/src/.generated-registry/model-registry.ts",
     );
     mkdirSync(generatedRoot, { recursive: true });
     mkdirSync(stagedOutputRoot, { recursive: true });
@@ -1040,9 +1040,9 @@ describe("proto-workflow", () => {
 
   it("rolls back a v3 mid-file interruption including the Chat registry", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
-    const registry = join(repoRoot, "examples/chat/src/model-registry.ts");
-    const staged = join(repoRoot, "examples/chat/src/.generated-interrupted/model-registry.ts");
-    const backup = join(repoRoot, "examples/chat/src/.model-registry.ts.backup-interrupted");
+    const registry = join(repoRoot, "examples/chat/app/src/model-registry.ts");
+    const staged = join(repoRoot, "examples/chat/app/src/.generated-interrupted/model-registry.ts");
+    const backup = join(repoRoot, "examples/chat/app/src/.model-registry.ts.backup-interrupted");
     const manifest = join(repoRoot, "packages/proto/spine-proto-manifest.json");
     const stagedManifest = join(
       repoRoot,
@@ -1112,7 +1112,7 @@ describe("proto-workflow", () => {
     const manifestPaths = [
       "packages/proto/spine-proto-manifest.json",
       ...modelAtomicTargets.map((target) => `${target.packagePath}/spine-proto-manifest.json`),
-      "examples/chat/src/model-registry.ts",
+      "examples/chat/app/src/model-registry.ts",
     ];
     const files = manifestPaths.map((path, index) => {
       const target = join(repoRoot, path);
@@ -1147,11 +1147,11 @@ describe("proto-workflow", () => {
 
   it("preserves an unexpected stage sibling while removing the journal-owned file", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
-    const target = join(repoRoot, "examples/chat/src/model-registry.ts");
-    const stageRoot = join(repoRoot, "examples/chat/src/.generated-preserve");
+    const target = join(repoRoot, "examples/chat/app/src/model-registry.ts");
+    const stageRoot = join(repoRoot, "examples/chat/app/src/.generated-preserve");
     const staged = join(stageRoot, "model-registry.ts");
     const sibling = join(stageRoot, "keep.txt");
-    const backup = join(repoRoot, "examples/chat/src/.model-registry.ts.backup-preserve");
+    const backup = join(repoRoot, "examples/chat/app/src/.model-registry.ts.backup-preserve");
     mkdirSync(stageRoot, { recursive: true });
     writeFileSync(target, "next\n");
     writeFileSync(staged, "next\n");

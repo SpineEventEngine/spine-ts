@@ -49,22 +49,22 @@ export const modelAtomicTargets = [
     handlerProjectPath: "examples/datastore-orders/tsconfig.json",
   },
   {
-    displayPath: "examples/users-model/generated",
-    packagePath: "examples/users-model",
+    displayPath: "examples/chat/users-model/generated",
+    packagePath: "examples/chat/users-model",
     moduleName: "Users",
   },
   {
-    displayPath: "examples/chat-model/generated",
-    packagePath: "examples/chat-model",
+    displayPath: "examples/chat/model/generated",
+    packagePath: "examples/chat/model",
     moduleName: "Chat",
-    handlerProjectPath: "examples/chat/tsconfig.json",
-    handlerGeneratedPath: "examples/chat/generated",
+    handlerProjectPath: "examples/chat/app/tsconfig.json",
+    handlerGeneratedPath: "examples/chat/app/generated",
   },
 ];
 export const atomicGeneratedTargets = [
   ...generatedTargets,
   ...modelAtomicTargets,
-  { displayPath: "examples/chat/generated" },
+  { displayPath: "examples/chat/app/generated" },
 ];
 
 export function main(argv = process.argv.slice(2)) {
@@ -380,7 +380,7 @@ function validatePublicationJournal(root, journal) {
   ]);
   const allowedFiles = new Set([
     ...allowedManifests,
-    join(root, "examples/chat/src/model-registry.ts"),
+    join(root, "examples/chat/app/src/model-registry.ts"),
   ]);
   if (!Array.isArray(files) || new Set(files.map((entry) => entry?.target)).size !== files.length)
     throw new Error("invalid publication journal");
@@ -939,7 +939,7 @@ export function cleanupStagedTargets(stagedTargets) {
 }
 
 export function stageChatRegistry(root, options = {}) {
-  const liveRoot = join(root, "examples/chat");
+  const liveRoot = join(root, "examples/chat/app");
   if (!existsSync(join(liveRoot, "spine-proto.json"))) return undefined;
   const stageRoot = mkdtempSync(join(liveRoot, ".generated-"));
   let fileStageRoot;

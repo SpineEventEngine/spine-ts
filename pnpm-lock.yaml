@@ -66,60 +66,73 @@ importers:
         specifier: 4.1.9
         version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(jsdom@30.0.0)(vite@8.1.0(@types/node@24.13.2)(yaml@2.9.0))
 
-  examples/chat:
+  examples/chat/app:
     dependencies:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/auth':
         specifier: workspace:*
-        version: link:../../packages/auth
-      '@spine-event-engine/chat-model':
-        specifier: 0.0.0
-        version: link:../chat-model
+        version: link:../../../packages/auth
       '@spine-event-engine/client-node':
         specifier: workspace:*
-        version: link:../../packages/client-node
+        version: link:../../../packages/client-node
       '@spine-event-engine/core':
         specifier: 0.0.0
-        version: link:../../packages/core
-      '@spine-event-engine/proto':
+        version: link:../../../packages/core
+      '@spine-event-engine/example-chat-model':
         specifier: 0.0.0
-        version: link:../../packages/proto
-      '@spine-event-engine/server':
-        specifier: 0.0.0
-        version: link:../../packages/server
-      '@spine-event-engine/storage':
-        specifier: workspace:*
-        version: link:../../packages/storage
-      '@spine-event-engine/users-model':
+        version: link:../model
+      '@spine-event-engine/example-chat-users-model':
         specifier: 0.0.0
         version: link:../users-model
+      '@spine-event-engine/proto':
+        specifier: 0.0.0
+        version: link:../../../packages/proto
+      '@spine-event-engine/server':
+        specifier: 0.0.0
+        version: link:../../../packages/server
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../../../packages/storage
     devDependencies:
       '@connectrpc/connect':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)
       '@spine-event-engine/proto-tools':
         specifier: 0.0.0
-        version: link:../../packages/proto-tools
+        version: link:../../../packages/proto-tools
 
-  examples/chat-model:
+  examples/chat/model:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-event-engine/example-chat-users-model':
+        specifier: 0.0.0
+        version: link:../users-model
+      '@spine-event-engine/proto':
+        specifier: 0.0.0
+        version: link:../../../packages/proto
+    devDependencies:
+      '@spine-event-engine/proto-tools':
+        specifier: 0.0.0
+        version: link:../../../packages/proto-tools
+
+  examples/chat/users-model:
     dependencies:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
         specifier: 0.0.0
-        version: link:../../packages/proto
-      '@spine-event-engine/users-model':
-        specifier: 0.0.0
-        version: link:../users-model
+        version: link:../../../packages/proto
     devDependencies:
       '@spine-event-engine/proto-tools':
         specifier: 0.0.0
-        version: link:../../packages/proto-tools
+        version: link:../../../packages/proto-tools
 
-  examples/chat-web:
+  examples/chat/web:
     dependencies:
       '@bufbuild/protobuf':
         specifier: 2.12.1
@@ -130,24 +143,24 @@ importers:
       '@connectrpc/connect-web':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
-      '@spine-event-engine/chat-model':
-        specifier: workspace:*
-        version: link:../chat-model
       '@spine-event-engine/client-react':
         specifier: workspace:*
-        version: link:../../packages/client-react
+        version: link:../../../packages/client-react
       '@spine-event-engine/client-web':
         specifier: workspace:*
-        version: link:../../packages/client-web
+        version: link:../../../packages/client-web
       '@spine-event-engine/core':
         specifier: workspace:*
-        version: link:../../packages/core
-      '@spine-event-engine/proto':
+        version: link:../../../packages/core
+      '@spine-event-engine/example-chat-model':
         specifier: workspace:*
-        version: link:../../packages/proto
-      '@spine-event-engine/users-model':
+        version: link:../model
+      '@spine-event-engine/example-chat-users-model':
         specifier: workspace:*
         version: link:../users-model
+      '@spine-event-engine/proto':
+        specifier: workspace:*
+        version: link:../../../packages/proto
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -266,19 +279,6 @@ importers:
       '@spine-event-engine/transport':
         specifier: workspace:*
         version: link:../../packages/transport
-
-  examples/users-model:
-    dependencies:
-      '@bufbuild/protobuf':
-        specifier: 2.12.1
-        version: 2.12.1
-      '@spine-event-engine/proto':
-        specifier: 0.0.0
-        version: link:../../packages/proto
-    devDependencies:
-      '@spine-event-engine/proto-tools':
-        specifier: 0.0.0
-        version: link:../../packages/proto-tools
 
   packages/auth:
     dependencies:

@@ -144,7 +144,7 @@ function checkBrowserGuide() {
     "packages/client-node/README.md",
     "packages/client-react/README.md",
     "examples/chat/README.md",
-    "examples/chat-web/README.md",
+    "examples/chat/web/README.md",
     "interop/envoy/README.md",
   ];
   for (const path of links) {

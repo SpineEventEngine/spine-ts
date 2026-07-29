@@ -248,7 +248,7 @@ void dynamicSpine;
 at typed boundaries. `unpackAnyUsing` is for a value whose schema is selected
 at runtime; it returns `undefined` for a type URL absent from the registry.
 The generated Chat application is the runnable in-repository example of this
-layout: it composes `@spine-event-engine/chat-model`, obtains Users through its
+layout: it composes `@spine-event-engine/example-chat-model`, obtains Users through its
 transitive model dependency, and runs an in-memory Chat server.
 
 ## 2. Model domain messages

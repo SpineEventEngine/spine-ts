@@ -1967,7 +1967,8 @@ function structurePartition(file) {
   if (/^packages\/server\//.test(file)) return "T-0080F";
   if (/^packages\/(?:auth|client-web|client-react)\//.test(file)) return "T-0080G";
   if (/^packages\//.test(file)) return "T-0080H";
-  if (/^examples\/(?:chat|chat-web|chat-model|users-model)\//.test(file)) return "T-0080K";
+  if (/^examples\/chat\/(?:app|web)\//.test(file)) return "T-0080K";
+  if (/^examples\/chat\/(?:model|users-model)\//.test(file)) return "T-0080J";
   if (/^examples\/todo\//.test(file)) return "T-0080L";
   if (/^examples\/project-management\//.test(file)) return "T-0080M";
   if (/^examples\/datastore-orders\//.test(file)) return "T-0080N";
@@ -2080,16 +2081,25 @@ function readStructureLedger(repoRoot, directory, rule) {
 }
 
 function baselineContains(repoRoot, entry) {
-  const key = `${repoRoot}\u0000${migrationBaseline}\u0000${entry.file}`;
+  const baselineFile = movedChatBaselinePath(entry.file);
+  const key = `${repoRoot}\u0000${migrationBaseline}\u0000${baselineFile}`;
   let source = baselineSourceCache.get(key);
   if (source === undefined) {
-    const result = runGit(repoRoot, ["show", `${migrationBaseline}:${entry.file}`]);
+    const result = runGit(repoRoot, ["show", `${migrationBaseline}:${baselineFile}`]);
     if (result.status !== 0)
       throw new Error(`Immutable structure baseline ${migrationBaseline} is unavailable.`);
     source = result.status === 0 ? result.stdout : "";
     baselineSourceCache.set(key, source);
   }
   return baselineObservesStructureEntry(entry, source);
+}
+
+function movedChatBaselinePath(file) {
+  return file
+    .replace(/^examples\/chat\/app\//, "examples/chat/")
+    .replace(/^examples\/chat\/web\//, "examples/chat-web/")
+    .replace(/^examples\/chat\/model\//, "examples/chat-model/")
+    .replace(/^examples\/chat\/users-model\//, "examples/users-model/");
 }
 
 export function baselineObservesStructureEntry(entry, source) {

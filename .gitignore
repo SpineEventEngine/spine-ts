@@ -8,8 +8,10 @@ playwright-report/
 docs/api/reference/
 packages/*/generated/
 examples/*/generated/
+examples/*/*/generated/
 packages/*/.generated-*/generated/
 examples/*/.generated-*/generated/
+examples/*/*/.generated-*/generated/
 .pnpm-store/
 .eslintcache
 .turbo/
