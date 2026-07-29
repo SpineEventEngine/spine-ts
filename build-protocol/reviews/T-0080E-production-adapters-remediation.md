@@ -298,6 +298,9 @@ are accepted unless a visible mismatch or fallback appears.
 - Final verification passes all deterministic gates and 20 files / 251 tests.
   Three live-service files / 25 tests are skipped without configured Datastore
   or MySQL services.
+- Reviewed task commit:
+  `a532c55dcd6b6c5e8c563a5db7e7ae7365c29439`; the task branch is verified at
+  the same commit on origin.
 
 ## Datastore History Implementation Evidence
 

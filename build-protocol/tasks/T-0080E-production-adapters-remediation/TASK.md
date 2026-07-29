@@ -383,3 +383,10 @@ delivery behavior is moved; otherwise standard.
   configured.
 - T-0080E is accepted for commit and push. T-0080F is the next umbrella slice;
   final integration into `main` remains reserved for T-0080O.
+
+## Durable Endpoint
+
+- Reviewed task commit:
+  `a532c55dcd6b6c5e8c563a5db7e7ae7365c29439`.
+- `origin/task/T-0080-code-quality-examples` is verified at the same commit.
+- T-0080E is durably closed. T-0080F follows.
