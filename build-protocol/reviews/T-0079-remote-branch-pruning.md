@@ -61,3 +61,24 @@ Review immutable range `0fa0b39c..ea59e78e`:
 Both roles and profiles are explicit before dispatch. Runtime self-metadata
 will be recorded if returned; otherwise each immutable configured profile is
 the available evidence.
+
+## Review Wave 1
+
+- Documentation: CLEAN. The factual reviewer confirmed all accounting,
+  preservation, recovery, audit, and pending-closure claims. Its live query hit
+  transient DNS, superseded by the orchestrator's successful direct query
+  showing exactly two heads and all 17 mapped tags. Runtime self-metadata was
+  unavailable; the immutable `gpt-5.6-luna`/medium profile is the evidence.
+- Style/maintainability P1: records claim an atomic successful retry but omit
+  the actual `--atomic --force-with-lease` flags from the documented command.
+  The operation did run with those flags; correct every execution record to
+  show the exact evidence-supported command. Accepted.
+- Style/maintainability P2: the published post-prune examples query only
+  expected refs and do not assert closed-world equality for the complete head
+  and archive-tag sets. Add deterministic exact-name/count/SHA assertions.
+  Accepted.
+
+Return the complete accepted batch to the existing implementer. The
+expected/configured profile remains `gpt-5.6-terra`, medium reasoning,
+explicitly dispatched. Runtime self-metadata will be recorded if returned;
+otherwise the immutable configured profile is the evidence.
