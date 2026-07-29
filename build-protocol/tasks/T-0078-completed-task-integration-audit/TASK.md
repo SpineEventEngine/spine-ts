@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress.
+Complete; reviewed and final verification passed; ready for `main` integration.
 
 ## Classification
 
@@ -179,4 +179,14 @@ rescue branches, and all 15 legacy archive refs at the recorded exact SHAs.
 
 ## Verification
 
-Pending.
+- The checked-in inventory reproduces byte-for-byte from immutable baseline
+  `e6bdc0653a55c5c09a1af3742e74626b81c43217`.
+- 172 rows have unique task identifiers and paths, valid explicit status
+  evidence, and seven well-formed TSV fields.
+- All 886 resolved SHA occurrences belong to the immutable baseline except the
+  single explicitly classified T-0077 preservation rescue.
+- Node syntax, diff cleanliness, and Prettier checks pass for the complete task
+  diff.
+- The task worktree is clean and its local/remote branch tips match.
+- Direct remote verification matched `main`, T-0078, both rescue refs, and all
+  15 legacy archive refs to their recorded exact SHAs.
