@@ -4646,3 +4646,7 @@ profiles; no Spine JVM project command may run.
   (10,061/11,177). Typecheck, lint, cleanup, formatting, TypeDoc/API checks,
   Protobuf integrity/generated-clean, and release-readiness all pass. All
   review concerns are closed.
+- Task endpoint `470cd41f` is merged without conflict as `77105890`. Full
+  post-merge verification is GREEN with the same 157 files / 3,070 runnable
+  tests / 90.01% branch coverage, plus clean docs, Protobuf, generated-output,
+  and release-readiness gates. `origin/main` contains `77105890`.

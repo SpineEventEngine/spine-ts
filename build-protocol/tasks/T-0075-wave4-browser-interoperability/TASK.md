@@ -1,10 +1,10 @@
 # T-0075: Wave 4 Browser Client and Interoperability
 
-Status: Implementation accepted; integration pending
+Status: Complete
 
 Implementation status: fully implemented, specialist-converged, final-security
-clean, and task-branch verified. Commit, merge into `main`, post-merge
-verification, and remote synchronization remain.
+clean, committed as `470cd41f`, merged into `main` as `77105890`, post-merge
+verified, and remotely synchronized.
 
 ## Objective
 

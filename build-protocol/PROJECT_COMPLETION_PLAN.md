@@ -1,15 +1,13 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release and post-release JVM parity Waves 1 through 3 complete;
-Wave 4 implementation accepted under T-0075, integration pending
+Status: Initial release and post-release JVM parity Waves 1 through 4 complete
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: T-0075 has implemented and verified the
-approved Wave 4 browser access and interoperability plan. Task integration,
-post-merge verification, and remote synchronization remain.
+Active implementation frontier: Wave 4 is complete. Wave 5 packaging and
+deployment requires its separate human Q&A before implementation starts.
 
 ## Purpose
 
@@ -85,9 +83,10 @@ limitations, diagrams, authentication flows, extension points, and
 dependency-ordered implementation plan in
 `build-protocol/planning/WAVE_4_BROWSER_CLIENT_INTEROPERABILITY_PLAN.md`.
 T-0075 implements the approved Wave 4 plan. All specialist and final security
-reviews are closed, and the task-branch native gate passes with 157 test files,
-3,070 runnable tests, and 90.01% branch coverage. Integration, post-merge
-verification, and remote synchronization remain.
+reviews are closed. Task endpoint `470cd41f` is merged as `77105890`; the
+post-merge native gate passes with 157 test files, 3,070 runnable tests, and
+90.01% branch coverage. `origin/main` contains the verified merge. Wave 4 is
+durably closed.
 
 - **Wave 1:** handler-state `update` / `tryUpdate`, a Node client package,
   end-user `BlackBox`, Projection columns and Query DSL, `Environment`, a
