@@ -1,13 +1,15 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release and post-release JVM parity Waves 1 through 4 complete
+Status: Initial release and post-release JVM parity Waves 1 through 4 complete;
+T-0080 authored-API/example quality correction planned
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active implementation frontier: Wave 4 is complete. Wave 5 packaging and
-deployment requires its separate human Q&A before implementation starts.
+Active implementation frontier: T-0080 is the active corrective program. Wave
+5 packaging and deployment still requires its separate human Q&A before
+implementation starts.
 
 ## Purpose
 
@@ -119,6 +121,39 @@ durably closed.
 Each Wave 5-6 plan still requires a separate human Q&A. Do not publish packages
 to npm until all waves are complete and publication is revisited with the
 human.
+
+## Authored API And Example Quality Correction
+
+T-0080 is a bounded corrective program opened after Wave 4. It does not answer
+the Wave 5 Q&A or add runtime capability. It makes authored production/example
+TypeScript and example Proto sources concise, documented, structurally owned,
+and deterministically enforced, while moving the four Chat modules beneath one
+discoverable `examples/chat/` family.
+
+The planned dependency shape, pending orchestrator acceptance, is:
+
+1. T-0080A-C: serial TSDoc, complete TypeScript name/standalone-function, and
+   authored example Proto enforcement.
+2. T-0080I: Chat physical/package migration so later consumer repairs target
+   the final nested paths.
+3. T-0080D: production foundations.
+4. T-0080E/F/G: disjoint adapter, server, and auth/browser-client remediation
+   after foundation contracts stabilize.
+5. T-0080H: dependent client, delivery-client, testing, and Proto tooling
+   remediation.
+6. T-0080J/K: Chat model and application/web remediation after their production
+   dependencies.
+7. T-0080L/M/N: disjoint to-do, project-management, and datastore-orders
+   remediation.
+8. T-0080O: final generation, exact debt closure, cross-slice reconciliation,
+   one final relevant review/verification boundary, integration, and remote
+   synchronization.
+
+Intermediate slices use focused checks and relevant review-sized endpoints.
+The program pays for one final full `pnpm verify` in T-0080O; post-merge full
+verification repeats only when the protocol's change-sensitive conditions
+require it. Original copied Spine JVM Proto contracts and generated output are
+never manually renamed or edited, and Spine JVM is not built.
 
 Wave 1 uses frozen `core-java` commit
 `a408b0d70dafd603efc55b89c8b4b6f3e8c19d3b` and frozen `delivery-server`
