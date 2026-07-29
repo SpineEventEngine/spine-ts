@@ -79,3 +79,28 @@ Review the immutable correction range `7de0331f..b51dfc31`:
 Both existing roles and configured profiles are explicit before dispatch.
 Runtime self-metadata will be recorded when returned; if unavailable, the
 configured immutable profile is the available evidence.
+
+## Review Wave 2
+
+- Documentation: CLEAN. The reviewer reproduced 176 unique rows, matched their
+  qualifying evidence to the source records, verified T-0045/T-0047 ancestry,
+  and confirmed the sole non-ancestor T-0077 rescue disposition. Runtime
+  self-metadata was unavailable; the immutable configured
+  `gpt-5.6-luna`/medium profile is the available evidence.
+- Style/maintainability P1: the broad first-twelve-line predicate can select
+  dependency prose instead of an explicit completed/accepted status; T-0037e
+  is superseded but entered the inventory through its dependency line.
+  Accepted.
+- Style/maintainability P2: the generator reads moving `origin/main` and
+  `rev-list --all` inputs despite the pinned baseline, and the reproduction
+  commands do not assert generated-file equality. Accepted.
+- The earlier stale-status, trailing-whitespace, and T-0045/T-0047 findings are
+  closed.
+
+Return both accepted findings as one batch to the existing implementer.
+Expected/configured profile remains explicit: `gpt-5.6-terra`, medium
+reasoning. Parse only recognized explicit top-level completion/acceptance
+status evidence, pin source and ancestry inputs to `e6bdc065`, avoid mutable
+all-ref abbreviation resolution, regenerate and re-audit the count, and add a
+generated-file equality check. Runtime self-metadata will be recorded when
+returned; if unavailable, the configured profile is the available evidence.
