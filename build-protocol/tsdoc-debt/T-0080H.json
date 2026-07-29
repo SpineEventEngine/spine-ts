@@ -1,0 +1,2162 @@
+[
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumn.register(schema,definition)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "all(first,rest)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "either(first,rest)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.build()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.byId(ids)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.limit(value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.mask(paths)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.orderBy(column,direction)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.where(predicate)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "eq(column,value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "ge(column,value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "gt(column,value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "le(column,value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "lt(column,value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.connectTo(baseUrl,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.findOne(id,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.newestPending(shardIndex,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.observeShardUpdates(options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.pageSize()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.pickUp(shardIndex,workerId,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.readPage(shardIndex,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.release(value,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.releaseExpired(inactivityMs,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.removeMany(messages,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.removeOne(message,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.shardSnapshot(options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.usingTransport(transport,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.writeMany(messages,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.writeOne(message,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.reconcile(observation)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshotInboxMessage(value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "composeApplication(packageRoot,operations)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "generateModel(packageRoot,operations)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "probeGenerationClaimLiveness(pid,probe)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/proto-tools/src/generation/handler-generator.ts",
+    "name": "generateHandlers(applicationRoot)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "ManifestFileOperations.rename(from,to)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "writeManifestAtomically(target,content,operations)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.asGuest()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.eventually(read,accept,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.from(contextOrBuilder,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.onBehalfOf(actor)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "defineGeneratedEntityColumns(_schema,entries)(_schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "defineGeneratedEntityColumns(_schema,entries)(entries)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumn.register(schema,definition)(definition)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumn.register(schema,definition)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "all(first,rest)(first)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "all(first,rest)(rest)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "either(first,rest)(first)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "either(first,rest)(rest)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.byId(ids)(ids)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.constructor(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.limit(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.mask(paths)(paths)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.orderBy(column,direction)(column)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.orderBy(column,direction)(direction)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.where(predicate)(predicate)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "eq(column,value)(column)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "eq(column,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "ge(column,value)(column)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "ge(column,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "gt(column,value)(column)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "gt(column,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "le(column,value)(column)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "le(column,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "lt(column,value)(column)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "lt(column,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.connectTo(baseUrl,options)(baseUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.connectTo(baseUrl,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.findOne(id,options)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.findOne(id,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.newestPending(shardIndex,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.newestPending(shardIndex,options)(shardIndex)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.observeShardUpdates(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.pickUp(shardIndex,workerId,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.pickUp(shardIndex,workerId,options)(shardIndex)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.pickUp(shardIndex,workerId,options)(workerId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.readPage(shardIndex,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.readPage(shardIndex,options)(shardIndex)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.release(value,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.release(value,options)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.releaseExpired(inactivityMs,options)(inactivityMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.releaseExpired(inactivityMs,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.removeMany(messages,options)(messages)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.removeMany(messages,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.removeOne(message,options)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.removeOne(message,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.shardSnapshot(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.usingTransport(transport,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.usingTransport(transport,options)(transport)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.writeMany(messages,options)(messages)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.writeMany(messages,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.writeOne(message,options)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.writeOne(message,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "name": "ShardObservationStream.constructor(config)(config)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryOutcomeUnknownError.constructor(operation,reconciliation)(operation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryOutcomeUnknownError.constructor(operation,reconciliation)(reconciliation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantine.delete(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantine.get(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantine.put(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.begin(message,session,options)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.begin(message,session,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.begin(message,session,options)(session)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.constructor(client,quarantine)(client)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.constructor(client,quarantine)(quarantine)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.read(shardIndex,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.read(shardIndex,options)(shardIndex)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.readMessage(id,options)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.readMessage(id,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.receive(input,options)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.receive(input,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.constructor(client)(client)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.pickUp(shardIndex,node,options)(node)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.pickUp(shardIndex,node,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.pickUp(shardIndex,node,options)(shardIndex)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.reconcile(observation)(observation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.release(session,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.release(session,options)(session)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "backoff(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded(value,minimum,maximum,name)(maximum)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded(value,minimum,maximum,name)(minimum)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded(value,minimum,maximum,name)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded(value,minimum,maximum,name)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "callOptions(signal,timeoutMs)(signal)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "callOptions(signal,timeoutMs)(timeoutMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeInboxMessage(message,expectedShard)(expectedShard)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeInboxMessage(message,expectedShard)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePickedUpSession(value,expectedShard,expectedWorker)(expectedShard)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePickedUpSession(value,expectedShard,expectedWorker)(expectedWorker)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePickedUpSession(value,expectedShard,expectedWorker)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeReleasedSession(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeShardObservation(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeShardUpdate(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeDuration(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeInboxBatch(messages)(messages)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeInboxMessage(message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeMessageId(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeShard(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeTimestamp(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeWorker(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "normalizeOptions(options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "pageSize(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "requestBytes(schema,value)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "requestBytes(schema,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "responseBytes(schema,value)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "responseBytes(schema,value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "retries(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshotInboxMessage(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshotShard(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timeout(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validateAlreadyPickedUp(value,expectedShard)(expectedShard)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validateAlreadyPickedUp(value,expectedShard)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validBaseUrl(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "composeApplication(packageRoot,operations)(operations)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "composeApplication(packageRoot,operations)(packageRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "generateModel(packageRoot,operations)(operations)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "generateModel(packageRoot,operations)(packageRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.create(path,content)(content)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.create(path,content)(path)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.inspect(path)(path)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.list(directory)(directory)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.liveness(pid)(pid)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.read(path)(path)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.remove(path)(path)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rename(from,to)(from)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rename(from,to)(to)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rewriteImports(output,owners,currentPackage)(currentPackage)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rewriteImports(output,owners,currentPackage)(output)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rewriteImports(output,owners,currentPackage)(owners)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runBuf(moduleRoot,output,owned,packageName,runner)(moduleRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runBuf(moduleRoot,output,owned,packageName,runner)(output)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runBuf(moduleRoot,output,owned,packageName,runner)(owned)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runBuf(moduleRoot,output,owned,packageName,runner)(packageName)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runBuf(moduleRoot,output,owned,packageName,runner)(runner)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.writeModule(output,exportName,packageName,dependencies)(dependencies)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.writeModule(output,exportName,packageName,dependencies)(exportName)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.writeModule(output,exportName,packageName,dependencies)(output)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.writeModule(output,exportName,packageName,dependencies)(packageName)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "probeGenerationClaimLiveness(pid,probe)(pid)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "probeGenerationClaimLiveness(pid,probe)(probe)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/generation/handler-generator.ts",
+    "name": "generateHandlers(applicationRoot)(applicationRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "createManifest(packageRoot,ownedProtoFiles)(ownedProtoFiles)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "createManifest(packageRoot,ownedProtoFiles)(packageRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "readConfig(packageRoot)(packageRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "readManifest#1(packageRoot)(packageRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "readManifest#2(packageRoot,manifestPath)(manifestPath)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "readManifest#2(packageRoot,manifestPath)(packageRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "ManifestFileOperations.remove(path)(path)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "ManifestFileOperations.rename(from,to)(from)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "ManifestFileOperations.rename(from,to)(to)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "ManifestFileOperations.writeFile(path,content)(content)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "ManifestFileOperations.writeFile(path,content)(path)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "writeManifestAtomically(target,content,operations)(content)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "writeManifestAtomically(target,content,operations)(operations)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/io/atomic-manifest.ts",
+    "name": "writeManifestAtomically(target,content,operations)(target)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "resolveModelGraph(requesterRoot,modelPackages)(modelPackages)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "resolveModelGraph(requesterRoot,modelPackages)(requesterRoot)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/model/npm-package-name.ts",
+    "name": "isNpmPackageName(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/proto-tools/src/model/registry-dependency.ts",
+    "name": "isRegistryDependencySpecifier(specifier)(specifier)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.eventually(read,accept,options)(accept)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.eventually(read,accept,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.eventually(read,accept,options)(read)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.from(contextOrBuilder,options)(contextOrBuilder)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.from(contextOrBuilder,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.onBehalfOf(actor)(actor)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxScope.postEvent(schema,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxScope.postEvent(schema,message)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxTimeoutError.constructor(timeoutMs)(timeoutMs)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "createTestBlackBox(resources)(resources)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "openTestBlackBox(resources)(resources)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "trackTestHandle(blackBox,handle)(blackBox)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "trackTestHandle(blackBox,handle)(handle)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "defineGeneratedEntityColumns(_schema,entries)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumn.register(schema,definition)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "all(first,rest)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "either(first,rest)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.build()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.byId(ids)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.constructor(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.limit(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.mask(paths)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.orderBy(column,direction)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.where(predicate)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "eq(column,value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "ge(column,value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "gt(column,value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "le(column,value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "lt(column,value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.connectTo(baseUrl,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.findOne(id,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.newestPending(shardIndex,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.observeShardUpdates(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.pageSize()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.pickUp(shardIndex,workerId,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.readPage(shardIndex,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.releaseExpired(inactivityMs,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.shardSnapshot(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/client.ts",
+    "name": "DeliveryClient.usingTransport(transport,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "name": "ShardObservationStream.[Symbol.asyncIterator]()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "name": "ShardObservationStream.constructor(config)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryOutcomeUnknownError.constructor(operation,reconciliation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryPagingError.constructor()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryProtocolError.constructor()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryQuarantineError.constructor()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryShardObservationError.constructor()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantine.get(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "ShardObservationOverflowError.constructor()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.begin(message,session,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.constructor(client,quarantine)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.read(shardIndex,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.readMessage(id,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.receive(input,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.constructor(client)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.pickUp(shardIndex,node,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.release(session,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "backoff(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded(value,minimum,maximum,name)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "callOptions(signal,timeoutMs)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeInboxMessage(message,expectedShard)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePickedUpSession(value,expectedShard,expectedWorker)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeReleasedSession(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeShardObservation(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeShardUpdate(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeDuration(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeInboxBatch(messages)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeInboxMessage(message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeMessageId(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeShard(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeTimestamp(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeWorker(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "normalizeOptions(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "pageSize(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "protocol()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "retries(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshotInboxMessage(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshotShard(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timeout(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.inspect(path)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.list(directory)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.liveness(pid)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.read(path)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "probeGenerationClaimLiveness(pid,probe)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "createManifest(packageRoot,ownedProtoFiles)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "readConfig(packageRoot)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "readManifest#1(packageRoot)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "readManifest#2(packageRoot,manifestPath)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "resolveModelGraph(requesterRoot,modelPackages)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/model/npm-package-name.ts",
+    "name": "isNpmPackageName(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/proto-tools/src/model/registry-dependency.ts",
+    "name": "isRegistryDependencySpecifier(specifier)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.asGuest()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.eventually(read,accept,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.from(contextOrBuilder,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBox.onBehalfOf(actor)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxClosedError.constructor()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxTimeoutError.constructor(timeoutMs)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "createTestBlackBox(resources)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "openTestBlackBox(resources)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "trackTestHandle(blackBox,handle)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "defineGeneratedEntityColumns(_schema,entries)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumnDefinition:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumnDefinition.[generatedDefinitionBrand]:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumnDefinition.entries:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumnDefinitionEntry.comparison:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/entity/entity-column.ts",
+    "name": "EntityColumnDefinitionEntry.field:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityComparisonPredicate.column:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityComparisonPredicate.kind:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityComparisonPredicate.operator:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityComparisonPredicate.value:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityGroup.kind:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityGroup.predicates:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/client-node/src/query/entity-query.ts",
+    "name": "EntityQueryBuilder.constructor(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "name": "ShardObservationStream:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "name": "ShardObservationStream.[Symbol.asyncIterator]()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "name": "ShardObservationStream.cancel()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/shard-observation.ts",
+    "name": "ShardObservationStream.constructor(config)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryClientOptions.observationBufferSize:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryClientOptions.observationReconnectBackoffMs:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryClientOptions.observationReconnects:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryClientOptions.pageSize:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryClientOptions.readRetries:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryClientOptions.retryBackoffMs:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryFindOneOptions.signal:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryFindOneOptions.timeoutMs:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryMutationOptions.signal:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryMutationOptions.timeoutMs:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryOutcomeUnknownError.constructor(operation,reconciliation)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryOutcomeUnknownError.operation:PropertyDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryOutcomeUnknownError.reconciliation:PropertyDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryPagingError.constructor()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryProtocolError.constructor()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryQuarantineError.constructor()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryReadPageOptions.pageSize:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryReadPageOptions.sinceWhen:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryShardObservationError.constructor()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryShardObservationStream.cancel()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryWorkerId.nodeId:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "DeliveryWorkerId.value:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "ReleasedShardSession.whenReleased:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemoteShardObservation.lastPicked:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemoteShardObservation.messages:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemoteShardObservation.shard:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemoteShardObservation.status:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemoteShardSession.kind:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemoteShardSession.shard:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemoteShardSession.whenPicked:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemoteShardSession.worker:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantine.delete(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantine.get(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantine.put(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantineRecord.fingerprint:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantineRecord.id:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "RemovalQuarantineRecord.phase:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/client/types.ts",
+    "name": "ShardObservationOverflowError.constructor()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.begin(message,session,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.constructor(client,quarantine)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.read(shardIndex,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.readMessage(id,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteInbox.receive(input,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.constructor(client)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.pickUp(shardIndex,node,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/remote/adapters.ts",
+    "name": "RemoteWorkRegistry.release(session,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "backoff(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "bounded(value,minimum,maximum,name)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "callOptions(signal,timeoutMs)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeInboxMessage(message,expectedShard)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodePickedUpSession(value,expectedShard,expectedWorker)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeReleasedSession(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeShardObservation(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "decodeShardUpdate(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeDuration(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeInboxBatch(messages)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeInboxMessage(message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeMessageId(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeShard(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeTimestamp(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "encodeWorker(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "normalizeOptions(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "pageSize(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "protocol()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "requestBytes(schema,value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "responseBytes(schema,value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "retries(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "snapshotShard(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "timeout(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validateAlreadyPickedUp(value,expectedShard)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/delivery-client/src/wire/codec.ts",
+    "name": "validBaseUrl(value)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "CompositionOperations.registryOperations:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.create:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.create(path,content)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.inspect:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.inspect(path)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.list:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.list(directory)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.liveness:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.liveness(pid)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.read:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.read(path)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.remove:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationLockOperations.remove(path)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.lockOperations:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.manifestOperations:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rename:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rename(from,to)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rewriteImports:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.rewriteImports(output,owners,currentPackage)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runBuf:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runBuf(moduleRoot,output,owned,packageName,runner)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.runProcess:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.writeModule:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/generation/generator.ts",
+    "name": "GenerationOperations.writeModule(output,exportName,packageName,dependencies)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "ApplicationConfig:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "ModelConfig:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "ProtoManifest:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/index.ts",
+    "name": "readManifest#2(packageRoot,manifestPath)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ProtoOwner:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ProtoOwner.generatedExport:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ProtoOwner.packageName:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModel:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModel.moduleExport:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModel.name:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModel.root:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModel.version:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModelGraph:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModelGraph.models:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto-tools/src/model/model-graph.ts",
+    "name": "ResolvedModelGraph.protoOwners:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxClosedError.constructor()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxScope.postEvent(schema,message)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "BlackBoxTimeoutError.constructor(timeoutMs)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "createTestBlackBox(resources)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "openTestBlackBox(resources)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/testing/src/black-box/black-box.ts",
+    "name": "trackTestHandle(blackBox,handle)"
+  }
+]

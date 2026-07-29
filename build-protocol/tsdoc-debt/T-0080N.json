@@ -1,0 +1,397 @@
+[
+  {
+    "rule": "callable-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "runDatastoreOrdersLoad(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "createDatastoreOrdersContext(storageFactory)(storageFactory)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "InventoryViewProjection.onSkuRegistered(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderAggregate.createOrder(command)(command)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderAuditViewProjection.onOrderCreated(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSalesManager.onOrderCreated(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSkuViewProjection.onOrderCreated(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSummaryProjection.onOrderCreated(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesFeedProjection.onOrderCreated(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesSkuIndexProjection.onSkuRegistered(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesSummaryProjection.onOrderCreated(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuAggregate.registerSku(command)(command)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuAuditViewProjection.onSkuRegistered(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuCatalogProjection.onSkuRegistered(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuSalesManager.onSkuRegistered(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuSalesViewProjection.onSkuRegistered(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "startDatastoreOrdersDatastoreServer(datastore,options)(datastore)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "startDatastoreOrdersDatastoreServer(datastore,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "startDatastoreOrdersServer(storageFactory,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "startDatastoreOrdersServer(storageFactory,options)(storageFactory)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "runDatastoreOrdersLoad(options)(options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "createDatastoreOrdersContext(storageFactory)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderAggregate.createOrder(command)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuAggregate.registerSku(command)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "startDatastoreOrdersDatastoreServer(datastore,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "startDatastoreOrdersServer(storageFactory,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "runDatastoreOrdersLoad(options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "DatastoreOrdersServerOptions:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "DatastoreOrdersServerOptions.host:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "DatastoreOrdersServerOptions.port:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "datastoreOrdersTopology"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "InventoryViewProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "InventoryViewProjection.onSkuRegistered(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderAggregate:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderAggregate.createOrder(command)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderAuditViewProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderAuditViewProjection.onOrderCreated(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSalesManager:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSalesManager.onOrderCreated(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSkuViewProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSkuViewProjection.onOrderCreated(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSummaryProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "OrderSummaryProjection.onOrderCreated(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesFeedProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesFeedProjection.onOrderCreated(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesSkuIndexProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesSkuIndexProjection.onSkuRegistered(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesSummaryProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SalesSummaryProjection.onOrderCreated(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuAggregate:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuAggregate.registerSku(command)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuAuditViewProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuAuditViewProjection.onSkuRegistered(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuCatalogProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuCatalogProjection.onSkuRegistered(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuSalesManager:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuSalesManager.onSkuRegistered(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuSalesViewProjection:ClassDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "SkuSalesViewProjection.onSkuRegistered(event)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/index.ts",
+    "name": "startDatastoreOrdersServer(storageFactory,options)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadLevel:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadOptions:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadOptions.baseUrl:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadOptions.users:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadOptions.visibilityTimeoutMs:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.commandAcknowledgementLatency:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.commandAcknowledgements:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.failedUsers:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.queryVisibilities:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.queryVisibilityLatency:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.subscriptionDeliveries:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.subscriptionDeliveryLatency:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.throughputPerSecond:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "DatastoreOrdersLoadResult.users:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "LatencyPercentiles:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "LatencyPercentiles.p50Ms:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "LatencyPercentiles.p95Ms:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/datastore-orders/src/load-runner.ts",
+    "name": "LatencyPercentiles.p99Ms:PropertySignature"
+  }
+]

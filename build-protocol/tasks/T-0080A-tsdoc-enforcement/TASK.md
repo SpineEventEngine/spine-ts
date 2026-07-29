@@ -2,7 +2,8 @@
 
 ## Status
 
-In progress.
+Implementation and focused mechanical verification complete; awaiting the
+parent's review wave.
 
 ## Parent And Dependency
 
@@ -99,3 +100,29 @@ but not runtime behavior or a public package contract.
 - Both fields are explicit in dispatch.
 - Runtime metadata is recorded if exposed; otherwise the immutable configured
   role/profile and self-introspection limitation are the acceptance evidence.
+
+## Implementation Evidence
+
+- Added `scripts/check-tsdoc.mjs`, a tracked authored-source checker invoked by
+  `pnpm lint:generated`; `pnpm lint` runs the canonical Proto-generation path
+  before that gate.
+- The checker confines tracked authored package/example source paths, excludes
+  test/generated/dist/dependency paths, checks declaration/member/callable
+  documentation and tags, escapes diagnostics, and verifies exact debt entries
+  against their remediation partition.
+- `node scripts/check-tsdoc.mjs --write-debt` deterministically regenerated
+  the current exact JSON partitions: D 520, E 205, F 1,652, G 450, H 432, K
+  49, L 39, M 130, and N 79 entries (3,556 total).
+- Completion redispatch extended the checker with a TypeScript Program and
+  TypeChecker return analysis, stable overload identities, namespace/member
+  identities, callable-property/index/call/construct coverage, and confined
+  broken/escaping symlink diagnostics. The checker now discovers tracked
+  sources only and remains source-path confined.
+- Focused fixture suite: 22/22 passing, including semantic inferred/async
+  void results, barrels, overloads, recursive destructuring, inheritance,
+  callable signatures, tag quality, exact debt schema, Unicode controls, and
+  symlink confinement. Direct checker, scoped ESLint, tooling typecheck,
+  Prettier, `git diff --check`, and canonical `pnpm lint` passed.
+- Existing implementer profile was explicitly configured as `gpt-5.6-terra`
+  with medium reasoning. This child surface does not expose actual runtime
+  model/reasoning introspection; no visible fallback or mismatch was exposed.

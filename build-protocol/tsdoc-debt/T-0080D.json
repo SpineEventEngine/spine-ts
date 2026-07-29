@@ -1,0 +1,2602 @@
+[
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "checkValid(schema,message)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "createRejectionThrowable(schema,input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "createSpineCoreRegistry()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "createValidationError(violations)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "deriveTypeUrl(schema,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "getTypeUrlPrefix(schema,fallbackPrefix)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "isRejectionThrowable(value)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "packCommand(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "packEvent(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "RejectionThrowable.messageData()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "RejectionThrowable.messageThrown()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "RejectionThrowable.schema()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TransitionValidationRule.validateTransition(request)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeMetadata.getFileOption(option)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeMetadata.hasFileOption(option)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.constructor(schemas)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findByFullName(fullTypeName)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findBySchema(schema)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findBySemanticTag(semanticTag)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findByTypeUrl(typeUrl)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.from(modules)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getByFullName(fullTypeName)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getBySchema(schema)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getByTypeUrl(typeUrl)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.list()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.register(schema,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findByFullName(fullTypeName)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findBySchema(schema)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findBySemanticTag(semanticTag)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findByTypeUrl(typeUrl)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getByFullName(fullTypeName)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getBySchema(schema)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getByTypeUrl(typeUrl)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.list()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "unpackAny(packed,schema)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "unpackAnyUsing(registry,packed)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "validateMessage(schema,message)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "validateTransition(request,rules)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "ValidationException.asMessage()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/core/src/index.ts",
+    "name": "ValidationException.constructor(messageData)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventStorage.truncate(olderThan)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryStorage.trim(entityId,keepMostRecent)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryStorage.truncate(olderThan)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "entityStorageKey(stateType,purpose)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "assertCurrentQueryConformance(adapter)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "assertEntityHistoryConformance(adapter)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityHistoryConformanceAdapter.reopen(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventRollback.rollback()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.accept(event)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.acceptThenAppend(event,onAccepted)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.append(event)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.appendAll(events)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.appendAllWithRollback(events)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.isOpen()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.read(query)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput.extractId(state)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityStorageFactory.constructor(backend)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/memory/in-memory-storage-backend.ts",
+    "name": "bindMemoryBackendScope(backend,scope,fingerprint,create)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/memory/in-memory-storage-factory.ts",
+    "name": "InMemoryStorageFactory.constructor(backend)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/memory/in-memory-storage-factory.ts",
+    "name": "InMemoryStorageFactory.createEntityStorage(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-column.ts",
+    "name": "RecordColumn.valueIn(record)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.cloneId(id)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.cloneRecord(record)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.compatibilityFingerprint()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.idValueIn(record)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.materialize(record)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.schema()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.storageKey()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.compareAndSet(id,expected,next)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.delete(id)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.index(query)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.isOpen()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.query(query)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryEntries(query)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryPlan(plan)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryPlanEntries(plan)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.read(id,options)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.recordSpec()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.write(record)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.writeAll(records)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/storage/canonical-scope.ts",
+    "name": "canonicalStorageScope(context,storageKey)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/storage/storage-factory.ts",
+    "name": "StorageFactory.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/storage/storage-factory.ts",
+    "name": "StorageFactory.createRecordStorage(context,recordSpec)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/storage/storage-factory.ts",
+    "name": "StorageFactory.isOpen()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/storage/storage.ts",
+    "name": "Storage.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/storage/src/storage/storage.ts",
+    "name": "Storage.isOpen()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "AsyncCloseable.close()"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportSubscription(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportTopic(input)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportOperationKind(operation,signalKind)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportTopicKind(topic,signalKind)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.publish(operation)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.request(operation)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.respond(subscription,handler)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.subscribe(subscription,handler)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "createZeroMqTransport(config,options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "checkValid(schema,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "checkValid(schema,message)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "createRejectionThrowable(schema,input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "createRejectionThrowable(schema,input)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "createValidationError(violations)(violations)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "deriveTypeUrl(schema,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "deriveTypeUrl(schema,options)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "getTypeUrlPrefix(schema,fallbackPrefix)(fallbackPrefix)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "getTypeUrlPrefix(schema,fallbackPrefix)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "isRejectionThrowable(value)(value)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packCommand(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "packEvent(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TransitionValidationRule.validateTransition(request)(request)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeMetadata.getFileOption(option)(option)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeMetadata.hasFileOption(option)(option)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.constructor(schemas)(schemas)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findByFullName(fullTypeName)(fullTypeName)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findBySchema(schema)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findBySemanticTag(semanticTag)(semanticTag)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findByTypeUrl(typeUrl)(typeUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.from(modules)(modules)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getByFullName(fullTypeName)(fullTypeName)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getBySchema(schema)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getByTypeUrl(typeUrl)(typeUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.register(schema,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.register(schema,options)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findByFullName(fullTypeName)(fullTypeName)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findBySchema(schema)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findBySemanticTag(semanticTag)(semanticTag)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findByTypeUrl(typeUrl)(typeUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getByFullName(fullTypeName)(fullTypeName)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getBySchema(schema)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getByTypeUrl(typeUrl)(typeUrl)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "unpackAny(packed,schema)(packed)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "unpackAny(packed,schema)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "unpackAnyUsing(registry,packed)(packed)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "unpackAnyUsing(registry,packed)(registry)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "validateMessage(schema,message)(message)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "validateMessage(schema,message)(schema)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "validateTransition(request,rules)(request)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "validateTransition(request,rules)(rules)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/core/src/index.ts",
+    "name": "ValidationException.constructor(messageData)(messageData)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryPort.append(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryPort.backward(entityId,depth,startingFromVersion)(depth)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryPort.backward(entityId,depth,startingFromVersion)(entityId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryPort.backward(entityId,depth,startingFromVersion)(startingFromVersion)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventStorage.truncate(olderThan)(olderThan)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.append(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.backward(entityId,depth,startingFromVersion)(depth)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.backward(entityId,depth,startingFromVersion)(entityId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.backward(entityId,depth,startingFromVersion)(startingFromVersion)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.stateAt(entityId,time)(entityId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.stateAt(entityId,time)(time)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryStorage.trim(entityId,keepMostRecent)(entityId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryStorage.trim(entityId,keepMostRecent)(keepMostRecent)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryStorage.truncate(olderThan)(olderThan)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecordStorage.query(plan)(plan)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecordStorage.read(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecordStorage.write(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "entityStorageKey(stateType,purpose)(purpose)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "entityStorageKey(stateType,purpose)(stateType)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "assertCurrentQueryConformance(adapter)(adapter)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "assertEntityHistoryConformance(adapter)(adapter)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityHistoryConformanceAdapter.create(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityHistoryConformanceAdapter.reopen(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.accept(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.acceptThenAppend(event,onAccepted)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.acceptThenAppend(event,onAccepted)(onAccepted)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.append(event)(event)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.appendAll(events)(events)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.appendAllWithRollback(events)(events)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.constructor(context,factory)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.constructor(context,factory)(factory)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.read(query)(query)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityIdCodec.clone(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityIdCodec.key(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput.extractId(state)(state)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.append(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.backward(entityId,depth,startingFromVersion)(depth)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.backward(entityId,depth,startingFromVersion)(entityId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.backward(entityId,depth,startingFromVersion)(startingFromVersion)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.constructor(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.stateAt(entityId,time)(entityId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.stateAt(entityId,time)(time)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.trim(entityId,keepMostRecent)(entityId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.trim(entityId,keepMostRecent)(keepMostRecent)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.truncate(olderThan)(olderThan)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityStorage.constructor(input,backend)(backend)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityStorage.constructor(input,backend)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.append(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.backward(entityId,depth,startingFromVersion)(depth)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.backward(entityId,depth,startingFromVersion)(entityId)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.backward(entityId,depth,startingFromVersion)(startingFromVersion)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.constructor(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.truncate(olderThan)(olderThan)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.constructor(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.query(plan)(plan)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.read(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.write(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityStorageFactory.constructor(backend)(backend)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityStorageFactory.create(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-record-storage.ts",
+    "name": "InMemoryRecordStorage.constructor(context,recordSpec,tenantRecords)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-record-storage.ts",
+    "name": "InMemoryRecordStorage.constructor(context,recordSpec,tenantRecords)(recordSpec)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-record-storage.ts",
+    "name": "InMemoryRecordStorage.constructor(context,recordSpec,tenantRecords)(tenantRecords)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-storage-backend.ts",
+    "name": "bindMemoryBackendScope(backend,scope,fingerprint,create)(backend)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-storage-backend.ts",
+    "name": "bindMemoryBackendScope(backend,scope,fingerprint,create)(create)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-storage-backend.ts",
+    "name": "bindMemoryBackendScope(backend,scope,fingerprint,create)(fingerprint)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-storage-backend.ts",
+    "name": "bindMemoryBackendScope(backend,scope,fingerprint,create)(scope)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-storage-factory.ts",
+    "name": "InMemoryStorageFactory.constructor(backend)(backend)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/in-memory-storage-factory.ts",
+    "name": "InMemoryStorageFactory.createEntityStorage(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.compareAndSet(id,expected,next)(expected)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.compareAndSet(id,expected,next)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.compareAndSet(id,expected,next)(next)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.delete(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.queryEntries(spec,query)(query)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.queryEntries(spec,query)(spec)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.read(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.write(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.writeAll(records)(records)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/query/query-execution.ts",
+    "name": "QueryCandidateLimitError.constructor(candidateLimit)(candidateLimit)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-column.ts",
+    "name": "RecordColumn.constructor(name,read,valueType)(name)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-column.ts",
+    "name": "RecordColumn.constructor(name,read,valueType)(read)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-column.ts",
+    "name": "RecordColumn.constructor(name,read,valueType)(valueType)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-column.ts",
+    "name": "RecordColumn.valueIn(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.cloneId(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.cloneRecord(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.constructor(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.idValueIn(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.materialize(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.compareAndSet(id,expected,next)(expected)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.compareAndSet(id,expected,next)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.compareAndSet(id,expected,next)(next)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.constructor(context,recordSpec)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.constructor(context,recordSpec)(recordSpec)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.delete(id)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.index(query)(query)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.query(query)(query)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryEntries(query)(query)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryPlan(plan)(plan)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryPlanEntries(plan)(plan)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.read(id,options)(id)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.read(id,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.write(record)(record)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.writeAll(records)(records)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/storage/canonical-scope.ts",
+    "name": "canonicalStorageScope(context,storageKey)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/storage/canonical-scope.ts",
+    "name": "canonicalStorageScope(context,storageKey)(storageKey)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/storage/storage-factory.ts",
+    "name": "StorageFactory.createRecordStorage(context,recordSpec)(context)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/storage/src/storage/storage-factory.ts",
+    "name": "StorageFactory.createRecordStorage(context,recordSpec)(recordSpec)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportSubscription(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportTopic(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportOperationKind(operation,signalKind)(operation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportOperationKind(operation,signalKind)(signalKind)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportTopicKind(topic,signalKind)(signalKind)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportTopicKind(topic,signalKind)(topic)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.publish(operation)(operation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.request(operation)(operation)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.respond(subscription,handler)(handler)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.respond(subscription,handler)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.subscribe(subscription,handler)(handler)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.subscribe(subscription,handler)(subscription)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "createZeroMqAdapterConfig(input)(input)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/endpoint-files.ts",
+    "name": "endpointFileAccess.remove(filePath)(filePath)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "createZeroMqTransport(config,options)(config)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "createZeroMqTransport(config,options)(options)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.bindPublisher(socket,address)(address)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.bindPublisher(socket,address)(socket)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.bindReply(socket,address)(address)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.bindReply(socket,address)(socket)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.close(socket)(socket)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.connect(socket,address)(address)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.connect(socket,address)(socket)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.createIpcDirectoryComponent(directory)(directory)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.prepareIpcDirectory(ipcDirectory)(ipcDirectory)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.recheckIpcDirectory(prepared)(prepared)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.sendPublisher(socket,frames)(frames)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.sendPublisher(socket,frames)(socket)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.sendRequest(socket,frames)(frames)"
+  },
+  {
+    "rule": "missing-param",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.sendRequest(socket,frames)(socket)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "checkValid(schema,message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "createRejectionThrowable(schema,input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "createSpineCoreRegistry()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "createValidationError(violations)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "deriveTypeUrl(schema,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "getTypeUrlPrefix(schema,fallbackPrefix)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "isRejectionThrowable(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "packAny(schema,message,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "packCommand(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "packEvent(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "RejectionThrowable.messageData()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "RejectionThrowable.messageThrown()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "RejectionThrowable.schema()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TransitionValidationRule.validateTransition(request)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeMetadata.getFileOption(option)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeMetadata.hasFileOption(option)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.constructor(schemas)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findByFullName(fullTypeName)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findBySchema(schema)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findBySemanticTag(semanticTag)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.findByTypeUrl(typeUrl)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.from(modules)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getByFullName(fullTypeName)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getBySchema(schema)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.getByTypeUrl(typeUrl)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.list()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistry.register(schema,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findByFullName(fullTypeName)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findBySchema(schema)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findBySemanticTag(semanticTag)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.findByTypeUrl(typeUrl)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getByFullName(fullTypeName)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getBySchema(schema)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.getByTypeUrl(typeUrl)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "TypeRegistryLookup.list()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "unpackAny(packed,schema)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "unpackAnyUsing(registry,packed)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "validateMessage(schema,message)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "validateTransition(request,rules)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "ValidationException.asMessage()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/core/src/index.ts",
+    "name": "ValidationException.constructor(messageData)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryPort.backward(entityId,depth,startingFromVersion)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.backward(entityId,depth,startingFromVersion)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.stateAt(entityId,time)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecordStorage.query(plan)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecordStorage.read(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "entityStorageKey(stateType,purpose)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityHistoryConformanceAdapter.create(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityHistoryConformanceAdapter.reopen(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.acceptThenAppend(event,onAccepted)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.appendAllWithRollback(events)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.constructor(context,factory)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.isOpen()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.read(query)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityIdCodec.clone(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityIdCodec.key(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput.extractId(state)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.backward(entityId,depth,startingFromVersion)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.constructor(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.isOpen()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.stateAt(entityId,time)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityStorage.constructor(input,backend)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryMaintenance.afterSelection()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryMaintenance.onChunk()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.backward(entityId,depth,startingFromVersion)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.constructor(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.isOpen()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.constructor(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.query(plan)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.read(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityStorageFactory.constructor(backend)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityStorageFactory.create(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-record-storage.ts",
+    "name": "InMemoryRecordStorage.constructor(context,recordSpec,tenantRecords)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-storage-backend.ts",
+    "name": "bindMemoryBackendScope(backend,scope,fingerprint,create)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-storage-factory.ts",
+    "name": "InMemoryStorageFactory.constructor(backend)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/in-memory-storage-factory.ts",
+    "name": "InMemoryStorageFactory.createEntityStorage(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.compareAndSet(id,expected,next)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.delete(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.queryEntries(spec,query)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.read(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/query/query-execution.ts",
+    "name": "QueryCandidateLimitError.constructor(candidateLimit)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-column.ts",
+    "name": "RecordColumn.constructor(name,read,valueType)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-column.ts",
+    "name": "RecordColumn.valueIn(record)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.cloneId(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.cloneRecord(record)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.compatibilityFingerprint()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.constructor(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.idValueIn(record)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.materialize(record)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.schema()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-spec.ts",
+    "name": "RecordSpec.storageKey()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.compareAndSet(id,expected,next)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.constructor(context,recordSpec)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.delete(id)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.index(query)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.isOpen()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.query(query)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryEntries(query)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryPlan(plan)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.queryPlanEntries(plan)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.read(id,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.recordSpec()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/storage/canonical-scope.ts",
+    "name": "canonicalStorageScope(context,storageKey)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/storage/storage-factory.ts",
+    "name": "StorageFactory.createRecordStorage(context,recordSpec)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/storage/storage-factory.ts",
+    "name": "StorageFactory.isOpen()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/storage/src/storage/storage.ts",
+    "name": "Storage.isOpen()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportSubscription(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "createTransportTopic(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportOperationKind(operation,signalKind)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "isTransportTopicKind(topic,signalKind)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.request(operation)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.respond(subscription,handler)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/index.ts",
+    "name": "SignalTransport.subscribe(subscription,handler)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "createZeroMqAdapterConfig(input)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "createZeroMqTransport(config,options)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.prepareIpcDirectory(ipcDirectory)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto/src/index.ts",
+    "name": "CommandValidationError:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto/src/index.ts",
+    "name": "DayOfWeek:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto/src/index.ts",
+    "name": "EventValidationError:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto/src/index.ts",
+    "name": "Language:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/proto/src/index.ts",
+    "name": "Month:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryPort.append(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryPort.backward(entityId,depth,startingFromVersion)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryRecord.createdAt:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryRecord.entityId:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryRecord.event:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventHistoryRecord.producerVersion:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityEventStorage.[entityEventHistoryEntity]:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.append(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.backward(entityId,depth,startingFromVersion)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryPort.stateAt(entityId,time)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryRecord.createdAt:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryRecord.entityId:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryRecord.state:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryRecord.version:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryStorage:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-history-storage.ts",
+    "name": "EntityStateHistoryStorage.[entityStateHistoryState]:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecord.archived:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecord.deleted:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecord.id:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecord.state:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecord.version:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecordStorage.query(plan)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecordStorage.read(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/entity-record.ts",
+    "name": "EntityRecordStorage.write(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityHistoryConformanceAdapter.create:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityHistoryConformanceAdapter.create(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityStorageConformance.close()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityStorageConformance.current:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityStorageConformance.events:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/entity/history-conformance.ts",
+    "name": "EntityStorageConformance.states:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/event/event-store.ts",
+    "name": "EventStore.constructor(context,factory)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityIdCodec.clone:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityIdCodec.clone(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityIdCodec.key:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityIdCodec.key(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput.context:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput.id:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput.layout:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput.stateSchema:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "EntityStorageInput.storageKey:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.append(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.backward(entityId,depth,startingFromVersion)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.close()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.constructor(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.isOpen()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.stateAt(entityId,time)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.trim(entityId,keepMostRecent)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityHistory.truncate(olderThan)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityStorage.constructor(input,backend)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityStorage.current:PropertyDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityStorage.events:PropertyDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryEntityStorage.states:PropertyDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryMaintenance.afterSelection:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryMaintenance.afterSelection()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryMaintenance.onChunk:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "InMemoryMaintenance.onChunk()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.append(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.backward(entityId,depth,startingFromVersion)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.close()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.constructor(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.isOpen()"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityEventHistory.truncate(olderThan)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.constructor(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.query(plan)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.read(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityRecordStorage.write(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-entity-history.ts",
+    "name": "MemoryEntityStorageFactory.create(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-record-storage.ts",
+    "name": "InMemoryRecordStorage.constructor(context,recordSpec,tenantRecords)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/in-memory-storage-backend.ts",
+    "name": "InMemoryStorageBackend.[Symbol.toStringTag]:PropertyDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.compareAndSet(id,expected,next)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.delete(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.queryEntries(spec,query)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.read(id)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.write(record)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/memory/tenant-records.ts",
+    "name": "TenantRecords.writeAll(records)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-execution.ts",
+    "name": "NormalizedQueryEntry.columns:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-execution.ts",
+    "name": "NormalizedQueryEntry.id:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-execution.ts",
+    "name": "NormalizedQueryEntry.record:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-execution.ts",
+    "name": "QueryCandidateLimitError.constructor(candidateLimit)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryMask.paths:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryOrder.column:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryOrder.direction:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPlan.limit:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPlan.mask:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPlan.order:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "NormalizedQueryPlan.predicate:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "StorageQueryCapabilities.comparisons:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/query/query-policy.ts",
+    "name": "StorageQueryCapabilities.features:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/record/record-column.ts",
+    "name": "RecordColumn.constructor(name,read,valueType)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/record/record-mask.ts",
+    "name": "RecordMask"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/record/record-mask.ts",
+    "name": "RecordMask:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/record/record-query.ts",
+    "name": "RecordQuery"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordEntry.id:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordEntry.record:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/storage/src/record/record-storage.ts",
+    "name": "RecordStorage.constructor(context,recordSpec)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "createZeroMqAdapterConfig(input)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfig:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfig.adapterIdentity:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfig.ipcDirectory:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfig.nativePackageName:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfig.transportScope:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfigInput:InterfaceDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfigInput.adapterIdentity:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqAdapterConfigInput.ipcDirectory:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqNativeModule:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/adapter-config.ts",
+    "name": "ZeroMqTransportScope:TypeAliasDeclaration"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/endpoint-files.ts",
+    "name": "endpointFileAccess"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/endpoint-files.ts",
+    "name": "endpointFileAccess.remove(filePath)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.bindPublisher(socket,address)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.bindReply(socket,address)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.close(socket)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.connect(socket,address)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.createIpcDirectoryComponent(directory)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.prepareIpcDirectory(ipcDirectory)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.recheckIpcDirectory(prepared)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.sendPublisher(socket,frames)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "packages/transport/src/zeromq/signal-transport.ts",
+    "name": "zeroMqSocketAccess.sendRequest(socket,frames)"
+  }
+]
