@@ -68,13 +68,13 @@ canonical history.
 ## Historical rescue branches and post-pruning tag preservation
 
 At this audit's 2026-07-29 baseline, the following names were remote branches.
-T-0079 records their exact planned preservation tags in
+T-0079 preserved them under the exact tags recorded in
 [`T-0079_REMOTE_BRANCH_PRUNING_MANIFEST.md`](T-0079_REMOTE_BRANCH_PRUNING_MANIFEST.md).
-Only after those tags are pushed and verified may the historical branches be
-deleted. The tag column below is therefore a post-execution target, not a
-claim that the tag already exists.
+The tags were pushed and verified before the historical branches were deleted
+as part of the successful atomic 81-branch prune. The branch column remains
+historical baseline evidence; the tag column is the current preservation ref.
 
-| Item                               | Historical branch / exact tip                                                  | Planned post-execution tag                                | Disposition                                                                                                     |
+| Item                               | Historical branch / exact tip                                                  | Current preservation tag                                  | Disposition                                                                                                     |
 | ---------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Root dirty-worktree snapshot       | `rescue/dirty-root-20260729` / `def03a41dc187205ede71c1101afba05a7f603f4`      | `archive/rescue/dirty-root-20260729` at the same SHA      | Preservation-only snapshot; the source changes were already integrated or superseded, not missing product work. |
 | T-0048 planning/review artifacts   | `rescue/T-0048-planning-20260729` / `cf608c7b4dadfa75cb1ea4631cdca8760e21c123` | `archive/rescue/T-0048-planning-20260729` at the same SHA | 16 unique planning/review artifacts do not belong on product `main`.                                            |
@@ -112,11 +112,10 @@ absence is not a missing capability.
 ## Historical legacy branches and post-pruning tag preservation
 
 The table records the 15 historical remote branch names and their immutable
-baseline tips. After T-0079 execution, the same names will exist under
+baseline tips. After T-0079 execution, the same names exist under
 `refs/tags/` (for example, `refs/tags/archive/legacy/T-0012a-minimal-command-post-enqueue`),
 not `refs/heads/`. Those preservation tags are explicitly non-active and must
-not be merged, cherry-picked, or rebased into `main`. This audit does not claim
-that the planned tags already exist.
+not be merged, cherry-picked, or rebased into `main`.
 
 | Historical branch / planned tag name                                    | Exact tip                                  |
 | ----------------------------------------------------------------------- | ------------------------------------------ |
@@ -141,8 +140,9 @@ that the planned tags already exist.
 This is a repository-history audit. At the captured baseline, a direct
 `git ls-remote origin` query verified `main`, the then-active T-0078 branch,
 both rescue **branches**, and all 15 `archive/legacy/*` **branches** at their
-recorded SHAs. T-0079 separately specifies verification of the replacement
-tags and the remaining heads after pruning. The audit does not verify
+recorded SHAs. T-0079 then verified all 17 replacement tags at their mapped
+SHAs and exactly two remaining heads (`main` and active T-0079) after the
+successful atomic prune. The audit does not verify
 hosting-provider retention policy or rerun application behavior. The result
 therefore establishes no missing committed/integrated behavior, not a fresh
 runtime release certification.

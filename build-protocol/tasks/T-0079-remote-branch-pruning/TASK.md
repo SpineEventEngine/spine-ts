@@ -103,10 +103,7 @@ every unique historical or rescue tip under an immutable remote tag.
   deterministic tag verification, post-pruning checks, and branch restoration
   from tags.
 - Updated the completed-task audit to distinguish its historical remote branch
-  evidence from the planned post-execution preservation tags. It does not claim
-  that tags or deletions have already occurred.
-- No refs, tags, commits, pushes, protected human-review files, or Spine JVM
-  builds were created, changed, read, or run by this implementation assignment.
+  evidence from the current post-execution preservation tags.
 
 ### Assignment acceptance metadata
 
@@ -128,6 +125,11 @@ every unique historical or rescue tip under an immutable remote tag.
   exact/frozen; T-0079 is intentionally verified only as a live retained name.
 - Manifest table counts: 17 preservation mappings, two retained heads, and 81
   initial deletion rows.
-- Final formatting, diff, full-SHA, and content-count checks are recorded in
-  the work log; execution verification remains pending until the authorized
-  ref-mutating task phase.
+- Remote execution result: all 17 tags were verified at mapped SHAs; an
+  ambiguous deletion attempt failed atomically without changes; fully qualified
+  `:refs/heads/...` retry then deleted all 81 target branches atomically.
+  Post-fetch verification found only `main` at
+  `0fa0b39c14768abac26d466ba721f9c9297a56c3` and moving active T-0079 at
+  `f191ee5a271b2f94abd0a37b30cfc4f8cb14b4d4`.
+- Final review, integration/merge, post-merge verification, push, and eventual
+  T-0079 branch deletion remain pending and are not claimed complete here.

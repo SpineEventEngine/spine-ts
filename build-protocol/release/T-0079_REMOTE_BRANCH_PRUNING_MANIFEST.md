@@ -2,28 +2,32 @@
 
 ## Status and scope
 
-This is the exact **pre-execution** manifest captured from the 83 live
-`origin` heads. It freezes the 81 deletion-target tips and `main` at their
-full 40-character SHAs (82 exact tips). The active
+This manifest captured 83 pre-execution live `origin` heads. It froze the 81
+deletion-target tips and `main` at their full 40-character SHAs (82 exact
+tips). The active
 `task/T-0079-remote-branch-pruning` retained head is deliberately not frozen:
 committing this manifest advances that branch. At execution, verify that its
 name exists and resolves live, rather than comparing it to a recorded tip.
-It authorizes no ref mutation by itself. Tag creation, verification, branch
-deletion, and push remain future execution steps. Until those steps succeed,
-the branch names below remain the historical evidence and the preservation
-tags described below do not yet exist.
+
+Execution is complete. The 17 preservation tags were created and verified at
+their mapped SHAs before deletion. An initial ambiguous `git push --delete`
+attempt failed atomically with no remote changes; a retry using fully qualified
+`:refs/heads/<head>` deletions succeeded atomically for all 81 branches.
+After fetch/prune, only `main` and T-0079 remain. Final review, merge, and the
+eventual T-0079 branch deletion are outside this completed prune operation.
 
 The manifest retains `main` and `task/T-0079-remote-branch-pruning`. Every
-other pre-cleanup head is in the initial deletion set: 64 are redundant and 17
-are deleted only after their exact preservation tags are verified.
+other pre-cleanup head was in the initial deletion set: 64 redundant branches
+and 17 branches deleted after their exact preservation tags were verified.
 
-## Deterministic execution and verification guide
+## Executed procedure and deterministic verification guide
 
-Run these commands from a clone that has fetched the live remote state. The
-commands intentionally name this manifest rather than deriving targets from a
-mutable branch listing.
+The recorded execution used this deterministic sequence. The commands name
+this manifest rather than deriving deletion targets from a mutable branch
+listing. Only the verification and restoration commands remain operational
+guidance.
 
-1. Confirm the baseline inventory, exact `main` tip, and moving active head:
+1. Confirmed the baseline inventory, exact `main` tip, and moving active head:
 
    ```sh
    git fetch --prune --tags origin
@@ -32,8 +36,8 @@ mutable branch listing.
    git rev-parse --verify origin/task/T-0079-remote-branch-pruning
    ```
 
-2. For each row in the preservation map, create the lightweight tag at the
-   stated full SHA, push it, then prove the remote tag resolves to that SHA:
+2. Created and verified each lightweight preservation tag at its stated full
+   SHA before deleting its source branch:
 
    ```sh
    git tag <tag> <full-40-character-tip>
@@ -41,15 +45,17 @@ mutable branch listing.
    test "$(git ls-remote --tags origin "refs/tags/<tag>" | awk '{print $1}')" = "<full-40-character-tip>"
    ```
 
-3. Delete exactly the 81 refs in the initial deletion set only after all 17
-   tag checks pass. Do not delete either retained ref:
+3. An ambiguous `git push origin --delete …` attempt failed atomically; it
+   made no remote change. The retry used fully qualified deletion refspecs and
+   succeeded atomically for exactly the 81 manifest branches. `main` and
+   T-0079 were excluded:
 
    ```sh
-   git push origin --delete <head> [<head> ...]
+   git push origin :refs/heads/<head> [:refs/heads/<head> ...]
    git fetch --prune origin
    ```
 
-4. Verify that only the two retained **names** remain, that `main` still
+4. Verified that only the two retained **names** remain, that `main` still
    resolves to its listed exact tip, that all 17 tags resolve to their listed
    tips, and that the completed-task/integration deletion targets are ancestors
    of `origin/main` (the communication branch additionally had no unique patch
@@ -113,10 +119,10 @@ git push origin refs/tags/archive/rescue/dirty-root-20260729:refs/heads/rescue/d
 | `main`                              | `0fa0b39c14768abac26d466ba721f9c9297a56c3`                                                       | Retain.                                                  |
 | `task/T-0079-remote-branch-pruning` | Live moving head; verify that this name resolves at execution. The tip is deliberately unfrozen. | Retain until T-0079 is integrated, verified, and closed. |
 
-## Initial deletion set (81 heads)
+## Executed initial deletion set (81 heads)
 
-The `preservation-then-delete` rows are deletable only after the corresponding
-tag row above has been pushed and verified. All tips are the full 40-character
+The `preservation-then-delete` rows were deleted only after the corresponding
+tag row above had been pushed and verified. All tips are the full 40-character
 pre-cleanup values.
 
 | Head                                                                    | Full tip                                   | Disposition                                                           |
@@ -205,13 +211,13 @@ pre-cleanup values.
 
 ## Classification accounting
 
-| Pre-cleanup category                |  Count | Planned disposition                                                                       |
+| Pre-cleanup category                |  Count | Executed disposition                                                                      |
 | ----------------------------------- | -----: | ----------------------------------------------------------------------------------------- |
 | Retained heads                      |      2 | `main` has an exact frozen tip; active T-0079 is retained and verified by live name only. |
-| Redundant merged task heads         |     61 | Delete after normal ancestry verification.                                                |
-| Redundant merged integration heads  |      2 | Delete after normal ancestry verification.                                                |
-| Patch-equivalent communication head |      1 | Delete after the recorded no-unique-patch check.                                          |
-| Legacy preservation heads           |     15 | Tag, verify, then delete.                                                                 |
-| Rescue preservation heads           |      2 | Tag, verify, then delete.                                                                 |
+| Redundant merged task heads         |     61 | Deleted after ancestry verification.                                                      |
+| Redundant merged integration heads  |      2 | Deleted after ancestry verification.                                                      |
+| Patch-equivalent communication head |      1 | Deleted after the recorded no-unique-patch check.                                         |
+| Legacy preservation heads           |     15 | Tagged, verified, then deleted.                                                           |
+| Rescue preservation heads           |      2 | Tagged, verified, then deleted.                                                           |
 | Exact frozen tips                   |     82 | 81 deletion targets plus `main`; active T-0079 is deliberately unfrozen.                  |
-| **Total pre-cleanup heads**         | **83** | **81 planned initial deletions; `main` and T-0079 retained.**                             |
+| **Total pre-cleanup heads**         | **83** | **81 executed deletions; `main` and T-0079 retained.**                                    |
