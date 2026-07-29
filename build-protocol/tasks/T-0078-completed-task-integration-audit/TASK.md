@@ -56,12 +56,57 @@ Before dispatch:
 
 Runtime metadata and results are pending.
 
+All three dispatches explicitly set the expected model and reasoning. Runtime
+self-metadata was unavailable; the configured profiles are the available
+evidence and the results are accepted under the protocol.
+
+## Investigation Results
+
+- 176 task records on `main` contain completion or acceptance terms.
+- 722 commit-like identifiers were extracted from task integration, merge,
+  commit, branch, and push evidence. Of 708 identifiers that resolve to
+  repository commits, all 708 are ancestors of `origin/main` at the audit
+  baseline.
+- All 60 completed remote task branches and both integration branches are
+  ancestors of `origin/main`.
+- Modern T-0046 and T-0048 through T-0077 work is committed, represented on
+  `main`, and reflected by local remote-tracking refs.
+- `codex/communication-milestones` is non-ancestral but has no unique patch
+  content versus `main`.
+- The pushed `rescue/dirty-root-20260729` branch is preservation-only and does
+  not contain a missing current implementation.
+- T-0048 had 16 unique untracked planning/review artifacts. They are now
+  committed as `cf608c7b` and pushed on
+  `rescue/T-0048-planning-20260729`; they do not belong on product `main`.
+- Dirty historical worktrees contain no unique uncommitted source blobs.
+  T-0066/T-0067 changes are executable-bit-only; T-0012-11b deletions are
+  represented by later canonical history; recurring `.superpowers` deletions
+  are intentional.
+
+## Legacy Branch Ambiguity
+
+Local T-0012a–g and T-0013.1–.6 branch families contain non-ancestral commits
+and lack remote task refs. T-0012 is explicitly abandoned by the current build
+protocol; T-0013 predates later canonical aggregate, registry, decorator, and
+reactor implementations. Raw merging would reintroduce obsolete architecture.
+
+Before disposition, dispatch the existing requirements splitter for a
+capability-level mapping and exact preservation/push plan:
+
+- Expected profile: `gpt-5.6-sol`, high reasoning.
+- Model and reasoning must be explicit in dispatch.
+- Scope: determine which branch families are completed, abandoned,
+  superseded, or incomplete; map accepted capabilities to canonical `main`;
+  identify any genuine missing behavior; and specify which legacy refs must be
+  pushed without merging.
+
 ## Review Dispositions
 
-- Style/maintainability: pending audit outcome.
-- Documentation: pending audit outcome.
-- TypeScript/API: pending audit outcome.
-- Performance/reliability: pending audit outcome.
+- Style/maintainability: pending status-reconciliation implementation.
+- Documentation: pending audit matrix and status reconciliation.
+- TypeScript/API: N/A unless a genuine missing implementation is found.
+- Performance/reliability: N/A unless a genuine missing implementation is
+  found.
 - Security: N/A unless the audit exposes missing security-boundary work.
 
 ## Verification
