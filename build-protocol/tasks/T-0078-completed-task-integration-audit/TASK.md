@@ -63,7 +63,9 @@ evidence and the results are accepted under the protocol.
 
 ## Investigation Results
 
-- 176 task records on `main` contain completion or acceptance terms.
+- 172 task records at immutable baseline `e6bdc065` have recognized explicit
+  completion, acceptance, or done status fields; superseded/abandoned records are
+  excluded.
 - 722 commit-like identifiers were extracted from task integration, merge,
   commit, branch, and push evidence. Of 708 identifiers that resolve to
   repository commits, all 708 are ancestors of `origin/main` at the audit
@@ -142,11 +144,12 @@ Before dispatch:
   reasoning, explicitly dispatched.
 - Runtime metadata remains unavailable from the execution surface; the
   configured profile is the available evidence.
-- Result: added the deterministic 176-row task-record inventory and generator,
-  including top-level qualifying-status evidence and explicit T-0077
-  preservation-only rescue disposition; documented its reproduction method,
-  added T-0045/T-0047 coverage, and removed stale pending wording and audit
-  trailing whitespace. No runtime, test, or production code changed.
+- Result: corrected the deterministic 172-row task-record inventory and
+  generator to parse explicit status fields only, pin source/ancestry to
+  `e6bdc065`, allow only named preservation refs outside that graph, and verify
+  byte equality with `--check`. It retains explicit T-0077 preservation-only
+  rescue disposition and T-0045/T-0047 coverage. No runtime, test, or
+  production code changed.
 
 A direct `git ls-remote origin` query verified canonical `main`, T-0078, both
 rescue branches, and all 15 legacy archive refs at the recorded exact SHAs.

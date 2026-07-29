@@ -46,7 +46,8 @@ on the execution surface.
 
 Return the complete accepted batch to the existing implementer context:
 
-- add a committed deterministic inventory for all 176 completed/accepted task
+- add a committed deterministic inventory for all 172 explicit
+  completed/accepted-status task
   records, mapping each path to resolved commits, ancestry result, unresolved
   tokens, and disposition;
 - document the exact generation/verification command and reference the
@@ -57,11 +58,11 @@ Return the complete accepted batch to the existing implementer context:
 Expected profile remains `gpt-5.6-terra`, medium reasoning, explicitly
 dispatched. Actual runtime metadata is unavailable from the execution surface;
 the immutable configured profile is the available evidence. The implementer
-added the deterministic 176-row inventory and generator, documented its
-verification method, added T-0045/T-0047 coverage, added qualifying-status
-evidence and explicit T-0077 rescue disposition, and corrected the stale
-pending wording and trailing whitespace. Focused diff/format verification is
-pending the correction review.
+corrected the deterministic 172-row inventory and generator to parse explicit
+status evidence only, pin baseline resolution, use a fixed preservation-ref
+allowlist, and assert byte equality with `--check`; it retains T-0045/T-0047
+coverage and explicit T-0077 rescue disposition. Focused diff/format
+verification is pending the correction review.
 
 ## Review Wave 2 Assignments
 
@@ -82,7 +83,7 @@ configured immutable profile is the available evidence.
 
 ## Review Wave 2
 
-- Documentation: CLEAN. The reviewer reproduced 176 unique rows, matched their
+- Documentation: CLEAN. The reviewer reproduced 172 unique rows, matched their
   qualifying evidence to the source records, verified T-0045/T-0047 ancestry,
   and confirmed the sole non-ancestor T-0077 rescue disposition. Runtime
   self-metadata was unavailable; the immutable configured
@@ -104,3 +105,15 @@ status evidence, pin source and ancestry inputs to `e6bdc065`, avoid mutable
 all-ref abbreviation resolution, regenerate and re-audit the count, and add a
 generated-file equality check. Runtime self-metadata will be recorded when
 returned; if unavailable, the configured profile is the available evidence.
+
+## Review Wave 2 Correction Result
+
+- Existing implementer profile: explicitly configured `gpt-5.6-terra`, medium
+  reasoning. Runtime self-metadata remains unavailable; the configured profile
+  is the available evidence.
+- Result: the 172-row inventory now selects only recognized explicit status
+  fields, reads and resolves against immutable baseline `e6bdc065`, uses a
+  fixed preservation-ref allowlist, and supports byte-equality `--check`.
+- Verification: generator write/check passes; T-0037e is excluded; T-0045 and
+  T-0047 remain present; legacy rows and T-0077 preservation disposition remain
+  present; focused structural, diff, Node, and Prettier checks pass.

@@ -1,7 +1,7 @@
 # Completed-task integration audit
 
 Audit date: 2026-07-29
-Canonical baseline: `origin/main` = `e6bdc0653a55c5c09a1af3742e74626b81c43217`
+Immutable source and ancestry baseline: `e6bdc0653a55c5c09a1af3742e74626b81c43217`
 
 ## Result
 
@@ -13,10 +13,10 @@ task/work/review chronology.
 ## Reproducible task-record inventory
 
 [`COMPLETED_TASK_INTEGRATION_INVENTORY.tsv`](COMPLETED_TASK_INTEGRATION_INVENTORY.tsv)
-contains exactly one data row for each of the 176 qualifying task records. It
-maps the task identifier, path, and deterministic first-twelve-line qualifying
-status evidence to every resolved SHA-like source literal, its `origin/main`
-ancestry result, unresolved literals, and the applicable canonical/legacy
+contains exactly one data row for each of the 172 qualifying task records. It
+maps the task identifier, path, and parsed explicit top-level status evidence
+to every resolved SHA-like source literal, its immutable-baseline ancestry
+result, unresolved literals, and the applicable canonical/legacy
 disposition. TSV fields escape backslashes, tabs, carriage returns, and
 newlines. The preservation-only T-0077 rescue literal is intentionally
 non-ancestral and is explicitly identified in its disposition as
@@ -25,27 +25,30 @@ non-integration evidence.
 Regenerate and check the inventory from the audit worktree with:
 
 ```sh
-node build-protocol/release/generate-completed-task-integration-inventory.mjs
-test "$(($(wc -l < build-protocol/release/COMPLETED_TASK_INTEGRATION_INVENTORY.tsv) - 1))" = 176
-awk -F '\t' 'NR > 1 && $5 == "contains-nonancestor-resolved-commit" { print $1, $7 }' build-protocol/release/COMPLETED_TASK_INTEGRATION_INVENTORY.tsv
+node build-protocol/release/generate-completed-task-integration-inventory.mjs --check
+test "$(($(wc -l < build-protocol/release/COMPLETED_TASK_INTEGRATION_INVENTORY.tsv) - 1))" = 172
+awk -F '\t' 'NR > 1 { seen[$2]++; if (NF != 7 || $3 == "") bad++ } END { exit !(length(seen) == 172 && !bad) }' build-protocol/release/COMPLETED_TASK_INTEGRATION_INVENTORY.tsv
 git diff --check
 ```
 
-The generator reads every `TASK.md` blob from `origin/main`, selects a record
-when completion/acceptance language occurs in its first twelve lines, resolves
-each SHA-like literal unambiguously against the local object graph, and checks
-membership in `git rev-list origin/main`. The historical 722-token/708-resolved
-completion-evidence scan below remains the integration proof; the TSV also
-retains non-completion literals so each source record is independently
-inspectable.
+`--check` regenerates in memory and exits nonzero unless the checked-in TSV is
+byte-identical. The generator reads every `TASK.md` blob and resolves full or
+abbreviated SHA literals only from the immutable baseline's commit graph. It
+selects only a top-level `Status: ...` or a top-level `## Status` followed by a
+value, and only when that explicit field is a completion, acceptance, or done
+status rather than superseded or abandoned. Its two fixed preservation refs are the only explicit exception to
+baseline resolution; neither is completion integration evidence. The historical
+722-token/708-resolved completion-evidence scan below remains the integration
+proof; the TSV also retains non-completion literals so each source record is
+independently inspectable.
 
-| Evidence set                                 | Result                             | Disposition                                                                                                                        |
-| -------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Completed or accepted records on `main`      | 176                                | All included in the inventory.                                                                                                     |
-| Extracted completion/integration identifiers | 722                                | 708 resolve to repository commits; the other 14 are non-commit tokens or abbreviated non-resolutions.                              |
-| Resolved identifiers                         | 708/708 ancestors of `origin/main` | No resolved completed-task implementation remains outside canonical history.                                                       |
-| Completed remote task refs                   | 60/60 ancestors of `origin/main`   | Task endpoints are committed, pushed, and merged.                                                                                  |
-| Remote integration refs                      | 2/2 ancestors of `origin/main`     | `integration/T-0074-wave4-browser-interoperability` and `integration/T-0075-wave4-browser-interoperability` are fully represented. |
+| Evidence set                                       | Result                             | Disposition                                                                                                                        |
+| -------------------------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Explicit completed or accepted/done status records | 172                                | All included in the inventory.                                                                                                     |
+| Extracted completion/integration identifiers       | 722                                | 708 resolve to repository commits; the other 14 are non-commit tokens or abbreviated non-resolutions.                              |
+| Resolved identifiers                               | 708/708 ancestors of `origin/main` | No resolved completed-task implementation remains outside canonical history.                                                       |
+| Completed remote task refs                         | 60/60 ancestors of `origin/main`   | Task endpoints are committed, pushed, and merged.                                                                                  |
+| Remote integration refs                            | 2/2 ancestors of `origin/main`     | `integration/T-0074-wave4-browser-interoperability` and `integration/T-0075-wave4-browser-interoperability` are fully represented. |
 
 `codex/communication-milestones` (`384dd719da09f2792374cdd86cce24b0544b47e6`)
 is deliberately non-ancestral, but `git cherry` found no patch unique to it
