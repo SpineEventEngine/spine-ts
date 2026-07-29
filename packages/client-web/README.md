@@ -1,5 +1,9 @@
 # @spine-event-engine/client-web
 
+For gateway/session composition, provider flows, Envoy, testing recipes, and
+the complete delivery/authentication limitations, see the authoritative
+[browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+
 `@spine-event-engine/client-web` is the framework-neutral, browser-safe Spine
 protocol client. It exposes the same command, raw-query, and subscription
 facade as the Node client without importing Node, React, or generated Entity

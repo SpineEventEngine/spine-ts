@@ -3,7 +3,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
-import { packAny, packCommand, unpackAny, type MessageSchema } from "@spine-event-engine/core";
+import { packCommand, unpackAny } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -294,11 +294,18 @@ class Request implements ClientRequest {
     topic: Topic,
     options: CreateSubscriptionOptions,
   ): Promise<Subscription> {
-    validateSubscriptionOptions(topic, options);
-    return this.#owner.run(options.signal, async (signal) => {
-      const prepared = cloneTopic(topic, this.#context());
-      return new TopicSubscription(this.#owner, prepared, signal, options, this.#subscriptions);
-    });
+    const validatedOptions = validateSubscriptionOptions(options);
+    return this.#owner.run(validatedOptions.signal, (signal) =>
+      Promise.resolve(
+        new TopicSubscription(
+          this.#owner,
+          cloneTopic(topic, this.#context()),
+          signal,
+          validatedOptions,
+          this.#subscriptions,
+        ),
+      ),
+    );
   }
 
   #context(): ActorContext {
@@ -338,19 +345,21 @@ class ClientOwner {
     if (!Number.isSafeInteger(remainingMs) || remainingMs <= 0)
       throw new ClientProtocolError("subscription reauthentication retry deadline is exhausted.");
     const controller = new AbortController();
-    const abort = () => controller.abort(signal.reason);
-    const timeout = setTimeout(
-      () => controller.abort(new ClientProtocolError("subscription reauthentication timed out.")),
-      remainingMs,
-    );
+    const abort = () => {
+      controller.abort(signal.reason);
+    };
+    const timeout = setTimeout(() => {
+      controller.abort(new ClientProtocolError("subscription reauthentication timed out."));
+    }, remainingMs);
     signal.addEventListener("abort", abort, { once: true });
     const pending = Promise.resolve().then(() => callback(controller.signal));
     const terminal = Promise.withResolvers<never>();
-    const rejectTerminal = () =>
+    const rejectTerminal = () => {
       terminal.reject(
         controller.signal.reason ??
           new ClientProtocolError("subscription reauthentication aborted."),
       );
+    };
     controller.signal.addEventListener("abort", rejectTerminal, { once: true });
     try {
       await Promise.race([pending, terminal.promise]);
@@ -369,7 +378,9 @@ class ClientOwner {
     this.assertOpen();
     if (signal?.aborted) throw signal.reason;
     const controller = new AbortController();
-    const abort = () => controller.abort(signal?.reason);
+    const abort = () => {
+      controller.abort(signal?.reason);
+    };
     signal?.addEventListener("abort", abort, { once: true });
     this.#controllers.add(controller);
     try {
@@ -402,9 +413,8 @@ class ClientOwner {
       const settled = await Promise.allSettled(
         [...this.#subscriptions].map((subscription) => subscription.cancel()),
       );
-      failures.push(
-        ...settled.flatMap((result) => (result.status === "rejected" ? [result.reason] : [])),
-      );
+      for (const result of settled)
+        if (result.status === "rejected") failures.push(result.reason as unknown);
     } finally {
       try {
         this.#source.close?.();
@@ -485,7 +495,9 @@ class TopicSubscription implements Subscription {
     if (signal?.aborted) throw signal.reason;
     if (this.#signal.aborted) throw this.#signal.reason;
     const generation = ++this.#generation;
-    const abort = () => this.#controller.abort(signal?.reason ?? this.#signal.reason);
+    const abort = () => {
+      this.#controller.abort(signal?.reason ?? this.#signal.reason);
+    };
     signal?.addEventListener("abort", abort, { once: true });
     this.#signal.addEventListener("abort", abort, { once: true });
     try {
@@ -494,12 +506,12 @@ class TopicSubscription implements Subscription {
         SubscriptionService,
         this.#owner.transport,
       ).subscribe(this.#topic, { signal: this.#controller.signal });
-      const subscription = await raceTerminal(pendingSubscription, this.#controller.signal, () =>
-        cancelLateSubscription(pendingSubscription, this.#owner.transport),
-      );
+      const subscription = await raceTerminal(pendingSubscription, this.#controller.signal, () => {
+        cancelLateSubscription(pendingSubscription, this.#owner.transport);
+      });
       this.#wire = subscription;
       validateSubscription(subscription, this.#topic, true);
-      if (this.#cancelled || generation !== this.#generation) {
+      if (generation !== this.#generation) {
         await this.#cancelWireOnce(subscription);
         throw new ClientProtocolError("subscription is cancelled.");
       }
@@ -526,7 +538,7 @@ class TopicSubscription implements Subscription {
       this.#failStreams(error, generation);
       let cleanupFailure: unknown;
       try {
-        if (this.#wire !== undefined && !this.#cancelled) await this.#cancelWireOnce(this.#wire);
+        if (this.#wire !== undefined) await this.#cancelWireOnce(this.#wire);
       } catch (cleanupError) {
         cleanupFailure = cleanupError;
       } finally {
@@ -566,13 +578,16 @@ class TopicSubscription implements Subscription {
   ): Promise<void> {
     let recovering = false;
     try {
-      while (true) {
+      for (;;) {
         const next = await raceTerminal(updates.next(), this.#controller.signal);
         if (next.done)
           throw new SubscriptionStreamEndedError("subscription stream ended unexpectedly.");
         if (this.#cancelled || generation !== this.#generation) return;
         const update = next.value;
-        validateSubscription(update.subscription, subscription.topic!, true);
+        const topic = subscription.topic;
+        if (topic === undefined)
+          throw new ClientProtocolError("accepted subscription topic is missing.");
+        validateSubscription(update.subscription, topic, true);
         if (update.subscription?.id?.value !== subscription.id?.value)
           throw new ClientProtocolError(
             "subscription update ID does not match the accepted subscription.",
@@ -598,11 +613,12 @@ class TopicSubscription implements Subscription {
         // The stream's original terminal error remains observable; cleanup is best effort.
       }
     } finally {
-      if (recovering) return;
-      this.#updates.close();
-      this.#lifecycle.close();
-      this.#owner.remove(this);
-      if (this.#streamIterator === updates) this.#streamIterator = undefined;
+      if (!recovering) {
+        this.#updates.close();
+        this.#lifecycle.close();
+        this.#owner.remove(this);
+        if (this.#streamIterator === updates) this.#streamIterator = undefined;
+      }
     }
   }
 
@@ -646,13 +662,14 @@ class TopicSubscription implements Subscription {
           this.#controller.signal,
         );
         if (this.#controller.signal.aborted) throw this.#controller.signal.reason;
-        if (this.#cancelled) return;
         if (this.#elapsed()) throw failure;
-        await this.#owner.onReauthenticateBeforeReconnect(
+        await raceTerminal(
+          this.#owner.onReauthenticateBeforeReconnect(
+            this.#controller.signal,
+            this.#remainingRetryMs(),
+          ),
           this.#controller.signal,
-          this.#remainingRetryMs(),
         );
-        if (this.#cancelled) return;
         if (this.#elapsed()) throw failure;
         this.#pushLifecycle({ state: "connecting", generation, attempt });
         try {
@@ -660,9 +677,9 @@ class TopicSubscription implements Subscription {
             this.#topic,
             { signal: this.#controller.signal },
           );
-          const subscription = await raceTerminal(pending, this.#controller.signal, () =>
-            cancelLateSubscription(pending, this.#owner.transport),
-          );
+          const subscription = await raceTerminal(pending, this.#controller.signal, () => {
+            cancelLateSubscription(pending, this.#owner.transport);
+          });
           this.#wire = subscription;
           validateSubscription(subscription, this.#topic, true);
           const updates = createClient(SubscriptionService, this.#owner.transport).activate(
@@ -723,7 +740,10 @@ class TopicSubscription implements Subscription {
       throw new ClientProtocolError(
         "authoritative query target does not match the subscription topic.",
       );
-    query.context = clone(ActorContextSchema, this.#topic.context!);
+    const topicContext = this.#topic.context;
+    if (topicContext === undefined)
+      throw new ClientProtocolError("subscription topic context is missing.");
+    query.context = clone(ActorContextSchema, topicContext);
     this.#pushLifecycle({ state: "resynchronizing", generation });
     const pending = createClient(QueryService, this.#owner.transport).read(query, {
       signal: this.#controller.signal,
@@ -822,17 +842,30 @@ function raceTerminal<Value>(
   if (signal.aborted) {
     void pending.catch(() => undefined);
     onTerminal?.();
-    return Promise.reject(signal.reason);
+    return Promise.reject(abortError(signal));
   }
   const terminal = Promise.withResolvers<never>();
-  const abort = () => terminal.reject(signal.reason);
+  const abort = () => {
+    terminal.reject(abortError(signal));
+  };
   signal.addEventListener("abort", abort, { once: true });
   return Promise.race([pending, terminal.promise])
     .catch((error: unknown) => {
       if (signal.aborted) onTerminal?.();
       throw error;
     })
-    .finally(() => signal.removeEventListener("abort", abort));
+    .finally(() => {
+      signal.removeEventListener("abort", abort);
+    });
+}
+
+function abortError(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason;
+  if (reason instanceof Error) return reason;
+  if (typeof reason === "string") return new Error(reason);
+  if (typeof reason === "number" || typeof reason === "boolean" || typeof reason === "bigint")
+    return new Error(String(reason));
+  return new Error("operation aborted.");
 }
 
 /** Cancels a wire accepted after its local subscription has already terminated. */
@@ -906,7 +939,7 @@ const DEFAULT_SUBSCRIPTION_SCHEDULER: SubscriptionScheduler = {
   wait: (delayMs, signal) =>
     new Promise<void>((resolve, reject) => {
       if (signal.aborted) {
-        reject(signal.reason);
+        reject(abortError(signal));
         return;
       }
       const timeout = setTimeout(resolve, delayMs);
@@ -914,7 +947,7 @@ const DEFAULT_SUBSCRIPTION_SCHEDULER: SubscriptionScheduler = {
         "abort",
         () => {
           clearTimeout(timeout);
-          reject(signal.reason);
+          reject(abortError(signal));
         },
         { once: true },
       );
@@ -960,31 +993,33 @@ function positiveSubscriptionOption(
   return resolved;
 }
 
-function validateSubscriptionOptions(
-  topic: Topic,
-  options: CreateSubscriptionOptions,
-): CreateSubscriptionOptions {
-  if (options === undefined || (options.kind !== "event" && options.kind !== "entity"))
+function validateSubscriptionOptions(options: unknown): CreateSubscriptionOptions {
+  if (
+    options === null ||
+    typeof options !== "object" ||
+    !("kind" in options) ||
+    (options.kind !== "event" && options.kind !== "entity")
+  )
     throw new TypeError("Subscription kind must be 'event' or 'entity'.");
   if (options.kind === "event") {
     if ("authoritativeQuery" in options)
       throw new TypeError("Event subscriptions must not provide an authoritative query.");
-    return options;
+    return options as EventSubscriptionOptions;
   }
-  if (typeof options.authoritativeQuery !== "function")
+  if (!("authoritativeQuery" in options) || typeof options.authoritativeQuery !== "function")
     throw new TypeError("Entity subscriptions require an authoritative query.");
-  return options;
+  return options as EntitySubscriptionOptions;
 }
 
 class BoundedChannel<Value> implements AsyncIterable<Value> {
   readonly #name: string;
   readonly #capacity: number;
   readonly #byteCapacity: number | undefined;
-  readonly #values: Array<Readonly<{ value: Value; bytes: number }>> = [];
+  readonly #values: Readonly<{ value: Value; bytes: number }>[] = [];
   #bytes = 0;
   #consumer = false;
   #closed = false;
-  #error: unknown;
+  #error: Error | undefined;
   #pending: PromiseWithResolvers<IteratorResult<Value>> | undefined;
 
   constructor(name: string, capacity: number, byteCapacity?: number) {
@@ -1047,7 +1082,7 @@ class BoundedChannel<Value> implements AsyncIterable<Value> {
     this.#values.push({ value, bytes: 0 });
   }
 
-  fail(error: unknown): void {
+  fail(error: Error): void {
     if (this.#error !== undefined) return;
     this.#error = error;
     this.#values.length = 0;
@@ -1113,7 +1148,7 @@ function browserTransportOptions(
   };
 }
 
-function credentialedFetch(credentials: RequestCredentials): typeof globalThis.fetch {
+function credentialedFetch(credentials: unknown): typeof globalThis.fetch {
   if (credentials !== "omit" && credentials !== "same-origin" && credentials !== "include")
     throw new TypeError("Browser Fetch credentials must be omit, same-origin, or include.");
   return (input, init) => globalThis.fetch(input, { ...init, credentials });
@@ -1128,15 +1163,24 @@ function requestMetadata(onRequestMetadata: OnRequestMetadata): Interceptor {
 }
 
 function browserRequestId(): string {
-  const crypto = globalThis.crypto;
-  if (typeof crypto?.randomUUID === "function") return crypto.randomUUID();
-  if (typeof crypto?.getRandomValues !== "function")
+  const crypto: unknown = globalThis.crypto;
+  if (!isBrowserCrypto(crypto))
     throw new ClientProtocolError("secure random browser API is unavailable for request IDs.");
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
   bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function isBrowserCrypto(value: unknown): value is Crypto {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "getRandomValues" in value &&
+    typeof value.getRandomValues === "function"
+  );
 }
 
 function cloneTopic(topic: Topic, context: ActorContext): Topic {

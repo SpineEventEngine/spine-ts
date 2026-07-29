@@ -4,7 +4,7 @@ import { createClient } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
 import { BrowserSession, Client } from "@spine-event-engine/client-web";
 import { deriveTypeUrl, packAny } from "@spine-event-engine/core";
-import { ActorContextSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { ResolveContextRequestSchema, AuthenticationService } from "@spine-event-engine/proto/auth";
 import {
   CompositeFilterSchema,
@@ -25,7 +25,7 @@ import {
   ChatRoomIdSchema,
   MessageIdSchema,
 } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/chat_pb.js";
-import { UserIdSchema } from "@spine-event-engine/users-model/generated/spine/example/users/v1/users_pb.js";
+import { UserIdSchema as ChatUserIdSchema } from "@spine-event-engine/users-model/generated/spine/example/users/v1/users_pb.js";
 
 const parameters = new URLSearchParams(location.search);
 const baseUrl = parameters.get("baseUrl");
@@ -45,7 +45,8 @@ const sessionFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
   if (csrf !== null) headers.set("x-spine-csrf", csrf);
   return session.fetch(input, { ...init, headers });
 };
-const createBrowserTransport = protocol === "connect" ? createConnectTransport : createGrpcWebTransport;
+const createBrowserTransport =
+  protocol === "connect" ? createConnectTransport : createGrpcWebTransport;
 const auth = createClient(
   AuthenticationService,
   createBrowserTransport({ baseUrl, fetch: sessionFetch }),
@@ -54,7 +55,9 @@ const wireSubscriptions = createClient(
   SubscriptionService,
   createBrowserTransport({ baseUrl, fetch: sessionFetch }),
 );
-const client = (protocol === "connect" ? Client.forConnect : Client.forGrpcWeb)(baseUrl, {
+const client = (
+  protocol === "connect" ? Client.forConnect.bind(Client) : Client.forGrpcWeb.bind(Client)
+)(baseUrl, {
   credentials: session.credentials,
   ...(tenant === null ? {} : { tenant }),
   onRequestMetadata: () => {
@@ -97,12 +100,11 @@ const topic = create(TopicSchema, {
   }),
 });
 let sequence = 0;
-let retainedSubscription;
 
 const resolveContext = async () => {
   await session.reauthenticate(async ({ signal }) => {
     const context = await auth.resolveContext(create(ResolveContextRequestSchema), { signal });
-    return { actor: context.actor?.value };
+    return context.actor === undefined ? {} : { actor: context.actor.value };
   });
   return session.context;
 };
@@ -121,7 +123,6 @@ const startActiveSubscription = async () => {
     authoritativeQuery: () => query,
   });
   await subscription.activate();
-  retainedSubscription = subscription;
   const updates = subscription.updates[Symbol.asyncIterator]();
   const next = updates.next();
   for (let probe = 0; probe < 10; probe += 1) {
@@ -139,9 +140,9 @@ const post = () =>
   request.post(
     PostMessageSchema,
     create(PostMessageSchema, {
-      id: create(MessageIdSchema, { value: `browser-interop-${++sequence}` }),
+      id: create(MessageIdSchema, { value: `browser-interop-${String(++sequence)}` }),
       room: create(ChatRoomIdSchema, { value: room }),
-      author: create(UserIdSchema, { value: "ada" }),
+      author: create(ChatUserIdSchema, { value: "ada" }),
       text: "browser",
       postedAt: create(TimestampSchema, { seconds: BigInt(sequence) }),
     }),

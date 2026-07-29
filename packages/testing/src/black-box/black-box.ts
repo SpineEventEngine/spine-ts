@@ -10,7 +10,7 @@ import {
   type Subscription,
   type CreateSubscriptionOptions,
 } from "@spine-event-engine/client-node";
-import { packEvent, type MessageSchema } from "@spine-event-engine/core";
+import { packEvent } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   EventContextSchema,
@@ -404,7 +404,10 @@ class TrackedSubscription implements Subscription {
   }
 
   private trackStream<Value>(source: AsyncIterable<Value>): AsyncIterable<Value> {
-    const owner = this;
+    const onRelease = () => {
+      this.release();
+    };
+    const onCancel = () => this.cancel();
     return {
       [Symbol.asyncIterator](): AsyncIterator<Value> {
         const iterator = source[Symbol.asyncIterator]();
@@ -412,29 +415,29 @@ class TrackedSubscription implements Subscription {
           next: async () => {
             try {
               const result = await iterator.next();
-              if (result.done) owner.release();
+              if (result.done) onRelease();
               return result;
             } catch (error) {
-              owner.release();
+              onRelease();
               throw error;
             }
           },
           return: async (value) => {
             try {
-              await owner.cancel();
+              await onCancel();
               const returned = await iterator.return?.(value);
               return returned ?? { done: true, value: undefined };
             } finally {
-              owner.release();
+              onRelease();
             }
           },
           throw: async (error) => {
             try {
-              await owner.cancel();
+              await onCancel();
               if (iterator.throw === undefined) throw error;
               return await iterator.throw(error);
             } finally {
-              owner.release();
+              onRelease();
             }
           },
         };

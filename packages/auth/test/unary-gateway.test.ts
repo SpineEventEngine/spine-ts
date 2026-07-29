@@ -5,6 +5,8 @@ import {
   CommandContextSchema,
   CommandSchema,
   TenantIdSchema,
+  UserIdSchema,
+  ZoneIdSchema,
 } from "@spine-event-engine/proto";
 import {
   ResolveContextRequestSchema,
@@ -56,11 +58,13 @@ function setup(
     ...(overrides.registry === undefined ? {} : { registry: overrides.registry }),
     maxRequestBytes: overrides.maxRequestBytes ?? 1024,
     sessions: {
-      resolve: async () => {
+      resolve: () => {
         calls.push("session");
-        return overrides.session === "missing"
-          ? undefined
-          : { principal: { id: "principal" }, expiresAt: sessionExpiry };
+        return Promise.resolve(
+          overrides.session === "missing"
+            ? undefined
+            : { principal: { id: "principal" }, expiresAt: sessionExpiry },
+        );
       },
     },
     authorize: async (_principal, incoming) => {
@@ -68,33 +72,33 @@ function setup(
       return (await overrides.authorize?.(incoming)) ?? overrides.authorized ?? true;
     },
     contexts: {
-      resolve: async (_principal, incoming) => {
+      resolve: (_principal, incoming) => {
         calls.push("resolve-request");
         overrides.resolve?.(incoming);
-        return {
-          actor: { value: overrides.trustedActor ?? "actor-1" },
+        return Promise.resolve({
+          actor: create(UserIdSchema, { value: overrides.trustedActor ?? "actor-1" }),
           tenant: tenant(overrides.trustedTenant ?? "tenant-1"),
           timestamp: create(TimestampSchema, { seconds: 2n }),
-          zoneId: { value: "Europe/Lisbon" },
+          zoneId: create(ZoneIdSchema, { value: "Europe/Lisbon" }),
           language: 1,
-        };
+        });
       },
-      resolveContext: async () => {
+      resolveContext: () => {
         calls.push("resolve-context");
-        return {
-          actor: { value: "actor-1" },
+        return Promise.resolve({
+          actor: create(UserIdSchema, { value: "actor-1" }),
           tenant: tenant("tenant-1"),
           timestamp: create(TimestampSchema, { seconds: 2n }),
-        };
+        });
       },
     },
     clock: { now: overrides.clock ?? (() => clockTimestamp) },
-    forward: async (request) => {
+    forward: (request) => {
       calls.push("forward");
       forwarded.push(request);
       if (overrides.forwardReject !== undefined) throw overrides.forwardReject;
       if (overrides.forward !== undefined) return overrides.forward(request);
-      return new Uint8Array([1]);
+      return Promise.resolve(new Uint8Array([1]));
     },
   });
   return { calls, forwarded, gateway };
@@ -122,8 +126,9 @@ describe("UnaryGateway", () => {
       sessions: {
         resolve: () =>
           new Promise<{ principal: { id: string }; expiresAt: Timestamp }>((resolve) => {
-            releaseSession = () =>
+            releaseSession = () => {
               resolve({ principal: { id: "principal" }, expiresAt: sessionExpiry });
+            };
           }),
       },
       authorize: (_principal: unknown, incoming: IncomingRequest) => {
@@ -134,13 +139,16 @@ describe("UnaryGateway", () => {
         resolve: (_principal: unknown, incoming: IncomingRequest) => {
           seen.push(incoming.kind === "command" ? incoming.message : undefined);
           return Promise.resolve({
-            actor: { value: "actor-1" },
+            actor: create(UserIdSchema, { value: "actor-1" }),
             tenant: tenant("tenant-1"),
             timestamp: create(TimestampSchema, { seconds: 2n }),
           });
         },
         resolveContext: () =>
-          Promise.resolve({ actor: { value: "actor-1" }, timestamp: create(TimestampSchema) }),
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "actor-1" }),
+            timestamp: create(TimestampSchema),
+          }),
       },
       clock: { now: () => clockTimestamp },
       forward: () => Promise.resolve(new Uint8Array([1])),
@@ -177,7 +185,7 @@ describe("UnaryGateway", () => {
     expect(calls).toEqual([]);
   });
 
-  it("decodes registered command content independently for policy and context without changing forwarded bytes", async () => {
+  it("decodes registered content independently without changing forwarded bytes", async () => {
     const registry = new TypeRegistry([TenantIdSchema]);
     let policyMessage: unknown;
     let contextMessage: unknown;
@@ -299,9 +307,7 @@ describe("UnaryGateway", () => {
         context: create(CommandContextSchema, { actorContext: requestedContext }),
       }),
     );
-    const { forwarded, gateway } = setup({
-      session: undefined,
-    });
+    const { forwarded } = setup();
     const guarded = new UnaryGateway({
       maxRequestBytes: 1024,
       sessions: {
@@ -310,32 +316,39 @@ describe("UnaryGateway", () => {
           return { principal: { id: "principal" }, expiresAt: sessionExpiry };
         },
       },
-      authorize: async () => true,
+      authorize: () => Promise.resolve(true),
       contexts: {
-        resolve: async () => ({
-          actor: { value: "actor-1" },
-          tenant: tenant("tenant-1"),
-          timestamp: create(TimestampSchema, { seconds: 2n }),
-        }),
-        resolveContext: async () => ({
-          actor: { value: "actor-1" },
-          tenant: tenant("tenant-1"),
-          timestamp: create(TimestampSchema),
-        }),
+        resolve: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "actor-1" }),
+            tenant: tenant("tenant-1"),
+            timestamp: create(TimestampSchema, { seconds: 2n }),
+          }),
+        resolveContext: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "actor-1" }),
+            tenant: tenant("tenant-1"),
+            timestamp: create(TimestampSchema),
+          }),
       },
       clock: { now: () => clockTimestamp },
-      forward: async (entry) => {
+      forward: (entry) => {
         forwarded.push(entry);
-        return new Uint8Array();
+        return Promise.resolve(new Uint8Array());
       },
     });
     const result = guarded.handle(request("spine.client.CommandService", "Post", command));
     command.fill(255);
-    releaseSession!();
+    if (releaseSession === undefined) throw new Error("session release was not captured");
+    releaseSession();
     await expect(result).resolves.toMatchObject({ kind: "forwarded" });
+    const [firstForward] = forwarded;
+    if (firstForward === undefined) throw new Error("expected a forwarded command");
     expect(
-      fromBinary(CommandSchema, forwarded[0]!.value).context?.actorContext?.actor,
-    ).toMatchObject({ value: "actor-1" });
+      fromBinary(CommandSchema, firstForward.value).context?.actorContext?.actor,
+    ).toMatchObject({
+      value: "actor-1",
+    });
   });
 
   it("requires a finite non-negative byte bound at construction", () => {
@@ -427,7 +440,9 @@ describe("UnaryGateway", () => {
     });
 
     expect(calls).toEqual(["session", "authorize", "resolve-request", "forward"]);
-    const forwardedCommand = fromBinary(CommandSchema, forwarded[0]!.value);
+    const [firstForward] = forwarded;
+    if (firstForward === undefined) throw new Error("expected a forwarded command");
+    const forwardedCommand = fromBinary(CommandSchema, firstForward.value);
     const restoredCommand = clone(CommandSchema, forwardedCommand);
     restoredCommand.context = command.context;
     expect(toBinary(CommandSchema, restoredCommand)).toEqual(toBinary(CommandSchema, command));
@@ -435,7 +450,7 @@ describe("UnaryGateway", () => {
       id: { uuid: "command-1" },
       context: {
         actorContext: {
-          actor: { value: "actor-1" },
+          actor: create(UserIdSchema, { value: "actor-1" }),
           tenantId: { kind: { case: "value", value: "tenant-1" } },
           timestamp: { seconds: 2n },
           zoneId: { value: "Europe/Lisbon" },
@@ -465,7 +480,9 @@ describe("UnaryGateway", () => {
     });
 
     expect(calls).toEqual(["session", "authorize", "resolve-request", "forward"]);
-    const forwardedQuery = fromBinary(QuerySchema, forwarded[0]!.value);
+    const [firstForward] = forwarded;
+    if (firstForward === undefined) throw new Error("expected a forwarded query");
+    const forwardedQuery = fromBinary(QuerySchema, firstForward.value);
     expect(toBinary(QuerySchema, { ...forwardedQuery, context: requestedContext })).toEqual(
       toBinary(QuerySchema, query),
     );
@@ -527,13 +544,19 @@ describe("UnaryGateway", () => {
     ];
     const { forwarded, gateway } = setup({
       authorize: (incoming) => {
-        if (incoming.kind === "command") incoming.requestedContext.actor!.value = "mutated";
+        if (incoming.kind === "command" && incoming.requestedContext.actor !== undefined)
+          incoming.requestedContext.actor.value = "mutated";
         return true;
       },
       resolve: (incoming) => {
-        if (incoming.kind === "command") incoming.command.id!.uuid = "mutated";
+        if (incoming.kind === "command" && incoming.command.id !== undefined)
+          incoming.command.id.uuid = "mutated";
       },
-      clock: () => timestamps.shift()!,
+      clock: () => {
+        const timestamp = timestamps.shift();
+        if (timestamp === undefined) throw new Error("expected a clock timestamp");
+        return timestamp;
+      },
     });
 
     await expect(
@@ -542,12 +565,14 @@ describe("UnaryGateway", () => {
       kind: "forwarded",
     });
 
-    const forwardedCommand = fromBinary(CommandSchema, forwarded[0]!.value);
+    const [firstForward] = forwarded;
+    if (firstForward === undefined) throw new Error("expected a forwarded command");
+    const forwardedCommand = fromBinary(CommandSchema, firstForward.value);
     expect(forwardedCommand.id).toMatchObject({ uuid: "original" });
     expect(forwardedCommand.context).toMatchObject({
       actorContext: { timestamp: { seconds: 2n } },
     });
-    expect(Array.from(forwarded[0]!.value).slice(-3)).toEqual(Array.from(unknownField));
+    expect(Array.from(firstForward.value).slice(-3)).toEqual(Array.from(unknownField));
   });
 
   it("does not retry forwarding or begin later work after a collaborator rejects", async () => {
@@ -579,36 +604,37 @@ describe("UnaryGateway", () => {
       const gateway = new UnaryGateway({
         maxRequestBytes: 1024,
         sessions: {
-          resolve: async () => {
+          resolve: () => {
             calls.push("session");
             if (stage === "session") throw failure;
-            return { principal: { id: "principal" }, expiresAt: sessionExpiry };
+            return Promise.resolve({ principal: { id: "principal" }, expiresAt: sessionExpiry });
           },
         },
-        authorize: async () => {
+        authorize: () => {
           calls.push("authorize");
           if (stage === "authorize") throw failure;
-          return true;
+          return Promise.resolve(true);
         },
         contexts: {
-          resolve: async () => {
+          resolve: () => {
             calls.push("resolve-request");
             if (stage === "resolve-request") throw failure;
-            return {
-              actor: { value: "actor-1" },
+            return Promise.resolve({
+              actor: create(UserIdSchema, { value: "actor-1" }),
               tenant: tenant("tenant-1"),
               timestamp: create(TimestampSchema, { seconds: 2n }),
-            };
+            });
           },
-          resolveContext: async () => ({
-            actor: { value: "actor-1" },
-            timestamp: create(TimestampSchema),
-          }),
+          resolveContext: () =>
+            Promise.resolve({
+              actor: create(UserIdSchema, { value: "actor-1" }),
+              timestamp: create(TimestampSchema),
+            }),
         },
         clock: { now: () => clockTimestamp },
-        forward: async () => {
+        forward: () => {
           calls.push("forward");
-          return new Uint8Array();
+          return Promise.resolve(new Uint8Array());
         },
       });
       await expect(
@@ -624,7 +650,7 @@ describe("UnaryGateway", () => {
     }
   });
 
-  it("returns informational ResolveContext data after session validation without policy, resolver, or forwarding", async () => {
+  it("returns informational context after session validation without forwarding", async () => {
     const { calls, gateway } = setup();
     const result = await gateway.handle(
       request(
@@ -651,26 +677,30 @@ describe("UnaryGateway", () => {
     const gateway = new UnaryGateway({
       maxRequestBytes: 1024,
       sessions: {
-        resolve: async () => {
+        resolve: () => {
           calls.push("session");
-          return { principal: { id: "principal" }, expiresAt: sessionExpiry };
+          return Promise.resolve({ principal: { id: "principal" }, expiresAt: sessionExpiry });
         },
       },
-      authorize: async () => {
+      authorize: () => {
         calls.push("authorize");
-        return true;
+        return Promise.resolve(true);
       },
       contexts: {
-        resolve: async () => ({ actor: { value: "actor-1" }, timestamp: create(TimestampSchema) }),
-        resolveContext: async () => {
+        resolve: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "actor-1" }),
+            timestamp: create(TimestampSchema),
+          }),
+        resolveContext: () => {
           calls.push("resolve-context");
           throw failure;
         },
       },
       clock: { now: () => clockTimestamp },
-      forward: async () => {
+      forward: () => {
         calls.push("forward");
-        return new Uint8Array();
+        return Promise.resolve(new Uint8Array());
       },
     });
     await expect(

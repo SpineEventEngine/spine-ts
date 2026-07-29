@@ -123,13 +123,14 @@ export class BrowserSession {
   }
 
   /** Aborts session-owned HTTP or reauthentication work and clears memory-only credentials. */
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#closed) return Promise.resolve();
     this.#closed = true;
     this.#bearer = undefined;
     this.#context = undefined;
     for (const controller of this.#controllers)
       controller.abort(new Error("Browser session is closed."));
+    return Promise.resolve();
   }
 
   async #run<Result>(
@@ -139,19 +140,21 @@ export class BrowserSession {
     this.#assertOpen();
     if (signal?.aborted) throw signal.reason;
     const controller = new AbortController();
-    const abort = () => controller.abort(signal?.reason);
-    const timeout = setTimeout(
-      () => controller.abort(new Error("Browser session request timed out.")),
-      this.#maxRequestMs,
-    );
+    const abort = () => {
+      controller.abort(signal?.reason);
+    };
+    const timeout = setTimeout(() => {
+      controller.abort(new Error("Browser session request timed out."));
+    }, this.#maxRequestMs);
     signal?.addEventListener("abort", abort, { once: true });
     this.#controllers.add(controller);
     try {
       const operation = work(controller.signal);
       void operation.catch(() => undefined);
       const aborted = Promise.withResolvers<never>();
-      const rejectAbort = () =>
+      const rejectAbort = () => {
         aborted.reject(controller.signal.reason ?? new Error("Browser session request aborted."));
+      };
       controller.signal.addEventListener("abort", rejectAbort, { once: true });
       const result = await Promise.race([operation, aborted.promise]).finally(() => {
         controller.signal.removeEventListener("abort", rejectAbort);

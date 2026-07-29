@@ -1,5 +1,8 @@
 # Runnable Chat
 
+For the browser, authentication-gateway, and Envoy extension path used by this
+example, see the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+
 This is the Wave 4 Projection-backed application example:
 `@spine-event-engine/chat-model` owns Chat Protobuf messages and imports `UserId` from the separate
 `@spine-event-engine/users-model` package. The application package composes

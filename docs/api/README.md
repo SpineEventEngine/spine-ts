@@ -2,6 +2,10 @@
 
 TypeDoc is the canonical API documentation generator for this repository.
 
+For the end-to-end browser/authentication extension contract, including the
+exact trust-boundary limitations that TypeDoc declarations cannot convey, see
+the [browser client and gateway guide](../BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+
 Current status: the generated TypeDoc reference contains the curated
 `@spine-event-engine/proto` root API for copied Spine contracts, the `@spine-event-engine/core`
 metadata/type registry and validation facade APIs, the first `@spine-event-engine/server`

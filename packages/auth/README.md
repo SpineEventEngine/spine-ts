@@ -2,6 +2,10 @@
 
 Provider-neutral authentication gateway contracts for Spine services.
 
+This README is a package overview. The authoritative setup, extension, session,
+provider, topology, testing, and limitation guidance is the
+[browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+
 This package defines request facts, authentication/session/authorization and
 trusted-context seams. `IncomingRequest` has one discriminated member for each
 Spine service operation: command, query, subscribe, activate, and cancel.
@@ -32,9 +36,9 @@ unknown/malformed packed content, policy retains the safe type-URL-only view.
 `AuthenticationService.ResolveContext` validates the application session and
 returns only informational actor, tenant, and expiry data. It does not invoke a
 Spine backend, it is not a credential, and every later request is independently
-authenticated and authorized. It can use the signed-session strategy documented
-below. OIDC/provider transactions and browser reconnect integration remain
-later Wave 4 slices.
+authenticated and authorized. It can use either documented session strategy;
+OIDC/provider transactions and browser reconnect integration are implemented
+through the public seams described in the extension guide.
 
 `OpaqueSessions` is the C1 process-local `SessionResolver`: it produces 32-byte
 base64url cookie credentials, retains at most 10,000 sessions for eight hours,

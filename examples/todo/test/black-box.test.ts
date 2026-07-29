@@ -3,7 +3,7 @@ import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobu
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-event-engine/core";
-import { UserIdSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
+import { EventContextSchema, UserIdSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
@@ -839,7 +839,7 @@ describe("@spine-event-engine/example-todo", () => {
         postEvent: (_schema, message) => {
           postCount++;
           if (postCount === 1) {
-            firstRead.resolve({ message });
+            firstRead.resolve({ message, context: create(EventContextSchema) });
             return firstPost.promise;
           }
           return Promise.resolve();
@@ -877,11 +877,11 @@ describe("@spine-event-engine/example-todo", () => {
         postEvent: (_schema, message) => {
           postCount++;
           if (postCount === 1) {
-            firstRead.resolve({ message });
+            firstRead.resolve({ message, context: create(EventContextSchema) });
             return firstPost.promise;
           }
           if (postCount === 2) {
-            fenceRead.resolve({ message });
+            fenceRead.resolve({ message, context: create(EventContextSchema) });
             return fencePost.promise;
           }
           throw new Error("Unexpected rejection readiness post.");

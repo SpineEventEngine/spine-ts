@@ -4368,3 +4368,281 @@ profiles; no Spine JVM project command may run.
 - Slice E is accepted for checkpoint commit and immediate task-branch push. No
   Spine JVM command, build, test, generation, dependency resolution, launch, or
   download was invoked.
+
+## Slice F documentation implementation dispatch
+
+- Slice F is high-risk release/documentation closure under the binding
+  `F_TASK_BRIEF.md`. Runtime behavior in Slices A-E is frozen.
+- One existing `implementer` is explicitly dispatched with expected/configured
+  `gpt-5.6-terra` / `medium`. It owns the authoritative agent-oriented guide,
+  directly related user/package/example/API documentation, necessary TSDoc,
+  fresh-reader/snippet checks, focused tests, and evidence records.
+- The owner must remove stale incremental claims, preserve every human
+  decision and public limitation, use current compile-checked APIs, and provide
+  responsibility/decision/configuration tables plus durable lifecycle,
+  topology, and third-party authentication diagrams. It may not change runtime
+  semantics, commit/push/merge, spawn children, or run any JVM-family
+  operation.
+
+## Slice F specialist review dispatch
+
+- Independent mechanical verification is green for compile-checked TypeScript
+  snippets, generated TypeDoc and exact public API inventory, documentation
+  checks, client-web dependency isolation, checker ESLint, repository
+  formatting, and diff hygiene.
+- Existing `style_maintainability_reviewer`,
+  `typescript_api_docs_reviewer`, and
+  `performance_reliability_reviewer` are dispatched read-only with explicit
+  expected/configured `gpt-5.6-terra` / `high`. The existing
+  `documentation_reviewer` is dispatched through its immutable
+  `gpt-5.6-luna` / `medium` profile; the execution surface does not permit a
+  model override for that fixed role, which is recorded rather than
+  misrepresented.
+- Review scope is the Slice F authoritative guide, linked public documentation,
+  compile-check inventory, two mechanical fixture-format corrections, and
+  factual consistency with the frozen Wave 4 implementation. Reviewers may not
+  edit, mutate Git, spawn children, inspect or execute Spine JVM-family work,
+  or reopen accepted runtime design.
+
+## Slice F specialist review results and correction dispatch
+
+- Style/maintainability reports three P2 findings: executable snippets are not
+  type-checked against real exported declarations, the `ResolveContext` matrix
+  heading conflates valid-session authentication with per-request policy
+  authorization, and most named extension seams lack exact signatures or
+  direct declaration routes.
+- TypeScript/API independently confirms the real-contract checking and exact
+  declaration-route P2 findings. It otherwise confirms the public API claims
+  and the corrected `ResolveContext` versus `IncomingRequest` distinction.
+- Performance/reliability reports one P1: the primary cookie-session browser
+  example omits `credentials: session.credentials`, so cross-origin RPC calls
+  can omit the application cookie even though `BrowserSession.fetch()` is
+  credentialed.
+- Documentation reports one additional P2: the guide does not publish the
+  implemented numeric Envoy, gateway-envelope, and subscription-relay defaults
+  and failure boundaries required by the task brief. No other stale or
+  contradictory guidance is confirmed.
+- Runtime self-introspection is unavailable for all results. The immutable
+  configured existing profiles are style, API, and reliability reviewers on
+  `gpt-5.6-terra` / `high`, and documentation reviewer on
+  `gpt-5.6-luna` / `medium`, with no visible mismatch or fallback.
+- One deduplicated correction batch returns to the existing Slice F
+  `implementer`, explicitly expected/configured `gpt-5.6-terra` / `medium`.
+  It must add the cookie credential invariant, real public-contract snippet
+  checking, accurate matrix semantics, exact extension declaration routes,
+  and numeric limit/default/failure documentation with fail-closed checks. It
+  may not redesign runtime behavior, commit/push/merge, spawn children, or
+  perform any JVM-family operation.
+
+## Slice F correction verification and targeted re-review dispatch
+
+- The existing implementer completed the consolidated batch under explicit
+  configured `gpt-5.6-terra` / `medium`; runtime self-introspection remains
+  unavailable and no mismatch is visible.
+- The browser cookie bootstrap supplies `credentials: session.credentials`;
+  executable guide snippets resolve and type-check against actual workspace
+  public declarations; pseudocode remains explicitly labelled; the operation
+  matrix separates session validation from authorization; direct declaration
+  routes/signatures cover all required seams; and implemented
+  gateway/relay/Envoy limits and failure behavior are tabulated.
+- Independent verification passes declaration-backed snippet checking,
+  generated TypeDoc and exact API inventory, documentation checks, client-web
+  dependency isolation, checker ESLint, repository formatting, and diff
+  hygiene.
+- Style, TypeScript/API, reliability, and documentation concerns reopen only
+  for disposition of their accepted findings and regression inspection.
+  Expected profiles remain the three applicable existing Terra reviewers on
+  explicit `gpt-5.6-terra` / `high`, and the immutable documentation reviewer
+  on `gpt-5.6-luna` / `medium`. Reviews are read-only and prohibit all
+  JVM-family operations.
+
+## Slice F first targeted re-review results
+
+- Style confirms declaration-backed guide checking and the corrected
+  `ResolveContext` matrix, but retains one P2 because
+  `NativeGatewayRequestContext.credential()` and `.transport()` are prose-only
+  rather than signature-checked.
+- TypeScript/API confirms the same residual P2 and adds the related
+  `transportFacts` request-fact constructor: all three routes require exact
+  declaration-backed coverage. Other public API corrections are accepted.
+- Reliability confirms the P1 cookie bootstrap and all published limits, but
+  identifies one residual P2: `pendingOperationLimit` defaults to one, which
+  permits one active plus one queued operation and rejects the third as
+  `binding-busy`; the guide/checker omit it.
+- The existing implementer receives this single narrow residual batch under
+  explicit configured `gpt-5.6-terra` / `medium`. Runtime behavior remains
+  frozen; no Git/JVM/child activity is permitted.
+
+## Slice F residual verification and final targeted dispatch
+
+- The existing implementer adds declaration-backed `typeof transportFacts`,
+  `NativeGatewayRequestContext["credential"]`, and
+  `NativeGatewayRequestContext["transport"]` routes, plus the
+  `pendingOperationLimit = 1` rule: one active and one queued operation are
+  allowed, while the third rejects as `binding-busy`.
+- Independent declaration-snippet, generated TypeDoc/API, documentation,
+  ESLint, formatting, and diff checks pass.
+- Style/API reopen only exact route coverage; reliability/documentation reopen
+  only the pending-operation and limits-table correction. Existing profiles
+  remain explicit Terra High for style/API/reliability and immutable Luna
+  Medium for documentation. All reviews are read-only with no JVM activity.
+
+## Slice F specialist convergence and final security dispatch
+
+- Style/maintainability is CLEAN. The guide declaration-checks
+  `typeof transportFacts`, `NativeGatewayRequestContext["credential"]`, and
+  `["transport"]`; the checker requires the exact routes.
+- TypeScript/API is CLEAN. All accepted exact-signature and public-contract
+  findings are resolved, with declaration-backed snippets passing.
+- Performance/reliability is CLEAN. The credential bootstrap and all finite
+  limits are accurate, including one active plus one queued operation and a
+  third `binding-busy` rejection.
+- Documentation is CLEAN. The authoritative guide covers current exported
+  declaration routes and every required Envoy, gateway, binding, relay,
+  operation, and shutdown default/failure boundary without stale Wave 4
+  claims.
+- Runtime self-introspection is unavailable for the targeted confirmations.
+  Immutable configured profiles remain the three relevant Terra High reviewers
+  and the Luna Medium documentation reviewer, with no visible mismatch.
+- Slice F is specialist-converged. The existing final `security_reviewer` is
+  dispatched once across the complete Wave 4 diff from `f8a59883`, with
+  explicit expected/configured `gpt-5.6-terra` / `high`. Scope covers
+  authentication/session/provider flows, cookies/CSRF/CORS, context rewriting,
+  request facts, native forwarding, subscription ownership and relays,
+  redaction, finite limits, Envoy/trust topology, browser lifecycle, examples,
+  tests, and public limitations. The review is read-only and prohibits all
+  Spine JVM-family operations.
+
+## Wave 4 final security result
+
+- Final security is CLEAN with no confirmed P0-P2 security or correctness
+  finding across the complete diff from `f8a59883`: authentication, opaque and
+  signed sessions, OIDC/provider flows, cookie/CSRF/CORS boundaries, trusted
+  context rewriting, request facts, native forwarding, subscription
+  ownership/private envelopes/relay limits, browser and Chat behavior, Envoy,
+  dependencies, diagnostics, tests, and public limitations.
+- `interop/envoy/validated.yaml` is a stale, unreferenced syntax-validation
+  fixture without the renderer's credentialed-CORS fields. It is not an active
+  browser topology or public deployment input; both use `renderEnvoy()`, which
+  includes credentialed CORS and `x-spine-csrf`. This is accepted as
+  non-release-blocking and is not represented as the deployable template.
+- Newly locked Vite `8.1.0` is outside the affected `<=8.0.4` advisory range,
+  and `protobufjs 7.6.5` is outside the affected `<7.5.5` range.
+- Runtime self-introspection is unavailable. The immutable configured existing
+  security profile is explicitly `gpt-5.6-terra` / `high`, with no visible
+  mismatch or fallback. No Spine JVM-family work was inspected or executed.
+- Full native repository verification and coverage now form the final task
+  acceptance gate.
+
+## Full-verification correction dispatch
+
+- Final `verify` exposes a deterministic tooling-typecheck gap: 143 strict
+  errors across 16 Wave 4 test/example files. Root-cause triage identifies
+  inferred mutable fixtures, widened iterator discriminants, intentional
+  invalid-input boundaries, generated-message presence/optional handling, and
+  a Chat application/core `UserId` schema mix-up.
+- One existing implementer is dispatched with explicit
+  `gpt-5.6-terra` / `medium` and exclusive ownership of the failing
+  tests/fixtures. Production contracts remain frozen; corrections must be
+  source-rooted and preserve behavioral assertions.
+- After deterministic convergence, style/API/reliability reopen only affected
+  test-helper and browser-fixture concerns. Security reopens only if a change
+  affects executable browser/auth boundary behavior.
+
+## Full-verification lint correction dispatch
+
+- Tooling typecheck is independently green and listener-dependent focused tests
+  pass 49/49 with localhost permission. The supported lint gate now reports
+  703 Wave 4 errors: 76 environment-global configuration gaps and 627
+  strict-rule code/test violations.
+- The existing implementer remains the single writer under explicit
+  `gpt-5.6-terra` / `medium`. Strict rules and public/runtime contracts remain
+  in force. Accurate path-scoped globals are configuration correctness, while
+  all other findings require semantics-preserving source/test correction.
+- Style and TypeScript/API necessarily reopen for the lint correction;
+  reliability/security reopen only for substantively affected production or
+  executable browser/auth behavior.
+
+### Auth-production lint ownership transfer
+
+- OIDC and native auth production sources are lint-clean with tooling
+  typecheck green. The initial correction context returns the same 33
+  provider/signed-session/subscription findings across three bounded turns.
+- A replacement existing `implementer`, explicitly
+  `gpt-5.6-terra` / `medium`, receives exclusive ownership of those three
+  files. It must preserve the established public contracts and runtime
+  validation/lifecycle semantics and may not weaken rules or perform Git,
+  child, or JVM-family work.
+
+## Final verification-correction review wave
+
+- Style/maintainability reports one P1 and two P2 findings. The P1 identifies
+  lint-only `await Promise.resolve()` statements in the native relay that defer
+  formerly immediate push/close effects and introduce observable races. The
+  P2 findings identify two client cancellation tests that stopped proving abort
+  reason identity.
+- TypeScript/API reports one P2: `SignedSessions.issue()` may now throw
+  synchronously even though its public contract returns a Promise.
+- Performance/reliability reports one P1 and one P2. Accessor-backed OIDC input
+  can return different grant identifiers across validation/lookup/deletion and
+  leave the issued grant replayable. An opaque-session principal getter can
+  close the store during copying after the final terminal check, allowing a
+  record to be inserted into a closed store.
+- All six findings are accepted as one correction batch. The configured
+  existing reviewer profiles were explicitly `gpt-5.6-terra` / `high`;
+  runtime self-introspection was unavailable with no visible mismatch. No
+  reviewer changed files or performed a Spine JVM-family operation.
+- Correction re-review is clean for style/maintainability and confirms the
+  native immediate-effect and abort-reason fixes. TypeScript/API and
+  reliability independently report the same remaining P2: hostile Proxy shape
+  inspection can throw outside the OIDC snapshot catch boundary, violating the
+  rejection-union contract. The accepted correction also covers analogous
+  start/callback runtime validation paths; all prior findings are otherwise
+  resolved.
+- Final OIDC API and reliability re-review independently find the same P1:
+  snapshotting grant and verifier together lets a throwing verifier getter
+  reject before a known grant is deleted. The initial regression is a false
+  positive because its issuer rejects even if the grant survives. The accepted
+  correction must snapshot/validate the grant first, delete a known grant, then
+  snapshot/validate the verifier separately, and prove non-replay with a
+  successful issuer.
+- The split-snapshot correction is independently verified and both final API
+  and reliability re-reviews are CLEAN. A known grant is deleted synchronously
+  before verifier snapshot/validation, hostile access maps to the rejection
+  union, and the successful-issuer regression proves no replay. All targeted
+  correction findings are closed.
+- The existing final `security_reviewer` is dispatched once more across the
+  complete release-ready Wave 4 diff, explicitly expected/configured
+  `gpt-5.6-terra` / `high`, with no JVM-family operation authorized.
+- Final security is CLEAN across the complete release-ready Wave 4 diff with
+  no confirmed P0-P2 issue. Grant burn ordering, cookie Origin/CSRF controls,
+  credential stripping, private bounded relays, logging, browser behavior, and
+  Envoy trust assumptions are accepted. Operator-supplied Envoy topology
+  remains trusted configuration, and the unreferenced validation fixture
+  remains non-blocking. Runtime self-introspection is unavailable; the
+  immutable configured profile is `gpt-5.6-terra` / `high`.
+- The first full native verification run exposes one BlackBox cancellation
+  regression from lint-time bound method capture. The dynamic-lookup closure
+  correction passes focused and mechanical gates. Targeted style and
+  reliability re-reviews are both CLEAN: cancellation remains observable,
+  precedes iterator disposal, and releases ownership idempotently without a
+  new race or retention path. API/documentation/security remain N/A for this
+  internal lifecycle-only correction.
+- Final coverage test review accepts the behavioral branch gain but reports two
+  P2 assertion gaps: the Node factory test must prove the exact owned session
+  manager is passed into transport construction, and opaque fail-closed tests
+  must prove pre-existing credentials are cleared and cannot resolve or rotate.
+  Both are accepted as one test-only correction batch; production and public
+  behavior remain frozen.
+- The Node exact-manager assertion is accepted. The initial overflow cleanup
+  assertion expired its seed during pre-sweep; reviewers correctly reject that
+  false positive. Moving the trigger one millisecond earlier keeps the seed
+  live until overflow-driven `failClosed()`. Final style and reliability
+  re-reviews are CLEAN: both opaque paths prove live-state clearing and
+  terminal resolve/rotate/create behavior, and Node ownership tests are exact,
+  deterministic, and network-free.
+- Final commit-ready native verification is GREEN: 157 test files pass with 3
+  skipped; 3,070 tests pass with 25 skipped; branch coverage is 90.01%
+  (10,061/11,177). Typecheck, lint, cleanup, formatting, TypeDoc/API checks,
+  Protobuf integrity/generated-clean, and release-readiness all pass. All
+  review concerns are closed.

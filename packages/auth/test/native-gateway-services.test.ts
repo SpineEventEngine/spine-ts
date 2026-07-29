@@ -2,7 +2,6 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type HandlerContext } from "@connectrpc/connect";
 import {
-  AuthenticationService,
   ResolveContextRequestSchema,
   ResolveContextResponseSchema,
 } from "@spine-event-engine/proto/auth";
@@ -12,6 +11,7 @@ import {
   CommandContextSchema,
   CommandSchema,
   TenantIdSchema,
+  UserIdSchema,
 } from "@spine-event-engine/proto";
 import { TypeRegistry, packAny } from "@spine-event-engine/core";
 import {
@@ -90,7 +90,9 @@ function updateWithNestedAny(): Uint8Array {
 }
 
 function nestedAnyValue(update: SubscriptionUpdate): Uint8Array | undefined {
-  return update.subscription?.topic?.target?.criterion.value?.filter[0]?.filter[0]?.value?.value;
+  const criterion = update.subscription?.topic?.target?.criterion;
+  if (criterion?.case !== "filters") return undefined;
+  return criterion.value.filter[0]?.filter[0]?.value?.value;
 }
 
 function requests(): NativeGatewayRequestContext {
@@ -113,14 +115,14 @@ function unary(result: UnaryGatewayResult): {
   readonly calls: UnaryGatewayRequest[];
 } {
   const calls: UnaryGatewayRequest[] = [];
-  return { fake: { handle: async (request) => (calls.push(request), result) }, calls };
+  return { fake: { handle: (request) => (calls.push(request), Promise.resolve(result)) }, calls };
 }
 
 function subscriptions(
   handler: (request: SubscriptionGatewayRequest) => Promise<SubscriptionGatewayResult>,
 ): { readonly fake: SubscriptionFake; readonly calls: SubscriptionGatewayRequest[] } {
   const calls: SubscriptionGatewayRequest[] = [];
-  return { fake: { handle: async (request) => (calls.push(request), handler(request)) }, calls };
+  return { fake: { handle: (request) => (calls.push(request), handler(request)) }, calls };
 }
 
 async function errorCode(effect: Promise<unknown>): Promise<Code> {
@@ -167,12 +169,12 @@ describe("createNativeGatewayServices", () => {
       contexts: {
         resolve: () =>
           Promise.resolve({
-            actor: { value: "ada" },
+            actor: create(UserIdSchema, { value: "ada" }),
             timestamp: create(TimestampSchema, { seconds: 2n }),
           }),
         resolveContext: () =>
           Promise.resolve({
-            actor: { value: "ada" },
+            actor: create(UserIdSchema, { value: "ada" }),
             timestamp: create(TimestampSchema, { seconds: 2n }),
           }),
       },
@@ -216,7 +218,7 @@ describe("createNativeGatewayServices", () => {
       kind: "forwarded",
       value: toBinary(QueryService.method.read.output, create(QueryService.method.read.output)),
     });
-    const subscription = subscriptions(async () => ({ kind: "cancelled" }));
+    const subscription = subscriptions(() => Promise.resolve({ kind: "cancelled" }));
     const gateway = services(
       {
         handle: async (request) =>
@@ -240,8 +242,8 @@ describe("createNativeGatewayServices", () => {
       credential,
       transport,
     });
-    expect(post.calls[0].signal).toBeDefined();
-    expect(read.calls[0].signal).toBeDefined();
+    expect(post.calls[0]?.signal).toBeDefined();
+    expect(read.calls[0]?.signal).toBeDefined();
   });
 
   it.each([
@@ -253,14 +255,18 @@ describe("createNativeGatewayServices", () => {
     ["context-stale", Code.InvalidArgument],
   ] as const)("maps UnaryGateway %s rejection to Connect status", async (reason, code) => {
     const unaryGateway = unary({ kind: "rejected", reason });
-    const subscription = subscriptions(async () => ({ kind: "cancelled" }));
+    const subscription = subscriptions(() => Promise.resolve({ kind: "cancelled" }));
     const gateway = services(unaryGateway.fake, subscription.fake);
 
     expect(
-      await errorCode(gateway.command.post(create(CommandService.method.post.input), context())),
+      await errorCode(
+        Promise.resolve(gateway.command.post(create(CommandService.method.post.input), context())),
+      ),
     ).toBe(code);
     expect(
-      await errorCode(gateway.query.read(create(QueryService.method.read.input), context())),
+      await errorCode(
+        Promise.resolve(gateway.query.read(create(QueryService.method.read.input), context())),
+      ),
     ).toBe(code);
   });
 
@@ -269,10 +275,12 @@ describe("createNativeGatewayServices", () => {
       SubscriptionSchema,
       create(SubscriptionSchema, { id: { value: "subscription-1" } }),
     );
-    const fake = subscriptions(async (request) =>
-      request.method === "Subscribe"
-        ? { kind: "subscribed", wire: { kind: "public-subscription", bytes: subscribed } }
-        : { kind: "cancelled" },
+    const fake = subscriptions((request) =>
+      Promise.resolve(
+        request.method === "Subscribe"
+          ? { kind: "subscribed", wire: { kind: "public-subscription", bytes: subscribed } }
+          : { kind: "cancelled" },
+      ),
     );
     const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
     const subscription = create(SubscriptionSchema, { id: { value: "subscription-1" } });
@@ -302,14 +310,18 @@ describe("createNativeGatewayServices", () => {
     ["malformed-request", Code.InvalidArgument],
     ["backend-envelope-too-large", Code.InvalidArgument],
   ] as const)("maps SubscriptionGateway %s rejection to Connect status", async (reason, code) => {
-    const fake = subscriptions(async () => ({ kind: "rejected", reason }));
+    const fake = subscriptions(() => Promise.resolve({ kind: "rejected", reason }));
     const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
 
-    expect(await errorCode(gateway.subscription.subscribe(create(TopicSchema), context()))).toBe(
-      code,
-    );
     expect(
-      await errorCode(gateway.subscription.cancel(create(SubscriptionSchema), context())),
+      await errorCode(
+        Promise.resolve(gateway.subscription.subscribe(create(TopicSchema), context())),
+      ),
+    ).toBe(code);
+    expect(
+      await errorCode(
+        Promise.resolve(gateway.subscription.cancel(create(SubscriptionSchema), context())),
+      ),
     ).toBe(code);
   });
 
@@ -322,8 +334,12 @@ describe("createNativeGatewayServices", () => {
     const fake = subscriptions(async (request) => {
       expect(request.method).toBe("Activate");
       expect(request.signal).toBeDefined();
-      await request.updates?.({ kind: "subscription-update", bytes: source[0] });
-      await request.updates?.({ kind: "subscription-update", bytes: source[1] });
+      const first = source[0];
+      const second = source[1];
+      if (first === undefined || second === undefined || request.updates === undefined)
+        throw new Error("expected update sink and source updates");
+      await request.updates({ kind: "subscription-update", bytes: first });
+      await request.updates({ kind: "subscription-update", bytes: second });
       return { kind: "activated" };
     });
     const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
@@ -350,7 +366,8 @@ describe("createNativeGatewayServices", () => {
 
     const delivered = await waiting;
     expect(delivered.done).toBe(false);
-    expect(nestedAnyValue(delivered.value!)).toEqual(
+    if (delivered.done) throw new Error("expected delivered update");
+    expect(nestedAnyValue(delivered.value)).toEqual(
       toBinary(
         TenantIdSchema,
         create(TenantIdSchema, { kind: { case: "value", value: "nested-bytes" } }),
@@ -367,7 +384,8 @@ describe("createNativeGatewayServices", () => {
 
     const delivered = await relay[Symbol.asyncIterator]().next();
     expect(delivered.done).toBe(false);
-    expect(nestedAnyValue(delivered.value!)).toEqual(
+    if (delivered.done) throw new Error("expected delivered update");
+    expect(nestedAnyValue(delivered.value)).toEqual(
       toBinary(
         TenantIdSchema,
         create(TenantIdSchema, { kind: { case: "value", value: "nested-bytes" } }),
@@ -423,9 +441,9 @@ describe("createNativeGatewayServices", () => {
   it("rejects an already-aborted external signal before SubscriptionGateway activation", async () => {
     const controller = new AbortController();
     controller.abort();
-    const fake = subscriptions(async () => {
-      throw new Error("pre-aborted activation must not reach B3");
-    });
+    const fake = subscriptions(() =>
+      Promise.reject(new Error("pre-aborted activation must not reach B3")),
+    );
     const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
     const iterator = gateway.subscription
       .activate(create(SubscriptionSchema), context(controller.signal))
@@ -444,7 +462,13 @@ describe("createNativeGatewayServices", () => {
       const fake = subscriptions(async (request) => {
         signal = request.signal;
         await new Promise<void>((finish) =>
-          signal?.addEventListener("abort", finish, { once: true }),
+          signal?.addEventListener(
+            "abort",
+            () => {
+              finish();
+            },
+            { once: true },
+          ),
         );
         settle?.();
         return { kind: "activated" };
@@ -459,11 +483,15 @@ describe("createNativeGatewayServices", () => {
       const pending = iterator.next();
       await new Promise((finish) => setTimeout(finish, 0));
 
-      if (terminal === "return") await iterator.return?.();
-      else
-        await expect(iterator.throw?.(new Error("consumer stopped"))).rejects.toThrow(
-          "consumer stopped",
-        );
+      if (terminal === "return") {
+        const returned = iterator.return?.();
+        expect(signal?.aborted).toBe(true);
+        await expect(returned).resolves.toEqual({ done: true, value: undefined });
+      } else {
+        const thrown = iterator.throw?.(new Error("consumer stopped"));
+        expect(signal?.aborted).toBe(true);
+        await expect(thrown).rejects.toThrow("consumer stopped");
+      }
       await pending.catch(() => undefined);
 
       await settled;
@@ -472,7 +500,9 @@ describe("createNativeGatewayServices", () => {
   );
 
   it("maps Activate gateway rejection and backend failure through the stream terminal", async () => {
-    const rejected = subscriptions(async () => ({ kind: "rejected", reason: "binding-busy" }));
+    const rejected = subscriptions(() =>
+      Promise.resolve({ kind: "rejected", reason: "binding-busy" }),
+    );
     const rejectedGateway = services(
       unary({ kind: "forwarded", value: new Uint8Array() }).fake,
       rejected.fake,
@@ -485,9 +515,7 @@ describe("createNativeGatewayServices", () => {
     ).rejects.toMatchObject({ code: Code.Aborted });
 
     const failure = new Error("native backend failed");
-    const failed = subscriptions(async () => {
-      throw failure;
-    });
+    const failed = subscriptions(() => Promise.reject(failure));
     const failedGateway = services(
       unary({ kind: "forwarded", value: new Uint8Array() }).fake,
       failed.fake,
@@ -501,7 +529,7 @@ describe("createNativeGatewayServices", () => {
   });
 
   it("maps an unexpected Activate acknowledgement to an internal stream failure", async () => {
-    const fake = subscriptions(async () => ({ kind: "cancelled" }));
+    const fake = subscriptions(() => Promise.resolve({ kind: "cancelled" }));
     const gateway = services(unary({ kind: "forwarded", value: new Uint8Array() }).fake, fake.fake);
 
     await expect(

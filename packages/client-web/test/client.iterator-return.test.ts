@@ -6,13 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const connect = vi.hoisted(() => ({
   iterator: undefined as AsyncIterator<unknown> | undefined,
   iterators: [] as AsyncIterator<unknown>[],
-  cancel: vi.fn(async () => {}),
-  read: vi.fn(async () => ({ response: { status: { status: { case: "ok" } } } })),
+  cancel: vi.fn(() => Promise.resolve()),
+  read: vi.fn(() => Promise.resolve({ response: { status: { status: { case: "ok" } } } })),
 }));
 
 vi.mock("@connectrpc/connect", () => ({
   createClient: () => ({
-    subscribe: async (topic: unknown) => ({ id: { value: "wire" }, topic }),
+    subscribe: (topic: unknown) => Promise.resolve({ id: { value: "wire" }, topic }),
     activate: () => ({
       [Symbol.asyncIterator]: () => connect.iterators.shift() ?? connect.iterator,
     }),
@@ -36,7 +36,7 @@ describe("Client iterator disposal", () => {
     let returns = 0;
     let closed = 0;
     connect.iterator = {
-      next: () => new Promise<IteratorResult<unknown>>(() => {}),
+      next: () => new Promise<IteratorResult<unknown>>(() => undefined),
       return: () => {
         returns++;
         return Promise.reject(new Error("iterator return rejected"));
@@ -65,10 +65,12 @@ describe("Client iterator disposal", () => {
   it("waits for a cooperative iterator return before cancelling its wire", async () => {
     let settle: (() => void) | undefined;
     connect.iterator = {
-      next: () => new Promise<IteratorResult<unknown>>(() => {}),
+      next: () => new Promise<IteratorResult<unknown>>(() => undefined),
       return: () =>
         new Promise<IteratorResult<unknown>>((resolve) => {
-          settle = () => resolve({ done: true, value: undefined });
+          settle = () => {
+            resolve({ done: true, value: undefined });
+          };
         }),
     };
     const client = Client.usingTransport({
@@ -80,7 +82,9 @@ describe("Client iterator disposal", () => {
       .createSubscription(create(TopicSchema), { kind: "event" });
     await subscription.activate();
     const cancelling = subscription.cancel();
-    await vi.waitFor(() => expect(settle).toBeDefined());
+    await vi.waitFor(() => {
+      expect(settle).toBeDefined();
+    });
     expect(connect.cancel).not.toHaveBeenCalled();
     settle?.();
     await cancelling;
@@ -89,17 +93,17 @@ describe("Client iterator disposal", () => {
 
   it("disposes a retryable failed stream once before reconnect and never returns it again", async () => {
     const firstReturn = vi.fn(() => Promise.reject(new Error("first return rejected")));
-    const secondReturn = vi.fn(() => new Promise<IteratorResult<unknown>>(() => {}));
+    const secondReturn = vi.fn(() => new Promise<IteratorResult<unknown>>(() => undefined));
     connect.iterators = [
       { next: () => Promise.reject(new Error("retryable stream failure")), return: firstReturn },
-      { next: () => new Promise<IteratorResult<unknown>>(() => {}), return: secondReturn },
+      { next: () => new Promise<IteratorResult<unknown>>(() => undefined), return: secondReturn },
     ];
     const client = Client.usingTransport(
       { transport: {} as Transport, createRequestId: () => "retry-return" },
       {
         subscriptions: {
           retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
-          scheduler: { now: () => 0, wait: async () => {} },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
         },
       },
     );
@@ -108,7 +112,9 @@ describe("Client iterator disposal", () => {
       .createSubscription(create(TopicSchema), { kind: "event" });
 
     await subscription.activate();
-    await vi.waitFor(() => expect(firstReturn).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => {
+      expect(firstReturn).toHaveBeenCalledTimes(1);
+    });
     await expect(subscription.cancel()).resolves.toBeUndefined();
     expect(firstReturn).toHaveBeenCalledTimes(1);
     expect(secondReturn).toHaveBeenCalledTimes(1);
@@ -118,11 +124,24 @@ describe("Client iterator disposal", () => {
   });
 
   it("disposes each Entity replacement iterator once through Read retry exhaustion", async () => {
-    const returns = [vi.fn(), vi.fn(() => Promise.reject(new Error("ignored"))), vi.fn()];
+    const returns = [
+      vi.fn(() => Promise.resolve({ done: true, value: undefined })),
+      vi.fn(() => Promise.reject(new Error("ignored"))),
+      vi.fn(() => Promise.resolve({ done: true, value: undefined })),
+    ];
     connect.iterators = [
-      { next: () => Promise.reject(new Error("retryable stream failure")), return: returns[0] },
-      { next: () => new Promise<IteratorResult<unknown>>(() => {}), return: returns[1] },
-      { next: () => new Promise<IteratorResult<unknown>>(() => {}), return: returns[2] },
+      {
+        next: () => Promise.reject(new Error("retryable stream failure")),
+        return: requireReturn(returns, 0),
+      },
+      {
+        next: () => new Promise<IteratorResult<unknown>>(() => undefined),
+        return: requireReturn(returns, 1),
+      },
+      {
+        next: () => new Promise<IteratorResult<unknown>>(() => undefined),
+        return: requireReturn(returns, 2),
+      },
     ];
     connect.read
       .mockRejectedValueOnce(new Error("transient Read failure"))
@@ -133,7 +152,7 @@ describe("Client iterator disposal", () => {
       {
         subscriptions: {
           retryPolicy: { maxAttempts: 2, maxElapsedMs: 1_000, delayMs: () => 1 },
-          scheduler: { now: () => 0, wait: async () => {} },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
         },
       },
     );
@@ -153,3 +172,12 @@ describe("Client iterator disposal", () => {
     for (const iteratorReturn of returns) expect(iteratorReturn).toHaveBeenCalledTimes(1);
   });
 });
+
+function requireReturn(
+  returns: readonly (() => Promise<IteratorResult<unknown>>)[],
+  index: number,
+): () => Promise<IteratorResult<unknown>> {
+  const iteratorReturn = returns[index];
+  if (iteratorReturn === undefined) throw new Error("iterator return is missing");
+  return iteratorReturn;
+}

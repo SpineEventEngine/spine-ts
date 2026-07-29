@@ -31,7 +31,7 @@ describe("BlackBox lifecycle seams", () => {
     const cleanup = new Error("server cleanup");
 
     const failure = await openTestBlackBox({
-      start: async () => ({ close: async () => Promise.reject(cleanup) }),
+      start: () => Promise.resolve({ close: () => Promise.reject(cleanup) }),
       connect: () => {
         throw primary;
       },
@@ -44,16 +44,17 @@ describe("BlackBox lifecycle seams", () => {
   it("releases a returned tracked handle and rejects unsupported activation", async () => {
     let cancellations = 0;
     const blackBox = createTestBlackBox({
-      client: { close: async () => {} },
-      server: { close: async () => {} },
+      client: { close: () => Promise.resolve() },
+      server: { close: () => Promise.resolve() },
     });
     const tracked = trackTestHandle(blackBox, {
-      cancel: async () => {
+      cancel: () => {
         cancellations++;
+        return Promise.resolve();
       },
       [Symbol.asyncIterator]: () => ({
-        next: async () => ({ done: true as const, value: undefined }),
-        return: async () => ({ done: true as const, value: undefined }),
+        next: () => Promise.resolve({ done: true as const, value: undefined }),
+        return: () => Promise.resolve({ done: true as const, value: undefined }),
       }),
     });
 

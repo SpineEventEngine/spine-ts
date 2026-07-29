@@ -134,7 +134,9 @@ describe("Chat Projection backend", () => {
       const events = await waitForStoredEvents(eventStore, 2);
       const normalEvents = events.filter((event) => event.context?.rejection === undefined);
       expect(normalEvents).toHaveLength(1);
-      const winner = unpackAny(normalEvents[0]?.message, MessagePostedSchema);
+      const message = normalEvents[0]?.message;
+      if (message === undefined) throw new Error("Expected stored message.");
+      const winner = unpackAny(message, MessagePostedSchema);
       expect(winner?.text).toBe("first");
       expect(
         events.filter(
@@ -183,7 +185,9 @@ describe("Chat Projection backend", () => {
       const events = await waitForStoredEvents(eventStore, 2);
       const normalEvents = events.filter((event) => event.context?.rejection === undefined);
       expect(normalEvents).toHaveLength(1);
-      const winner = unpackAny(normalEvents[0]?.message, MessagePostedSchema);
+      const message = normalEvents[0]?.message;
+      if (message === undefined) throw new Error("Expected stored message.");
+      const winner = unpackAny(message, MessagePostedSchema);
       expect(["first", "second"]).toContain(winner?.text);
       expect(
         events.filter(
@@ -348,7 +352,8 @@ async function nextView(
     const update = result.done ? undefined : result.value;
     if (update?.kind !== "update" || update.update.update.case !== "entityUpdates")
       throw new Error("Expected Projection update.");
-    const value = update.update.update.value.update[0]?.kind.value;
+    const kind = update.update.update.value.update[0]?.kind;
+    const value = kind?.case === "state" ? kind.value : undefined;
     const row = value === undefined ? undefined : unpackAny(value, ChatMessageViewSchema);
     if (row === undefined) throw new Error("Expected ChatMessageView.");
     return row;

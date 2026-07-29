@@ -206,16 +206,16 @@ function useSubscription(
 async function observeDeliveries(
   subscription: Subscription,
   live: () => boolean,
-  setState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
+  onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
   cancel: () => Promise<void>,
 ): Promise<void> {
   try {
     for await (const delivery of subscription.updates) {
-      if (live()) setState((previous) => ({ ...previous, delivery }));
+      if (live()) onSetState((previous) => ({ ...previous, delivery }));
     }
   } catch (error: unknown) {
     if (live())
-      setState((previous) => ({
+      onSetState((previous) => ({
         ...previous,
         status: "error",
         error,
@@ -228,16 +228,16 @@ async function observeDeliveries(
 async function observeLifecycle(
   subscription: Subscription,
   live: () => boolean,
-  setState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
+  onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
   cancel: () => Promise<void>,
 ): Promise<void> {
   try {
     for await (const lifecycle of subscription.lifecycle) {
-      if (live()) setState((previous) => ({ ...previous, lifecycle }));
+      if (live()) onSetState((previous) => ({ ...previous, lifecycle }));
     }
   } catch (error: unknown) {
     if (live())
-      setState((previous) => ({
+      onSetState((previous) => ({
         ...previous,
         status: "error",
         error,

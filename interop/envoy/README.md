@@ -5,6 +5,10 @@ starting point, not a managed deployment product: applications own the gateway
 listener, TLS material, identity-provider flow, network policy, and any
 template changes.
 
+Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+before adapting this template: it documents the gateway trust boundary,
+session/provider ownership, delivery limits, and verification matrix.
+
 ## Render a configuration
 
 Pass an HTTPS browser origin, the Envoy listen address and port, the application

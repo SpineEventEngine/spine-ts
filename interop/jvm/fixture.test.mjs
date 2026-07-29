@@ -225,6 +225,7 @@ describe("the static JVM source reference", () => {
         createReadStreamImpl: () =>
           Readable.from(
             (async function* () {
+              yield new Uint8Array();
               throw failure;
             })(),
           ),

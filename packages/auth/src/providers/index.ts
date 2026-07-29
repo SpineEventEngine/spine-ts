@@ -12,18 +12,18 @@ const MAX_JWKS = 32;
 const MAX_SCOPES = 32;
 const MAX_CACHE_SECONDS = 86_400;
 const ALGORITHMS = new Set(["RS256", "ES256"]);
-type Jwk = {
+interface Jwk {
   readonly kid?: string;
   readonly kty?: string;
   readonly alg?: string;
   readonly [name: string]: unknown;
-};
-type PendingJwks = {
+}
+interface PendingJwks {
   readonly promise: Promise<Jwk[] | undefined>;
   readonly controller: AbortController;
   waiters: number;
   settled: boolean;
-};
+}
 
 /** Node-compatible HTTP function injected by provider adapters for deterministic transport. */
 export type ProviderFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -191,6 +191,7 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
     async exchangeAuthorizationCode(input: OidcAuthorizationCodeExchange) {
       try {
         if (input.clientId !== clientId || !validExchange(input)) return undefined;
+        const secret = clientSecret ?? "";
         return await boundedOperation(timeout, input.signal, async (signal) => {
           const body = new URLSearchParams({
             grant_type: "authorization_code",
@@ -203,12 +204,11 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
             accept: "application/json",
             "content-type": "application/x-www-form-urlencoded",
           });
-          if (clientAuthentication === "client_secret_post")
-            body.set("client_secret", clientSecret!);
+          if (clientAuthentication === "client_secret_post") body.set("client_secret", secret);
           if (clientAuthentication === "client_secret_basic")
             headers.set(
               "authorization",
-              `Basic ${Buffer.from(`${clientId}:${clientSecret!}`).toString("base64")}`,
+              `Basic ${Buffer.from(`${clientId}:${secret}`).toString("base64")}`,
             );
           const token = await json(tokenEndpoint, http, { maxResponseBytes: limit }, signal, {
             method: "POST",
@@ -295,14 +295,15 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
   )
     throw new TypeError("includeVerifiedPrimaryEmail");
   const includeVerifiedPrimaryEmail = options.includeVerifiedPrimaryEmail === true;
-  const requiredScopes = [...new Set(options.scopes ?? ["read:user"])];
+  const suppliedScopes: readonly unknown[] = options.scopes ?? ["read:user"];
+  const requiredScopes: string[] = [];
+  for (const scope of suppliedScopes) {
+    if (!validScope(scope)) throw new TypeError("scopes");
+    if (!requiredScopes.includes(scope)) requiredScopes.push(scope);
+  }
   if (includeVerifiedPrimaryEmail && !requiredScopes.includes("user:email"))
     requiredScopes.push("user:email");
-  if (
-    requiredScopes.length === 0 ||
-    requiredScopes.length > MAX_SCOPES ||
-    requiredScopes.some((scope) => !validScope(scope))
-  )
+  if (requiredScopes.length === 0 || requiredScopes.length > MAX_SCOPES)
     throw new TypeError("scopes");
   const apiVersion = options.apiVersion ?? "2022-11-28";
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(apiVersion)) throw new TypeError("apiVersion");
@@ -343,14 +344,16 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
             token.token_type.toLowerCase() !== "bearer"
           )
             return undefined;
-          const granted =
+          const accessToken = string(token.access_token);
+          if (accessToken === undefined) return undefined;
+          const granted: string[] =
             typeof token.scope === "string" ? token.scope.split(/[ ,]+/).filter(Boolean) : [];
           if (requiredScopes.some((scope) => !granted.includes(scope))) return undefined;
           const user = await json(`${api}/user`, http, { maxResponseBytes: limit }, signal, {
             redirect: "error",
             headers: {
               accept: "application/json",
-              authorization: `Bearer ${token.access_token}`,
+              authorization: `Bearer ${accessToken}`,
               "x-github-api-version": apiVersion,
             },
           });
@@ -367,21 +370,17 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
                 redirect: "error",
                 headers: {
                   accept: "application/json",
-                  authorization: `Bearer ${token.access_token}`,
+                  authorization: `Bearer ${accessToken}`,
                   "x-github-api-version": apiVersion,
                 },
               },
             );
             if (!Array.isArray(emails) || emails.length > 64) return undefined;
-            const primary = emails.filter(
-              (email) =>
-                plain(email) &&
-                email.primary === true &&
-                email.verified === true &&
-                validEmail(email.email),
-            );
+            const primary = emails.filter(validPrimaryEmail);
             if (primary.length !== 1) return undefined;
-            Object.defineProperty(claims, "email", { value: primary[0].email, enumerable: true });
+            const email = primary[0];
+            if (email === undefined) return undefined;
+            Object.defineProperty(claims, "email", { value: email.email, enumerable: true });
           }
           return Object.freeze({
             issuer: base,
@@ -433,7 +432,7 @@ async function verifyToken(
       currentDate: new Date(clock()),
       typ: "JWT",
     });
-    claims = verified.payload as Record<string, unknown>;
+    claims = verified.payload;
   } catch {
     return undefined;
   }
@@ -561,6 +560,11 @@ function validEmail(value: unknown): value is string {
     typeof value === "string" && value.length <= 320 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)
   );
 }
+function validPrimaryEmail(value: unknown): value is { readonly email: string } {
+  return (
+    plain(value) && value.primary === true && value.verified === true && validEmail(value.email)
+  );
+}
 function validScope(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 128 && !/\s/u.test(value);
 }
@@ -599,7 +603,9 @@ async function boundedOperation<T>(
   });
   const onAbort = () => rejectAbort?.(new Error("Provider operation aborted."));
   signal.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => controller.abort(), timeoutMilliseconds);
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMilliseconds);
   try {
     if (signal.aborted) throw new Error("Provider operation aborted.");
     return await Promise.race([operation(signal), aborted]);

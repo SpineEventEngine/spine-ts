@@ -19,6 +19,7 @@ import {
 import {
   QueryResponseSchema,
   QueryIdSchema,
+  type Query,
   QuerySchema,
   ResponseFormatSchema,
   EventUpdatesSchema,
@@ -87,7 +88,7 @@ describe("Client", () => {
   });
 
   it("freezes the discriminated lifecycle and finite retry configuration contract", () => {
-    expectTypeOf<CreateSubscriptionOptions>().toMatchTypeOf<
+    expectTypeOf<CreateSubscriptionOptions>().toExtend<
       | { readonly kind: "event"; readonly signal?: AbortSignal }
       | {
           readonly kind: "entity";
@@ -95,7 +96,7 @@ describe("Client", () => {
           readonly signal?: AbortSignal;
         }
     >();
-    expectTypeOf<SubscriptionLifecycle>().toMatchTypeOf<
+    expectTypeOf<SubscriptionLifecycle>().toExtend<
       | { readonly state: "connecting"; readonly generation: number; readonly attempt: number }
       | { readonly state: "failed"; readonly generation: number; readonly error: Error }
       | {
@@ -103,7 +104,7 @@ describe("Client", () => {
           readonly generation: number;
         }
     >();
-    expectTypeOf<SubscriptionRetryPolicy>().toMatchTypeOf<{
+    expectTypeOf<SubscriptionRetryPolicy>().toExtend<{
       readonly maxAttempts: number;
       readonly maxElapsedMs: number;
       delayMs(attempt: number): number;
@@ -118,7 +119,7 @@ describe("Client", () => {
       Client.usingTransport(source(), {
         subscriptions: {
           retryPolicy: validPolicy,
-          scheduler: { now: () => 0, wait: async () => {} },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
         },
       }),
     ).not.toThrow();
@@ -134,7 +135,7 @@ describe("Client", () => {
 
     expect(() =>
       Client.usingTransport(source(), {
-        subscriptions: { scheduler: { now: () => Number.NaN, wait: async () => {} } },
+        subscriptions: { scheduler: { now: () => Number.NaN, wait: () => Promise.resolve() } },
       }),
     ).toThrow("scheduler");
   });
@@ -144,13 +145,16 @@ describe("Client", () => {
       { maxAttempts: 1.5, maxElapsedMs: 1, delayMs: () => 1 },
       { maxAttempts: 1, maxElapsedMs: 0, delayMs: () => 1 },
       { maxAttempts: 1, maxElapsedMs: 1, delayMs: () => 0 },
-      { maxAttempts: 1, maxElapsedMs: 1, delayMs: undefined },
+      { maxAttempts: 1, maxElapsedMs: 1 } as SubscriptionRetryPolicy,
     ])
       expect(() => Client.usingTransport(source(), { subscriptions: { retryPolicy } })).toThrow(
         "retry",
       );
 
-    for (const scheduler of [{ now: () => 0 }, { now: () => -1, wait: async () => {} }])
+    for (const scheduler of [
+      { now: () => 0 } as { now(): number; wait(): Promise<void> },
+      { now: () => -1, wait: () => Promise.resolve() },
+    ])
       expect(() => Client.usingTransport(source(), { subscriptions: { scheduler } })).toThrow(
         "scheduler",
       );
@@ -254,7 +258,7 @@ describe("Client", () => {
           updateBufferCapacity: 10,
           updateBufferByteCapacity: 10_000,
           retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
-          scheduler: { now: () => 0, wait: async () => {} },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
         },
       },
     );
@@ -292,7 +296,7 @@ describe("Client", () => {
               subscribes++;
               if (subscribes === 2) throw new Error("transient subscribe failure");
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `retry-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `retry-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
@@ -302,7 +306,7 @@ describe("Client", () => {
           undefined,
           () => {
             active++;
-            return active < 2 ? (async function* () {})() : neverEndingUpdates();
+            return active < 2 ? emptyUpdates() : neverEndingUpdates();
           },
         ),
         createRequestId: () => "retry-subscribe",
@@ -318,7 +322,9 @@ describe("Client", () => {
     const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
 
     await subscription.activate();
-    await vi.waitFor(() => expect(subscribes).toBe(3));
+    await vi.waitFor(() => {
+      expect(subscribes).toBe(3);
+    });
     expect(cancels).toBe(1);
     await expect(lifecycle.next()).resolves.toMatchObject({
       value: { state: "connecting", generation: 1 },
@@ -416,7 +422,7 @@ describe("Client", () => {
               subscribes++;
               topic = input as Topic;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `entity-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `entity-${String(subscribes)}` }),
                 topic,
               });
             }
@@ -439,15 +445,15 @@ describe("Client", () => {
           },
           () => {
             active++;
-            if (active === 1) return (async function* () {})();
+            if (active === 1) return emptyUpdates();
             return (async function* () {
               yield create(SubscriptionUpdateSchema, {
                 subscription: create(SubscriptionSchema, {
                   id: create(SubscriptionIdSchema, { value: "entity-2" }),
-                  topic: topic!,
+                  topic: requireValue(topic, "subscription topic"),
                 }),
               });
-              await new Promise<void>(() => {});
+              await never<undefined>();
             })();
           },
         ),
@@ -478,7 +484,9 @@ describe("Client", () => {
 
     expect(queryFactoryCalls).toBe(0);
     await subscription.activate();
-    await vi.waitFor(() => expect(queryCalls).toBe(1));
+    await vi.waitFor(() => {
+      expect(queryCalls).toBe(1);
+    });
     expect(queryFactoryCalls).toBe(1);
     expect(readQuery).toMatchObject({
       id: { value: "authoritative-query" },
@@ -579,7 +587,7 @@ describe("Client", () => {
               if (method.name === "Subscribe") {
                 subscribes++;
                 return create(SubscriptionSchema, {
-                  id: create(SubscriptionIdSchema, { value: `terminal-${subscribes}` }),
+                  id: create(SubscriptionIdSchema, { value: `terminal-${String(subscribes)}` }),
                   topic: input as Topic,
                 });
               }
@@ -597,7 +605,7 @@ describe("Client", () => {
                 }),
               });
             },
-            () => (async function* () {})(),
+            () => emptyUpdates(),
           ),
           createRequestId: () => `terminal-${testCase.name}`,
         },
@@ -614,7 +622,7 @@ describe("Client", () => {
           kind: "entity",
           authoritativeQuery: () => {
             queryCalls++;
-            return testCase.query();
+            return testCase.query() as Query;
           },
         });
       const updates = subscription.updates[Symbol.asyncIterator]();
@@ -647,7 +655,7 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `read-retry-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `read-retry-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
@@ -666,7 +674,7 @@ describe("Client", () => {
           },
           () => {
             activations++;
-            return activations === 1 ? (async function* () {})() : neverEndingUpdates();
+            return activations === 1 ? emptyUpdates() : neverEndingUpdates();
           },
         ),
         createRequestId: () => "read-retry",
@@ -691,7 +699,9 @@ describe("Client", () => {
     const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
 
     await subscription.activate();
-    await vi.waitFor(() => expect(reads).toBe(2));
+    await vi.waitFor(() => {
+      expect(reads).toBe(2);
+    });
     expect(queryCalls).toBe(2);
     expect(subscribes).toBe(3);
     expect(cancelled).toEqual(["read-retry-1", "read-retry-2"]);
@@ -725,7 +735,7 @@ describe("Client", () => {
               if (method.name === "Subscribe") {
                 subscribes++;
                 return create(SubscriptionSchema, {
-                  id: create(SubscriptionIdSchema, { value: `pending-read-${subscribes}` }),
+                  id: create(SubscriptionIdSchema, { value: `pending-read-${String(subscribes)}` }),
                   topic: input as Topic,
                 });
               }
@@ -735,7 +745,7 @@ describe("Client", () => {
             },
             () =>
               new Promise<Message>((resolve) => {
-                releaseRead = () =>
+                releaseRead = () => {
                   resolve(
                     create(QueryResponseSchema, {
                       response: create(ResponseSchema, {
@@ -743,15 +753,16 @@ describe("Client", () => {
                       }),
                     }),
                   );
+                };
               }),
             () => {
               activations++;
-              if (activations === 1) return (async function* () {})();
+              if (activations === 1) return emptyUpdates();
               return {
                 [Symbol.asyncIterator]: () => ({
                   next: () => {
                     nextCalls++;
-                    return new Promise<IteratorResult<Message>>(() => {});
+                    return never<IteratorResult<Message>>();
                   },
                 }),
               };
@@ -777,7 +788,9 @@ describe("Client", () => {
       const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
 
       await subscription.activate();
-      await vi.waitFor(() => expect(releaseRead).toBeTypeOf("function"));
+      await vi.waitFor(() => {
+        expect(releaseRead).toBeTypeOf("function");
+      });
       if (operation === "cancel") await subscription.cancel();
       else await client.close();
       expect(nextCalls).toBe(0);
@@ -821,7 +834,7 @@ describe("Client", () => {
                 subscribes++;
                 acceptedTopic = input as Topic;
                 return create(SubscriptionSchema, {
-                  id: create(SubscriptionIdSchema, { value: `overflow-${subscribes}` }),
+                  id: create(SubscriptionIdSchema, { value: `overflow-${String(subscribes)}` }),
                   topic: acceptedTopic,
                 });
               }
@@ -831,12 +844,13 @@ describe("Client", () => {
             () => response,
             () => {
               activations++;
-              if (activations === 1) return (async function* () {})();
+              if (activations === 1) return emptyUpdates();
               return (async function* () {
+                await Promise.resolve();
                 yield create(SubscriptionUpdateSchema, {
                   subscription: create(SubscriptionSchema, {
                     id: create(SubscriptionIdSchema, { value: "overflow-2" }),
-                    topic: acceptedTopic!,
+                    topic: requireValue(acceptedTopic, "accepted topic"),
                   }),
                 });
               })();
@@ -861,7 +875,9 @@ describe("Client", () => {
       const updates = subscription.updates[Symbol.asyncIterator]();
       const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
       await subscription.activate();
-      await vi.waitFor(() => expect(cancels).toBe(2));
+      await vi.waitFor(() => {
+        expect(cancels).toBe(2);
+      });
       const updateError = await updates.next().catch((error: unknown) => error);
       const lifecycleError = await lifecycle.next().catch((error: unknown) => error);
       expect(updateError).toBe(lifecycleError);
@@ -882,7 +898,7 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `initial-wire-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `initial-wire-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
@@ -912,7 +928,9 @@ describe("Client", () => {
       .createSubscription(create(TopicSchema), eventSubscription);
 
     await subscription.activate();
-    await vi.waitFor(() => expect(subscribes).toBe(2));
+    await vi.waitFor(() => {
+      expect(subscribes).toBe(2);
+    });
     expect(cancelled).toEqual(["initial-wire-1"]);
     await subscription.cancel();
     expect(cancelled).toEqual(["initial-wire-1", "initial-wire-2"]);
@@ -931,7 +949,7 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `wire-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `wire-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
@@ -948,7 +966,7 @@ describe("Client", () => {
                   throw new Error("iterator setup failed");
                 },
               };
-            return active === 3 ? neverEndingUpdates() : (async function* () {})();
+            return active === 3 ? neverEndingUpdates() : emptyUpdates();
           },
         ),
         createRequestId: () => "retry-activate",
@@ -963,7 +981,9 @@ describe("Client", () => {
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
 
     await subscription.activate();
-    await vi.waitFor(() => expect(subscribes).toBe(3));
+    await vi.waitFor(() => {
+      expect(subscribes).toBe(3);
+    });
     expect(cancelled).toEqual(["wire-1", "wire-2"]);
     await subscription.cancel();
     expect(cancelled).toEqual(["wire-1", "wire-2", "wire-3"]);
@@ -981,7 +1001,7 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `exhaust-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `exhaust-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
@@ -989,7 +1009,7 @@ describe("Client", () => {
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "retry-exhaustion",
       },
@@ -1006,7 +1026,9 @@ describe("Client", () => {
 
     await subscription.activate();
     const error = await updates.next().catch((value: unknown) => value);
-    await vi.waitFor(() => expect(subscribes).toBe(2));
+    await vi.waitFor(() => {
+      expect(subscribes).toBe(2);
+    });
     expect(cancels).toBe(2);
     for (let index = 0; index < 5; index++) await lifecycle.next();
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "failed", error } });
@@ -1034,7 +1056,7 @@ describe("Client", () => {
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "retry-elapsed",
       },
@@ -1043,8 +1065,9 @@ describe("Client", () => {
           retryPolicy: { maxAttempts: 2, maxElapsedMs: 5, delayMs: () => 1 },
           scheduler: {
             now: () => now,
-            wait: async () => {
+            wait: () => {
               now = 5;
+              return Promise.resolve();
             },
           },
         },
@@ -1087,7 +1110,7 @@ describe("Client", () => {
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "retry-wait-cancel",
       },
@@ -1097,9 +1120,15 @@ describe("Client", () => {
           scheduler: {
             now: () => 0,
             wait: (_delay, signal) =>
-              (waiting = new Promise<void>((_resolve, reject) =>
-                signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
-              )),
+              (waiting = new Promise<void>((_resolve, reject) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    reject(new Error("retry wait aborted"));
+                  },
+                  { once: true },
+                );
+              })),
           },
         },
       },
@@ -1110,7 +1139,9 @@ describe("Client", () => {
     const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
 
     await subscription.activate();
-    await vi.waitFor(() => expect(waiting).toBeDefined());
+    await vi.waitFor(() => {
+      expect(waiting).toBeDefined();
+    });
     await subscription.cancel();
     expect(subscribes).toBe(1);
     expect(cancels).toBe(1);
@@ -1141,7 +1172,7 @@ describe("Client", () => {
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "retry-wait-close",
         close: () => sourceCloses++,
@@ -1152,9 +1183,15 @@ describe("Client", () => {
           scheduler: {
             now: () => 0,
             wait: (_delay, signal) =>
-              (waiting = new Promise<void>((_resolve, reject) =>
-                signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
-              )),
+              (waiting = new Promise<void>((_resolve, reject) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    reject(new Error("retry wait aborted"));
+                  },
+                  { once: true },
+                );
+              })),
           },
         },
       },
@@ -1165,7 +1202,9 @@ describe("Client", () => {
     const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
 
     await subscription.activate();
-    await vi.waitFor(() => expect(waiting).toBeDefined());
+    await vi.waitFor(() => {
+      expect(waiting).toBeDefined();
+    });
     await client.close();
     expect(subscribes).toBe(1);
     expect(sourceCloses).toBe(1);
@@ -1193,9 +1232,15 @@ describe("Client", () => {
           scheduler: {
             now: () => 0,
             wait: (_delay, signal) =>
-              (waiting = new Promise<void>((_resolve, reject) =>
-                signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
-              )),
+              (waiting = new Promise<void>((_resolve, reject) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    reject(new Error("retry wait aborted"));
+                  },
+                  { once: true },
+                );
+              })),
           },
         },
       },
@@ -1206,7 +1251,9 @@ describe("Client", () => {
     const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
     const activation = subscription.activate();
 
-    await vi.waitFor(() => expect(waiting).toBeDefined());
+    await vi.waitFor(() => {
+      expect(waiting).toBeDefined();
+    });
     await subscription.cancel();
     await expect(activation).rejects.toThrow("aborted");
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
@@ -1246,18 +1293,19 @@ describe("Client", () => {
     const abort = new AbortController();
     const activation = subscription.activate({ signal: abort.signal });
 
-    await vi.waitFor(() => expect(releaseWait).toBeTypeOf("function"));
+    await vi.waitFor(() => {
+      expect(releaseWait).toBeTypeOf("function");
+    });
     abort.abort(new Error("activation interrupted"));
     releaseWait?.();
     await expect(activation).rejects.toThrow("activation interrupted");
     expect(subscribes).toBe(1);
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
-    await expect(lifecycle.next()).resolves.toMatchObject({
-      value: {
-        state: "failed",
-        error: expect.objectContaining({ message: "activation interrupted" }),
-      },
-    });
+    const failedLifecycle = await lifecycle.next();
+    expect(failedLifecycle.done).toBe(false);
+    if (failedLifecycle.done || failedLifecycle.value.state !== "failed")
+      throw new Error("expected failed lifecycle notice");
+    expect(failedLifecycle.value.error.message).toBe("activation interrupted");
     await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
     await client.close();
     expect(subscribes).toBe(1);
@@ -1280,7 +1328,7 @@ describe("Client", () => {
       {
         subscriptions: {
           retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
-          scheduler: { now: () => 0, wait: () => new Promise<void>(() => {}) },
+          scheduler: { now: () => 0, wait: () => never<undefined>() },
         },
       },
     );
@@ -1291,10 +1339,12 @@ describe("Client", () => {
     const abort = new AbortController();
     const activation = subscription.activate({ signal: abort.signal });
 
-    await vi.runAllTicks();
+    vi.runAllTicks();
     abort.abort(new Error("activation interrupted"));
     const deadline = new Promise<never>((_resolve, reject) =>
-      setTimeout(() => reject(new Error("activation did not settle")), 1),
+      setTimeout(() => {
+        reject(new Error("activation did not settle"));
+      }, 1),
     );
     const settlement = expect(Promise.race([activation, deadline])).rejects.toThrow(
       "activation interrupted",
@@ -1303,12 +1353,11 @@ describe("Client", () => {
     await settlement;
     expect(subscribes).toBe(1);
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
-    await expect(lifecycle.next()).resolves.toMatchObject({
-      value: {
-        state: "failed",
-        error: expect.objectContaining({ message: "activation interrupted" }),
-      },
-    });
+    const failedLifecycle = await lifecycle.next();
+    expect(failedLifecycle.done).toBe(false);
+    if (failedLifecycle.done || failedLifecycle.value.state !== "failed")
+      throw new Error("expected failed lifecycle notice");
+    expect(failedLifecycle.value.error.message).toBe("activation interrupted");
     await expect(lifecycle.next()).resolves.toMatchObject({ done: true });
     await expect(client.close()).resolves.toBeUndefined();
     vi.useRealTimers();
@@ -1329,10 +1378,11 @@ describe("Client", () => {
         undefined,
         () =>
           (async function* () {
+            await Promise.resolve();
             yield create(SubscriptionUpdateSchema, {
               subscription: create(SubscriptionSchema, {
                 id: create(SubscriptionIdSchema, { value: "binary" }),
-                topic: topic!,
+                topic: requireValue(topic, "subscription topic"),
               }),
               update: {
                 case: "eventUpdates",
@@ -1362,7 +1412,7 @@ describe("Client", () => {
       next.value.update.update.case !== "eventUpdates"
     )
       throw new Error("expected binary event update");
-    const value = next.value.update.update.value.event[0]?.message.value;
+    const value = next.value.update.update.value.event[0]?.message?.value;
     expect(value).toEqual(new Uint8Array([1, 2]));
     expect(Object.isFrozen(next.value)).toBe(true);
     await subscription.cancel();
@@ -1393,17 +1443,17 @@ describe("Client", () => {
 
   it("selects each explicit protocol for post and read with fresh request metadata", async () => {
     const calls: BrowserCall[] = [];
-    browserFactories.grpcWeb.mockImplementation((options) =>
-      browserTransport("grpc-web", options?.interceptors ?? [], calls),
+    browserFactories.grpcWeb.mockImplementation((options: unknown) =>
+      browserTransport("grpc-web", interceptorsFrom(options), calls),
     );
-    browserFactories.connect.mockImplementation((options) =>
-      browserTransport("connect", options?.interceptors ?? [], calls),
+    browserFactories.connect.mockImplementation((options: unknown) =>
+      browserTransport("connect", interceptorsFrom(options), calls),
     );
     let sequence = 0;
     const options: BrowserClientOptions = {
       onRequestMetadata: () => ({ "x-application-call": String(++sequence) }),
     };
-    expectTypeOf(options).toMatchTypeOf<BrowserClientOptions>();
+    expectTypeOf(options).toExtend<BrowserClientOptions>();
 
     const grpcWeb = Client.forGrpcWeb("https://gateway.example", options);
     const connect = Client.forConnect("https://gateway.example", options);
@@ -1438,8 +1488,8 @@ describe("Client", () => {
 
   it("rejects a metadata provider failure before its selected transport executes", async () => {
     const calls: BrowserCall[] = [];
-    browserFactories.grpcWeb.mockImplementation((options) =>
-      browserTransport("grpc-web", options?.interceptors ?? [], calls),
+    browserFactories.grpcWeb.mockImplementation((options: unknown) =>
+      browserTransport("grpc-web", interceptorsFrom(options), calls),
     );
     const client = Client.forGrpcWeb("https://gateway.example", {
       onRequestMetadata: () => {
@@ -1455,7 +1505,7 @@ describe("Client", () => {
   });
 
   it("passes configured browser credentials to the explicitly selected transport", async () => {
-    const browserFetch = vi.fn(async () => new Response());
+    const browserFetch = vi.fn(() => Promise.resolve(new Response()));
     vi.stubGlobal("fetch", browserFetch);
     browserFactories.grpcWeb.mockReturnValue(source().transport);
 
@@ -1496,7 +1546,10 @@ describe("Client", () => {
         if (method.name === "Post") {
           id = (input as { id?: { uuid?: string } }).id?.uuid;
           return create(AckSchema, {
-            messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: id })),
+            messageId: packAny(
+              CommandIdSchema,
+              create(CommandIdSchema, { uuid: requireValue(id, "request ID") }),
+            ),
             status: create(StatusSchema, { status: { case: "ok", value: {} } }),
           });
         }
@@ -1521,7 +1574,10 @@ describe("Client", () => {
         if (method.name === "Post") {
           id = (input as { id?: { uuid?: string } }).id?.uuid;
           return create(AckSchema, {
-            messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: id })),
+            messageId: packAny(
+              CommandIdSchema,
+              create(CommandIdSchema, { uuid: requireValue(id, "request ID") }),
+            ),
             status: create(StatusSchema, { status: { case: "ok", value: {} } }),
           });
         }
@@ -1559,7 +1615,7 @@ describe("Client", () => {
   it("uses injected transport and request IDs for post and send", async () => {
     const calls: string[] = [];
     const client = Client.usingTransport({
-      transport: unaryTransport((method, input) => {
+      transport: unaryTransport((method) => {
         calls.push(method.name);
         return create(QueryResponseSchema, {
           response: create(ResponseSchema, {
@@ -1676,7 +1732,7 @@ describe("Client", () => {
       {
         subscriptions: {
           retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
-          scheduler: { now: () => 0, wait: async () => {} },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
         },
       },
     );
@@ -1701,14 +1757,14 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `s-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `s-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "event-reconnect",
       },
@@ -1726,9 +1782,13 @@ describe("Client", () => {
     const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
 
     await subscription.activate();
-    await vi.waitFor(() => expect(releaseRetry).toBeTypeOf("function"));
+    await vi.waitFor(() => {
+      expect(releaseRetry).toBeTypeOf("function");
+    });
     releaseRetry?.();
-    await vi.waitFor(() => expect(subscribes).toBe(2));
+    await vi.waitFor(() => {
+      expect(subscribes).toBe(2);
+    });
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
     await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connecting" } });
@@ -1740,7 +1800,10 @@ describe("Client", () => {
 
   it("reauthenticates with the live cancellation signal before reconnecting", async () => {
     let subscribes = 0;
-    const reauthenticate = vi.fn(async (_signal: AbortSignal) => {});
+    const reauthenticate = vi.fn((signal: AbortSignal) => {
+      expect(signal).toBeInstanceOf(AbortSignal);
+      return Promise.resolve();
+    });
     const topic = create(TopicSchema);
     const client = Client.usingTransport(
       {
@@ -1749,14 +1812,14 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `reauth-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `reauth-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "reauthenticate",
       },
@@ -1764,14 +1827,16 @@ describe("Client", () => {
         onReauthenticateBeforeReconnect: reauthenticate,
         subscriptions: {
           retryPolicy: { maxAttempts: 1, maxElapsedMs: 1_000, delayMs: () => 1 },
-          scheduler: { now: () => 0, wait: async () => {} },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
         },
       },
     );
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
 
     await subscription.activate();
-    await vi.waitFor(() => expect(subscribes).toBe(2));
+    await vi.waitFor(() => {
+      expect(subscribes).toBe(2);
+    });
 
     expect(reauthenticate).toHaveBeenCalledTimes(1);
     expect(reauthenticate.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
@@ -1791,14 +1856,14 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `cancel-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `cancel-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "cancel-reauthentication",
       },
@@ -1821,9 +1886,13 @@ describe("Client", () => {
       .createSubscription(create(TopicSchema), eventSubscription);
 
     await subscription.activate();
-    await vi.waitFor(() => expect(releaseRetry).toBeTypeOf("function"));
+    await vi.waitFor(() => {
+      expect(releaseRetry).toBeTypeOf("function");
+    });
     releaseRetry?.();
-    await vi.waitFor(() => expect(hookSignal).toBeDefined());
+    await vi.waitFor(() => {
+      expect(hookSignal).toBeDefined();
+    });
     await subscription.cancel();
     rejectHook?.(new Error("late hook rejection"));
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1845,14 +1914,14 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `late-success-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `late-success-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "late-success-reauthentication",
       },
@@ -1876,9 +1945,13 @@ describe("Client", () => {
     const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
 
     await subscription.activate();
-    await vi.waitFor(() => expect(releaseRetry).toBeTypeOf("function"));
+    await vi.waitFor(() => {
+      expect(releaseRetry).toBeTypeOf("function");
+    });
     releaseRetry?.();
-    await vi.waitFor(() => expect(hookSignal).toBeDefined());
+    await vi.waitFor(() => {
+      expect(hookSignal).toBeDefined();
+    });
     await subscription.cancel();
     resolveHook?.();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1902,14 +1975,14 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `deadline-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `deadline-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "deadline-after-reauthentication",
       },
@@ -1920,7 +1993,7 @@ describe("Client", () => {
         },
         subscriptions: {
           retryPolicy: { maxAttempts: 1, maxElapsedMs: 1, delayMs: () => 1 },
-          scheduler: { now: () => now, wait: async () => {} },
+          scheduler: { now: () => now, wait: () => Promise.resolve() },
         },
       },
     );
@@ -1946,25 +2019,25 @@ describe("Client", () => {
             if (method.name === "Subscribe") {
               subscribes++;
               return create(SubscriptionSchema, {
-                id: create(SubscriptionIdSchema, { value: `timeout-${subscribes}` }),
+                id: create(SubscriptionIdSchema, { value: `timeout-${String(subscribes)}` }),
                 topic: input as Topic,
               });
             }
             return create(ResponseSchema);
           },
           undefined,
-          () => (async function* () {})(),
+          () => emptyUpdates(),
         ),
         createRequestId: () => "timeout-reauthentication",
       },
       {
         onReauthenticateBeforeReconnect: (signal) => {
           hookSignal = signal;
-          return new Promise<void>(() => {});
+          return never<undefined>();
         },
         subscriptions: {
           retryPolicy: { maxAttempts: 1, maxElapsedMs: 1, delayMs: () => 1 },
-          scheduler: { now: () => 0, wait: async () => {} },
+          scheduler: { now: () => 0, wait: () => Promise.resolve() },
         },
       },
     );
@@ -1996,9 +2069,14 @@ describe("Client", () => {
           return create(ResponseSchema);
         },
         undefined,
-        async function* () {
-          throw "stream rejected without an Error";
-        },
+        () => ({
+          [Symbol.asyncIterator]: () => ({
+            next: () =>
+              Promise.resolve().then(() => {
+                throw JSON.parse('"stream rejected without an Error"');
+              }),
+          }),
+        }),
       ),
       createRequestId: () => "non-error-stream",
     });
@@ -2031,11 +2109,17 @@ describe("Client", () => {
             topic: input as Topic,
           });
         if (method.name === "Cancel")
-          return new Promise<Message>((_resolve, reject) =>
-            signal.addEventListener("abort", () => reject(new Error("cleanup timed out")), {
-              once: true,
-            }),
-          );
+          return new Promise<Message>((_resolve, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                reject(new Error("cleanup timed out"));
+              },
+              {
+                once: true,
+              },
+            );
+          });
         return create(ResponseSchema);
       }),
       createRequestId: () => "request-stall",
@@ -2059,7 +2143,7 @@ describe("Client", () => {
             id: create(SubscriptionIdSchema, { value: "s-non-cooperative" }),
             topic: input as Topic,
           });
-        if (method.name === "Cancel") return new Promise<Message>(() => {});
+        if (method.name === "Cancel") return never<Message>();
         return create(ResponseSchema);
       }),
       createRequestId: () => "request-non-cooperative",
@@ -2069,8 +2153,10 @@ describe("Client", () => {
     const cancellation = subscription.cancel();
     const cancellationFailure = cancellation.catch((error: unknown) => error);
     await vi.advanceTimersByTimeAsync(1_000);
-    await expect(cancellationFailure).resolves.toMatchObject({
-      message: expect.stringContaining("timed out"),
+    await cancellationFailure.then((failure) => {
+      expect(failure).toBeInstanceOf(Error);
+      if (!(failure instanceof Error)) throw new Error("expected cancellation failure");
+      expect(failure.message).toContain("timed out");
     });
     await client.close().catch(() => undefined);
     vi.useRealTimers();
@@ -2125,10 +2211,12 @@ describe("Client", () => {
       .createSubscription(create(TopicSchema), eventSubscription);
     const failure = await subscription.activate().catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(AggregateError);
-    expect((failure as AggregateError).errors).toMatchObject([
-      { message: expect.stringContaining("subscription ID") },
-      { message: "compensating cancel failed" },
-    ]);
+    const errors = (failure as AggregateError).errors;
+    expect(errors).toHaveLength(2);
+    expect(errors[0]).toBeInstanceOf(Error);
+    expect(errors[1]).toBeInstanceOf(Error);
+    expect((errors[0] as Error).message).toContain("subscription ID");
+    expect((errors[1] as Error).message).toBe("compensating cancel failed");
     expect(cancels).toBe(1);
     await client.close();
     expect(cancels).toBe(1);
@@ -2164,15 +2252,14 @@ describe("Client", () => {
     resolveSubscribe?.(
       create(SubscriptionSchema, {
         id: create(SubscriptionIdSchema, { value: "s-late" }),
-        topic: subscribedTopic!,
+        topic: requireValue(subscribedTopic, "subscribed topic"),
       }),
     );
-    await expect(activationError).resolves.toMatchObject({
-      message: expect.stringContaining("aborted"),
-    });
-    await expect(duplicateError).resolves.toMatchObject({
-      message: expect.stringContaining("aborted"),
-    });
+    for (const failure of [await activationError, await duplicateError]) {
+      expect(failure).toBeInstanceOf(Error);
+      if (!(failure instanceof Error)) throw new Error("expected activation failure");
+      expect(failure.message).toContain("aborted");
+    }
     await cancellation;
     await expect(pendingUpdate).resolves.toMatchObject({ done: true });
     expect(subscribes).toBe(1);
@@ -2185,7 +2272,7 @@ describe("Client", () => {
     let closed = 0;
     const client = Client.usingTransport({
       transport: unaryTransport((method) =>
-        method.name === "Subscribe" ? new Promise<Message>(() => {}) : create(ResponseSchema),
+        method.name === "Subscribe" ? never<Message>() : create(ResponseSchema),
       ),
       createRequestId: () => "subscribe-never-settles",
       close: () => closed++,
@@ -2201,26 +2288,27 @@ describe("Client", () => {
   });
 
   it("settles cancellation requested synchronously while Subscribe is dispatched", async () => {
-    let subscription: Awaited<ReturnType<ReturnType<Client["asGuest"]>["createSubscription"]>>;
     let cancellation: Promise<void> | undefined;
     const client = Client.usingTransport({
       transport: unaryTransport((method) => {
         if (method.name === "Subscribe") {
           cancellation = subscription.cancel();
-          return new Promise<Message>(() => {});
+          return never<Message>();
         }
         return create(ResponseSchema);
       }),
       createRequestId: () => "synchronous-cancel",
     });
-    subscription = await client
+    const subscription = await client
       .asGuest()
       .createSubscription(create(TopicSchema), eventSubscription);
     const activationError = subscription.activate().catch((error: unknown) => error);
 
     await expect(cancellation).resolves.toBeUndefined();
-    await expect(activationError).resolves.toMatchObject({
-      message: expect.stringContaining("aborted"),
+    await activationError.then((failure) => {
+      expect(failure).toBeInstanceOf(Error);
+      if (!(failure instanceof Error)) throw new Error("expected activation failure");
+      expect(failure.message).toContain("aborted");
     });
     await expect(subscription.updates[Symbol.asyncIterator]().next()).resolves.toMatchObject({
       done: true,
@@ -2253,10 +2341,12 @@ describe("Client", () => {
     resolveSubscribe?.(
       create(SubscriptionSchema, {
         id: create(SubscriptionIdSchema, { value: "after-close" }),
-        topic: topic!,
+        topic: requireValue(topic, "subscription topic"),
       }),
     );
-    await vi.waitFor(() => expect(cancels).toBe(1));
+    await vi.waitFor(() => {
+      expect(cancels).toBe(1);
+    });
     await client.close();
     expect(cancels).toBe(1);
   });
@@ -2270,7 +2360,7 @@ describe("Client", () => {
         return {
           next: () => {
             nextCalls++;
-            return new Promise<IteratorResult<Message>>(() => {});
+            return never<IteratorResult<Message>>();
           },
         };
       },
@@ -2293,7 +2383,9 @@ describe("Client", () => {
     const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
     const localUpdates = subscription.updates[Symbol.asyncIterator]();
     await subscription.activate();
-    await vi.waitFor(() => expect(nextCalls).toBe(1));
+    await vi.waitFor(() => {
+      expect(nextCalls).toBe(1);
+    });
 
     await expect(client.close()).resolves.toBeUndefined();
     expect(closed).toBe(1);
@@ -2305,9 +2397,15 @@ describe("Client", () => {
       {
         transport: unaryTransport((method, _input, signal) =>
           method.name === "Subscribe"
-            ? new Promise<Message>((_resolve, reject) =>
-                signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
-              )
+            ? new Promise<Message>((_resolve, reject) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    reject(new Error("activation aborted"));
+                  },
+                  { once: true },
+                );
+              })
             : create(ResponseSchema),
         ),
         createRequestId: () => "closed-terminal",
@@ -2439,7 +2537,7 @@ describe("Client", () => {
 
   it("rejects a concurrent pending next without stranding the first call", async () => {
     const client = Client.usingTransport({
-      transport: updateTransport(2, () => new Promise<void>(() => {})),
+      transport: updateTransport(2, () => never<undefined>()),
       createRequestId: () => "pending",
     });
     const subscription = await client
@@ -2469,7 +2567,7 @@ describe("Client", () => {
         undefined,
         () => ({
           [Symbol.asyncIterator]: () => ({
-            next: () => new Promise<IteratorResult<Message>>(() => {}),
+            next: () => never<IteratorResult<Message>>(),
           }),
         }),
       ),
@@ -2517,7 +2615,10 @@ describe("Client", () => {
         expect(method.name).toBe("Post");
         const command = input as { id?: { uuid?: string } };
         return create(AckSchema, {
-          messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: command.id?.uuid })),
+          messageId: packAny(
+            CommandIdSchema,
+            create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
+          ),
           status: statuses[index++],
         });
       }),
@@ -2546,7 +2647,9 @@ describe("Client", () => {
             ? undefined
             : packAny(
                 CommandIdSchema,
-                create(CommandIdSchema, { uuid: `${command.id?.uuid}-other` }),
+                create(CommandIdSchema, {
+                  uuid: `${requireValue(command.id?.uuid, "command ID")}-other`,
+                }),
               ),
           status: create(StatusSchema, { status: { case: "ok", value: {} } }),
         });
@@ -2569,7 +2672,10 @@ describe("Client", () => {
       transport: unaryTransport((_method, input) => {
         const command = input as { id?: { uuid?: string } };
         return create(AckSchema, {
-          messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: command.id?.uuid })),
+          messageId: packAny(
+            CommandIdSchema,
+            create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
+          ),
         });
       }),
       createRequestId: () => "post-no-status",
@@ -2687,10 +2793,11 @@ describe("Client", () => {
         undefined,
         () =>
           (async function* () {
+            await Promise.resolve();
             yield create(SubscriptionUpdateSchema, {
               subscription: create(SubscriptionSchema, {
                 id: create(SubscriptionIdSchema, { value: "wrong-id" }),
-                topic: accepted!,
+                topic: requireValue(accepted, "accepted topic"),
               }),
             });
           })(),
@@ -2726,16 +2833,17 @@ describe("Client", () => {
         undefined,
         () => ({
           [Symbol.asyncIterator]: () => ({
-            next: async () => ({
-              done: false,
-              value: create(SubscriptionUpdateSchema, {
-                subscription: create(SubscriptionSchema, {
-                  id: create(SubscriptionIdSchema, { value: "sub-deliver" }),
-                  topic: accepted!,
+            next: () =>
+              Promise.resolve({
+                done: false,
+                value: create(SubscriptionUpdateSchema, {
+                  subscription: create(SubscriptionSchema, {
+                    id: create(SubscriptionIdSchema, { value: "sub-deliver" }),
+                    topic: requireValue(accepted, "accepted topic"),
+                  }),
                 }),
               }),
-            }),
-            return: async () => ({ done: true, value: undefined }),
+            return: () => Promise.resolve({ done: true, value: undefined }),
           }),
         }),
       ),
@@ -2779,14 +2887,22 @@ describe("Client", () => {
 
   it("aborts an in-flight activation and forwards its abort reason to Subscribe", async () => {
     let resolveStarted: (() => void) | undefined;
+    let transportSignal: AbortSignal | undefined;
     const started = new Promise<void>((resolve) => (resolveStarted = resolve));
     const client = Client.usingTransport({
       transport: unaryTransport(
         (method, _input, signal) => {
           if (method.name !== "Subscribe") return create(ResponseSchema);
+          transportSignal = signal;
           resolveStarted?.();
           return new Promise<Message>((_resolve, reject) => {
-            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+            signal.addEventListener(
+              "abort",
+              () => {
+                reject(new Error("activation aborted"));
+              },
+              { once: true },
+            );
           });
         },
         undefined,
@@ -2800,8 +2916,10 @@ describe("Client", () => {
     const abort = new AbortController();
     const activation = subscription.activate({ signal: abort.signal });
     await started;
-    abort.abort(new Error("activation interrupted"));
+    const reason = new Error("activation interrupted");
+    abort.abort(reason);
     await expect(activation).rejects.toThrow("activation interrupted");
+    expect(transportSignal?.reason).toBe(reason);
     await subscription.cancel();
     await client.close();
   });
@@ -2827,18 +2945,18 @@ function unaryTransport(
         message:
           method.name === "Read" && read !== undefined
             ? await read(input as Message)
-            : await handler(method, input, signal),
+            : await handler(method, input as Message, signal ?? new AbortController().signal),
       } as never;
     },
-    async stream(method) {
-      return {
+    stream(method) {
+      return Promise.resolve({
         stream: true,
         method,
         header: new Headers(),
         trailer: new Headers(),
         service: method.parent,
-        message: updates?.() ?? (async function* () {})(),
-      } as never;
+        message: updates?.() ?? emptyUpdates(),
+      } as never);
     },
   };
 }
@@ -2863,24 +2981,27 @@ function browserTransport(
 ): Transport {
   const invoke = runInterceptors(
     [...interceptors],
-    async (request: UnaryRequest): Promise<UnaryResponse> => {
+    (request: UnaryRequest): Promise<UnaryResponse> => {
       calls.push({
         protocol,
         method: request.method.name,
         metadata: request.header.get("x-application-call"),
       });
-      return {
+      return Promise.resolve({
         stream: false,
         method: request.method,
         header: new Headers(),
         trailer: new Headers(),
         service: request.service,
-        message: browserResponse(request.method.name, request.message),
-      } as never;
+        message: browserResponse(
+          request.method.name,
+          request.message as unknown as { id?: { uuid?: string } },
+        ),
+      } as never);
     },
   );
   return {
-    async unary(method, signal, _timeoutMs, header, input) {
+    unary(method, signal, _timeoutMs, header, input) {
       return invoke({
         stream: false,
         method,
@@ -2893,17 +3014,23 @@ function browserTransport(
         message: input,
       } as never) as never;
     },
-    async stream(method) {
-      return {
+    stream(method) {
+      return Promise.resolve({
         stream: true,
         method,
         header: new Headers(),
         trailer: new Headers(),
         service: method.parent,
-        message: (async function* () {})(),
-      } as never;
+        message: emptyUpdates(),
+      } as never);
     },
   };
+}
+
+function interceptorsFrom(options: unknown): readonly Interceptor[] {
+  if (typeof options !== "object" || options === null || !("interceptors" in options)) return [];
+  const { interceptors } = options as { readonly interceptors?: unknown };
+  return Array.isArray(interceptors) ? (interceptors as readonly Interceptor[]) : [];
 }
 
 function runInterceptors(
@@ -2923,7 +3050,10 @@ function browserResponse(
   if (method !== "Post") return create(QueryResponseSchema);
   const command = input as { id?: { uuid?: string } };
   return create(AckSchema, {
-    messageId: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: command.id?.uuid })),
+    messageId: packAny(
+      CommandIdSchema,
+      create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
+    ),
     status: create(StatusSchema, { status: { case: "ok", value: {} } }),
   });
 }
@@ -2947,7 +3077,7 @@ function updateTransport(count = 2, beforeSecond?: () => Promise<void>): Transpo
           yield create(SubscriptionUpdateSchema, {
             subscription: create(SubscriptionSchema, {
               id: create(SubscriptionIdSchema, { value: "updates" }),
-              topic: topic!,
+              topic: requireValue(topic, "subscription topic"),
             }),
           });
         }
@@ -2956,13 +3086,30 @@ function updateTransport(count = 2, beforeSecond?: () => Promise<void>): Transpo
 }
 
 function immediateScheduler(): { now(): number; wait(): Promise<void> } {
-  return { now: () => 0, wait: async () => {} };
+  return { now: () => 0, wait: () => Promise.resolve() };
+}
+
+function emptyUpdates(): AsyncIterable<Message> {
+  return {
+    [Symbol.asyncIterator]: () => ({
+      next: () => Promise.resolve({ done: true, value: undefined }),
+    }),
+  };
+}
+
+function never<T>(): Promise<T> {
+  return new Promise<T>(() => undefined);
+}
+
+function requireValue<T>(value: T | undefined, name: string): T {
+  if (value === undefined) throw new Error(`${name} is missing`);
+  return value;
 }
 
 function neverEndingUpdates(): AsyncIterable<Message> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<Message> {
-      return { next: () => new Promise<IteratorResult<Message>>(() => {}) };
+      return { next: () => never<IteratorResult<Message>>() };
     },
   };
 }

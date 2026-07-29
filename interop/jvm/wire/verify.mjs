@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { prepareFixture } from "../fixture.mjs";
@@ -198,7 +198,7 @@ async function readArchiveProto(paths, file) {
 }
 
 function importsOf(source) {
-  return [...source.toString("utf8").matchAll(/^\s*import\s+"([^\"]+)"\s*;/gm)].map(
+  return [...source.toString("utf8").matchAll(/^\s*import\s+"([^"]+)"\s*;/gm)].map(
     (match) => match[1],
   );
 }

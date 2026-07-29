@@ -16,6 +16,7 @@ import {
   MessageIdSchema,
 } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/chat_pb.js";
 import { PostMessageSchema } from "@spine-event-engine/chat-model/generated/spine/example/chat/v1/commands_pb.js";
+import { UserIdSchema as ChatUserIdSchema } from "@spine-event-engine/users-model/generated/spine/example/users/v1/users_pb.js";
 import { packAny } from "@spine-event-engine/core";
 import {
   AckSchema,
@@ -137,7 +138,7 @@ describe("Chat gateway policy", () => {
             create(PostMessageSchema, {
               id: create(MessageIdSchema, { value: "native" }),
               room: create(ChatRoomIdSchema, { value: room }),
-              author: create(UserIdSchema, { value: author }),
+              author: create(ChatUserIdSchema, { value: author }),
               text: "hello",
               postedAt: create(TimestampSchema, { seconds: 1n }),
             }),
@@ -384,13 +385,16 @@ describe("Chat gateway policy", () => {
     if (authorizedQuery.kind !== "query") throw new Error("Expected query request.");
     const nonFilterTarget = create(TargetSchema, {
       type: deriveTypeUrl(ChatMessageViewSchema),
-      criterion: { case: "all", value: true },
+      criterion: { case: "includeAll", value: true },
     });
-    const unsupportedCommand: IncomingRequest = {
-      ...commandRequest("ada", "room-a"),
+    const unsupportedCommand = {
+      kind: "command" as const,
+      command: create(CommandSchema),
       message: undefined,
       messageType: "example.Unknown",
-    };
+      requestedContext: create(ActorContextSchema),
+      transport,
+    } as unknown as IncomingRequest;
 
     await expect(
       policy.authorize(principal, {
@@ -514,7 +518,7 @@ function commandRequest(author: string, room: string): IncomingRequest {
     message: create(PostMessageSchema, {
       id: create(MessageIdSchema, { value: "message-1" }),
       room: create(ChatRoomIdSchema, { value: room }),
-      author: create(UserIdSchema, { value: author }),
+      author: create(ChatUserIdSchema, { value: author }),
       text: "hello",
       postedAt: create(TimestampSchema, { seconds: 1n }),
     }),

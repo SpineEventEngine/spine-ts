@@ -49,7 +49,7 @@ describe("decodeIncomingRequest", () => {
       decodeIncomingRequest({ kind: "query", value: toBinary(QuerySchema, query), transport }),
       decodeIncomingRequest({
         kind: "subscribe",
-        value: toBinary(TopicSchema, subscription.topic!),
+        value: toBinary(TopicSchema, subscription.topic ?? create(TopicSchema)),
         transport,
       }),
       decodeIncomingRequest({
@@ -265,9 +265,7 @@ describe("fallback request facts", () => {
       peerAddress: "127.0.0.1",
       userAgent: "test-agent",
     });
-    expect(
-      transportFacts({ service: "spine.client.QueryService", method: "Read", headers: undefined }),
-    ).toEqual({
+    expect(transportFacts({ service: "spine.client.QueryService", method: "Read" })).toEqual({
       service: "spine.client.QueryService",
       method: "Read",
     });

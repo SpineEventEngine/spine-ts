@@ -5,6 +5,9 @@
 dependency. This package owns neither a cache nor request construction, SSR,
 Suspense, service workers, or an external state manager.
 
+For the full browser subscription/reconnect limits and gateway/session
+integration, see the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+
 ## Query observation
 
 Create the browser client and request scope outside render, then provide the

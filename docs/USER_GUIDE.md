@@ -1805,3 +1805,6 @@ It creates and removes only the adapter tables; do not log credentials.
 - [To-do application guide](../examples/todo/USER_GUIDE.md) for the runnable
   local application workflow and its distinct topology limits.
 - [API documentation](api/README.md) for public API semantics.
+- [Browser client, authentication, and gateway extension guide](BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+  for browser protocol selection, sessions, provider flows, gateway policy,
+  subscription recovery, Envoy, and the Wave 4 limits.

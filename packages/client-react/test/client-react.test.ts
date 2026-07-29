@@ -2,6 +2,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { createElement, StrictMode, useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Subscription } from "@spine-event-engine/client-web";
 
 import {
   SpineClientProvider,
@@ -539,7 +540,15 @@ function createQuery() {
 
 function subscription(
   options: { readonly cancelEnds?: boolean; readonly cancelFailure?: "throw" | "reject" } = {},
-) {
+): Subscription & {
+  activate: import("vitest").Mock<() => Promise<void>>;
+  cancel: import("vitest").Mock<() => Promise<void>>;
+  emitLifecycle(value: import("@spine-event-engine/client-web").SubscriptionLifecycle): void;
+  emitDelivery(value: import("@spine-event-engine/client-web").SubscriptionDelivery): void;
+  failLifecycle(error: unknown): void;
+  failDelivery(error: unknown): void;
+  recover?: () => void;
+} {
   const lifecycle = iterable<import("@spine-event-engine/client-web").SubscriptionLifecycle>();
   const updates = iterable<import("@spine-event-engine/client-web").SubscriptionDelivery>();
   return {
@@ -567,7 +576,6 @@ function subscription(
     failDelivery: (error: unknown) => {
       updates.fail(error);
     },
-    recover: undefined as (() => void) | undefined,
   };
 }
 
@@ -583,7 +591,7 @@ function iterable<T>() {
         return {
           next: () =>
             ended
-              ? Promise.resolve({ done: true, value: undefined })
+              ? Promise.resolve({ done: true as const, value: undefined })
               : new Promise<IteratorResult<T>>((resolve, reject) =>
                   waiting.push({ resolve, reject }),
                 ),

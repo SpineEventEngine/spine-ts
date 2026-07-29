@@ -101,7 +101,7 @@ export class OpaqueSessions implements SessionResolver {
 
   /** Creates a new session unless the terminal or bounded store state rejects it. */
   create(principal: AuthenticatedPrincipal): Promise<OpaqueSessionCreateResult> {
-    if (this.closed) return Promise.resolve({ kind: "rejected", reason: "closed" });
+    if (this.isClosed()) return Promise.resolve({ kind: "rejected", reason: "closed" });
     const now = this.now();
     if (now === undefined) return Promise.resolve({ kind: "rejected", reason: "clock-failure" });
     this.sweepExpired(now);
@@ -113,7 +113,7 @@ export class OpaqueSessions implements SessionResolver {
     if (current === undefined)
       return Promise.resolve({ kind: "rejected", reason: "clock-failure" });
     this.sweepExpired(current);
-    if (this.closed) return Promise.resolve({ kind: "rejected", reason: "closed" });
+    if (this.isClosed()) return Promise.resolve({ kind: "rejected", reason: "closed" });
     if (this.records.size >= this.maxSessions) {
       return Promise.resolve({ kind: "rejected", reason: "capacity-exceeded" });
     }
@@ -121,6 +121,7 @@ export class OpaqueSessions implements SessionResolver {
       return Promise.resolve({ kind: "rejected", reason: "entropy-exhausted" });
     const record = this.record(principal, current);
     if (record === undefined) return Promise.resolve({ kind: "rejected", reason: "clock-failure" });
+    if (this.isClosed()) return Promise.resolve({ kind: "rejected", reason: "closed" });
     this.records.set(id, record);
     return Promise.resolve({
       kind: "created",
@@ -140,7 +141,7 @@ export class OpaqueSessions implements SessionResolver {
 
   /** Rotates a live opaque credential without ever retaining both values. */
   rotate(credentialInput: RequestCredential): Promise<OpaqueSessionRotateResult> {
-    if (this.closed) return Promise.resolve({ kind: "rejected", reason: "closed" });
+    if (this.isClosed()) return Promise.resolve({ kind: "rejected", reason: "closed" });
     if (credentialInput.kind !== "cookie")
       return Promise.resolve({ kind: "rejected", reason: "unsupported-credential" });
     const now = this.now();
@@ -156,7 +157,7 @@ export class OpaqueSessions implements SessionResolver {
     const current = this.now();
     if (current === undefined)
       return Promise.resolve({ kind: "rejected", reason: "clock-failure" });
-    if (this.closed) return Promise.resolve({ kind: "rejected", reason: "closed" });
+    if (this.isClosed()) return Promise.resolve({ kind: "rejected", reason: "closed" });
     if (this.records.get(credentialInput.value) !== previous) {
       return Promise.resolve({ kind: "rejected", reason: "not-found" });
     }
@@ -190,6 +191,10 @@ export class OpaqueSessions implements SessionResolver {
     this.closed = true;
     this.records.clear();
     return Promise.resolve();
+  }
+
+  private isClosed(): boolean {
+    return this.closed;
   }
 
   private record(principal: AuthenticatedPrincipal, now: number): SessionRecord | undefined {

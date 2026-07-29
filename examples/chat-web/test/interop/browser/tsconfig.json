@@ -1,1 +1,11 @@
-{"extends":"../../../../../tsconfig.base.json","compilerOptions":{"declaration":false,"declarationMap":false,"isolatedDeclarations":false,"lib":["ES2024","DOM"],"types":["node","@playwright/test"]},"include":["./**/*.ts"]}
+{
+  "extends": "../../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "isolatedDeclarations": false,
+    "lib": ["ES2024", "DOM"],
+    "types": ["node", "@playwright/test"]
+  },
+  "include": ["./**/*.ts"]
+}

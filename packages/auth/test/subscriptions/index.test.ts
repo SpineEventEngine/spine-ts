@@ -1,6 +1,6 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { ActorContextSchema, TenantIdSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
   SubscriptionSchema,
   SubscriptionUpdateSchema,
@@ -14,6 +14,11 @@ import {
   SubscriptionUpdateRelay,
   transportFacts,
 } from "../../src/index.js";
+import type { SubscriptionGatewayOptions } from "../../src/index.js";
+
+type MutableFixtureOptions = {
+  -readonly [Key in keyof SubscriptionGatewayOptions]: SubscriptionGatewayOptions[Key];
+};
 
 const service = "spine.client.SubscriptionService";
 const topic = toBinary(
@@ -41,6 +46,13 @@ function request(method: "Subscribe" | "Activate" | "Cancel", bytes: Uint8Array)
     transport: transportFacts({ service, method }),
   };
 }
+function user(value: string) {
+  return create(UserIdSchema, { value });
+}
+function defined<Value>(value: Value | undefined, message: string): Value {
+  if (value === undefined) throw new Error(message);
+  return value;
+}
 function setup(
   overrides: {
     readonly activate?: () => Promise<void>;
@@ -49,8 +61,8 @@ function setup(
 ) {
   let nextId = 0;
   const bindings = new InMemorySubscriptionBindings({
-    nextId: () => `gateway-${++nextId}`,
-    dispose: async () => undefined,
+    nextId: () => `gateway-${String(++nextId)}`,
+    dispose: () => Promise.resolve(),
   });
   const calls: string[] = [];
   return {
@@ -59,29 +71,35 @@ function setup(
     options: {
       bindings,
       sessions: {
-        resolve: async () => ({
-          principal: { id: "owner-a" },
-          expiresAt: create(TimestampSchema, { seconds: 100n }),
-        }),
+        resolve: () =>
+          Promise.resolve({
+            principal: { id: "owner-a" },
+            expiresAt: create(TimestampSchema, { seconds: 100n }),
+          }),
       },
-      authorize: async () => true,
+      authorize: () => Promise.resolve(true),
       contexts: {
-        resolve: async () => ({
-          actor: { value: "owner-a" },
-          tenant: tenant("tenant-a"),
-          timestamp: create(TimestampSchema, { seconds: 10n }),
-        }),
-        resolveContext: async () => ({
-          actor: { value: "owner-a" },
-          timestamp: create(TimestampSchema),
-        }),
+        resolve: () =>
+          Promise.resolve({
+            actor: user("owner-a"),
+            tenant: tenant("tenant-a"),
+            timestamp: create(TimestampSchema, { seconds: 10n }),
+          }),
+        resolveContext: () =>
+          Promise.resolve({
+            actor: user("owner-a"),
+            timestamp: create(TimestampSchema),
+          }),
       },
       clock: { now: () => create(TimestampSchema, { seconds: 10n }) },
       fingerprint: (principal) => principal.id,
       creator: {
-        subscribe: async ({ bytes }) => {
+        subscribe: ({ bytes }) => {
           calls.push("subscribe");
-          return { kind: "backend-subscription-envelope", bytes: bytes.slice() };
+          return Promise.resolve({
+            kind: "backend-subscription-envelope" as const,
+            bytes: bytes.slice(),
+          });
         },
         activate: async () => {
           calls.push("activate");
@@ -91,25 +109,28 @@ function setup(
           calls.push("cancel");
           await overrides.cancel?.();
         },
-        dispose: async () => {
+        dispose: () => {
           calls.push("dispose");
+          return Promise.resolve();
         },
       },
-    },
+    } as MutableFixtureOptions,
   };
 }
 function gateway(
   fixture: ReturnType<typeof setup>,
   limits?: { readonly maxRequestBytes?: number },
 ) {
-  return new SubscriptionGateway({ ...fixture.options, limits });
+  return new SubscriptionGateway(
+    limits === undefined ? fixture.options : { ...fixture.options, limits },
+  );
 }
 async function subscribe(gateway: SubscriptionGateway) {
   const result = await gateway.handle(request("Subscribe", topic));
   if (result.kind !== "subscribed") throw new Error("fixture subscription rejected");
   return result.wire.bytes;
 }
-function tick() {
+function tick(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 function subscriptionWire(id: string, actor = "owner-a", tenantId = "tenant-a") {
@@ -149,7 +170,7 @@ describe("SubscriptionGateway", () => {
     });
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "queued-activation",
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     await bindings.create({
       backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
@@ -177,12 +198,13 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 1,
       signal: controller.signal,
-      onBackend: async () => {
+      onBackend: () => {
         queuedNativeCalls++;
+        return Promise.resolve();
       },
     });
     controller.abort();
-    releaseFirst!();
+    defined(releaseFirst, "expected first activation release")();
 
     await expect(first).rejects.toThrow("first activation failed");
     await expect(queued).resolves.toEqual({ kind: "denied" });
@@ -193,7 +215,7 @@ describe("SubscriptionGateway", () => {
   it("cancels an active binding once after aborting its native effect", async () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "active-cancel",
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     await bindings.create({
       backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
@@ -208,8 +230,17 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: async (_backend, signal) =>
-        await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true })),
+      onBackend: async (_backend, signal) => {
+        await new Promise<void>((resolve) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
     });
     await tick();
     const cancelled = bindings.cancel({
@@ -217,8 +248,9 @@ describe("SubscriptionGateway", () => {
       principalFingerprint: "owner",
       tenant: undefined,
       nowMs: 1,
-      onBackend: async () => {
+      onBackend: () => {
         cancels++;
+        return Promise.resolve();
       },
     });
     await expect(active).resolves.toEqual({ kind: "activated" });
@@ -242,13 +274,14 @@ describe("SubscriptionGateway", () => {
   it("expires a live activation without another gateway request", async () => {
     let aborted = false;
     const fixture = setup();
-    fixture.options.sessions.resolve = async () => ({
-      principal: { id: "owner-a" },
-      expiresAt: create(TimestampSchema, { seconds: 10n, nanos: 20_000_000 }),
-    });
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 10n, nanos: 20_000_000 }),
+      });
     fixture.options.clock = { now: () => create(TimestampSchema, { seconds: 10n }) };
     fixture.options.creator.activate = async (_request, signal) => {
-      await new Promise<void>((resolve) =>
+      await new Promise<void>((resolve) => {
         signal.addEventListener(
           "abort",
           () => {
@@ -256,8 +289,8 @@ describe("SubscriptionGateway", () => {
             resolve();
           },
           { once: true },
-        ),
-      );
+        );
+      });
     };
     const subscriptionGateway = gateway(fixture);
     const wire = await subscribe(subscriptionGateway);
@@ -292,13 +325,16 @@ describe("SubscriptionGateway", () => {
   it("passes the platform AbortSignal to subscription callbacks", async () => {
     let received: AbortSignal | undefined;
     const fixture = setup();
-    fixture.options.creator.subscribe = async (_request, signal) => {
+    fixture.options.creator.subscribe = (_request, signal) => {
       received = signal;
-      return { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) };
+      return Promise.resolve({
+        kind: "backend-subscription-envelope",
+        bytes: new Uint8Array([1]),
+      });
     };
     await gateway(fixture).handle(request("Subscribe", topic));
     expect(received).toBeInstanceOf(AbortSignal);
-    expect(received?.addEventListener).toBeTypeOf("function");
+    expect(received?.addEventListener.bind(received)).toBeTypeOf("function");
   });
 
   it("forwards copied public updates through the activation sink for the backend stream lifetime", async () => {
@@ -327,25 +363,35 @@ describe("SubscriptionGateway", () => {
     const wire = await subscribe(subscriptionGateway);
     const result = await subscriptionGateway.handle({
       ...request("Activate", wire),
-      updates: async (update) => {
+      updates: (update) => {
         received = update.bytes;
+        return Promise.resolve();
       },
     });
     expect(result).toEqual({ kind: "activated" });
-    const emitted = fromBinary(SubscriptionUpdateSchema, received!);
+    const emitted = fromBinary(SubscriptionUpdateSchema, defined(received, "expected update"));
     const publicSubscription = fromBinary(SubscriptionSchema, wire);
-    expect(toBinary(TargetSchema, emitted.subscription!.topic!.target!)).toEqual(
-      toBinary(TargetSchema, publicSubscription.topic!.target!),
-    );
+    const emittedSubscription = defined(emitted.subscription, "expected emitted subscription");
+    const emittedTopic = defined(emittedSubscription.topic, "expected emitted topic");
+    const emittedTarget = defined(emittedTopic.target, "expected emitted target");
+    const publicTopic = defined(publicSubscription.topic, "expected public topic");
+    const publicTarget = defined(publicTopic.target, "expected public target");
+    expect(toBinary(TargetSchema, emittedTarget)).toEqual(toBinary(TargetSchema, publicTarget));
     expect(emitted.subscription).toEqual(publicSubscription);
   });
 
   it("aborts a quiet activation through the admitted downstream signal and cleans up once", async () => {
     const fixture = setup();
     fixture.options.creator.activate = async (_request, signal) => {
-      await new Promise<void>((_resolve, reject) =>
-        signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }),
-      );
+      await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            reject(new Error("aborted"));
+          },
+          { once: true },
+        );
+      });
     };
     const subscriptionGateway = gateway(fixture);
     const wire = await subscribe(subscriptionGateway);
@@ -384,22 +430,23 @@ describe("SubscriptionGateway", () => {
       reason: "denied",
     });
     const unauthenticated = setup();
-    unauthenticated.options.sessions.resolve = async () => undefined;
+    unauthenticated.options.sessions.resolve = () => Promise.resolve(undefined);
     await expect(gateway(unauthenticated).handle(request("Subscribe", topic))).resolves.toEqual({
       kind: "rejected",
       reason: "unauthenticated",
     });
     const forbidden = setup();
-    forbidden.options.authorize = async () => false;
+    forbidden.options.authorize = () => Promise.resolve(false);
     await expect(gateway(forbidden).handle(request("Subscribe", topic))).resolves.toEqual({
       kind: "rejected",
       reason: "forbidden",
     });
     const expired = setup();
-    expired.options.sessions.resolve = async () => ({
-      principal: { id: "owner-a" },
-      expiresAt: create(TimestampSchema, { seconds: 10n }),
-    });
+    expired.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 10n }),
+      });
     await expect(gateway(expired).handle(request("Subscribe", topic))).resolves.toEqual({
       kind: "rejected",
       reason: "denied",
@@ -412,17 +459,18 @@ describe("SubscriptionGateway", () => {
       TopicSchema,
       create(TopicSchema, {
         target: create(TargetSchema),
-        context: create(ActorContextSchema, { actor: { value: "owner-a" } }),
+        context: create(ActorContextSchema, { actor: user("owner-a") }),
       }),
     );
-    fixture.options.contexts.resolve = async () => ({
-      actor: { value: "owner-a" },
-      timestamp: create(TimestampSchema, { seconds: 10n }),
-    });
-    let seen: Record<string, string | undefined> | undefined;
-    fixture.options.authorize = async (_principal, incoming) => {
+    fixture.options.contexts.resolve = () =>
+      Promise.resolve({
+        actor: user("owner-a"),
+        timestamp: create(TimestampSchema, { seconds: 10n }),
+      });
+    let seen: Parameters<SubscriptionGatewayOptions["authorize"]>[1]["transport"] | undefined;
+    fixture.options.authorize = (_principal, incoming) => {
       seen = incoming.transport;
-      return true;
+      return Promise.resolve(true);
     };
     const incoming = request("Subscribe", tenantlessTopic);
     incoming.transport = transportFacts({
@@ -447,7 +495,7 @@ describe("SubscriptionGateway", () => {
     const oversize = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { maxBackendEnvelopeBytes: 1 },
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     await expect(
       oversize.create({
@@ -459,7 +507,7 @@ describe("SubscriptionGateway", () => {
     ).rejects.toThrow("backend-envelope-too-large");
     const emptyId = new InMemorySubscriptionBindings({
       nextId: () => "",
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     await expect(
       emptyId.create({
@@ -471,7 +519,7 @@ describe("SubscriptionGateway", () => {
     ).rejects.toThrow("unique");
     const duplicateId = new InMemorySubscriptionBindings({
       nextId: () => "one",
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     const input = {
       backend: { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) },
@@ -504,7 +552,7 @@ describe("SubscriptionGateway", () => {
     const capacityFailure = {
       ...unavailable,
       reserveCapacity: () => ({ release: () => undefined }),
-      create: async () => {
+      create: () => {
         throw new Error("binding-capacity-exceeded");
       },
     };
@@ -518,7 +566,7 @@ describe("SubscriptionGateway", () => {
   it("denies a foreign cancel before it reserves a binding queue slot", async () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     await bindings.create({
       backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
@@ -532,7 +580,7 @@ describe("SubscriptionGateway", () => {
         principalFingerprint: "other",
         tenant: "tenant",
         nowMs: 1,
-        onBackend: async () => {
+        onBackend: () => {
           throw new Error("must not run");
         },
       }),
@@ -544,7 +592,7 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { bindingLimit: 1 },
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     let release: (() => void) | undefined;
     const held = new Promise<void>((resolve) => {
@@ -561,7 +609,7 @@ describe("SubscriptionGateway", () => {
       kind: "rejected",
       reason: "binding-capacity-exceeded",
     });
-    release!();
+    defined(release, "expected release")();
     await first;
   });
 
@@ -570,7 +618,7 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { bindingLimit: 1 },
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     let aborted = false;
     fixture.options.creator.subscribe = async (_request, signal) => {
@@ -606,7 +654,7 @@ describe("SubscriptionGateway", () => {
     let callbackBytes: Uint8Array | undefined;
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     const source = new Uint8Array([1, 2, 3]);
     await bindings.create({
@@ -621,9 +669,11 @@ describe("SubscriptionGateway", () => {
       principalFingerprint: "p",
       tenant: undefined,
       nowMs: 1,
-      onBackend: async ({ bytes }) => {
+      signal: new AbortController().signal,
+      onBackend: ({ bytes }) => {
         callbackBytes = bytes;
         bytes.fill(8);
+        return Promise.resolve();
       },
     });
     expect(callbackBytes).toEqual(new Uint8Array([0, 0, 0]));
@@ -633,8 +683,9 @@ describe("SubscriptionGateway", () => {
       principalFingerprint: "p",
       tenant: undefined,
       nowMs: 1,
-      onBackend: async ({ bytes }) => {
+      onBackend: ({ bytes }) => {
         retryBytes = bytes;
+        return Promise.resolve();
       },
     });
     expect(retryBytes).toEqual(new Uint8Array([0, 0, 0]));
@@ -657,7 +708,7 @@ describe("SubscriptionGateway", () => {
     const cancelling = subscriptionGateway.handle(request("Cancel", wire));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
-    release!();
+    defined(release, "expected release")();
     await activating;
     await cancelling;
     expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
@@ -692,7 +743,7 @@ describe("SubscriptionGateway", () => {
       kind: "rejected",
       reason: "binding-busy",
     });
-    release!();
+    defined(release, "expected release")();
     await activating;
     await queued;
   });
@@ -700,9 +751,10 @@ describe("SubscriptionGateway", () => {
   it("retains failed cancellation cleanup for a retry and then clears it", async () => {
     let attempt = 0;
     const fixture = setup({
-      cancel: async () => {
+      cancel: () => {
         attempt++;
         if (attempt === 1) throw new Error("cleanup failed");
+        return Promise.resolve();
       },
     });
     const subscriptionGateway = gateway(fixture);
@@ -731,7 +783,7 @@ describe("SubscriptionGateway", () => {
   it("makes store close terminal for concurrent and late creation", async () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     const closing = bindings.close();
     const create = bindings.create({
@@ -768,7 +820,7 @@ describe("SubscriptionGateway", () => {
     const fixture = setup();
     const subscriptionGateway = new SubscriptionGateway({
       ...fixture.options,
-      sessions: { resolve: async () => (++sessionCalls, undefined) },
+      sessions: { resolve: () => Promise.resolve((++sessionCalls, undefined)) },
       limits: { maxRequestBytes: 1 },
     });
     await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
@@ -808,7 +860,7 @@ describe("SubscriptionGateway", () => {
     await expect(
       subscriptionGateway.handle(request("Activate", second.wire.bytes)),
     ).resolves.toEqual({ kind: "activated" });
-    release!();
+    defined(release, "expected release")();
     await firstActivation;
   });
 
@@ -816,6 +868,7 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { bindingLimit: 1 },
+      dispose: () => Promise.resolve(),
     });
     const input = {
       backend: { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) },
@@ -837,7 +890,7 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: (() => {
         let id = 0;
-        return () => `${++id}`;
+        return () => String(++id);
       })(),
       dispose: async () => {
         calls.push("dispose");
@@ -864,11 +917,15 @@ describe("SubscriptionGateway", () => {
         principalFingerprint: "p",
         tenant: undefined,
         nowMs: 2,
-        onBackend: async () => calls.push("activate"),
+        signal: new AbortController().signal,
+        onBackend: () => {
+          calls.push("activate");
+          return Promise.resolve();
+        },
       }),
     ).resolves.toEqual({ kind: "activated" });
     expect(calls).toEqual(["dispose", "activate"]);
-    release!();
+    defined(release, "expected release")();
     await purging;
     expect(bindings.size).toBe(1);
     expect(first.id).toBe("1");
@@ -878,10 +935,10 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: (() => {
         let id = 0;
-        return () => `${++id}`;
+        return () => String(++id);
       })(),
       limits: { bindingLimit: 1 },
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     const input = {
       backend: { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) },
@@ -900,7 +957,7 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: (() => {
         let id = 0;
-        return () => `${++id}`;
+        return () => String(++id);
       })(),
       limits: { shutdownTimeoutMs: 1 },
       dispose: async (_envelope, signal) => {
@@ -924,10 +981,10 @@ describe("SubscriptionGateway", () => {
     const fixture = setup();
     let releaseSession: (() => void) | undefined;
     const sessionHeld = new Promise<void>((resolve) => (releaseSession = resolve));
-    const seen: Array<{
+    const seen: {
       readonly actor: string | undefined;
       readonly requestId: string | undefined;
-    }> = [];
+    }[] = [];
     fixture.options.sessions.resolve = async () => {
       await sessionHeld;
       return {
@@ -935,12 +992,12 @@ describe("SubscriptionGateway", () => {
         expiresAt: create(TimestampSchema, { seconds: 100n }),
       };
     };
-    fixture.options.authorize = async (_principal, incoming) => {
+    fixture.options.authorize = (_principal, incoming) => {
       seen.push({
         actor: incoming.requestedContext.actor?.value,
         requestId: incoming.transport.requestId,
       });
-      return true;
+      return Promise.resolve(true);
     };
     const mutableWire = topic.slice();
     const mutable = request("Subscribe", mutableWire);
@@ -949,7 +1006,7 @@ describe("SubscriptionGateway", () => {
     const pending = gateway(fixture).handle(mutable);
     mutableWire.fill(0);
     transport.requestId = "mutated";
-    releaseSession!();
+    defined(releaseSession, "expected session release")();
     await expect(pending).resolves.toMatchObject({ kind: "subscribed" });
     expect(seen).toEqual([{ actor: "owner-a", requestId: "original" }]);
   });
@@ -959,12 +1016,12 @@ describe("SubscriptionGateway", () => {
     const subscriptionGateway = gateway(fixture);
     const wire = await subscribe(subscriptionGateway);
     const staleActor = subscriptionWire(
-      fromBinary(SubscriptionSchema, wire).id!.value,
+      defined(fromBinary(SubscriptionSchema, wire).id, "expected subscription id").value,
       "other",
       "tenant-a",
     );
     const staleTenant = subscriptionWire(
-      fromBinary(SubscriptionSchema, wire).id!.value,
+      defined(fromBinary(SubscriptionSchema, wire).id, "expected subscription id").value,
       "owner-a",
       "other",
     );
@@ -989,7 +1046,7 @@ describe("SubscriptionGateway", () => {
     const wire = await subscribe(subscriptionGateway);
     const activating = subscriptionGateway.handle(request("Activate", wire));
     await tick();
-    const id = fromBinary(SubscriptionSchema, wire).id!.value;
+    const id = defined(fromBinary(SubscriptionSchema, wire).id, "expected subscription id").value;
     await expect(
       subscriptionGateway.handle(request("Cancel", subscriptionWire(id, "other", "tenant-a"))),
     ).resolves.toEqual({ kind: "rejected", reason: "denied" });
@@ -999,7 +1056,7 @@ describe("SubscriptionGateway", () => {
     const cancelling = subscriptionGateway.handle(request("Cancel", wire));
     await tick();
     expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
-    release!();
+    defined(release, "expected release")();
     await activating;
     await expect(cancelling).resolves.toEqual({ kind: "cancelled" });
     expect(fixture.calls).toEqual(["subscribe", "activate", "cancel"]);
@@ -1010,11 +1067,17 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { bindingLimit: 1 },
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     let aborted = false;
     fixture.options.creator.subscribe = async (_request, signal) => {
-      signal.addEventListener("abort", () => (aborted = true), { once: true });
+      signal.addEventListener(
+        "abort",
+        () => {
+          aborted = true;
+        },
+        { once: true },
+      );
       await new Promise<void>(() => undefined);
       return { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) };
     };
@@ -1027,10 +1090,11 @@ describe("SubscriptionGateway", () => {
       "aborted",
     );
     expect(aborted).toBe(true);
-    fixture.options.creator.subscribe = async ({ bytes }) => ({
-      kind: "backend-subscription-envelope",
-      bytes,
-    });
+    fixture.options.creator.subscribe = ({ bytes }) =>
+      Promise.resolve({
+        kind: "backend-subscription-envelope",
+        bytes,
+      });
     await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
       kind: "subscribed",
     });
@@ -1039,10 +1103,11 @@ describe("SubscriptionGateway", () => {
   it("aborts hung oversize and create-failure compensation and releases their leases", async () => {
     const fixture = setup();
     let aborts = 0;
-    fixture.options.creator.subscribe = async () => ({
-      kind: "backend-subscription-envelope",
-      bytes: new Uint8Array([1, 2]),
-    });
+    fixture.options.creator.subscribe = () =>
+      Promise.resolve({
+        kind: "backend-subscription-envelope",
+        bytes: new Uint8Array([1, 2]),
+      });
     fixture.options.creator.dispose = async (_backend, signal) => {
       signal.addEventListener("abort", () => aborts++, { once: true });
       await new Promise<void>(() => undefined);
@@ -1056,7 +1121,7 @@ describe("SubscriptionGateway", () => {
     );
     expect(aborts).toBe(1);
     const failingBindings = {
-      create: async () => {
+      create: () => {
         throw new Error("create failed");
       },
       activate: fixture.bindings.activate.bind(fixture.bindings),
@@ -1081,7 +1146,7 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { bindingLimit: 1 },
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     let releaseCreate: (() => void) | undefined;
     const creating = new Promise<void>((resolve) => (releaseCreate = resolve));
@@ -1089,7 +1154,7 @@ describe("SubscriptionGateway", () => {
     const started = new Promise<void>((resolve) => (createStarted = resolve));
     const delayedBindings = {
       create: async (input: Parameters<typeof bindings.create>[0]) => {
-        createStarted!();
+        defined(createStarted, "expected create start")();
         await creating;
         void input;
         throw new Error("binding store is closed");
@@ -1098,7 +1163,7 @@ describe("SubscriptionGateway", () => {
       cancel: bindings.cancel.bind(bindings),
       reserveCapacity: bindings.reserveCapacity.bind(bindings),
       purgeExpired: bindings.purgeExpired.bind(bindings),
-      close: async () => undefined,
+      close: () => Promise.resolve(),
     };
     let releaseSubscribe: (() => void) | undefined;
     const receiving = new Promise<void>((resolve) => (releaseSubscribe = resolve));
@@ -1115,8 +1180,8 @@ describe("SubscriptionGateway", () => {
     fixture.options.creator.dispose = async (_backend, signal) => {
       compensationSignal = signal;
       expect(signal.aborted).toBe(false);
-      compensationStarted!();
-      await new Promise<void>((resolve) =>
+      defined(compensationStarted, "expected compensation start")();
+      await new Promise<void>((resolve) => {
         signal.addEventListener(
           "abort",
           () => {
@@ -1124,8 +1189,8 @@ describe("SubscriptionGateway", () => {
             resolve();
           },
           { once: true },
-        ),
-      );
+        );
+      });
     };
     const subscriptionGateway = new SubscriptionGateway({
       ...fixture.options,
@@ -1134,11 +1199,11 @@ describe("SubscriptionGateway", () => {
     });
     const pending = subscriptionGateway.handle(request("Subscribe", topic));
     await tick();
-    releaseSubscribe!();
+    defined(releaseSubscribe, "expected subscribe release")();
     await started;
     await subscriptionGateway.close();
     expect(subscribeSignal?.aborted).toBe(true);
-    releaseCreate!();
+    defined(releaseCreate, "expected create release")();
     await compensating;
     expect(compensationSignal?.aborted).toBe(false);
     await expect(pending).rejects.toBeInstanceOf(AggregateError);
@@ -1153,18 +1218,25 @@ describe("SubscriptionGateway", () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { bindingLimit: 1 },
-      dispose: async () => undefined,
+      dispose: () => Promise.resolve(),
     });
     let compensate = true;
-    fixture.options.creator.subscribe = async ({ bytes }) => ({
-      kind: "backend-subscription-envelope",
-      bytes: compensate ? new Uint8Array([1, 2]) : bytes.slice(0, 1),
-    });
+    fixture.options.creator.subscribe = ({ bytes }) =>
+      Promise.resolve({
+        kind: "backend-subscription-envelope",
+        bytes: compensate ? new Uint8Array([1, 2]) : new Uint8Array(bytes.slice(0, 1)),
+      });
     fixture.options.creator.dispose = async (_backend, signal) => {
       if (!compensate) return;
-      await new Promise<void>((resolve) =>
-        signal.addEventListener("abort", resolve, { once: true }),
-      );
+      await new Promise<void>((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            resolve();
+          },
+          { once: true },
+        );
+      });
     };
     const subscriptionGateway = new SubscriptionGateway({
       ...fixture.options,
@@ -1186,7 +1258,7 @@ describe("SubscriptionGateway", () => {
     const wire = await subscribe(subscriptionGateway);
     let releaseContext: (() => void) | undefined;
     const held = new Promise<void>((resolve) => (releaseContext = resolve));
-    const original = fixture.options.contexts.resolve;
+    const original = fixture.options.contexts.resolve.bind(fixture.options.contexts);
     fixture.options.contexts.resolve = async (principal, incoming, clock) => {
       if (incoming.kind === "activate") await held;
       return original(principal, incoming, clock);
@@ -1196,7 +1268,7 @@ describe("SubscriptionGateway", () => {
     await expect(subscriptionGateway.handle(request("Cancel", wire))).resolves.toEqual({
       kind: "cancelled",
     });
-    releaseContext!();
+    defined(releaseContext, "expected context release")();
     await expect(activating).resolves.toEqual({ kind: "rejected", reason: "denied" });
     expect(fixture.calls).toEqual(["subscribe", "cancel"]);
   });
@@ -1207,7 +1279,7 @@ describe("SubscriptionGateway", () => {
     const fixture = setup();
     fixture.options.clock = { now: () => create(TimestampSchema, { seconds: now }) };
     fixture.options.creator.activate = async (_request, signal) => {
-      await new Promise<void>((resolve) =>
+      await new Promise<void>((resolve) => {
         signal.addEventListener(
           "abort",
           () => {
@@ -1215,8 +1287,8 @@ describe("SubscriptionGateway", () => {
             resolve();
           },
           { once: true },
-        ),
-      );
+        );
+      });
     };
     const subscriptionGateway = gateway(fixture);
     const wire = await subscribe(subscriptionGateway);
@@ -1239,7 +1311,7 @@ describe("SubscriptionGateway", () => {
       nextId: () => "one",
       limits: { shutdownTimeoutMs: 1 },
       dispose: async (_backend, signal) => {
-        await new Promise<void>((resolve) =>
+        await new Promise<void>((resolve) => {
           signal.addEventListener(
             "abort",
             () => {
@@ -1247,13 +1319,13 @@ describe("SubscriptionGateway", () => {
               resolve();
             },
             { once: true },
-          ),
-        );
+          );
+        });
       },
     });
     const fixture = setup();
     fixture.options.creator.activate = async (_request, signal) => {
-      await new Promise<void>((resolve) =>
+      await new Promise<void>((resolve) => {
         signal.addEventListener(
           "abort",
           () => {
@@ -1261,8 +1333,8 @@ describe("SubscriptionGateway", () => {
             resolve();
           },
           { once: true },
-        ),
-      );
+        );
+      });
     };
     const subscriptionGateway = new SubscriptionGateway({
       ...fixture.options,

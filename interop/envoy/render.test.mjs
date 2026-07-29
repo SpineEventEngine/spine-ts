@@ -27,7 +27,7 @@ test("renders a bounded grpc-web gateway-only listener", () => {
   assert.match(rendered, /\/spine\.auth\.AuthenticationService\/ResolveContext/);
   assert.match(rendered, /\/spine\.client\.QueryService\/Read/);
   assert.match(rendered, /\/spine\.client\.SubscriptionService\/Activate/);
-  assert.match(rendered, /SubscriptionService\/Activate \}\n                          route: \{ cluster: gateway, timeout: 0s \}/);
+  assert.match(rendered, /SubscriptionService\/Activate \}\n {26}route: \{ cluster: gateway, timeout: 0s \}/);
   assert.doesNotMatch(rendered, /backend/);
 });
 

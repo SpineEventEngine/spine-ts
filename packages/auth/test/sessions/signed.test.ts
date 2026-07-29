@@ -1,7 +1,7 @@
 import { generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
-import { SignedSessions } from "../../src/index.js";
+import { SignedSessions, type AuthenticatedPrincipal } from "../../src/index.js";
 
 function keys() {
   return generateKeyPairSync("ec", { namedCurve: "prime256v1" });
@@ -26,9 +26,7 @@ function signedInput(key: KeyObject, input: string, signature?: Uint8Array) {
   return `${input}.${Buffer.from(bytes).toString("base64url")}`;
 }
 function without(value: Record<string, unknown>, name: string) {
-  const copy = { ...value };
-  delete copy[name];
-  return copy;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== name));
 }
 function headerOf(credential: { readonly value: string }) {
   const [header] = credential.value.split(".");
@@ -52,6 +50,8 @@ describe("SignedSessions", () => {
     expect(issued).toMatchObject({ kind: "issued", credential: { kind: "bearer" } });
     if (issued.kind !== "issued") throw new Error("expected issued");
     const [header, payload, signature] = issued.credential.value.split(".");
+    if (header === undefined || payload === undefined || signature === undefined)
+      throw new Error("expected three JWT segments");
     expect([header, payload, signature]).toHaveLength(3);
     expect(JSON.parse(Buffer.from(header, "base64url").toString())).toEqual({
       alg: "ES256",
@@ -109,11 +109,21 @@ describe("SignedSessions", () => {
     if (issued.kind !== "issued") throw new Error("expected issued");
     const segments = issued.credential.value.split(".");
     const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-    const signature = segments[2]!;
-    const last = alphabet.indexOf(signature.at(-1)!);
-    const altered = `${signature.slice(0, -1)}${alphabet[(last & 0b11_0000) | ((last + 1) & 0b1111)]!}`;
+    const [header, payload, signature] = segments;
+    const lastCharacter = signature?.at(-1);
+    if (
+      header === undefined ||
+      payload === undefined ||
+      signature === undefined ||
+      lastCharacter === undefined
+    )
+      throw new Error("expected a three-part JWT");
+    const last = alphabet.indexOf(lastCharacter);
+    const replacement = alphabet[(last & 0b11_0000) | ((last + 1) & 0b1111)];
+    if (replacement === undefined) throw new Error("expected a replacement base64url character");
+    const altered = `${signature.slice(0, -1)}${replacement}`;
     await expect(
-      sessions.resolve({ kind: "bearer", value: `${segments[0]!}.${segments[1]!}.${altered}` }),
+      sessions.resolve({ kind: "bearer", value: `${header}.${payload}.${altered}` }),
     ).resolves.toBeUndefined();
   });
 
@@ -198,8 +208,7 @@ describe("SignedSessions", () => {
 
   it("lets terminal close win reentrant randomness and rotation callbacks", async () => {
     const key = keys();
-    let randomSessions: SignedSessions;
-    randomSessions = new SignedSessions({
+    const randomSessions = new SignedSessions({
       issuer: "issuer",
       audience: "aud",
       activeKey: { kid: "random", privateKey: key.privateKey },
@@ -212,8 +221,7 @@ describe("SignedSessions", () => {
       kind: "rejected",
       reason: "closed",
     });
-    let failingRandom: SignedSessions;
-    failingRandom = new SignedSessions({
+    const failingRandom = new SignedSessions({
       issuer: "issuer",
       audience: "aud",
       activeKey: { kid: "random-failure", privateKey: key.privateKey },
@@ -226,8 +234,7 @@ describe("SignedSessions", () => {
       kind: "rejected",
       reason: "closed",
     });
-    let invalidRandom: SignedSessions;
-    invalidRandom = new SignedSessions({
+    const invalidRandom = new SignedSessions({
       issuer: "issuer",
       audience: "aud",
       activeKey: { kid: "random-invalid", privateKey: key.privateKey },
@@ -243,8 +250,7 @@ describe("SignedSessions", () => {
 
     const next = keys();
     let calls = 0;
-    let rotatingSessions: SignedSessions;
-    rotatingSessions = new SignedSessions({
+    const rotatingSessions = new SignedSessions({
       issuer: "issuer",
       audience: "aud",
       activeKey: { kid: "one", privateKey: key.privateKey },
@@ -261,8 +267,7 @@ describe("SignedSessions", () => {
       reason: "closed",
     });
     expect(await rotatingSessions.resolve({ kind: "bearer", value: "unused" })).toBeUndefined();
-    let failingClock: SignedSessions;
-    failingClock = new SignedSessions({
+    const failingClock = new SignedSessions({
       issuer: "issuer",
       audience: "aud",
       activeKey: { kid: "clock-issue", privateKey: key.privateKey },
@@ -277,8 +282,7 @@ describe("SignedSessions", () => {
       kind: "rejected",
       reason: "closed",
     });
-    let invalidRotationClock: SignedSessions;
-    invalidRotationClock = new SignedSessions({
+    const invalidRotationClock = new SignedSessions({
       issuer: "issuer",
       audience: "aud",
       activeKey: { kid: "clock-rotation", privateKey: key.privateKey },
@@ -334,8 +338,11 @@ describe("SignedSessions", () => {
       activeKey: { kid: "one", privateKey: key.privateKey },
       revocation: {
         kind: "supported",
-        isRevoked: async (jti) => revoked.has(jti),
-        revoke: async (jti) => void revoked.add(jti),
+        isRevoked: (jti) => Promise.resolve(revoked.has(jti)),
+        revoke: (jti) => {
+          revoked.add(jti);
+          return Promise.resolve();
+        },
       },
     });
     const issued = await sessions.issue({ id: "principal" });
@@ -365,8 +372,8 @@ describe("SignedSessions", () => {
       ...base,
       revocation: {
         kind: "supported",
-        isRevoked: async () => false,
-        revoke: async () => {
+        isRevoked: () => Promise.resolve(false),
+        revoke: () => {
           revokeCalls += 1;
           throw new Error("store unavailable");
         },
@@ -395,18 +402,17 @@ describe("SignedSessions", () => {
       ...base,
       revocation: {
         kind: "supported",
-        isRevoked: async () => {
+        isRevoked: () => {
           throw new Error("store unavailable");
         },
-        revoke: async () => undefined,
+        revoke: () => Promise.resolve(),
       },
     });
     const failedLookupToken = await lookupFailure.issue({ id: "principal" });
     if (failedLookupToken.kind !== "issued") throw new Error("expected issued");
     expect(await lookupFailure.resolve(failedLookupToken.credential)).toBeUndefined();
 
-    let resolving: SignedSessions;
-    resolving = new SignedSessions({
+    const resolving = new SignedSessions({
       ...base,
       revocation: {
         kind: "supported",
@@ -414,19 +420,18 @@ describe("SignedSessions", () => {
           await resolving.close();
           return false;
         },
-        revoke: async () => undefined,
+        revoke: () => Promise.resolve(),
       },
     });
     const resolvingToken = await resolving.issue({ id: "principal" });
     if (resolvingToken.kind !== "issued") throw new Error("expected issued");
     expect(await resolving.resolve(resolvingToken.credential)).toBeUndefined();
 
-    let loggingOut: SignedSessions;
-    loggingOut = new SignedSessions({
+    const loggingOut = new SignedSessions({
       ...base,
       revocation: {
         kind: "supported",
-        isRevoked: async () => false,
+        isRevoked: () => Promise.resolve(false),
         revoke: async () => {
           await loggingOut.close();
           throw new Error("late failure");
@@ -527,6 +532,19 @@ describe("SignedSessions", () => {
       maxAttributes: 0,
     });
     expect(await noAttributes.issue({ id: "ok", attributes: guardedAttributes })).toEqual({
+      kind: "rejected",
+      reason: "principal-invalid",
+    });
+    const hostilePrincipal: AuthenticatedPrincipal = {
+      get id(): string {
+        throw new Error("hostile principal");
+      },
+    };
+    let hostileIssue: ReturnType<SignedSessions["issue"]> | undefined;
+    expect(() => {
+      hostileIssue = noAttributes.issue(hostilePrincipal);
+    }).not.toThrow();
+    await expect(hostileIssue).resolves.toEqual({
       kind: "rejected",
       reason: "principal-invalid",
     });

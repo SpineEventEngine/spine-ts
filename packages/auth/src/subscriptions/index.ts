@@ -39,7 +39,10 @@ export interface SubscriptionTopicWire {
   readonly kind: "subscription-topic";
   readonly bytes: Uint8Array;
 }
-/** Owned raw Subscription protobuf bytes for the public Activate and Cancel RPCs. The gateway copies them on admission. */
+/**
+ * Owned raw Subscription protobuf bytes for the public Activate and Cancel RPCs.
+ * The gateway copies them on admission.
+ */
 export interface PublicSubscriptionWire {
   readonly kind: "public-subscription";
   readonly bytes: Uint8Array;
@@ -51,12 +54,18 @@ export interface SubscriptionUpdateWire {
 }
 /** Asynchronous public-stream admission boundary. Resolving admits the next backend update. */
 export type SubscriptionUpdateSink = (update: SubscriptionUpdateWire) => Promise<void>;
-/** Trusted-infrastructure-only raw backend envelope. It is never returned in a gateway result or decoded browser result. */
+/**
+ * Trusted-infrastructure-only raw backend envelope.
+ * It is never returned in a gateway result or decoded browser result.
+ */
 export interface BackendSubscriptionEnvelope {
   readonly kind: "backend-subscription-envelope";
   readonly bytes: Uint8Array;
 }
-/** A gateway-controlled callback that receives a fresh private backend-envelope copy. Rejection leaves cancellation retryable. */
+/**
+ * Receives a fresh private backend-envelope copy.
+ * Rejection leaves cancellation retryable.
+ */
 /** Standard event-capable cancellation signal supplied to every backend callback. */
 export type SubscriptionAbortSignal = AbortSignal;
 export type OnBackendSubscription = (
@@ -64,16 +73,18 @@ export type OnBackendSubscription = (
   signal: SubscriptionAbortSignal,
 ) => Promise<void>;
 /** Opaque result of an ownership transition. */
-export type SubscriptionBindingTransition = { readonly kind: "activated" | "closed" | "denied" };
+export interface SubscriptionBindingTransition {
+  readonly kind: "activated" | "closed" | "denied";
+}
 type SubscriptionOperation = "subscribe" | "activate" | "cancel";
-type PreparedOperation = {
+interface PreparedOperation {
   readonly source: Extract<IncomingRequest, { readonly kind: SubscriptionOperation }>;
   readonly context: ActorContext;
   readonly fingerprint: string;
   readonly tenant: string | undefined;
   readonly expiresAtMs: number;
   readonly nowMs: number;
-};
+}
 
 /** Finite B3 ownership limits. Every supplied value must be a positive safe integer. */
 export interface SubscriptionGatewayLimits {
@@ -170,9 +181,10 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     return reservation;
   }
   /** Drops already-expired private envelopes without a background timer. */
-  async purgeExpired(nowMs: number): Promise<void> {
+  purgeExpired(nowMs: number): Promise<void> {
     for (const [id, binding] of this.#bindings)
       if (binding.expiresAtMs <= nowMs) this.#expire(id, binding);
+    return Promise.resolve();
   }
   /** Permanently rejects later creation and zeroes every private envelope after in-flight work. */
   async close(): Promise<void> {
@@ -184,43 +196,50 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     );
     const failures = results
       .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-      .map((result) => result.reason);
+      .map((result): unknown => result.reason);
     if (failures.length > 0)
       throw new AggregateError(failures, "subscription shutdown cleanup failed");
   }
   /** Creates an inactive binding from a copied trusted backend envelope. */
-  async create(input: {
+  create(input: {
     readonly backend: BackendSubscriptionEnvelope;
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly expiresAtMs: number;
     readonly reservation?: SubscriptionCapacityReservation;
   }): Promise<{ readonly id: string }> {
-    if (this.#closed) throw new Error("subscription bindings are closed");
-    if (input.backend.bytes.byteLength > this.#limits.maxBackendEnvelopeBytes)
-      throw new Error("backend-envelope-too-large");
-    if (
-      !this.#reservations.has(input.reservation as SubscriptionCapacityReservation) &&
-      this.#bindings.size + this.#reservations.size >= this.#limits.bindingLimit
-    )
-      throw new Error("binding-capacity-exceeded");
-    const id = this.#nextId();
-    if (id.length === 0 || this.#bindings.has(id))
-      throw new Error("subscription ID must be unique");
-    this.#bindings.set(id, {
-      backend: input.backend.bytes.slice(),
-      principalFingerprint: input.principalFingerprint,
-      tenant: input.tenant,
-      expiresAtMs: input.expiresAtMs,
-      state: "inactive",
-      controller: new AbortController(),
-      tail: Promise.resolve(),
-      pending: 0,
-      expiring: false,
-      cancelRequested: false,
-    });
-    input.reservation?.release();
-    return { id };
+    try {
+      if (this.#closed) throw new Error("subscription bindings are closed");
+      if (input.backend.bytes.byteLength > this.#limits.maxBackendEnvelopeBytes)
+        throw new Error("backend-envelope-too-large");
+      const reservation = input.reservation;
+      if (
+        (reservation === undefined || !this.#reservations.has(reservation)) &&
+        this.#bindings.size + this.#reservations.size >= this.#limits.bindingLimit
+      )
+        throw new Error("binding-capacity-exceeded");
+      const id = this.#nextId();
+      if (id.length === 0 || this.#bindings.has(id))
+        throw new Error("subscription ID must be unique");
+      this.#bindings.set(id, {
+        backend: input.backend.bytes.slice(),
+        principalFingerprint: input.principalFingerprint,
+        tenant: input.tenant,
+        expiresAtMs: input.expiresAtMs,
+        state: "inactive",
+        controller: new AbortController(),
+        tail: Promise.resolve(),
+        pending: 0,
+        expiring: false,
+        cancelRequested: false,
+      });
+      input.reservation?.release();
+      return Promise.resolve({ id });
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error ? error : new Error("subscription binding creation failed"),
+      );
+    }
   }
   /** Activates only an owned inactive binding; callback failure restores the inactive retry state. */
   async activate(input: {
@@ -231,16 +250,17 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     readonly onBackend: OnBackendSubscription;
     readonly signal: AbortSignal;
   }): Promise<SubscriptionBindingTransition> {
-    if (input.signal?.aborted) return { kind: "denied" };
+    if (input.signal.aborted) return { kind: "denied" };
     if (this.#precheck(input) !== "owned") return { kind: "denied" };
     return this.#coordinate(input.id, async () => {
       const binding = await this.#owned(input);
-      if (input.signal?.aborted || binding === undefined || binding.state !== "inactive")
-        return { kind: "denied" };
+      if (input.signal.aborted || binding?.state !== "inactive") return { kind: "denied" };
       binding.state = "active";
       binding.controller = new AbortController();
-      const abort = () => binding.controller.abort();
-      input.signal?.addEventListener("abort", abort, { once: true });
+      const abort = () => {
+        binding.controller.abort();
+      };
+      input.signal.addEventListener("abort", abort, { once: true });
       try {
         await this.#runEffect(binding, input.onBackend);
       } catch (error) {
@@ -248,7 +268,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
         binding.state = "inactive";
         throw error;
       } finally {
-        input.signal?.removeEventListener("abort", abort);
+        input.signal.removeEventListener("abort", abort);
       }
       return { kind: "activated" };
     });
@@ -275,31 +295,27 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       if (binding.state === "closed") return { kind: "closed" };
       binding.state = "cancelling";
       binding.controller = new AbortController();
-      try {
-        await this.#runEffect(binding, input.onBackend);
-      } catch (error) {
-        throw error;
-      }
+      await this.#runEffect(binding, input.onBackend);
       this.#dispose(input.id, binding);
       return { kind: "closed" };
     });
   }
-  async #owned(input: {
+  #owned(input: {
     readonly id: string;
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
   }): Promise<Binding | undefined> {
     const binding = this.#bindings.get(input.id);
-    if (binding === undefined) return undefined;
+    if (binding === undefined) return Promise.resolve(undefined);
     if (binding.expiresAtMs <= input.nowMs) {
       this.#expire(input.id, binding);
-      return undefined;
+      return Promise.resolve(undefined);
     }
     return binding.principalFingerprint === input.principalFingerprint &&
       binding.tenant === input.tenant
-      ? binding
-      : undefined;
+      ? Promise.resolve(binding)
+      : Promise.resolve(undefined);
   }
   #precheck(input: {
     readonly id: string;
@@ -382,7 +398,10 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   }
 }
 
-/** Admission input for one of the three SubscriptionService RPCs. `wire` is copied immediately and credential is never forwarded. */
+/**
+ * Admission input for one of the three SubscriptionService RPCs.
+ * `wire` is copied immediately and credential is never forwarded.
+ */
 export interface SubscriptionGatewayRequest {
   readonly service: string;
   readonly method: string;
@@ -394,7 +413,10 @@ export interface SubscriptionGatewayRequest {
   /** B4 downstream cancellation signal, copied only as a control capability. */
   readonly signal?: AbortSignal;
 }
-/** B4-mappable backend seam. It receives copied wire values; cleanup is mandatory so a backend subscription cannot be orphaned. */
+/**
+ * B4-mappable backend seam.
+ * It receives copied wire values and requires cleanup of every backend subscription.
+ */
 export interface SubscriptionCreator {
   subscribe(
     request: SubscriptionTopicWire,
@@ -428,7 +450,10 @@ export interface SubscriptionGatewayOptions {
   readonly creator: SubscriptionCreator;
   readonly limits?: SubscriptionGatewayLimits;
 }
-/** Opaque browser-facing operation result. Only subscribed contains a copied public Subscription wire, never backend bytes. */
+/**
+ * Opaque browser-facing operation result.
+ * Only subscribed contains a copied public Subscription wire, never backend bytes.
+ */
 export type SubscriptionGatewayResult =
   | { readonly kind: "subscribed"; readonly wire: PublicSubscriptionWire }
   | { readonly kind: "activated" }
@@ -447,7 +472,10 @@ export type SubscriptionGatewayResult =
         | "binding-busy";
     };
 
-/** B3 gateway. It serializes complete operations, admits one immutable transport snapshot, and never reveals backend envelopes. */
+/**
+ * B3 gateway.
+ * It serializes operations, admits one transport snapshot, and never reveals backend envelopes.
+ */
 export class SubscriptionGateway {
   readonly #options: SubscriptionGatewayOptions;
   readonly #limits: Required<SubscriptionGatewayLimits>;
@@ -571,10 +599,17 @@ export class SubscriptionGateway {
   ): Promise<SubscriptionGatewayResult> {
     const activeController = new AbortController();
     const active = activeController.signal;
-    const abort = () => activeController.abort();
+    const abort = () => {
+      activeController.abort();
+    };
     if (signal?.aborted) return rejected("denied");
     signal?.addEventListener("abort", abort, { once: true });
-    const expiry = setTimeout(() => activeController.abort(), Math.max(0, expiresAtMs - nowMs));
+    const expiry = setTimeout(
+      () => {
+        activeController.abort();
+      },
+      Math.max(0, expiresAtMs - nowMs),
+    );
     try {
       const result = await this.#options.bindings.activate({
         id,
@@ -632,7 +667,6 @@ export class SubscriptionGateway {
     let backend: BackendSubscriptionEnvelope | undefined;
     try {
       backend = await this.#receiveBackend(bytes, controller);
-      if (backend === undefined) return rejected("denied");
       return await this.#retainBackend(
         backend,
         bytes,
@@ -798,8 +832,9 @@ export class SubscriptionGateway {
     }
   }
 }
-async function discardUpdate(update: SubscriptionUpdateWire): Promise<void> {
+function discardUpdate(update: SubscriptionUpdateWire): Promise<void> {
   update.bytes.fill(0);
+  return Promise.resolve();
 }
 function envelope(bytes: Uint8Array): BackendSubscriptionEnvelope {
   return { kind: "backend-subscription-envelope", bytes: bytes.slice() };
@@ -937,17 +972,14 @@ function admit(
 ): SubscriptionGatewayRequest | undefined {
   if (request.wire.bytes.byteLength > limit.maxRequestBytes) return undefined;
   return {
-    service: `${request.service}`,
-    method: `${request.method}`,
+    service: request.service,
+    method: request.method,
     wire: { kind: request.wire.kind, bytes: request.wire.bytes.slice() },
-    credential: { kind: request.credential.kind, value: `${request.credential.value}` },
+    credential: { kind: request.credential.kind, value: request.credential.value },
     transport: snapshotTransport(request),
     ...(request.updates === undefined ? {} : { updates: request.updates }),
     ...(request.signal === undefined ? {} : { signal: request.signal }),
   };
-}
-function timeout(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 async function withTimeout<T>(
   effect: Promise<T>,
@@ -965,7 +997,9 @@ async function withTimeout<T>(
   const aborted = new Promise<never>((_, reject) => {
     controller.signal.addEventListener(
       "abort",
-      () => reject(new Error("subscription operation aborted")),
+      () => {
+        reject(new Error("subscription operation aborted"));
+      },
       { once: true },
     );
   });

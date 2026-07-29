@@ -125,7 +125,9 @@ export type SignedSessionRotationResult =
  * `expiryOnly` means no immediate revocation guarantee exists, while
  * `unavailable` means the configured revocation store failed.
  */
-export type SignedSessionLogoutResult = { readonly kind: "revoked" | "expiryOnly" | "unavailable" };
+export interface SignedSessionLogoutResult {
+  readonly kind: "revoked" | "expiryOnly" | "unavailable";
+}
 
 type IssueRejectionReason =
   "closed" | "clock-failure" | "entropy-failure" | "principal-invalid" | "signing-failure";
@@ -212,31 +214,32 @@ export class SignedSessions implements SessionResolver {
    * Issues one compact ES256 bearer token for a principal inside configured
    * ID and attribute bounds.
    */
-  async issue(principal: AuthenticatedPrincipal): Promise<SignedSessionIssueResult> {
-    if (this.#closed) return rejected("closed");
+  issue(principal: AuthenticatedPrincipal): Promise<SignedSessionIssueResult> {
+    if (this.#isClosed()) return Promise.resolve(rejected("closed"));
     const now = this.#now();
-    if (now === "closed") return rejected("closed");
-    if (now === undefined) return rejected("clock-failure");
-    if (this.#closed) return rejected("closed");
+    if (typeof now !== "number")
+      return Promise.resolve(rejected(now.kind === "closed" ? "closed" : "clock-failure"));
+    if (this.#isClosed()) return Promise.resolve(rejected("closed"));
     this.#sweep(now);
-    const copied = principalCopy(
-      principal,
-      this.#maxId,
-      this.#maxAttributes,
-      this.#maxAttributeChars,
-    );
-    if (copied === undefined) return rejected("principal-invalid");
+    let copied: AuthenticatedPrincipal | undefined;
+    try {
+      copied = principalCopy(principal, this.#maxId, this.#maxAttributes, this.#maxAttributeChars);
+    } catch {
+      return Promise.resolve(rejected("principal-invalid"));
+    }
+    if (copied === undefined) return Promise.resolve(rejected("principal-invalid"));
     const jti = this.#jti();
-    if (jti === "closed") return rejected("closed");
-    if (jti === undefined) return rejected("entropy-failure");
-    if (this.#closed) return rejected("closed");
+    if (jti === undefined)
+      return Promise.resolve(this.#isClosed() ? rejected("closed") : rejected("entropy-failure"));
+    if (this.#isClosed()) return Promise.resolve(rejected("closed"));
     const again = this.#now();
-    if (again === "closed") return rejected("closed");
-    if (again === undefined) return rejected("clock-failure");
-    if (this.#closed) return rejected("closed");
+    if (typeof again !== "number")
+      return Promise.resolve(rejected(again.kind === "closed" ? "closed" : "clock-failure"));
+    if (this.#isClosed()) return Promise.resolve(rejected("closed"));
     const iat = Math.floor(again / 1000);
     const exp = iat + this.#ttl;
-    if (!Number.isSafeInteger(exp) || !timeValid(exp * 1000)) return rejected("clock-failure");
+    if (!Number.isSafeInteger(exp) || !timeValid(exp * 1000))
+      return Promise.resolve(rejected("clock-failure"));
     const claims: Claims = {
       iss: this.#issuer,
       aud: this.#audience,
@@ -249,15 +252,15 @@ export class SignedSessions implements SessionResolver {
     };
     try {
       const token = this.#token(claims);
-      if (token.length > this.#maxToken) return rejected("signing-failure");
-      if (this.#closed) return rejected("closed");
-      return {
+      if (token.length > this.#maxToken) return Promise.resolve(rejected("signing-failure"));
+      if (this.#isClosed()) return Promise.resolve(rejected("closed"));
+      return Promise.resolve({
         kind: "issued",
         credential: Object.freeze({ kind: "bearer", value: token }),
         session: session(copied, exp),
-      };
+      });
     } catch {
-      return rejected("signing-failure");
+      return Promise.resolve(rejected("signing-failure"));
     }
   }
 
@@ -268,7 +271,7 @@ export class SignedSessions implements SessionResolver {
    * unavailable-revocation result return `undefined`.
    */
   async resolve(credential: RequestCredential): Promise<ResolvedSession | undefined> {
-    if (this.#closed || credential.kind !== "bearer") return undefined;
+    if (this.#isClosed() || credential.kind !== "bearer") return undefined;
     const claims = this.#verifiedClaims(credential.value);
     if (claims === undefined) return undefined;
     if (this.#revocation !== undefined)
@@ -277,7 +280,7 @@ export class SignedSessions implements SessionResolver {
       } catch {
         return undefined;
       }
-    if (this.#closed) return undefined;
+    if (this.#isClosed()) return undefined;
     return session(
       {
         id: claims.sub,
@@ -293,40 +296,41 @@ export class SignedSessions implements SessionResolver {
    * The previous verifier remains through the configured token lifetime plus
    * clock skew, subject to the finite key bound.
    */
-  async rotate(next: SignedSessionSigningKey): Promise<SignedSessionRotationResult> {
-    if (this.#closed) return rotation("closed");
+  rotate(next: SignedSessionSigningKey): Promise<SignedSessionRotationResult> {
+    if (this.#isClosed()) return Promise.resolve(rotation("closed"));
     const now = this.#now();
-    if (now === "closed") return rotation("closed");
-    if (now === undefined) return rotation("clock-failure");
-    if (this.#closed) return rotation("closed");
+    if (typeof now !== "number")
+      return Promise.resolve(rotation(now.kind === "closed" ? "closed" : "clock-failure"));
+    if (this.#isClosed()) return Promise.resolve(rotation("closed"));
     this.#sweep(now);
     let copy: { kid: string; privateKey: KeyObject; publicKey: KeyObject };
     try {
       copy = signing(next);
     } catch {
-      return rotation("invalid-key");
+      return Promise.resolve(rotation("invalid-key"));
     }
-    if (this.#keys.has(copy.kid)) return rotation("duplicate-key");
-    if (this.#keys.size + 1 > this.#maxKeys) return rotation("key-capacity-exceeded");
+    if (this.#keys.has(copy.kid)) return Promise.resolve(rotation("duplicate-key"));
+    if (this.#keys.size + 1 > this.#maxKeys)
+      return Promise.resolve(rotation("key-capacity-exceeded"));
     const again = this.#now();
-    if (again === "closed") return rotation("closed");
-    if (again === undefined) return rotation("clock-failure");
-    if (this.#closed) return rotation("closed");
+    if (typeof again !== "number")
+      return Promise.resolve(rotation(again.kind === "closed" ? "closed" : "clock-failure"));
+    if (this.#isClosed()) return Promise.resolve(rotation("closed"));
     let expiresAt: number;
     try {
       expiresAt = retentionDeadline(again, this.#ttl, this.#skew);
     } catch {
-      return rotation("clock-failure");
+      return Promise.resolve(rotation("clock-failure"));
     }
     const active = this.#active;
-    if (active === undefined) return rotation("closed");
+    if (active === undefined) return Promise.resolve(rotation("closed"));
     this.#keys.set(active.kid, {
       publicKey: active.publicKey,
       expiresAt,
     });
     this.#active = copy;
     this.#keys.set(copy.kid, { publicKey: copy.publicKey });
-    return { kind: "rotated" };
+    return Promise.resolve({ kind: "rotated" });
   }
 
   /**
@@ -358,16 +362,16 @@ export class SignedSessions implements SessionResolver {
     return Promise.resolve();
   }
 
-  async #claimsForLogout(credential: RequestCredential): Promise<Claims | undefined> {
-    if (credential.kind !== "bearer" || this.#closed) return undefined;
-    return this.#verifiedClaims(credential.value);
+  #claimsForLogout(credential: RequestCredential): Promise<Claims | undefined> {
+    if (credential.kind !== "bearer" || this.#isClosed()) return Promise.resolve(undefined);
+    return Promise.resolve(this.#verifiedClaims(credential.value));
   }
 
   #verifiedClaims(value: string): Claims | undefined {
     const parsed = this.#parse(value);
     if (parsed === undefined) return undefined;
     const now = this.#now();
-    if (now === undefined || now === "closed" || this.#closed) return undefined;
+    if (typeof now !== "number" || this.#isClosed()) return undefined;
     this.#sweep(now);
     const key = this.#keys.get(parsed.kid);
     if (key === undefined || (key.expiresAt !== undefined && now > key.expiresAt)) return undefined;
@@ -409,28 +413,31 @@ export class SignedSessions implements SessionResolver {
     if (signature.byteLength !== 64) throw new Error("invalid ES256 signature");
     return `${input}.${Buffer.from(signature).toString("base64url")}`;
   }
-  #jti(): string | "closed" | undefined {
+  #jti(): string | undefined {
     let bytes: Uint8Array | undefined;
     try {
       bytes = this.#random(16);
-      if (bytes.byteLength !== 16) return this.#closed ? "closed" : undefined;
+      if (bytes.byteLength !== 16) return undefined;
       return Buffer.from(bytes).toString("base64url");
     } catch {
-      return this.#closed ? "closed" : undefined;
+      return undefined;
     } finally {
       bytes?.fill(0);
     }
   }
-  #now(): number | "closed" | undefined {
+  #now(): number | { readonly kind: "closed" | "failure" } {
     try {
       const value = this.#clock.now();
       if (!Number.isSafeInteger(value) || !timeValid(value)) throw new Error();
       return value;
     } catch {
-      if (this.#closed) return "closed";
-      this.close();
-      return undefined;
+      if (this.#isClosed()) return { kind: "closed" };
+      void this.close();
+      return { kind: "failure" };
     }
+  }
+  #isClosed(): boolean {
+    return this.#closed;
   }
   #sweep(now: number): void {
     for (const [kid, key] of this.#keys)
@@ -628,13 +635,15 @@ function timestamp(seconds: number): Timestamp {
   return create(TimestampSchema, { seconds: BigInt(seconds) });
 }
 function session(principal: AuthenticatedPrincipal, seconds: number): ResolvedSession {
+  const copied = principalCopy(
+    principal,
+    Number.MAX_SAFE_INTEGER,
+    Number.MAX_SAFE_INTEGER,
+    Number.MAX_SAFE_INTEGER,
+  );
+  if (copied === undefined) throw new Error("invalid principal");
   return Object.freeze({
-    principal: principalCopy(
-      principal,
-      Number.MAX_SAFE_INTEGER,
-      Number.MAX_SAFE_INTEGER,
-      Number.MAX_SAFE_INTEGER,
-    )!,
+    principal: copied,
     expiresAt: timestamp(seconds),
   });
 }

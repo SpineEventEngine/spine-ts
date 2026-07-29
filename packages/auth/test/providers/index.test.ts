@@ -34,10 +34,12 @@ describe("custom OIDC provider", () => {
         tokenEndpoint: "https://issuer.example/token",
         jwksEndpoint: "https://issuer.example/keys",
         clientId: "chat-web",
-        fetch: async () =>
-          new Response(JSON.stringify(++call === 1 ? { id_token: token } : { keys: [jwk] }), {
-            headers: { "content-type": "application/json" },
-          }),
+        fetch: () =>
+          Promise.resolve(
+            new Response(JSON.stringify(++call === 1 ? { id_token: token } : { keys: [jwk] }), {
+              headers: { "content-type": "application/json" },
+            }),
+          ),
         clock: () => 1_000,
       });
       await expect(
@@ -64,14 +66,19 @@ describe("custom OIDC provider", () => {
       jwksEndpoint: "https://issuer.example/keys",
       clientId: "chat-web",
       clientAuthentication: "none",
-      fetch: async (url, init) => {
+      fetch: (url, init) => {
         expect(url).toBe("https://issuer.example/token");
         expect(init?.redirect).toBe("error");
-        expect(String(init?.body)).toContain("grant_type=authorization_code");
-        return new Response(JSON.stringify({ id_token: "not-a-jwt" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+        const body = init?.body;
+        if (!(body instanceof URLSearchParams))
+          throw new Error("expected URL-encoded request body");
+        expect(body.toString()).toContain("grant_type=authorization_code");
+        return Promise.resolve(
+          new Response(JSON.stringify({ id_token: "not-a-jwt" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
       },
     });
 
@@ -116,7 +123,9 @@ describe("custom OIDC provider", () => {
   it("rejects a non-canonical JWT signature spelling", async () => {
     const fixture = await signedFixture();
     const parts = fixture.token.split(".");
-    parts[2] += "=";
+    const signature = parts[2];
+    if (signature === undefined) throw new Error("expected JWT signature segment");
+    parts[2] = `${signature}=`;
     await expect(exchangeFixture({ ...fixture, token: parts.join(".") })).resolves.toBeUndefined();
   });
 
@@ -127,7 +136,7 @@ describe("custom OIDC provider", () => {
     ["malformed JSON", new Response("{", { headers: jsonHeaders() })],
     ["empty response", new Response(null, { headers: jsonHeaders() })],
   ])("fails closed for a %s token response", async (_label, response) => {
-    const provider = oidcProvider(async () => response, { maxResponseBytes: 2 });
+    const provider = oidcProvider(() => Promise.resolve(response), { maxResponseBytes: 2 });
     await expect(
       provider.provider.exchangeAuthorizationCode(exchangeInput()),
     ).resolves.toBeUndefined();
@@ -147,7 +156,7 @@ describe("custom OIDC provider", () => {
         cancelled = true;
       },
     });
-    const provider = oidcProvider(async () => new Response(body, init), {
+    const provider = oidcProvider(() => Promise.resolve(new Response(body, init)), {
       maxResponseBytes: 2,
     });
     await expect(
@@ -166,9 +175,12 @@ describe("custom OIDC provider", () => {
         cancelled = true;
       },
     });
-    const provider = oidcProvider(async () => new Response(body, { headers: jsonHeaders() }), {
-      maxResponseBytes: 2,
-    });
+    const provider = oidcProvider(
+      () => Promise.resolve(new Response(body, { headers: jsonHeaders() })),
+      {
+        maxResponseBytes: 2,
+      },
+    );
     await expect(
       provider.provider.exchangeAuthorizationCode(exchangeInput()),
     ).resolves.toBeUndefined();
@@ -176,7 +188,7 @@ describe("custom OIDC provider", () => {
   });
 
   it("settles when an injected token client ignores abort", async () => {
-    const provider = oidcProvider(() => new Promise<Response>(() => {}), {
+    const provider = oidcProvider(() => new Promise<Response>(() => undefined), {
       timeoutMilliseconds: 5,
     });
     await expect(
@@ -192,15 +204,17 @@ describe("custom OIDC provider", () => {
       discoverOidcProvider({
         issuer: "https://issuer.example",
         clientId: "chat-web",
-        fetch: async () =>
-          new Response(
-            JSON.stringify({
-              issuer: "https://other.example",
-              authorization_endpoint: "https://issuer.example/authorize",
-              token_endpoint: "https://issuer.example/token",
-              jwks_uri: "https://issuer.example/keys",
-            }),
-            { headers: jsonHeaders() },
+        fetch: () =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({
+                issuer: "https://other.example",
+                authorization_endpoint: "https://issuer.example/authorize",
+                token_endpoint: "https://issuer.example/token",
+                jwks_uri: "https://issuer.example/keys",
+              }),
+              { headers: jsonHeaders() },
+            ),
           ),
       }),
     ).resolves.toBeUndefined();
@@ -210,7 +224,7 @@ describe("custom OIDC provider", () => {
           issuer: "https://issuer.example",
           clientId: "chat-web",
           timeoutMilliseconds: 5,
-          fetch: () => new Promise<Response>(() => {}),
+          fetch: () => new Promise<Response>(() => undefined),
         }),
         rejectAfter(100),
       ]),
@@ -233,9 +247,9 @@ describe("custom OIDC provider", () => {
         issuer: "https://issuer.example",
         clientId: "chat-web",
         discoveryEndpoint: "https://metadata.example/configuration",
-        fetch: async (url) => {
+        fetch: (url) => {
           expect(url).toBe("https://metadata.example/configuration");
-          return metadata("https://issuer.example");
+          return Promise.resolve(metadata("https://issuer.example"));
         },
       }),
     ).resolves.toMatchObject({
@@ -245,7 +259,7 @@ describe("custom OIDC provider", () => {
     await expect(
       createGoogleProvider({
         clientId: "chat-web",
-        fetch: async () => metadata("https://accounts.google.com"),
+        fetch: () => Promise.resolve(metadata("https://accounts.google.com")),
       }),
     ).resolves.toMatchObject({
       authorizationEndpoint: "https://accounts.google.com/authorize",
@@ -258,16 +272,18 @@ describe("custom OIDC provider", () => {
     await createGoogleProvider({
       clientId: "chat-web",
       discoveryEndpoint: "https://attacker.example/configuration",
-      fetch: async (url) => {
+      fetch: (url) => {
         urls.push(url);
-        return new Response(
-          JSON.stringify({
-            issuer: "https://accounts.google.com",
-            authorization_endpoint: "https://accounts.google.com/authorize",
-            token_endpoint: "https://accounts.google.com/token",
-            jwks_uri: "https://accounts.google.com/keys",
-          }),
-          { headers: jsonHeaders() },
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              issuer: "https://accounts.google.com",
+              authorization_endpoint: "https://accounts.google.com/authorize",
+              token_endpoint: "https://accounts.google.com/token",
+              jwks_uri: "https://accounts.google.com/keys",
+            }),
+            { headers: jsonHeaders() },
+          ),
         );
       },
     } as Parameters<typeof createGoogleProvider>[0] & { discoveryEndpoint: string });
@@ -278,9 +294,12 @@ describe("custom OIDC provider", () => {
     "uses %s token endpoint authentication",
     async (clientAuthentication) => {
       const provider = oidcProvider(
-        async (_url, init) => {
+        (_url, init) => {
           const headers = new Headers(init?.headers);
-          const body = String(init?.body);
+          const requestBody = init?.body;
+          if (!(requestBody instanceof URLSearchParams))
+            throw new Error("expected URL-encoded request body");
+          const body = requestBody.toString();
           if (clientAuthentication === "client_secret_post") {
             expect(body).toContain("client_secret=secret");
             expect(headers.has("authorization")).toBe(false);
@@ -290,7 +309,7 @@ describe("custom OIDC provider", () => {
             );
             expect(body).not.toContain("client_secret");
           }
-          return new Response(JSON.stringify({}), { headers: jsonHeaders() });
+          return Promise.resolve(new Response(JSON.stringify({}), { headers: jsonHeaders() }));
         },
         { clientAuthentication, clientSecret: "secret" },
       );
@@ -312,13 +331,15 @@ describe("custom OIDC provider", () => {
     ["oversized unused client secret", { clientSecret: "s".repeat(4097) }],
     ["unknown client authentication", { clientAuthentication: "unknown" as never }],
   ])("rejects %s configuration", (_label, overrides) => {
-    expect(() => oidcProvider(async () => new Response("{}"), overrides)).toThrow(TypeError);
+    expect(() => oidcProvider(() => Promise.resolve(new Response("{}")), overrides)).toThrow(
+      TypeError,
+    );
   });
 
   it("refreshes JWKS once for a rotated key and then caches it", async () => {
     const fixture = await signedFixture();
     let call = 0;
-    const provider = oidcProvider(async () => {
+    const provider = oidcProvider(() => {
       call++;
       const body =
         call === 1 || call === 4
@@ -326,9 +347,11 @@ describe("custom OIDC provider", () => {
           : call === 2
             ? { keys: [{ ...fixture.jwk, kid: "old" }] }
             : { keys: [fixture.jwk] };
-      return new Response(JSON.stringify(body), {
-        headers: jsonHeaders({ "cache-control": "max-age=60" }),
-      });
+      return Promise.resolve(
+        new Response(JSON.stringify(body), {
+          headers: jsonHeaders({ "cache-control": "max-age=60" }),
+        }),
+      );
     });
     await expect(
       provider.provider.exchangeAuthorizationCode(exchangeInput()),
@@ -344,12 +367,14 @@ describe("custom OIDC provider", () => {
     let now = 1_000;
     let keyCalls = 0;
     const provider = oidcProvider(
-      async (url) => {
+      (url) => {
         const body = url.endsWith("/token") ? { id_token: fixture.token } : { keys: [fixture.jwk] };
         if (url.endsWith("/keys")) keyCalls++;
-        return new Response(JSON.stringify(body), {
-          headers: jsonHeaders({ "cache-control": "max-age=1" }),
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify(body), {
+            headers: jsonHeaders({ "cache-control": "max-age=1" }),
+          }),
+        );
       },
       { clock: () => now },
     );
@@ -370,11 +395,13 @@ describe("custom OIDC provider", () => {
     const pending = new Promise<Response>((resolve) => {
       release = resolve;
     });
-    const provider = oidcProvider(async (url) => {
+    const provider = oidcProvider((url) => {
       if (url.endsWith("/token"))
-        return new Response(JSON.stringify({ id_token: fixture.token }), {
-          headers: jsonHeaders(),
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify({ id_token: fixture.token }), {
+            headers: jsonHeaders(),
+          }),
+        );
       keyCalls++;
       return pending;
     });
@@ -397,11 +424,13 @@ describe("custom OIDC provider", () => {
     const pending = new Promise<Response>((resolve) => {
       release = resolve;
     });
-    const provider = oidcProvider(async (url) => {
+    const provider = oidcProvider((url) => {
       if (url.endsWith("/token"))
-        return new Response(JSON.stringify({ id_token: fixture.token }), {
-          headers: jsonHeaders(),
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify({ id_token: fixture.token }), {
+            headers: jsonHeaders(),
+          }),
+        );
       keyCalls++;
       return pending;
     });
@@ -432,19 +461,23 @@ describe("custom OIDC provider", () => {
     const fixture = await signedFixture();
     let keyCalls = 0;
     let firstJwksSignal: AbortSignal | undefined;
-    const provider = oidcProvider(async (url, init) => {
+    const provider = oidcProvider((url, init) => {
       if (url.endsWith("/token"))
-        return new Response(JSON.stringify({ id_token: fixture.token }), {
-          headers: jsonHeaders(),
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify({ id_token: fixture.token }), {
+            headers: jsonHeaders(),
+          }),
+        );
       keyCalls++;
       if (keyCalls === 1) {
         firstJwksSignal = init?.signal ?? undefined;
-        return new Promise<Response>(() => {});
+        return new Promise<Response>(() => undefined);
       }
-      return new Response(JSON.stringify({ keys: [fixture.jwk] }), {
-        headers: jsonHeaders({ "cache-control": "max-age=60" }),
-      });
+      return Promise.resolve(
+        new Response(JSON.stringify({ keys: [fixture.jwk] }), {
+          headers: jsonHeaders({ "cache-control": "max-age=60" }),
+        }),
+      );
     });
     const controller = new AbortController();
     const abandoned = provider.provider.exchangeAuthorizationCode({
@@ -470,12 +503,13 @@ describe("custom OIDC provider", () => {
         calls++;
         await new Promise((resolve) => setTimeout(resolve, 20));
         return new (class extends Response {
-          override get body(): ReadableStream<Uint8Array> {
+          override get body(): ReadableStream<Uint8Array<ArrayBuffer>> | null {
             return {
-              cancel: async () => {
+              cancel: () => {
                 cancelled = true;
+                return Promise.resolve();
               },
-            } as ReadableStream<Uint8Array>;
+            } as ReadableStream<Uint8Array<ArrayBuffer>>;
           }
         })();
       },
@@ -492,14 +526,17 @@ describe("custom OIDC provider", () => {
   it("cancels a non-cooperative response stream at deadline", async () => {
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
-      pull: () => new Promise<void>(() => {}),
+      pull: () => new Promise<void>(() => undefined),
       cancel() {
         cancelled = true;
       },
     });
-    const provider = oidcProvider(async () => new Response(body, { headers: jsonHeaders() }), {
-      timeoutMilliseconds: 5,
-    });
+    const provider = oidcProvider(
+      () => Promise.resolve(new Response(body, { headers: jsonHeaders() })),
+      {
+        timeoutMilliseconds: 5,
+      },
+    );
     await expect(
       provider.provider.exchangeAuthorizationCode(exchangeInput()),
     ).resolves.toBeUndefined();
@@ -514,9 +551,11 @@ describe("custom OIDC provider", () => {
     const fixture = await signedFixture();
     const token = replaceHeader(fixture.token, header);
     let calls = 0;
-    const provider = oidcProvider(async () => {
+    const provider = oidcProvider(() => {
       calls++;
-      return new Response(JSON.stringify({ id_token: token }), { headers: jsonHeaders() });
+      return Promise.resolve(
+        new Response(JSON.stringify({ id_token: token }), { headers: jsonHeaders() }),
+      );
     });
     await expect(
       provider.provider.exchangeAuthorizationCode(exchangeInput()),
@@ -526,9 +565,9 @@ describe("custom OIDC provider", () => {
 
   it("rejects a mismatched client and an already-aborted exchange", async () => {
     let calls = 0;
-    const provider = oidcProvider(async () => {
+    const provider = oidcProvider(() => {
       calls++;
-      return new Response("{}", { headers: jsonHeaders() });
+      return Promise.resolve(new Response("{}", { headers: jsonHeaders() }));
     });
     await expect(
       provider.provider.exchangeAuthorizationCode({ ...exchangeInput(), clientId: "other" }),
@@ -560,7 +599,7 @@ describe("GitHub provider", () => {
       clientId: "chat-web",
       clientSecret: "secret",
       includeVerifiedPrimaryEmail: true,
-      fetch: async (url, init) => {
+      fetch: (url, init) => {
         calls.push(url);
         if (url.includes("api.github"))
           expect(init?.headers).toMatchObject({ "x-github-api-version": "2022-11-28" });
@@ -569,9 +608,11 @@ describe("GitHub provider", () => {
           : url.endsWith("/user")
             ? { id: 42 }
             : [{ email: "user@example.test", primary: true, verified: true }];
-        return new Response(JSON.stringify(body), {
-          headers: { "content-type": "application/json" },
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify(body), {
+            headers: { "content-type": "application/json" },
+          }),
+        );
       },
     });
     await expect(
@@ -599,20 +640,24 @@ describe("GitHub provider", () => {
     const provider = createGitHubProvider({
       clientId: "chat-web",
       clientSecret: "secret",
-      fetch: async (url) => {
+      fetch: (url) => {
         calls.push(url);
         if (url.includes("access_token"))
-          return new Response(
-            JSON.stringify({
-              access_token: "provider-token",
-              token_type: "bearer",
-              scope: "read:user",
-            }),
-            { headers: { "content-type": "application/json" } },
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                access_token: "provider-token",
+                token_type: "bearer",
+                scope: "read:user",
+              }),
+              { headers: { "content-type": "application/json" } },
+            ),
           );
-        return new Response(JSON.stringify({ id: 42, login: "mutable-login" }), {
-          headers: { "content-type": "application/json" },
-        });
+        return Promise.resolve(
+          new Response(JSON.stringify({ id: 42, login: "mutable-login" }), {
+            headers: { "content-type": "application/json" },
+          }),
+        );
       },
     });
     const result = await provider.provider.exchangeAuthorizationCode({
@@ -668,7 +713,7 @@ describe("GitHub provider", () => {
       clientId: "chat-web",
       clientSecret: "secret",
       timeoutMilliseconds: 5,
-      fetch: () => new Promise<Response>(() => {}),
+      fetch: () => new Promise<Response>(() => undefined),
     });
     await expect(
       Promise.race([
@@ -723,7 +768,10 @@ describe("GitHub provider", () => {
   it.each([
     ["invalid API version", { apiVersion: "latest" }],
     ["empty scopes", { scopes: [] }],
-    ["too many scopes", { scopes: Array.from({ length: 33 }, (_, index) => `scope-${index}`) }],
+    [
+      "too many scopes",
+      { scopes: Array.from({ length: 33 }, (_, index) => `scope-${String(index)}`) },
+    ],
     ["whitespace in scope", { scopes: ["read:user extra"] }],
     ["non-array scopes", { scopes: new Set(["read:user"]) as never }],
     ["non-boolean email lookup", { includeVerifiedPrimaryEmail: "yes" as never }],
@@ -739,7 +787,7 @@ describe("GitHub provider", () => {
   });
 });
 
-type SignedClaims = {
+interface SignedClaims {
   readonly issuer?: string;
   readonly audience?: string | readonly string[];
   readonly nonce?: string;
@@ -748,13 +796,13 @@ type SignedClaims = {
   readonly notBefore?: number;
   readonly authorizedPresenter?: string;
   readonly emailVerified?: unknown;
-};
-type KeyScenario = {
+}
+interface KeyScenario {
   readonly keyId?: string;
   readonly duplicateKey?: boolean;
   readonly oversizedKeySet?: boolean;
   readonly keyAlgorithm?: string;
-};
+}
 
 async function signedFixture(
   claims: SignedClaims = {},
@@ -769,7 +817,13 @@ async function signedFixture(
   })
     .setProtectedHeader({ alg: "RS256", kid: "current", typ: "JWT" })
     .setIssuer(claims.issuer ?? "https://issuer.example")
-    .setAudience(claims.audience ?? "chat-web")
+    .setAudience(
+      claims.audience === undefined
+        ? "chat-web"
+        : typeof claims.audience === "string"
+          ? claims.audience
+          : Array.from(claims.audience),
+    )
     .setIssuedAt(1)
     .setExpirationTime(claims.expiration ?? 2_000_000_000);
   if (!Object.hasOwn(claims, "subject") || claims.subject !== undefined)
@@ -787,18 +841,22 @@ async function exchangeFixture(
   keys: KeyScenario = {},
 ): Promise<unknown> {
   const jwk = { ...fixture.jwk, alg: keys.keyAlgorithm ?? fixture.jwk.alg };
-  const selected = { ...jwk, kid: keys.keyId ?? jwk.kid };
+  const selected = {
+    ...jwk,
+    kid: keys.keyId ?? (fixture.jwk.kid as string | undefined),
+  };
   const keySet = keys.oversizedKeySet
-    ? Array.from({ length: 33 }, (_, index) => ({ ...jwk, kid: `key-${index}` }))
+    ? Array.from({ length: 33 }, (_, index) => ({ ...jwk, kid: `key-${String(index)}` }))
     : keys.duplicateKey
       ? [selected, { ...selected }]
       : [selected];
   let call = 0;
-  const provider = oidcProvider(
-    async () =>
+  const provider = oidcProvider(() =>
+    Promise.resolve(
       new Response(JSON.stringify(++call === 1 ? { id_token: fixture.token } : { keys: keySet }), {
         headers: jsonHeaders(),
       }),
+    ),
   );
   return provider.provider.exchangeAuthorizationCode(exchangeInput());
 }
@@ -842,7 +900,7 @@ function githubProvider(
     clientId: "chat-web",
     clientSecret: "secret",
     includeVerifiedPrimaryEmail,
-    fetch: async (url) => {
+    fetch: (url) => {
       const body = url.endsWith("access_token")
         ? (scenario.token ?? {
             access_token: "provider-token",
@@ -852,7 +910,7 @@ function githubProvider(
         : url.endsWith("/user")
           ? (scenario.user ?? { id: 42 })
           : (scenario.emails ?? []);
-      return new Response(JSON.stringify(body), { headers: jsonHeaders() });
+      return Promise.resolve(new Response(JSON.stringify(body), { headers: jsonHeaders() }));
     },
   });
 }
@@ -863,6 +921,7 @@ function jsonHeaders(extra: Record<string, string> = {}) {
 
 function replaceHeader(token: string, header: Record<string, unknown>): string {
   const [, payload, signature] = token.split(".");
+  if (payload === undefined || signature === undefined) throw new Error("expected a JWT");
   return `${Buffer.from(JSON.stringify(header)).toString("base64url")}.${payload}.${signature}`;
 }
 

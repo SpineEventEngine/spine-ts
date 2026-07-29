@@ -32,8 +32,11 @@ describe("SubscriptionUpdateRelay", () => {
     await relay.push({ kind: "subscription-update", bytes: first });
     await relay.push({ kind: "subscription-update", bytes: second });
     first.fill(9);
-    expect((await relay[Symbol.asyncIterator]().next()).value.update.case).toBe("eventUpdates");
-    expect((await relay[Symbol.asyncIterator]().next()).value.update.case).toBe("entityUpdates");
+    const firstResult = await relay[Symbol.asyncIterator]().next();
+    const secondResult = await relay[Symbol.asyncIterator]().next();
+    if (firstResult.done || secondResult.done) throw new Error("expected queued updates");
+    expect(firstResult.value.update.case).toBe("eventUpdates");
+    expect(secondResult.value.update.case).toBe("entityUpdates");
   });
 
   it("delivers an update directly to a waiting consumer", async () => {
@@ -64,6 +67,23 @@ describe("SubscriptionUpdateRelay", () => {
     await expect(
       relay.push({ kind: "subscription-update", bytes: new Uint8Array() }),
     ).rejects.toMatchObject({ code: 1 });
+  });
+
+  it("makes relay push and iterator cancellation take effect before their promises settle", async () => {
+    const relay = new SubscriptionUpdateRelay();
+    const push = relay.push({
+      kind: "subscription-update",
+      bytes: toBinary(SubscriptionUpdateSchema, create(SubscriptionUpdateSchema)),
+    });
+    relay.close();
+    await expect(push).resolves.toBeUndefined();
+    await expect(relay[Symbol.asyncIterator]().next()).resolves.toMatchObject({ done: false });
+
+    const iterator = relay[Symbol.asyncIterator]();
+    const closing = iterator.return?.();
+    const afterClose = iterator.next();
+    await expect(afterClose).rejects.toMatchObject({ code: 1 });
+    await expect(closing).resolves.toMatchObject({ done: true });
   });
 
   it("rejects count overflow before byte overflow with a deterministic error", async () => {
@@ -123,9 +143,9 @@ describe("SubscriptionUpdateRelay", () => {
 
 describe("NativeSubscriptionCreator", () => {
   it("uses shared descriptors and preserves supplied abort signals", async () => {
-    const calls: Array<{ method: string; signal: AbortSignal | undefined }> = [];
+    const calls: { method: string; signal: AbortSignal | undefined }[] = [];
     const transport = {
-      unary: async (method: { name: string; parent: unknown }, signal: AbortSignal | undefined) => {
+      unary: (method: { name: string; parent: unknown }, signal: AbortSignal | undefined) => {
         calls.push({ method: method.name, signal });
         const message =
           method.name === "Subscribe"
@@ -135,30 +155,28 @@ describe("NativeSubscriptionCreator", () => {
               : method.name === "Read"
                 ? create(QueryService.method.read.output)
                 : create(SubscriptionService.method.cancel.output);
-        return {
+        return Promise.resolve({
           stream: false,
           method,
           service: method.parent,
           header: new Headers(),
           trailer: new Headers(),
           message,
-        };
+        });
       },
-      stream: async (
-        method: { name: string; parent: unknown },
-        signal: AbortSignal | undefined,
-      ) => {
+      stream: (method: { name: string; parent: unknown }, signal: AbortSignal | undefined) => {
         calls.push({ method: method.name, signal });
-        return {
+        return Promise.resolve({
           stream: true,
           method,
           service: method.parent,
           header: new Headers(),
           trailer: new Headers(),
           message: (async function* () {
+            await Promise.resolve();
             yield create(SubscriptionUpdateSchema);
           })(),
-        };
+        });
       },
     } as unknown as Transport;
     const native = new NativeSubscriptionCreator(transport);
@@ -182,8 +200,9 @@ describe("NativeSubscriptionCreator", () => {
       {
         wire: { kind: "public-subscription", bytes: backend.bytes },
         backend,
-        updates: async (update) => {
+        updates: (update) => {
           updates.push(update.bytes);
+          return Promise.resolve();
         },
       },
       signal,

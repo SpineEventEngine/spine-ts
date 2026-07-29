@@ -16,7 +16,6 @@ import {
   SubscriptionService,
   SubscriptionUpdateSchema,
   TopicSchema,
-  type Topic,
   type Subscription,
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
@@ -54,12 +53,12 @@ const relayDefaults: Required<SubscriptionRelayLimits> = {
 export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate> {
   readonly #limits: Required<SubscriptionRelayLimits>;
   readonly #queue: Uint8Array[] = [];
-  readonly #waiters: Array<{
+  readonly #waiters: {
     readonly resolve: (result: IteratorResult<SubscriptionUpdate>) => void;
     readonly reject: (reason: unknown) => void;
-  }> = [];
+  }[] = [];
   #bytes = 0;
-  #terminal: unknown | undefined;
+  #terminal: unknown;
   #closed = false;
 
   constructor(limits: SubscriptionRelayLimits = {}) {
@@ -70,33 +69,38 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
    * Copies and validates an update before FIFO admission. Count precedes bytes;
    * either bound rejects with `ResourceExhausted`.
    */
-  async push(update: SubscriptionUpdateWire): Promise<void> {
-    if (this.#closed) throw terminalError(this.#terminal);
-    const nextMessages = this.#queue.length + 1;
-    if (nextMessages > this.#limits.maxMessages)
-      return this.#failOverflow("message", this.#limits.maxMessages, nextMessages);
-    const bytes = update.bytes.slice();
-    let decoded: SubscriptionUpdate;
+  push(update: SubscriptionUpdateWire): Promise<void> {
     try {
-      decoded = fromBinary(SubscriptionUpdateSchema, bytes);
+      if (this.#closed) throw terminalError(this.#terminal);
+      const nextMessages = this.#queue.length + 1;
+      if (nextMessages > this.#limits.maxMessages)
+        return this.#failOverflow("message", this.#limits.maxMessages, nextMessages);
+      const bytes = update.bytes.slice();
+      let decoded: SubscriptionUpdate;
+      try {
+        decoded = fromBinary(SubscriptionUpdateSchema, bytes);
+      } catch (error) {
+        bytes.fill(0);
+        this.#finish(error);
+        throw error;
+      }
+      const nextBytes = this.#bytes + bytes.byteLength;
+      if (nextBytes > this.#limits.maxBytes) {
+        bytes.fill(0);
+        return this.#failOverflow("byte", this.#limits.maxBytes, nextBytes);
+      }
+      const waiter = this.#waiters.shift();
+      if (waiter !== undefined) {
+        waiter.resolve({ done: false, value: clone(SubscriptionUpdateSchema, decoded) });
+        bytes.fill(0);
+        return Promise.resolve();
+      }
+      this.#bytes = nextBytes;
+      this.#queue.push(bytes);
+      return Promise.resolve();
     } catch (error) {
-      bytes.fill(0);
-      this.#finish(error);
-      throw error;
+      return rejectedRelayPromise(error);
     }
-    const nextBytes = this.#bytes + bytes.byteLength;
-    if (nextBytes > this.#limits.maxBytes) {
-      bytes.fill(0);
-      return this.#failOverflow("byte", this.#limits.maxBytes, nextBytes);
-    }
-    const waiter = this.#waiters.shift();
-    if (waiter !== undefined) {
-      waiter.resolve({ done: false, value: clone(SubscriptionUpdateSchema, decoded) });
-      bytes.fill(0);
-      return;
-    }
-    this.#bytes = nextBytes;
-    this.#queue.push(bytes);
   }
 
   /** Starts graceful FIFO drain; later cancellation or failure supersedes it and purges queued bytes. */
@@ -113,13 +117,13 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
   [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
     return {
       next: () => this.#next(),
-      return: async () => {
+      return: () => {
         this.#finish(new ConnectError("subscription stream cancelled", Code.Canceled));
-        return { done: true, value: undefined };
+        return Promise.resolve({ done: true, value: undefined });
       },
-      throw: async (reason) => {
+      throw: (reason) => {
         this.#finish(reason);
-        throw reason;
+        return rejectedRelayPromise(reason);
       },
     };
   }
@@ -138,7 +142,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
       }
     }
     if (this.#closed) {
-      if (this.#terminal !== undefined) throw this.#terminal;
+      if (this.#terminal !== undefined) throw terminalError(this.#terminal);
       return { done: true, value: undefined };
     }
     return new Promise((resolve, reject) => this.#waiters.push({ resolve, reject }));
@@ -146,7 +150,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
 
   #failOverflow(dimension: "message" | "byte", limit: number, observed: number): never {
     const error = new ConnectError(
-      `subscription relay ${dimension} limit ${limit} exceeded by ${observed}`,
+      `subscription relay ${dimension} limit ${String(limit)} exceeded by ${String(observed)}`,
       Code.ResourceExhausted,
     );
     this.#finish(error);
@@ -175,6 +179,12 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
       else waiter.reject(reason);
     }
   }
+}
+
+function rejectedRelayPromise(reason: unknown): Promise<never> {
+  return Promise.resolve().then(() => {
+    throw reason;
+  });
 }
 
 /**
@@ -437,12 +447,15 @@ function activate(
       relay.fail(reason);
     }
   };
-  const onAbort = () =>
+  const onAbort = () => {
     close(new ConnectError("subscription stream cancelled", Code.Canceled), true);
+  };
   context.signal.addEventListener("abort", onAbort, { once: true });
   if (context.signal.aborted) {
     onAbort();
-    return activationStream(relay, (reason) => close(reason, true));
+    return activationStream(relay, (reason) => {
+      close(reason, true);
+    });
   }
   void options.subscriptions
     .handle({
@@ -459,26 +472,30 @@ function activate(
       if (result.kind !== "activated") close(gatewayResultError(result), true);
       else close(undefined, false);
     })
-    .catch((error: unknown) => close(error, true));
-  return activationStream(relay, (reason) => close(reason, true));
+    .catch((error: unknown) => {
+      close(error, true);
+    });
+  return activationStream(relay, (reason) => {
+    close(reason, true);
+  });
 }
 
 function activationStream(
   relay: SubscriptionUpdateRelay,
-  close: (reason: unknown) => void,
+  onClose: (reason: unknown) => void,
 ): AsyncIterable<SubscriptionUpdate> {
   return {
     [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
       const iterator = relay[Symbol.asyncIterator]();
       return {
         next: () => iterator.next(),
-        return: async () => {
-          close(new ConnectError("subscription stream cancelled", Code.Canceled));
-          return { done: true, value: undefined };
+        return: () => {
+          onClose(new ConnectError("subscription stream cancelled", Code.Canceled));
+          return Promise.resolve({ done: true, value: undefined });
         },
-        throw: async (reason) => {
-          close(reason);
-          throw reason;
+        throw: (reason) => {
+          onClose(reason);
+          return rejectedRelayPromise(reason);
         },
       };
     },

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createHash } from "node:crypto";
 
-import { OidcFlow } from "../../src/index.js";
+import { OidcFlow, type ExternalIdentity, type OidcFlowCallbackInput } from "../../src/index.js";
 
 function clock(start = 1_000) {
   let value = start;
@@ -25,12 +25,18 @@ function flow(options: Record<string, unknown> = {}) {
     allowedPostLoginRedirects: [landing],
     provider: {
       issuer: "https://issuer.example",
-      exchangeAuthorizationCode: async () => undefined,
+      exchangeAuthorizationCode: () => Promise.resolve(undefined),
     },
-    identityMapping: { resolve: async () => undefined },
-    sessionIssuer: { issue: async () => undefined },
+    identityMapping: { resolve: () => Promise.resolve(undefined) },
+    sessionIssuer: { issue: () => Promise.resolve(undefined) },
     ...options,
   });
+}
+
+function stateOf(authorizationUrl: string) {
+  const state = new URL(authorizationUrl).searchParams.get("state");
+  if (state === null) throw new Error("expected state");
+  return state;
 }
 
 describe("OidcFlow start", () => {
@@ -41,7 +47,14 @@ describe("OidcFlow start", () => {
       new Uint8Array(32).fill(2),
       new Uint8Array(32).fill(3),
     ];
-    const oidc = flow({ clock: time, randomBytes: () => generated.shift()! });
+    const oidc = flow({
+      clock: time,
+      randomBytes: () => {
+        const bytes = generated.shift();
+        if (bytes === undefined) throw new Error("expected random test material");
+        return bytes;
+      },
+    });
 
     const started = oidc.start({
       browserCodeChallenge: "a".repeat(43),
@@ -89,6 +102,30 @@ describe("OidcFlow start", () => {
   });
 
   it.each([
+    new Proxy(
+      {},
+      {
+        getPrototypeOf: () => {
+          throw new Error("prototype");
+        },
+      },
+    ),
+    {
+      get browserCodeChallenge() {
+        throw new Error("challenge");
+      },
+      postLoginRedirect: landing,
+    },
+  ])("rejects hostile start input without escaping %#", (input) => {
+    const oidc = flow({ randomBytes: random(1, 2, 3) });
+
+    expect(oidc.start(input as never)).toEqual({ kind: "rejected", reason: "invalid-input" });
+    expect(
+      oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
+    ).toMatchObject({ kind: "started" });
+  });
+
+  it.each([
     { clientId: "" },
     { scopes: ["openid", "has space"] },
     { scopes: [] },
@@ -103,7 +140,7 @@ describe("OidcFlow start", () => {
     {
       provider: {
         issuer: "http://issuer.example",
-        exchangeAuthorizationCode: async () => undefined,
+        exchangeAuthorizationCode: () => Promise.resolve(undefined),
       },
     },
     { provider: { issuer: "https://issuer.example", exchangeAuthorizationCode: undefined } },
@@ -232,19 +269,17 @@ describe("OidcFlow start", () => {
   it.each(["valid", "invalid", "throw"] as const)(
     "lets terminal close win re-entrant %s clock and random callbacks",
     (outcome) => {
-      let oidc: OidcFlow;
       const closeThen = () => {
         oidc.close();
         if (outcome === "throw") throw new Error("entropy");
         return outcome === "valid" ? 1_000 : Number.NaN;
       };
-      oidc = flow({ clock: { now: closeThen }, randomBytes: random(1, 2, 3) });
+      const oidc = flow({ clock: { now: closeThen }, randomBytes: random(1, 2, 3) });
       expect(
         oidc.start({ browserCodeChallenge: "a".repeat(43), postLoginRedirect: landing }),
       ).toEqual({ kind: "rejected", reason: "closed" });
 
-      let randomClosing: OidcFlow;
-      randomClosing = flow({
+      const randomClosing = flow({
         randomBytes: () => {
           randomClosing.close();
           if (outcome === "throw") throw new Error("entropy");
@@ -266,7 +301,9 @@ describe("OidcFlow callback", () => {
       postLoginRedirect: landing,
     });
     if (started.kind !== "started") throw new Error("expected start");
-    return { oidc, state: new URL(started.authorizationUrl).searchParams.get("state")! };
+    const state = new URL(started.authorizationUrl).searchParams.get("state");
+    if (state === null) throw new Error("expected state");
+    return { oidc, state };
   }
 
   it.each([[{ state: "bad", code: "code" }]])(
@@ -280,6 +317,38 @@ describe("OidcFlow callback", () => {
     },
   );
 
+  it("rejects hostile callback input without escaping and keeps a consumed state burned", async () => {
+    const prototypeHostile = startedFlow();
+    await expect(
+      prototypeHostile.oidc.callback(
+        new Proxy(
+          {},
+          {
+            getPrototypeOf: () => {
+              throw new Error("prototype");
+            },
+          },
+        ) as never,
+      ),
+    ).resolves.toEqual({ kind: "rejected", reason: "invalid-input" });
+    await expect(
+      prototypeHostile.oidc.callback({ state: prototypeHostile.state, error: "denied" }),
+    ).resolves.toEqual({ kind: "rejected", reason: "provider-error" });
+
+    const getterHostile = startedFlow();
+    await expect(
+      getterHostile.oidc.callback({
+        state: getterHostile.state,
+        get code() {
+          throw new Error("code");
+        },
+      } as never),
+    ).resolves.toEqual({ kind: "rejected", reason: "invalid-input" });
+    await expect(
+      getterHostile.oidc.callback({ state: getterHostile.state, code: "code" }),
+    ).resolves.toEqual({ kind: "rejected", reason: "not-found" });
+  });
+
   it("consumes state before provider work, then creates a one-time bounded grant", async () => {
     let providerCalls = 0;
     let mappingIdentity: unknown;
@@ -288,22 +357,22 @@ describe("OidcFlow callback", () => {
       clock: time,
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => {
+        exchangeAuthorizationCode: () => {
           providerCalls += 1;
-          return {
+          return Promise.resolve({
             issuer: "https://issuer.example",
             subject: "subject-1",
             claims: { email: "a@b.c" },
-          };
+          });
         },
       },
       identityMapping: {
-        resolve: async (identity: unknown) => {
+        resolve: (identity: unknown) => {
           mappingIdentity = identity;
-          return {
+          return Promise.resolve({
             externalIdentity: identity,
             principal: { id: "principal-1", attributes: { role: "member" } },
-          };
+          });
         },
       },
     });
@@ -337,7 +406,7 @@ describe("OidcFlow callback", () => {
       {
         provider: {
           issuer: "https://issuer.example",
-          exchangeAuthorizationCode: async () => undefined,
+          exchangeAuthorizationCode: (): Promise<undefined> => Promise.resolve(undefined),
         },
       },
       "verification-failed",
@@ -348,7 +417,7 @@ describe("OidcFlow callback", () => {
       {
         provider: {
           issuer: "https://issuer.example",
-          exchangeAuthorizationCode: async () => {
+          exchangeAuthorizationCode: () => {
             throw new Error("provider");
           },
         },
@@ -361,12 +430,13 @@ describe("OidcFlow callback", () => {
       {
         provider: {
           issuer: "https://issuer.example",
-          exchangeAuthorizationCode: async () => ({
-            issuer: "https://issuer.example",
-            subject: "subject",
-          }),
+          exchangeAuthorizationCode: () =>
+            Promise.resolve({
+              issuer: "https://issuer.example",
+              subject: "subject",
+            }),
         },
-        identityMapping: { resolve: async () => undefined },
+        identityMapping: { resolve: (): Promise<undefined> => Promise.resolve(undefined) },
       },
       "mapping-failed",
     ],
@@ -376,13 +446,14 @@ describe("OidcFlow callback", () => {
       {
         provider: {
           issuer: "https://issuer.example",
-          exchangeAuthorizationCode: async () => ({
-            issuer: "https://issuer.example",
-            subject: "subject",
-          }),
+          exchangeAuthorizationCode: () =>
+            Promise.resolve({
+              issuer: "https://issuer.example",
+              subject: "subject",
+            }),
         },
         identityMapping: {
-          resolve: async () => {
+          resolve: () => {
             throw new Error("mapping");
           },
         },
@@ -403,7 +474,7 @@ describe("OidcFlow callback", () => {
     let providerCalls = 0;
     const provider = {
       issuer: "https://issuer.example",
-      exchangeAuthorizationCode: async () => {
+      exchangeAuthorizationCode: () => {
         providerCalls += 1;
         return { issuer: "https://issuer.example", subject: "subject" };
       },
@@ -420,7 +491,11 @@ describe("OidcFlow callback", () => {
 
     const malformed = startedFlow({ provider });
     expect(
-      await malformed.oidc.callback({ state: malformed.state, code: "code", error: "bad" }),
+      await malformed.oidc.callback({
+        state: malformed.state,
+        code: "code",
+        error: "bad",
+      } as unknown as OidcFlowCallbackInput),
     ).toEqual({
       kind: "rejected",
       reason: "invalid-input",
@@ -457,7 +532,7 @@ describe("OidcFlow callback", () => {
     const rejected = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => undefined,
+        exchangeAuthorizationCode: () => Promise.resolve(undefined),
       },
     });
     expect(await rejected.oidc.callback({ state: rejected.state, code: "code" })).toEqual({
@@ -468,10 +543,11 @@ describe("OidcFlow callback", () => {
     const wrongIssuer = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://other.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://other.example",
+            subject: "subject",
+          }),
       },
     });
     expect(await wrongIssuer.oidc.callback({ state: wrongIssuer.state, code: "code" })).toEqual({
@@ -480,16 +556,17 @@ describe("OidcFlow callback", () => {
     });
 
     const manyClaims = Object.fromEntries(
-      Array.from({ length: 33 }, (_, index) => [`claim-${index}`, "x"]),
+      Array.from({ length: 33 }, (_, index) => [`claim-${String(index)}`, "x"]),
     );
     const oversized = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-          claims: manyClaims,
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+            claims: manyClaims,
+          }),
       },
     });
     expect(await oversized.oidc.callback({ state: oversized.state, code: "code" })).toEqual({
@@ -500,12 +577,13 @@ describe("OidcFlow callback", () => {
     const mapping = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+          }),
       },
-      identityMapping: { resolve: async () => undefined },
+      identityMapping: { resolve: () => Promise.resolve(undefined) },
     });
     expect(await mapping.oidc.callback({ state: mapping.state, code: "code" })).toEqual({
       kind: "rejected",
@@ -519,9 +597,15 @@ describe("OidcFlow callback", () => {
       provider: {
         issuer: "https://issuer.example",
         exchangeAuthorizationCode: ({ signal }: { signal: AbortSignal }) =>
-          new Promise((resolve) =>
-            signal.addEventListener("abort", () => resolve(undefined), { once: true }),
-          ),
+          new Promise((resolve) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                resolve(undefined);
+              },
+              { once: true },
+            );
+          }),
       },
     });
     await expect(deadline.oidc.callback({ state: deadline.state, code: "code" })).resolves.toEqual({
@@ -533,9 +617,11 @@ describe("OidcFlow callback", () => {
     const closing = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () =>
+        exchangeAuthorizationCode: () =>
           new Promise((resolve) => {
-            release = () => resolve({ issuer: "https://issuer.example", subject: "subject" });
+            release = () => {
+              resolve({ issuer: "https://issuer.example", subject: "subject" });
+            };
           }),
       },
     });
@@ -551,12 +637,18 @@ describe("OidcFlow callback", () => {
       operationTimeoutMilliseconds: 1,
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+          }),
       },
-      identityMapping: { resolve: async () => new Promise(() => {}) },
+      identityMapping: {
+        resolve: () =>
+          new Promise<void>(() => {
+            void 0;
+          }),
+      },
     });
     await expect(bounded.oidc.callback({ state: bounded.state, code: "code" })).resolves.toEqual({
       kind: "rejected",
@@ -566,7 +658,6 @@ describe("OidcFlow callback", () => {
 
   it("returns closed when a callback clock closes during lookup", async () => {
     let calls = 0;
-    let oidc: OidcFlow;
     const time = {
       now: () => {
         calls += 1;
@@ -574,7 +665,7 @@ describe("OidcFlow callback", () => {
         return 1_000;
       },
     };
-    oidc = flow({ clock: time, randomBytes: random(1, 2, 3) });
+    const oidc = flow({ clock: time, randomBytes: random(1, 2, 3) });
     const started = oidc.start({
       browserCodeChallenge: "a".repeat(43),
       postLoginRedirect: landing,
@@ -582,7 +673,7 @@ describe("OidcFlow callback", () => {
     if (started.kind !== "started") throw new Error("expected start");
     await expect(
       oidc.callback({
-        state: new URL(started.authorizationUrl).searchParams.get("state")!,
+        state: stateOf(started.authorizationUrl),
         code: "code",
       }),
     ).resolves.toEqual({ kind: "rejected", reason: "closed" });
@@ -605,8 +696,12 @@ describe("OidcFlow callback", () => {
       const hostile = startedFlow({
         provider: {
           issuer: "https://issuer.example",
-          exchangeAuthorizationCode: async () =>
-            ({ issuer: "https://issuer.example", subject: "subject", claims }) as never,
+          exchangeAuthorizationCode: () =>
+            Promise.resolve({
+              issuer: "https://issuer.example",
+              subject: "subject",
+              claims,
+            } as never),
         },
       });
       await expect(hostile.oidc.callback({ state: hostile.state, code: "code" })).resolves.toEqual({
@@ -625,17 +720,18 @@ describe("OidcFlow callback", () => {
     const preserved = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-          claims,
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+            claims,
+          }),
       },
       identityMapping: {
-        resolve: async (externalIdentity) => {
+        resolve: (externalIdentity: ExternalIdentity) => {
           expect(Object.hasOwn(externalIdentity.claims ?? {}, "__proto__")).toBe(true);
-          expect(externalIdentity.claims?.["__proto__"]).toBe("literal-claim");
-          return { externalIdentity, principal: { id: "principal" } };
+          expect(externalIdentity.claims?.__proto__).toBe("literal-claim");
+          return Promise.resolve({ externalIdentity, principal: { id: "principal" } });
         },
       },
     });
@@ -648,21 +744,24 @@ describe("OidcFlow callback", () => {
     const hostile = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+          }),
       },
       identityMapping: {
-        resolve: async () =>
-          new Proxy(
-            {},
-            {
-              get: () => {
-                throw new Error("getter");
+        resolve: () =>
+          Promise.resolve(
+            new Proxy(
+              {},
+              {
+                get: () => {
+                  throw new Error("getter");
+                },
               },
-            },
-          ) as never,
+            ) as never,
+          ),
       },
     });
     await expect(hostile.oidc.callback({ state: hostile.state, code: "code" })).resolves.toEqual({
@@ -685,12 +784,13 @@ describe("OidcFlow callback", () => {
     const malformed = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+          }),
       },
-      identityMapping: { resolve: async () => output as never },
+      identityMapping: { resolve: () => Promise.resolve(output as never) },
     });
     await expect(
       malformed.oidc.callback({ state: malformed.state, code: "code" }),
@@ -726,7 +826,9 @@ describe("OidcFlow callback", () => {
         externalIdentity: {
           issuer: "https://issuer.example",
           subject: "subject",
-          claims: Object.fromEntries(Array.from({ length: 33 }, (_, index) => [`c${index}`, "v"])),
+          claims: Object.fromEntries(
+            Array.from({ length: 33 }, (_, index) => [`c${String(index)}`, "v"]),
+          ),
         },
         principal: { id: "principal" },
       },
@@ -798,7 +900,7 @@ describe("OidcFlow callback", () => {
         principal: {
           id: "principal",
           attributes: Object.fromEntries(
-            Array.from({ length: 33 }, (_, index) => [`a${index}`, "v"]),
+            Array.from({ length: 33 }, (_, index) => [`a${String(index)}`, "v"]),
           ),
         },
       },
@@ -821,13 +923,14 @@ describe("OidcFlow callback", () => {
     const malformed = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-          ...(providerClaims === undefined ? {} : { claims: providerClaims }),
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+            ...(providerClaims === undefined ? {} : { claims: providerClaims }),
+          }),
       },
-      identityMapping: { resolve: async () => output as never },
+      identityMapping: { resolve: () => Promise.resolve(output as never) },
     });
     await expect(
       malformed.oidc.callback({ state: malformed.state, code: "code" }),
@@ -865,12 +968,13 @@ describe("OidcFlow callback", () => {
     const stable = startedFlow({
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+          }),
       },
-      identityMapping: { resolve: async () => mapped as never },
+      identityMapping: { resolve: () => Promise.resolve(mapped as never) },
     });
     await expect(
       stable.oidc.callback({ state: stable.state, code: "code" }),
@@ -887,16 +991,18 @@ describe("OidcFlow callback", () => {
       grantTtlMilliseconds: 10,
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+          }),
       },
       identityMapping: {
-        resolve: async (externalIdentity: unknown) => ({
-          externalIdentity,
-          principal: { id: "principal" },
-        }),
+        resolve: (externalIdentity: unknown) =>
+          Promise.resolve({
+            externalIdentity,
+            principal: { id: "principal" },
+          }),
       },
     });
     const start = () => {
@@ -905,7 +1011,7 @@ describe("OidcFlow callback", () => {
         postLoginRedirect: landing,
       });
       if (started.kind !== "started") throw new Error("expected start");
-      return new URL(started.authorizationUrl).searchParams.get("state")!;
+      return stateOf(started.authorizationUrl);
     };
     expect((await oidc.callback({ state: start(), code: "one" })).kind).toBe("granted");
     await expect(oidc.callback({ state: start(), code: "two" })).resolves.toEqual({
@@ -925,22 +1031,25 @@ describe("OidcFlow callback", () => {
       maxGrants: 2,
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+          }),
       },
       identityMapping: {
-        resolve: async (externalIdentity: unknown) => ({
-          externalIdentity,
-          principal: { id: "principal" },
-        }),
+        resolve: (externalIdentity: unknown) =>
+          Promise.resolve({
+            externalIdentity,
+            principal: { id: "principal" },
+          }),
       },
       sessionIssuer: {
-        issue: async () => ({
-          credential: { kind: "cookie", value: "session" },
-          session: { principal: { id: "principal" }, expiresAt: { seconds: 1n, nanos: 0 } },
-        }),
+        issue: () =>
+          Promise.resolve({
+            credential: { kind: "cookie", value: "session" },
+            session: { principal: { id: "principal" }, expiresAt: { seconds: 1n, nanos: 0 } },
+          }),
       },
     });
     const start = () => {
@@ -949,7 +1058,7 @@ describe("OidcFlow callback", () => {
         postLoginRedirect: landing,
       });
       if (started.kind !== "started") throw new Error("expected start");
-      return new URL(started.authorizationUrl).searchParams.get("state")!;
+      return stateOf(started.authorizationUrl);
     };
     const first = await oidc.callback({ state: start(), code: "one" });
     if (first.kind !== "granted") throw new Error("expected grant");
@@ -975,23 +1084,25 @@ describe("OidcFlow exchange", () => {
       randomBytes: random(1, 2, 3, 4),
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+          }),
       },
       identityMapping: {
-        resolve: async (externalIdentity: unknown) => ({
-          externalIdentity,
-          principal: { id: "principal" },
-        }),
+        resolve: (externalIdentity: unknown) =>
+          Promise.resolve({
+            externalIdentity,
+            principal: { id: "principal" },
+          }),
       },
       ...options,
     });
     const started = oidc.start({ browserCodeChallenge: challenge, postLoginRedirect: landing });
     if (started.kind !== "started") throw new Error("expected start");
     const callback = await oidc.callback({
-      state: new URL(started.authorizationUrl).searchParams.get("state")!,
+      state: stateOf(started.authorizationUrl),
       code: "provider-code",
     });
     if (callback.kind !== "granted") throw new Error("expected grant");
@@ -1002,13 +1113,13 @@ describe("OidcFlow exchange", () => {
     let issued = 0;
     const { oidc, grant } = await grantedFlow({
       sessionIssuer: {
-        issue: async (principal: unknown) => {
+        issue: (principal: unknown) => {
           issued += 1;
           expect(principal).toEqual({ id: "principal" });
-          return {
+          return Promise.resolve({
             credential: { kind: "cookie", value: "opaque-session" },
             session: { principal, expiresAt: { seconds: 1n, nanos: 0 } },
-          };
+          });
         },
       },
     });
@@ -1025,10 +1136,127 @@ describe("OidcFlow exchange", () => {
     expect(issued).toBe(1);
   });
 
+  it("snapshots cycling grant and verifier getters before it burns and verifies a grant", async () => {
+    const oidc = flow({
+      randomBytes: random(1, 2, 3, 4, 5, 6, 7, 8),
+      provider: {
+        issuer: "https://issuer.example",
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({ issuer: "https://issuer.example", subject: "subject" }),
+      },
+      identityMapping: {
+        resolve: (externalIdentity: unknown) =>
+          Promise.resolve({ externalIdentity, principal: { id: "principal" } }),
+      },
+      sessionIssuer: {
+        issue: (principal: unknown) =>
+          Promise.resolve({
+            credential: { kind: "cookie", value: "opaque-session" },
+            session: { principal, expiresAt: { seconds: 1n, nanos: 0 } },
+          }),
+      },
+    });
+    const grant = async () => {
+      const started = oidc.start({ browserCodeChallenge: challenge, postLoginRedirect: landing });
+      if (started.kind !== "started") throw new Error("expected start");
+      const callback = await oidc.callback({
+        state: stateOf(started.authorizationUrl),
+        code: "code",
+      });
+      if (callback.kind !== "granted") throw new Error("expected grant");
+      return callback.grant;
+    };
+    const first = await grant();
+    const second = await grant();
+    let grantReads = 0;
+    let verifierReads = 0;
+    const input = {
+      get grant() {
+        grantReads += 1;
+        return grantReads === 1 ? first : second;
+      },
+      get browserCodeVerifier() {
+        verifierReads += 1;
+        return verifierReads === 1 ? verifier : "wrong";
+      },
+    };
+
+    await expect(oidc.exchange(input)).resolves.toMatchObject({ kind: "issued" });
+    expect(grantReads).toBe(1);
+    expect(verifierReads).toBe(1);
+    await expect(oidc.exchange({ grant: first, browserCodeVerifier: verifier })).resolves.toEqual({
+      kind: "rejected",
+    });
+    await expect(
+      oidc.exchange({ grant: second, browserCodeVerifier: verifier }),
+    ).resolves.toMatchObject({
+      kind: "issued",
+    });
+  });
+
+  it("rejects hostile exchange input without escaping or revealing grant state", async () => {
+    const prototypeHostile = await grantedFlow({
+      sessionIssuer: {
+        issue: () =>
+          Promise.resolve({
+            credential: { kind: "cookie", value: "opaque-session" },
+            session: { principal: { id: "principal" }, expiresAt: { seconds: 1n, nanos: 0 } },
+          }),
+      },
+    });
+    await expect(
+      prototypeHostile.oidc.exchange(
+        new Proxy(
+          {},
+          {
+            getPrototypeOf: () => {
+              throw new Error("prototype");
+            },
+          },
+        ) as never,
+      ),
+    ).resolves.toEqual({ kind: "rejected" });
+    await expect(
+      prototypeHostile.oidc.exchange({
+        grant: prototypeHostile.grant,
+        browserCodeVerifier: verifier,
+      }),
+    ).resolves.toMatchObject({ kind: "issued" });
+
+    const getterHostile = await grantedFlow({
+      sessionIssuer: {
+        issue: () =>
+          Promise.resolve({
+            credential: { kind: "cookie", value: "opaque-session" },
+            session: { principal: { id: "principal" }, expiresAt: { seconds: 1n, nanos: 0 } },
+          }),
+      },
+    });
+    await expect(
+      getterHostile.oidc.exchange({
+        grant: getterHostile.grant,
+        get browserCodeVerifier() {
+          throw new Error("verifier");
+        },
+      } as never),
+    ).resolves.toEqual({ kind: "rejected" });
+    await expect(
+      getterHostile.oidc.exchange({
+        grant: getterHostile.grant,
+        browserCodeVerifier: verifier,
+      }),
+    ).resolves.toEqual({ kind: "rejected" });
+  });
+
   it("burns grants before malformed or incorrect PKCE proof and session failures", async () => {
     let issued = 0;
     const wrong = await grantedFlow({
-      sessionIssuer: { issue: async () => ((issued += 1), undefined) },
+      sessionIssuer: {
+        issue: () => {
+          issued += 1;
+          return Promise.resolve(undefined);
+        },
+      },
     });
     expect(await wrong.oidc.exchange({ grant: wrong.grant, browserCodeVerifier: "wrong" })).toEqual(
       {
@@ -1043,7 +1271,12 @@ describe("OidcFlow exchange", () => {
     expect(issued).toBe(0);
 
     const failing = await grantedFlow({
-      sessionIssuer: { issue: async () => ((issued += 1), undefined) },
+      sessionIssuer: {
+        issue: () => {
+          issued += 1;
+          return Promise.resolve(undefined);
+        },
+      },
     });
     expect(
       await failing.oidc.exchange({ grant: failing.grant, browserCodeVerifier: verifier }),
@@ -1061,7 +1294,12 @@ describe("OidcFlow exchange", () => {
   it("bounds session issuer work with the configured deadline", async () => {
     const bounded = await grantedFlow({
       operationTimeoutMilliseconds: 1,
-      sessionIssuer: { issue: async () => new Promise(() => {}) },
+      sessionIssuer: {
+        issue: () =>
+          new Promise<void>(() => {
+            void 0;
+          }),
+      },
     });
     await expect(
       bounded.oidc.exchange({ grant: bounded.grant, browserCodeVerifier: verifier }),
@@ -1074,7 +1312,7 @@ describe("OidcFlow exchange", () => {
       clock: time,
       grantTtlMilliseconds: 1,
       sessionIssuer: {
-        issue: async () => {
+        issue: () => {
           throw new Error("must not issue");
         },
       },
@@ -1088,7 +1326,10 @@ describe("OidcFlow exchange", () => {
 
     const closing = await grantedFlow({
       sessionIssuer: {
-        issue: async () => new Promise(() => {}),
+        issue: () =>
+          new Promise<void>(() => {
+            void 0;
+          }),
       },
     });
     const pending = closing.oidc.exchange({ grant: closing.grant, browserCodeVerifier: verifier });
@@ -1100,7 +1341,7 @@ describe("OidcFlow exchange", () => {
   it("rejects malformed issuer sessions without throwing", async () => {
     const malformed = await grantedFlow({
       sessionIssuer: {
-        issue: async () => ({ credential: { kind: "cookie", value: "x" } }) as never,
+        issue: () => Promise.resolve({ credential: { kind: "cookie", value: "x" } } as never),
       },
     });
     await expect(
@@ -1111,15 +1352,17 @@ describe("OidcFlow exchange", () => {
   it("rejects throwing session getters and proxies without escaping", async () => {
     const hostile = await grantedFlow({
       sessionIssuer: {
-        issue: async () =>
-          new Proxy(
-            {},
-            {
-              get: () => {
-                throw new Error("getter");
+        issue: () =>
+          Promise.resolve(
+            new Proxy(
+              {},
+              {
+                get: () => {
+                  throw new Error("getter");
+                },
               },
-            },
-          ) as never,
+            ) as never,
+          ),
       },
     });
     await expect(
@@ -1132,11 +1375,12 @@ describe("OidcFlow exchange", () => {
       randomBytes: random(1, 2, 3),
       provider: {
         issuer: "https://issuer.example",
-        exchangeAuthorizationCode: async () => ({
-          issuer: "https://issuer.example",
-          subject: "subject",
-          claims: { access_token: "secret" },
-        }),
+        exchangeAuthorizationCode: () =>
+          Promise.resolve({
+            issuer: "https://issuer.example",
+            subject: "subject",
+            claims: { access_token: "secret" },
+          }),
       },
     });
     const tokenStarted = tokenOidc.start({
@@ -1146,7 +1390,7 @@ describe("OidcFlow exchange", () => {
     if (tokenStarted.kind !== "started") throw new Error("expected start");
     await expect(
       tokenOidc.callback({
-        state: new URL(tokenStarted.authorizationUrl).searchParams.get("state")!,
+        state: stateOf(tokenStarted.authorizationUrl),
         code: "code",
       }),
     ).resolves.toEqual({
@@ -1156,10 +1400,11 @@ describe("OidcFlow exchange", () => {
 
     const nanos = await grantedFlow({
       sessionIssuer: {
-        issue: async () => ({
-          credential: { kind: "cookie", value: "x" },
-          session: { principal: { id: "principal" }, expiresAt: { seconds: 1n, nanos: -1 } },
-        }),
+        issue: () =>
+          Promise.resolve({
+            credential: { kind: "cookie", value: "x" },
+            session: { principal: { id: "principal" }, expiresAt: { seconds: 1n, nanos: -1 } },
+          }),
       },
     });
     await expect(
@@ -1265,7 +1510,7 @@ describe("OidcFlow exchange", () => {
     },
   ])("rejects session issuer output with $name", async ({ issue }) => {
     const malformed = await grantedFlow({
-      sessionIssuer: { issue: async () => issue as never },
+      sessionIssuer: { issue: () => Promise.resolve(issue as never) },
     });
     await expect(
       malformed.oidc.exchange({ grant: malformed.grant, browserCodeVerifier: verifier }),

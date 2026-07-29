@@ -75,8 +75,14 @@ export class OidcFlow {
     this.#scopes = validScopes(options.scopes);
     this.#allowedPostLoginRedirects = validRedirects(options.allowedPostLoginRedirects);
     validateProvider(options.provider);
-    validateFunction(options.identityMapping.resolve, "identityMapping.resolve");
-    validateFunction(options.sessionIssuer.issue, "sessionIssuer.issue");
+    validateFunction(
+      (options.identityMapping as unknown as Record<string, unknown>).resolve,
+      "identityMapping.resolve",
+    );
+    validateFunction(
+      (options.sessionIssuer as unknown as Record<string, unknown>).issue,
+      "sessionIssuer.issue",
+    );
     this.#provider = options.provider;
     this.#providerIssuer = options.provider.issuer;
     this.#identityMapping = options.identityMapping;
@@ -112,8 +118,10 @@ export class OidcFlow {
 
   /** Starts one finite authorization-code transaction without exposing any application credential. */
   start(input: OidcFlowStartInput): OidcFlowStartResult {
-    if (this.#closed) return rejected("closed");
-    if (!validStartInput(input, this.#allowedPostLoginRedirects)) return rejected("invalid-input");
+    if (this.#isClosed()) return rejected("closed");
+    const request = snapshotStartInput(input);
+    if (request === undefined || !validStartInput(request, this.#allowedPostLoginRedirects))
+      return rejected("invalid-input");
     const now = this.#now();
     if (now === undefined) return rejected("closed");
     if (this.#closed) return rejected("closed");
@@ -123,14 +131,14 @@ export class OidcFlow {
     for (let attempt = 0; attempt < this.#collisionAttempts; attempt += 1) {
       const material = this.#transactionMaterial();
       if (material === undefined) {
-        if (this.#closed) return rejected("closed");
+        if (this.#isClosed()) return rejected("closed");
         continue;
       }
       try {
         const current = this.#now();
         if (current === undefined) return rejected("closed");
         this.#sweepExpired(current);
-        if (this.#closed) return rejected("closed");
+        if (this.#isClosed()) return rejected("closed");
         if (this.#transactions.size >= this.#maxTransactions) return rejected("capacity-exceeded");
         if (this.#transactions.has(material.state) || this.#transactionMaterialInUse(material))
           continue;
@@ -143,14 +151,14 @@ export class OidcFlow {
           material.state,
           material.nonce,
           Buffer.from(material.providerVerifierBytes).toString("base64url"),
-          input.browserCodeChallenge,
+          request.browserCodeChallenge,
         );
         if (authorizationUrl === undefined) return rejected("invalid-input");
         this.#transactions.set(material.state, {
           nonce: material.nonce,
           providerVerifier: Uint8Array.from(material.providerVerifierBytes),
-          browserCodeChallenge: input.browserCodeChallenge,
-          postLoginRedirect: input.postLoginRedirect,
+          browserCodeChallenge: request.browserCodeChallenge,
+          postLoginRedirect: request.postLoginRedirect,
           expiresAt: transactionExpiry,
         });
         return Object.freeze({ kind: "started", authorizationUrl, expiresAt: transactionExpiry });
@@ -166,15 +174,17 @@ export class OidcFlow {
    * A rejected callback never restores its transaction.
    */
   async callback(input: OidcFlowCallbackInput): Promise<OidcFlowCallbackResult> {
-    if (this.#closed) return callbackRejected("closed");
-    if (!validCallbackState(input)) return callbackRejected("invalid-input");
+    if (this.#isClosed()) return callbackRejected("closed");
+    const state = snapshotCallbackState(input);
+    if (state === undefined) return callbackRejected("invalid-input");
     const now = this.#now();
     if (now === undefined) return callbackRejected("closed");
-    if (this.#closed) return callbackRejected("closed");
-    const transaction = this.#transactions.get(input.state);
+    if (this.#isClosed()) return callbackRejected("closed");
+    const transaction = this.#transactions.get(state);
     if (transaction === undefined) return callbackRejected("not-found");
-    this.#transactions.delete(input.state);
-    if (!validCallbackInput(input)) {
+    this.#transactions.delete(state);
+    const callback = snapshotCallbackInput(input);
+    if (callback === undefined || !validCallbackInput(callback)) {
       transaction.providerVerifier.fill(0);
       return callbackRejected("invalid-input");
     }
@@ -182,11 +192,11 @@ export class OidcFlow {
       transaction.providerVerifier.fill(0);
       return callbackRejected("expired");
     }
-    if (input.error !== undefined) {
+    if (callback.error !== undefined) {
       transaction.providerVerifier.fill(0);
       return callbackRejected("provider-error");
     }
-    if (input.responseIssuer !== undefined && input.responseIssuer !== this.#providerIssuer) {
+    if (callback.responseIssuer !== undefined && callback.responseIssuer !== this.#providerIssuer) {
       transaction.providerVerifier.fill(0);
       return callbackRejected("issuer-mismatch");
     }
@@ -195,7 +205,7 @@ export class OidcFlow {
     transaction.providerVerifier.fill(0);
     const identity = await this.#runBounded((signal) =>
       this.#provider.exchangeAuthorizationCode({
-        code: input.code!,
+        code: callback.code,
         clientId: this.#clientId,
         callbackUri: this.#callbackUri,
         providerCodeVerifier: providerVerifier,
@@ -203,7 +213,7 @@ export class OidcFlow {
         signal,
       }),
     );
-    if (this.#closed) return callbackRejected("closed");
+    if (this.#isClosed()) return callbackRejected("closed");
     let verified: ExternalIdentity | undefined;
     try {
       verified = validExternalIdentity(identity, this.#providerIssuer);
@@ -214,14 +224,14 @@ export class OidcFlow {
     const resolved = await this.#runBounded((signal) =>
       this.#identityMapping.resolve(verified, signal),
     );
-    if (this.#closed) return callbackRejected("closed");
+    if (this.#isClosed()) return callbackRejected("closed");
     const mapped = snapshotResolvedIdentity(resolved, verified);
     if (mapped === undefined) return callbackRejected("mapping-failed");
 
     const current = this.#now();
     if (current === undefined) return callbackRejected("closed");
     this.#sweepGrants(current);
-    if (this.#closed) return callbackRejected("closed");
+    if (this.#isClosed()) return callbackRejected("closed");
     if (this.#grants.size >= this.#maxGrants) return callbackRejected("capacity-exceeded");
     const expiry = expiryAt(current, this.#grantTtlMilliseconds);
     if (expiry === undefined) {
@@ -229,9 +239,10 @@ export class OidcFlow {
       return callbackRejected("clock-failure");
     }
     const grant = this.#nextGrant();
-    if (grant === undefined) return callbackRejected(this.#closed ? "closed" : "entropy-exhausted");
-    if (this.#closed || this.#grants.size >= this.#maxGrants || this.#grants.has(grant))
-      return callbackRejected(this.#closed ? "closed" : "entropy-exhausted");
+    if (grant === undefined)
+      return callbackRejected(this.#isClosed() ? "closed" : "entropy-exhausted");
+    if (this.#isClosed() || this.#grants.size >= this.#maxGrants || this.#grants.has(grant))
+      return callbackRejected(this.#isClosed() ? "closed" : "entropy-exhausted");
     this.#grants.set(grant, {
       identity: mapped,
       browserCodeChallenge: transaction.browserCodeChallenge,
@@ -251,21 +262,28 @@ export class OidcFlow {
    * All failures deliberately have the same result to avoid grant-state enumeration.
    */
   async exchange(input: OidcFlowExchangeInput): Promise<OidcFlowExchangeResult> {
-    if (this.#closed || input === null || typeof input !== "object" || !validGrant(input.grant))
+    const grantRequest = snapshotGrantExchangeInput(input);
+    if (this.#isClosed() || grantRequest === undefined || !validGrant(grantRequest.grant))
       return exchangeRejected();
     const now = this.#now();
     if (now === undefined) return exchangeRejected();
-    const grant = this.#grants.get(input.grant);
+    const grant = this.#grants.get(grantRequest.grant);
     if (grant === undefined) return exchangeRejected();
-    this.#grants.delete(input.grant);
-    if (now >= grant.expiresAt || !validExchangeInput(input)) return exchangeRejected();
-    if (!constantTimeEquals(sha256Base64Url(input.browserCodeVerifier), grant.browserCodeChallenge))
+    this.#grants.delete(grantRequest.grant);
+    const browserCodeVerifier = snapshotBrowserCodeVerifier(input);
+    if (
+      now >= grant.expiresAt ||
+      browserCodeVerifier === undefined ||
+      !validBrowserCodeVerifier(browserCodeVerifier)
+    )
+      return exchangeRejected();
+    if (!constantTimeEquals(sha256Base64Url(browserCodeVerifier), grant.browserCodeChallenge))
       return exchangeRejected();
     const issued = await this.#runBounded((signal) =>
       this.#sessionIssuer.issue(grant.identity.principal, signal),
     );
     const safeIssue = snapshotSessionIssue(issued);
-    if (this.#closed || safeIssue === undefined) return exchangeRejected();
+    if (this.#isClosed() || safeIssue === undefined) return exchangeRejected();
     return Object.freeze({
       kind: "issued",
       credential: safeIssue.credential,
@@ -279,8 +297,14 @@ export class OidcFlow {
     this.#closed = true;
     this.#clearTransactions();
     this.#grants.clear();
-    this.#callbacks.forEach((controller) => controller.abort());
+    this.#callbacks.forEach((controller) => {
+      controller.abort();
+    });
     this.#callbacks.clear();
+  }
+
+  #isClosed(): boolean {
+    return this.#closed;
   }
 
   #authorizationUrl(
@@ -339,9 +363,15 @@ export class OidcFlow {
     this.#callbacks.add(controller);
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const aborted = new Promise<undefined>((resolve) =>
-        controller.signal.addEventListener("abort", () => resolve(undefined), { once: true }),
-      );
+      const aborted = new Promise<undefined>((resolve) => {
+        controller.signal.addEventListener(
+          "abort",
+          () => {
+            resolve(undefined);
+          },
+          { once: true },
+        );
+      });
       const timeout = new Promise<undefined>((resolve) => {
         timer = setTimeout(() => {
           controller.abort();
@@ -421,7 +451,9 @@ export class OidcFlow {
     this.#closed = true;
     this.#clearTransactions();
     this.#grants.clear();
-    this.#callbacks.forEach((controller) => controller.abort());
+    this.#callbacks.forEach((controller) => {
+      controller.abort();
+    });
     this.#callbacks.clear();
   }
 }
@@ -492,7 +524,7 @@ function parseUrl(value: string, name: string): URL {
   }
 }
 
-function validScopes(scopes: readonly string[]): readonly string[] {
+function validScopes(scopes: unknown): readonly string[] {
   if (!Array.isArray(scopes) || scopes.length === 0 || scopes.length > 64)
     throw new TypeError("scopes must be a non-empty bounded list");
   const copy = scopes.map((scope) => {
@@ -505,10 +537,12 @@ function validScopes(scopes: readonly string[]): readonly string[] {
   return Object.freeze(copy);
 }
 
-function validRedirects(redirects: readonly string[]): ReadonlySet<string> {
+function validRedirects(redirects: unknown): ReadonlySet<string> {
   if (!Array.isArray(redirects) || redirects.length === 0 || redirects.length > 1_000)
     throw new TypeError("allowedPostLoginRedirects must be a non-empty bounded list");
   const copy = redirects.map((redirect) => {
+    if (typeof redirect !== "string")
+      throw new TypeError("allowedPostLoginRedirects entries must be strings");
     const url = strictHttpsUrl(redirect, "allowedPostLoginRedirects entry");
     return url.toString();
   });
@@ -517,8 +551,10 @@ function validRedirects(redirects: readonly string[]): ReadonlySet<string> {
   return new Set(copy);
 }
 
-function validStartInput(input: OidcFlowStartInput, redirects: ReadonlySet<string>): boolean {
-  if (input === null || typeof input !== "object") return false;
+function validStartInput(
+  input: { readonly browserCodeChallenge: unknown; readonly postLoginRedirect: unknown },
+  redirects: ReadonlySet<string>,
+): input is OidcFlowStartInput {
   if (
     typeof input.browserCodeChallenge !== "string" ||
     !BASE64URL_32_BYTES.test(input.browserCodeChallenge)
@@ -533,14 +569,62 @@ function validStartInput(input: OidcFlowStartInput, redirects: ReadonlySet<strin
   }
 }
 
-function validCallbackState(input: OidcFlowCallbackInput): input is OidcFlowCallbackInput {
-  if (input === null || typeof input !== "object") return false;
-  return typeof input.state === "string" && BASE64URL_32_BYTES.test(input.state);
+function snapshotStartInput(
+  input: unknown,
+): { readonly browserCodeChallenge: unknown; readonly postLoginRedirect: unknown } | undefined {
+  try {
+    if (!plainRecord(input)) return undefined;
+    return Object.freeze({
+      browserCodeChallenge: input.browserCodeChallenge,
+      postLoginRedirect: input.postLoginRedirect,
+    });
+  } catch {
+    return undefined;
+  }
 }
 
-function validCallbackInput(
-  input: OidcFlowCallbackInput,
-): input is OidcFlowCallbackInput & { code: string } {
+function snapshotCallbackState(input: unknown): string | undefined {
+  try {
+    if (!plainRecord(input)) return undefined;
+    const state = input.state;
+    return validGrant(state) ? state : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+interface CallbackInputSnapshot {
+  readonly code: unknown;
+  readonly error: unknown;
+  readonly responseIssuer: unknown;
+}
+
+type ValidCallbackInputSnapshot =
+  | {
+      readonly code: string;
+      readonly error: undefined;
+      readonly responseIssuer: string | undefined;
+    }
+  | {
+      readonly code: undefined;
+      readonly error: string;
+      readonly responseIssuer: string | undefined;
+    };
+
+function snapshotCallbackInput(input: unknown): CallbackInputSnapshot | undefined {
+  try {
+    if (!plainRecord(input)) return undefined;
+    return Object.freeze({
+      code: input.code,
+      error: input.error,
+      responseIssuer: input.responseIssuer,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function validCallbackInput(input: CallbackInputSnapshot): input is ValidCallbackInputSnapshot {
   const codeValid = typeof input.code === "string" && boundedNonEmpty(input.code);
   const errorValid = typeof input.error === "string" && boundedNonEmpty(input.error);
   if (codeValid === errorValid) return false;
@@ -556,16 +640,29 @@ function validGrant(value: unknown): value is string {
   return typeof value === "string" && BASE64URL_32_BYTES.test(value);
 }
 
-function validExchangeInput(input: OidcFlowExchangeInput): boolean {
-  return (
-    input !== null && typeof input === "object" && RFC7636_VERIFIER.test(input.browserCodeVerifier)
-  );
+function snapshotGrantExchangeInput(input: unknown): { readonly grant: unknown } | undefined {
+  try {
+    if (!plainRecord(input)) return undefined;
+    return Object.freeze({ grant: input.grant });
+  } catch {
+    return undefined;
+  }
 }
 
-function validExternalIdentity(
-  identity: ExternalIdentity | undefined,
-  issuer: string,
-): ExternalIdentity | undefined {
+function snapshotBrowserCodeVerifier(input: unknown): unknown {
+  try {
+    if (!plainRecord(input)) return undefined;
+    return input.browserCodeVerifier;
+  } catch {
+    return undefined;
+  }
+}
+
+function validBrowserCodeVerifier(value: unknown): value is string {
+  return typeof value === "string" && RFC7636_VERIFIER.test(value);
+}
+
+function validExternalIdentity(identity: unknown, issuer: string): ExternalIdentity | undefined {
   try {
     if (!plainRecord(identity)) return undefined;
     const actualIssuer = identity.issuer;
@@ -585,7 +682,7 @@ function validExternalIdentity(
 }
 
 function snapshotResolvedIdentity(
-  identity: ResolvedApplicationIdentity | undefined,
+  identity: unknown,
   expected: ExternalIdentity,
 ): ResolvedApplicationIdentity | undefined {
   try {
@@ -596,8 +693,9 @@ function snapshotResolvedIdentity(
       Array.isArray(identity)
     )
       return undefined;
-    const externalIdentity = identity.externalIdentity;
-    const principal = identity.principal;
+    const candidate = identity as ResolvedApplicationIdentity;
+    const externalIdentity = candidate.externalIdentity;
+    const principal = candidate.principal;
     if (!plainRecord(externalIdentity) || !plainRecord(principal)) return undefined;
     const issuer = externalIdentity.issuer;
     const subject = externalIdentity.subject;
@@ -659,10 +757,11 @@ function copyBoundedRecord(
   return Object.freeze(copy);
 }
 
-function validPrincipal(principal: AuthenticatedPrincipal): boolean {
-  if (principal === null || typeof principal !== "object" || !boundedNonEmpty(principal.id))
+function validPrincipal(principal: unknown): principal is AuthenticatedPrincipal {
+  const candidate = principal as AuthenticatedPrincipal;
+  if (principal === null || typeof principal !== "object" || !boundedNonEmpty(candidate.id))
     return false;
-  const attributes = principal.attributes;
+  const attributes = candidate.attributes;
   if (attributes === undefined) return true;
   let characters = 0;
   const entries = Object.entries(attributes);
@@ -674,35 +773,31 @@ function validPrincipal(principal: AuthenticatedPrincipal): boolean {
   });
 }
 
-function validSessionIssue(
-  issue: ApplicationSessionIssue | undefined,
-): issue is ApplicationSessionIssue {
-  if (issue === undefined || issue === null || typeof issue !== "object") return false;
+function validSessionIssue(issue: unknown): issue is ApplicationSessionIssue {
+  if (!plainRecord(issue)) return false;
   const credential = issue.credential;
   const session = issue.session;
+  if (!plainRecord(credential) || !plainRecord(session)) return false;
   return (
-    credential !== null &&
-    typeof credential === "object" &&
     (credential.kind === "bearer" || credential.kind === "cookie") &&
     boundedNonEmpty(credential.value) &&
-    session !== null &&
-    typeof session === "object" &&
     validPrincipal(session.principal) &&
     validSessionTimestamp(session.expiresAt)
   );
 }
 
 function snapshotSessionIssue(
-  issue: ApplicationSessionIssue | undefined,
+  issue: unknown,
 ): { readonly credential: RequestCredential; readonly session: ResolvedSession } | undefined {
   try {
-    const credential = issue?.credential;
-    const session = issue?.session;
+    const rawIssue = issue as ApplicationSessionIssue | undefined;
+    const credential = rawIssue?.credential;
+    const session = rawIssue?.session;
     const principal = session?.principal;
     const expiry = session?.expiresAt;
     const attributes = principal?.attributes;
     if (attributes !== undefined && !plainRecord(attributes)) return undefined;
-    const candidate = {
+    const snapshot = {
       credential:
         credential === undefined ? undefined : { kind: credential.kind, value: credential.value },
       session:
@@ -716,23 +811,23 @@ function snapshotSessionIssue(
               expiresAt: { seconds: expiry.seconds, nanos: expiry.nanos },
             },
     };
-    if (!validSessionIssue(candidate as ApplicationSessionIssue)) return undefined;
+    if (!validSessionIssue(snapshot)) return undefined;
     return Object.freeze({
-      credential: Object.freeze(candidate.credential!),
-      session: copyResolvedSession(candidate.session! as ResolvedSession),
+      credential: Object.freeze(snapshot.credential),
+      session: copyResolvedSession(snapshot.session),
     });
   } catch {
     return undefined;
   }
 }
 
-function validSessionTimestamp(value: Timestamp): boolean {
+function validSessionTimestamp(value: unknown): value is Timestamp {
+  if (!plainRecord(value)) return false;
   return (
-    value !== null &&
-    typeof value === "object" &&
     typeof value.seconds === "bigint" &&
     value.seconds >= -62_135_596_800n &&
     value.seconds <= 253_402_300_799n &&
+    typeof value.nanos === "number" &&
     Number.isSafeInteger(value.nanos) &&
     value.nanos >= 0 &&
     value.nanos < 1_000_000_000
@@ -758,9 +853,9 @@ function boundedNonEmpty(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 4_096;
 }
 
-function plainRecord(value: unknown): value is Readonly<Record<string, string>> {
+function plainRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
+  const prototype = Reflect.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }
 
@@ -783,9 +878,9 @@ function nonEmpty(value: string, name: string): string {
   return value;
 }
 
-function validateProvider(provider: OidcVerifiedIdentityProvider): void {
-  if (provider === null || typeof provider !== "object")
-    throw new TypeError("provider is required");
+function validateProvider(provider: unknown): asserts provider is OidcVerifiedIdentityProvider {
+  if (!plainRecord(provider)) throw new TypeError("provider is required");
+  if (typeof provider.issuer !== "string") throw new TypeError("provider.issuer is required");
   strictHttpsUrl(provider.issuer, "provider.issuer");
   validateFunction(provider.exchangeAuthorizationCode, "provider.exchangeAuthorizationCode");
 }

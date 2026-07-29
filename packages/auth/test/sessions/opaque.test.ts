@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { OpaqueSessionCookies, OpaqueSessions } from "../../src/index.js";
+import {
+  OpaqueSessionCookies,
+  OpaqueSessions,
+  type AuthenticatedPrincipal,
+} from "../../src/index.js";
 
 function clock(start = 1_000) {
   let now = start;
@@ -166,10 +170,69 @@ describe("OpaqueSessions", () => {
     });
   });
 
+  it("fails closed when the second create clock read throws", async () => {
+    let reads = 0;
+    const sessions = new OpaqueSessions({
+      clock: {
+        now: () => {
+          reads += 1;
+          if (reads === 4) throw new Error("second create read failed");
+          return 1_000;
+        },
+      },
+      randomBytes: random(9, 10),
+    });
+
+    const created = await sessions.create({ id: "principal" });
+    if (created.kind !== "created") throw new Error("expected a created session");
+    expect(await sessions.create({ id: "clock-failure" })).toEqual({
+      kind: "rejected",
+      reason: "clock-failure",
+    });
+    expect(await sessions.resolve(created.credential)).toBeUndefined();
+    expect(await sessions.rotate(created.credential)).toEqual({
+      kind: "rejected",
+      reason: "closed",
+    });
+    expect(await sessions.create({ id: "after-clock-failure" })).toEqual({
+      kind: "rejected",
+      reason: "closed",
+    });
+  });
+
+  it("fails closed when a maximum Timestamp clock plus TTL exceeds its range", async () => {
+    let reads = 0;
+    const sessions = new OpaqueSessions({
+      clock: {
+        now: () => {
+          reads += 1;
+          return reads <= 2 ? 253_402_300_799_997 : 253_402_300_799_998;
+        },
+      },
+      randomBytes: random(11, 12),
+      ttlMilliseconds: 2,
+    });
+
+    const created = await sessions.create({ id: "principal" });
+    if (created.kind !== "created") throw new Error("expected a created session");
+    expect(await sessions.create({ id: "clock-failure" })).toEqual({
+      kind: "rejected",
+      reason: "clock-failure",
+    });
+    expect(await sessions.resolve(created.credential)).toBeUndefined();
+    expect(await sessions.rotate(created.credential)).toEqual({
+      kind: "rejected",
+      reason: "closed",
+    });
+    expect(await sessions.create({ id: "after-clock-failure" })).toEqual({
+      kind: "rejected",
+      reason: "closed",
+    });
+  });
+
   it("revalidates create and rotate state after reentrant randomness", async () => {
-    let sessions: OpaqueSessions;
     let calls = 0;
-    sessions = new OpaqueSessions({
+    const sessions: OpaqueSessions = new OpaqueSessions({
       maxSessions: 1,
       randomBytes: () => {
         calls += 1;
@@ -182,31 +245,43 @@ describe("OpaqueSessions", () => {
       reason: "capacity-exceeded",
     });
 
-    let rotating: OpaqueSessions;
     let rotationCalls = 0;
-    let credential: { readonly kind: "cookie"; readonly value: string } | undefined;
-    rotating = new OpaqueSessions({
+    const rotating: OpaqueSessions = new OpaqueSessions({
       randomBytes: () => {
         rotationCalls += 1;
-        if (rotationCalls === 2 && credential !== undefined) void rotating.logout(credential);
+        if (rotationCalls === 2) void rotating.logout(credential);
         return new Uint8Array(32).fill(rotationCalls);
       },
     });
     const created = await rotating.create({ id: "principal" });
     if (created.kind !== "created") throw new Error("expected a created session");
-    credential = created.credential;
+    const credential = created.credential;
     expect(await rotating.rotate(created.credential)).toEqual({
       kind: "rejected",
       reason: "not-found",
     });
   });
 
+  it("does not insert a copied record when a reentrant principal getter closes the store", async () => {
+    const sessions = new OpaqueSessions({ randomBytes: random(15) });
+    const principal: AuthenticatedPrincipal = {
+      get id(): string {
+        void sessions.close();
+        return "principal";
+      },
+    };
+
+    await expect(sessions.create(principal)).resolves.toEqual({
+      kind: "rejected",
+      reason: "closed",
+    });
+  });
+
   it("rechecks capacity and expiry when random callbacks advance the clock", async () => {
     const time = clock();
-    let creating: OpaqueSessions;
     let calls = 0;
     let nested: ReturnType<OpaqueSessions["create"]> | undefined;
-    creating = new OpaqueSessions({
+    const creating: OpaqueSessions = new OpaqueSessions({
       clock: time,
       maxSessions: 1,
       ttlMilliseconds: 1,
@@ -234,9 +309,8 @@ describe("OpaqueSessions", () => {
     });
 
     const rotationTime = clock();
-    let rotating: OpaqueSessions;
     let rotationCalls = 0;
-    rotating = new OpaqueSessions({
+    const rotating: OpaqueSessions = new OpaqueSessions({
       clock: rotationTime,
       ttlMilliseconds: 1,
       randomBytes: () => {
@@ -255,8 +329,7 @@ describe("OpaqueSessions", () => {
   });
 
   it("rejects create and rotation after reentrant randomness closes the terminal store", async () => {
-    let creating: OpaqueSessions;
-    creating = new OpaqueSessions({
+    const creating: OpaqueSessions = new OpaqueSessions({
       randomBytes: () => {
         void creating.close();
         return new Uint8Array(32).fill(11);
@@ -268,9 +341,8 @@ describe("OpaqueSessions", () => {
       reason: "closed",
     });
 
-    let rotating: OpaqueSessions;
     let calls = 0;
-    rotating = new OpaqueSessions({
+    const rotating: OpaqueSessions = new OpaqueSessions({
       randomBytes: () => {
         calls += 1;
         if (calls === 2) void rotating.close();

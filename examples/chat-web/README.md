@@ -5,6 +5,9 @@ fixture. It composes the public `@spine-event-engine/client-react` hooks and
 the application-owned `ClientRequest`; it does not replace the hooks, cache
 entities, or model chat messages as events.
 
+The complete browser/authentication extension contract and its limitations are
+in the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+
 The hosting application owns sign-in and creates a fresh `ClientRequest` only
 after it has established its browser session. The supplied session object is a
 provider-neutral UI boundary: actor data is informational and is never a

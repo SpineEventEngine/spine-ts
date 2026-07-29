@@ -16,7 +16,9 @@ export const Client: Readonly<{
   connectTo(baseUrl: string, options: ClientOptions = {}): WebClient {
     const sessions = new Http2SessionManager(baseUrl);
     return WebClient.usingTransport(
-      source(createGrpcTransport({ baseUrl, sessionManager: sessions }), () => sessions.abort()),
+      source(createGrpcTransport({ baseUrl, sessionManager: sessions }), () => {
+        sessions.abort();
+      }),
       options,
     );
   },
@@ -27,8 +29,8 @@ export const Client: Readonly<{
   },
 });
 
-function source(transport: Transport, close?: () => void): ClientTransport {
-  return close === undefined
+function source(transport: Transport, onClose?: () => void): ClientTransport {
+  return onClose === undefined
     ? { transport, createRequestId: randomUUID }
-    : { transport, createRequestId: randomUUID, close };
+    : { transport, createRequestId: randomUUID, close: onClose };
 }

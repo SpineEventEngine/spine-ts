@@ -2,6 +2,9 @@
 
 Node transport factory and descriptor-backed Entity query foundations for Spine.
 
+Browser/gateway behavior is documented in the
+[browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+
 `Client.connectTo(url)` supplies a Node HTTP/2 transport to the shared
 `@spine-event-engine/client-web` kernel and owns that session. `Client.usingTransport(transport)`
 uses a caller-owned transport. Node is responsible only for that native

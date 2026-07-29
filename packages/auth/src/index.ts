@@ -1,5 +1,5 @@
-import { create, fromBinary, type Message } from "@bufbuild/protobuf";
-import { unpackAnyUsing, type TypeRegistryLookup } from "@spine-event-engine/core";
+import type { Message } from "@bufbuild/protobuf";
+import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type {
   ActorContext,
   Command,
@@ -8,12 +8,7 @@ import type {
   UserId,
   ZoneId,
 } from "@spine-event-engine/proto";
-import { ActorContextSchema, CommandSchema } from "@spine-event-engine/proto";
 import {
-  QuerySchema,
-  SubscriptionSchema,
-  TargetSchema,
-  TopicSchema,
   type Query,
   type Subscription,
   type Target,
