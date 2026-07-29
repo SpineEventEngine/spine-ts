@@ -165,13 +165,17 @@ rescue branches, and all 15 legacy archive refs at the recorded exact SHAs.
 
 ## Review Dispositions
 
-- Style/maintainability: pending review of the audit matrix/status package.
-- Documentation: pending factual review of the audit matrix/status package.
+- Style/maintainability: CLEAN after three focused waves. The final reviewer
+  verified explicit status semantics, the immutable baseline, deterministic
+  regeneration, and closure of all earlier findings.
+- Documentation: CLEAN after factual re-review of the corrected 172-record
+  inventory, ancestry/rescue evidence, continuity claims, and instructions.
 - TypeScript/API: N/A because no source, export, declaration, generated model,
   or public API changes.
 - Performance/reliability: N/A because no runtime, persistence, concurrency,
   lifecycle, resource, retry, or performance behavior changes.
-- Security: N/A unless the audit exposes missing security-boundary work.
+- Security: N/A because the audit changed no product behavior, dependency,
+  credential handling, trust boundary, or deployment behavior.
 
 ## Verification
 

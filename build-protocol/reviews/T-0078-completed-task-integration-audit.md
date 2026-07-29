@@ -133,3 +133,27 @@ immutable profiles are the available evidence.
 - Verification: generator write/check passes; T-0037e is excluded; T-0045 and
   T-0047 remain present; legacy rows and T-0077 preservation disposition remain
   present; focused structural, diff, Node, and Prettier checks pass.
+
+## Review Wave 3
+
+- Style/maintainability: CLEAN. The reviewer verified byte-identical
+  reproduction, explicit top-level status parsing, `done` vocabulary,
+  superseded/abandoned exclusion, immutable-baseline resolution, fixed
+  preservation exceptions, and closure of every earlier finding.
+- Documentation: CLEAN. The reviewer verified the corrected 172-record count,
+  T-0016h `DONE` inclusion, T-0037e exclusion, T-0045/T-0047 coverage, legacy
+  continuity, rescue/ancestry statements, and reproduction guidance.
+- Runtime self-metadata was unavailable for both reviewers. Their explicit
+  immutable configured profiles, `gpt-5.6-terra`/high and
+  `gpt-5.6-luna`/medium, are the accepted runtime evidence.
+
+## Final Dispositions
+
+- Style/maintainability: CLEAN.
+- Documentation completeness: CLEAN.
+- TypeScript/API: N/A because no source, export, declaration, generated model,
+  or public API changed.
+- Performance/reliability: N/A because no runtime, persistence, concurrency,
+  lifecycle, resource, retry, or performance behavior changed.
+- Security: N/A because no product behavior, dependency, credential handling,
+  trust boundary, or deployment behavior changed.
