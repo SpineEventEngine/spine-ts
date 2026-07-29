@@ -51,7 +51,8 @@ every unique historical or rescue tip under an immutable remote tag.
 
 ## Investigation Assignment
 
-- Orchestrator-dispatched remote-ref classification scan.
+- Existing documentation reviewer performing a factual, read-only remote-ref
+  classification.
 - Scope: every live remote head, ancestry, patch equivalence, unique-tip
   preservation, exact proposed tag and deletion sets.
 - Expected/configured profile: `gpt-5.6-luna`, medium reasoning, explicitly
