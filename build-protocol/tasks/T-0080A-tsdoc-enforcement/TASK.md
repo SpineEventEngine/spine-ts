@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+In progress.
 
 ## Parent And Dependency
 
@@ -87,3 +87,15 @@ but not runtime behavior or a public package contract.
 - Style/maintainability: relevant for checker structure and diagnostics.
 - Performance/reliability: N/A if the checker is bounded to tracked authored
   files with explicit traversal limits and no runtime code changes.
+
+## Implementation Assignment
+
+- Existing role: implementer.
+- Ownership: authored-TSDoc checker, focused checker fixtures/tests, root
+  lint/docs integration, exact partitioned TSDoc debt records, and this
+  task's status/evidence. No production/example remediation.
+- Expected/configured model: `gpt-5.6-terra`.
+- Expected/configured reasoning: medium.
+- Both fields are explicit in dispatch.
+- Runtime metadata is recorded if exposed; otherwise the immutable configured
+  role/profile and self-introspection limitation are the acceptance evidence.
