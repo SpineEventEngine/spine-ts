@@ -65,15 +65,22 @@ canonical history.
 | T-0073–T-0075 (Waves 3–4) | `5240b44f`, `8a627719`, `470cd41f`, `77105890`                                                                                                                                  | Committed, merged, post-merge verified, and pushed.           |
 | T-0076–T-0077             | T-0077 tip and `origin/main` both `e6bdc065`                                                                                                                                    | Cleanup/recovery is committed and pushed.                     |
 
-## Preserved rescue and dirty-worktree dispositions
+## Historical rescue branches and post-pruning tag preservation
 
-| Item                               | Exact ref/tip                                                                  | Disposition                                                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| Root dirty-worktree snapshot       | `rescue/dirty-root-20260729` / `def03a41dc187205ede71c1101afba05a7f603f4`      | Preservation-only snapshot; the source changes were already integrated or superseded, not missing product work. |
-| T-0048 planning/review artifacts   | `rescue/T-0048-planning-20260729` / `cf608c7b4dadfa75cb1ea4631cdca8760e21c123` | Preserved and pushed; 16 unique planning/review artifacts do not belong on product `main`.                      |
-| T-0066 and T-0067 worktrees        | executable-bit-only changes                                                    | No source behavior to integrate.                                                                                |
-| T-0012-11b worktree                | deletions                                                                      | Later canonical history already represents the removals.                                                        |
-| Recurring `.superpowers` deletions | intentional cleanup                                                            | Closed by T-0076; no product behavior removed.                                                                  |
+At this audit's 2026-07-29 baseline, the following names were remote branches.
+T-0079 records their exact planned preservation tags in
+[`T-0079_REMOTE_BRANCH_PRUNING_MANIFEST.md`](T-0079_REMOTE_BRANCH_PRUNING_MANIFEST.md).
+Only after those tags are pushed and verified may the historical branches be
+deleted. The tag column below is therefore a post-execution target, not a
+claim that the tag already exists.
+
+| Item                               | Historical branch / exact tip                                                  | Planned post-execution tag                                | Disposition                                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Root dirty-worktree snapshot       | `rescue/dirty-root-20260729` / `def03a41dc187205ede71c1101afba05a7f603f4`      | `archive/rescue/dirty-root-20260729` at the same SHA      | Preservation-only snapshot; the source changes were already integrated or superseded, not missing product work. |
+| T-0048 planning/review artifacts   | `rescue/T-0048-planning-20260729` / `cf608c7b4dadfa75cb1ea4631cdca8760e21c123` | `archive/rescue/T-0048-planning-20260729` at the same SHA | 16 unique planning/review artifacts do not belong on product `main`.                                            |
+| T-0066 and T-0067 worktrees        | executable-bit-only changes                                                    | N/A                                                       | No source behavior to integrate.                                                                                |
+| T-0012-11b worktree                | deletions                                                                      | N/A                                                       | Later canonical history already represents the removals.                                                        |
+| Recurring `.superpowers` deletions | intentional cleanup                                                            | N/A                                                       | Closed by T-0076; no product behavior removed.                                                                  |
 
 No dirty historical worktree contained a unique uncommitted source blob. The
 two protected human-review files were not read, altered, staged, or used as
@@ -102,12 +109,16 @@ implementation rather than merging obsolete branch topology.
 The legacy `@Apply`/event-replay design is intentionally superseded. Its
 absence is not a missing capability.
 
-## Archived legacy refs
+## Historical legacy branches and post-pruning tag preservation
 
-All are remote preservation refs only. They are explicitly non-active and
-must not be merged, cherry-picked, or rebased into `main`.
+The table records the 15 historical remote branch names and their immutable
+baseline tips. After T-0079 execution, the same names will exist under
+`refs/tags/` (for example, `refs/tags/archive/legacy/T-0012a-minimal-command-post-enqueue`),
+not `refs/heads/`. Those preservation tags are explicitly non-active and must
+not be merged, cherry-picked, or rebased into `main`. This audit does not claim
+that the planned tags already exist.
 
-| Ref                                                                     | Exact tip                                  |
+| Historical branch / planned tag name                                    | Exact tip                                  |
 | ----------------------------------------------------------------------- | ------------------------------------------ |
 | `archive/legacy/T-0012-write-side-command-execution-foundation`         | `5dd57cbe3fa257e4e50b6ab4e93730a5a59ca861` |
 | `archive/legacy/T-0012a-minimal-command-post-enqueue`                   | `39f555386883facf725e7fbf8a08b8d77936c02d` |
@@ -127,9 +138,11 @@ must not be merged, cherry-picked, or rebased into `main`.
 
 ## Verification limits
 
-This is a repository-history audit. In addition to local ancestry checks, a
-direct `git ls-remote origin` query verified `main`, the active T-0078 branch,
-both rescue branches, and all 15 `archive/legacy/*` refs at their recorded
-SHAs. The audit does not verify hosting-provider retention policy or rerun
-application behavior. The result therefore establishes no missing
-committed/integrated behavior, not a fresh runtime release certification.
+This is a repository-history audit. At the captured baseline, a direct
+`git ls-remote origin` query verified `main`, the then-active T-0078 branch,
+both rescue **branches**, and all 15 `archive/legacy/*` **branches** at their
+recorded SHAs. T-0079 separately specifies verification of the replacement
+tags and the remaining heads after pruning. The audit does not verify
+hosting-provider retention policy or rerun application behavior. The result
+therefore establishes no missing committed/integrated behavior, not a fresh
+runtime release certification.

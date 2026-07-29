@@ -92,4 +92,42 @@ every unique historical or rescue tip under an immutable remote tag.
 
 ## Verification
 
-Pending.
+### Manifest implementation result
+
+- Created `build-protocol/release/T-0079_REMOTE_BRANCH_PRUNING_MANIFEST.md`.
+  It records all 83 pre-cleanup head names and 82 exact frozen 40-character
+  tips: `main` plus 81 deletion targets. Active T-0079 is deliberately a
+  moving retained head verified by live name, not a stale recorded tip.
+- The map specifies 15 `archive/legacy/*` tags and two
+  `archive/rescue/*` tags, each pinned to its historical branch tip, plus
+  deterministic tag verification, post-pruning checks, and branch restoration
+  from tags.
+- Updated the completed-task audit to distinguish its historical remote branch
+  evidence from the planned post-execution preservation tags. It does not claim
+  that tags or deletions have already occurred.
+- No refs, tags, commits, pushes, protected human-review files, or Spine JVM
+  builds were created, changed, read, or run by this implementation assignment.
+
+### Assignment acceptance metadata
+
+- Existing role: implementer.
+- Expected/configured profile: `gpt-5.6-terra`, medium reasoning; explicit
+  dispatch was recorded at `a7aeed1a1333eed4d7a58090bfef1534129d7de6`.
+- Actual runtime self-metadata is not exposed by this execution surface. The
+  immutable configured role/profile is the available acceptance evidence; this
+  limitation does not indicate a visible profile mismatch.
+
+### Focused evidence
+
+- Accepted review correction: T-0079's previously recorded retained tip was
+  stale because committing the manifest advances its own active branch. The
+  manifest now freezes only 82 stable tips and verifies T-0079 by live name.
+- Independent live remote-tracking inventory matched
+  `/tmp/t0079-classification-full.txt`: 83 names, 15 legacy, two rescue, 64
+  directly redundant, and two retained. The 81 deletion tips and `main` are
+  exact/frozen; T-0079 is intentionally verified only as a live retained name.
+- Manifest table counts: 17 preservation mappings, two retained heads, and 81
+  initial deletion rows.
+- Final formatting, diff, full-SHA, and content-count checks are recorded in
+  the work log; execution verification remains pending until the authorized
+  ref-mutating task phase.
