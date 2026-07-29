@@ -100,6 +100,36 @@ capability-level mapping and exact preservation/push plan:
   identify any genuine missing behavior; and specify which legacy refs must be
   pushed without merging.
 
+The splitter found no missing behavior:
+
+- T-0012a–f are historically completed children integrated only into the
+  explicitly abandoned T-0012 parent; T-0012g and the parent are incomplete.
+- T-0013.1–.6 completed historical slices, but the T-0013 parent remained
+  incomplete and the line was superseded by T-0014/T-0015/T-0017 and
+  definitive Wave 2 repository/history work.
+- Current `main` contains canonical command posting/routing, repository-owned
+  transactions/event production, first-class rejections, delivery handoff,
+  entity history storage, handler contracts, generated registries, bare
+  decorators, aggregate cutover, and reactor/subscriber behavior.
+- The removed `@Apply`/event-replay design is intentionally superseded, not
+  missing.
+
+All 15 legacy tips are pushed at their exact SHAs under non-active
+`archive/legacy/*` refs. They must never be merged, cherry-picked, or rebased
+into current `main`.
+
+## Implementation Assignment
+
+Before dispatch:
+
+- Existing implementer role.
+- Scope: create one durable completed-task integration/capability matrix and
+  correct only provably stale top-level task status headers; do not rewrite
+  historical chronology.
+- Expected profile: `gpt-5.6-terra`, medium reasoning.
+- Model and reasoning must be explicit in dispatch.
+- Actual runtime metadata and result: pending.
+
 ## Review Dispositions
 
 - Style/maintainability: pending status-reconciliation implementation.
