@@ -5,7 +5,7 @@ import {
   StringValueSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
-import { packAny, unpackAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
 export type PrimitiveId = string | number | boolean;
@@ -32,11 +32,11 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
   pack(id: PrimitiveId): Any {
     switch (typeof id) {
       case "string":
-        return packAny(StringValueSchema, create(StringValueSchema, { value: id }));
+        return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }));
       case "number":
-        return packAny(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
+        return AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
       case "boolean":
-        return packAny(BoolValueSchema, create(BoolValueSchema, { value: id }));
+        return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
     }
   },
 
@@ -56,10 +56,10 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
     }
 
     return (
-      unpackAny(id, StringValueSchema)?.value ??
-      unpackAny(id, DoubleValueSchema)?.value ??
-      unpackAny(id, BoolValueSchema)?.value ??
-      unpackAny(id, UserIdSchema)?.value
+      AnyMessages.unpack(id, StringValueSchema)?.value ??
+      AnyMessages.unpack(id, DoubleValueSchema)?.value ??
+      AnyMessages.unpack(id, BoolValueSchema)?.value ??
+      AnyMessages.unpack(id, UserIdSchema)?.value
     );
   },
 });

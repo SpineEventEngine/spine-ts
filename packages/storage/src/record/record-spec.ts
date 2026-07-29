@@ -4,6 +4,10 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 
 import { RecordColumn } from "./record-column.js";
 
+const storageHost = globalThis as typeof globalThis & {
+  structuredClone<Value>(value: Value): Value;
+};
+
 /** Declarative specification for one identified Protobuf record type. */
 export class RecordSpec<I, R extends Message> {
   readonly #columns: readonly RecordColumn<R>[];
@@ -17,6 +21,8 @@ export class RecordSpec<I, R extends Message> {
    * Creates a record specification.
    *
    * @throws Error if two declared columns have the same name.
+   * @param input The schema, identity, and column definitions.
+   * @returns The created record specification.
    */
   constructor(input: {
     readonly schema: GenMessage<R>;
@@ -28,7 +34,7 @@ export class RecordSpec<I, R extends Message> {
     readonly extractId: (record: R) => I;
     readonly columns?: readonly RecordColumn<R>[];
   }) {
-    validateStorageKey(input.storageKey);
+    RecordSpecSupport.validateStorageKey(input.storageKey);
     this.#columns = input.columns ?? [];
     const names = new Set<string>();
     for (const column of this.#columns) {
@@ -57,17 +63,23 @@ export class RecordSpec<I, R extends Message> {
     this.#storageKey = input.storageKey;
   }
 
-  /** Protobuf schema used to clone, encode, and decode this record type. */
+  /** Returns the Protobuf schema used to clone, encode, and decode records.
+   * @returns The managed record schema.
+   */
   get schema(): GenMessage<R> {
     return this.#record;
   }
 
-  /** Stable provider-visible identity for this physical record layout. */
+  /** Returns the stable provider-visible physical layout identity.
+   * @returns The record storage key.
+   */
   get storageKey(): string {
     return this.#storageKey;
   }
 
-  /** Deterministic compatibility descriptor for provider metadata bindings. */
+  /** Returns the deterministic provider metadata compatibility descriptor.
+   * @returns The compatibility fingerprint.
+   */
   get compatibilityFingerprint(): string {
     return JSON.stringify({
       columns: this.#columns.map((column) => ({ name: column.name, type: column.valueType })),
@@ -76,24 +88,36 @@ export class RecordSpec<I, R extends Message> {
     });
   }
 
-  /** Clone an ID value according to this spec. */
+  /** Copies an ID value according to this specification.
+   * @param id The ID to clone.
+   * @returns The cloned ID.
+   */
   cloneId(id: I): I {
     const idSchema = this.#idSchema;
 
     return idSchema === undefined ? RecordCloner.value(id) : RecordCloner.message(idSchema, id);
   }
 
-  /** Clone one record value according to this spec. */
+  /** Copies one record value according to this specification.
+   * @param record The record to clone.
+   * @returns The cloned record.
+   */
   cloneRecord(record: R): R {
     return RecordCloner.message(this.#record, record);
   }
 
-  /** Extract the identifier from one stored record. */
+  /** Gets the identifier from one stored record.
+   * @param record The stored record.
+   * @returns The logical record identifier.
+   */
   idValueIn(record: R): I {
     return this.#extractId(record);
   }
 
-  /** Clone and materialize one record with its identifier and columns. */
+  /** Creates materialized record values with cloned identifiers and columns.
+   * @param record The record to materialize.
+   * @returns The materialized record values.
+   */
   materialize(record: R): {
     readonly columns: ReadonlyMap<string, unknown>;
     readonly id: I;
@@ -115,30 +139,32 @@ export class RecordSpec<I, R extends Message> {
   }
 }
 
-function validateStorageKey(storageKey: string): void {
-  if (
-    storageKey.length === 0 ||
-    storageKey.trim() !== storageKey ||
-    hasControlCharacter(storageKey)
-  ) {
-    throw new Error("Storage record specification requires a non-blank storage key.");
-  }
-}
+const RecordSpecSupport = Object.freeze({
+  validateStorageKey(storageKey: string): void {
+    if (
+      storageKey.length === 0 ||
+      storageKey.trim() !== storageKey ||
+      this.hasControlCharacter(storageKey)
+    ) {
+      throw new Error("Storage record specification requires a non-blank storage key.");
+    }
+  },
 
-function hasControlCharacter(value: string): boolean {
-  for (let index = 0; index < value.length; index++) {
-    const codePoint = value.codePointAt(index);
-    if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) return true;
-    if (codePoint !== undefined && codePoint > 0xffff) index++;
-  }
-  return false;
-}
+  hasControlCharacter(value: string): boolean {
+    for (let index = 0; index < value.length; index++) {
+      const codePoint = value.codePointAt(index);
+      if (codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)) return true;
+      if (codePoint !== undefined && codePoint > 0xffff) index++;
+    }
+    return false;
+  },
+});
 
 type CloneMethod = (this: object) => unknown;
 
 const RecordCloner = Object.freeze({
   message<R extends Message>(schema: GenMessage<R>, record: R): R {
-    const cloneMethod = findCloneMethod(record);
+    const cloneMethod = this.findCloneMethod(record);
 
     if (cloneMethod !== undefined) {
       return Reflect.apply(cloneMethod, record, []) as R;
@@ -152,28 +178,22 @@ const RecordCloner = Object.freeze({
   },
 
   value<T>(value: T): T {
-    const cloneMethod = findCloneMethod(value);
+    const cloneMethod = this.findCloneMethod(value);
 
     if (cloneMethod !== undefined) {
       return Reflect.apply(cloneMethod, value, []) as T;
     }
 
     try {
-      return structuredClone(value);
+      return storageHost.structuredClone(value);
     } catch {
       throw new Error("Storage value could not be cloned.");
     }
   },
+
+  findCloneMethod(value: unknown): CloneMethod | undefined {
+    if (typeof value !== "object" || value === null) return undefined;
+    const candidate: unknown = Reflect.get(value, "clone");
+    return typeof candidate === "function" ? (candidate as CloneMethod) : undefined;
+  },
 });
-
-function findCloneMethod(value: unknown): CloneMethod | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-
-  const candidate: unknown = Reflect.get(value, "clone");
-
-  return typeof candidate === "function" ? (candidate as CloneMethod) : undefined;
-}
-
-declare function structuredClone<T>(value: T): T;

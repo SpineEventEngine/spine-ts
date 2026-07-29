@@ -53,7 +53,7 @@ Current slice exposes:
   pending `TO_DELIVER` status, the tenant, payload/schema, target type URL, and
   routed target ID.
   Repository command execution recognizes factory-created domain rejections
-  only through core `isRejectionThrowable()`. It handles them after aggregate
+  only through core `RejectionThrowable.is()`. It handles them after aggregate
   or process-manager rollback, schedules one rejection event for independent
   EventBus posting, and completes process-manager inbox delivery. The rejected
   draft, produced output, aggregate state history, current state, lifecycle, and

@@ -1,6 +1,6 @@
 import type { Message } from "@bufbuild/protobuf";
 import {
-  entityStorageKey,
+  EntityStorageKey,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
 import type { RecordColumn, StorageContext } from "@spine-event-engine/storage";
@@ -26,7 +26,7 @@ export function entityStorageDescriptor(
     },
     layout: "spine-ts.entity-record.v2",
     stateSchema: schema,
-    storageKey: entityStorageKey(schema.typeName, "current"),
+    storageKey: EntityStorageKey.of(schema.typeName, "current"),
   };
 }
 

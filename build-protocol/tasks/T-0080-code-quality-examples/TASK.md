@@ -2,7 +2,9 @@
 
 ## Status
 
-In progress. T-0080A and T-0080B are complete; T-0080C is next.
+In progress. T-0080A-D and T-0080I are complete; T-0080E production
+storage/delivery adapter remediation is next. T-0080F and T-0080G are also
+unblocked for disjoint execution.
 
 ## Classification
 

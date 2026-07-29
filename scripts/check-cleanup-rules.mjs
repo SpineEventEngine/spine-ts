@@ -490,7 +490,7 @@ function recordCoreImport(clause, state) {
     }
 
     const importedName = element.propertyName?.text ?? element.name.text;
-    if (importedName === "packEvent" || importedName === "packCommand") {
+    if (importedName === "SignalEnvelopes.event" || importedName === "SignalEnvelopes.command") {
       state.forbiddenApiAliases.set(element.name.text, importedName);
     }
   }
@@ -613,7 +613,7 @@ function applyImportEqualsAlias(alias, importState) {
   if (
     valueImport &&
     importState.coreNamespaces.has(namespace) &&
-    (name === "packEvent" || name === "packCommand")
+    (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")
   ) {
     changed = addToMap(importState.forbiddenApiAliases, alias.alias, name) || changed;
   }
@@ -798,7 +798,7 @@ function readValueAlias(initializer, state) {
     if (
       namespace !== undefined &&
       state.coreNamespaces.has(namespace) &&
-      (name === "packEvent" || name === "packCommand")
+      (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")
     ) {
       return { kind: "forbidden", name };
     }
@@ -825,7 +825,7 @@ function readValueAlias(initializer, state) {
       namespace !== undefined &&
       name !== undefined &&
       state.coreNamespaces.has(namespace) &&
-      (name === "packEvent" || name === "packCommand")
+      (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")
     ) {
       return { kind: "forbidden", name };
     }
@@ -978,7 +978,10 @@ function addNamespaceAlias(alias, namespace, state) {
 }
 
 function applyNamespaceMember(alias, namespace, name, state, aliasNames) {
-  if (namespace === "core" && (name === "packEvent" || name === "packCommand")) {
+  if (
+    namespace === "core" &&
+    (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")
+  ) {
     state.forbiddenApiAliases.set(alias, name);
   }
   if (namespace === "server") {
@@ -1087,7 +1090,7 @@ function forbiddenApiName(node, importState) {
     if (
       (namespace !== undefined &&
         importState.coreNamespaces.has(namespace) &&
-        (name === "packEvent" || name === "packCommand")) ||
+        (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")) ||
       (namespace !== undefined &&
         importState.protoNamespaces.has(namespace) &&
         name === "EventIdSchema") ||
@@ -1114,7 +1117,7 @@ function forbiddenApiName(node, importState) {
       name !== undefined &&
       ((namespace !== undefined &&
         importState.coreNamespaces.has(namespace) &&
-        (name === "packEvent" || name === "packCommand")) ||
+        (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")) ||
         (namespace !== undefined &&
           importState.protoNamespaces.has(namespace) &&
           name === "EventIdSchema") ||

@@ -58,7 +58,7 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
 /** Protobuf-ES schema shape accepted by the Spine TS type registry. */
 export type MessageSchema = GenMessage<Message>;
 
-/** Structured result returned by {@link validateMessage}. */
+/** Structured result returned by {@link Validate.message}. */
 export type MessageValidationResult =
   | {
       /** The message satisfied all single-message validation constraints. */
@@ -89,17 +89,15 @@ export interface TransitionValidationRequest<Schema extends MessageSchema = Mess
 
 /** Rule adapter for stateful validation such as Spine `(set_once)`. */
 export interface TransitionValidationRule<Schema extends MessageSchema = MessageSchema> {
-  /** Return transition-only constraint violations for the proposed state change. */
+  /** Returns transition-only constraint violations for the proposed state change.
+   * @param request The previous and proposed state change.
+   * @returns The constraint violations found by this rule.
+   */
   validateTransition(request: TransitionValidationRequest<Schema>): readonly ConstraintViolation[];
 }
 
-/** Structured result returned by {@link validateTransition}. */
+/** Structured result returned by {@link Validate.transition}. */
 export type TransitionValidationResult = MessageValidationResult;
-
-/** Create a repo-local Spine `ValidationError` message from constraint violations. */
-export function createValidationError(violations: readonly ConstraintViolation[]): ValidationError {
-  return create(ValidationErrorSchema, { constraintViolation: [...violations] });
-}
 
 /** Error thrown when a Protobuf message fails Spine single-message validation. */
 export class ValidationException extends Error {
@@ -107,7 +105,10 @@ export class ValidationException extends Error {
   readonly violations: readonly ConstraintViolation[];
   readonly #messageData: ValidationError;
 
-  /** Create an exception from structured Spine validation error data. */
+  /** Creates an exception from structured Spine validation error data.
+   * @param messageData The validation error represented by this exception.
+   * @returns The created validation exception.
+   */
   constructor(messageData: ValidationError) {
     super(
       `Message validation failed with ${String(messageData.constraintViolation.length)} violation(s).`,
@@ -118,7 +119,9 @@ export class ValidationException extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
-  /** Return the structured Spine `ValidationError` message data. */
+  /** Returns the structured Spine `ValidationError` message data.
+   * @returns The validation error message.
+   */
   asMessage(): ValidationError {
     return this.#messageData;
   }
@@ -145,7 +148,7 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
     }
     this.name = "RejectionThrowable";
     this.#schema = schema;
-    this.#messageData = snapshotMessage(schema, messageData);
+    this.#messageData = RejectionThrowable.snapshot(schema, messageData);
     Object.setPrototypeOf(this, new.target.prototype);
     REJECTION_THROWABLES.add(this);
     Object.preventExtensions(this);
@@ -158,93 +161,134 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
     ) => new RejectionThrowable<CreatedSchema>(schema, messageData, REJECTION_CONSTRUCTOR);
   }
 
-  /** Generated Protobuf-ES schema for the rejected domain signal. */
+  /** Returns the generated Protobuf-ES schema for the rejected domain signal.
+   * @returns The rejection schema.
+   */
   get schema(): Schema {
     return this.#schema;
   }
 
-  /** Return a defensive clone of the snapshotted rejection message. */
+  /** Returns a defensive clone of the snapshotted rejection message.
+   * @returns The cloned rejection message.
+   */
   get messageData(): MessageShape<Schema> {
-    return snapshotMessage(this.#schema, this.#messageData);
+    return RejectionThrowable.snapshot(this.#schema, this.#messageData);
   }
 
-  /** Return a defensive clone, matching Spine JVM's throwable contract. */
+  /** Returns a defensive clone matching Spine JVM's throwable contract.
+   * @returns The cloned rejection message.
+   */
   messageThrown(): MessageShape<Schema> {
-    return snapshotMessage(this.#schema, this.#messageData);
-  }
-}
-
-/** Check whether a value is a factory-created domain rejection throwable. */
-export function isRejectionThrowable(value: unknown): value is RejectionThrowable {
-  return typeof value === "object" && value !== null && REJECTION_THROWABLES.has(value);
-}
-
-/**
- * Validate, snapshot, and wrap a generated rejection message in a nominal throwable.
- *
- * The schema must describe a top-level message declared in a source file whose
- * name ends in `rejections.proto`.
- *
- * @throws `TypeError` if the schema is not an eligible rejection message.
- * @throws {@link ValidationException} if the rejection payload is invalid.
- */
-export function createRejectionThrowable<Schema extends MessageSchema>(
-  schema: Schema,
-  input: MessageInitShape<Schema>,
-): RejectionThrowable<Schema> {
-  assertRejectionSchema(schema);
-  const messageData = checkValid(schema, create(schema, input));
-
-  return instantiateRejection(schema, messageData);
-}
-
-/** Validate one Protobuf message through the Spine TS validation facade. */
-export function validateMessage<Schema extends MessageSchema>(
-  schema: Schema,
-  message: MessageShape<Schema>,
-): MessageValidationResult {
-  try {
-    return createValidationResult(validateWithSpine(schema, message).map(toConstraintViolation));
-  } catch {
-    return createValidationResult([
-      createFacadeFailureViolation(schema.typeName, VALIDATION_RUNTIME_FAILURE_MESSAGE),
-    ]);
-  }
-}
-
-/** Validate one Protobuf message and throw if it has constraint violations. */
-export function checkValid<Schema extends MessageSchema>(
-  schema: Schema,
-  message: MessageShape<Schema>,
-): MessageShape<Schema> {
-  const result = validateMessage(schema, message);
-
-  if (!result.valid) {
-    throw new ValidationException(result.error);
+    return RejectionThrowable.snapshot(this.#schema, this.#messageData);
   }
 
-  return message;
-}
+  /** Creates a nominal throwable from a validated generated rejection message.
+   * @param schema The generated rejection schema.
+   * @param input The rejection message fields.
+   * @returns The validated nominal rejection throwable.
+   */
+  static create<Schema extends MessageSchema>(
+    schema: Schema,
+    input: MessageInitShape<Schema>,
+  ): RejectionThrowable<Schema> {
+    RejectionThrowable.assertSchema(schema);
+    return instantiateRejection(schema, Validate.check(schema, create(schema, input)));
+  }
 
-/** Run framework-owned transition validation rules for a previous/next state pair. */
-export function validateTransition<Schema extends MessageSchema>(
-  request: TransitionValidationRequest<Schema>,
-  rules: readonly TransitionValidationRule<Schema>[] = [],
-): TransitionValidationResult {
-  const violations: ConstraintViolation[] = [];
+  /** Checks whether a value is a factory-created domain rejection throwable.
+   * @param value The value to inspect.
+   * @returns Whether the value is a trusted rejection throwable.
+   */
+  static is(value: unknown): value is RejectionThrowable {
+    return typeof value === "object" && value !== null && REJECTION_THROWABLES.has(value);
+  }
 
-  for (const rule of rules) {
-    try {
-      violations.push(...rule.validateTransition(request).map(toConstraintViolation));
-    } catch {
-      violations.push(
-        createFacadeFailureViolation(request.schema.typeName, TRANSITION_RULE_FAILURE_MESSAGE),
+  private static assertSchema(schema: MessageSchema): void {
+    if (schema.parent !== undefined || !schema.file.proto.name.endsWith("rejections.proto")) {
+      throw new TypeError(
+        `Rejection schema "${schema.typeName}" must be a top-level message declared in a rejections.proto file.`,
       );
     }
   }
 
-  return createValidationResult(violations);
+  private static snapshot<Schema extends MessageSchema>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+  ): MessageShape<Schema> {
+    return fromBinary(schema, toBinary(schema, message));
+  }
 }
+
+/** Owns Spine message and transition validation. */
+export const Validate = {
+  /** Creates a repo-local validation error from constraint violations.
+   * @param violations The violations to include.
+   * @returns The validation error.
+   */
+  createError(violations: readonly ConstraintViolation[]): ValidationError {
+    return ValidationResults.error(violations);
+  },
+  /** Validates one Protobuf message through the Spine TS validation facade.
+   * @param schema The message schema.
+   * @param message The message to validate.
+   * @returns The sanitized validation result.
+   */
+  message<Schema extends MessageSchema>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+  ): MessageValidationResult {
+    try {
+      return ValidationResults.from(
+        validateWithSpine(schema, message).map((violation) =>
+          ValidationResults.violation(violation),
+        ),
+      );
+    } catch {
+      return ValidationResults.from([
+        ValidationResults.failure(schema.typeName, VALIDATION_RUNTIME_FAILURE_MESSAGE),
+      ]);
+    }
+  },
+  /** Validates one Protobuf message and throws for constraint violations.
+   * @param schema The message schema.
+   * @param message The message to validate.
+   * @returns The validated message.
+   */
+  check<Schema extends MessageSchema>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+  ): MessageShape<Schema> {
+    const result = Validate.message(schema, message);
+    if (!result.valid) throw new ValidationException(result.error);
+    return message;
+  },
+  /** Validates a previous/next state pair with framework-owned transition rules.
+   * @param request The state transition.
+   * @param rules The rules to apply.
+   * @returns The sanitized transition result.
+   */
+  transition<Schema extends MessageSchema>(
+    request: TransitionValidationRequest<Schema>,
+    rules: readonly TransitionValidationRule<Schema>[] = [],
+  ): TransitionValidationResult {
+    const violations: ConstraintViolation[] = [];
+    for (const rule of rules) {
+      try {
+        violations.push(
+          ...rule
+            .validateTransition(request)
+            .map((violation) => ValidationResults.violation(violation)),
+        );
+      } catch {
+        violations.push(
+          ValidationResults.failure(request.schema.typeName, TRANSITION_RULE_FAILURE_MESSAGE),
+        );
+      }
+    }
+    return ValidationResults.from(violations);
+  },
+} as const;
+Object.freeze(Validate);
 
 /** Options for registering a schema in a {@link TypeRegistry}. */
 export interface RegisterTypeOptions {
@@ -281,9 +325,15 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
   readonly firstFieldName: string | undefined;
   /** Semantic tags explicitly registered for this schema. */
   readonly semanticTags: readonly string[];
-  /** Check whether a file option is set on this schema's file descriptor. */
+  /** Checks whether a file option is set on this schema's file descriptor.
+   * @param option The file option extension.
+   * @returns Whether the option is present.
+   */
   hasFileOption<Value>(option: FileOptionExtension<Value>): boolean;
-  /** Read a file option from this schema's file descriptor. */
+  /** Reads a file option from this schema's file descriptor.
+   * @param option The file option extension.
+   * @returns The extension value.
+   */
   getFileOption<Value>(option: FileOptionExtension<Value>): Value;
 }
 
@@ -292,21 +342,44 @@ export type FileOptionExtension<Value = unknown> = GenExtension<FileOptions, Val
 
 /** Read-only lookup surface for a registry whose registrations are already fixed. */
 export interface TypeRegistryLookup {
-  /** Find metadata by fully qualified Protobuf type name. */
+  /** Finds metadata by fully qualified Protobuf type name.
+   * @param fullTypeName The Protobuf type name.
+   * @returns Matching metadata, if registered.
+   */
   findByFullName(fullTypeName: string): TypeMetadata | undefined;
-  /** Find metadata by canonical type URL. */
+  /** Finds metadata by canonical type URL.
+   * @param typeUrl The canonical type URL.
+   * @returns Matching metadata, if registered.
+   */
   findByTypeUrl(typeUrl: string): TypeMetadata | undefined;
-  /** Find metadata by generated schema identity. */
+  /** Finds metadata by generated schema identity.
+   * @param schema The generated message schema.
+   * @returns Matching metadata, if registered.
+   */
   findBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> | undefined;
-  /** Find all metadata entries tagged with a semantic marker. */
+  /** Finds all metadata entries tagged with a semantic marker.
+   * @param semanticTag The semantic marker.
+   * @returns The matching metadata entries.
+   */
   findBySemanticTag(semanticTag: string): readonly TypeMetadata[];
-  /** Get metadata by fully qualified Protobuf type name or throw a descriptive error. */
+  /** Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
+   * @param fullTypeName The Protobuf type name.
+   * @returns The registered metadata.
+   */
   getByFullName(fullTypeName: string): TypeMetadata;
-  /** Get metadata by canonical type URL or throw a descriptive error. */
+  /** Gets metadata by canonical type URL or throws a descriptive error.
+   * @param typeUrl The canonical type URL.
+   * @returns The registered metadata.
+   */
   getByTypeUrl(typeUrl: string): TypeMetadata;
-  /** Get metadata by generated schema identity or throw a descriptive error. */
+  /** Gets metadata by generated schema identity or throws a descriptive error.
+   * @param schema The generated message schema.
+   * @returns The registered metadata.
+   */
   getBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema>;
-  /** Return all registered metadata in registration order. */
+  /** Returns all registered metadata in registration order.
+   * @returns The registered metadata entries.
+   */
   list(): readonly TypeMetadata[];
 }
 
@@ -359,113 +432,133 @@ export interface PackEventInput<
   readonly message: MessageShape<Schema>;
 }
 
-/**
- * Derive the deterministic type URL for a Protobuf-ES message schema.
- *
- * @throws TypeError when the selected custom fallback normalizes to empty or
- *   contains whitespace.
- */
-export function deriveTypeUrl(schema: MessageSchema, options: DeriveTypeUrlOptions = {}): string {
-  const typeUrlPrefix = getTypeUrlPrefix(schema, options.fallbackPrefix);
+/** Owns canonical Spine type URL derivation and explicit URL validation. */
+export const TypeUrls = {
+  /** Calculates the deterministic type URL for a Protobuf-ES message schema.
+   * @param schema The message schema.
+   * @param options The fallback options.
+   * @returns The canonical type URL.
+   */
+  derive(schema: MessageSchema, options: DeriveTypeUrlOptions = {}): string {
+    return `${TypeUrls.prefix(schema, options.fallbackPrefix).replace(/\/+$/u, "")}/${schema.typeName}`;
+  },
+  /** Returns the type URL prefix that applies to a schema.
+   * @param schema The message schema.
+   * @param fallbackPrefix The fallback prefix.
+   * @returns The canonical prefix.
+   */
+  prefix(schema: MessageSchema, fallbackPrefix: string = DEFAULT_TYPE_URL_PREFIX): string {
+    if (hasOption(schema.file, type_url_prefix)) return getOption(schema.file, type_url_prefix);
+    const normalizedFallbackPrefix = fallbackPrefix.replace(/\/+$/u, "");
+    if (normalizedFallbackPrefix.length === 0 || /\s/u.test(normalizedFallbackPrefix)) {
+      throw new TypeError("Fallback type URL prefix must be non-empty and contain no whitespace.");
+    }
+    return normalizedFallbackPrefix;
+  },
+  /** Resolves an explicit or derived type URL for a schema registration.
+   * @param schema The message schema.
+   * @param explicitTypeUrl The explicit type URL.
+   * @returns The resolved type URL.
+   */
+  resolve(schema: MessageSchema, explicitTypeUrl: string | undefined): string {
+    if (explicitTypeUrl === undefined) return TypeUrls.derive(schema);
+    TypeUrls.validate(schema, explicitTypeUrl);
+    return explicitTypeUrl;
+  },
+  /** Validates an explicit type URL for a schema registration.
+   * @param schema The message schema.
+   * @param typeUrl The type URL to validate.
+   */
+  validate(schema: MessageSchema, typeUrl: string): void {
+    const expectedSuffix = `/${schema.typeName}`;
+    const prefix = typeUrl.slice(0, typeUrl.length - expectedSuffix.length);
+    if (!typeUrl.endsWith(expectedSuffix) || prefix.length === 0) {
+      throw new Error(
+        `Explicit type URL "${typeUrl}" must have the form "<prefix>/${schema.typeName}".`,
+      );
+    }
+  },
+} as const;
+Object.freeze(TypeUrls);
 
-  return `${typeUrlPrefix.replace(/\/+$/u, "")}/${schema.typeName}`;
-}
+/** Owns Spine-aware `google.protobuf.Any` packing and unpacking. */
+export const AnyMessages = {
+  /** Packs a message into `Any`, omitting unknown fields from binary output.
+   * @param schema The message schema.
+   * @param message The message to pack.
+   * @param options The packing options.
+   * @returns The packed Any message.
+   */
+  pack<Schema extends MessageSchema>(
+    schema: Schema,
+    message: MessageShape<Schema>,
+    options: PackAnyOptions = {},
+  ): Any {
+    if (options.validate !== false) Validate.check(schema, message);
+    return create(AnySchema, {
+      typeUrl: TypeUrls.derive(schema),
+      value: toBinary(schema, message, { writeUnknownFields: false }),
+    });
+  },
+  /** Unpacks an `Any` when its type URL exactly matches the requested schema.
+   * @param packed The packed message.
+   * @param schema The expected schema.
+   * @returns The unpacked message, when valid.
+   */
+  unpack<Schema extends MessageSchema>(
+    packed: Any,
+    schema: Schema,
+  ): MessageShape<Schema> | undefined {
+    if (packed.typeUrl !== TypeUrls.derive(schema)) return undefined;
+    try {
+      return fromBinary(schema, packed.value);
+    } catch {
+      return undefined;
+    }
+  },
+  /** Unpacks an `Any` when its exact type URL is registered.
+   * @param registry The schema registry.
+   * @param packed The packed message.
+   * @returns The unpacked message, when valid.
+   */
+  unpackUsing(registry: TypeRegistryLookup, packed: Any): Message | undefined {
+    const metadata = registry.findByTypeUrl(packed.typeUrl);
+    if (metadata === undefined) return undefined;
+    try {
+      return fromBinary(metadata.schema, packed.value);
+    } catch {
+      return undefined;
+    }
+  },
+} as const;
+Object.freeze(AnyMessages);
 
-/**
- * Pack a Protobuf-ES message into `Any` using Spine type URL derivation.
- *
- * Unknown fields are omitted from the serialized payload for stable framework
- * packing. Protobuf-ES 2.12.1 does not expose deterministic map-key ordering.
- */
-export function packAny<Schema extends MessageSchema>(
-  schema: Schema,
-  message: MessageShape<Schema>,
-  options: PackAnyOptions = {},
-): Any {
-  if (options.validate !== false) {
-    checkValid(schema, message);
-  }
-
-  return create(AnySchema, {
-    typeUrl: deriveTypeUrl(schema),
-    value: toBinary(schema, message, { writeUnknownFields: false }),
-  });
-}
-
-/** Unpack an `Any` only when its type URL exactly matches the requested schema. */
-export function unpackAny<Schema extends MessageSchema>(
-  packed: Any,
-  schema: Schema,
-): MessageShape<Schema> | undefined {
-  if (packed.typeUrl !== deriveTypeUrl(schema)) {
-    return undefined;
-  }
-
-  try {
-    return fromBinary(schema, packed.value);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Dynamically unpack an `Any` only when its exact type URL is registered. */
-export function unpackAnyUsing(registry: TypeRegistryLookup, packed: Any): Message | undefined {
-  const metadata = registry.findByTypeUrl(packed.typeUrl);
-
-  if (metadata === undefined) {
-    return undefined;
-  }
-
-  try {
-    return fromBinary(metadata.schema, packed.value);
-  } catch {
-    return undefined;
-  }
-}
-
-/** Create a generated Spine `Command` envelope from a caller-supplied payload, ID, and context. */
-export function packCommand<Schema extends MessageSchema>(
-  input: PackCommandInput<Schema>,
-): Command {
-  return create(CommandSchema, {
-    id: clone(CommandIdSchema, input.id),
-    message: packAny(input.schema, input.message, input),
-    context: clone(CommandContextSchema, input.context),
-  });
-}
-
-/** Create a generated Spine `Event` envelope from a caller-supplied payload, ID, and context. */
-export function packEvent<Schema extends MessageSchema>(input: PackEventInput<Schema>): Event {
-  return create(EventSchema, {
-    id: clone(EventIdSchema, input.id),
-    message: packAny(input.schema, input.message, input),
-    context: clone(EventContextSchema, input.context),
-  });
-}
-
-/**
- * Return the type URL prefix that applies to the given schema.
- *
- * Fallback prefixes have trailing `/` separators removed and must then be
- * non-empty and contain no whitespace. A schema file's Spine option takes
- * precedence without validating an unused fallback.
- */
-export function getTypeUrlPrefix(
-  schema: MessageSchema,
-  fallbackPrefix: string = DEFAULT_TYPE_URL_PREFIX,
-): string {
-  if (hasOption(schema.file, type_url_prefix)) {
-    return getOption(schema.file, type_url_prefix);
-  }
-
-  const normalizedFallbackPrefix = fallbackPrefix.replace(/\/+$/u, "");
-
-  if (normalizedFallbackPrefix.length === 0 || /\s/u.test(normalizedFallbackPrefix)) {
-    throw new TypeError("Fallback type URL prefix must be non-empty and contain no whitespace.");
-  }
-
-  return normalizedFallbackPrefix;
-}
+/** Owns construction of generated Spine command and event envelopes. */
+export const SignalEnvelopes = {
+  /** Packs a generated Spine command envelope from caller-supplied data.
+   * @param input The command envelope input.
+   * @returns The packed command.
+   */
+  command<Schema extends MessageSchema>(input: PackCommandInput<Schema>): Command {
+    return create(CommandSchema, {
+      id: clone(CommandIdSchema, input.id),
+      message: AnyMessages.pack(input.schema, input.message, input),
+      context: clone(CommandContextSchema, input.context),
+    });
+  },
+  /** Packs a generated Spine event envelope from caller-supplied data.
+   * @param input The event envelope input.
+   * @returns The packed event.
+   */
+  event<Schema extends MessageSchema>(input: PackEventInput<Schema>): Event {
+    return create(EventSchema, {
+      id: clone(EventIdSchema, input.id),
+      message: AnyMessages.pack(input.schema, input.message, input),
+      context: clone(EventContextSchema, input.context),
+    });
+  },
+} as const;
+Object.freeze(SignalEnvelopes);
 
 /** Registry for Protobuf schemas, Spine type URLs, and descriptor metadata. */
 export class TypeRegistry {
@@ -475,14 +568,20 @@ export class TypeRegistry {
   readonly #bySchema = new WeakMap<object, TypeMetadata>();
   readonly #bySchemaDescriptor = new WeakMap<object, TypeMetadata>();
 
-  /** Create a registry and optionally register schemas immediately. */
+  /** Creates a registry and optionally registers schemas immediately.
+   * @param schemas The schemas to register.
+   * @returns The created registry.
+   */
   constructor(schemas: Iterable<MessageSchema> = []) {
     for (const schema of schemas) {
       this.register(schema);
     }
   }
 
-  /** Compose modules in deterministic dependency-first order. */
+  /** Creates a registry from modules in deterministic dependency-first order.
+   * @param modules The modules to compose.
+   * @returns The composed registry.
+   */
   static from(...modules: readonly ProtoModule[]): TypeRegistry {
     const definitions = new Map<string, ProtoModule>();
     const visiting = new Set<string>();
@@ -490,19 +589,60 @@ export class TypeRegistry {
     const schemas: MessageSchema[] = [];
 
     for (const module of modules) {
-      composeModule(module, definitions, visiting, verified, schemas);
+      RegistryLookups.compose(module, definitions, visiting, verified, schemas);
     }
 
     return new TypeRegistry(schemas);
   }
 
-  /** Register one schema and return its immutable metadata. */
+  /** Creates a registry containing the currently curated Spine schemas.
+   * @returns The mutable curated registry.
+   */
+  static spineCore(): TypeRegistry {
+    return new TypeRegistry([
+      FieldPathSchema,
+      TemplateStringSchema,
+      ActorContextSchema,
+      CommandIdSchema,
+      CommandSchema,
+      Command_SystemPropertiesSchema,
+      CommandContextSchema,
+      CommandContext_ScheduleSchema,
+      MessageIdSchema,
+      OriginSchema,
+      EnrichmentSchema,
+      Enrichment_ContainerSchema,
+      EventIdSchema,
+      EventSchema,
+      EventContextSchema,
+      RejectionEventContextSchema,
+      TenantIdSchema,
+      UserIdSchema,
+      VersionSchema,
+      EmailAddressSchema,
+      InternetDomainSchema,
+      YearMonthSchema,
+      LocalDateSchema,
+      LocalTimeSchema,
+      LocalDateTimeSchema,
+      ZoneIdSchema,
+      ZonedDateTimeSchema,
+      ValidationErrorSchema,
+      ConstraintViolationSchema,
+    ]);
+  }
+
+  /** Registers one schema and returns its immutable metadata.
+   * @param schema The generated message schema.
+   * @param options Optional type URL and semantic tag metadata.
+   * @returns The registered schema metadata.
+   */
   register<Schema extends MessageSchema>(
     schema: Schema,
     options: RegisterTypeOptions = {},
   ): TypeMetadata<Schema> {
     const fullTypeName = schema.typeName;
-    const typeUrl = resolveTypeUrl(schema, options.typeUrl);
+    const typeUrl = TypeUrls.resolve(schema, options.typeUrl);
     const duplicateFullName = this.#byFullName.get(fullTypeName);
     const duplicateTypeUrl = this.#byTypeUrl.get(typeUrl);
     const schemaIdentityConflict = this.#bySchemaDescriptor.get(schema.proto);
@@ -535,7 +675,7 @@ export class TypeRegistry {
       );
     }
 
-    const metadata = createTypeMetadata(schema, typeUrl, options.semanticTags);
+    const metadata = RegistryLookups.metadata(schema, typeUrl, options.semanticTags);
 
     this.#byFullName.set(metadata.fullTypeName, metadata);
     this.#byTypeUrl.set(metadata.typeUrl, metadata);
@@ -551,27 +691,42 @@ export class TypeRegistry {
     return metadata;
   }
 
-  /** Find metadata by fully qualified Protobuf type name. */
+  /** Finds metadata by fully qualified Protobuf type name.
+   * @param fullTypeName The Protobuf type name.
+   * @returns Matching metadata, if registered.
+   */
   findByFullName(fullTypeName: string): TypeMetadata | undefined {
     return this.#byFullName.get(fullTypeName);
   }
 
-  /** Find metadata by canonical type URL. */
+  /** Finds metadata by canonical type URL.
+   * @param typeUrl The canonical type URL.
+   * @returns Matching metadata, if registered.
+   */
   findByTypeUrl(typeUrl: string): TypeMetadata | undefined {
     return this.#byTypeUrl.get(typeUrl);
   }
 
-  /** Find metadata by generated schema identity. */
+  /** Finds metadata by generated schema identity.
+   * @param schema The generated message schema.
+   * @returns Matching metadata, if registered.
+   */
   findBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> | undefined {
     return this.#bySchema.get(schema) as TypeMetadata<Schema> | undefined;
   }
 
-  /** Find all metadata entries tagged with a semantic marker. */
+  /** Finds all metadata entries tagged with a semantic marker.
+   * @param semanticTag The semantic marker.
+   * @returns The matching metadata entries.
+   */
   findBySemanticTag(semanticTag: string): readonly TypeMetadata[] {
     return [...(this.#bySemanticTag.get(semanticTag) ?? [])];
   }
 
-  /** Get metadata by fully qualified Protobuf type name or throw a descriptive error. */
+  /** Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
+   * @param fullTypeName The Protobuf type name.
+   * @returns The registered metadata.
+   */
   getByFullName(fullTypeName: string): TypeMetadata {
     const metadata = this.findByFullName(fullTypeName);
 
@@ -582,7 +737,10 @@ export class TypeRegistry {
     return metadata;
   }
 
-  /** Get metadata by canonical type URL or throw a descriptive error. */
+  /** Gets metadata by canonical type URL or throws a descriptive error.
+   * @param typeUrl The canonical type URL.
+   * @returns The registered metadata.
+   */
   getByTypeUrl(typeUrl: string): TypeMetadata {
     const metadata = this.findByTypeUrl(typeUrl);
 
@@ -593,7 +751,10 @@ export class TypeRegistry {
     return metadata;
   }
 
-  /** Get metadata by generated schema identity or throw a descriptive error. */
+  /** Gets metadata by generated schema identity or throws a descriptive error.
+   * @param schema The generated message schema.
+   * @returns The registered metadata.
+   */
   getBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> {
     const metadata = this.findBySchema(schema);
 
@@ -604,239 +765,143 @@ export class TypeRegistry {
     return metadata;
   }
 
-  /** Return all registered metadata in registration order. */
+  /** Returns all registered metadata in registration order.
+   * @returns The registered metadata entries.
+   */
   list(): readonly TypeMetadata[] {
     return [...this.#byFullName.values()];
   }
 }
 
-function composeModule(
-  root: ProtoModule,
-  definitions: Map<string, ProtoModule>,
-  visiting: Set<string>,
-  verified: WeakSet<ProtoModule>,
-  schemas: MessageSchema[],
-): void {
-  const frames: ModuleFrame[] = [{ module: root, appendSchemas: false }];
+const RegistryLookups = {
+  /** Composes modules in deterministic dependency-first order. */
+  compose(
+    root: ProtoModule,
+    definitions: Map<string, ProtoModule>,
+    visiting: Set<string>,
+    verified: WeakSet<ProtoModule>,
+    schemas: MessageSchema[],
+  ): void {
+    const frames: ModuleFrame[] = [{ module: root, appendSchemas: false }];
 
-  while (frames.length > 0) {
-    const frame = frames.pop();
+    while (frames.length > 0) {
+      const frame = frames.pop();
 
-    if (frame === undefined) {
-      continue;
-    }
-
-    const { module } = frame;
-    if (frame.appendSchemas) {
-      visiting.delete(module.name);
-      verified.add(module);
-      if (definitions.get(module.name) === module) {
-        schemas.push(...module.schemas);
+      if (frame === undefined) {
+        continue;
       }
-      continue;
-    }
 
-    if (visiting.has(module.name)) {
-      throw new Error(`Proto module dependency cycle at "${module.name}".`);
-    }
+      const { module } = frame;
+      if (frame.appendSchemas) {
+        visiting.delete(module.name);
+        verified.add(module);
+        if (definitions.get(module.name) === module) {
+          schemas.push(...module.schemas);
+        }
+        continue;
+      }
 
-    const existing = definitions.get(module.name);
-    if (existing !== undefined && !sameModuleContent(existing, module)) {
-      throw new Error(`Proto module conflict for "${module.name}".`);
-    }
+      if (visiting.has(module.name)) {
+        throw new Error(`Proto module dependency cycle at "${module.name}".`);
+      }
 
-    if (existing !== undefined && verified.has(module)) {
-      continue;
-    }
+      const existing = definitions.get(module.name);
+      if (existing !== undefined && !RegistryLookups.sameModule(existing, module)) {
+        throw new Error(`Proto module conflict for "${module.name}".`);
+      }
 
-    if (existing === undefined) {
-      definitions.set(module.name, module);
-    }
+      if (existing !== undefined && verified.has(module)) {
+        continue;
+      }
 
-    visiting.add(module.name);
-    frames.push({ module, appendSchemas: true });
+      if (existing === undefined) {
+        definitions.set(module.name, module);
+      }
 
-    for (let index = module.dependencies.length - 1; index >= 0; index -= 1) {
-      const dependency = module.dependencies[index];
-      if (dependency !== undefined) {
-        frames.push({ module: dependency, appendSchemas: false });
+      visiting.add(module.name);
+      frames.push({ module, appendSchemas: true });
+
+      for (let index = module.dependencies.length - 1; index >= 0; index -= 1) {
+        const dependency = module.dependencies[index];
+        if (dependency !== undefined) {
+          frames.push({ module: dependency, appendSchemas: false });
+        }
       }
     }
-  }
-}
+  },
+
+  /** Compares two module definitions for same-name conflicts. */
+  sameModule(left: ProtoModule, right: ProtoModule): boolean {
+    if (left === right) {
+      return true;
+    }
+
+    if (
+      left.name !== right.name ||
+      left.schemas.length !== right.schemas.length ||
+      left.dependencies.length !== right.dependencies.length
+    ) {
+      return false;
+    }
+
+    return (
+      left.schemas.every((schema, index) => schema === right.schemas[index]) &&
+      left.dependencies.every(
+        (dependency, index) => dependency.name === right.dependencies[index]?.name,
+      )
+    );
+  },
+  /** Creates immutable descriptor-backed schema metadata. */
+  metadata<Schema extends MessageSchema>(
+    schema: Schema,
+    typeUrl: string,
+    semanticTags: readonly string[] = [],
+  ): TypeMetadata<Schema> {
+    const firstField = schema.fields[0];
+    const tags = [...new Set(semanticTags)].sort();
+    return Object.freeze({
+      fullTypeName: schema.typeName,
+      typeUrl,
+      schema,
+      descriptor: schema,
+      fileDescriptor: schema.file,
+      fileName: `${schema.file.name}.proto`,
+      typeUrlPrefix: typeUrl.slice(0, typeUrl.length - schema.typeName.length - 1),
+      firstField,
+      firstFieldName: firstField?.name,
+      semanticTags: Object.freeze(tags),
+      hasFileOption<Value>(option: FileOptionExtension<Value>): boolean {
+        return hasOption(schema.file, option);
+      },
+      getFileOption<Value>(option: FileOptionExtension<Value>): Value {
+        return getOption(schema.file, option);
+      },
+    });
+  },
+  /** Creates an immutable registry lookup view. */
+  lookup(registry: TypeRegistry): TypeRegistryLookup {
+    return Object.freeze({
+      findByFullName: (fullTypeName: string) => registry.findByFullName(fullTypeName),
+      findByTypeUrl: (typeUrl: string) => registry.findByTypeUrl(typeUrl),
+      findBySchema: <Schema extends MessageSchema>(schema: Schema) => registry.findBySchema(schema),
+      findBySemanticTag: (semanticTag: string) => registry.findBySemanticTag(semanticTag),
+      getByFullName: (fullTypeName: string) => registry.getByFullName(fullTypeName),
+      getByTypeUrl: (typeUrl: string) => registry.getByTypeUrl(typeUrl),
+      getBySchema: <Schema extends MessageSchema>(schema: Schema) => registry.getBySchema(schema),
+      list: () => registry.list(),
+    });
+  },
+};
 
 interface ModuleFrame {
   readonly module: ProtoModule;
   readonly appendSchemas: boolean;
 }
 
-function sameModuleContent(left: ProtoModule, right: ProtoModule): boolean {
-  if (left === right) {
-    return true;
-  }
-
-  if (
-    left.name !== right.name ||
-    left.schemas.length !== right.schemas.length ||
-    left.dependencies.length !== right.dependencies.length
-  ) {
-    return false;
-  }
-
-  return (
-    left.schemas.every((schema, index) => schema === right.schemas[index]) &&
-    left.dependencies.every(
-      (dependency, index) => dependency.name === right.dependencies[index]?.name,
-    )
-  );
-}
-
-/** Build a registry containing the currently curated Spine schemas. */
-export function createSpineCoreRegistry(): TypeRegistry {
-  return new TypeRegistry([
-    FieldPathSchema,
-    TemplateStringSchema,
-    ActorContextSchema,
-    CommandIdSchema,
-    CommandSchema,
-    Command_SystemPropertiesSchema,
-    CommandContextSchema,
-    CommandContext_ScheduleSchema,
-    MessageIdSchema,
-    OriginSchema,
-    EnrichmentSchema,
-    Enrichment_ContainerSchema,
-    EventIdSchema,
-    EventSchema,
-    EventContextSchema,
-    RejectionEventContextSchema,
-    TenantIdSchema,
-    UserIdSchema,
-    VersionSchema,
-    EmailAddressSchema,
-    InternetDomainSchema,
-    YearMonthSchema,
-    LocalDateSchema,
-    LocalTimeSchema,
-    LocalDateTimeSchema,
-    ZoneIdSchema,
-    ZonedDateTimeSchema,
-    ValidationErrorSchema,
-    ConstraintViolationSchema,
-  ]);
-}
-
 /** Shared registry for the first curated Spine schema set. */
-export const spineCoreRegistry: TypeRegistryLookup =
-  createTypeRegistryLookup(createSpineCoreRegistry());
-
-function createTypeRegistryLookup(registry: TypeRegistry): TypeRegistryLookup {
-  return Object.freeze({
-    findByFullName(fullTypeName: string): TypeMetadata | undefined {
-      return registry.findByFullName(fullTypeName);
-    },
-    findByTypeUrl(typeUrl: string): TypeMetadata | undefined {
-      return registry.findByTypeUrl(typeUrl);
-    },
-    findBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> | undefined {
-      return registry.findBySchema(schema);
-    },
-    findBySemanticTag(semanticTag: string): readonly TypeMetadata[] {
-      return registry.findBySemanticTag(semanticTag);
-    },
-    getByFullName(fullTypeName: string): TypeMetadata {
-      return registry.getByFullName(fullTypeName);
-    },
-    getByTypeUrl(typeUrl: string): TypeMetadata {
-      return registry.getByTypeUrl(typeUrl);
-    },
-    getBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> {
-      return registry.getBySchema(schema);
-    },
-    list(): readonly TypeMetadata[] {
-      return registry.list();
-    },
-  });
-}
-
-function resolveTypeUrl(schema: MessageSchema, explicitTypeUrl: string | undefined): string {
-  if (explicitTypeUrl === undefined) {
-    return deriveTypeUrl(schema);
-  }
-
-  validateExplicitTypeUrl(schema, explicitTypeUrl);
-
-  return explicitTypeUrl;
-}
-
-function validateExplicitTypeUrl(schema: MessageSchema, typeUrl: string): void {
-  const expectedSuffix = `/${schema.typeName}`;
-  const prefix = typeUrl.slice(0, typeUrl.length - expectedSuffix.length);
-
-  if (!typeUrl.endsWith(expectedSuffix) || prefix.length === 0) {
-    throw new Error(
-      `Explicit type URL "${typeUrl}" must have the form "<prefix>/${schema.typeName}".`,
-    );
-  }
-}
-
-function createTypeMetadata<Schema extends MessageSchema>(
-  schema: Schema,
-  typeUrl: string,
-  semanticTags: readonly string[] = [],
-): TypeMetadata<Schema> {
-  const firstField = schema.fields[0];
-  const tags = [...new Set(semanticTags)].sort();
-  const metadata: TypeMetadata<Schema> = {
-    fullTypeName: schema.typeName,
-    typeUrl,
-    schema,
-    descriptor: schema,
-    fileDescriptor: schema.file,
-    fileName: `${schema.file.name}.proto`,
-    typeUrlPrefix: typeUrl.slice(0, typeUrl.length - schema.typeName.length - 1),
-    firstField,
-    firstFieldName: firstField?.name,
-    semanticTags: Object.freeze(tags),
-    hasFileOption<Value>(option: FileOptionExtension<Value>): boolean {
-      return hasOption(schema.file, option);
-    },
-    getFileOption<Value>(option: FileOptionExtension<Value>): Value {
-      return getOption(schema.file, option);
-    },
-  };
-
-  return Object.freeze(metadata);
-}
-
-function createValidationResult(
-  violations: readonly ConstraintViolation[],
-): MessageValidationResult {
-  if (violations.length === 0) {
-    return {
-      valid: true,
-      violations: EMPTY_VIOLATIONS,
-      error: undefined,
-    };
-  }
-
-  const nonEmptyViolations = violations as readonly [ConstraintViolation, ...ConstraintViolation[]];
-
-  return {
-    valid: false,
-    violations: nonEmptyViolations,
-    error: createValidationError(nonEmptyViolations),
-  };
-}
-
-function createFacadeFailureViolation(typeName: string, message: string): ConstraintViolation {
-  return create(ConstraintViolationSchema, {
-    typeName,
-    message: create(TemplateStringSchema, {
-      withPlaceholders: message,
-    }),
-  });
-}
+export const spineCoreRegistry: TypeRegistryLookup = RegistryLookups.lookup(
+  TypeRegistry.spineCore(),
+);
 
 interface SanitizableConstraintViolation {
   readonly typeName: string;
@@ -853,42 +918,42 @@ interface SanitizableConstraintViolation {
     | undefined;
 }
 
-function toConstraintViolation(violation: SanitizableConstraintViolation): ConstraintViolation {
-  return create(ConstraintViolationSchema, {
-    message:
-      violation.message === undefined
-        ? undefined
-        : create(TemplateStringSchema, {
-            withPlaceholders: violation.message.withPlaceholders,
-            placeholderValue: redactPlaceholderValues(violation.message.placeholderValue),
-          }),
-    typeName: violation.typeName,
-    fieldPath:
-      violation.fieldPath === undefined
-        ? undefined
-        : create(FieldPathSchema, { fieldName: [...violation.fieldPath.fieldName] }),
-  });
-}
-
-function redactPlaceholderValues(
-  values: Record<string, string> | undefined,
-): Record<string, string> {
-  return Object.fromEntries(
-    Object.keys(values ?? {}).map((key) => [key, REDACTED_VALIDATION_DETAIL]),
-  );
-}
-
-function assertRejectionSchema(schema: MessageSchema): void {
-  if (schema.parent !== undefined || !schema.file.proto.name.endsWith("rejections.proto")) {
-    throw new TypeError(
-      `Rejection schema "${schema.typeName}" must be a top-level message declared in a rejections.proto file.`,
+/** Owns private validation-result construction and sanitization. */
+const ValidationResults = {
+  from(violations: readonly ConstraintViolation[]): MessageValidationResult {
+    if (violations.length === 0)
+      return { valid: true, violations: EMPTY_VIOLATIONS, error: undefined };
+    const nonEmpty = violations as readonly [ConstraintViolation, ...ConstraintViolation[]];
+    return { valid: false, violations: nonEmpty, error: ValidationResults.error(nonEmpty) };
+  },
+  error(violations: readonly ConstraintViolation[]): ValidationError {
+    return create(ValidationErrorSchema, { constraintViolation: [...violations] });
+  },
+  failure(typeName: string, message: string): ConstraintViolation {
+    return create(ConstraintViolationSchema, {
+      typeName,
+      message: create(TemplateStringSchema, { withPlaceholders: message }),
+    });
+  },
+  violation(violation: SanitizableConstraintViolation): ConstraintViolation {
+    return create(ConstraintViolationSchema, {
+      message:
+        violation.message === undefined
+          ? undefined
+          : create(TemplateStringSchema, {
+              withPlaceholders: violation.message.withPlaceholders,
+              placeholderValue: ValidationResults.redact(violation.message.placeholderValue),
+            }),
+      typeName: violation.typeName,
+      fieldPath:
+        violation.fieldPath === undefined
+          ? undefined
+          : create(FieldPathSchema, { fieldName: [...violation.fieldPath.fieldName] }),
+    });
+  },
+  redact(values: Record<string, string> | undefined): Record<string, string> {
+    return Object.fromEntries(
+      Object.keys(values ?? {}).map((key) => [key, REDACTED_VALIDATION_DETAIL]),
     );
-  }
-}
-
-function snapshotMessage<Schema extends MessageSchema>(
-  schema: Schema,
-  message: MessageShape<Schema>,
-): MessageShape<Schema> {
-  return fromBinary(schema, toBinary(schema, message));
-}
+  },
+};

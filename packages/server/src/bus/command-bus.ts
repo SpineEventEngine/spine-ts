@@ -1,5 +1,5 @@
 import { clone } from "@bufbuild/protobuf";
-import { ValidationException, checkValid, unpackAny } from "@spine-event-engine/core";
+import { ValidationException, Validate, AnyMessages } from "@spine-event-engine/core";
 import { CommandSchema, type Command } from "@spine-event-engine/proto";
 
 import {
@@ -137,14 +137,14 @@ export class CommandBus {
       throw new Error(`No command dispatcher registered for "${typeUrl}".`);
     }
 
-    const message = unpackAny(packed, registration.schema);
+    const message = AnyMessages.unpack(packed, registration.schema);
 
     if (message === undefined) {
       throw CommandValidationError.invalidPayload();
     }
 
     try {
-      checkValid(registration.schema, message);
+      Validate.check(registration.schema, message);
     } catch (error) {
       if (error instanceof ValidationException) {
         throw new CommandValidationError(error.asMessage());

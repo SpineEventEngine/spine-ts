@@ -6,7 +6,7 @@ import {
   ChatRoomIdSchema,
   MessageIdSchema,
 } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
-import { packAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import type {
   ClientOperationOptions,
   ClientOutcome,
@@ -386,12 +386,14 @@ function requestFixture(
 
 function responseRows(...texts: string[]) {
   return {
-    message: texts.map((text) => ({ state: packAny(ChatMessageViewSchema, view(text)) })),
+    message: texts.map((text) => ({ state: AnyMessages.pack(ChatMessageViewSchema, view(text)) })),
   } as never;
 }
 
 function responseRoomRows(text: string, room: string) {
-  return { message: [{ state: packAny(ChatMessageViewSchema, view(text, room)) }] } as never;
+  return {
+    message: [{ state: AnyMessages.pack(ChatMessageViewSchema, view(text, room)) }],
+  } as never;
 }
 
 function view(text: string, room = text.startsWith("other") ? "other" : "general") {

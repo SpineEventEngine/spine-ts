@@ -1,5 +1,5 @@
 import type { MessageInitShape } from "@bufbuild/protobuf";
-import { createRejectionThrowable, type RejectionThrowable } from "@spine-event-engine/core";
+import { RejectionThrowable } from "@spine-event-engine/core";
 
 import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/rejections_pb.js";
 
@@ -9,5 +9,5 @@ export const MessageAlreadyPosted: {
     input: MessageInitShape<typeof MessageAlreadyPostedSchema>,
   ) => RejectionThrowable<typeof MessageAlreadyPostedSchema>;
 } = Object.freeze({
-  create: (input) => createRejectionThrowable(MessageAlreadyPostedSchema, input),
+  create: (input) => RejectionThrowable.create(MessageAlreadyPostedSchema, input),
 });

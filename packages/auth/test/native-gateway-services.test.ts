@@ -13,7 +13,7 @@ import {
   TenantIdSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
-import { TypeRegistry, packAny } from "@spine-event-engine/core";
+import { TypeRegistry, AnyMessages } from "@spine-event-engine/core";
 import {
   CommandService,
   EventUpdatesSchema,
@@ -70,7 +70,7 @@ function updateWithNestedAny(): Uint8Array {
                   create(CompositeFilterSchema, {
                     filter: [
                       create(FilterSchema, {
-                        value: packAny(
+                        value: AnyMessages.pack(
                           TenantIdSchema,
                           create(TenantIdSchema, {
                             kind: { case: "value", value: "nested-bytes" },
@@ -194,7 +194,7 @@ describe("createNativeGatewayServices", () => {
       context: create(CommandContextSchema, {
         actorContext: create(ActorContextSchema, { actor: { value: "ada" } }),
       }),
-      message: packAny(
+      message: AnyMessages.pack(
         TenantIdSchema,
         create(TenantIdSchema, { kind: { case: "value", value: "application" } }),
       ),

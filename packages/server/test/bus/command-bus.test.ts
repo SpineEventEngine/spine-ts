@@ -2,7 +2,7 @@ import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -106,7 +106,7 @@ describe("CommandBus", () => {
     bus.register(first);
 
     expect(() => bus.register(second)).toThrow(
-      `Duplicate command dispatcher for "${deriveTypeUrl(ProjectionStateSchema)}".`,
+      `Duplicate command dispatcher for "${TypeUrls.derive(ProjectionStateSchema)}".`,
     );
   });
 
@@ -146,7 +146,7 @@ describe("CommandBus", () => {
     );
     const bus = new CommandBus([dispatcher]);
 
-    expect(bus.acceptedCommandTypes()).toEqual([deriveTypeUrl(ProjectionStateSchema)]);
+    expect(bus.acceptedCommandTypes()).toEqual([TypeUrls.derive(ProjectionStateSchema)]);
 
     await bus.post(createProjectionCommand("command-deduplicated"));
 
@@ -195,7 +195,7 @@ describe("CommandBus", () => {
     const bus = new CommandBus();
 
     await expect(bus.post(createProjectionCommand("command-2"))).rejects.toThrow(
-      `No command dispatcher registered for "${deriveTypeUrl(ProjectionStateSchema)}".`,
+      `No command dispatcher registered for "${TypeUrls.derive(ProjectionStateSchema)}".`,
     );
   });
 
@@ -358,7 +358,7 @@ function createValidatedCommandDispatcher(
 }
 
 function createProjectionCommand(id: string) {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
@@ -382,7 +382,7 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: packAny(
+    message: AnyMessages.pack(
       ValidatedTaskCommandSchema,
       create(ValidatedTaskCommandSchema, {
         id: aggregateId,

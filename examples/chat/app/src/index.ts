@@ -1,5 +1,5 @@
 import { clone, create, type Message as ProtoMessage } from "@bufbuild/protobuf";
-import { unpackAnyUsing, packAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   Aggregate,
   Assign,
@@ -128,14 +128,14 @@ export async function startChatServer(options: ChatServerOptions = {}): Promise<
 
 /** Dynamically decodes registered application model values. */
 export function unpackChatValue(
-  value: Parameters<typeof unpackAnyUsing>[1],
+  value: Parameters<typeof AnyMessages.unpackUsing>[1],
 ): ProtoMessage | undefined {
-  return unpackAnyUsing(typeRegistry, value);
+  return AnyMessages.unpackUsing(typeRegistry, value);
 }
 
 /** Packs a user identifier for use by a Chat application boundary. */
-export function packUserId(user: UserId): Parameters<typeof unpackAnyUsing>[1] {
-  return packAny(UserIdSchema, user);
+export function packUserId(user: UserId): Parameters<typeof AnyMessages.unpackUsing>[1] {
+  return AnyMessages.pack(UserIdSchema, user);
 }
 
 export type { ChatMessage, ChatMessageView };

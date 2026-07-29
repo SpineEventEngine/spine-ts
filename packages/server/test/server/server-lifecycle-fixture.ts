@@ -7,7 +7,7 @@ import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { packAny, packEvent } from "@spine-event-engine/core";
+import { AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -123,10 +123,10 @@ export async function lifecycleFixture(
       })
       .build();
   const createEvent = (id: string) =>
-    packEvent({
+    SignalEnvelopes.event({
       id: create(EventIdSchema, { value: id }),
       context: create(EventContextSchema, {
-        producerId: packAny(UserIdSchema, create(UserIdSchema, { value: id })),
+        producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: id })),
         version: create(VersionSchema, { number: 1 }),
       }),
       schema: LifecycleStateSchema,

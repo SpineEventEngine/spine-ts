@@ -7,7 +7,7 @@ import { create } from "@bufbuild/protobuf";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { HandlerContext } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import { packAny, unpackAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import { AckSchema } from "@spine-event-engine/proto";
 import { ResponseSchema, StatusSchema } from "@spine-event-engine/proto";
 import { type Query, QueryResponseSchema } from "@spine-event-engine/proto/client";
@@ -248,13 +248,14 @@ function queryResponse(query: Query) {
     query.target?.criterion.case === "filters"
       ? query.target.criterion.value.idFilter?.id[0]
       : undefined;
-  const id = packedId === undefined ? undefined : unpackAny(packedId, StringValueSchema)?.value;
+  const id =
+    packedId === undefined ? undefined : AnyMessages.unpack(packedId, StringValueSchema)?.value;
   return create(QueryResponseSchema, {
     response: create(ResponseSchema, { status: okStatus() }),
     message:
       id === undefined
         ? []
-        : [{ state: packAny(OrderSummarySchema, create(OrderSummarySchema, { id })) }],
+        : [{ state: AnyMessages.pack(OrderSummarySchema, create(OrderSummarySchema, { id })) }],
   });
 }
 function okStatus() {

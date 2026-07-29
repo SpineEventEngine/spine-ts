@@ -106,7 +106,7 @@ import { create } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
@@ -153,7 +153,7 @@ try {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [packAny(StringValueSchema, create(StringValueSchema, { value: taskId }))],
+            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: taskId }))],
           },
         }),
       },
@@ -169,7 +169,7 @@ try {
             filter: [
               create(FilterSchema, {
                 fieldPath: { fieldName: ["open_task_count"] },
-                value: packAny(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
+                value: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
                 operator: Filter_Operator.EQUAL,
               }),
             ],
@@ -210,7 +210,7 @@ function taskListQuery(id, criterion, limit = maxQueryRows) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: id }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
+      type: TypeUrls.derive(TaskListSchema),
       criterion,
     }),
     context: actorContext,
@@ -248,7 +248,7 @@ function decodeTaskLists(response) {
       continue;
     }
     try {
-      const list = unpackAny(row.state, TaskListSchema);
+      const list = AnyMessages.unpack(row.state, TaskListSchema);
       if (list !== undefined) {
         taskLists.push(list);
       } else {
@@ -322,7 +322,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
@@ -350,12 +350,12 @@ const actorContext = metadata.actorContext({
 const suffix = randomUUID();
 const taskId = `subscription-task-${suffix}`;
 const target = create(TargetSchema, {
-  type: deriveTypeUrl(TaskListSchema),
+  type: TypeUrls.derive(TaskListSchema),
   criterion: {
     case: "filters",
     value: create(TargetFiltersSchema, {
       idFilter: {
-        id: [packAny(StringValueSchema, create(StringValueSchema, { value: taskId }))],
+        id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: taskId }))],
       },
     }),
   },
@@ -449,7 +449,7 @@ try {
 }
 
 function createTaskCommand(taskId, commandSuffix) {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: metadata.commandId(`subscription-command-${commandSuffix}`),
     context: metadata.commandContext({ actorContext }),
     schema: CreateTaskSchema,
@@ -466,7 +466,7 @@ function taskListFrom(update) {
   if (entityUpdate?.kind.case !== "state") {
     return undefined;
   }
-  return unpackAny(entityUpdate.kind.value, TaskListSchema);
+  return AnyMessages.unpack(entityUpdate.kind.value, TaskListSchema);
 }
 
 async function withTimeout(promise, label, timeoutMs) {

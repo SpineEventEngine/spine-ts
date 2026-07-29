@@ -27,15 +27,15 @@ The type registry slice includes:
 
 ```ts
 import { FieldPathSchema } from "@spine-event-engine/proto";
-import { deriveTypeUrl, spineCoreRegistry } from "@spine-event-engine/core";
+import { spineCoreRegistry, TypeUrls } from "@spine-event-engine/core";
 
-const typeUrl = deriveTypeUrl(FieldPathSchema);
+const typeUrl = TypeUrls.derive(FieldPathSchema);
 const metadata = spineCoreRegistry.getByTypeUrl(typeUrl);
 
 console.log(metadata.fullTypeName);
 ```
 
-Use `createSpineCoreRegistry()` when a caller-owned mutable registry is needed.
+Use `TypeRegistry.spineCore()` when a caller-owned mutable registry is needed.
 The shared `spineCoreRegistry` intentionally exposes lookup methods only, so
 application code cannot mutate the process-wide curated registry.
 
@@ -51,11 +51,11 @@ through the upstream validation package:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { validateMessage, checkValid, ValidationException } from "@spine-event-engine/core";
+import { ValidationException, Validate } from "@spine-event-engine/core";
 import { CommandSchema } from "@spine-event-engine/proto";
 
 const command = create(CommandSchema, {});
-const result = validateMessage(CommandSchema, command);
+const result = Validate.message(CommandSchema, command);
 
 if (!result.valid) {
   const fields = result.violations.map(
@@ -65,7 +65,7 @@ if (!result.valid) {
 }
 
 try {
-  checkValid(CommandSchema, command);
+  Validate.check(CommandSchema, command);
 } catch (error) {
   if (error instanceof ValidationException) {
     const validationError = error.asMessage();
@@ -76,9 +76,9 @@ try {
 }
 ```
 
-`validateMessage()` returns a structured result with repo-local
+`Validate.message()` returns a structured result with repo-local
 `spine.validation.ConstraintViolation` and `spine.validation.ValidationError`
-message data from `@spine-event-engine/proto`. `checkValid()` uses the same validation
+message data from `@spine-event-engine/proto`. `Validate.check()` uses the same validation
 path and throws `ValidationException` when violations are present.
 Validation details are safe by default: the facade omits raw invalid
 `fieldValue` data, redacts every upstream or transition-rule placeholder value
@@ -87,7 +87,7 @@ structured repo-local violations.
 
 Stateful checks such as Spine `(set_once)` require previous and proposed state.
 They are intentionally separate from single-message validation and use the
-framework-owned `validateTransition()` seam consumed by current server entity
+framework-owned `Validate.transition()` seam consumed by current server entity
 transaction validation. Rule-returned violations are sanitized before
 aggregation, and throwing transition rules are isolated into structured
 violations so later rules still run in order.
@@ -122,33 +122,33 @@ validated throwable contract.
 
 ## Envelope Packing
 
-Use `packAny()` when a caller needs Spine-aware `google.protobuf.Any` values.
-It derives the type URL through `deriveTypeUrl(schema)` and serializes with the
+Use `AnyMessages.pack()` when a caller needs Spine-aware `google.protobuf.Any` values.
+It derives the type URL through `TypeUrls.derive(schema)` and serializes with the
 Protobuf-ES binary writer, so Spine payloads use `type.spine.io/...` instead of
 the default `type.googleapis.com/...` prefix.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { packAny, unpackAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import { FieldPathSchema } from "@spine-event-engine/proto";
 
 const payload = create(FieldPathSchema, { fieldName: ["task", "title"] });
-const any = packAny(FieldPathSchema, payload);
-const unpacked = unpackAny(any, FieldPathSchema);
+const any = AnyMessages.pack(FieldPathSchema, payload);
+const unpacked = AnyMessages.unpack(any, FieldPathSchema);
 ```
 
-`packAny()` validates the enclosed message through the core validation facade by
+`AnyMessages.pack()` validates the enclosed message through the core validation facade by
 default and throws `ValidationException` for structured validation failures. Set
 `{ validate: false }` only when the caller has already validated a trusted
 message. Framework-packed payloads omit unknown fields for stable binary output
 inside this helper seam. Protobuf-ES 2.12.1 does not expose deterministic
 map-key ordering, so this package does not claim fully canonical map ordering in
 T-0007b. The helpers do not include packed bytes or payload contents in their
-validation errors, and `unpackAny()` returns `undefined` for type URL mismatches
+validation errors, and `AnyMessages.unpack()` returns `undefined` for type URL mismatches
 or malformed payload bytes.
 
-Low-level framework and test-fixture code can use `packCommand()` and
-`packEvent()` when it already owns generated Spine envelope IDs and contexts:
+Low-level framework and test-fixture code can use `SignalEnvelopes.command()` and
+`SignalEnvelopes.event()` when it already owns generated Spine envelope IDs and contexts:
 
 The following block is intentionally a non-executable call-shape fragment. It
 requires caller-owned `commandId` (`CommandId`), `commandContext`
@@ -158,16 +158,16 @@ messages from `@spine-event-engine/proto`, plus consumer-generated `CreateTaskSc
 messages.
 
 ```ts
-import { packCommand, packEvent } from "@spine-event-engine/core";
+import { SignalEnvelopes } from "@spine-event-engine/core";
 
-const command = packCommand({
+const command = SignalEnvelopes.command({
   id: commandId,
   context: commandContext,
   schema: CreateTaskSchema,
   message: payload,
 });
 
-const event = packEvent({
+const event = SignalEnvelopes.event({
   id: eventId,
   context: eventContext,
   schema: TaskCreatedSchema,

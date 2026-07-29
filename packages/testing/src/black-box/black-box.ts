@@ -10,7 +10,7 @@ import {
   type Subscription,
   type CreateSubscriptionOptions,
 } from "@spine-event-engine/client-node";
-import { packEvent } from "@spine-event-engine/core";
+import { SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   EventContextSchema,
@@ -195,7 +195,7 @@ export class BlackBox {
     this.#assertOpen();
     const id = create(EventIdSchema, { value: randomUUID() });
     await this.#context.eventBus().post(
-      packEvent({
+      SignalEnvelopes.event({
         id,
         context: create(EventContextSchema, {
           timestamp: timestamp(),

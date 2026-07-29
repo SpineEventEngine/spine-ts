@@ -16,7 +16,7 @@ import {
   useSubscriptionLifecycle,
 } from "@spine-event-engine/client-react";
 import type { ClientRequest, SubscriptionLifecycle } from "@spine-event-engine/client-web";
-import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilterSchema,
@@ -266,7 +266,7 @@ export function createRoomQuery(room: string): Query {
     id: create(QueryIdSchema, { value: `chat-room-${room}` }),
     context: create(ActorContextSchema),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ChatMessageViewSchema),
+      type: TypeUrls.derive(ChatMessageViewSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -277,7 +277,10 @@ export function createRoomQuery(room: string): Query {
                 create(FilterSchema, {
                   fieldPath: { fieldName: ["room"] },
                   operator: Filter_Operator.EQUAL,
-                  value: packAny(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: room })),
+                  value: AnyMessages.pack(
+                    ChatRoomIdSchema,
+                    create(ChatRoomIdSchema, { value: room }),
+                  ),
                 }),
               ],
             }),
@@ -301,7 +304,7 @@ export function createRoomTopic(room: string): Topic {
 export function roomRows(response: QueryResponse, room: string): readonly ChatMessageView[] {
   return response.message.flatMap((entry) => {
     if (entry.state === undefined) return [];
-    const row = unpackAny(entry.state, ChatMessageViewSchema);
+    const row = AnyMessages.unpack(entry.state, ChatMessageViewSchema);
     return row?.room?.value === room ? [row] : [];
   });
 }

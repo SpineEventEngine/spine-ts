@@ -35,8 +35,8 @@ describe("@spine-event-engine/core validation facade upstream boundary", () => {
       ],
     }));
 
-    const { ValidationException, checkValid, validateMessage } = await import("../src/index.js");
-    const result = validateMessage(ValidationErrorSchema, create(ValidationErrorSchema, {}));
+    const { ValidationException, Validate } = await import("../src/index.js");
+    const result = Validate.message(ValidationErrorSchema, create(ValidationErrorSchema, {}));
 
     expect(result.valid).toBe(false);
     expect(result.violations[0]?.fieldValue).toBeUndefined();
@@ -54,8 +54,8 @@ describe("@spine-event-engine/core validation facade upstream boundary", () => {
     expect(JSON.stringify(result.error)).not.toContain("private@example.test");
 
     try {
-      checkValid(ValidationErrorSchema, create(ValidationErrorSchema, {}));
-      throw new Error("Expected checkValid() to throw.");
+      Validate.check(ValidationErrorSchema, create(ValidationErrorSchema, {}));
+      throw new Error("Expected Validate.check() to throw.");
     } catch (error) {
       expect(error).toBeInstanceOf(ValidationException);
       const validationError = (error as InstanceType<typeof ValidationException>).asMessage();
@@ -81,9 +81,9 @@ describe("@spine-event-engine/core validation facade upstream boundary", () => {
       },
     }));
 
-    const { ValidationException, checkValid, validateMessage } = await import("../src/index.js");
+    const { ValidationException, Validate } = await import("../src/index.js");
     const message = create(ValidationErrorSchema, {});
-    const result = validateMessage(ValidationErrorSchema, message);
+    const result = Validate.message(ValidationErrorSchema, message);
 
     expect(result.valid).toBe(false);
     expect(result.violations).toHaveLength(1);
@@ -91,11 +91,11 @@ describe("@spine-event-engine/core validation facade upstream boundary", () => {
     expect(result.violations[0]?.message?.withPlaceholders).toBe("Validation runtime failed.");
     expect(JSON.stringify(result.error)).not.toContain("raw upstream payload secret");
 
-    expect(() => checkValid(ValidationErrorSchema, message)).toThrow(ValidationException);
+    expect(() => Validate.check(ValidationErrorSchema, message)).toThrow(ValidationException);
 
     try {
-      checkValid(ValidationErrorSchema, message);
-      throw new Error("Expected checkValid() to throw.");
+      Validate.check(ValidationErrorSchema, message);
+      throw new Error("Expected Validate.check() to throw.");
     } catch (error) {
       expect(error).toBeInstanceOf(ValidationException);
       expect(

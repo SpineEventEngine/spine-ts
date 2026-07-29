@@ -2,7 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
@@ -76,7 +76,7 @@ describe("project-management load example", () => {
 
     try {
       const acknowledgement = await commands.post(
-        packCommand({
+        SignalEnvelopes.command({
           id: metadata.commandId("project-grpc-command"),
           context: metadata.commandContext({ actorContext }),
           schema: CreateProjectSchema,
@@ -88,7 +88,7 @@ describe("project-management load example", () => {
       const response = await readEventually(queries, id, actorContext);
       const summary = response.message
         .map((row) =>
-          row.state === undefined ? undefined : unpackAny(row.state, ProjectSummarySchema),
+          row.state === undefined ? undefined : AnyMessages.unpack(row.state, ProjectSummarySchema),
         )
         .find((candidate) => candidate?.id === id);
       expect(summary?.name).toBe("gRPC project");
@@ -123,11 +123,13 @@ function createQuery(id: string, actorContext: ReturnType<typeof metadata.actorC
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: `query-${id}-${String(Date.now())}` }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ProjectSummarySchema),
+      type: TypeUrls.derive(ProjectSummarySchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
-          idFilter: { id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))] },
+          idFilter: {
+            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+          },
         }),
       },
     }),
@@ -139,11 +141,13 @@ function createTopic(id: string, actorContext: ReturnType<typeof metadata.actorC
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: `project-topic-${id}` }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ProjectSummarySchema),
+      type: TypeUrls.derive(ProjectSummarySchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
-          idFilter: { id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))] },
+          idFilter: {
+            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+          },
         }),
       },
     }),

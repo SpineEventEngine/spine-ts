@@ -2,6 +2,12 @@
 export class RecordColumn<R extends object, V = unknown> {
   readonly #read: (record: R) => V;
 
+  /** Creates a named column reader.
+   * @param name The stable column name.
+   * @param read The record value reader.
+   * @param valueType The stable provider-visible value type.
+   * @returns The created column.
+   */
   constructor(
     readonly name: string,
     read: (record: R) => V,
@@ -14,7 +20,10 @@ export class RecordColumn<R extends object, V = unknown> {
     this.#read = read;
   }
 
-  /** Read the stored column value from a record snapshot. */
+  /** Reads the stored column value from a record snapshot.
+   * @param record The record snapshot.
+   * @returns The column value.
+   */
   valueIn(record: R): V {
     return this.#read(record);
   }

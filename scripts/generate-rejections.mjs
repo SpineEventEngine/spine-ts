@@ -18,8 +18,7 @@ export function generateRejectionCompanions(schema) {
     }
 
     const output = schema.generateFile(`${file.name}.ts`);
-    const factory = output.import("createRejectionThrowable", "@spine-event-engine/core");
-    const throwable = output.import("RejectionThrowable", "@spine-event-engine/core", true);
+    const throwable = output.import("RejectionThrowable", "@spine-event-engine/core");
     const messageInit = output.import("MessageInitShape", "@bufbuild/protobuf", true);
 
     output.preamble(file);
@@ -36,8 +35,8 @@ export function generateRejectionCompanions(schema) {
         "<typeof ",
         messageSchema,
         "> } = {\n  create(input) {\n    return ",
-        factory,
-        "(",
+        throwable,
+        ".create(",
         messageSchema,
         ", input);\n  },\n};\n",
       );

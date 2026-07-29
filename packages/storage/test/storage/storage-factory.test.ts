@@ -11,8 +11,26 @@ import {
   RecordSpec,
   type StorageFactory,
 } from "../../src/index.js";
+import { StorageScopes } from "../../src/storage/canonical-scope.js";
 
 describe("StorageFactory", () => {
+  it("exposes immutable storage-scope methods", () => {
+    const rejectsReassignment = () => {
+      // @ts-expect-error Frozen owner methods cannot be reassigned.
+      StorageScopes.canonical = () => "unreachable";
+    };
+    void rejectsReassignment;
+    expect(Object.isFrozen(StorageScopes)).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(StorageScopes, "canonical")?.writable).toBe(false);
+  });
+
+  it("length-delimits tenant scope components without colliding", () => {
+    const first = StorageScopes.canonical({ name: "a:b", multitenant: true, tenantId: "c" }, "d");
+    const second = StorageScopes.canonical({ name: "a", multitenant: true, tenantId: "b:c" }, "d");
+
+    expect(first).not.toBe(second);
+  });
+
   it("creates typed record storages through the JVM-like seam", () => {
     const factory: StorageFactory = new InMemoryStorageFactory();
     const spec = createEventSpec();

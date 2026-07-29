@@ -9,7 +9,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   QueryIdSchema,
@@ -21,11 +21,8 @@ import {
 import { QueryService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
 import { SignalMetadata } from "@spine-event-engine/server";
-import { createTransportTopic, type SignalTransport } from "@spine-event-engine/transport";
-import {
-  createZeroMqAdapterConfig,
-  createZeroMqTransport,
-} from "@spine-event-engine/transport/zeromq";
+import { TransportTopics, type SignalTransport } from "@spine-event-engine/transport";
+import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
 import { describe, expect, it, vi } from "vitest";
 
 import { CreateTaskSchema } from "../generated/spine/example/todo/v1/task_commands_pb.js";
@@ -120,7 +117,7 @@ describe("local multi-process to-do mode", () => {
       value: create(TargetFiltersSchema, {
         idFilter: {
           id: [
-            packAny(
+            AnyMessages.pack(
               StringValueSchema,
               create(StringValueSchema, { value: "local-multi-process-task" }),
             ),
@@ -796,7 +793,7 @@ class LocalMultiProcessFixture {
       expect(directory.isDirectory()).toBe(true);
       expect(directory.mode & 0o077).toBe(0);
       parentTransport = createZeroMqTransport(
-        createZeroMqAdapterConfig({ ipcDirectory, adapterIdentity }),
+        ZeroMqConfig.create({ ipcDirectory, adapterIdentity }),
         {
           requestTimeoutMs,
           receiveTimeoutMs,
@@ -913,11 +910,11 @@ class LocalMultiProcessFixture {
   async requestCreateTask(): Promise<void> {
     await within(
       this.#parentTransport.request({
-        topic: createTransportTopic({
+        topic: TransportTopics.create({
           signalKind: "command",
-          messageTypeUrl: deriveTypeUrl(CreateTaskSchema),
+          messageTypeUrl: TypeUrls.derive(CreateTaskSchema),
         }),
-        envelope: packCommand({
+        envelope: SignalEnvelopes.command({
           id: signalMetadata.commandId("local-multi-process-create-command"),
           context: signalMetadata.commandContext({
             actorContext: signalMetadata.actorContext({
@@ -1285,7 +1282,7 @@ function controlledDiagnosticQueryResponse(): QueryResponse {
     message: [
       {},
       {
-        state: packAny(
+        state: AnyMessages.pack(
           TaskListSchema,
           create(TaskListSchema, {
             id: `unsafe\nrow\t${"x".repeat(maxDiagnosticLength)}`,
@@ -1293,7 +1290,7 @@ function controlledDiagnosticQueryResponse(): QueryResponse {
         ),
       },
       ...Array.from({ length: maxDiagnosticRowIds + 1 }, (_, index) => ({
-        state: packAny(
+        state: AnyMessages.pack(
           TaskListSchema,
           create(TaskListSchema, { id: `extra-row-${String(index)}` }),
         ),
@@ -1313,13 +1310,13 @@ function createTaskListQuery(): Query {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "local-multi-process-query" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
+      type: TypeUrls.derive(TaskListSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
             id: [
-              packAny(
+              AnyMessages.pack(
                 StringValueSchema,
                 create(StringValueSchema, { value: "local-multi-process-task" }),
               ),
@@ -1339,7 +1336,7 @@ function findTaskList(response: QueryResponse, id: string): TaskList | undefined
     if (message.state === undefined) {
       continue;
     }
-    const list = unpackAny(message.state, TaskListSchema);
+    const list = AnyMessages.unpack(message.state, TaskListSchema);
     if (list?.id === id) {
       return list;
     }
@@ -1353,7 +1350,7 @@ function summarizeRowIds(response: QueryResponse, ipcDirectory: string): string 
     if (message.state === undefined) {
       return "<unreadable>";
     }
-    const id = unpackAny(message.state, TaskListSchema)?.id;
+    const id = AnyMessages.unpack(message.state, TaskListSchema)?.id;
     return id === undefined ? "<unreadable>" : sanitizeRowId(id, ipcDirectory);
   });
   const omittedRows = response.message.length - inspectedRows.length;

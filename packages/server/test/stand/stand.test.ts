@@ -2,7 +2,7 @@ import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/pro
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import { VersionSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
@@ -80,7 +80,7 @@ describe("Stand", () => {
     stand.register(ProjectionStateSchema);
     stand.register(ProjectionStateSchema);
 
-    expect(stand.stateTypes()).toEqual([deriveTypeUrl(ProjectionStateSchema)]);
+    expect(stand.stateTypes()).toEqual([TypeUrls.derive(ProjectionStateSchema)]);
     await expect(stand.read(AggregateStateSchema, "task-1")).rejects.toThrow(StandStateTypeError);
     expect(() => stand.subscribe(AggregateStateSchema, () => undefined)).toThrow(
       StandStateTypeError,
@@ -132,7 +132,7 @@ describe("Stand", () => {
     expect(stored).not.toBe(state);
     expect(updates).toHaveLength(1);
     expect(updates[0]?.id).toBe("task-1");
-    expect(updates[0]?.typeUrl).toBe(deriveTypeUrl(ProjectionStateSchema));
+    expect(updates[0]?.typeUrl).toBe(TypeUrls.derive(ProjectionStateSchema));
     expect(updates[0]?.version).toEqual(create(VersionSchema, { number: 3 }));
     expect(updates[0]?.state).toEqual(stored);
     expect(updates[0]?.state).not.toBe(stored);

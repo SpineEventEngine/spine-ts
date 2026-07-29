@@ -33,21 +33,11 @@ import {
   TypeRegistry,
   ValidationException,
   RejectionThrowable,
-  checkValid,
-  createRejectionThrowable,
-  createValidationError,
-  createSpineCoreRegistry,
-  deriveTypeUrl,
-  getTypeUrlPrefix,
-  isRejectionThrowable,
-  packAny,
-  packCommand,
-  packEvent,
   spineCoreRegistry,
-  unpackAny,
-  unpackAnyUsing,
-  validateTransition,
-  validateMessage,
+  Validate,
+  TypeUrls,
+  AnyMessages,
+  SignalEnvelopes,
 } from "../src/index.js";
 
 type RequiredName = Message<"example.validation.RequiredName"> & {
@@ -129,7 +119,7 @@ function eventContext() {
   const producerId = create(UserIdSchema, { value: "aggregate-1" });
 
   return create(EventContextSchema, {
-    producerId: packAny(UserIdSchema, producerId),
+    producerId: AnyMessages.pack(UserIdSchema, producerId),
     version: create(VersionSchema, { number: 1 }),
   });
 }
@@ -169,7 +159,7 @@ function freezeModule(module: { schemas: never[]; dependencies: ProtoModule[] })
 
 describe("RejectionThrowable", () => {
   it("keeps a nominal, cloned rejection message with Error behavior", () => {
-    const rejection = createRejectionThrowable(RequiredRejectionSchema, {
+    const rejection = RejectionThrowable.create(RequiredRejectionSchema, {
       name: "Task already done",
     });
 
@@ -185,7 +175,7 @@ describe("RejectionThrowable", () => {
   });
 
   it("validates the rejection message before creating the throwable", () => {
-    expect(() => createRejectionThrowable(RequiredRejectionSchema, {})).toThrow(
+    expect(() => RejectionThrowable.create(RequiredRejectionSchema, {})).toThrow(
       ValidationException,
     );
   });
@@ -200,7 +190,7 @@ describe("RejectionThrowable", () => {
       }),
     );
     const input = fromBinary(PayloadRejectedSchema, new Uint8Array([...encoded, 0x98, 0x06, 0x7b]));
-    const rejection = createRejectionThrowable(PayloadRejectedSchema, input);
+    const rejection = RejectionThrowable.create(PayloadRejectedSchema, input);
     const inputDetail = input.detail;
     const inputUnknown = input.$unknown?.[0];
 
@@ -240,28 +230,28 @@ describe("RejectionThrowable", () => {
   });
 
   it("recognizes only factory-created rejection throwables", () => {
-    const rejection = createRejectionThrowable(RequiredRejectionSchema, {
+    const rejection = RejectionThrowable.create(RequiredRejectionSchema, {
       name: "Task already done",
     });
     const spoofedError = new Error("spoofed");
 
     Object.setPrototypeOf(spoofedError, RejectionThrowable.prototype);
 
-    expect(isRejectionThrowable(rejection)).toBe(true);
-    expect(isRejectionThrowable(new Error("ordinary"))).toBe(false);
+    expect(RejectionThrowable.is(rejection)).toBe(true);
+    expect(RejectionThrowable.is(new Error("ordinary"))).toBe(false);
     expect(spoofedError).toBeInstanceOf(RejectionThrowable);
-    expect(isRejectionThrowable(spoofedError)).toBe(false);
-    expect(isRejectionThrowable({ schema: RequiredRejectionSchema })).toBe(false);
+    expect(RejectionThrowable.is(spoofedError)).toBe(false);
+    expect(RejectionThrowable.is({ schema: RequiredRejectionSchema })).toBe(false);
   });
 
   it("accepts only top-level messages declared in rejections.proto files", () => {
     expect(() =>
-      createRejectionThrowable(RequiredRejectionSchema, { name: "valid" }),
+      RejectionThrowable.create(RequiredRejectionSchema, { name: "valid" }),
     ).not.toThrow();
-    expect(() => createRejectionThrowable(RequiredNameSchema, { name: "ordinary" })).toThrow(
+    expect(() => RejectionThrowable.create(RequiredNameSchema, { name: "ordinary" })).toThrow(
       TypeError,
     );
-    expect(() => createRejectionThrowable(NestedRejectionSchema, { reason: "nested" })).toThrow(
+    expect(() => RejectionThrowable.create(NestedRejectionSchema, { reason: "nested" })).toThrow(
       TypeError,
     );
   });
@@ -279,8 +269,8 @@ describe("RejectionThrowable", () => {
   it("preserves the schema-specific create input type", () => {
     const TaskAlreadyDone = {
       create: (
-        input: Parameters<typeof createRejectionThrowable<typeof RequiredRejectionSchema>>[1],
-      ) => createRejectionThrowable(RequiredRejectionSchema, input),
+        input: Parameters<typeof RejectionThrowable.create<typeof RequiredRejectionSchema>>[1],
+      ) => RejectionThrowable.create(RequiredRejectionSchema, input),
     };
 
     expectTypeOf<{ name: string }>().toExtend<Parameters<typeof TaskAlreadyDone.create>[0]>();
@@ -335,9 +325,12 @@ describe("@spine-event-engine/core type registry", () => {
     const registry = TypeRegistry.from(
       module("example.application", [], [module("example.dependency", [UserIdSchema])]),
     );
-    const packed = packAny(UserIdSchema, create(UserIdSchema, { value: "dependency-user" }));
+    const packed = AnyMessages.pack(
+      UserIdSchema,
+      create(UserIdSchema, { value: "dependency-user" }),
+    );
 
-    expect(unpackAnyUsing(registry, packed)).toEqual(
+    expect(AnyMessages.unpackUsing(registry, packed)).toEqual(
       create(UserIdSchema, { value: "dependency-user" }),
     );
   });
@@ -384,7 +377,7 @@ describe("@spine-event-engine/core type registry", () => {
   it("dynamically unpacks only exact registered type URLs", () => {
     const registry = TypeRegistry.from(module("example.application", [UserIdSchema]));
     const message = create(UserIdSchema, { value: "user-1" });
-    const packed = packAny(UserIdSchema, message);
+    const packed = AnyMessages.pack(UserIdSchema, message);
     const unknown = create(AnySchema, {
       typeUrl: "type.spine.io/spine.core.UserId.extra",
       value: packed.value,
@@ -394,21 +387,21 @@ describe("@spine-event-engine/core type registry", () => {
       value: new Uint8Array([0xff]),
     });
 
-    expect(unpackAnyUsing(registry, packed)).toEqual(message);
-    expect(unpackAnyUsing(registry, unknown)).toBeUndefined();
-    expect(unpackAnyUsing(registry, malformed)).toBeUndefined();
+    expect(AnyMessages.unpackUsing(registry, packed)).toEqual(message);
+    expect(AnyMessages.unpackUsing(registry, unknown)).toBeUndefined();
+    expect(AnyMessages.unpackUsing(registry, malformed)).toBeUndefined();
   });
 
   it("derives type URLs from Spine file type_url_prefix options", () => {
-    expect(deriveTypeUrl(FieldPathSchema)).toBe("type.spine.io/spine.base.FieldPath");
-    expect(deriveTypeUrl(ValidationErrorSchema)).toBe(
+    expect(TypeUrls.derive(FieldPathSchema)).toBe("type.spine.io/spine.base.FieldPath");
+    expect(TypeUrls.derive(ValidationErrorSchema)).toBe(
       "type.spine.io/spine.validation.ValidationError",
     );
   });
 
   it("uses the documented fallback prefix when a file has no Spine prefix option", () => {
     expect(DEFAULT_TYPE_URL_PREFIX).toBe("type.googleapis.com");
-    expect(deriveTypeUrl(AnySchema)).toBe("type.googleapis.com/google.protobuf.Any");
+    expect(TypeUrls.derive(AnySchema)).toBe("type.googleapis.com/google.protobuf.Any");
   });
 
   it.each(["", " \t\n", "/", "///"])(
@@ -416,8 +409,8 @@ describe("@spine-event-engine/core type registry", () => {
     (fallbackPrefix) => {
       const message = "Fallback type URL prefix must be non-empty and contain no whitespace.";
 
-      expect(() => getTypeUrlPrefix(AnySchema, fallbackPrefix)).toThrow(new TypeError(message));
-      expect(() => deriveTypeUrl(AnySchema, { fallbackPrefix })).toThrow(new TypeError(message));
+      expect(() => TypeUrls.prefix(AnySchema, fallbackPrefix)).toThrow(new TypeError(message));
+      expect(() => TypeUrls.derive(AnySchema, { fallbackPrefix })).toThrow(new TypeError(message));
     },
   );
 
@@ -426,16 +419,16 @@ describe("@spine-event-engine/core type registry", () => {
     (fallbackPrefix) => {
       const expectedPrefix = "type.example.test";
 
-      expect(getTypeUrlPrefix(AnySchema, fallbackPrefix)).toBe(expectedPrefix);
-      expect(deriveTypeUrl(AnySchema, { fallbackPrefix })).toBe(
+      expect(TypeUrls.prefix(AnySchema, fallbackPrefix)).toBe(expectedPrefix);
+      expect(TypeUrls.derive(AnySchema, { fallbackPrefix })).toBe(
         `${expectedPrefix}/google.protobuf.Any`,
       );
     },
   );
 
   it("uses a Spine file option before considering an unused custom fallback", () => {
-    expect(getTypeUrlPrefix(FieldPathSchema, "///")).toBe("type.spine.io");
-    expect(deriveTypeUrl(FieldPathSchema, { fallbackPrefix: "///" })).toBe(
+    expect(TypeUrls.prefix(FieldPathSchema, "///")).toBe("type.spine.io");
+    expect(TypeUrls.derive(FieldPathSchema, { fallbackPrefix: "///" })).toBe(
       "type.spine.io/spine.base.FieldPath",
     );
   });
@@ -554,7 +547,7 @@ describe("@spine-event-engine/core type registry", () => {
   });
 
   it("registers the current curated Spine schemas in the default registry", () => {
-    const registry = createSpineCoreRegistry();
+    const registry = TypeRegistry.spineCore();
 
     expect(registry.getBySchema(FieldPathSchema).typeUrl).toBe(
       "type.spine.io/spine.base.FieldPath",
@@ -574,7 +567,7 @@ describe("@spine-event-engine/core type registry", () => {
   });
 
   it("registers representative core signal envelope and context schemas", () => {
-    const registry = createSpineCoreRegistry();
+    const registry = TypeRegistry.spineCore();
 
     expect(registry.getBySchema(CommandSchema).typeUrl).toBe("type.spine.io/spine.core.Command");
     expect(registry.getBySchema(EventSchema).typeUrl).toBe("type.spine.io/spine.core.Event");
@@ -609,7 +602,7 @@ describe("@spine-event-engine/core type registry", () => {
   });
 
   it("keeps semantic tag lookup future-compatible without inventing tags", () => {
-    const registry = createSpineCoreRegistry();
+    const registry = TypeRegistry.spineCore();
 
     expect(registry.findBySemanticTag("io.spine.SomeMarker")).toEqual([]);
     expect(registry.getBySchema(FieldPathSchema).semanticTags).toEqual([]);
@@ -618,7 +611,7 @@ describe("@spine-event-engine/core type registry", () => {
 
 describe("@spine-event-engine/core validation facade", () => {
   it("narrows result invariants for valid and invalid validation outcomes", () => {
-    const validResult: MessageValidationResult = validateMessage(ValidationErrorSchema, {
+    const validResult: MessageValidationResult = Validate.message(ValidationErrorSchema, {
       $typeName: "spine.validation.ValidationError",
       constraintViolation: [],
     });
@@ -630,7 +623,7 @@ describe("@spine-event-engine/core validation facade", () => {
       expect(validResult.error).toBeUndefined();
     }
 
-    const invalidResult: MessageValidationResult = validateMessage(
+    const invalidResult: MessageValidationResult = Validate.message(
       RequiredNameSchema,
       create(RequiredNameSchema, { name: "" }),
     );
@@ -646,7 +639,7 @@ describe("@spine-event-engine/core validation facade", () => {
   });
 
   it("returns a typed valid result for a valid Protobuf message", () => {
-    const result = validateMessage(ValidationErrorSchema, {
+    const result = Validate.message(ValidationErrorSchema, {
       $typeName: "spine.validation.ValidationError",
       constraintViolation: [],
     });
@@ -659,11 +652,11 @@ describe("@spine-event-engine/core validation facade", () => {
   it("throws a ValidationException that exposes structured ValidationError data", () => {
     const message = create(RequiredNameSchema, { name: "" });
 
-    expect(() => checkValid(RequiredNameSchema, message)).toThrow(ValidationException);
+    expect(() => Validate.check(RequiredNameSchema, message)).toThrow(ValidationException);
 
     try {
-      checkValid(RequiredNameSchema, message);
-      throw new Error("Expected checkValid() to throw.");
+      Validate.check(RequiredNameSchema, message);
+      throw new Error("Expected Validate.check() to throw.");
     } catch (error) {
       expect(error).toBeInstanceOf(ValidationException);
       const validationError = (error as ValidationException).asMessage();
@@ -688,7 +681,7 @@ describe("@spine-event-engine/core validation facade", () => {
   });
 
   it("returns invalid results and creates ValidationError messages without validation-ts imports", () => {
-    const result = validateMessage(RequiredNameSchema, create(RequiredNameSchema, { name: "" }));
+    const result = Validate.message(RequiredNameSchema, create(RequiredNameSchema, { name: "" }));
 
     expect(result.valid).toBe(false);
     expect(result.violations).toHaveLength(1);
@@ -702,17 +695,17 @@ describe("@spine-event-engine/core validation facade", () => {
     expect(result.error?.$typeName).toBe("spine.validation.ValidationError");
     expect(result.error?.constraintViolation).toEqual(result.violations);
 
-    const validationError = createValidationError(result.violations);
+    const validationError = Validate.createError(result.violations);
 
     expect(validationError.$typeName).toBe("spine.validation.ValidationError");
     expect(validationError.constraintViolation).toEqual(result.violations);
   });
 
-  it("returns the original message from checkValid and accepts empty transition rule sets", () => {
+  it("returns the original message from Validate.check and accepts empty transition rule sets", () => {
     const message = create(RequiredNameSchema, { name: "ready" });
 
-    expect(checkValid(RequiredNameSchema, message)).toBe(message);
-    expect(validateTransition({ schema: RequiredNameSchema, previous: undefined, next: message }))
+    expect(Validate.check(RequiredNameSchema, message)).toBe(message);
+    expect(Validate.transition({ schema: RequiredNameSchema, previous: undefined, next: message }))
       .toMatchInlineSnapshot(`
         {
           "error": undefined,
@@ -727,8 +720,8 @@ describe("@spine-event-engine/core validation facade", () => {
     const next = create(RequiredNameSchema, { name: "second" });
     const violation = transitionViolation("The field `name` cannot be reassigned.");
 
-    const singleMessageResult = validateMessage(RequiredNameSchema, next);
-    const transitionResult = validateTransition({ schema: RequiredNameSchema, previous, next }, [
+    const singleMessageResult = Validate.message(RequiredNameSchema, next);
+    const transitionResult = Validate.transition({ schema: RequiredNameSchema, previous, next }, [
       {
         validateTransition() {
           return [violation];
@@ -762,7 +755,7 @@ describe("@spine-event-engine/core validation facade", () => {
       }),
     });
 
-    const result = validateTransition({ schema: RequiredNameSchema, previous, next }, [
+    const result = Validate.transition({ schema: RequiredNameSchema, previous, next }, [
       {
         validateTransition() {
           return [leakingViolation];
@@ -810,7 +803,7 @@ describe("@spine-event-engine/core validation facade", () => {
     const lastViolation = transitionViolation("last transition violation");
     const calls: string[] = [];
 
-    const result = validateTransition({ schema: RequiredNameSchema, previous, next }, [
+    const result = Validate.transition({ schema: RequiredNameSchema, previous, next }, [
       {
         validateTransition() {
           calls.push("first");
@@ -844,8 +837,25 @@ describe("@spine-event-engine/core validation facade", () => {
 });
 
 describe("@spine-event-engine/core envelope packing", () => {
+  it("exposes immutable public owner methods", () => {
+    const rejectsReassignment = () => {
+      // @ts-expect-error Frozen owner methods cannot be reassigned.
+      Validate.message = () => ({ valid: true, violations: [], error: undefined });
+    };
+    void rejectsReassignment;
+    for (const [owner, method] of [
+      [Validate, "message"],
+      [TypeUrls, "derive"],
+      [AnyMessages, "pack"],
+      [SignalEnvelopes, "command"],
+    ] as const) {
+      expect(Object.isFrozen(owner)).toBe(true);
+      expect(Object.getOwnPropertyDescriptor(owner, method)?.writable).toBe(false);
+    }
+  });
+
   it("keeps packing for schemas without a Spine option on the default canonical URL", () => {
-    const packed = packAny(AnySchema, create(AnySchema));
+    const packed = AnyMessages.pack(AnySchema, create(AnySchema));
 
     expect(packed.typeUrl).toBe("type.googleapis.com/google.protobuf.Any");
   });
@@ -853,20 +863,20 @@ describe("@spine-event-engine/core envelope packing", () => {
   it("packs Any values with Spine type URLs and Protobuf-ES binary payloads", () => {
     const message = create(FieldPathSchema, { fieldName: ["task", "id"] });
 
-    const packed = packAny(FieldPathSchema, message);
+    const packed = AnyMessages.pack(FieldPathSchema, message);
 
     expect(packed.typeUrl).toBe("type.spine.io/spine.base.FieldPath");
-    expect(packed.typeUrl).toBe(deriveTypeUrl(FieldPathSchema));
+    expect(packed.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
     expect(packed.typeUrl).not.toBe("type.googleapis.com/spine.base.FieldPath");
     expect(packed.value).toEqual(toBinary(FieldPathSchema, message));
-    expect(unpackAny(packed, FieldPathSchema)).toEqual(message);
-    expect(unpackAny(packed, ValidationErrorSchema)).toBeUndefined();
+    expect(AnyMessages.unpack(packed, FieldPathSchema)).toEqual(message);
+    expect(AnyMessages.unpack(packed, ValidationErrorSchema)).toBeUndefined();
   });
 
   it("omits unknown fields from framework-packed Any payloads by default", () => {
     const message = fieldPathWithUnknownFields();
 
-    const packed = packAny(FieldPathSchema, message);
+    const packed = AnyMessages.pack(FieldPathSchema, message);
     const stableBytes = toBinary(FieldPathSchema, message, { writeUnknownFields: false });
 
     expect(toBinary(FieldPathSchema, message)).not.toEqual(stableBytes);
@@ -875,22 +885,22 @@ describe("@spine-event-engine/core envelope packing", () => {
 
   it("returns undefined instead of throwing when matching Any payload bytes are malformed", () => {
     const malformed = create(AnySchema, {
-      typeUrl: deriveTypeUrl(FieldPathSchema),
+      typeUrl: TypeUrls.derive(FieldPathSchema),
       value: new Uint8Array([0xff]),
     });
 
-    expect(unpackAny(malformed, FieldPathSchema)).toBeUndefined();
+    expect(AnyMessages.unpack(malformed, FieldPathSchema)).toBeUndefined();
   });
 
   it("lets callers opt out of payload validation when packing already-trusted messages", () => {
     const invalidMessage = create(RequiredNameSchema, { name: "" });
 
-    expect(() => packAny(RequiredNameSchema, invalidMessage)).toThrow(ValidationException);
+    expect(() => AnyMessages.pack(RequiredNameSchema, invalidMessage)).toThrow(ValidationException);
 
-    const packed = packAny(RequiredNameSchema, invalidMessage, { validate: false });
+    const packed = AnyMessages.pack(RequiredNameSchema, invalidMessage, { validate: false });
 
-    expect(packed.typeUrl).toBe(deriveTypeUrl(RequiredNameSchema));
-    expect(unpackAny(packed, RequiredNameSchema)).toEqual(invalidMessage);
+    expect(packed.typeUrl).toBe(TypeUrls.derive(RequiredNameSchema));
+    expect(AnyMessages.unpack(packed, RequiredNameSchema)).toEqual(invalidMessage);
   });
 
   it("packs caller-supplied command IDs and contexts without generating runtime metadata", () => {
@@ -898,7 +908,7 @@ describe("@spine-event-engine/core envelope packing", () => {
     const context = commandContext();
     const message = create(FieldPathSchema, { fieldName: ["task"] });
 
-    const command = packCommand({
+    const command = SignalEnvelopes.command({
       id,
       context,
       schema: FieldPathSchema,
@@ -909,9 +919,11 @@ describe("@spine-event-engine/core envelope packing", () => {
     expect(command.id).toEqual(id);
     expect(command.context).toEqual(context);
     expect(command.systemProperties).toBeUndefined();
-    expect(command.message?.typeUrl).toBe(deriveTypeUrl(FieldPathSchema));
+    expect(command.message?.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
     expect(command.message?.value).toEqual(toBinary(FieldPathSchema, message));
-    expect(unpackAny(command.message ?? create(AnySchema), FieldPathSchema)).toEqual(message);
+    expect(AnyMessages.unpack(command.message ?? create(AnySchema), FieldPathSchema)).toEqual(
+      message,
+    );
 
     id.uuid = "mutated-command-id";
     if (context.actorContext?.actor === undefined) {
@@ -928,7 +940,7 @@ describe("@spine-event-engine/core envelope packing", () => {
     const context = eventContext();
     const message = create(FieldPathSchema, { fieldName: ["task", "created"] });
 
-    const event = packEvent({
+    const event = SignalEnvelopes.event({
       id,
       context,
       schema: FieldPathSchema,
@@ -938,9 +950,11 @@ describe("@spine-event-engine/core envelope packing", () => {
     expect(event.$typeName).toBe("spine.core.Event");
     expect(event.id).toEqual(id);
     expect(event.context).toEqual(context);
-    expect(event.message?.typeUrl).toBe(deriveTypeUrl(FieldPathSchema));
+    expect(event.message?.typeUrl).toBe(TypeUrls.derive(FieldPathSchema));
     expect(event.message?.value).toEqual(toBinary(FieldPathSchema, message));
-    expect(unpackAny(event.message ?? create(AnySchema), FieldPathSchema)).toEqual(message);
+    expect(AnyMessages.unpack(event.message ?? create(AnySchema), FieldPathSchema)).toEqual(
+      message,
+    );
 
     id.value = "mutated-event-id";
     if (context.version === undefined) {

@@ -5,13 +5,7 @@ import {
   StringValueSchema,
   TimestampSchema,
 } from "@bufbuild/protobuf/wkt";
-import {
-  deriveTypeUrl,
-  packAny,
-  packCommand,
-  packEvent,
-  unpackAny,
-} from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -63,12 +57,12 @@ describe("SignalMetadata", () => {
     });
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: deriveTypeUrl(UserIdSchema),
+        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+        typeUrl: TypeUrls.derive(UserIdSchema),
       }),
       actorContext,
     });
-    const command = packCommand({
+    const command = SignalEnvelopes.command({
       id: create(CommandIdSchema, { uuid: "source-command" }),
       context: create(CommandContextSchema, {
         actorContext,
@@ -89,22 +83,25 @@ describe("SignalMetadata", () => {
     expect(
       eventMetadata.context.producerId === undefined
         ? undefined
-        : unpackAny(eventMetadata.context.producerId, StringValueSchema)?.value,
+        : AnyMessages.unpack(eventMetadata.context.producerId, StringValueSchema)?.value,
     ).toBe("task-1");
     expect(eventMetadata.context.version?.number).toBe(7);
     expect(eventMetadata.context.origin).toEqual({
       case: "pastMessage",
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "source-command" })),
-          typeUrl: deriveTypeUrl(UserIdSchema),
+          id: AnyMessages.pack(
+            CommandIdSchema,
+            create(CommandIdSchema, { uuid: "source-command" }),
+          ),
+          typeUrl: TypeUrls.derive(UserIdSchema),
         }),
         actorContext,
         grandOrigin,
       }),
     });
 
-    const sourceEvent = packEvent({
+    const sourceEvent = SignalEnvelopes.event({
       id: create(EventIdSchema, { value: "source-event" }),
       context: create(EventContextSchema, {
         origin: {
@@ -122,8 +119,8 @@ describe("SignalMetadata", () => {
         actorContext,
         origin: create(OriginSchema, {
           message: create(MessageIdSchema, {
-            id: packAny(EventIdSchema, create(EventIdSchema, { value: "source-event" })),
-            typeUrl: deriveTypeUrl(UserIdSchema),
+            id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "source-event" })),
+            typeUrl: TypeUrls.derive(UserIdSchema),
           }),
           actorContext,
         }),
@@ -165,8 +162,8 @@ describe("SignalMetadata", () => {
     });
     const origin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "command-origin" })),
-        typeUrl: deriveTypeUrl(UserIdSchema),
+        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "command-origin" })),
+        typeUrl: TypeUrls.derive(UserIdSchema),
       }),
     });
 
@@ -189,12 +186,12 @@ describe("SignalMetadata", () => {
     expect(
       booleanProducer.producerId === undefined
         ? undefined
-        : unpackAny(booleanProducer.producerId, BoolValueSchema)?.value,
+        : AnyMessages.unpack(booleanProducer.producerId, BoolValueSchema)?.value,
     ).toBe(true);
     expect(
       numericProducer.producerId === undefined
         ? undefined
-        : unpackAny(numericProducer.producerId, DoubleValueSchema)?.value,
+        : AnyMessages.unpack(numericProducer.producerId, DoubleValueSchema)?.value,
     ).toBe(42);
     expect(metadata.producerId(undefined)).toBeUndefined();
   });
@@ -216,7 +213,10 @@ describe("SignalMetadata", () => {
 
   it("rejects missing or empty event ids before deriving causality", () => {
     const metadata = new SignalMetadata();
-    const eventMessage = packAny(UserIdSchema, create(UserIdSchema, { value: "payload-user" }));
+    const eventMessage = AnyMessages.pack(
+      UserIdSchema,
+      create(UserIdSchema, { value: "payload-user" }),
+    );
 
     expect(() =>
       metadata.commandFromEvent(
@@ -239,7 +239,10 @@ describe("SignalMetadata", () => {
 
   it("rejects missing or empty command ids before deriving event metadata", () => {
     const metadata = new SignalMetadata();
-    const commandMessage = packAny(UserIdSchema, create(UserIdSchema, { value: "payload-user" }));
+    const commandMessage = AnyMessages.pack(
+      UserIdSchema,
+      create(UserIdSchema, { value: "payload-user" }),
+    );
 
     expect(() =>
       metadata.eventFromCommand(
@@ -266,7 +269,7 @@ describe("SignalMetadata", () => {
     const metadata = new SignalMetadata();
     const event = create(EventSchema, {
       id: create(EventIdSchema, { value: "   " }),
-      message: packAny(UserIdSchema, create(UserIdSchema, { value: "payload-user" })),
+      message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "payload-user" })),
     });
 
     expect(() => metadata.commandFromEvent(event, 1)).toThrow(/event ID/i);
@@ -286,11 +289,11 @@ describe("SignalMetadata", () => {
     const metadata = new SignalMetadata();
     const grandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
-        typeUrl: deriveTypeUrl(UserIdSchema),
+        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
+        typeUrl: TypeUrls.derive(UserIdSchema),
       }),
     });
-    const event = packEvent({
+    const event = SignalEnvelopes.event({
       id: create(EventIdSchema, { value: "past-event" }),
       context: create(EventContextSchema, {
         origin: {
@@ -305,8 +308,8 @@ describe("SignalMetadata", () => {
     expect(metadata.originFromEvent(event)).toEqual(
       create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: packAny(EventIdSchema, create(EventIdSchema, { value: "past-event" })),
-          typeUrl: deriveTypeUrl(UserIdSchema),
+          id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "past-event" })),
+          typeUrl: TypeUrls.derive(UserIdSchema),
         }),
         grandOrigin,
       }),

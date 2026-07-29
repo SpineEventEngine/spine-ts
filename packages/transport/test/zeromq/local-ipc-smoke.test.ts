@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Publisher, Reply, Request, Subscriber, type MessageLike, type Socket } from "zeromq";
 
-import { createZeroMqAdapterConfig } from "../../src/zeromq/adapter-config.js";
+import { ZeroMqConfig } from "../../src/zeromq/adapter-config.js";
 
 const smokeTimeoutMs = 2_000;
 const publishCadenceMs = 10;
@@ -13,7 +13,7 @@ const publishCadenceMs = 10;
 describe("ZeroMQ adapter-private local IPC smoke tests", () => {
   it("publishes subscribed messages over a temporary local IPC endpoint", async () => {
     await withTemporaryIpcDirectory(async (ipcDirectory) => {
-      const config = createZeroMqAdapterConfig({
+      const config = ZeroMqConfig.create({
         ipcDirectory,
         adapterIdentity: "pub-sub-smoke",
       });
@@ -43,7 +43,7 @@ describe("ZeroMQ adapter-private local IPC smoke tests", () => {
 
   it("round-trips request and reply messages over a temporary local IPC endpoint", async () => {
     await withTemporaryIpcDirectory(async (ipcDirectory) => {
-      const config = createZeroMqAdapterConfig({
+      const config = ZeroMqConfig.create({
         ipcDirectory,
         adapterIdentity: "req-rep-smoke",
       });

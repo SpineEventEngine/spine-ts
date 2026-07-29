@@ -8,7 +8,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand, packEvent } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -430,12 +430,12 @@ describe("BoundedContext assembly", () => {
     expect(internalDeliveryDescriptor(context).endpoints()).toEqual([
       {
         label: "HANDLE_COMMAND",
-        targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
         shard: { index: 0, ofTotal: 1 },
       },
       {
         label: "UPDATE_SUBSCRIBER",
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
         shard: { index: 0, ofTotal: 1 },
       },
     ]);
@@ -448,12 +448,12 @@ describe("BoundedContext assembly", () => {
     expect(ready).toEqual([
       {
         label: "HANDLE_COMMAND",
-        targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
         shard: { index: 0, ofTotal: 1 },
       },
       {
         label: "UPDATE_SUBSCRIBER",
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
         shard: { index: 0, ofTotal: 1 },
       },
     ]);
@@ -615,7 +615,7 @@ describe("BoundedContext assembly", () => {
     const stand = context.stand();
 
     expect(stand).toBe(context.stand());
-    expect(stand.stateTypes()).toEqual([deriveTypeUrl(ProjectionStateSchema)]);
+    expect(stand.stateTypes()).toEqual([TypeUrls.derive(ProjectionStateSchema)]);
 
     await stand.update(
       ProjectionStateSchema,
@@ -653,7 +653,7 @@ describe("BoundedContext assembly", () => {
       .build();
 
     await expect(context.commandBus().post(createProjectionCommand("command-2"))).rejects.toThrow(
-      `No command dispatcher registered for "${deriveTypeUrl(ProjectionStateSchema)}".`,
+      `No command dispatcher registered for "${TypeUrls.derive(ProjectionStateSchema)}".`,
     );
   });
 
@@ -673,14 +673,16 @@ describe("BoundedContext assembly", () => {
     const dispatcher = createEventDispatcher([EventSchema, ProjectionStateSchema], () => undefined);
     const context = BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build();
 
-    expect(context.eventBus().acceptedEventTypes()).toEqual([deriveTypeUrl(ProjectionStateSchema)]);
+    expect(context.eventBus().acceptedEventTypes()).toEqual([
+      TypeUrls.derive(ProjectionStateSchema),
+    ]);
   });
 
   it("rejects package-local event subscriptions for non-context values", () => {
     expect(() =>
       boundedContextAccess.subscribeToEvent(
         {} as BoundedContext,
-        deriveTypeUrl(ProjectionStateSchema),
+        TypeUrls.derive(ProjectionStateSchema),
         { onEvent: () => undefined },
       ),
     ).toThrow("Event subscription requires a built BoundedContext instance.");
@@ -834,7 +836,7 @@ describe("BoundedContext assembly", () => {
       TaskProjection,
     ]);
     expect(context.commandBus().acceptedCommandTypes()).toEqual([
-      deriveTypeUrl(ProjectionStateSchema),
+      TypeUrls.derive(ProjectionStateSchema),
     ]);
 
     await expect(context.commandBus().post(createProjectionCommand("command-4"))).resolves.toBe(
@@ -871,7 +873,7 @@ describe("BoundedContext assembly", () => {
 
     await expect(
       context.commandBus().post(
-        packCommand({
+        SignalEnvelopes.command({
           id: create(CommandIdSchema, { uuid: "command-generated-pm" }),
           context: create(CommandContextSchema, {
             actorContext: create(ActorContextSchema, {
@@ -904,7 +906,7 @@ describe("BoundedContext assembly", () => {
     if (message === undefined) {
       throw new Error("Expected a generated process-manager produced event.");
     }
-    expect(message.typeUrl).toBe(deriveTypeUrl(ProjectionStateSchema));
+    expect(message.typeUrl).toBe(TypeUrls.derive(ProjectionStateSchema));
   });
 
   it("requires an explicit generated registry root for entity-class assembly", async () => {
@@ -1617,7 +1619,7 @@ function createEventDispatcher(
 }
 
 function createProjectionCommand(id: string) {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
@@ -1634,7 +1636,7 @@ function createProjectionCommand(id: string) {
 }
 
 function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: string) {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
@@ -1658,10 +1660,10 @@ function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: 
 }
 
 function createProjectionEvent(id: string) {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: packAny(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
     schema: ProjectionStateSchema,

@@ -9,15 +9,15 @@ import { describe, expect, it, vi } from "vitest";
 import { Publisher, Reply, Request, Subscriber } from "zeromq";
 
 import {
-  createTransportSubscription,
-  createTransportTopic,
+  TransportSubscriptions,
+  TransportTopics,
   type PublishTransportOperation,
   type TransportTopic,
 } from "../../src/index.js";
-import { endpointFileAccess } from "../../src/zeromq/endpoint-files.js";
+import { EndpointFiles } from "../../src/zeromq/endpoint-files.js";
 import {
-  createZeroMqAdapterConfig,
   createZeroMqTransport,
+  ZeroMqConfig,
   type ZeroMqTransportOptions,
 } from "../../src/zeromq/index.js";
 import { zeroMqSocketAccess } from "../../src/zeromq/signal-transport.js";
@@ -43,7 +43,7 @@ describe("ZeroMQ SignalTransport", () => {
   it("rejects invalid request timeouts before IPC preparation", async () => {
     const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-timeout-validation-"));
     const prepare = vi.spyOn(zeroMqSocketAccess, "prepareIpcDirectory");
-    const config = createZeroMqAdapterConfig({
+    const config = ZeroMqConfig.create({
       ipcDirectory,
       adapterIdentity: `timeout-validation-${String(process.pid)}-${String(Date.now())}`,
     });
@@ -78,7 +78,7 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("keeps publishers at the native default send timeout", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.PublisherTimeoutScope",
     });
@@ -119,13 +119,13 @@ describe("ZeroMQ SignalTransport", () => {
 
     try {
       await withZeroMqTransport(async (transport) => {
-        const eventTopic = createTransportTopic({
+        const eventTopic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.ReceiverCapEvent",
         });
         await expect(
           transport.subscribe(
-            createTransportSubscription({
+            TransportSubscriptions.create({
               subscriberId: "receiver-cap-subscriber",
               topic: eventTopic,
             }),
@@ -134,7 +134,7 @@ describe("ZeroMQ SignalTransport", () => {
         ).rejects.toThrow("stop after observing receiver options");
       });
       await withZeroMqTransport(async (transport) => {
-        const commandTopic = createTransportTopic({
+        const commandTopic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.ReceiverCapCommand",
         });
@@ -143,7 +143,7 @@ describe("ZeroMQ SignalTransport", () => {
         ).rejects.toThrow("stop after observing receiver options");
         await expect(
           transport.respond(
-            createTransportSubscription({
+            TransportSubscriptions.create({
               subscriberId: "receiver-cap-replier",
               topic: commandTopic,
               mode: "competing-consumer",
@@ -167,11 +167,11 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("sends command and event envelopes as their exact Buf binary bytes", async () => {
-    const eventTopic = createTransportTopic({
+    const eventTopic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/example.BufOutboundEvent",
     });
-    const commandTopic = createTransportTopic({
+    const commandTopic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/example.BufOutboundCommand",
     });
@@ -213,7 +213,7 @@ describe("ZeroMQ SignalTransport", () => {
         subscriberAddress = address;
         connectSocket(socket, address);
       });
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/example.BufInboundEvent",
     });
@@ -224,7 +224,7 @@ describe("ZeroMQ SignalTransport", () => {
       await withZeroMqTransport(
         async (transport) => {
           const handle = await transport.subscribe<Event, "event">(
-            createTransportSubscription({ subscriberId: "buf-inbound-event", topic }),
+            TransportSubscriptions.create({ subscriberId: "buf-inbound-event", topic }),
             ({ envelope }) => {
               received.push(envelope);
             },
@@ -272,7 +272,7 @@ describe("ZeroMQ SignalTransport", () => {
       replyAddress = address;
       return bindSocket(socket, address);
     });
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/example.BufInboundCommand",
     });
@@ -281,7 +281,7 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport) => {
         const handle = await transport.respond<Command, { readonly status: string }, "command">(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "buf-inbound-command",
             topic,
             mode: "competing-consumer",
@@ -341,7 +341,7 @@ describe("ZeroMQ SignalTransport", () => {
         }
       });
     const replier = new Reply({ linger: 0, receiveTimeout: 1_000, sendTimeout: 1_000 });
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/example.RawReplyTrailers",
     });
@@ -387,7 +387,7 @@ describe("ZeroMQ SignalTransport", () => {
         }
       });
     const replier = new Reply({ linger: 0, receiveTimeout: 1_000, sendTimeout: 1_000 });
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.MalformedPrivateReply",
     });
@@ -433,11 +433,11 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("rejects a generated Proto successful reply and serves a later plain result", async () => {
-    const commandTopic = createTransportTopic({
+    const commandTopic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/example.ProtoReplyRejected",
     });
-    const subscription = createTransportSubscription({
+    const subscription = TransportSubscriptions.create({
       subscriberId: "proto-reply-rejected",
       topic: commandTopic,
       mode: "competing-consumer",
@@ -472,7 +472,7 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("reserves string $typeName on private successful replies", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/example.ReservedReplyTypeName",
     });
@@ -483,7 +483,7 @@ describe("ZeroMQ SignalTransport", () => {
         { readonly $typeName: string; readonly accepted: boolean },
         "command"
       >(
-        createTransportSubscription({
+        TransportSubscriptions.create({
           subscriberId: "reserved-reply-type-name",
           topic,
           mode: "competing-consumer",
@@ -514,13 +514,13 @@ describe("ZeroMQ SignalTransport", () => {
 
     try {
       await withZeroMqTransport(async (transport) => {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.OversizedRawPublish",
         });
         const received: string[] = [];
         const handle = await transport.subscribe<{ readonly value: string }, "system">(
-          createTransportSubscription({ subscriberId: "oversized-raw-publish", topic }),
+          TransportSubscriptions.create({ subscriberId: "oversized-raw-publish", topic }),
           ({ envelope }) => {
             received.push(envelope.value);
           },
@@ -564,7 +564,7 @@ describe("ZeroMQ SignalTransport", () => {
 
     try {
       await withZeroMqTransport(async (transport) => {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.OversizedRawRequest",
         });
@@ -574,7 +574,7 @@ describe("ZeroMQ SignalTransport", () => {
           { readonly ok: boolean },
           "system"
         >(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "oversized-raw-request",
             topic,
             mode: "competing-consumer",
@@ -630,7 +630,7 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(
         async (transport) => {
-          const topic = createTransportTopic({
+          const topic = TransportTopics.create({
             signalKind: "system",
             messageTypeUrl: "type.spine.io/example.OversizedRawReply",
           });
@@ -664,7 +664,7 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("blocks a pre-bound publish when close starts after publisher lookup", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.PreBoundClosingPublish",
     });
@@ -686,13 +686,13 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("closes a publisher before draining its already-started send", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.PausedClosingPublish",
     });
-    const removeEndpoint = endpointFileAccess.remove.bind(endpointFileAccess);
+    const removeEndpoint = EndpointFiles.remove.bind(EndpointFiles);
     const pathnameRemoved = deferred<undefined>();
-    const remove = vi.spyOn(endpointFileAccess, "remove").mockImplementation(async (filePath) => {
+    const remove = vi.spyOn(EndpointFiles, "remove").mockImplementation(async (filePath) => {
       await removeEndpoint(filePath);
       pathnameRemoved.resolve(undefined);
     });
@@ -748,15 +748,15 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("keeps paused publish and cleanup failures with their initiating callers", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.PausedClosingCleanupFailure",
     });
-    const removeEndpoint = endpointFileAccess.remove.bind(endpointFileAccess);
+    const removeEndpoint = EndpointFiles.remove.bind(EndpointFiles);
     const cleanupFailure = new Error("injected publisher pathname cleanup failure");
     const cleanupAttempted = deferred<undefined>();
     const remove = vi
-      .spyOn(endpointFileAccess, "remove")
+      .spyOn(EndpointFiles, "remove")
       .mockImplementationOnce(() => {
         cleanupAttempted.resolve(undefined);
         return Promise.reject(cleanupFailure);
@@ -822,11 +822,11 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("publishes subscribed envelopes through the SignalTransport contract", async () => {
     await withZeroMqTransport(async (transport) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.TaskCreated",
       });
-      const subscription = createTransportSubscription({
+      const subscription = TransportSubscriptions.create({
         subscriberId: "projection-worker-1",
         topic,
       });
@@ -864,14 +864,14 @@ describe("ZeroMQ SignalTransport", () => {
       "query" | "subscription"
     >[] = [
       {
-        topic: createTransportTopic({
+        topic: TransportTopics.create({
           signalKind: "query",
           messageTypeUrl: "type.spine.io/example/PrivateQueryBytes",
         }),
         envelope: { signalKind: "query", value: "query-bytes" },
       },
       {
-        topic: createTransportTopic({
+        topic: TransportTopics.create({
           signalKind: "subscription",
           messageTypeUrl: "type.spine.io/example/PrivateSubscriptionBytes",
         }),
@@ -909,14 +909,14 @@ describe("ZeroMQ SignalTransport", () => {
       "query" | "subscription"
     >[] = [
       {
-        topic: createTransportTopic({
+        topic: TransportTopics.create({
           signalKind: "query",
           messageTypeUrl: "type.spine.io/example/PrivateQuery",
         }),
         envelope: { signalKind: "query", value: "query-value" },
       },
       {
-        topic: createTransportTopic({
+        topic: TransportTopics.create({
           signalKind: "subscription",
           messageTypeUrl: "type.spine.io/example/PrivateSubscription",
         }),
@@ -926,7 +926,7 @@ describe("ZeroMQ SignalTransport", () => {
 
     for (const operation of operations) {
       await withZeroMqTransport(async (transport) => {
-        const subscription = createTransportSubscription({
+        const subscription = TransportSubscriptions.create({
           subscriberId: `private-${operation.topic.signalKind}-worker`,
           topic: operation.topic,
         });
@@ -963,13 +963,13 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(
         async (transport) => {
-          const topic = createTransportTopic({
+          const topic = TransportTopics.create({
             signalKind: "system",
             messageTypeUrl: "type.spine.io/example/PublishRouteValidation",
           });
           const received: string[] = [];
           const handle = await transport.subscribe<{ readonly value: string }, "system">(
-            createTransportSubscription({ subscriberId: "publish-route-validation", topic }),
+            TransportSubscriptions.create({ subscriberId: "publish-route-validation", topic }),
             ({ envelope }) => {
               received.push(envelope.value);
             },
@@ -1029,7 +1029,7 @@ describe("ZeroMQ SignalTransport", () => {
 
     try {
       await withZeroMqTransport(async (transport) => {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example/RequestRouteValidation",
         });
@@ -1039,7 +1039,7 @@ describe("ZeroMQ SignalTransport", () => {
           { readonly accepted: boolean },
           "system"
         >(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "request-route-validation",
             topic,
             mode: "competing-consumer",
@@ -1103,11 +1103,11 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("round-trips request and response envelopes through the SignalTransport contract", async () => {
     await withZeroMqTransport(async (transport) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.LookupTask",
       });
-      const subscription = createTransportSubscription({
+      const subscription = TransportSubscriptions.create({
         subscriberId: "command-worker-1",
         topic,
         mode: "competing-consumer",
@@ -1138,7 +1138,7 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("closes the successful request socket exactly once before resolving", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.SuccessfulRequestCleanup",
     });
@@ -1155,7 +1155,7 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport) => {
         const handle = await transport.respond(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "successful-request-cleanup-worker",
             topic,
             mode: "competing-consumer",
@@ -1177,7 +1177,7 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("surfaces successful request cleanup failure without aggregation", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.SuccessfulRequestCleanupFailure",
     });
@@ -1201,7 +1201,7 @@ describe("ZeroMQ SignalTransport", () => {
     try {
       await withZeroMqTransport(async (transport) => {
         const handle = await transport.respond(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "successful-request-cleanup-failure-worker",
             topic,
             mode: "competing-consumer",
@@ -1224,13 +1224,13 @@ describe("ZeroMQ SignalTransport", () => {
   it("bounds close after an already-sent unanswered request", async () => {
     await withZeroMqTransport(
       async (transport) => {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.UnansweredCloseRequest",
         });
         const started = deferred<undefined>();
         await transport.respond(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "unanswered-close-worker",
             topic,
             mode: "competing-consumer",
@@ -1265,11 +1265,11 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("removes a replier IPC pathname when its registration closes", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ReplierCleanupTask",
       });
-      const subscription = createTransportSubscription({
+      const subscription = TransportSubscriptions.create({
         subscriberId: "command-worker-cleanup",
         topic,
         mode: "competing-consumer",
@@ -1285,11 +1285,11 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("closes a replier after bind failure and preserves cleanup failure second", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.DuplicateResponderCleanupTask",
     });
-    const subscription = createTransportSubscription({
+    const subscription = TransportSubscriptions.create({
       subscriberId: "duplicate-command-worker",
       topic,
       mode: "competing-consumer",
@@ -1343,7 +1343,7 @@ describe("ZeroMQ SignalTransport", () => {
           nativeClose(socket);
           throw closeFailure;
         });
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.RequestCleanupFailureTask",
         });
@@ -1380,7 +1380,7 @@ describe("ZeroMQ SignalTransport", () => {
           nativeClose(socket);
           throw closeFailure;
         });
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.PublisherCleanupFailureTask",
         });
@@ -1408,15 +1408,15 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("connects subscribers without binding the publish endpoint", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.SharedPublishedTask",
     });
-    const subscriberOne = createTransportSubscription({
+    const subscriberOne = TransportSubscriptions.create({
       subscriberId: "projection-worker-1",
       topic,
     });
-    const subscriberTwo = createTransportSubscription({
+    const subscriberTwo = TransportSubscriptions.create({
       subscriberId: "projection-worker-2",
       topic,
     });
@@ -1432,11 +1432,11 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("does not create publish IPC socket files when subscribing", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ConnectOnlySubscriptionTask",
       });
-      const subscription = createTransportSubscription({
+      const subscription = TransportSubscriptions.create({
         subscriberId: "projection-worker-1",
         topic,
       });
@@ -1469,11 +1469,11 @@ describe("ZeroMQ SignalTransport", () => {
 
     try {
       await withSharedZeroMqTransports(async (publisherTransport, subscriberTransport) => {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.ClosingSubscriberSetupTask",
         });
-        const subscription = createTransportSubscription({
+        const subscription = TransportSubscriptions.create({
           subscriberId: "closing-projection-worker",
           topic,
         });
@@ -1594,23 +1594,23 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("leaves sibling-owned pathnames intact when connect-only sockets close", async () => {
     await withSharedZeroMqTransports(async (ownerTransport, connectorTransport, ipcDirectory) => {
-      const eventTopic = createTransportTopic({
+      const eventTopic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ConnectOnlyOwnershipEvent",
       });
-      const commandTopic = createTransportTopic({
+      const commandTopic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ConnectOnlyOwnershipCommand",
       });
       const eventHandle = await connectorTransport.subscribe(
-        createTransportSubscription({
+        TransportSubscriptions.create({
           subscriberId: "connect-only-projection",
           topic: eventTopic,
         }),
         () => undefined,
       );
       const commandHandle = await ownerTransport.respond(
-        createTransportSubscription({
+        TransportSubscriptions.create({
           subscriberId: "owned-command-worker",
           topic: commandTopic,
           mode: "competing-consumer",
@@ -1635,7 +1635,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("shares the first publisher bind across concurrent publishes", async () => {
     await withZeroMqTransport(async (transport) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ConcurrentPublishedTask",
       });
@@ -1655,7 +1655,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("removes a publisher IPC pathname when the transport closes", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.PublisherCleanupTask",
       });
@@ -1670,25 +1670,25 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("attempts every bound pathname cleanup and retries only a failed unlink", async () => {
-    const removeEndpointFile = endpointFileAccess.remove.bind(endpointFileAccess);
+    const removeEndpointFile = EndpointFiles.remove.bind(EndpointFiles);
     const unlinkFailure = new Error("injected endpoint unlink failure");
     const remove = vi
-      .spyOn(endpointFileAccess, "remove")
+      .spyOn(EndpointFiles, "remove")
       .mockRejectedValueOnce(unlinkFailure)
       .mockImplementation(removeEndpointFile);
 
     try {
       await withZeroMqTransport(async (transport, ipcDirectory) => {
-        const commandTopic = createTransportTopic({
+        const commandTopic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.RetryCleanupCommand",
         });
-        const eventTopic = createTransportTopic({
+        const eventTopic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.RetryCleanupEvent",
         });
         await transport.respond(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "retry-cleanup-command-worker",
             topic: commandTopic,
             mode: "competing-consumer",
@@ -1716,27 +1716,27 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("reports bound pathname cleanup failures in stable order and retries all of them", async () => {
-    const removeEndpointFile = endpointFileAccess.remove.bind(endpointFileAccess);
+    const removeEndpointFile = EndpointFiles.remove.bind(EndpointFiles);
     const replierFailure = new Error("injected replier unlink failure");
     const publisherFailure = new Error("injected publisher unlink failure");
     const remove = vi
-      .spyOn(endpointFileAccess, "remove")
+      .spyOn(EndpointFiles, "remove")
       .mockRejectedValueOnce(replierFailure)
       .mockRejectedValueOnce(publisherFailure)
       .mockImplementation(removeEndpointFile);
 
     try {
       await withZeroMqTransport(async (transport, ipcDirectory) => {
-        const commandTopic = createTransportTopic({
+        const commandTopic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.StableCleanupCommand",
         });
-        const eventTopic = createTransportTopic({
+        const eventTopic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.StableCleanupEvent",
         });
         await transport.respond(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "stable-cleanup-command-worker",
             topic: commandTopic,
             mode: "competing-consumer",
@@ -1768,7 +1768,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("treats an already absent owned pathname as closed", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.MissingCleanupTask",
       });
@@ -1786,7 +1786,7 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("removes a publisher pathname when close wins the bind race", async () => {
     await withZeroMqTransport(async (transport, ipcDirectory) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.ClosingPublisherSetupTask",
       });
@@ -1805,11 +1805,11 @@ describe("ZeroMQ SignalTransport", () => {
 
     await withZeroMqTransport(
       async (transport) => {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.FailingSubscriberTask",
         });
-        const subscription = createTransportSubscription({
+        const subscription = TransportSubscriptions.create({
           subscriberId: "projection-worker-1",
           topic,
         });
@@ -1866,11 +1866,11 @@ describe("ZeroMQ SignalTransport", () => {
 
     await withZeroMqTransport(
       async (transport) => {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.SocketNamedFailureTask",
         });
-        const subscription = createTransportSubscription({
+        const subscription = TransportSubscriptions.create({
           subscriberId: "projection-worker-1",
           topic,
         });
@@ -1900,11 +1900,11 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("sanitizes request handler failures returned to requesters", async () => {
     await withZeroMqTransport(async (transport) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.SecretFailingTask",
       });
-      const subscription = createTransportSubscription({
+      const subscription = TransportSubscriptions.create({
         subscriberId: "command-worker-1",
         topic,
         mode: "competing-consumer",
@@ -1936,11 +1936,11 @@ describe("ZeroMQ SignalTransport", () => {
 
     await withZeroMqTransport(
       async (transport) => {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.SocketNamedCommandFailure",
         });
-        const subscription = createTransportSubscription({
+        const subscription = TransportSubscriptions.create({
           subscriberId: "command-worker-1",
           topic,
           mode: "competing-consumer",
@@ -1967,12 +1967,12 @@ describe("ZeroMQ SignalTransport", () => {
   it("rejects unsafe IPC directories before publish, request, or response work", async () => {
     const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-transport-open-"));
     const transport = createZeroMqTransport(
-      createZeroMqAdapterConfig({
+      ZeroMqConfig.create({
         ipcDirectory,
         adapterIdentity: `open-${String(process.pid)}-${String(Date.now())}`,
       }),
     );
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.OpenDirectoryTask",
     });
@@ -1988,7 +1988,7 @@ describe("ZeroMQ SignalTransport", () => {
       );
       await expect(
         transport.respond(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "unsafe-command-worker",
             topic,
             mode: "competing-consumer",
@@ -2042,7 +2042,7 @@ describe("ZeroMQ SignalTransport", () => {
     async () => {
       const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-ca-"));
       const canonicalDirectory = await realpath(ipcDirectory);
-      const config = createZeroMqAdapterConfig({
+      const config = ZeroMqConfig.create({
         ipcDirectory,
         adapterIdentity: `system-alias-${String(process.pid)}`,
       });
@@ -2057,12 +2057,12 @@ describe("ZeroMQ SignalTransport", () => {
         });
 
       try {
-        const topic = createTransportTopic({
+        const topic = TransportTopics.create({
           signalKind: "system",
           messageTypeUrl: "type.spine.io/example.CanonicalAliasTask",
         });
         const handle = await transport.respond(
-          createTransportSubscription({
+          TransportSubscriptions.create({
             subscriberId: "canonical-alias-worker",
             topic,
             mode: "competing-consumer",
@@ -2132,11 +2132,11 @@ describe("ZeroMQ SignalTransport", () => {
   });
 
   it("prevents all native operations after prepared-directory replacement", async () => {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.RecheckReplacementTask",
     });
-    const subscription = createTransportSubscription({
+    const subscription = TransportSubscriptions.create({
       subscriberId: "recheck-worker",
       topic,
       mode: "competing-consumer",
@@ -2196,11 +2196,11 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("closes registrations and rejects later operations without exposing adapter details", async () => {
     await withZeroMqTransport(async (transport) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/example.CloseTask",
       });
-      const subscription = createTransportSubscription({
+      const subscription = TransportSubscriptions.create({
         subscriberId: "command-worker-1",
         topic,
         mode: "competing-consumer",
@@ -2235,7 +2235,7 @@ async function withZeroMqTransport<T>(
 ): Promise<T> {
   const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-transport-"));
   const transport = createZeroMqTransport(
-    createZeroMqAdapterConfig({
+    ZeroMqConfig.create({
       ipcDirectory,
       adapterIdentity: `test-${String(process.pid)}-${String(Date.now())}`,
     }),
@@ -2265,7 +2265,7 @@ async function withSharedZeroMqTransports<T>(
   ) => Promise<T>,
 ): Promise<T> {
   const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-transport-"));
-  const config = createZeroMqAdapterConfig({
+  const config = ZeroMqConfig.create({
     ipcDirectory,
     adapterIdentity: `test-${String(process.pid)}-${String(Date.now())}`,
   });
@@ -2344,10 +2344,10 @@ async function expectPausedSharedClose({
 
   try {
     const fixture = withSharedZeroMqTransports(async (firstTransport, secondTransport) => {
-      const topic = createTransportTopic({ signalKind: "system", messageTypeUrl });
+      const topic = TransportTopics.create({ signalKind: "system", messageTypeUrl });
       const selectedTransport = transport === "first" ? firstTransport : secondTransport;
       opening = selectedTransport.subscribe(
-        createTransportSubscription({ subscriberId, topic }),
+        TransportSubscriptions.create({ subscriberId, topic }),
         () => undefined,
       );
       await preparationStarted.promise;
@@ -2369,7 +2369,7 @@ async function expectNativeOperationBlocked(
 ): Promise<void> {
   const ipcDirectory = await mkdtemp(path.join(tmpdir(), `sz-recheck-${operation}-`));
   const transport = createZeroMqTransport(
-    createZeroMqAdapterConfig({
+    ZeroMqConfig.create({
       ipcDirectory,
       adapterIdentity: `recheck-${operation}-${String(process.pid)}-${String(Date.now())}`,
     }),
@@ -2441,14 +2441,14 @@ const closeBlockedOperations: Record<CloseBlockedOperation, CloseBlockedOperatio
     signalKind: "system",
     nativeGuards: [guardNativeConnect],
     open: (transport, topic, subscriberId) =>
-      transport.subscribe(createTransportSubscription({ subscriberId, topic }), () => undefined),
+      transport.subscribe(TransportSubscriptions.create({ subscriberId, topic }), () => undefined),
   },
   "responder-bind": {
     signalKind: "system",
     nativeGuards: [guardNativeReplyBind],
     open: (transport, topic, subscriberId) =>
       transport.respond(
-        createTransportSubscription({
+        TransportSubscriptions.create({
           subscriberId,
           topic,
           mode: "competing-consumer",
@@ -2478,7 +2478,7 @@ async function expectCloseBlocksNative(
 
   try {
     await withZeroMqTransport(async (transport) => {
-      const topic = createTransportTopic({
+      const topic = TransportTopics.create({
         signalKind: operationCase.signalKind,
         messageTypeUrl: `type.spine.io/example.Closing${operation}${boundary}`,
       });

@@ -1,6 +1,21 @@
 [
   {
     "rule": "callable-summary",
+    "file": "examples/chat/app/src/index.ts",
+    "name": "ChatMessageAggregate.postMessage(command)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "examples/chat/app/src/index.ts",
+    "name": "ChatMessageViewProjection.onMessagePosted(event)"
+  },
+  {
+    "rule": "callable-summary",
+    "file": "examples/chat/app/src/index.ts",
+    "name": "unpackChatValue(value)"
+  },
+  {
+    "rule": "callable-summary",
     "file": "examples/chat/web/src/index.tsx",
     "name": "ChatBrowserApp(props)"
   },
@@ -18,46 +33,6 @@
     "rule": "callable-summary",
     "file": "examples/chat/web/src/index.tsx",
     "name": "roomRows(response,room)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "examples/chat/app/src/index.ts",
-    "name": "ChatMessageAggregate.postMessage(command)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "examples/chat/app/src/index.ts",
-    "name": "ChatMessageViewProjection.onMessagePosted(event)"
-  },
-  {
-    "rule": "callable-summary",
-    "file": "examples/chat/app/src/index.ts",
-    "name": "unpackChatValue(value)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "examples/chat/web/src/index.tsx",
-    "name": "ChatBrowserApp(props)(props)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "examples/chat/web/src/index.tsx",
-    "name": "createRoomQuery(room)(room)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "examples/chat/web/src/index.tsx",
-    "name": "createRoomTopic(room)(room)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "examples/chat/web/src/index.tsx",
-    "name": "roomRows(response,room)(response)"
-  },
-  {
-    "rule": "missing-param",
-    "file": "examples/chat/web/src/index.tsx",
-    "name": "roomRows(response,room)(room)"
   },
   {
     "rule": "missing-param",
@@ -130,39 +105,29 @@
     "name": "validateChatMessageInput(input)(input)"
   },
   {
-    "rule": "missing-returns",
+    "rule": "missing-param",
     "file": "examples/chat/web/src/index.tsx",
-    "name": "BrowserChatSession.signIn#1()"
+    "name": "ChatBrowserApp(props)(props)"
   },
   {
-    "rule": "missing-returns",
+    "rule": "missing-param",
     "file": "examples/chat/web/src/index.tsx",
-    "name": "BrowserChatSession.signIn#2()"
+    "name": "createRoomQuery(room)(room)"
   },
   {
-    "rule": "missing-returns",
+    "rule": "missing-param",
     "file": "examples/chat/web/src/index.tsx",
-    "name": "ChatBrowserApp(props)"
+    "name": "createRoomTopic(room)(room)"
   },
   {
-    "rule": "missing-returns",
+    "rule": "missing-param",
     "file": "examples/chat/web/src/index.tsx",
-    "name": "ChatBrowserAppProps.createMessageId()"
+    "name": "roomRows(response,room)(response)"
   },
   {
-    "rule": "missing-returns",
+    "rule": "missing-param",
     "file": "examples/chat/web/src/index.tsx",
-    "name": "createRoomQuery(room)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "examples/chat/web/src/index.tsx",
-    "name": "createRoomTopic(room)"
-  },
-  {
-    "rule": "missing-returns",
-    "file": "examples/chat/web/src/index.tsx",
-    "name": "roomRows(response,room)"
+    "name": "roomRows(response,room)(room)"
   },
   {
     "rule": "missing-returns",
@@ -203,6 +168,66 @@
     "rule": "missing-returns",
     "file": "examples/chat/app/src/index.ts",
     "name": "unpackChatValue(value)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat/web/src/index.tsx",
+    "name": "BrowserChatSession.signIn#1()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat/web/src/index.tsx",
+    "name": "BrowserChatSession.signIn#2()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat/web/src/index.tsx",
+    "name": "ChatBrowserApp(props)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat/web/src/index.tsx",
+    "name": "ChatBrowserAppProps.createMessageId()"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat/web/src/index.tsx",
+    "name": "createRoomQuery(room)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat/web/src/index.tsx",
+    "name": "createRoomTopic(room)"
+  },
+  {
+    "rule": "missing-returns",
+    "file": "examples/chat/web/src/index.tsx",
+    "name": "roomRows(response,room)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat/app/src/chat-policy.ts",
+    "name": "ChatAuthorizationPolicy.authorize(principal,request)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat/app/src/chat-policy.ts",
+    "name": "ChatContextResolver.resolve(principal,_request,clock)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat/app/src/chat-policy.ts",
+    "name": "ChatContextResolver.resolveContext(principal,clock)"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat/app/src/index.ts",
+    "name": "ChatServerOptions.host:PropertySignature"
+  },
+  {
+    "rule": "missing-summary",
+    "file": "examples/chat/app/src/index.ts",
+    "name": "ChatServerOptions.port:PropertySignature"
   },
   {
     "rule": "missing-summary",
@@ -263,30 +288,5 @@
     "rule": "missing-summary",
     "file": "examples/chat/web/src/index.tsx",
     "name": "ChatBrowserAppProps.session:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "examples/chat/app/src/chat-policy.ts",
-    "name": "ChatAuthorizationPolicy.authorize(principal,request)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "examples/chat/app/src/chat-policy.ts",
-    "name": "ChatContextResolver.resolve(principal,_request,clock)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "examples/chat/app/src/chat-policy.ts",
-    "name": "ChatContextResolver.resolveContext(principal,clock)"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "examples/chat/app/src/index.ts",
-    "name": "ChatServerOptions.host:PropertySignature"
-  },
-  {
-    "rule": "missing-summary",
-    "file": "examples/chat/app/src/index.ts",
-    "name": "ChatServerOptions.port:PropertySignature"
   }
 ]

@@ -1,4 +1,4 @@
-import { deriveTypeUrl, type MessageSchema } from "@spine-event-engine/core";
+import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
 
 import type { CommandDispatcher } from "./command-dispatcher.js";
 
@@ -53,7 +53,7 @@ function collectRegistrations(
   const seen = new Set<string>();
 
   for (const schema of dispatcher.messageSchemas()) {
-    const typeUrl = deriveTypeUrl(schema);
+    const typeUrl = TypeUrls.derive(schema);
 
     if (!seen.has(typeUrl)) {
       seen.add(typeUrl);

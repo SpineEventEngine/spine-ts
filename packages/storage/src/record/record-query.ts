@@ -1,4 +1,7 @@
-/** Deterministic record query by IDs, columns, sorting, continuations, offsets, limits, and masks. */
+/**
+ * Defines a deterministic record query by IDs, columns, sorting, continuations,
+ * offsets, limits, and masks.
+ */
 export interface RecordQuery<I> extends RecordReadOptions {
   /** Exact storage slot identifier filter. */
   readonly ids?: readonly I[];
@@ -14,6 +17,7 @@ export interface RecordQuery<I> extends RecordReadOptions {
   readonly offset?: number;
 }
 
+/** Provides record-query validation operations. */
 export const RecordQuery: Readonly<{
   validate<I>(query: RecordQuery<I>): void;
 }> = Object.freeze({

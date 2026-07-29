@@ -1,8 +1,10 @@
 /** Common closeable contract shared by storage factories and concrete storages. */
 export interface Storage {
-  /** Close the storage. Future operations fail. */
+  /** Closes the storage. Future operations fail. */
   close(): void;
-  /** Whether the storage still accepts operations. */
+  /** Returns whether the storage accepts operations.
+   * @returns Whether the storage is open.
+   */
   isOpen(): boolean;
 }
 

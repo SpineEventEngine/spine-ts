@@ -3,7 +3,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Interceptor, type Transport } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
-import { packCommand, unpackAny } from "@spine-event-engine/core";
+import { SignalEnvelopes, AnyMessages } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -264,7 +264,7 @@ class Request implements ClientRequest {
     return this.#owner.run(options.signal, async (signal) => {
       const id = this.#owner.createRequestId();
       if (id.length === 0) throw new ClientProtocolError("request ID is missing or invalid.");
-      const command = packCommand({
+      const command = SignalEnvelopes.command({
         id: create(CommandIdSchema, { uuid: id }),
         context: create(CommandContextSchema, { actorContext: this.#context() }),
         schema,
@@ -1251,7 +1251,7 @@ function outcome(status: Status["status"] | undefined): ClientOutcome {
 }
 
 function validateAckId(packed: Any | undefined, id: string): void {
-  const commandId = packed === undefined ? undefined : unpackAny(packed, CommandIdSchema);
+  const commandId = packed === undefined ? undefined : AnyMessages.unpack(packed, CommandIdSchema);
   if (commandId?.uuid !== id)
     throw new ClientProtocolError("acknowledgement command ID does not match the posted command.");
 }

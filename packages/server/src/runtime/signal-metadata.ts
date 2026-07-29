@@ -9,7 +9,7 @@ import {
   TimestampSchema,
   type Timestamp,
 } from "@bufbuild/protobuf/wkt";
-import { packAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -159,7 +159,7 @@ export class SignalMetadata {
   originFromCommand(command: Command): Origin {
     return create(OriginSchema, {
       message: this.#messageId(
-        packAny(CommandIdSchema, requireCommandId(command)),
+        AnyMessages.pack(CommandIdSchema, requireCommandId(command)),
         command.message?.typeUrl,
       ),
       ...(command.context?.actorContext === undefined
@@ -177,7 +177,7 @@ export class SignalMetadata {
 
     return create(OriginSchema, {
       message: this.#messageId(
-        packAny(EventIdSchema, requireEventId(event)),
+        AnyMessages.pack(EventIdSchema, requireEventId(event)),
         event.message?.typeUrl,
       ),
       ...(actorContext === undefined ? {} : { actorContext }),
@@ -188,12 +188,12 @@ export class SignalMetadata {
   producerId(value: string | number | boolean | undefined): Any | undefined {
     switch (typeof value) {
       case "string":
-        return packAny(StringValueSchema, create(StringValueSchema, { value }));
+        return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }));
       case "boolean":
-        return packAny(BoolValueSchema, create(BoolValueSchema, { value }));
+        return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value }));
       case "number":
         return Number.isFinite(value)
-          ? packAny(DoubleValueSchema, create(DoubleValueSchema, { value }))
+          ? AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value }))
           : undefined;
       default:
         return undefined;

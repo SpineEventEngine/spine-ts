@@ -12,7 +12,7 @@ import {
   ChatMessageViewSchema,
   ChatRoomIdSchema,
 } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
-import { deriveTypeUrl, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import type { CompositeFilter, Target } from "@spine-event-engine/proto/client";
 import {
   CompositeFilter_CompositeOperator,
@@ -45,7 +45,7 @@ export class ChatAuthorizationPolicy implements AuthorizationPolicy {
 }
 
 function roomIsAuthorized(target: Target, rooms: readonly string[]): boolean {
-  if (target.type !== deriveTypeUrl(ChatMessageViewSchema)) return false;
+  if (target.type !== TypeUrls.derive(ChatMessageViewSchema)) return false;
   if (target.criterion.case !== "filters") return false;
   const budget = {
     compositeFilters: MAX_AUTHORIZATION_COMPOSITE_FILTERS,
@@ -76,7 +76,8 @@ function guaranteesAuthorizedRoom(
       guaranteed.push(false);
       continue;
     }
-    const room = filter.value === undefined ? undefined : unpackAny(filter.value, ChatRoomIdSchema);
+    const room =
+      filter.value === undefined ? undefined : AnyMessages.unpack(filter.value, ChatRoomIdSchema);
     guaranteed.push(room !== undefined && rooms.includes(room.value));
   }
   for (const child of composite.compositeFilter) {

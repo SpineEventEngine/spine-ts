@@ -4,7 +4,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import { EventSchema, type Command, type Event, type TenantId } from "@spine-event-engine/proto";
 import { SPI_type, internal_all, internal_type } from "@spine-event-engine/proto";
 import {
@@ -1127,7 +1127,7 @@ function exposedEventTypeUrls(eventBus: EventBus): readonly string[] {
     eventBusAccess
       .eventSchemas(eventBus)
       .filter((schema) => !isInternalEventSchema(schema))
-      .map((schema) => deriveTypeUrl(schema)),
+      .map((schema) => TypeUrls.derive(schema)),
   );
 }
 
@@ -1758,9 +1758,11 @@ function projectionDispatchers(
       Object.freeze({
         repository,
         dispatcher,
-        eventTypeUrls: new Set(dispatcher.messageSchemas().map((schema) => deriveTypeUrl(schema))),
+        eventTypeUrls: new Set(
+          dispatcher.messageSchemas().map((schema) => TypeUrls.derive(schema)),
+        ),
         schema: snapshot.stateSchema,
-        typeUrl: deriveTypeUrl(snapshot.stateSchema),
+        typeUrl: TypeUrls.derive(snapshot.stateSchema),
       }),
     );
   }

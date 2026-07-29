@@ -1,7 +1,4 @@
-import {
-  assertEntityHistoryConformance,
-  entityStorageKey,
-} from "../../src/internal/entity-history.js";
+import { EntityHistoryConformance, EntityStorageKey } from "../../src/internal/entity-history.js";
 import type { StringValue } from "@bufbuild/protobuf/wkt";
 import type {
   EntityEventHistoryPort,
@@ -23,6 +20,6 @@ it("exposes the narrow provider-only entity history SPI", () => {
       ]
     | undefined = undefined;
   expect(types).toBeUndefined();
-  expect(assertEntityHistoryConformance).toBeTypeOf("function");
-  expect(entityStorageKey("tasks.Task", "state-history")).toBe("tasks.Task:state-history");
+  expect(EntityHistoryConformance.check).toBeTypeOf("function");
+  expect(EntityStorageKey.of("tasks.Task", "state-history")).toBe("tasks.Task:state-history");
 });

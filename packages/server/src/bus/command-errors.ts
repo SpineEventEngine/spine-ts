@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { createValidationError } from "@spine-event-engine/core";
+import { Validate } from "@spine-event-engine/core";
 import {
   ConstraintViolationSchema,
   TemplateStringSchema,
@@ -22,7 +22,7 @@ export class CommandValidationError extends Error {
   /** Create a validation error for payloads that cannot be unpacked as the registered type. */
   static invalidPayload(): CommandValidationError {
     return new CommandValidationError(
-      createValidationError([
+      Validate.createError([
         create(ConstraintViolationSchema, {
           message: create(TemplateStringSchema, {
             withPlaceholders: "Command payload could not be decoded as the registered type.",

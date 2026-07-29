@@ -21,8 +21,8 @@ server runtime code or expose a concrete production adapter from its root API.
 
 This package pins the maintained official `zeromq@6.5.0` package for local IPC.
 The adapter-scoped `@spine-event-engine/transport/zeromq` subpath exports exactly
-`createZeroMqAdapterConfig()`, `createZeroMqTransport()`,
-`ZeroMqAdapterConfig`, `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+`ZeroMqConfig`, `ZeroMqConfigInput`, `createZeroMqTransport()`,
+`ZeroMqTransportScope`, and
 `ZeroMqTransportOptions`. The package root remains adapter-agnostic. ZeroMQ
 socket classes, endpoint strings,
 multipart frames, native binding types, broker processes, participant lifecycle
@@ -37,7 +37,7 @@ ZeroMQ is reserved for local IPC on one host. The native binding install script
 is explicitly approved in the workspace pnpm configuration, and development or
 CI environments must allow that build step when restoring dependencies. The
 adapter derives compact deterministic IPC socket paths from the
-`ZeroMqAdapterConfig` identity, the operation channel, and transport routing
+`ZeroMqConfig` identity, the operation channel, and transport routing
 descriptors, then keeps those paths private. Publish/subscribe and
 request/reply tests open sockets only under temporary IPC directories and clean
 them up within the test process. The implementation does not define remote
@@ -77,27 +77,27 @@ kind is widened or is a union:
 
 ```ts
 import {
-  isTransportOperationKind,
-  isTransportTopicKind,
+  TransportOperations,
+  TransportTopics,
   type PublishTransportOperation,
   type TransportTopic,
 } from "@spine-event-engine/transport";
 
 function onTransportOperation(operation: PublishTransportOperation<{ readonly id: string }>): void {
-  if (isTransportOperationKind(operation, "event")) {
+  if (TransportOperations.hasKind(operation, "event")) {
     operation.envelope; // Inferred as the generated Event type.
   }
 }
 
 function onTransportTopic(topic: TransportTopic): void {
-  if (isTransportTopicKind(topic, "event")) {
+  if (TransportTopics.hasKind(topic, "event")) {
     topic.signalKind; // Inferred as "event".
   }
 }
 ```
 
-`isTransportOperationKind()` always compares `operation.topic.signalKind`;
-`isTransportTopicKind()` always compares `topic.signalKind`. These fixed paths
+`TransportOperations.hasKind()` always compares `operation.topic.signalKind`;
+`TransportTopics.hasKind()` always compares `topic.signalKind`. These fixed paths
 are type-narrowing aids, not validation of untrusted input or envelope content,
 and neither predicate inspects the envelope. The topic helper narrows only the
 top-level `signalKind`; it does not validate or narrow the routing descriptor or

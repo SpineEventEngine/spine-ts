@@ -2,7 +2,7 @@ import { create, fromBinary, ScalarType, toBinary, type MessageShape } from "@bu
 import {
   type TransitionValidationResult,
   type TransitionValidationRule,
-  validateTransition,
+  Validate,
 } from "@spine-event-engine/core";
 import {
   type ConstraintViolation,
@@ -49,7 +49,7 @@ const transitionRulesBySchema = new WeakMap<
  * server rules.
  *
  * The validator currently enforces descriptor-derived `(set_once)` fields,
- * delegates result shaping to `@spine-event-engine/core` `validateTransition()`, and does
+ * delegates result shaping to `@spine-event-engine/core` `Validate.transition()`, and does
  * not instantiate entities, dispatch handlers, touch repositories, or perform
  * runtime I/O. Repeated, map-valued, and explicit optional `(set_once)` fields
  * are unsupported in this slice and fail closed with field-specific violations.
@@ -59,7 +59,7 @@ const transitionRulesBySchema = new WeakMap<
 export function validateEntityStateTransition<Schema extends DescriptorMessageSchema>(
   request: EntityStateTransitionValidationRequest<Schema>,
 ): EntityStateTransitionValidationResult {
-  return validateTransition(request, getTransitionValidationRules(request.schema));
+  return Validate.transition(request, getTransitionValidationRules(request.schema));
 }
 
 const MAX_EQUALITY_DEPTH = 64;

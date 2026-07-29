@@ -13,25 +13,40 @@ import type {
 } from "../entity/entity-history-storage.js";
 import type { EntityRecord, EntityRecordStorage } from "../entity/entity-record.js";
 import type { StorageContext } from "../storage/storage.js";
-import { canonicalStorageScope } from "../storage/canonical-scope.js";
-import { bindMemoryBackendScope, InMemoryStorageBackend } from "./in-memory-storage-backend.js";
+import { StorageScopes } from "../storage/canonical-scope.js";
+import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { RecordColumn } from "../record/record-column.js";
 import { StorageQueryEvaluator } from "../query/query-execution.js";
 import { StorageQueryPolicy, type NormalizedQueryPlan } from "../query/query-policy.js";
+
+const storageHost = globalThis as typeof globalThis & {
+  structuredClone<Value>(value: Value): Value;
+};
 
 /** Shared in-memory entity-storage factory for adapter conformance. */
 export class MemoryEntityStorageFactory {
   readonly #backend: InMemoryStorageBackend;
 
-  /** Create a factory with a fresh backend, or deliberately share `backend`. */
+  /**
+   * Creates a factory with a fresh backend, or deliberately shares `backend`.
+   *
+   * @param backend - Supplies the backend to share between factory handles.
+   * @returns Creates the scoped entity-storage factory.
+   */
   constructor(backend: InMemoryStorageBackend = new InMemoryStorageBackend()) {
     this.#backend = backend;
   }
 
+  /**
+   * Creates one scoped entity-storage handle.
+   *
+   * @param input - Supplies the entity storage configuration.
+   * @returns Returns the scoped in-memory entity storage.
+   */
   create<I, S extends Message>(input: EntityStorageInput<I, S>): InMemoryEntityStorage<I, S> {
-    const scope = canonicalStorageScope(input.context, input.storageKey);
-    const fingerprint = entityFingerprint(input);
-    const backend = bindMemoryBackendScope(
+    const scope = StorageScopes.canonical(input.context, input.storageKey);
+    const fingerprint = EntitySnapshots.fingerprint(input);
+    const backend = InMemoryStorageBackend.bind(
       this.#backend,
       scope,
       fingerprint,
@@ -49,10 +64,20 @@ export class MemoryEntityStorageFactory {
 
 /** One scoped in-memory current/state/event storage handle. */
 export class InMemoryEntityStorage<I, S extends Message> {
+  /** Provides current-record storage for this entity scope. */
   readonly current: MemoryEntityRecordStorage<I, S>;
+  /** Provides event-history storage for this entity scope. */
   readonly events: MemoryEntityEventHistory<I>;
+  /** Provides state-history storage for this entity scope. */
   readonly states: InMemoryEntityHistory<I, S>;
 
+  /**
+   * Creates the current, event, and state storage adapters over `backend`.
+   *
+   * @param input - Supplies the entity storage configuration.
+   * @param backend - Supplies the scoped in-memory data structures.
+   * @returns Creates the scoped entity storage handle.
+   */
   constructor(input: EntityStorageInput<I, S>, backend: EntityBackend) {
     this.current = new MemoryEntityRecordStorage({
       idKey: input.id.key,
@@ -83,23 +108,46 @@ export class InMemoryEntityStorage<I, S extends Message> {
   }
 }
 
+/** Configures one in-memory entity storage scope. */
 export interface EntityStorageInput<I, S extends Message> {
+  /** Identifies the storage context for this entity scope. */
   readonly context: StorageContext;
+  /** Supplies canonicalization and defensive-copy operations for entity IDs. */
   readonly id: EntityIdCodec<I>;
-  /** Extract the canonical entity identifier from durable state. */
+  /**
+   * Returns the canonical entity identifier from durable state.
+   *
+   * @param state - Supplies the durable entity state.
+   * @returns Returns the state entity identifier.
+   */
   readonly extractId: (state: S) => I;
   /** Descriptor-owned declared state columns; lifecycle columns are supplied by storage. */
   readonly columns: readonly RecordColumn<S>[];
+  /** Names the compatible storage layout. */
   readonly layout: string;
+  /** Describes the generated entity state message. */
   readonly stateSchema: GenMessage<S>;
+  /** Names this entity storage scope within its context. */
   readonly storageKey: string;
 }
 
 /** Internal provider ID canonicalization and clone contract. */
 export interface EntityIdCodec<I> {
+  /**
+   * Copies an entity identifier before returning it to callers.
+   *
+   * @param id - Supplies the identifier to copy.
+   * @returns Returns an independent identifier copy.
+   */
   readonly clone: (id: I) => I;
   /** Stable, validated compatibility identity for this ID representation. */
   readonly fingerprint: string;
+  /**
+   * Converts an entity identifier into its storage-map key.
+   *
+   * @param id - Supplies the identifier to canonicalize.
+   * @returns Returns the stable storage-map key.
+   */
   readonly key: (id: I) => string;
 }
 
@@ -110,17 +158,49 @@ interface EntityBackend {
   readonly states: Map<string, unknown>;
 }
 
-function entityFingerprint<I, S extends Message>(input: EntityStorageInput<I, S>): string {
-  if (input.layout.trim().length === 0 || input.id.fingerprint.trim().length === 0) {
-    throw new Error("Entity storage requires non-blank layout and ID codec fingerprints.");
-  }
-  return JSON.stringify({
-    id: input.id.fingerprint,
-    layout: input.layout,
-    columns: input.columns.map((column) => [column.name, column.valueType]),
-    state: input.stateSchema.typeName,
-  });
-}
+/** Captures immutable entity values and their durable identity. */
+const EntitySnapshots = {
+  /** Derives the compatibility fingerprint for one entity storage input. */
+  fingerprint<I, S extends Message>(input: EntityStorageInput<I, S>): string {
+    if (input.layout.trim().length === 0 || input.id.fingerprint.trim().length === 0) {
+      throw new Error("Entity storage requires non-blank layout and ID codec fingerprints.");
+    }
+    return JSON.stringify({
+      id: input.id.fingerprint,
+      layout: input.layout,
+      columns: input.columns.map((column) => [column.name, column.valueType]),
+      state: input.stateSchema.typeName,
+    });
+  },
+
+  /** Clones one entity ID with the platform structured-clone operation. */
+  cloneId<I>(id: I): I {
+    return storageHost.structuredClone(id);
+  },
+
+  /** Copies an immutable latest-state record. */
+  copyCurrent<I, S extends Message>(
+    record: EntityRecord<I, S>,
+    schema: GenMessage<S>,
+    idClone: (id: I) => I,
+  ): EntityRecord<I, S> {
+    return { ...record, id: idClone(record.id), state: clone(schema, record.state) };
+  },
+
+  /** Copies an immutable state-history record. */
+  copyState<I, S extends Message>(
+    record: EntityStateHistoryRecord<I, S>,
+    schema: GenMessage<S>,
+    idClone: (id: I) => I,
+  ): EntityStateHistoryRecord<I, S> {
+    return {
+      ...record,
+      entityId: idClone(record.entityId),
+      state: clone(schema, record.state),
+      createdAt: { ...record.createdAt },
+    };
+  },
+};
 
 /** In-memory latest-state storage used by all entity families. */
 export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRecordStorage<I, S> {
@@ -131,6 +211,12 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
   readonly #extractId: (state: S) => I;
   readonly #columns: readonly RecordColumn<S>[];
 
+  /**
+   * Creates a current-record adapter over supplied or fresh record storage.
+   *
+   * @param input - Supplies state, ID, column, and record-storage configuration.
+   * @returns Creates the current-record adapter.
+   */
   constructor(input: {
     readonly stateSchema: GenMessage<S>;
     readonly idKey: (id: I) => string;
@@ -140,22 +226,33 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
     readonly columns: readonly RecordColumn<S>[];
   }) {
     this.#idKey = input.idKey;
-    this.#idClone = input.idClone ?? cloneId;
+    this.#idClone = input.idClone ?? ((id) => EntitySnapshots.cloneId(id));
     this.#stateSchema = input.stateSchema;
     this.#records = input.records ?? new Map<string, EntityRecord<I, S>>();
     this.#extractId = input.extractId;
     this.#columns = input.columns;
   }
 
+  /**
+   * Reads the current record for one entity identifier.
+   *
+   * @param id - Supplies the entity identifier to read.
+   * @returns Resolves to an independent current record, when present.
+   */
   read(id: I): Promise<EntityRecord<I, S> | undefined> {
     return Promise.resolve().then(() => {
       const record = this.#records.get(this.#idKey(id));
       return record === undefined
         ? undefined
-        : copyEntityRecord(record, this.#stateSchema, this.#idClone);
+        : EntitySnapshots.copyCurrent(record, this.#stateSchema, this.#idClone);
     });
   }
 
+  /**
+   * Stores an independent copy of one current entity record.
+   *
+   * @param record - Supplies the current record to store.
+   */
   write(record: EntityRecord<I, S>): Promise<void> {
     return Promise.resolve().then(() => {
       if (this.#idKey(record.id) !== this.#idKey(this.#extractId(record.state))) {
@@ -163,11 +260,17 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
       }
       this.#records.set(
         this.#idKey(record.id),
-        copyEntityRecord(record, this.#stateSchema, this.#idClone),
+        EntitySnapshots.copyCurrent(record, this.#stateSchema, this.#idClone),
       );
     });
   }
 
+  /**
+   * Returns non-deleted current records matching the normalized plan.
+   *
+   * @param plan - Supplies the normalized record-query plan.
+   * @returns Resolves to ordered matching current-record entries.
+   */
   query(
     plan: NormalizedQueryPlan<I>,
   ): Promise<
@@ -189,7 +292,7 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
         throw new Error(`Storage query exceeded the candidate limit of ${String(limit)}.`);
       }
       const entries = candidates.flatMap((record) => {
-        const copied = copyEntityRecord(record, this.#stateSchema, this.#idClone);
+        const copied = EntitySnapshots.copyCurrent(record, this.#stateSchema, this.#idClone);
         if (this.#idKey(copied.id) !== this.#idKey(this.#extractId(copied.state))) {
           throw new Error("Entity current record ID does not match its state ID.");
         }
@@ -224,6 +327,12 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
   readonly #records: Map<string, EntityEventHistoryRecord<I>>;
   #open = true;
 
+  /**
+   * Creates an event-history adapter over supplied or fresh event storage.
+   *
+   * @param input - Supplies ID, maintenance, and event-storage configuration.
+   * @returns Creates the event-history adapter.
+   */
   constructor(input: {
     readonly idKey: (id: I) => string;
     readonly idClone?: (id: I) => I;
@@ -231,12 +340,17 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
     readonly records?: Map<string, EntityEventHistoryRecord<I>>;
   }) {
     this.#idKey = input.idKey;
-    this.#idClone = input.idClone ?? cloneId;
+    this.#idClone = input.idClone ?? ((id) => EntitySnapshots.cloneId(id));
     this.#maintenance = input.maintenance;
-    requireBatchSize(input.maintenance?.batchSize);
+    HistoryLimits.requireBatchSize(input.maintenance?.batchSize);
     this.#records = input.records ?? new Map<string, EntityEventHistoryRecord<I>>();
   }
 
+  /**
+   * Stores one immutable event-history record idempotently.
+   *
+   * @param record - Supplies the event-history record to append.
+   */
   append(record: EntityEventHistoryRecord<I>): Promise<void> {
     return Promise.resolve().then(() => {
       this.requireOpen();
@@ -245,7 +359,7 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
         throw new Error("Event history requires an event ID.");
       }
       const stored = this.#records.get(id);
-      if (stored !== undefined && !sameEventRecord(stored, record, this.#idKey)) {
+      if (stored !== undefined && !HistoryIdentity.sameEvent(stored, record, this.#idKey)) {
         throw new Error("Event-history retry has divergent content.");
       }
       if (stored === undefined) {
@@ -259,10 +373,18 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
     });
   }
 
+  /**
+   * Reads recent events in descending producer-version order.
+   *
+   * @param entityId - Supplies the entity identifier to inspect.
+   * @param depth - Limits the number of events returned.
+   * @param startingFromVersion - Excludes events at or after this producer version.
+   * @returns Resolves to immutable event snapshots.
+   */
   backward(entityId: I, depth: number, startingFromVersion?: bigint): Promise<readonly Event[]> {
     return Promise.resolve().then(() => {
       this.requireOpen();
-      requireDepth(depth);
+      HistoryLimits.requireDepth(depth);
       return Object.freeze(
         [...this.#records.values()]
           .filter((record) => this.#idKey(record.entityId) === this.#idKey(entityId))
@@ -273,8 +395,8 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
           .sort(
             (left, right) =>
               Number(right.producerVersion - left.producerVersion) ||
-              compareTime(right.createdAt, left.createdAt) ||
-              compareCanonicalBytes(eventId(right), eventId(left)),
+              HistoryOrdering.compareTime(right.createdAt, left.createdAt) ||
+              CanonicalBytes.compare(HistoryIdentity.eventId(right), HistoryIdentity.eventId(left)),
           )
           .slice(0, depth)
           .map((record) => Object.freeze(clone(EventSchema, record.event))),
@@ -282,21 +404,26 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
     });
   }
 
+  /**
+   * Deletes events created before the supplied timestamp in maintenance chunks.
+   *
+   * @param olderThan - Specifies the exclusive event creation-time boundary.
+   */
   async truncate(olderThan: Timestamp): Promise<void> {
     this.requireOpen();
-    const upperBound = lastMatchingKey(
+    const upperBound = HistorySelection.lastMatchingKey(
       this.#records,
-      (record) => compareTime(record.createdAt, olderThan) < 0,
+      (record) => HistoryOrdering.compareTime(record.createdAt, olderThan) < 0,
     );
     let after: string | undefined;
     while (this.#open) {
-      const selected = selectKeys(
+      const selected = HistorySelection.selectKeys(
         this.#records,
         after,
         this.batchSize(),
         (record, key) =>
-          (upperBound === undefined || compareCanonicalBytes(key, upperBound) <= 0) &&
-          compareTime(record.createdAt, olderThan) < 0,
+          (upperBound === undefined || CanonicalBytes.compare(key, upperBound) <= 0) &&
+          HistoryOrdering.compareTime(record.createdAt, olderThan) < 0,
       );
       if (selected.length === 0) return;
       for (const key of selected) this.#records.delete(key);
@@ -306,9 +433,15 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
     }
   }
 
+  /** Closes this event-history adapter. */
   close(): void {
     this.#open = false;
   }
+  /**
+   * Returns whether this event-history adapter remains open.
+   *
+   * @returns Returns true while the adapter is open.
+   */
   isOpen(): boolean {
     return this.#open;
   }
@@ -330,6 +463,12 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
   #open = true;
   readonly #maintenance: InMemoryMaintenance | undefined;
 
+  /**
+   * Creates a state-history adapter over supplied or fresh state storage.
+   *
+   * @param input - Supplies state, ID, maintenance, queue, and record configuration.
+   * @returns Creates the state-history adapter.
+   */
   constructor(input: {
     readonly stateSchema: GenMessage<S>;
     readonly idKey: (id: I) => string;
@@ -339,14 +478,19 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     readonly queue?: KeyedSerialQueue;
   }) {
     this.#idKey = input.idKey;
-    this.#idClone = input.idClone ?? cloneId;
+    this.#idClone = input.idClone ?? ((id) => EntitySnapshots.cloneId(id));
     this.#stateSchema = input.stateSchema;
     this.#records = input.records ?? new Map<string, EntityStateHistoryRecord<I, S>>();
     this.#maintenance = input.maintenance;
-    requireBatchSize(input.maintenance?.batchSize);
+    HistoryLimits.requireBatchSize(input.maintenance?.batchSize);
     this.#queue = input.queue ?? new KeyedSerialQueue();
   }
 
+  /**
+   * Stores one immutable state-history record idempotently.
+   *
+   * @param record - Supplies the state-history record to append.
+   */
   async append(record: EntityStateHistoryRecord<I, S>): Promise<void> {
     this.requireOpen();
     await this.#queue.run(this.#idKey(record.entityId), () =>
@@ -354,16 +498,27 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
         this.requireOpen();
         const key = this.key(record.entityId, record.version);
         const stored = this.#records.get(key);
-        if (stored !== undefined && !sameRecord(stored, record, this.#stateSchema)) {
+        if (stored !== undefined && !HistoryIdentity.sameState(stored, record, this.#stateSchema)) {
           throw new Error("State-history retry has divergent content.");
         }
         if (stored === undefined) {
-          this.#records.set(key, copyRecord(record, this.#stateSchema, this.#idClone));
+          this.#records.set(
+            key,
+            EntitySnapshots.copyState(record, this.#stateSchema, this.#idClone),
+          );
         }
       }),
     );
   }
 
+  /**
+   * Reads recent state records in descending version order.
+   *
+   * @param entityId - Supplies the entity identifier to inspect.
+   * @param depth - Limits the number of state records returned.
+   * @param startingFromVersion - Excludes records at or after this version.
+   * @returns Resolves to immutable state-record snapshots.
+   */
   backward(
     entityId: I,
     depth: number,
@@ -371,27 +526,42 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
   ): Promise<readonly EntityStateHistoryRecord<I, S>[]> {
     return Promise.resolve().then(() => {
       this.requireOpen();
-      requireDepth(depth);
+      HistoryLimits.requireDepth(depth);
       return Object.freeze(
         this.recordsFor(entityId, startingFromVersion)
           .slice(0, depth)
-          .map((record) => Object.freeze(copyRecord(record, this.#stateSchema, this.#idClone))),
+          .map((record) =>
+            Object.freeze(EntitySnapshots.copyState(record, this.#stateSchema, this.#idClone)),
+          ),
       );
     });
   }
 
+  /**
+   * Reads the latest state recorded at or before a timestamp.
+   *
+   * @param entityId - Supplies the entity identifier to inspect.
+   * @param time - Specifies the inclusive state creation-time boundary.
+   * @returns Resolves to an immutable state snapshot, when present.
+   */
   stateAt(entityId: I, time: Timestamp): Promise<S | undefined> {
     return Promise.resolve().then(() => {
       this.requireOpen();
       const selected = this.recordsFor(entityId)
-        .filter((record) => compareTime(record.createdAt, time) <= 0)
-        .sort(compareStateAtRecord)[0];
+        .filter((record) => HistoryOrdering.compareTime(record.createdAt, time) <= 0)
+        .sort((left, right) => HistoryOrdering.compareStateAt(left, right))[0];
       return selected === undefined
         ? undefined
         : Object.freeze(clone(this.#stateSchema, selected.state));
     });
   }
 
+  /**
+   * Deletes all but the requested number of most recent state records.
+   *
+   * @param entityId - Supplies the entity identifier to trim.
+   * @param keepMostRecent - Specifies how many recent records to retain.
+   */
   async trim(entityId: I, keepMostRecent: number): Promise<void> {
     this.requireOpen();
     if (!Number.isSafeInteger(keepMostRecent) || keepMostRecent < 0) {
@@ -408,7 +578,7 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
       await this.afterSelection();
       this.requireOpen();
       while (this.#open && deletionsRemaining > 0) {
-        const selected = selectOldestStateKeys(
+        const selected = HistorySelection.selectOldestStateKeys(
           this.#records,
           entityKey,
           Math.min(this.batchSize(), deletionsRemaining),
@@ -422,23 +592,28 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     });
   }
 
+  /**
+   * Deletes state records created before the supplied timestamp in maintenance chunks.
+   *
+   * @param olderThan - Specifies the exclusive state creation-time boundary.
+   */
   async truncate(olderThan: Timestamp): Promise<void> {
     this.requireOpen();
-    const upperBound = lastMatchingKey(
+    const upperBound = HistorySelection.lastMatchingKey(
       this.#records,
-      (record) => compareTime(record.createdAt, olderThan) < 0,
+      (record) => HistoryOrdering.compareTime(record.createdAt, olderThan) < 0,
     );
     await this.afterSelection();
     this.requireOpen();
     let after: string | undefined;
     while (this.#open) {
-      const selected = selectKeys(
+      const selected = HistorySelection.selectKeys(
         this.#records,
         after,
         this.batchSize(),
         (record, key) =>
-          (upperBound === undefined || compareCanonicalBytes(key, upperBound) <= 0) &&
-          compareTime(record.createdAt, olderThan) < 0,
+          (upperBound === undefined || CanonicalBytes.compare(key, upperBound) <= 0) &&
+          HistoryOrdering.compareTime(record.createdAt, olderThan) < 0,
       );
       if (selected.length === 0) return;
       for (const key of selected) this.#records.delete(key);
@@ -447,10 +622,16 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     }
   }
 
+  /** Closes this state-history adapter. */
   close(): void {
     this.#open = false;
   }
 
+  /**
+   * Returns whether this state-history adapter remains open.
+   *
+   * @returns Returns true while the adapter is open.
+   */
   isOpen(): boolean {
     return this.#open;
   }
@@ -464,7 +645,7 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
     return [...this.#records.values()]
       .filter((record) => this.#idKey(record.entityId) === id)
       .filter((record) => startingFromVersion === undefined || record.version < startingFromVersion)
-      .sort(compareRecord);
+      .sort((left, right) => HistoryOrdering.compareRecords(left, right));
   }
 
   private requireOpen(): void {
@@ -488,7 +669,17 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
 
 /** Adapter-internal deterministic maintenance test seam; not a storage API. */
 export interface InMemoryMaintenance {
+  /**
+   * Completes after maintenance selects its fixed deletion boundary.
+   *
+   * @returns Completes after the test seam finishes.
+   */
   readonly afterSelection?: () => void | Promise<void>;
+  /**
+   * Completes after each maintenance deletion chunk.
+   *
+   * @returns Completes after the test seam finishes.
+   */
   readonly onChunk?: () => void | Promise<void>;
   /** Test-only override for deterministic in-memory maintenance chunking. */
   readonly batchSize?: number;
@@ -515,195 +706,203 @@ class KeyedSerialQueue {
   }
 }
 
-function compareRecord<I, S extends Message>(
-  left: EntityStateHistoryRecord<I, S>,
-  right: EntityStateHistoryRecord<I, S>,
-): number {
-  return Number(right.version - left.version) || compareTime(right.createdAt, left.createdAt);
-}
+/** Orders history records by chronology, version, and stable keys. */
+const HistoryOrdering = {
+  /** Compares records newest-first by version and timestamp. */
+  compareRecords<I, S extends Message>(
+    left: EntityStateHistoryRecord<I, S>,
+    right: EntityStateHistoryRecord<I, S>,
+  ): number {
+    return (
+      Number(right.version - left.version) ||
+      HistoryOrdering.compareTime(right.createdAt, left.createdAt)
+    );
+  },
 
-function compareStateAtRecord<I, S extends Message>(
-  left: EntityStateHistoryRecord<I, S>,
-  right: EntityStateHistoryRecord<I, S>,
-): number {
-  return compareTime(right.createdAt, left.createdAt) || Number(right.version - left.version);
-}
+  /** Compares records for temporal state selection. */
+  compareStateAt<I, S extends Message>(
+    left: EntityStateHistoryRecord<I, S>,
+    right: EntityStateHistoryRecord<I, S>,
+  ): number {
+    return (
+      HistoryOrdering.compareTime(right.createdAt, left.createdAt) ||
+      Number(right.version - left.version)
+    );
+  },
 
-function compareTime(left: Timestamp, right: Timestamp): number {
-  return Number(left.seconds - right.seconds) || left.nanos - right.nanos;
-}
+  /** Compares timestamps by seconds and nanos. */
+  compareTime(left: Timestamp, right: Timestamp): number {
+    return Number(left.seconds - right.seconds) || left.nanos - right.nanos;
+  },
+};
 
-function copyRecord<I, S extends Message>(
-  record: EntityStateHistoryRecord<I, S>,
-  schema: GenMessage<S>,
-  idClone: (id: I) => I,
-): EntityStateHistoryRecord<I, S> {
-  return {
-    ...record,
-    entityId: idClone(record.entityId),
-    state: clone(schema, record.state),
-    createdAt: { ...record.createdAt },
-  };
-}
+/** Compares durable state and event history identities. */
+const HistoryIdentity = {
+  /** Compares two state-history records by durable state identity. */
+  sameState<I, S extends Message>(
+    left: EntityStateHistoryRecord<I, S>,
+    right: EntityStateHistoryRecord<I, S>,
+    schema: GenMessage<S>,
+  ): boolean {
+    return (
+      left.version === right.version &&
+      HistoryOrdering.compareTime(left.createdAt, right.createdAt) === 0 &&
+      CanonicalBytes.equal(toBinary(schema, left.state), toBinary(schema, right.state))
+    );
+  },
 
-function copyEntityRecord<I, S extends Message>(
-  record: EntityRecord<I, S>,
-  schema: GenMessage<S>,
-  idClone: (id: I) => I,
-): EntityRecord<I, S> {
-  return { ...record, id: idClone(record.id), state: clone(schema, record.state) };
-}
+  /** Compares two event-history records by durable event identity. */
+  sameEvent<I>(
+    left: EntityEventHistoryRecord<I>,
+    right: EntityEventHistoryRecord<I>,
+    idKey: (id: I) => string,
+  ): boolean {
+    return (
+      idKey(left.entityId) === idKey(right.entityId) &&
+      left.producerVersion === right.producerVersion &&
+      HistoryOrdering.compareTime(left.createdAt, right.createdAt) === 0 &&
+      CanonicalBytes.equal(toBinary(EventSchema, left.event), toBinary(EventSchema, right.event))
+    );
+  },
 
-function cloneId<I>(id: I): I {
-  return structuredClone(id);
-}
+  /** Returns the event ID used as an event-history tie breaker. */
+  eventId<I>(record: EntityEventHistoryRecord<I>): string {
+    return record.event.id?.value ?? "";
+  },
+};
 
-function sameRecord<I, S extends Message>(
-  left: EntityStateHistoryRecord<I, S>,
-  right: EntityStateHistoryRecord<I, S>,
-  schema: GenMessage<S>,
-): boolean {
-  return (
-    left.version === right.version &&
-    compareTime(left.createdAt, right.createdAt) === 0 &&
-    bytesEqual(toBinary(schema, left.state), toBinary(schema, right.state))
-  );
-}
+/** Validates bounded history requests. */
+const HistoryLimits = {
+  requireDepth(depth: number): void {
+    if (!Number.isSafeInteger(depth) || depth <= 0) {
+      throw new Error("History depth must be a positive safe integer.");
+    }
+  },
 
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function sameEventRecord<I>(
-  left: EntityEventHistoryRecord<I>,
-  right: EntityEventHistoryRecord<I>,
-  idKey: (id: I) => string,
-): boolean {
-  return (
-    idKey(left.entityId) === idKey(right.entityId) &&
-    left.producerVersion === right.producerVersion &&
-    compareTime(left.createdAt, right.createdAt) === 0 &&
-    bytesEqual(toBinary(EventSchema, left.event), toBinary(EventSchema, right.event))
-  );
-}
-
-function eventId<I>(record: EntityEventHistoryRecord<I>): string {
-  return record.event.id?.value ?? "";
-}
-
-function requireDepth(depth: number): void {
-  if (!Number.isSafeInteger(depth) || depth <= 0) {
-    throw new Error("History depth must be a positive safe integer.");
-  }
-}
-
-function requireBatchSize(batchSize: number | undefined): void {
-  if (batchSize !== undefined && (!Number.isSafeInteger(batchSize) || batchSize <= 0)) {
-    throw new Error("In-memory maintenance batch size must be a positive safe integer.");
-  }
-}
+  requireBatchSize(batchSize: number | undefined): void {
+    if (batchSize !== undefined && (!Number.isSafeInteger(batchSize) || batchSize <= 0)) {
+      throw new Error("In-memory maintenance batch size must be a positive safe integer.");
+    }
+  },
+};
 
 const MAINTENANCE_BATCH_SIZE = 128;
 
-function selectKeys<T>(
-  records: ReadonlyMap<string, T>,
-  after: string | undefined,
-  batchSize: number,
-  matches: (value: T, key: string) => boolean,
-): string[] {
-  const selected: string[] = [];
-  let cursor = after;
-  while (selected.length < batchSize) {
-    let next: string | undefined;
+/** Selects deterministic maintenance batches. */
+const HistorySelection = {
+  selectKeys<T>(
+    records: ReadonlyMap<string, T>,
+    after: string | undefined,
+    batchSize: number,
+    matches: (value: T, key: string) => boolean,
+  ): string[] {
+    const selected: string[] = [];
+    let cursor = after;
+    while (selected.length < batchSize) {
+      let next: string | undefined;
+      for (const [key, value] of records) {
+        if (
+          (cursor === undefined || CanonicalBytes.compare(key, cursor) > 0) &&
+          matches(value, key) &&
+          (next === undefined || CanonicalBytes.compare(key, next) < 0)
+        ) {
+          next = key;
+        }
+      }
+      if (next === undefined) return selected;
+      selected.push(next);
+      cursor = next;
+    }
+    return selected;
+  },
+
+  lastMatchingKey<T>(
+    records: ReadonlyMap<string, T>,
+    matches: (value: T) => boolean,
+  ): string | undefined {
+    let last: string | undefined;
     for (const [key, value] of records) {
-      if (
-        (cursor === undefined || compareCanonicalBytes(key, cursor) > 0) &&
-        matches(value, key) &&
-        (next === undefined || compareCanonicalBytes(key, next) < 0)
-      ) {
-        next = key;
+      if (matches(value) && (last === undefined || CanonicalBytes.compare(key, last) > 0))
+        last = key;
+    }
+    return last;
+  },
+
+  selectOldestStateKeys<I, S extends Message>(
+    records: ReadonlyMap<string, EntityStateHistoryRecord<I, S>>,
+    entityKey: string,
+    limit: number,
+    idKey: (id: I) => string,
+  ): string[] {
+    const selected: [string, EntityStateHistoryRecord<I, S>][] = [];
+    for (const entry of records) {
+      if (idKey(entry[1].entityId) !== entityKey) continue;
+      selected.push(entry);
+      selected.sort((left, right) => OldestStateOrdering.compare(left, right));
+      if (selected.length > limit) selected.pop();
+    }
+    return selected.map(([key]) => key);
+  },
+};
+
+/** Orders history records by chronology, version, and stable keys. */
+const OldestStateOrdering = {
+  /** Compares records oldest-first for bounded maintenance selection. */
+  compare<I, S extends Message>(
+    [leftKey, left]: [string, EntityStateHistoryRecord<I, S>],
+    [rightKey, right]: [string, EntityStateHistoryRecord<I, S>],
+  ): number {
+    return (
+      Number(left.version - right.version) ||
+      HistoryOrdering.compareTime(left.createdAt, right.createdAt) ||
+      CanonicalBytes.compare(leftKey, rightKey)
+    );
+  },
+};
+
+/** Orders canonical UTF-8 values and compares durable bytes. */
+const CanonicalBytes = {
+  /** Compares two durable byte sequences. */
+  equal(left: Uint8Array, right: Uint8Array): boolean {
+    return left.length === right.length && left.every((value, index) => value === right[index]);
+  },
+
+  /** Compares strings by canonical UTF-8 bytes. */
+  compare(left: string, right: string): number {
+    const leftBytes = CanonicalBytes.utf8(left);
+    const rightBytes = CanonicalBytes.utf8(right);
+    const length = Math.min(leftBytes.length, rightBytes.length);
+    for (let index = 0; index < length; index++) {
+      const difference = (leftBytes[index] ?? 0) - (rightBytes[index] ?? 0);
+      if (difference !== 0) return difference;
+    }
+    return leftBytes.length - rightBytes.length;
+  },
+
+  /** Encodes a string as canonical UTF-8 bytes. */
+  utf8(value: string): Uint8Array {
+    const bytes: number[] = [];
+    for (let index = 0; index < value.length; index++) {
+      const codePoint = value.codePointAt(index);
+      if (codePoint === undefined) continue;
+      if (codePoint > 0xffff) index++;
+      if (codePoint <= 0x7f) bytes.push(codePoint);
+      else if (codePoint <= 0x7ff) bytes.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f));
+      else if (codePoint <= 0xffff) {
+        bytes.push(
+          0xe0 | (codePoint >> 12),
+          0x80 | ((codePoint >> 6) & 0x3f),
+          0x80 | (codePoint & 0x3f),
+        );
+      } else {
+        bytes.push(
+          0xf0 | (codePoint >> 18),
+          0x80 | ((codePoint >> 12) & 0x3f),
+          0x80 | ((codePoint >> 6) & 0x3f),
+          0x80 | (codePoint & 0x3f),
+        );
       }
     }
-    if (next === undefined) return selected;
-    selected.push(next);
-    cursor = next;
-  }
-  return selected;
-}
-
-function lastMatchingKey<T>(
-  records: ReadonlyMap<string, T>,
-  matches: (value: T) => boolean,
-): string | undefined {
-  let last: string | undefined;
-  for (const [key, value] of records) {
-    if (matches(value) && (last === undefined || compareCanonicalBytes(key, last) > 0)) last = key;
-  }
-  return last;
-}
-
-function selectOldestStateKeys<I, S extends Message>(
-  records: ReadonlyMap<string, EntityStateHistoryRecord<I, S>>,
-  entityKey: string,
-  limit: number,
-  idKey: (id: I) => string,
-): string[] {
-  const selected: [string, EntityStateHistoryRecord<I, S>][] = [];
-  for (const entry of records) {
-    if (idKey(entry[1].entityId) !== entityKey) continue;
-    selected.push(entry);
-    selected.sort(compareOldestStateEntry);
-    if (selected.length > limit) selected.pop();
-  }
-  return selected.map(([key]) => key);
-}
-
-function compareOldestStateEntry<I, S extends Message>(
-  [leftKey, left]: [string, EntityStateHistoryRecord<I, S>],
-  [rightKey, right]: [string, EntityStateHistoryRecord<I, S>],
-): number {
-  return (
-    Number(left.version - right.version) ||
-    compareTime(left.createdAt, right.createdAt) ||
-    compareCanonicalBytes(leftKey, rightKey)
-  );
-}
-
-function compareCanonicalBytes(left: string, right: string): number {
-  const leftBytes = utf8Bytes(left);
-  const rightBytes = utf8Bytes(right);
-  const length = Math.min(leftBytes.length, rightBytes.length);
-  for (let index = 0; index < length; index++) {
-    const difference = (leftBytes[index] ?? 0) - (rightBytes[index] ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return leftBytes.length - rightBytes.length;
-}
-
-function utf8Bytes(value: string): Uint8Array {
-  const bytes: number[] = [];
-  for (let index = 0; index < value.length; index++) {
-    const codePoint = value.codePointAt(index);
-    if (codePoint === undefined) continue;
-    if (codePoint > 0xffff) index++;
-    if (codePoint <= 0x7f) bytes.push(codePoint);
-    else if (codePoint <= 0x7ff) bytes.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f));
-    else if (codePoint <= 0xffff) {
-      bytes.push(
-        0xe0 | (codePoint >> 12),
-        0x80 | ((codePoint >> 6) & 0x3f),
-        0x80 | (codePoint & 0x3f),
-      );
-    } else {
-      bytes.push(
-        0xf0 | (codePoint >> 18),
-        0x80 | ((codePoint >> 12) & 0x3f),
-        0x80 | ((codePoint >> 6) & 0x3f),
-        0x80 | (codePoint & 0x3f),
-      );
-    }
-  }
-  return new Uint8Array(bytes);
-}
-
-declare function structuredClone<T>(value: T): T;
+    return new Uint8Array(bytes);
+  },
+};

@@ -2,7 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
@@ -66,14 +66,18 @@ describe("datastore orders test app", () => {
         create(CommandSchema, {
           id: metadata.commandId("order-grpc-command"),
           context: metadata.commandContext({ actorContext }),
-          message: packAny(CreateOrderSchema, create(CreateOrderSchema, { id, skuId: "sku-1" })),
+          message: AnyMessages.pack(
+            CreateOrderSchema,
+            create(CreateOrderSchema, { id, skuId: "sku-1" }),
+          ),
         }),
       );
       expect(acknowledgement.status?.status.case).toBe("ok");
       const response = await readEventually(queries, id, actorContext);
       expect(
         response.message.some(
-          (row) => row.state !== undefined && unpackAny(row.state, OrderSummarySchema)?.id === id,
+          (row) =>
+            row.state !== undefined && AnyMessages.unpack(row.state, OrderSummarySchema)?.id === id,
         ),
       ).toBe(true);
       const update = await nextUpdate;
@@ -140,11 +144,13 @@ function topic(id: string, actorContext: ReturnType<typeof metadata.actorContext
 
 function target(id: string) {
   return create(TargetSchema, {
-    type: deriveTypeUrl(OrderSummarySchema),
+    type: TypeUrls.derive(OrderSummarySchema),
     criterion: {
       case: "filters",
       value: create(TargetFiltersSchema, {
-        idFilter: { id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))] },
+        idFilter: {
+          id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+        },
       }),
     },
   });

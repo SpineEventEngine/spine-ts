@@ -112,11 +112,11 @@ The source package is intentionally in-memory by default:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { packAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import { CommandIdSchema } from "@spine-event-engine/proto";
 
 const commandId = create(CommandIdSchema, { uuid: "command-1" });
-const packedCommandId = packAny(CommandIdSchema, commandId);
+const packedCommandId = AnyMessages.pack(CommandIdSchema, commandId);
 
 void packedCommandId;
 ```

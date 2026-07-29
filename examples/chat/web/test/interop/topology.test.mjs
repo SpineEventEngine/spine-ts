@@ -11,7 +11,7 @@ import {
   create,
   toBinary,
 } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/index.js";
-import { packAny, deriveTypeUrl } from "../../../../../packages/core/dist/index.js";
+import { AnyMessages, TypeUrls } from "../../../../../packages/core/dist/index.js";
 import { TimestampSchema } from "../../../../../packages/proto/node_modules/@bufbuild/protobuf/dist/esm/wkt/gen/google/protobuf/timestamp_pb.js";
 import {
   CommandSchema,
@@ -73,7 +73,7 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
       create(CommandSchema, {
         id: create(CommandIdSchema, { uuid: "interop-command-1" }),
         context: create(CommandContextSchema, { actorContext: context }),
-        message: packAny(
+        message: AnyMessages.pack(
           PostMessageSchema,
           create(PostMessageSchema, {
             id: create(MessageIdSchema, { value: "interop-1" }),
@@ -88,7 +88,7 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
     assert.equal(acknowledgement.status?.status.case, "ok", JSON.stringify(acknowledgement));
     const query = create(QuerySchema, {
       target: create(TargetSchema, {
-        type: deriveTypeUrl(ChatMessageViewSchema),
+        type: TypeUrls.derive(ChatMessageViewSchema),
         criterion: {
           case: "filters",
           value: create(TargetFiltersSchema, {
@@ -99,7 +99,10 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
                   create(FilterSchema, {
                     fieldPath: { fieldName: ["room"] },
                     operator: Filter_Operator.EQUAL,
-                    value: packAny(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: "room-a" })),
+                    value: AnyMessages.pack(
+                      ChatRoomIdSchema,
+                      create(ChatRoomIdSchema, { value: "room-a" }),
+                    ),
                   }),
                 ],
               }),
@@ -114,7 +117,7 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
       return response.message.length === 0 ? undefined : response;
     });
     const view = read.message[0]?.state;
-    assert.equal(view?.typeUrl, deriveTypeUrl(ChatMessageViewSchema));
+    assert.equal(view?.typeUrl, TypeUrls.derive(ChatMessageViewSchema));
     const subscription = await subscriptions.subscribe(
       create(TopicSchema, {
         id: create(TopicIdSchema, { value: "interop-topic" }),
@@ -134,7 +137,7 @@ test("routes gRPC-Web ResolveContext through Envoy and the native gateway", asyn
         create(CommandSchema, {
           id: create(CommandIdSchema, { uuid: `interop-command-${probe}` }),
           context: create(CommandContextSchema, { actorContext: context }),
-          message: packAny(
+          message: AnyMessages.pack(
             PostMessageSchema,
             create(PostMessageSchema, {
               id: create(MessageIdSchema, { value: `interop-${probe}` }),

@@ -1,96 +1,6 @@
 [
   {
     "rule": "standalone-function",
-    "file": "examples/chat/web/src/browser-fixture.tsx",
-    "kind": "function-declaration",
-    "identity": "asyncQueue()#1",
-    "name": "asyncQueue",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration asyncQueue()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/browser-fixture.tsx",
-    "kind": "function-declaration",
-    "identity": "response()#1",
-    "name": "response",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration response()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/index.tsx",
-    "kind": "function-declaration",
-    "identity": "ChatBrowserApp()#1",
-    "name": "ChatBrowserApp",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration ChatBrowserApp()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/index.tsx",
-    "kind": "function-declaration",
-    "identity": "ChatRoom()#1",
-    "name": "ChatRoom",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration ChatRoom()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/index.tsx",
-    "kind": "function-declaration",
-    "identity": "createRoomQuery()#1",
-    "name": "createRoomQuery",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createRoomQuery()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/index.tsx",
-    "kind": "function-declaration",
-    "identity": "createRoomTopic()#1",
-    "name": "createRoomTopic",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createRoomTopic()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/index.tsx",
-    "kind": "function-declaration",
-    "identity": "defaultMessageId()#1",
-    "name": "defaultMessageId",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration defaultMessageId()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/index.tsx",
-    "kind": "function-declaration",
-    "identity": "lifecycleNotice()#1",
-    "name": "lifecycleNotice",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration lifecycleNotice()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/index.tsx",
-    "kind": "function-declaration",
-    "identity": "postMessage()#1",
-    "name": "postMessage",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration postMessage()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/chat/web/src/index.tsx",
-    "kind": "function-declaration",
-    "identity": "roomRows()#1",
-    "name": "roomRows",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration roomRows()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
     "file": "examples/chat/app/src/chat-policy.ts",
     "kind": "function-declaration",
     "identity": "guaranteesAuthorizedRoom()#1",
@@ -178,5 +88,95 @@
     "name": "validateChatMessageInput",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration validateChatMessageInput()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/browser-fixture.tsx",
+    "kind": "function-declaration",
+    "identity": "asyncQueue()#1",
+    "name": "asyncQueue",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration asyncQueue()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/browser-fixture.tsx",
+    "kind": "function-declaration",
+    "identity": "response()#1",
+    "name": "response",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration response()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/index.tsx",
+    "kind": "function-declaration",
+    "identity": "ChatBrowserApp()#1",
+    "name": "ChatBrowserApp",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration ChatBrowserApp()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/index.tsx",
+    "kind": "function-declaration",
+    "identity": "ChatRoom()#1",
+    "name": "ChatRoom",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration ChatRoom()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/index.tsx",
+    "kind": "function-declaration",
+    "identity": "createRoomQuery()#1",
+    "name": "createRoomQuery",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration createRoomQuery()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/index.tsx",
+    "kind": "function-declaration",
+    "identity": "createRoomTopic()#1",
+    "name": "createRoomTopic",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration createRoomTopic()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/index.tsx",
+    "kind": "function-declaration",
+    "identity": "defaultMessageId()#1",
+    "name": "defaultMessageId",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration defaultMessageId()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/index.tsx",
+    "kind": "function-declaration",
+    "identity": "lifecycleNotice()#1",
+    "name": "lifecycleNotice",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration lifecycleNotice()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/index.tsx",
+    "kind": "function-declaration",
+    "identity": "postMessage()#1",
+    "name": "postMessage",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration postMessage()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "examples/chat/web/src/index.tsx",
+    "kind": "function-declaration",
+    "identity": "roomRows()#1",
+    "name": "roomRows",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080 observed standalone declaration roomRows()#1 requires remediation by the assigned slice."
   }
 ]

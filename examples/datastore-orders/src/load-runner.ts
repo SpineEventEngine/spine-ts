@@ -4,7 +4,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import { CommandSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TargetFiltersSchema, TargetSchema } from "@spine-event-engine/proto/client";
@@ -233,7 +233,7 @@ class DatastoreOrdersUserRun {
     return create(CommandSchema, {
       id: metadata.commandId(`load-command-${this.id}`),
       context: metadata.commandContext({ actorContext: this.actorContext }),
-      message: packAny(
+      message: AnyMessages.pack(
         CreateOrderSchema,
         create(CreateOrderSchema, { id: this.id, skuId: `sku-${String(this.index)}` }),
       ),
@@ -272,7 +272,8 @@ class DatastoreOrdersUserRun {
       response.response?.status?.status.case === "ok" &&
       response.message.some(
         (row) =>
-          row.state !== undefined && unpackAny(row.state, OrderSummarySchema)?.id === this.id,
+          row.state !== undefined &&
+          AnyMessages.unpack(row.state, OrderSummarySchema)?.id === this.id,
       )
     );
   }
@@ -299,7 +300,7 @@ class DatastoreOrdersUserRun {
       update.update.value.update.some(
         (row) =>
           row.kind.case === "state" &&
-          unpackAny(row.kind.value, OrderSummarySchema)?.id === this.id,
+          AnyMessages.unpack(row.kind.value, OrderSummarySchema)?.id === this.id,
       )
     );
   }
@@ -327,11 +328,13 @@ function topic(id: string, actorContext: ReturnType<typeof metadata.actorContext
 }
 function target(id: string) {
   return create(TargetSchema, {
-    type: deriveTypeUrl(OrderSummarySchema),
+    type: TypeUrls.derive(OrderSummarySchema),
     criterion: {
       case: "filters",
       value: create(TargetFiltersSchema, {
-        idFilter: { id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))] },
+        idFilter: {
+          id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
+        },
       }),
     },
   });

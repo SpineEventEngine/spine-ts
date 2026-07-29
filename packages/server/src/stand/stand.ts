@@ -1,5 +1,5 @@
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
-import { deriveTypeUrl, type MessageSchema } from "@spine-event-engine/core";
+import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
 import { VersionSchema, type Version } from "@spine-event-engine/proto";
 import {
   RecordColumn,
@@ -149,7 +149,7 @@ export class Stand {
   /** Register one known entity state schema. Re-registering the same schema is idempotent. */
   register(schema: MessageSchema, options: StandRegisterOptions = {}): void {
     this.#requireOpen();
-    const typeUrl = deriveTypeUrl(schema);
+    const typeUrl = TypeUrls.derive(schema);
     if (this.#registrations.has(typeUrl)) {
       return;
     }
@@ -451,7 +451,7 @@ export class Stand {
     operation: string,
   ): Registration<Schema> {
     this.#requireOpen();
-    const typeUrl = deriveTypeUrl(schema);
+    const typeUrl = TypeUrls.derive(schema);
     const registration = this.#registrations.get(typeUrl);
     if (registration === undefined) {
       throw new StandStateTypeError(typeUrl, operation);

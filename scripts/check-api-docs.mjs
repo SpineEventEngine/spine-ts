@@ -84,21 +84,21 @@ const expectedProtoExports = [
   "ZonedDateTime",
   "ZonedDateTimeSchema",
   "file_spine_options",
-  "file_spine_base_field_path",
-  "file_spine_core_actor_context",
+  "fieldPathFile",
+  "actorContextFile",
   "file_spine_core_command",
   "file_spine_core_diagnostics",
   "file_spine_core_enrichment",
   "file_spine_core_event",
-  "file_spine_core_tenant_id",
-  "file_spine_core_user_id",
+  "tenantIdFile",
+  "userIdFile",
   "file_spine_core_version",
-  "file_spine_net_email_address",
-  "file_spine_net_internet_domain",
-  "file_spine_string_template_string",
+  "emailAddressFile",
+  "internetDomainFile",
+  "templateStringFile",
   "file_spine_time_time",
   "file_spine_ui_language",
-  "file_spine_validation_validation_error",
+  "validationErrorFile",
   "set_once",
   "type_url_prefix",
   "FieldPathSchema",
@@ -224,9 +224,9 @@ const expectedCoreExports = [
   "DEFAULT_TYPE_URL_PREFIX",
   "TypeRegistry",
   "TypeRegistryLookup",
-  "createSpineCoreRegistry",
-  "deriveTypeUrl",
-  "getTypeUrlPrefix",
+  "TypeRegistry.spineCore",
+  "TypeUrls.derive",
+  "TypeUrls.prefix",
   "spineCoreRegistry",
   "FileOptionExtension",
   "MessageSchema",
@@ -236,22 +236,22 @@ const expectedCoreExports = [
   "MessageValidationResult",
   "RejectionThrowable",
   "ValidationException",
-  "createRejectionThrowable",
-  "isRejectionThrowable",
-  "validateMessage",
-  "checkValid",
-  "createValidationError",
+  "RejectionThrowable.create",
+  "RejectionThrowable.is",
+  "Validate.message",
+  "Validate.check",
+  "Validate.createError",
   "TransitionValidationRequest",
   "TransitionValidationRule",
   "TransitionValidationResult",
-  "validateTransition",
+  "Validate.transition",
   "PackAnyOptions",
   "PackCommandInput",
   "PackEventInput",
-  "packAny",
-  "unpackAny",
-  "packCommand",
-  "packEvent",
+  "AnyMessages.pack",
+  "AnyMessages.unpack",
+  "SignalEnvelopes.command",
+  "SignalEnvelopes.event",
 ];
 const expectedClientExports = [
   "Client",
@@ -427,17 +427,16 @@ const expectedTransportExports = [
   "TransportSubscriptionMode",
   "TransportTopic",
   "TransportTopicInput",
-  "createTransportSubscription",
-  "createTransportTopic",
-  "isTransportOperationKind",
-  "isTransportTopicKind",
+  "TransportSubscriptions",
+  "TransportTopics",
+  "TransportOperations",
+  "TransportTopics",
 ];
 const expectedZeroMqExports = [
-  "ZeroMqAdapterConfig",
-  "ZeroMqAdapterConfigInput",
+  "ZeroMqConfig",
+  "ZeroMqConfigInput",
   "ZeroMqTransportOptions",
   "ZeroMqTransportScope",
-  "createZeroMqAdapterConfig",
   "createZeroMqTransport",
 ];
 const expectedTestingExports = [
@@ -743,6 +742,19 @@ function collectNames(value) {
 
   if (typeof value.name === "string") {
     documentedNames.add(value.name);
+
+    const members =
+      Array.isArray(value.children) && value.children.length > 0
+        ? value.children
+        : value.type?.type === "reflection" && Array.isArray(value.type.declaration?.children)
+          ? value.type.declaration.children
+          : [];
+
+    for (const member of members) {
+      if (typeof member.name === "string") {
+        documentedNames.add(`${value.name}.${member.name}`);
+      }
+    }
   }
 
   for (const child of Object.values(value)) {

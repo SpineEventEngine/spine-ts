@@ -4,7 +4,7 @@ import path from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
 
 import { EnvironmentType, Server, ServerEnvironment } from "@spine-event-engine/server";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
+import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
 
 import { createTodoContext } from "@spine-event-engine/example-todo";
 
@@ -17,7 +17,7 @@ const workerMode = workerModeEnvironment();
 const injectedCloseFailures = closeFailureEnvironment();
 const startupGate = createGate();
 const baseTransport = createZeroMqTransport(
-  createZeroMqAdapterConfig({ ipcDirectory, adapterIdentity }),
+  ZeroMqConfig.create({ ipcDirectory, adapterIdentity }),
   { requestTimeoutMs, receiveTimeoutMs },
 );
 const transport =

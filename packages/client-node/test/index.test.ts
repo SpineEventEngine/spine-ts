@@ -1,6 +1,6 @@
 import { create, type Message } from "@bufbuild/protobuf";
 import type { Transport } from "@connectrpc/connect";
-import { packAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   AckSchema,
   CommandIdSchema,
@@ -98,7 +98,7 @@ describe("@spine-event-engine/client-node", () => {
         commandId =
           method.name === "Post" ? (input as { id?: { uuid?: string } }).id?.uuid : undefined;
         return create(AckSchema, {
-          messageId: packAny(
+          messageId: AnyMessages.pack(
             CommandIdSchema,
             create(CommandIdSchema, { uuid: commandId ?? "missing-command-id" }),
           ),

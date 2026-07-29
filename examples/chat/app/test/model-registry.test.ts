@@ -5,7 +5,7 @@ import {
   type Subscription,
   type SubscriptionDelivery,
 } from "@spine-event-engine/client-node";
-import { deriveTypeUrl, packAny, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
   ChatMessageSchema,
   ChatMessageViewSchema,
@@ -50,7 +50,7 @@ describe("Chat Projection backend", () => {
       text: "hello",
       postedAt: create(TimestampSchema, { seconds: 1n }),
     });
-    expect(unpackChatValue(packAny(ChatMessageSchema, message))?.$typeName).toBe(
+    expect(unpackChatValue(AnyMessages.pack(ChatMessageSchema, message))?.$typeName).toBe(
       ChatMessageSchema.typeName,
     );
     expect(unpackChatValue(packUserId(user))).toEqual(user);
@@ -136,11 +136,11 @@ describe("Chat Projection backend", () => {
       expect(normalEvents).toHaveLength(1);
       const message = normalEvents[0]?.message;
       if (message === undefined) throw new Error("Expected stored message.");
-      const winner = unpackAny(message, MessagePostedSchema);
+      const winner = AnyMessages.unpack(message, MessagePostedSchema);
       expect(winner?.text).toBe("first");
       expect(
         events.filter(
-          (event) => event.message?.typeUrl === deriveTypeUrl(MessageAlreadyPostedSchema),
+          (event) => event.message?.typeUrl === TypeUrls.derive(MessageAlreadyPostedSchema),
         ),
       ).toHaveLength(1);
       await expectNoView(rejectedUpdate);
@@ -187,11 +187,11 @@ describe("Chat Projection backend", () => {
       expect(normalEvents).toHaveLength(1);
       const message = normalEvents[0]?.message;
       if (message === undefined) throw new Error("Expected stored message.");
-      const winner = unpackAny(message, MessagePostedSchema);
+      const winner = AnyMessages.unpack(message, MessagePostedSchema);
       expect(["first", "second"]).toContain(winner?.text);
       expect(
         events.filter(
-          (event) => event.message?.typeUrl === deriveTypeUrl(MessageAlreadyPostedSchema),
+          (event) => event.message?.typeUrl === TypeUrls.derive(MessageAlreadyPostedSchema),
         ),
       ).toHaveLength(1);
       await expect(nextView(firstUpdate)).resolves.toMatchObject({ id: { value: "raced" } });
@@ -290,7 +290,7 @@ function createRoomQuery(room: string): Query {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: `messages-${room}` }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ChatMessageViewSchema),
+      type: TypeUrls.derive(ChatMessageViewSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -300,7 +300,10 @@ function createRoomQuery(room: string): Query {
               filter: [
                 create(FilterSchema, {
                   fieldPath: { fieldName: ["room"] },
-                  value: packAny(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: room })),
+                  value: AnyMessages.pack(
+                    ChatRoomIdSchema,
+                    create(ChatRoomIdSchema, { value: room }),
+                  ),
                   operator: Filter_Operator.EQUAL,
                 }),
               ],
@@ -327,9 +330,12 @@ async function readRows(
     const rows = response.message.flatMap((entry) =>
       entry.state === undefined
         ? []
-        : [unpackAny(entry.state as Parameters<typeof unpackAny>[0], ChatMessageViewSchema)].filter(
-            (row): row is ChatMessageView => row !== undefined,
-          ),
+        : [
+            AnyMessages.unpack(
+              entry.state as Parameters<typeof AnyMessages.unpack>[0],
+              ChatMessageViewSchema,
+            ),
+          ].filter((row): row is ChatMessageView => row !== undefined),
     );
     if (rows.length === 1) return rows;
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -354,7 +360,7 @@ async function nextView(
       throw new Error("Expected Projection update.");
     const kind = update.update.update.value.update[0]?.kind;
     const value = kind?.case === "state" ? kind.value : undefined;
-    const row = value === undefined ? undefined : unpackAny(value, ChatMessageViewSchema);
+    const row = value === undefined ? undefined : AnyMessages.unpack(value, ChatMessageViewSchema);
     if (row === undefined) throw new Error("Expected ChatMessageView.");
     return row;
   } finally {

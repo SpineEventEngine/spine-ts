@@ -3,7 +3,7 @@ import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport, createGrpcWebTransport } from "@connectrpc/connect-web";
 import { BrowserSession, Client } from "@spine-event-engine/client-web";
-import { deriveTypeUrl, packAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import { ActorContextSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import { ResolveContextRequestSchema, AuthenticationService } from "@spine-event-engine/proto/auth";
 import {
@@ -69,7 +69,7 @@ const client = (
 const request = client.onBehalfOf(actor);
 const query = create(QuerySchema, {
   target: create(TargetSchema, {
-    type: deriveTypeUrl(ChatMessageViewSchema),
+    type: TypeUrls.derive(ChatMessageViewSchema),
     criterion: {
       case: "filters",
       value: create(TargetFiltersSchema, {
@@ -80,7 +80,10 @@ const query = create(QuerySchema, {
               create(FilterSchema, {
                 fieldPath: { fieldName: ["room"] },
                 operator: Filter_Operator.EQUAL,
-                value: packAny(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: room })),
+                value: AnyMessages.pack(
+                  ChatRoomIdSchema,
+                  create(ChatRoomIdSchema, { value: room }),
+                ),
               }),
             ],
           }),

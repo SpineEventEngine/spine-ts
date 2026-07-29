@@ -13,10 +13,9 @@ export type {
   EntityRecordStorage,
   EntityRecordPurpose,
 } from "../entity/entity-record.js";
-export { entityStorageKey } from "../entity/entity-record.js";
+export { EntityStorageKey } from "../entity/entity-record.js";
 export {
-  assertCurrentQueryConformance,
-  assertEntityHistoryConformance,
+  EntityHistoryConformance,
   type EntityHistoryConformanceAdapter,
   type EntityStorageConformance,
 } from "../entity/history-conformance.js";

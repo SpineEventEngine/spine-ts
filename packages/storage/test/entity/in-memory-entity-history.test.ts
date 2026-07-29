@@ -11,7 +11,7 @@ import {
   MemoryEntityStorageFactory,
 } from "../../src/memory/in-memory-entity-history.js";
 import { InMemoryStorageBackend } from "../../src/index.js";
-import { assertEntityHistoryConformance } from "../../src/internal/entity-history.js";
+import { EntityHistoryConformance } from "../../src/internal/entity-history.js";
 
 describe("InMemoryEntityHistory", () => {
   it("rejects blank entity layout and ID fingerprints", () => {
@@ -52,7 +52,7 @@ describe("InMemoryEntityHistory", () => {
 
   it("passes the shared adapter conformance fixture", async () => {
     const factory = new MemoryEntityStorageFactory();
-    await assertEntityHistoryConformance({
+    await EntityHistoryConformance.check({
       create: (input) => factory.create(input),
       reopen: (input) => factory.create(input),
     });

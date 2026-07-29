@@ -3,7 +3,7 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
-import { assertCurrentQueryConformance } from "../../storage/src/entity/history-conformance.js";
+import { EntityHistoryConformance } from "../../storage/src/entity/history-conformance.js";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 
 import { CanonicalMysqlValue, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
@@ -456,7 +456,7 @@ describe("MysqlStorageFactory", () => {
       url: "mysql://spine:secret@localhost:3306/spine_packet_entity_current_conformance",
     });
     try {
-      await assertCurrentQueryConformance({
+      await EntityHistoryConformance.checkCurrentQueries({
         create: (input) =>
           factory.createEntityStorage(input as unknown as EntityStorageInput<string, StringValue>),
         reopen: (input) =>

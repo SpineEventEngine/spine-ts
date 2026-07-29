@@ -4,8 +4,8 @@ import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageContext } from "../storage/storage.js";
 import { StorageFactory } from "../storage/storage-factory.js";
-import { canonicalStorageScope } from "../storage/canonical-scope.js";
-import { bindMemoryBackendScope, InMemoryStorageBackend } from "./in-memory-storage-backend.js";
+import { StorageScopes } from "../storage/canonical-scope.js";
+import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
 import { MemoryEntityStorageFactory, type EntityStorageInput } from "./in-memory-entity-history.js";
@@ -15,7 +15,10 @@ export class InMemoryStorageFactory extends StorageFactory {
   readonly #backend: InMemoryStorageBackend;
   readonly #entities: MemoryEntityStorageFactory;
 
-  /** Create a factory with a fresh backend, or deliberately share `backend`. */
+  /** Creates a factory with a fresh backend, or deliberately shares one.
+   * @param backend - Selects the backend to own or share.
+   * @returns The created storage factory.
+   */
   constructor(backend: InMemoryStorageBackend = new InMemoryStorageBackend()) {
     super();
     this.#backend = backend;
@@ -23,10 +26,12 @@ export class InMemoryStorageFactory extends StorageFactory {
   }
 
   /**
-   * Open the internal latest-state/history seam used by framework repositories.
+   * Creates the internal latest-state/history seam used by framework repositories.
    *
    * This is deliberately not exported from the root storage API. Provider
    * adapters expose the same structural method for the server runtime.
+   * @param input - Supplies the internal entity storage configuration.
+   * @returns The created internal entity storage.
    */
   createEntityStorage(input: unknown): unknown {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
@@ -46,9 +51,9 @@ export class InMemoryStorageFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): TenantRecords<I, R> {
-    const scope = canonicalStorageScope(context, recordSpec.storageKey);
+    const scope = StorageScopes.canonical(context, recordSpec.storageKey);
     const fingerprint = recordSpec.compatibilityFingerprint;
-    return bindMemoryBackendScope(
+    return InMemoryStorageBackend.bind(
       this.#backend,
       scope,
       fingerprint,

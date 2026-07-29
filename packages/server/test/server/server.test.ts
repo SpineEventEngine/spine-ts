@@ -18,7 +18,7 @@ import type {
   TransportSubscription,
   TransportSubscriptionHandle,
 } from "@spine-event-engine/transport";
-import { createTransportSubscription, createTransportTopic } from "@spine-event-engine/transport";
+import { TransportSubscriptions, TransportTopics } from "@spine-event-engine/transport";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -274,11 +274,11 @@ describe("Server", () => {
 
   it("removes local publish handlers when the last subscription closes", async () => {
     const environment = ServerEnvironment.instance();
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
     });
-    const subscription = createTransportSubscription({
+    const subscription = TransportSubscriptions.create({
       subscriberId: "test-subscriber",
       topic,
     });
@@ -308,11 +308,11 @@ describe("Server", () => {
 
   it("routes local request handlers and rejects duplicate responders", async () => {
     const environment = ServerEnvironment.instance();
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.LookupTask",
     });
-    const subscription = createTransportSubscription({
+    const subscription = TransportSubscriptions.create({
       subscriberId: "command-worker",
       topic,
       mode: "competing-consumer",
@@ -357,11 +357,11 @@ describe("Server", () => {
 
   it("rejects local transport work after environment close", async () => {
     const environment = ServerEnvironment.instance();
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/example.ClosedTransportTask",
     });
-    const subscription = createTransportSubscription({
+    const subscription = TransportSubscriptions.create({
       subscriberId: "closed-worker",
       topic,
     });

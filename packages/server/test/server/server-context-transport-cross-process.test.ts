@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc, type GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packCommand, packEvent } from "@spine-event-engine/core";
+import { TypeUrls, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -19,11 +19,11 @@ import {
   file_spine_options,
 } from "@spine-event-engine/proto";
 import { SignalMetadata } from "@spine-event-engine/server";
-import { createTransportTopic, type SignalTransport } from "@spine-event-engine/transport";
+import { TransportTopics, type SignalTransport } from "@spine-event-engine/transport";
 import {
-  createZeroMqAdapterConfig,
   createZeroMqTransport,
   type ZeroMqTransportOptions,
+  ZeroMqConfig,
 } from "@spine-event-engine/transport/zeromq";
 import { describe, expect, it } from "vitest";
 
@@ -368,7 +368,7 @@ class CrossProcessFixture {
       expect(directory.isDirectory()).toBe(true);
       expect(directory.mode & 0o077).toBe(0);
 
-      const config = createZeroMqAdapterConfig({ ipcDirectory, adapterIdentity });
+      const config = ZeroMqConfig.create({ ipcDirectory, adapterIdentity });
       const backgroundFailures: string[] = [];
       const transportOptions: TestTransportOptions = {
         requestTimeoutMs: transportTimeoutMs,
@@ -443,9 +443,9 @@ class CrossProcessFixture {
   }
 
   async requestCommand(command: Command): Promise<CommandIntakeResponse> {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "command",
-      messageTypeUrl: deriveTypeUrl(AggregateStateSchema),
+      messageTypeUrl: TypeUrls.derive(AggregateStateSchema),
     });
 
     return await withinPhase(
@@ -523,9 +523,9 @@ class CrossProcessFixture {
   }
 
   async publishEventUntilObserved(event: Event, entityId: string): Promise<ObservationBehavior[]> {
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "event",
-      messageTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+      messageTypeUrl: TypeUrls.derive(ProjectionStateSchema),
     });
     const deadline = Date.now() + phaseTimeoutMs;
 
@@ -711,7 +711,7 @@ function fixtureSchemas(): {
 }
 
 function createTaskCommand(): Command {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: signalMetadata.commandId("cross-process-command-id"),
     context: signalMetadata.commandContext({
       actorContext: signalMetadata.actorContext({
@@ -728,7 +728,7 @@ function createTaskCommand(): Command {
 }
 
 function createInboundEvent(): Event {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: "fixed-cross-process-inbound-event" }),
     context: create(EventContextSchema, {
       version: create(VersionSchema, { number: 1 }),

@@ -12,6 +12,12 @@ import { TenantRecords } from "./tenant-records.js";
 export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   readonly #records: () => TenantRecords<I, R>;
 
+  /** Creates an in-memory record storage.
+   * @param context - Supplies the storage and tenant context.
+   * @param recordSpec - Supplies the record materialization specification.
+   * @param tenantRecords - Supplies shared tenant records when factory-owned.
+   * @returns The created in-memory record storage.
+   */
   constructor(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,

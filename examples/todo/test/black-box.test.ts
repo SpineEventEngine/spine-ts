@@ -2,7 +2,7 @@ import { create, type MessageShape } from "@bufbuild/protobuf";
 import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import { EventContextSchema, UserIdSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
@@ -98,10 +98,10 @@ describe("@spine-event-engine/example-todo", () => {
 
     expect([...context.commandBus().acceptedCommandTypes()].sort()).toEqual(
       [
-        deriveTypeUrl(CreateTaskSchema),
-        deriveTypeUrl(RenameTaskSchema),
-        deriveTypeUrl(CompleteTaskSchema),
-        deriveTypeUrl(ReopenTaskSchema),
+        TypeUrls.derive(CreateTaskSchema),
+        TypeUrls.derive(RenameTaskSchema),
+        TypeUrls.derive(CompleteTaskSchema),
+        TypeUrls.derive(ReopenTaskSchema),
       ].sort(),
     );
     expect(
@@ -122,7 +122,7 @@ describe("@spine-event-engine/example-todo", () => {
     const response = create(QueryResponseSchema, {
       message: [
         create(EntityStateWithVersionSchema, {
-          state: packAny(
+          state: AnyMessages.pack(
             TaskListSchema,
             create(TaskListSchema, {
               id: "unsafe\nrow",
@@ -480,7 +480,7 @@ describe("@spine-event-engine/example-todo", () => {
       );
       const missingId = await postRemoteCommand(
         commands,
-        packCommand({
+        SignalEnvelopes.command({
           ...createCommandMetadata("command-remote-missing-id"),
           schema: CreateTaskSchema,
           message: create(CreateTaskSchema, { title: "Missing ID" }),
@@ -490,7 +490,7 @@ describe("@spine-event-engine/example-todo", () => {
       );
       const blankId = await postRemoteCommand(
         commands,
-        packCommand({
+        SignalEnvelopes.command({
           ...createCommandMetadata("command-remote-blank-id"),
           schema: CreateTaskSchema,
           message: create(CreateTaskSchema, {
@@ -1221,7 +1221,7 @@ describe("@spine-event-engine/example-todo", () => {
       await expect(context.catchUpReadSide()).resolves.toEqual({
         replayedEventCount: 2,
         clearedEntityCount: 1,
-        clearedStateTypes: [deriveTypeUrl(TaskListSchema)],
+        clearedStateTypes: [TypeUrls.derive(TaskListSchema)],
       });
       await expect(context.stand().read(TaskListSchema, "task-catch-up")).resolves.toEqual(
         create(TaskListSchema, {
@@ -1456,7 +1456,7 @@ function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
 }
 
 function createTaskCommand(commandId: string, taskId: string, title: string) {
-  return packCommand({
+  return SignalEnvelopes.command({
     ...createCommandMetadata(commandId),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {
@@ -1479,7 +1479,7 @@ function createRenameCommand(
   title: string,
   options: { readonly validate?: boolean } = {},
 ) {
-  return packCommand({
+  return SignalEnvelopes.command({
     ...createCommandMetadata(commandId),
     schema: RenameTaskSchema,
     message: create(RenameTaskSchema, {
@@ -1498,7 +1498,7 @@ function renameTask(taskId: string, title: string) {
 }
 
 function createCompleteCommand(commandId: string, taskId: string) {
-  return packCommand({
+  return SignalEnvelopes.command({
     ...createCommandMetadata(commandId),
     schema: CompleteTaskSchema,
     message: create(CompleteTaskSchema, {
@@ -1512,7 +1512,7 @@ function completeTask(taskId: string) {
 }
 
 function createReopenCommand(commandId: string, taskId: string) {
-  return packCommand({
+  return SignalEnvelopes.command({
     ...createCommandMetadata(commandId),
     schema: ReopenTaskSchema,
     message: create(ReopenTaskSchema, {
@@ -1538,7 +1538,7 @@ function createTaskListQuery() {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "query-task-list" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
+      type: TypeUrls.derive(TaskListSchema),
       criterion: {
         case: "includeAll",
         value: true,
@@ -1552,12 +1552,12 @@ function createTaskListIdQuery(id = "task-list-query") {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "query-task-list-by-id" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
+      type: TypeUrls.derive(TaskListSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))],
+            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
           },
         }),
       },
@@ -1570,7 +1570,7 @@ function createOpenTaskCountQuery(openTaskCount: number) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "query-task-list-column" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
+      type: TypeUrls.derive(TaskListSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -1579,7 +1579,7 @@ function createOpenTaskCountQuery(openTaskCount: number) {
               filter: [
                 create(FilterSchema, {
                   fieldPath: { fieldName: ["open_task_count"] },
-                  value: packAny(
+                  value: AnyMessages.pack(
                     Int32ValueSchema,
                     create(Int32ValueSchema, { value: openTaskCount }),
                   ),
@@ -1600,7 +1600,7 @@ function createTaskListTopic(id?: string) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "topic-task-list" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
+      type: TypeUrls.derive(TaskListSchema),
       criterion:
         id === undefined
           ? { case: "includeAll", value: true }
@@ -1608,7 +1608,9 @@ function createTaskListTopic(id?: string) {
               case: "filters",
               value: create(TargetFiltersSchema, {
                 idFilter: {
-                  id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))],
+                  id: [
+                    AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+                  ],
                 },
               }),
             },
@@ -1629,7 +1631,7 @@ function createTaskAlreadyDoneTopic() {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "topic-task-already-done" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskAlreadyDoneSchema),
+      type: TypeUrls.derive(TaskAlreadyDoneSchema),
       criterion: { case: "includeAll", value: true },
     }),
     context: createActorContext(),
@@ -1643,7 +1645,7 @@ function createActorContext() {
 }
 
 function unpackTaskList(state: Any | undefined): TaskList | undefined {
-  return state === undefined ? undefined : unpackAny(state, TaskListSchema);
+  return state === undefined ? undefined : AnyMessages.unpack(state, TaskListSchema);
 }
 
 function unpackSubscribedTaskList(update: SubscriptionUpdate | undefined) {
@@ -1669,7 +1671,9 @@ function unpackSubscribedTaskList(update: SubscriptionUpdate | undefined) {
 function unpackSubscribedTaskAlreadyDone(update: SubscriptionUpdate) {
   const event = update.update.case === "eventUpdates" ? update.update.value.event[0] : undefined;
   const message =
-    event?.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema);
+    event?.message === undefined
+      ? undefined
+      : AnyMessages.unpack(event.message, TaskAlreadyDoneSchema);
   if (message === undefined || event?.context === undefined) {
     throw new Error("Expected a TaskAlreadyDone event subscription update.");
   }
@@ -2071,5 +2075,8 @@ function validationDetails(status: unknown) {
     return undefined;
   }
 
-  return unpackAny(value.details as Parameters<typeof unpackAny>[0], ValidationErrorSchema);
+  return AnyMessages.unpack(
+    value.details as Parameters<typeof AnyMessages.unpack>[0],
+    ValidationErrorSchema,
+  );
 }

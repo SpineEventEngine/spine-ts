@@ -5,7 +5,7 @@ import {
   ChatRoomIdSchema,
   MessageIdSchema,
 } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
-import { packAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
 import { createRoot } from "react-dom/client";
 
@@ -77,7 +77,7 @@ function response(text: string) {
   return {
     message: [
       {
-        state: packAny(
+        state: AnyMessages.pack(
           ChatMessageViewSchema,
           create(ChatMessageViewSchema, {
             id: create(MessageIdSchema, { value: text }),

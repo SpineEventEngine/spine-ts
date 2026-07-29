@@ -8,7 +8,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
-import { deriveTypeUrl, packAny, packCommand } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 import {
   CommandService,
@@ -69,7 +69,7 @@ function isEntrypoint() {
 }
 
 function createCommand(id, commandSuffix, context) {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: metadata.commandId(`smoke-command-${commandSuffix}`),
     context: metadata.commandContext({ actorContext: context }),
     schema: CreateTaskSchema,
@@ -113,12 +113,12 @@ function createTaskListQuery(id, context, attempt) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: `smoke-query-${id}-${attempt}` }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
+      type: TypeUrls.derive(TaskListSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))],
+            id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
           },
         }),
       },

@@ -17,9 +17,31 @@ import {
   RecordStorage,
 } from "../../src/index.js";
 import type { NormalizedQueryPlan, RecordEntry } from "../../src/index.js";
+import { TenantRecords } from "../../src/memory/tenant-records.js";
 import { assertQueryProviderConformance } from "../query/query-provider-conformance.js";
 
 describe("InMemoryRecordStorage", () => {
+  it("keeps a tenant slice's compare-and-set and continued ordering atomic", () => {
+    const spec = createSpec();
+    const records = new TenantRecords<EventId, Event>();
+    const first = spec.materialize(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
+    const second = spec.materialize(createEvent("event-2", "type.spine.io/tasks.TaskClosed", 2n));
+
+    records.writeAll([first, second]);
+
+    expect(records.compareAndSet(first.id, undefined, second)).toBe(false);
+    expect(records.compareAndSet(first.id, first, undefined)).toBe(true);
+    expect(
+      records.queryEntries(spec, {
+        sort: [{ field: "timestamp", direction: "asc" }],
+        after: {
+          values: [{ field: "timestamp", value: 1n }],
+          id: first.id,
+        },
+      }),
+    ).toMatchObject([{ id: { value: "event-2" } }]);
+  });
+
   it("conforms to the shared normalized query provider fixture", async () => {
     const storage = new ObservedInMemoryStorage(
       { name: "QueryConformance", multitenant: false },

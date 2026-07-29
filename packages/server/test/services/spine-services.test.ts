@@ -21,12 +21,10 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
-  deriveTypeUrl,
-  packAny,
-  packCommand,
-  packEvent,
   type MessageSchema,
-  unpackAny,
+  TypeUrls,
+  AnyMessages,
+  SignalEnvelopes,
 } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -311,7 +309,7 @@ describe("SpineServices", () => {
 
       expect(ack.status?.status.case).toBe("ok");
       expect(ack.status?.status.value).toEqual(create(EmptySchema));
-      expect(ack.messageId?.typeUrl).toBe(deriveTypeUrl(CommandIdSchema));
+      expect(ack.messageId?.typeUrl).toBe(TypeUrls.derive(CommandIdSchema));
       expect(observed).toEqual(["command-1"]);
     } finally {
       await server.close();
@@ -433,9 +431,9 @@ describe("SpineServices", () => {
 
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
-      expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-        createState("task-1", "First"),
-      );
+      expect(
+        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+      ).toEqual(createState("task-1", "First"));
       expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
     } finally {
       await server.close();
@@ -464,7 +462,7 @@ describe("SpineServices", () => {
       const query = create(QuerySchema, {
         id: create(QueryIdSchema, { value: "q-network-complete" }),
         target: create(TargetSchema, {
-          type: deriveTypeUrl(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectionStateSchema),
           criterion: {
             case: "filters",
             value: create(TargetFiltersSchema, {
@@ -543,9 +541,9 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(1);
-    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-      createState("task-1", "First"),
-    );
+    expect(
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+    ).toEqual(createState("task-1", "First"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
   });
 
@@ -567,7 +565,9 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(1);
-    expect(unpackAny(response.message[0]?.state ?? packMissing(), TaskSchema)).toEqual(task);
+    expect(AnyMessages.unpack(response.message[0]?.state ?? packMissing(), TaskSchema)).toEqual(
+      task,
+    );
     expect(responseErrorMessage(incompatible)).toBe(
       "QueryService.Read id_filter values must pack spine.example.todo.v1.TaskId.",
     );
@@ -594,9 +594,9 @@ describe("SpineServices", () => {
 
       expect(response.response?.status?.status.case).toBe("ok");
       expect(response.message).toHaveLength(1);
-      expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-        createState("task-1", "Tenant B"),
-      );
+      expect(
+        AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+      ).toEqual(createState("task-1", "Tenant B"));
     } finally {
       await server.close();
     }
@@ -620,13 +620,13 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(2);
-    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-      createState("task-1", "First"),
-    );
+    expect(
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+    ).toEqual(createState("task-1", "First"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 1 }));
-    expect(unpackAny(response.message[1]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-      createState("task-2", "Second"),
-    );
+    expect(
+      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectionStateSchema),
+    ).toEqual(createState("task-2", "Second"));
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 2 }));
   });
 
@@ -654,20 +654,20 @@ describe("SpineServices", () => {
 
     expect(response.response?.status?.status.case).toBe("ok");
     expect(response.message).toHaveLength(2);
-    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-      createState("task-2", "Tenant B"),
-    );
+    expect(
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+    ).toEqual(createState("task-2", "Tenant B"));
     expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
-    expect(unpackAny(response.message[1]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-      createState("task-3", "Tenant B Again"),
-    );
+    expect(
+      AnyMessages.unpack(response.message[1]?.state ?? packMissing(), ProjectionStateSchema),
+    ).toEqual(createState("task-3", "Tenant B Again"));
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 3 }));
   });
 
   it("reads all aggregate states through QueryService include-all queries", async () => {
     const context = createFakeContext({
       entityFamily: "aggregate",
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       readAllVersioned: () =>
         Promise.resolve([{ state: createState("task-aggregate", "Aggregate") }]),
     });
@@ -676,15 +676,15 @@ describe("SpineServices", () => {
     const response = await handlers.read(createIncludeAllQuery());
 
     expect(response.response?.status?.status.case).toBe("ok");
-    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-      createState("task-aggregate", "Aggregate"),
-    );
+    expect(
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+    ).toEqual(createState("task-aggregate", "Aggregate"));
   });
 
   it("reads all process-manager states through QueryService include-all queries", async () => {
     const context = createFakeContext({
       entityFamily: "process-manager",
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       readAllVersioned: () =>
         Promise.resolve([{ state: createState("task-pm", "Process manager") }]),
     });
@@ -693,9 +693,9 @@ describe("SpineServices", () => {
     const response = await handlers.read(createIncludeAllQuery());
 
     expect(response.response?.status?.status.case).toBe("ok");
-    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
-      createState("task-pm", "Process manager"),
-    );
+    expect(
+      AnyMessages.unpack(response.message[0]?.state ?? packMissing(), ProjectionStateSchema),
+    ).toEqual(createState("task-pm", "Process manager"));
   });
 
   it("accepts declared and system-column filters for aggregate and process-manager routes", async () => {
@@ -704,7 +704,7 @@ describe("SpineServices", () => {
       registeredQueryHandlers(
         createFakeContext({
           entityFamily,
-          stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+          stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
           queryVersioned: (_schema, plan) => {
             plans.push(plan);
             return Promise.resolve([]);
@@ -716,11 +716,11 @@ describe("SpineServices", () => {
       createColumnFilterQuery("name", packStringId("Entity")),
       createColumnFilterQuery(
         "archived",
-        packAny(BoolValueSchema, create(BoolValueSchema, { value: false })),
+        AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
       ),
       createColumnFilterQuery(
         "deleted",
-        packAny(BoolValueSchema, create(BoolValueSchema, { value: false })),
+        AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
       ),
     ];
     const responses = await Promise.all(
@@ -802,13 +802,15 @@ describe("SpineServices", () => {
         }),
       );
       const objectId = await queryClient.read(
-        createQueryWithIds([packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "task-1" }))]),
+        createQueryWithIds([
+          AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "task-1" })),
+        ]),
       );
       const emptyFilter = await queryClient.read(
         create(QuerySchema, {
           id: create(QueryIdSchema, { value: "q-empty-filter" }),
           target: create(TargetSchema, {
-            type: deriveTypeUrl(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectionStateSchema),
             criterion: {
               case: "filters",
               value: create(TargetFiltersSchema),
@@ -854,9 +856,12 @@ describe("SpineServices", () => {
     const idResponse = await handlers.read(createFormattedQuery(nameOnly));
     const allResponse = await handlers.read(createFormattedIncludeAllQuery(idOnly));
 
-    const idState = unpackAny(idResponse.message[0]?.state ?? packMissing(), ProjectionStateSchema);
+    const idState = AnyMessages.unpack(
+      idResponse.message[0]?.state ?? packMissing(),
+      ProjectionStateSchema,
+    );
     const allStates = allResponse.message.map((message) =>
-      unpackAny(message.state ?? packMissing(), ProjectionStateSchema),
+      AnyMessages.unpack(message.state ?? packMissing(), ProjectionStateSchema),
     );
     if (idState === undefined) {
       throw new Error("Expected masked ID-filter state.");
@@ -923,7 +928,7 @@ describe("SpineServices", () => {
     });
     const query = createColumnFilterQuery(
       "version",
-      packAny(VersionSchema, create(VersionSchema, { number: 2 }), { validate: false }),
+      AnyMessages.pack(VersionSchema, create(VersionSchema, { number: 2 }), { validate: false }),
       { operator: Filter_Operator.GREATER_OR_EQUAL },
     );
     query.format = create(ResponseFormatSchema, {
@@ -1023,7 +1028,7 @@ describe("SpineServices", () => {
   it("adds the implicit storage query cap without requiring ordering", async () => {
     const observedQueries: NormalizedQueryPlan<unknown>[] = [];
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       queryVersioned: (_schema, query) => {
         observedQueries.push(query as NormalizedQueryPlan<unknown>);
         return Promise.resolve([]);
@@ -1192,7 +1197,7 @@ describe("SpineServices", () => {
   it("rejects malformed ID-filter entries before storage query execution", async () => {
     let observedQuery: { readonly ids?: readonly unknown[] } | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       queryVersioned: (_schema, query) => {
         observedQuery = query as { readonly ids?: readonly unknown[] };
         return Promise.resolve([]);
@@ -1448,13 +1453,13 @@ describe("SpineServices", () => {
     const doubleWrapped = await handlers.read(
       createColumnFilterQuery(
         "priority",
-        packAny(DoubleValueSchema, create(DoubleValueSchema, { value: 2 })),
+        AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: 2 })),
       ),
     );
     const unsignedWrapped = await handlers.read(
       createColumnFilterQuery(
         "priority",
-        packAny(UInt32ValueSchema, create(UInt32ValueSchema, { value: 2 })),
+        AnyMessages.pack(UInt32ValueSchema, create(UInt32ValueSchema, { value: 2 })),
       ),
     );
 
@@ -1495,7 +1500,7 @@ describe("SpineServices", () => {
   it("normalizes typed system-column predicates before provider access", async () => {
     const plans: unknown[] = [];
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       queryVersioned: (_schema, plan) => {
         plans.push(plan);
         return Promise.resolve([]);
@@ -1507,7 +1512,7 @@ describe("SpineServices", () => {
       handlers.read(
         createColumnFilterQuery(
           "version",
-          packAny(
+          AnyMessages.pack(
             VersionSchema,
             create(VersionSchema, {
               number: 2,
@@ -1520,13 +1525,13 @@ describe("SpineServices", () => {
       handlers.read(
         createColumnFilterQuery(
           "archived",
-          packAny(BoolValueSchema, create(BoolValueSchema, { value: false })),
+          AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: false })),
         ),
       ),
       handlers.read(
         createColumnFilterQuery(
           "deleted",
-          packAny(BoolValueSchema, create(BoolValueSchema, { value: true })),
+          AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: true })),
         ),
       ),
     ]);
@@ -1560,7 +1565,7 @@ describe("SpineServices", () => {
       create(QuerySchema, {
         id: create(QueryIdSchema, { value: "q-missing-criterion" }),
         target: create(TargetSchema, {
-          type: deriveTypeUrl(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectionStateSchema),
         }),
         context: createActorContext(),
       }),
@@ -1569,7 +1574,7 @@ describe("SpineServices", () => {
       create(QuerySchema, {
         id: create(QueryIdSchema, { value: "q-false-include-all" }),
         target: create(TargetSchema, {
-          type: deriveTypeUrl(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectionStateSchema),
           criterion: {
             case: "includeAll",
             value: false,
@@ -1589,7 +1594,7 @@ describe("SpineServices", () => {
 
   it("returns stable errors for invalid command envelopes and read failures", async () => {
     const readFailureContext = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       readVersioned: () => Promise.reject(new Error("storage details")),
     });
     const commandHandlers = registeredCommandHandlers(readFailureContext);
@@ -1606,7 +1611,7 @@ describe("SpineServices", () => {
 
   it("returns stable errors for include-all read failures", async () => {
     const readFailureContext = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       readAllVersioned: () => Promise.reject(new Error("storage details")),
     });
     const handlers = registeredQueryHandlers(readFailureContext);
@@ -1653,9 +1658,11 @@ describe("SpineServices", () => {
     const [event] = await waitForStoredEvents(eventStore, 1);
 
     expect(ack.status?.status.case).toBe("ok");
-    expect(event?.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+    expect(event?.message?.typeUrl).toBe(TypeUrls.derive(TaskAlreadyDoneSchema));
     expect(
-      event?.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+      event?.message === undefined
+        ? undefined
+        : AnyMessages.unpack(event.message, TaskAlreadyDoneSchema),
     ).toEqual(
       create(TaskAlreadyDoneSchema, {
         id: create(GeneratedTaskIdSchema, { value: "task-rejected" }),
@@ -1869,14 +1876,14 @@ describe("SpineServices", () => {
     const wrongPosts: string[] = [];
     const acceptedPosts: string[] = [];
     const wrongContext = createFakeContext({
-      commandTypes: [deriveTypeUrl(StringValueSchema)],
+      commandTypes: [TypeUrls.derive(StringValueSchema)],
       post: (command) => {
         wrongPosts.push(command.id?.uuid ?? "");
         return Promise.reject(new Error("wrong context touched"));
       },
     });
     const acceptedContext = createFakeContext({
-      commandTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      commandTypes: [TypeUrls.derive(ProjectionStateSchema)],
       post: (command) => {
         acceptedPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
@@ -1895,14 +1902,14 @@ describe("SpineServices", () => {
     const firstPosts: string[] = [];
     const secondPosts: string[] = [];
     const firstContext = createFakeContext({
-      commandTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      commandTypes: [TypeUrls.derive(ProjectionStateSchema)],
       post: (command) => {
         firstPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
       },
     });
     const secondContext = createFakeContext({
-      commandTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      commandTypes: [TypeUrls.derive(ProjectionStateSchema)],
       post: (command) => {
         secondPosts.push(command.id?.uuid ?? "");
         return Promise.resolve();
@@ -1965,11 +1972,11 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const singleTenant = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: false,
     });
     const multitenant = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: true,
       subscribe: (_schema, callback, options) => {
         deliverUpdate = callback;
@@ -1999,7 +2006,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-tenant",
       state: createState("task-tenant", "Tenant"),
     });
@@ -2049,11 +2056,11 @@ describe("SpineServices", () => {
   it("treats query tenant domain and email variants as present", async () => {
     const capturedTenantKeys: (string | undefined)[] = [];
     const singleTenant = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: false,
     });
     const multitenant = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: true,
       readVersioned: (_schema, _id, options) => {
         capturedTenantKeys.push(options.tenantId);
@@ -2082,11 +2089,11 @@ describe("SpineServices", () => {
   it("treats include-all query tenant domain and email variants as present", async () => {
     const capturedTenantKeys: (string | undefined)[] = [];
     const singleTenant = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: false,
     });
     const multitenant = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: true,
       readAllVersioned: (_schema, options) => {
         capturedTenantKeys.push(options.tenantId);
@@ -2139,7 +2146,7 @@ describe("SpineServices", () => {
       const update = delivered.value as SubscriptionUpdate | undefined;
 
       expect(subscription.id?.value).toMatch(/^s-/u);
-      expect(subscription.topic?.target?.type).toBe(deriveTypeUrl(ProjectionStateSchema));
+      expect(subscription.topic?.target?.type).toBe(TypeUrls.derive(ProjectionStateSchema));
       expect(delivered.done).toBe(false);
       expect(update?.response?.status?.status.case).toBe("ok");
       expect(update?.subscription?.id).toEqual(subscription.id);
@@ -2150,7 +2157,9 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected entity state update.");
       }
-      expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(createState("task-1", "First"));
+      expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
+        createState("task-1", "First"),
+      );
 
       const cancel = await withTimeout(client.cancel(subscription), "subscription cancellation");
       await context.stand().update(ProjectionStateSchema, createState("task-1", "Second"));
@@ -2179,7 +2188,7 @@ describe("SpineServices", () => {
     const update = delivered.value as SubscriptionUpdate | undefined;
 
     expect(delivered.done).toBe(false);
-    expect(subscription.topic?.target?.type).toBe(deriveTypeUrl(AggregateStateSchema));
+    expect(subscription.topic?.target?.type).toBe(TypeUrls.derive(AggregateStateSchema));
     expect(update?.response?.status?.status.case).toBe("ok");
     expect(update?.subscription?.id).toEqual(subscription.id);
     if (update?.update.case !== "eventUpdates") {
@@ -2192,7 +2201,7 @@ describe("SpineServices", () => {
     expect(event).toEqual(source);
     expect(event).not.toBe(source);
     expect(event.id?.value).toBe("event-created");
-    expect(unpackAny(event.message, AggregateStateSchema)).toEqual(
+    expect(AnyMessages.unpack(event.message, AggregateStateSchema)).toEqual(
       create(AggregateStateSchema, {
         id: "aggregate-1",
         name: "Created",
@@ -2334,7 +2343,7 @@ describe("SpineServices", () => {
     topic.id = create(TopicIdSchema, { value: "t-filtered-event" });
     topic.context = createActorContext();
     topic.target = create(TargetSchema, {
-      type: deriveTypeUrl(AggregateStateSchema),
+      type: TypeUrls.derive(AggregateStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema),
@@ -2399,7 +2408,7 @@ describe("SpineServices", () => {
     if (state?.case !== "state") {
       throw new Error("Expected entity state update.");
     }
-    expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+    expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
       createState("task-projected", "Task (projected)", 2),
     );
     await iterator.return?.();
@@ -2414,7 +2423,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -2432,17 +2441,17 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-1",
       state: createState("task-1", "Closed"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-2",
       state: createState("task-2", "Open"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-1",
       state: createState("task-1", "Open"),
     });
@@ -2465,7 +2474,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -2481,7 +2490,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-1",
       previousState: createState("task-1", "Open"),
       state: createState("task-1", "Closed"),
@@ -2493,9 +2502,9 @@ describe("SpineServices", () => {
     expect(delivered.done).toBe(false);
     expect(entityUpdateKind(update)?.case).toBe("noLongerMatching");
     expect(entityUpdateKind(update)?.value).toBe(true);
-    expect(unpackAny(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value).toBe(
-      "task-1",
-    );
+    expect(
+      AnyMessages.unpack(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value,
+    ).toBe("task-1");
     await iterator.return?.();
   });
 
@@ -2509,7 +2518,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -2527,14 +2536,14 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-1",
       state: createState("task-1", "Open", 7),
     });
     const deliveredState = await withTimeout(first, "masked subscription state");
     const second = iterator.next();
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-1",
       previousState: createState("task-1", "Open", 7),
       state: createState("task-1", "Closed", 7),
@@ -2553,7 +2562,7 @@ describe("SpineServices", () => {
   it("rejects unsupported subscription filters before activation attaches Stand delivery", async () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -2581,7 +2590,7 @@ describe("SpineServices", () => {
 
   it("rejects malformed subscription topics before activation attaches Stand delivery", () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
     );
     const cases = [
       {
@@ -2602,7 +2611,7 @@ describe("SpineServices", () => {
       {
         topic: create(TopicSchema, {
           id: create(TopicIdSchema, { value: "t-missing-criterion" }),
-          target: create(TargetSchema, { type: deriveTypeUrl(ProjectionStateSchema) }),
+          target: create(TargetSchema, { type: TypeUrls.derive(ProjectionStateSchema) }),
           context: createActorContext(),
         }),
         message: "Subscription topic criterion is required.",
@@ -2611,7 +2620,7 @@ describe("SpineServices", () => {
         topic: create(TopicSchema, {
           id: create(TopicIdSchema, { value: "t-include-none" }),
           target: create(TargetSchema, {
-            type: deriveTypeUrl(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectionStateSchema),
             criterion: { case: "includeAll", value: false },
           }),
           context: createActorContext(),
@@ -2628,7 +2637,7 @@ describe("SpineServices", () => {
   it("rejects empty subscription target filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -2641,7 +2650,7 @@ describe("SpineServices", () => {
     const topic = create(TopicSchema, {
       id: create(TopicIdSchema, { value: "t-empty-filters" }),
       target: create(TargetSchema, {
-        type: deriveTypeUrl(ProjectionStateSchema),
+        type: TypeUrls.derive(ProjectionStateSchema),
         criterion: {
           case: "filters",
           value: create(TargetFiltersSchema),
@@ -2658,7 +2667,7 @@ describe("SpineServices", () => {
 
   it("rejects invalid subscription field masks before activation attaches Stand delivery", () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
     );
     const cases = [
       {
@@ -2702,7 +2711,7 @@ describe("SpineServices", () => {
 
   it("rejects invalid subscription field filters before activation attaches Stand delivery", () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
     );
     const cases = [
       {
@@ -2775,7 +2784,10 @@ describe("SpineServices", () => {
           filter: [
             create(FilterSchema, {
               fieldPath: { fieldName: ["id"] },
-              value: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "wrong-id" })),
+              value: AnyMessages.pack(
+                CommandIdSchema,
+                create(CommandIdSchema, { uuid: "wrong-id" }),
+              ),
               operator: Filter_Operator.EQUAL,
             }),
           ],
@@ -2799,7 +2811,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       isMultitenant: true,
       subscribe: (_schema, callback, options) => {
         capturedTenantKeys.push(options.tenantId);
@@ -2821,7 +2833,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-cloned",
       state: createState("task-cloned", "Delivered"),
     });
@@ -2843,7 +2855,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -2860,7 +2872,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "first-delivered",
       state: createState("first-delivered", "First"),
     });
@@ -2883,7 +2895,7 @@ describe("SpineServices", () => {
     const second = iterator.next();
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "second-delivered",
       state: createState("second-delivered", "Second"),
     });
@@ -2900,7 +2912,7 @@ describe("SpineServices", () => {
 
   it("coerces non-positive subscription service options", () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
       { inactiveTtlMs: 0, queueLimit: 0 },
     );
 
@@ -2968,7 +2980,7 @@ describe("SpineServices", () => {
 
   it("validates the per-instance subscription capacity", () => {
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
 
     for (const subscriptionLimit of [
@@ -2987,7 +2999,7 @@ describe("SpineServices", () => {
 
   it("reserves capacity synchronously across concurrent subscription persistence", async () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
       { subscriptionLimit: 1 },
     );
     const first = handlers.subscribe(createTopic());
@@ -3006,7 +3018,7 @@ describe("SpineServices", () => {
 
   it("defaults the per-instance subscription capacity to 100", async () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
     );
     const subscriptions = await Promise.all(
       Array.from({ length: 100 }, () => Promise.resolve(handlers.subscribe(createTopic()))),
@@ -3368,7 +3380,7 @@ describe("SpineServices", () => {
 
   it("releases capacity when process-local subscription registration fails", async () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
       { subscriptionLimit: 1 },
     );
     const timer = vi.spyOn(globalThis, "setTimeout").mockImplementationOnce(() => {
@@ -3503,7 +3515,7 @@ describe("SpineServices", () => {
 
   it("keeps active subscription capacity reserved across duplicate activation", async () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
       { subscriptionLimit: 1 },
     );
     const subscription = await handlers.subscribe(createTopic());
@@ -3526,7 +3538,7 @@ describe("SpineServices", () => {
 
   it("keeps missing subscription IDs inert", async () => {
     const handlers = registeredSubscriptionHandlers(
-      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
     );
     const iterator = handlers.activate(create(SubscriptionSchema))[Symbol.asyncIterator]();
 
@@ -3544,7 +3556,7 @@ describe("SpineServices", () => {
   it("rejects empty subscription ID filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3557,7 +3569,7 @@ describe("SpineServices", () => {
     const topic = create(TopicSchema, {
       id: create(TopicIdSchema, { value: "t-empty-id-filter" }),
       target: create(TargetSchema, {
-        type: deriveTypeUrl(ProjectionStateSchema),
+        type: TypeUrls.derive(ProjectionStateSchema),
         criterion: {
           case: "filters",
           value: create(TargetFiltersSchema, {
@@ -3583,7 +3595,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -3619,7 +3631,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-1",
       state: createState("task-1", "Open", 7),
     });
@@ -3640,7 +3652,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -3650,7 +3662,7 @@ describe("SpineServices", () => {
       },
     });
     const handlers = registeredSubscriptionHandlers(context);
-    const id = packAny(TopicIdSchema, create(TopicIdSchema, { value: "packed-id" }));
+    const id = AnyMessages.pack(TopicIdSchema, create(TopicIdSchema, { value: "packed-id" }));
     const subscription = await handlers.subscribe(
       createFilteredTopicWithCriteria({ idFilter: { id: [id] } }),
     );
@@ -3659,7 +3671,7 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id,
       state: createState("task-1", "Packed"),
     });
@@ -3680,7 +3692,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -3699,12 +3711,12 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: new Uint8Array([9]),
       state: createState("task-ignored", "Ignored"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: new Uint8Array(id),
       state: createState("task-1", "Bytes"),
     });
@@ -3747,8 +3759,10 @@ describe("SpineServices", () => {
     const delivered = (await withTimeout(next, "message-id subscription")).value as
       SubscriptionUpdate | undefined;
 
-    expect(unpackAny(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(taskId);
-    expect(unpackAny(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
+    expect(AnyMessages.unpack(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(
+      taskId,
+    );
+    expect(AnyMessages.unpack(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
       create(TaskSchema, {
         id: taskId,
         title: "Matched",
@@ -3760,7 +3774,7 @@ describe("SpineServices", () => {
   it("rejects malformed subscription ID filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3790,7 +3804,7 @@ describe("SpineServices", () => {
   it("rejects over-limit subscription ID filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3815,7 +3829,7 @@ describe("SpineServices", () => {
   it("rejects over-depth subscription composites before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3839,7 +3853,7 @@ describe("SpineServices", () => {
   it("rejects too many nested subscription composites before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3871,7 +3885,7 @@ describe("SpineServices", () => {
 
   it("rejects too many top-level subscription composites before walking fields", () => {
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         throw new Error("over-broad filters must not attach delivery.");
       },
@@ -3900,7 +3914,7 @@ describe("SpineServices", () => {
   it("rejects empty undefined-operator subscription composites before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -3964,7 +3978,7 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected entity state update.");
       }
-      expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+      expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
         createState("task-live", "Live"),
       );
       expect(unknownNext.done).toBe(true);
@@ -4002,7 +4016,7 @@ describe("SpineServices", () => {
     if (state?.case !== "state") {
       throw new Error("Expected recovered entity state update.");
     }
-    expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+    expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
       createState("task-recovered", "Recovered"),
     );
     await iterator.return?.();
@@ -4892,7 +4906,7 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected recovered entity state update.");
       }
-      expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+      expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
         createState("task-activated", "Activated"),
       );
     } finally {
@@ -4940,7 +4954,7 @@ describe("SpineServices", () => {
       if (state?.case !== "state") {
         throw new Error("Expected local entity state update.");
       }
-      expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+      expect(AnyMessages.unpack(state.value, ProjectionStateSchema)).toEqual(
         createState("task-local-activated", "Activated"),
       );
       const durable = await readDurableSubscriptionRecord(
@@ -5021,7 +5035,7 @@ describe("SpineServices", () => {
       const durable = durableAny({
         id: testCase.id,
         kind: "state",
-        targetType: deriveTypeUrl(ProjectionStateSchema),
+        targetType: TypeUrls.derive(ProjectionStateSchema),
         subscriptionBinaryBase64: testCase.payload,
         expiresAtMs: Date.now() + 60_000,
       });
@@ -5082,7 +5096,7 @@ describe("SpineServices", () => {
     const source = DurableSubscriptionRecords.write({
       id,
       kind: "state",
-      targetType: deriveTypeUrl(ProjectionStateSchema),
+      targetType: TypeUrls.derive(ProjectionStateSchema),
       subscription: create(SubscriptionSchema, {
         id: create(SubscriptionIdSchema, { value: id }),
         topic: createTopic(),
@@ -5182,7 +5196,7 @@ describe("SpineServices", () => {
         DurableSubscriptionRecords.write({
           id: validId,
           kind: "state",
-          targetType: deriveTypeUrl(ProjectionStateSchema),
+          targetType: TypeUrls.derive(ProjectionStateSchema),
           subscription: validSubscription,
           expiresAtMs: Date.now() + 60_000,
         }),
@@ -5231,7 +5245,7 @@ describe("SpineServices", () => {
       DurableSubscriptionRecords.write({
         id,
         kind: "state",
-        targetType: deriveTypeUrl(ProjectionStateSchema),
+        targetType: TypeUrls.derive(ProjectionStateSchema),
         subscription,
         expiresAtMs: Date.now() + 60_000,
       }),
@@ -5248,7 +5262,7 @@ describe("SpineServices", () => {
     const valid = DurableSubscriptionRecords.write({
       id: "s-valid",
       kind: "state",
-      targetType: deriveTypeUrl(ProjectionStateSchema),
+      targetType: TypeUrls.derive(ProjectionStateSchema),
       subscription,
       expiresAtMs: Date.now() + 60_000,
     });
@@ -5274,7 +5288,7 @@ describe("SpineServices", () => {
         record: durableAny({
           id: "s-invalid",
           kind: "command",
-          targetType: deriveTypeUrl(ProjectionStateSchema),
+          targetType: TypeUrls.derive(ProjectionStateSchema),
           subscriptionBinaryBase64: binary,
           expiresAtMs: 1,
         }),
@@ -5284,7 +5298,7 @@ describe("SpineServices", () => {
         record: durableAny({
           id: "",
           kind: "state",
-          targetType: deriveTypeUrl(ProjectionStateSchema),
+          targetType: TypeUrls.derive(ProjectionStateSchema),
           subscriptionBinaryBase64: binary,
           expiresAtMs: 1,
         }),
@@ -5294,7 +5308,7 @@ describe("SpineServices", () => {
         record: durableAny({
           id: "s-tenant",
           kind: "state",
-          targetType: deriveTypeUrl(ProjectionStateSchema),
+          targetType: TypeUrls.derive(ProjectionStateSchema),
           tenantId: " ",
           subscriptionBinaryBase64: binary,
           expiresAtMs: 1,
@@ -5305,7 +5319,7 @@ describe("SpineServices", () => {
         record: durableAny({
           id: "s-expired",
           kind: "event",
-          targetType: deriveTypeUrl(ProjectionStateSchema),
+          targetType: TypeUrls.derive(ProjectionStateSchema),
           subscriptionBinaryBase64: binary,
           expiresAtMs: -1,
         }),
@@ -5315,7 +5329,7 @@ describe("SpineServices", () => {
         record: durableAny({
           id: "s-invalid-base64",
           kind: "state",
-          targetType: deriveTypeUrl(ProjectionStateSchema),
+          targetType: TypeUrls.derive(ProjectionStateSchema),
           subscriptionBinaryBase64,
           expiresAtMs: 1,
         }),
@@ -5335,7 +5349,7 @@ describe("SpineServices", () => {
         durableAny({
           id: "s-missing-payload-id",
           kind: "state",
-          targetType: deriveTypeUrl(ProjectionStateSchema),
+          targetType: TypeUrls.derive(ProjectionStateSchema),
           subscriptionBinaryBase64: missingId,
           expiresAtMs: 1,
         }),
@@ -5348,7 +5362,7 @@ describe("SpineServices", () => {
     const inactive = DurableSubscriptionRecords.write({
       id,
       kind: "state",
-      targetType: deriveTypeUrl(ProjectionStateSchema),
+      targetType: TypeUrls.derive(ProjectionStateSchema),
       subscription: create(SubscriptionSchema, {
         id: create(SubscriptionIdSchema, { value: id }),
         topic: createTopic(),
@@ -5418,7 +5432,7 @@ describe("SpineServices", () => {
       DurableSubscriptionRecords.write({
         id: subscriptionId,
         kind: "event",
-        targetType: deriveTypeUrl(AggregateStateSchema),
+        targetType: TypeUrls.derive(AggregateStateSchema),
         subscription: create(SubscriptionSchema, {
           id: create(SubscriptionIdSchema, { value: subscriptionId }),
           topic: createTopic(),
@@ -5459,7 +5473,7 @@ describe("SpineServices", () => {
       DurableSubscriptionRecords.write({
         id: subscriptionId,
         kind: "state",
-        targetType: deriveTypeUrl(ProjectionStateSchema),
+        targetType: TypeUrls.derive(ProjectionStateSchema),
         tenantId: "tenant-a",
         subscription: create(SubscriptionSchema, {
           id: create(SubscriptionIdSchema, { value: subscriptionId }),
@@ -5508,7 +5522,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         activeStandSubscriptions.push("open");
         deliverUpdate = callback;
@@ -5533,7 +5547,7 @@ describe("SpineServices", () => {
     await delay(25);
     expect(activeStandSubscriptions).toEqual(["open"]);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-close",
       state: createState("task-close", "Close"),
     });
@@ -5554,7 +5568,7 @@ describe("SpineServices", () => {
     let subscribeCalls = 0;
     let unsubscribeCount = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         subscribeCalls += 1;
         deliverUpdate = callback;
@@ -5578,7 +5592,7 @@ describe("SpineServices", () => {
     const duplicateDone = await withTimeout(duplicateIterator.next(), "duplicate activation close");
 
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-primary",
       state: createState("task-primary", "Primary"),
     });
@@ -5586,7 +5600,7 @@ describe("SpineServices", () => {
     await duplicateIterator.return?.();
     const secondUpdate = primaryIterator.next();
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-still-active",
       state: createState("task-still-active", "Still active"),
     });
@@ -5604,7 +5618,7 @@ describe("SpineServices", () => {
   it("removes inactive subscription records when activation attachment fails", async () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         throw new Error("stand subscribe failed");
@@ -5672,7 +5686,7 @@ describe("SpineServices", () => {
       readonly state: ProjectionState;
     }) => void)[] = [];
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         const index = callbacks.length;
         let closed = false;
@@ -5702,7 +5716,7 @@ describe("SpineServices", () => {
     await handlers.cancel(firstSubscription);
     await firstIterator.return?.();
     callbacks[1]?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-second",
       state: createState("task-second", "Second"),
     });
@@ -5728,7 +5742,7 @@ describe("SpineServices", () => {
         }) => void)
       | undefined;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -5741,42 +5755,45 @@ describe("SpineServices", () => {
     const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const first = iterator.next();
-    const anyId = packAny(TopicIdSchema, create(TopicIdSchema, { value: "already-packed" }));
+    const anyId = AnyMessages.pack(
+      TopicIdSchema,
+      create(TopicIdSchema, { value: "already-packed" }),
+    );
     const bytesId = new Uint8Array([7, 8, 9]);
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-first",
       state: createState("task-first", "First"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: bytesId,
       state: createState("task-bytes", "Bytes"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: anyId,
       state: createState("task-any", "Any"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: true,
       state: createState("task-bool", "Bool"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: 42,
       state: createState("task-number", "Number"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: 9007199254740993n,
       state: createState("task-bigint", "Bigint"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: { unsupported: true },
       state: createState("task-object", "Object"),
     });
@@ -5819,16 +5836,20 @@ describe("SpineServices", () => {
     ) {
       throw new Error("Expected packed update IDs.");
     }
-    expect(unpackAny(firstId, StringValueSchema)).toEqual(
+    expect(AnyMessages.unpack(firstId, StringValueSchema)).toEqual(
       create(StringValueSchema, { value: "task-first" }),
     );
-    expect(unpackAny(secondId, BytesValueSchema)).toEqual(
+    expect(AnyMessages.unpack(secondId, BytesValueSchema)).toEqual(
       create(BytesValueSchema, { value: bytesId }),
     );
     expect(thirdId).toEqual(anyId);
-    expect(unpackAny(fourthId, BoolValueSchema)).toEqual(create(BoolValueSchema, { value: true }));
-    expect(unpackAny(fifthId, DoubleValueSchema)).toEqual(create(DoubleValueSchema, { value: 42 }));
-    expect(unpackAny(sixthId, Int64ValueSchema)).toEqual(
+    expect(AnyMessages.unpack(fourthId, BoolValueSchema)).toEqual(
+      create(BoolValueSchema, { value: true }),
+    );
+    expect(AnyMessages.unpack(fifthId, DoubleValueSchema)).toEqual(
+      create(DoubleValueSchema, { value: 42 }),
+    );
+    expect(AnyMessages.unpack(sixthId, Int64ValueSchema)).toEqual(
       create(Int64ValueSchema, { value: 9007199254740993n }),
     );
     expect(seventhId).toBeUndefined();
@@ -5838,7 +5859,7 @@ describe("SpineServices", () => {
   it("expires abandoned inactive subscriptions before activation", async () => {
     const activeStandSubscriptions: string[] = [];
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         activeStandSubscriptions.push("open");
         return {
@@ -5918,7 +5939,7 @@ describe("SpineServices", () => {
       | undefined;
     let unsubscribeCount = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: (_schema, callback) => {
         deliverUpdate = callback;
         return {
@@ -5941,18 +5962,18 @@ describe("SpineServices", () => {
 
     await delay(25);
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-one",
       state: createState("task-one", "One"),
     });
     await withTimeout(first, "first slow subscription update");
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-two",
       state: createState("task-two", "Two"),
     });
     deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      typeUrl: TypeUrls.derive(ProjectionStateSchema),
       id: "task-three",
       state: createState("task-three", "Three"),
     });
@@ -5967,7 +5988,7 @@ describe("SpineServices", () => {
   it("releases subscription capacity after activation attachment fails", async () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({
-        stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+        stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
         subscribe: () => {
           throw new Error("activation failed");
         },
@@ -6003,7 +6024,7 @@ describe("SpineServices", () => {
   it("rejects unknown subscription targets before attaching Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       subscribe: () => {
         subscribeCalls += 1;
         return {
@@ -6044,7 +6065,7 @@ describe("SpineServices", () => {
       );
       const malformed = create(TopicSchema, {
         target: create(TargetSchema, {
-          type: deriveTypeUrl(ProjectionStateSchema),
+          type: TypeUrls.derive(ProjectionStateSchema),
         }),
       });
 
@@ -6064,7 +6085,7 @@ describe("SpineServices", () => {
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
     const handlers = registeredSubscriptionHandlers(context);
     const target = create(TargetSchema, {
-      type: deriveTypeUrl(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectionStateSchema),
       criterion: {
         case: "includeAll",
         value: true,
@@ -6084,7 +6105,7 @@ describe("SpineServices", () => {
         create(TopicSchema, {
           id: create(TopicIdSchema, { value: "t-missing-criterion" }),
           target: create(TargetSchema, {
-            type: deriveTypeUrl(ProjectionStateSchema),
+            type: TypeUrls.derive(ProjectionStateSchema),
           }),
           context: createActorContext(),
         }),
@@ -6205,7 +6226,7 @@ function createRollingBackTransitionRepository(): Repository<
 }
 
 function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Task") {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(tenantId),
@@ -6216,7 +6237,7 @@ function createProjectionCommand(id: string, tenantId?: TenantInput, name = "Tas
 }
 
 function createAggregateCommand(id: string, aggregateId: string, name = "Task") {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
@@ -6236,7 +6257,7 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
     }),
-    message: packAny(
+    message: AnyMessages.pack(
       ValidatedTaskCommandSchema,
       create(ValidatedTaskCommandSchema, {
         id: aggregateId,
@@ -6253,7 +6274,7 @@ function createAggregateEvent(
   name: string,
   tenantId?: TenantInput,
 ) {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: createEventContext(tenantId),
     schema: AggregateStateSchema,
@@ -6269,7 +6290,7 @@ function createRejectionEvent(
   command: ReturnType<typeof createAggregateCommand>,
   stacktrace: string,
 ) {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: "event-rejected" }),
     context: create(EventContextSchema, {
       timestamp: create(TimestampSchema, { seconds: 123n, nanos: 456 }),
@@ -6277,10 +6298,13 @@ function createRejectionEvent(
         case: "importContext",
         value: createActorContext("tenant-rejected"),
       },
-      producerId: packAny(StringValueSchema, create(StringValueSchema, { value: "producer-1" })),
+      producerId: AnyMessages.pack(
+        StringValueSchema,
+        create(StringValueSchema, { value: "producer-1" }),
+      ),
       rejection: create(RejectionEventContextSchema, {
         command,
-        commandMessage: packAny(
+        commandMessage: AnyMessages.pack(
           StringValueSchema,
           create(StringValueSchema, { value: "legacy rejected command payload" }),
         ),
@@ -6308,7 +6332,7 @@ function createEventContext(tenantId?: TenantInput) {
 }
 
 function createValidatedEvent(id: string, aggregateId: string, name: string) {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
     schema: ValidatedAggregateStateSchema,
@@ -6320,7 +6344,7 @@ function createValidatedEvent(id: string, aggregateId: string, name: string) {
 }
 
 function createProjectionEvent(id: string, entityId: string) {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       version: create(VersionSchema, { number: 1 }),
@@ -6332,7 +6356,7 @@ function createProjectionEvent(id: string, entityId: string) {
 
 function createCommandWithoutId() {
   return create(CommandSchema, {
-    message: packAny(ProjectionStateSchema, createState("task-1", "Task")),
+    message: AnyMessages.pack(ProjectionStateSchema, createState("task-1", "Task")),
     context: create(CommandContextSchema, {
       actorContext: createActorContext(),
     }),
@@ -6343,11 +6367,11 @@ function createQuery(id: string, tenantId?: TenantInput) {
   return createQueryWithIds([packStringId(id)], tenantId);
 }
 
-function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: TenantInput) {
+function createQueryWithIds(ids: ReturnType<typeof AnyMessages.pack>[], tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-1" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectionStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -6359,15 +6383,15 @@ function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: Tenant
   });
 }
 
-function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof packAny>) {
+function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof AnyMessages.pack>) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-message-id" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskSchema),
+      type: TypeUrls.derive(TaskSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
-          idFilter: { id: [incompatibleId ?? packAny(TaskIdSchema, id)] },
+          idFilter: { id: [incompatibleId ?? AnyMessages.pack(TaskIdSchema, id)] },
         }),
       },
     }),
@@ -6377,7 +6401,7 @@ function createMessageIdQuery(id: TaskId, incompatibleId?: ReturnType<typeof pac
 
 function createColumnFilterQuery(
   column = "name",
-  value: ReturnType<typeof packAny> = packStringId("First"),
+  value: ReturnType<typeof AnyMessages.pack> = packStringId("First"),
   options: {
     readonly operator?: Filter_Operator;
     readonly compositeOperator?: CompositeFilter_CompositeOperator;
@@ -6387,7 +6411,7 @@ function createColumnFilterQuery(
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-column-filter" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectionStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -6468,7 +6492,7 @@ function createColumnFilterQueryWithComposites(compositeCount: number) {
 
 function createFormattedColumnFilterQuery(
   column: string,
-  value: ReturnType<typeof packAny>,
+  value: ReturnType<typeof AnyMessages.pack>,
   format: Query["format"],
   tenantId?: TenantInput,
 ) {
@@ -6490,7 +6514,7 @@ function createIncludeAllQuery(tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-empty" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectionStateSchema),
       criterion: {
         case: "includeAll",
         value: true,
@@ -6841,7 +6865,7 @@ function createEventTopic(tenantId?: TenantInput, schema: MessageSchema = Aggreg
 
 function createSubscriptionTarget() {
   return create(TargetSchema, {
-    type: deriveTypeUrl(ProjectionStateSchema),
+    type: TypeUrls.derive(ProjectionStateSchema),
     criterion: {
       case: "includeAll",
       value: true,
@@ -6851,7 +6875,7 @@ function createSubscriptionTarget() {
 
 function createEventSubscriptionTarget(schema: MessageSchema = AggregateStateSchema) {
   return create(TargetSchema, {
-    type: deriveTypeUrl(schema),
+    type: TypeUrls.derive(schema),
     criterion: {
       case: "includeAll",
       value: true,
@@ -6890,7 +6914,7 @@ function createFilteredTopic(options: {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-filtered" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectionStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
@@ -6920,7 +6944,7 @@ function createFilteredTopicWithCriteria(
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-filtered" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectionStateSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, filters),
@@ -6939,7 +6963,7 @@ function createFilteredTopicForTask(
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-task-filtered" }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskSchema),
+      type: TypeUrls.derive(TaskSchema),
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, filters),
@@ -6951,7 +6975,7 @@ function createFilteredTopicForTask(
 
 function createMessageIdFilteredTopic(id: TaskId) {
   return createFilteredTopicForTask({
-    idFilter: { id: [packAny(TaskIdSchema, id)] },
+    idFilter: { id: [AnyMessages.pack(TaskIdSchema, id)] },
   });
 }
 
@@ -7009,19 +7033,19 @@ function createState(id: string, name: string, priority = 1): ProjectionState {
 }
 
 function packStringId(id: string) {
-  return packAny(StringValueSchema, create(StringValueSchema, { value: id }));
+  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }));
 }
 
 function packInt32(value: number) {
-  return packAny(Int32ValueSchema, create(Int32ValueSchema, { value }));
+  return AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value }));
 }
 
 function packBytes(value: Uint8Array) {
-  return packAny(BytesValueSchema, create(BytesValueSchema, { value }));
+  return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value }));
 }
 
 function unpackProjectionState(state: Any | undefined) {
-  return unpackAny(state ?? packMissing(), ProjectionStateSchema);
+  return AnyMessages.unpack(state ?? packMissing(), ProjectionStateSchema);
 }
 
 function unpackEntityState(update: SubscriptionUpdate | undefined) {
@@ -7047,7 +7071,7 @@ function entityUpdateId(update: SubscriptionUpdate | undefined) {
 }
 
 function packMissing() {
-  return packAny(StringValueSchema, create(StringValueSchema, { value: "missing" }));
+  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: "missing" }));
 }
 
 function errorMessage(status: unknown) {
@@ -7094,7 +7118,10 @@ function validationDetails(status: unknown) {
     return undefined;
   }
 
-  return unpackAny(value.details as Parameters<typeof unpackAny>[0], ValidationErrorSchema);
+  return AnyMessages.unpack(
+    value.details as Parameters<typeof AnyMessages.unpack>[0],
+    ValidationErrorSchema,
+  );
 }
 
 function responseErrorMessage(response: unknown) {
@@ -7119,7 +7146,7 @@ function responseErrorMessage(response: unknown) {
 
 function createRejectingReadContext() {
   return createFakeContext({
-    stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    stateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     queryVersioned: () => {
       throw new Error("unsupported query must not query storage.");
     },

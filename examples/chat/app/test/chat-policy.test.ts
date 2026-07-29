@@ -17,7 +17,7 @@ import {
 } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
 import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/commands_pb.js";
 import { UserIdSchema as ChatUserIdSchema } from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
-import { packAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   AckSchema,
   ActorContextSchema,
@@ -38,7 +38,7 @@ import {
   TargetSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import { describe, expect, it } from "vitest";
 
 import { ChatAuthorizationPolicy, ChatContextResolver } from "../src/chat-policy.js";
@@ -133,7 +133,7 @@ describe("Chat gateway policy", () => {
           context: create(CommandContextSchema, {
             actorContext: context(),
           }),
-          message: packAny(
+          message: AnyMessages.pack(
             PostMessageSchema,
             create(PostMessageSchema, {
               id: create(MessageIdSchema, { value: "native" }),
@@ -384,7 +384,7 @@ describe("Chat gateway policy", () => {
     const authorizedQuery = roomRequest("query", "room-a");
     if (authorizedQuery.kind !== "query") throw new Error("Expected query request.");
     const nonFilterTarget = create(TargetSchema, {
-      type: deriveTypeUrl(ChatMessageViewSchema),
+      type: TypeUrls.derive(ChatMessageViewSchema),
       criterion: { case: "includeAll", value: true },
     });
     const unsupportedCommand = {
@@ -440,12 +440,12 @@ describe("Chat gateway policy", () => {
     });
     const unrelated = create(FilterSchema, {
       fieldPath: { fieldName: ["author"] },
-      value: packAny(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: "room-a" })),
+      value: AnyMessages.pack(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: "room-a" })),
       operator: Filter_Operator.EQUAL,
     });
     const nonEquality = create(FilterSchema, {
       fieldPath: { fieldName: ["room"] },
-      value: packAny(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: "room-a" })),
+      value: AnyMessages.pack(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: "room-a" })),
       operator: Filter_Operator.GREATER_THAN,
     });
 
@@ -535,7 +535,7 @@ function roomRequest(
   additionalRooms: readonly string[] = [],
 ): IncomingRequest {
   const target = create(TargetSchema, {
-    type: deriveTypeUrl(ChatMessageViewSchema),
+    type: TypeUrls.derive(ChatMessageViewSchema),
     criterion: {
       case: "filters",
       value: create(TargetFiltersSchema, {
@@ -545,7 +545,10 @@ function roomRequest(
             filter: [room, ...additionalRooms].map((candidate) =>
               create(FilterSchema, {
                 fieldPath: { fieldName: ["room"] },
-                value: packAny(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: candidate })),
+                value: AnyMessages.pack(
+                  ChatRoomIdSchema,
+                  create(ChatRoomIdSchema, { value: candidate }),
+                ),
                 operator: Filter_Operator.EQUAL,
               }),
             ),
@@ -581,7 +584,7 @@ function roomRequestWithComposites(
   );
   if (afterBudget !== undefined) composites.push(afterBudget);
   const target = create(TargetSchema, {
-    type: deriveTypeUrl(ChatMessageViewSchema),
+    type: TypeUrls.derive(ChatMessageViewSchema),
     criterion: {
       case: "filters",
       value: create(TargetFiltersSchema, { filter: composites }),
@@ -603,7 +606,7 @@ function roomComposite(operator: CompositeFilter_CompositeOperator, rooms: reado
     filter: rooms.map((room) =>
       create(FilterSchema, {
         fieldPath: { fieldName: ["room"] },
-        value: packAny(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: room })),
+        value: AnyMessages.pack(ChatRoomIdSchema, create(ChatRoomIdSchema, { value: room })),
         operator: Filter_Operator.EQUAL,
       }),
     ),
@@ -615,7 +618,7 @@ function nestedRoomRequest(
   composite: ReturnType<typeof roomComposite>,
 ): IncomingRequest {
   const target = create(TargetSchema, {
-    type: deriveTypeUrl(ChatMessageViewSchema),
+    type: TypeUrls.derive(ChatMessageViewSchema),
     criterion: {
       case: "filters",
       value: create(TargetFiltersSchema, { filter: [composite] }),

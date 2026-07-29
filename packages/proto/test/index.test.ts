@@ -36,11 +36,11 @@ import {
   ValidationErrorSchema,
   VersionSchema,
   ZoneIdSchema,
-  file_spine_core_actor_context,
+  actorContextFile,
   file_spine_core_command,
   file_spine_core_event,
   file_spine_options,
-  file_spine_validation_validation_error,
+  validationErrorFile,
   type_url_prefix,
 } from "../src/index.js";
 import * as protoRoot from "../src/index.js";
@@ -119,10 +119,8 @@ describe("@spine-event-engine/proto", () => {
     expect(getOption(file_spine_options, type_url_prefix)).toBe("type.spine.io");
     expect(getOption(file_spine_core_command, type_url_prefix)).toBe("type.spine.io");
     expect(getOption(file_spine_core_event, type_url_prefix)).toBe("type.spine.io");
-    expect(getOption(file_spine_core_actor_context, type_url_prefix)).toBe("type.spine.io");
-    expect(getOption(file_spine_validation_validation_error, type_url_prefix)).toBe(
-      "type.spine.io",
-    );
+    expect(getOption(actorContextFile, type_url_prefix)).toBe("type.spine.io");
+    expect(getOption(validationErrorFile, type_url_prefix)).toBe("type.spine.io");
   });
 
   it("exports the curated Spine option descriptors needed by entity metadata", () => {
@@ -202,24 +200,24 @@ describe("@spine-event-engine/proto", () => {
         "ZoneIdSchema",
         "ZonedDateTimeSchema",
         "file_spine_base_error",
-        "file_spine_base_field_path",
+        "fieldPathFile",
         "file_spine_core_ack",
-        "file_spine_core_actor_context",
+        "actorContextFile",
         "file_spine_core_command",
         "file_spine_core_diagnostics",
         "file_spine_core_enrichment",
         "file_spine_core_event",
         "file_spine_core_response",
-        "file_spine_core_tenant_id",
-        "file_spine_core_user_id",
+        "tenantIdFile",
+        "userIdFile",
         "file_spine_core_version",
-        "file_spine_net_email_address",
-        "file_spine_net_internet_domain",
+        "emailAddressFile",
+        "internetDomainFile",
         "file_spine_options",
-        "file_spine_string_template_string",
+        "templateStringFile",
         "file_spine_time_time",
         "file_spine_ui_language",
-        "file_spine_validation_validation_error",
+        "validationErrorFile",
         "internal_all",
         "internal_type",
         "type_url_prefix",

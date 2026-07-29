@@ -35,7 +35,7 @@ name, type URL, and schema identity.
 The shared `spineCoreRegistry` export is a read-only lookup view over the
 curated schemas, including the core signal envelope/context closure. Mutable
 registration stays on caller-owned `TypeRegistry` instances, including those
-returned by `createSpineCoreRegistry()`, to avoid process-wide state mutation.
+returned by `TypeRegistry.spineCore()`, to avoid process-wide state mutation.
 
 The registry fails fast on duplicate full names, duplicate type URLs, and
 conflicting descriptor identities. This intentionally differs from the JVM
@@ -61,13 +61,13 @@ transport topics.
 `@spine-event-engine/core` owns the validation interface exposed to framework users.
 Single-message validation is delegated to
 `@spine-event-engine/validation-ts@2.0.0-snapshot.4`, pinned by D-0029, but
-callers use `validateMessage()` and `checkValid()` from core. This keeps the
+callers use `Validate.message()` and `Validate.check()` from core. This keeps the
 experimental upstream API and generated upstream validation error types behind a
 framework seam.
 
 The facade converts upstream violations into repo-local
 `spine.validation.ConstraintViolation` messages and builds
-`spine.validation.ValidationError` data through `createValidationError()`.
+`spine.validation.ValidationError` data through `Validate.createError()`.
 `ValidationException.asMessage()` returns that structured message data for
 throwing validation paths. The public contract is the repo-local
 `spine.validation.*` namespace.
@@ -80,7 +80,7 @@ of leaking raw exception objects or messages.
 
 State-transition validation is a separate framework-owned seam because rules
 such as `(set_once)` need both previous and proposed state. The
-`validateTransition()` API aggregates transition rule violations into the same
+`Validate.transition()` API aggregates transition rule violations into the same
 structured result shape and remains the sanitizer for server-owned built-in
 entity rules. Rule-returned violations are sanitized before aggregation, and
 throwing transition rules are isolated into structured transition-rule failures
@@ -88,8 +88,8 @@ so later rules still run deterministically.
 
 ## Core Envelope Construction
 
-`@spine-event-engine/core` owns the Spine-aware `Any` packing seam. `packAny()` derives
-the canonical type URL with `deriveTypeUrl(schema)` and serializes the payload
+`@spine-event-engine/core` owns the Spine-aware `Any` packing seam. `AnyMessages.pack()` derives
+the canonical type URL with `TypeUrls.derive(schema)` and serializes the payload
 with Protobuf-ES `toBinary()`. The implementation intentionally does not call
 Buf `anyPack()` directly for Spine domain payloads because that helper emits the
 standard `type.googleapis.com/...` prefix rather than the Spine
@@ -101,12 +101,12 @@ retained unknown fields. Protobuf-ES 2.12.1 does not expose deterministic
 map-key ordering, so T-0007b does not claim fully canonical map ordering and
 leaves any broader canonical serialization policy to a later task.
 
-`unpackAny()` performs exact type URL matching against the requested schema
+`AnyMessages.unpack()` performs exact type URL matching against the requested schema
 before binary decoding and returns `undefined` on decode failure, keeping type
 URL comparison and malformed payload handling inside the core module interface.
 Callers should not parse or concatenate type URL strings in their own code.
 
-`packCommand()` and `packEvent()` construct generated `spine.core.Command` and
+`SignalEnvelopes.command()` and `SignalEnvelopes.event()` construct generated `spine.core.Command` and
 `spine.core.Event` messages from caller-supplied generated IDs, generated
 contexts, schemas, and already-built domain messages. They validate the enclosed
 domain message through the core validation facade by default, then pack it as
@@ -728,11 +728,11 @@ objects and interfaces that later adapters can implement:
 
 - `TransportSignalKind` names framework-level signal families (`command`,
   `event`, `query`, `subscription`, and `system`);
-- `createTransportTopic()` builds immutable topics from a signal kind, a payload
+- `TransportTopics.create()` builds immutable topics from a signal kind, a payload
   type URL, and optional semantic tags;
 - `TransportRoutingDescriptor.routingKey` is derived deterministically from the
   signal kind, payload type URL, and sorted unique semantic tags;
-- `createTransportSubscription()` builds immutable logical subscription
+- `TransportSubscriptions.create()` builds immutable logical subscription
   descriptors from a topic, a logical subscriber ID, and a transport delivery
   mode; and
 - `SignalTransport` plus publish/request handler contracts define the minimal
@@ -748,10 +748,10 @@ tasks.
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the local IPC adapter. The package root stays adapter-neutral, while the
 `@spine-event-engine/transport/zeromq` subpath exposes exactly
-`createZeroMqAdapterConfig`, `createZeroMqTransport`, `ZeroMqAdapterConfig`,
-`ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+`ZeroMqConfig`, `ZeroMqConfigInput`, `createZeroMqTransport`,
+`ZeroMqTransportScope`, and
 `ZeroMqTransportOptions`. The adapter derives compact deterministic IPC socket
-paths from `ZeroMqAdapterConfig` plus transport routing descriptors and keeps
+paths from `ZeroMqConfig` plus transport routing descriptors and keeps
 endpoint strings, multipart frames, socket classes, and native module types out
 of framework APIs. Native tests prove publish/subscribe, request/reply, and
 `RuntimeTransportBinding` command/event callbacks over the ZeroMQ transport. A

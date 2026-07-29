@@ -2,13 +2,11 @@ import { clone, create, type Message } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
-  checkValid,
-  deriveTypeUrl,
-  isRejectionThrowable,
-  packAny,
-  unpackAny,
   type MessageSchema,
-  type RejectionThrowable,
+  RejectionThrowable,
+  Validate,
+  TypeUrls,
+  AnyMessages,
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
@@ -732,7 +730,7 @@ function createPmInboxTarget(
   }
 
   return Object.freeze({
-    targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+    targetTypeUrl: TypeUrls.derive(repository.stateSchema),
     labels: Object.freeze([
       ...(routing.commandSchemas.length === 0 ? [] : (["HANDLE_COMMAND"] as const)),
       ...(routing.eventSchemas.length === 0 ? [] : (["REACT_UPON_EVENT"] as const)),
@@ -753,7 +751,7 @@ function createProjectionInboxTarget(
   }
 
   return Object.freeze({
-    targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+    targetTypeUrl: TypeUrls.derive(repository.stateSchema),
     replay: (message: ProjectionInboxMessage, deliveryTenantId?: string): Promise<void> =>
       replayProjectionEvent(repository, routing, message, deliveryTenantId),
   });
@@ -871,10 +869,10 @@ async function handoffProcessManagerCommand(
     {
       inboxId: {
         targetId: inboxTargetId(route.entityId),
-        targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+        targetTypeUrl: TypeUrls.derive(repository.stateSchema),
       },
       signalId: commandId.uuid,
-      signal: packAny(CommandSchema, command),
+      signal: AnyMessages.pack(CommandSchema, command),
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
@@ -904,10 +902,10 @@ async function handoffProjectionEvent(
     {
       inboxId: {
         targetId: inboxTargetId(entityId),
-        targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+        targetTypeUrl: TypeUrls.derive(repository.stateSchema),
       },
       signalId: eventId.value,
-      signal: packAny(EventSchema, event, { validate: false }),
+      signal: AnyMessages.pack(EventSchema, event, { validate: false }),
       label: "UPDATE_SUBSCRIBER",
       status: "TO_DELIVER",
       shard: ShardIndex.single(),
@@ -970,10 +968,10 @@ function pmEventInboxInput(
   return {
     inboxId: {
       targetId: inboxTargetId(entityId),
-      targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+      targetTypeUrl: TypeUrls.derive(repository.stateSchema),
     },
     signalId,
-    signal: packAny(EventSchema, event, { validate: false }),
+    signal: AnyMessages.pack(EventSchema, event, { validate: false }),
     label: "REACT_UPON_EVENT",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
@@ -1334,7 +1332,7 @@ class AggregateCommandExecution {
         commandContext,
       );
     } catch (error) {
-      if (!isRejectionThrowable(error)) {
+      if (!RejectionThrowable.is(error)) {
         throw error;
       }
       postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
@@ -1442,7 +1440,7 @@ class AggregateCommandExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: packAny(schema, message as never),
+      message: AnyMessages.pack(schema, message as never),
       context: metadata.context,
     });
   }
@@ -1679,7 +1677,7 @@ class AggregateEventExecution {
             value: `${metadata.id.value}.target.${encodeURIComponent(canonicalEntityIdKey(entityId))}`,
           })
         : metadata.id,
-      message: packAny(schema, signal as never),
+      message: AnyMessages.pack(schema, signal as never),
       context: metadata.context,
     });
   }
@@ -1705,7 +1703,7 @@ class AggregateEventExecution {
 
         return create(CommandSchema, {
           id: metadata.id,
-          message: packAny(schema, signal as never),
+          message: AnyMessages.pack(schema, signal as never),
           context: metadata.context,
         });
       }),
@@ -2068,7 +2066,7 @@ class ProcessManagerCommandExecution {
     try {
       eventSignals = await this.#invoke(entity, assignee, message);
     } catch (error) {
-      if (!isRejectionThrowable(error)) {
+      if (!RejectionThrowable.is(error)) {
         throw error;
       }
       postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
@@ -2137,7 +2135,7 @@ class ProcessManagerCommandExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: packAny(schema, signal as never),
+      message: AnyMessages.pack(schema, signal as never),
       context: metadata.context,
     });
   }
@@ -2354,7 +2352,7 @@ class ProcessManagerEventExecution {
 
     return create(EventSchema, {
       id: metadata.id,
-      message: packAny(schema, signal as never),
+      message: AnyMessages.pack(schema, signal as never),
       context: metadata.context,
     });
   }
@@ -2379,7 +2377,7 @@ class ProcessManagerEventExecution {
 
         return create(CommandSchema, {
           id: metadata.id,
-          message: packAny(schema, signal as never),
+          message: AnyMessages.pack(schema, signal as never),
           context: metadata.context,
         });
       }),
@@ -2452,7 +2450,7 @@ function unpackRequired(
   schema: MessageSchema,
   signalKind: "command" | "event",
 ): unknown {
-  const unpacked = unpackAny(message, schema);
+  const unpacked = AnyMessages.unpack(message, schema);
 
   if (unpacked === undefined) {
     throw new Error(`Repository ${signalKind} execution requires a readable message.`);
@@ -2887,7 +2885,7 @@ function postRejectionEvent(
   });
   const event = create(EventSchema, {
     id: metadata.id,
-    message: packAny(rejection.schema, rejection.messageThrown()),
+    message: AnyMessages.pack(rejection.schema, rejection.messageThrown()),
     context: create(EventContextSchema, {
       ...metadata.context,
       rejection: create(RejectionEventContextSchema, {
@@ -3033,7 +3031,7 @@ function readInboxCommand(message: InboxMessage): Command {
   }
 
   const command =
-    message.signal === undefined ? undefined : unpackAny(message.signal, CommandSchema);
+    message.signal === undefined ? undefined : AnyMessages.unpack(message.signal, CommandSchema);
 
   if (command === undefined) {
     throw CommandValidationError.invalidPayload();
@@ -3077,7 +3075,7 @@ function readStoredEvent(
           typeUrl: message.signal.typeUrl,
           value: new Uint8Array(message.signal.value),
         });
-  const event = signal === undefined ? undefined : unpackAny(signal, EventSchema);
+  const event = signal === undefined ? undefined : AnyMessages.unpack(signal, EventSchema);
 
   if (event === undefined) {
     throw new Error(unreadableMessage);
@@ -3089,14 +3087,14 @@ function readStoredEvent(
 function validateReplayedCommandPayload(routing: RepositoryRouting, command: Command): void {
   const commandMessage = requireSignalMessage(command.message, "command");
   const commandSchema = schemaForTypeUrl(routing.commandSchemas, commandMessage.typeUrl, "command");
-  const payload = unpackAny(commandMessage, commandSchema);
+  const payload = AnyMessages.unpack(commandMessage, commandSchema);
 
   if (payload === undefined) {
     throw CommandValidationError.invalidPayload();
   }
 
   try {
-    checkValid(commandSchema, payload);
+    Validate.check(commandSchema, payload);
   } catch (error) {
     if (error instanceof ValidationException) {
       throw new CommandValidationError(error.asMessage());
@@ -3112,13 +3110,13 @@ function validateReplayedEventPayload(
 ): void {
   const eventMessage = requireSignalMessage(event.message, "event");
   const eventSchema = schemaForTypeUrl(routing.eventSchemas, eventMessage.typeUrl, "event");
-  const payload = unpackAny(eventMessage, eventSchema);
+  const payload = AnyMessages.unpack(eventMessage, eventSchema);
 
   if (payload === undefined) {
     throw new Error(invalidPayloadMessage);
   }
 
-  checkValid(eventSchema, payload);
+  Validate.check(eventSchema, payload);
 }
 
 function validateReplayTenant(
@@ -3201,7 +3199,7 @@ function validateReplayTarget(
   message: InboxMessage,
   command: Command,
 ): void {
-  const expectedTargetTypeUrl = deriveTypeUrl(repository.stateSchema);
+  const expectedTargetTypeUrl = TypeUrls.derive(repository.stateSchema);
 
   if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
     throw new Error(
@@ -3226,7 +3224,7 @@ function replayProcessManagerId(
   message: InboxMessage,
   event: Event,
 ): unknown {
-  const expectedTargetTypeUrl = deriveTypeUrl(repository.stateSchema);
+  const expectedTargetTypeUrl = TypeUrls.derive(repository.stateSchema);
 
   if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
     throw new Error(
@@ -3253,7 +3251,7 @@ function replayProjectionId(
   message: InboxMessage,
   event: Event,
 ): unknown {
-  const expectedTargetTypeUrl = deriveTypeUrl(repository.stateSchema);
+  const expectedTargetTypeUrl = TypeUrls.derive(repository.stateSchema);
 
   if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
     throw new Error(
@@ -3531,7 +3529,7 @@ function validateHandlers(
 function uniqueSchemas(schemas: readonly MessageSchema[]): readonly MessageSchema[] {
   const byTypeUrl = new Map<string, MessageSchema>();
   for (const schema of schemas) {
-    byTypeUrl.set(deriveTypeUrl(schema), schema);
+    byTypeUrl.set(TypeUrls.derive(schema), schema);
   }
   return Object.freeze([...byTypeUrl.values()]);
 }
@@ -3615,7 +3613,7 @@ function schemaForTypeUrl(
   typeUrl: string,
   signalKind: "command" | "event",
 ): MessageSchema {
-  const schema = schemas.find((candidate) => deriveTypeUrl(candidate) === typeUrl);
+  const schema = schemas.find((candidate) => TypeUrls.derive(candidate) === typeUrl);
 
   if (schema === undefined) {
     throw new Error(`Repository ${signalKind} routing has no schema for "${typeUrl}".`);
@@ -3629,7 +3627,7 @@ function readFirstFieldId(
   schema: MessageSchema,
   signalKind: "command" | "event",
 ): unknown {
-  const unpacked = unpackAny(message, schema);
+  const unpacked = AnyMessages.unpack(message, schema);
   const firstField = schema.fields[0];
 
   if (unpacked === undefined || firstField === undefined) {

@@ -8,7 +8,7 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packEvent, unpackAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -47,7 +47,7 @@ const EventStateSchema = messageDesc(fixtureFile, 2);
 
 class TaskAggregate extends Aggregate {
   assignTask(command) {
-    return packEvent({
+    return SignalEnvelopes.event({
       id: create(EventIdSchema, { value: `event-${command.id}` }),
       context: create(EventContextSchema),
       schema: ProjectionStateSchema,
@@ -86,7 +86,7 @@ export function registerBlackBoxContract(test, testing) {
         () => scope.send(query("task-1")),
         (candidate) => candidate.message.length === 1,
       );
-      const first = unpackAny(result.message[0]?.state, ProjectionStateSchema);
+      const first = AnyMessages.unpack(result.message[0]?.state, ProjectionStateSchema);
       if (first?.name !== "First (projected)") throw new Error("projection was not immutable");
     } finally {
       await blackBox.close();
@@ -124,8 +124,10 @@ export function registerBlackBoxContract(test, testing) {
         update.done ||
         update.value.kind !== "update" ||
         update.value.update.update.case !== "entityUpdates" ||
-        unpackAny(update.value.update.update.value.update[0]?.kind.value, ProjectionStateSchema)
-          ?.name !== "State (projected)"
+        AnyMessages.unpack(
+          update.value.update.update.value.update[0]?.kind.value,
+          ProjectionStateSchema,
+        )?.name !== "State (projected)"
       ) {
         throw new Error("state subscription did not decode the projection update");
       }
@@ -198,8 +200,8 @@ export function registerBlackBoxContract(test, testing) {
         update.done ||
         update.value.kind !== "update" ||
         update.value.update.update.case !== "eventUpdates" ||
-        unpackAny(update.value.update.update.value.event[0]?.message, EventStateSchema)?.id !==
-          "event-1" ||
+        AnyMessages.unpack(update.value.update.update.value.event[0]?.message, EventStateSchema)
+          ?.id !== "event-1" ||
         update.value.update.update.value.event[0]?.context === undefined
       ) {
         throw new Error("event subscription did not decode an immutable event context");
@@ -558,7 +560,7 @@ function query(id) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: `q-${id}` }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(ProjectionStateSchema),
+      type: TypeUrls.derive(ProjectionStateSchema),
       criterion:
         id === undefined
           ? { case: "includeAll", value: true }
@@ -566,7 +568,9 @@ function query(id) {
               case: "filters",
               value: create(TargetFiltersSchema, {
                 idFilter: {
-                  id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))],
+                  id: [
+                    AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id })),
+                  ],
                 },
               }),
             },
@@ -580,7 +584,7 @@ function topic(schema) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: `topic-${schema.typeName}` }),
     target: create(TargetSchema, {
-      type: deriveTypeUrl(schema),
+      type: TypeUrls.derive(schema),
       criterion: { case: "includeAll", value: true },
     }),
   });

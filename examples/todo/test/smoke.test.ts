@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import {
   EntityStateWithVersionSchema,
   QueryResponseSchema,
@@ -17,16 +17,19 @@ describe("to-do smoke row inspection", () => {
       message: [
         create(EntityStateWithVersionSchema),
         create(EntityStateWithVersionSchema, {
-          state: packAny(StringValueSchema, create(StringValueSchema, { value: "wrong type" })),
+          state: AnyMessages.pack(
+            StringValueSchema,
+            create(StringValueSchema, { value: "wrong type" }),
+          ),
         }),
         create(EntityStateWithVersionSchema, {
           state: create(AnySchema, {
-            typeUrl: deriveTypeUrl(TaskListSchema),
+            typeUrl: TypeUrls.derive(TaskListSchema),
             value: new Uint8Array([0xff]),
           }),
         }),
         create(EntityStateWithVersionSchema, {
-          state: packAny(TaskListSchema, create(TaskListSchema, { id: targetId })),
+          state: AnyMessages.pack(TaskListSchema, create(TaskListSchema, { id: targetId })),
         }),
       ],
     });
@@ -41,7 +44,7 @@ describe("to-do smoke row inspection", () => {
     const response = create(QueryResponseSchema, {
       message: Array.from({ length: 100 }, (_, index) =>
         create(EntityStateWithVersionSchema, {
-          state: packAny(
+          state: AnyMessages.pack(
             TaskListSchema,
             create(TaskListSchema, { id: `oversized-${String(index)}` }),
           ),

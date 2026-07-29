@@ -6,7 +6,7 @@ import {
   TargetSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { unpackAnyUsing } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import type { IncomingRequest, IncomingRequestInput } from "../index.js";
 
 /** The sole public request decoder; malformed known envelopes return undefined. */
@@ -21,7 +21,7 @@ export function decodeIncomingRequest(input: IncomingRequestInput): IncomingRequ
           message:
             command.message === undefined || input.registry === undefined
               ? undefined
-              : unpackAnyUsing(input.registry, command.message),
+              : AnyMessages.unpackUsing(input.registry, command.message),
           messageType: command.message?.typeUrl ?? "",
           requestedContext: command.context?.actorContext ?? create(ActorContextSchema),
           transport: input.transport,

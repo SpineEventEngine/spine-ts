@@ -1,7 +1,7 @@
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import {
-  createTransportSubscription,
-  createTransportTopic,
+  TransportSubscriptions,
+  TransportTopics,
   type TransportSubscription,
   type TransportTopic,
 } from "@spine-event-engine/transport";
@@ -246,12 +246,12 @@ function createAcceptedCommandPlan(typeUrls: readonly string[]): CommandRuntimeR
 
 function createContextCommandRoute(typeUrl: string, routeOrdinal: number): CommandRouteDraft {
   const message = acceptedRouteMessage(typeUrl);
-  const topic = createTransportTopic({
+  const topic = TransportTopics.create({
     signalKind: "command",
     messageTypeUrl: message.typeUrl,
     semanticTags: [],
   });
-  const subscription = createTransportSubscription({
+  const subscription = TransportSubscriptions.create({
     subscriberId: commandWorkerId,
     topic,
     mode: "competing-consumer",
@@ -293,12 +293,12 @@ function createCommandRouteDraft(
     readiness.findCommandAssignee(commandFullTypeName),
     commandFullTypeName,
   );
-  const topic = createTransportTopic({
+  const topic = TransportTopics.create({
     signalKind: "command",
     messageTypeUrl: routedMessage.message.typeUrl,
     semanticTags: routedMessage.semanticTags,
   });
-  const subscription = createTransportSubscription({
+  const subscription = TransportSubscriptions.create({
     subscriberId: commandWorkerId,
     topic,
     mode: "competing-consumer",
@@ -365,7 +365,7 @@ function createEventPlan(
       );
     }
 
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: firstMessage.message.typeUrl,
       semanticTags: collectTopicSemanticTags(subscribers, reactors, applications),
@@ -435,12 +435,12 @@ function createContextEventRoute(
   routeOrdinal: number,
 ): EventRouteDraft {
   const message = acceptedRouteMessage(typeUrl);
-  const topic = createTransportTopic({
+  const topic = TransportTopics.create({
     signalKind: "event",
     messageTypeUrl: message.typeUrl,
     semanticTags: [],
   });
-  const subscription = createTransportSubscription({
+  const subscription = TransportSubscriptions.create({
     subscriberId: workerId,
     topic,
     mode: "fan-out",
@@ -497,7 +497,7 @@ function createEventRouteDrafts(
     routeOrdinals[receiverGroup] += 1;
     const ordinal = routeOrdinals[receiverGroup];
     const workerId = `event-${receiverGroup}-worker-${String(ordinal)}`;
-    const subscription = createTransportSubscription({
+    const subscription = TransportSubscriptions.create({
       subscriberId: workerId,
       topic,
       mode: "fan-out",
@@ -813,7 +813,7 @@ function createMessageDescriptor(
   label: string,
 ): RouteMessage {
   const typeUrl = withDeterministicValidation(`${label} is malformed`, () =>
-    deriveTypeUrl(schema as never),
+    TypeUrls.derive(schema as never),
   );
 
   return Object.freeze({

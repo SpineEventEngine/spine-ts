@@ -1,7 +1,7 @@
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Interceptor, Transport, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
-import { packAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   AckSchema,
   ActorContextSchema,
@@ -1546,7 +1546,7 @@ describe("Client", () => {
         if (method.name === "Post") {
           id = (input as { id?: { uuid?: string } }).id?.uuid;
           return create(AckSchema, {
-            messageId: packAny(
+            messageId: AnyMessages.pack(
               CommandIdSchema,
               create(CommandIdSchema, { uuid: requireValue(id, "request ID") }),
             ),
@@ -1574,7 +1574,7 @@ describe("Client", () => {
         if (method.name === "Post") {
           id = (input as { id?: { uuid?: string } }).id?.uuid;
           return create(AckSchema, {
-            messageId: packAny(
+            messageId: AnyMessages.pack(
               CommandIdSchema,
               create(CommandIdSchema, { uuid: requireValue(id, "request ID") }),
             ),
@@ -2615,7 +2615,7 @@ describe("Client", () => {
         expect(method.name).toBe("Post");
         const command = input as { id?: { uuid?: string } };
         return create(AckSchema, {
-          messageId: packAny(
+          messageId: AnyMessages.pack(
             CommandIdSchema,
             create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
           ),
@@ -2645,7 +2645,7 @@ describe("Client", () => {
         return create(AckSchema, {
           messageId: malformed
             ? undefined
-            : packAny(
+            : AnyMessages.pack(
                 CommandIdSchema,
                 create(CommandIdSchema, {
                   uuid: `${requireValue(command.id?.uuid, "command ID")}-other`,
@@ -2672,7 +2672,7 @@ describe("Client", () => {
       transport: unaryTransport((_method, input) => {
         const command = input as { id?: { uuid?: string } };
         return create(AckSchema, {
-          messageId: packAny(
+          messageId: AnyMessages.pack(
             CommandIdSchema,
             create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
           ),
@@ -3050,7 +3050,7 @@ function browserResponse(
   if (method !== "Post") return create(QueryResponseSchema);
   const command = input as { id?: { uuid?: string } };
   return create(AckSchema, {
-    messageId: packAny(
+    messageId: AnyMessages.pack(
       CommandIdSchema,
       create(CommandIdSchema, { uuid: requireValue(command.id?.uuid, "command ID") }),
     ),

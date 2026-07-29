@@ -1,117 +1,117 @@
 import type { Command, Event } from "@spine-event-engine/proto";
 
-/** Transport-owned signal kinds for local routing contracts. */
+/** Defines transport-owned signal kinds for local routing contracts. */
 export type TransportSignalKind = "command" | "event" | "query" | "subscription" | "system";
 
-/** Envelope carried by a signal kind, with caller-owned shapes for non-Proto kinds. */
+/** Defines the envelope carried by a signal kind. */
 export type TransportSignalEnvelope<
   Kind extends TransportSignalKind,
   OtherEnvelope = unknown,
 > = Kind extends "command" ? Command : Kind extends "event" ? Event : OtherEnvelope;
 
-const transportSignalKinds = ["command", "event", "query", "subscription", "system"] as const;
-const transportSignalKindSet = new Set<string>(transportSignalKinds);
-
-/** Semantic tag copied from descriptor metadata for later adapter matching. */
+/** Defines a semantic tag copied from descriptor metadata. */
 export type TransportSemanticTag = string;
 
-/** Immutable routing descriptor owned by the transport package. */
+/** Defines an immutable routing descriptor owned by transport. */
 export interface TransportRoutingDescriptor<
   Kind extends TransportSignalKind = TransportSignalKind,
 > {
-  /** High-level signal category used for transport-owned routing. */
+  /** Identifies the high-level signal category. */
   readonly signalKind: Kind;
-  /** Canonical type URL of the routed message payload. */
+  /** Identifies the canonical payload type URL. */
   readonly messageTypeUrl: string;
-  /** Deterministic sorted semantic tags associated with the topic. */
+  /** Lists deterministic sorted semantic tags. */
   readonly semanticTags: readonly TransportSemanticTag[];
-  /** Deterministic adapter-agnostic routing key. */
+  /** Identifies the deterministic adapter-agnostic routing key. */
   readonly routingKey: string;
 }
 
-/** Input for defining one transport topic. */
+/** Defines input for one transport topic. */
 export interface TransportTopicInput<Kind extends TransportSignalKind = TransportSignalKind> {
-  /** High-level signal category used for transport-owned routing. */
+  /** Identifies the high-level signal category. */
   readonly signalKind: Kind;
-  /** Canonical type URL of the routed message payload. */
+  /** Identifies the canonical payload type URL. */
   readonly messageTypeUrl: string;
-  /** Optional semantic tags copied from descriptor metadata. */
+  /** Lists optional semantic tags copied from descriptor metadata. */
   readonly semanticTags?: readonly TransportSemanticTag[];
 }
 
-/** Immutable transport topic that exposes both topic data and its routing descriptor. */
+/** Defines an immutable transport topic and routing descriptor. */
 export interface TransportTopic<
   Kind extends TransportSignalKind = TransportSignalKind,
 > extends TransportTopicInput<Kind> {
-  /** Deterministic sorted semantic tags associated with the topic. */
+  /** Lists deterministic sorted semantic tags. */
   readonly semanticTags: readonly TransportSemanticTag[];
-  /** Transport-owned routing descriptor for later adapter mapping. */
+  /** Provides transport-owned routing for adapter mapping. */
   readonly routing: TransportRoutingDescriptor<Kind>;
 }
 
-/** Subscription behavior expected by the transport adapter, without socket details. */
+/** Defines subscription behavior without socket details. */
 export type TransportSubscriptionMode = "competing-consumer" | "fan-out";
 
-const transportSubscriptionModes = ["competing-consumer", "fan-out"] as const;
-const transportSubscriptionModeSet = new Set<string>(transportSubscriptionModes);
-
-/** Input for defining one immutable transport subscription descriptor. */
+/** Defines input for one immutable subscription descriptor. */
 export interface TransportSubscriptionInput<
   Kind extends TransportSignalKind = TransportSignalKind,
 > {
-  /** Stable logical subscriber identity, not a process, endpoint, or socket name. */
+  /** Identifies the stable logical subscriber. */
   readonly subscriberId: string;
-  /** Topic to subscribe to. */
+  /** Specifies the topic to subscribe to. */
   readonly topic: TransportTopicInput<Kind> | TransportTopic<Kind>;
-  /** Delivery behavior expected by the subscriber. Defaults to `fan-out`. */
+  /** Specifies delivery behavior and defaults to `fan-out`. */
   readonly mode?: TransportSubscriptionMode;
 }
 
-/** Immutable transport subscription descriptor. */
+/** Defines an immutable transport subscription descriptor. */
 export interface TransportSubscription<Kind extends TransportSignalKind = TransportSignalKind> {
-  /** Stable logical subscriber identity, not a process, endpoint, or socket name. */
+  /** Identifies the stable logical subscriber. */
   readonly subscriberId: string;
-  /** Delivery behavior expected by the subscriber. */
+  /** Identifies the delivery behavior. */
   readonly mode: TransportSubscriptionMode;
-  /** Copy-safe transport topic. */
+  /** Provides a copy-safe transport topic. */
   readonly topic: TransportTopic<Kind>;
-  /** Deterministic descriptor key derived from topic, subscriber, and mode. */
+  /** Identifies the deterministic topic, subscriber, and mode key. */
   readonly descriptorKey: string;
 }
 
-/** Publish-style transport operation contract. */
+/** Defines a publish-style transport operation. */
 export type PublishTransportOperation<
   Envelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
 > = Kind extends TransportSignalKind
   ? {
-      /** Transport-owned topic/routing contract. */
       readonly topic: TransportTopic<Kind>;
-      /** Caller-owned envelope already shaped by an upstream package. */
       readonly envelope: TransportSignalEnvelope<Kind, Envelope>;
     }
   : never;
 
-/** Request-style transport operation contract. */
+/** Defines a request-style transport operation. */
 export type RequestTransportOperation<
   RequestEnvelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
 > = Kind extends TransportSignalKind
   ? {
-      /** Transport-owned topic/routing contract. */
       readonly topic: TransportTopic<Kind>;
-      /** Caller-owned request envelope already shaped by an upstream package. */
       readonly envelope: TransportSignalEnvelope<Kind, RequestEnvelope>;
     }
   : never;
 
-/** Handler for one publish-style operation. */
+/**
+ * Accepts one publish-style operation.
+ *
+ * @param operation Specifies the published operation.
+ * @returns Returns when handling completes.
+ */
 export type PublishTransportHandler<
   Envelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
 > = (operation: PublishTransportOperation<Envelope, Kind>) => void | Promise<void>;
 
-/** Handler for one request-style operation. */
+/**
+ * Accepts one request-style operation.
+ *
+ * @param operation Specifies the received operation.
+ * @returns Returns the response envelope.
+ */
 export type RequestTransportHandler<
   RequestEnvelope = unknown,
   ResponseEnvelope = unknown,
@@ -120,204 +120,191 @@ export type RequestTransportHandler<
   operation: RequestTransportOperation<RequestEnvelope, Kind>,
 ) => ResponseEnvelope | Promise<ResponseEnvelope>;
 
-/** Common async close contract for transport-owned resources. */
+/** Defines a common asynchronous close contract. */
 export interface AsyncCloseable {
-  /** Start graceful asynchronous shutdown. */
+  /** Closes the resource gracefully.
+   */
   close(): Promise<void>;
 }
 
-/** Async handle returned from a transport subscription. */
+/** Defines the handle returned from a subscription. */
 export interface TransportSubscriptionHandle<
   Kind extends TransportSignalKind = TransportSignalKind,
 > extends AsyncCloseable {
-  /** Descriptor associated with this active subscription. */
+  /** Provides the descriptor associated with this subscription. */
   readonly subscription: TransportSubscription<Kind>;
 }
 
-/** Adapter-agnostic transport contract for later runtime integration. */
+/** Defines adapter-agnostic transport operations. */
 export interface SignalTransport extends AsyncCloseable {
-  /** Publish one envelope to a transport-owned topic. */
+  /** Publishes one envelope to a topic.
+   * @param operation Specifies the operation to publish.
+   */
   publish<Envelope, Kind extends TransportSignalKind>(
     operation: PublishTransportOperation<Envelope, Kind>,
   ): Promise<void>;
-  /** Register one publish-style handler for a topic subscription. */
+  /** Subscribes a handler to a topic.
+   * @param subscription Specifies the subscribed topic and mode.
+   * @param handler Specifies the handler for published operations.
+   * @returns Returns the closeable subscription handle.
+   */
   subscribe<Envelope, Kind extends TransportSignalKind>(
     subscription: TransportSubscription<Kind>,
     handler: PublishTransportHandler<Envelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>>;
-  /** Send one request-style envelope and await a typed response. */
+  /** Returns a typed response from a topic.
+   * @param operation Specifies the request operation.
+   * @returns Returns the response envelope.
+   */
   request<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
     operation: RequestTransportOperation<RequestEnvelope, Kind>,
   ): Promise<ResponseEnvelope>;
-  /** Register one request-style handler for a topic subscription. */
+  /** Registers a request handler for a topic.
+   * @param subscription Specifies the subscribed topic and mode.
+   * @param handler Specifies the handler for request operations.
+   * @returns Returns the closeable subscription handle.
+   */
   respond<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
     subscription: TransportSubscription<Kind>,
     handler: RequestTransportHandler<RequestEnvelope, ResponseEnvelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>>;
 }
 
-/** Create an immutable transport topic with a deterministic routing key. */
-export function createTransportTopic<Kind extends TransportSignalKind>(
-  input: TransportTopicInput<Kind>,
-): TransportTopic<Kind> {
-  const signalKind = normalizeTransportSignalKind(input.signalKind);
-  const messageTypeUrl = normalizeMessageTypeUrl(input.messageTypeUrl);
-  const semanticTags = normalizeSemanticTags(input.semanticTags);
-  const routing = Object.freeze({
-    signalKind,
-    messageTypeUrl,
-    semanticTags,
-    routingKey: createRoutingKey(signalKind, messageTypeUrl, semanticTags),
-  });
+const transportTopics = {
+  /** Creates an immutable topic with deterministic routing.
+   * @param input Specifies the topic data.
+   * @returns Returns the immutable transport topic.
+   */
+  create<Kind extends TransportSignalKind>(input: TransportTopicInput<Kind>): TransportTopic<Kind> {
+    const signalKind = TransportTopicParts.normalizeKind(input.signalKind);
+    const messageTypeUrl = TransportTopicParts.normalizeTypeUrl(input.messageTypeUrl);
+    const semanticTags = TransportTopicParts.normalizeTags(input.semanticTags);
+    const routing = Object.freeze({
+      signalKind,
+      messageTypeUrl,
+      semanticTags,
+      routingKey: TransportTopicParts.routingKey(signalKind, messageTypeUrl, semanticTags),
+    });
+    return Object.freeze({ signalKind, messageTypeUrl, semanticTags, routing });
+  },
 
-  return Object.freeze({
-    signalKind,
-    messageTypeUrl,
-    semanticTags,
-    routing,
-  });
-}
+  /** Checks a topic's top-level signal kind.
+   * @param topic Specifies the topic to inspect.
+   * @param signalKind Specifies the expected signal kind.
+   * @returns Returns whether the top-level kind matches.
+   */
+  hasKind<Topic extends TransportTopic, Kind extends Topic["signalKind"]>(
+    topic: Topic,
+    signalKind: Kind & NoInfer<Topic["signalKind"]>,
+  ): topic is Topic & { readonly signalKind: Kind } {
+    return topic.signalKind === signalKind;
+  },
+};
+type TransportTopicsOwner = Readonly<typeof transportTopics>;
+/** Owns transport-topic construction, normalization, and kind checks. */
+export const TransportTopics: TransportTopicsOwner = Object.freeze(transportTopics);
 
-/** Create an immutable subscription descriptor over a copy-safe topic. */
-export function createTransportSubscription<Kind extends TransportSignalKind>(
-  input: TransportSubscriptionInput<Kind>,
-): TransportSubscription<Kind> {
-  const subscriberId = normalizeLogicalTransportId(input.subscriberId, "subscriberId");
-  const mode = normalizeTransportSubscriptionMode(input.mode ?? "fan-out");
-  const topic = createTransportTopic(input.topic);
+const transportKinds = new Set<string>(["command", "event", "query", "subscription", "system"]);
 
-  return Object.freeze({
-    subscriberId,
-    mode,
-    topic,
-    descriptorKey: `${topic.routing.routingKey}#${encodeRoutingSegment(mode)}#${encodeRoutingSegment(subscriberId)}`,
-  });
-}
-
-/** Narrow a transport operation through its canonical nested topic kind. */
-export function isTransportOperationKind<
-  Operation extends PublishTransportOperation | RequestTransportOperation,
-  Kind extends Operation["topic"]["signalKind"],
->(
-  operation: Operation,
-  signalKind: Kind & NoInfer<Operation["topic"]["signalKind"]>,
-): operation is Extract<Operation, { readonly topic: TransportTopic<Kind> }> {
-  return operation.topic.signalKind === signalKind;
-}
-
-/**
- * Narrow a transport topic through its top-level `topic.signalKind`.
- *
- * This does not validate or narrow `topic.routing.signalKind`.
- */
-export function isTransportTopicKind<
-  Topic extends TransportTopic,
-  Kind extends Topic["signalKind"],
->(
-  topic: Topic,
-  signalKind: Kind & NoInfer<Topic["signalKind"]>,
-): topic is Topic & { readonly signalKind: Kind } {
-  return topic.signalKind === signalKind;
-}
-
-function normalizeRequiredText(value: string, name: string): string {
-  const normalized = value.trim();
-
-  if (normalized.length === 0) {
-    throw new Error(`Transport ${name} must not be empty.`);
-  }
-
-  return normalized;
-}
-
-function normalizeLogicalTransportId(value: string, name: string): string {
-  const normalized = normalizeRequiredText(value, name);
-
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(normalized) || /^\d+$/u.test(normalized)) {
-    throw new Error(
-      `Transport ${name} must use logical-name format (letters/digits followed by ` +
-        "letters/digits/underscores/hyphens, not endpoints, paths, hostnames, or PIDs).",
+const TransportTopicParts = {
+  requiredText(value: string, name: string): string {
+    const normalized = value.trim();
+    if (normalized.length === 0) throw new Error(`Transport ${name} must not be empty.`);
+    return normalized;
+  },
+  normalizeKind<Kind extends TransportSignalKind>(value: Kind): Kind {
+    const kind = TransportTopicParts.requiredText(value, "signalKind");
+    if (!transportKinds.has(kind))
+      throw new Error(`Transport signalKind must be one of: ${[...transportKinds].join(", ")}.`);
+    return kind as Kind;
+  },
+  normalizeTypeUrl(value: string): string {
+    const typeUrl = TransportTopicParts.requiredText(value, "messageTypeUrl");
+    const separator = typeUrl.indexOf("/");
+    if (separator <= 0 || separator === typeUrl.length - 1 || /\s/u.test(typeUrl))
+      throw new Error("Transport messageTypeUrl must use canonical 'prefix/type.name' format.");
+    return typeUrl;
+  },
+  normalizeTags(
+    tags: readonly TransportSemanticTag[] | undefined,
+  ): readonly TransportSemanticTag[] {
+    if (tags === undefined || tags.length === 0) return Object.freeze([]);
+    return Object.freeze(
+      [...new Set(tags.map((tag) => TransportTopicParts.requiredText(tag, "semanticTag")))].sort(
+        (left, right) => TransportTopicParts.compare(left, right),
+      ),
     );
-  }
+  },
+  routingKey(
+    kind: TransportSignalKind,
+    typeUrl: string,
+    tags: readonly TransportSemanticTag[],
+  ): string {
+    const topic = `${kind}:${encodeURIComponent(typeUrl)}`;
+    return tags.length === 0 ? topic : `${topic}:${tags.map(encodeURIComponent).join(",")}`;
+  },
+  compare(left: string, right: string): number {
+    return left < right ? -1 : left > right ? 1 : 0;
+  },
+};
 
-  return normalized;
-}
+const transportSubscriptions = {
+  /** Creates an immutable subscription descriptor.
+   * @param input Specifies the subscriber, topic, and mode.
+   * @returns Returns the immutable subscription descriptor.
+   */
+  create<Kind extends TransportSignalKind>(
+    input: TransportSubscriptionInput<Kind>,
+  ): TransportSubscription<Kind> {
+    const subscriberId = TransportSubscriptionParts.normalizeId(input.subscriberId);
+    const mode = TransportSubscriptionParts.normalizeMode(input.mode ?? "fan-out");
+    const topic = TransportTopics.create(input.topic);
+    return Object.freeze({
+      subscriberId,
+      mode,
+      topic,
+      descriptorKey: `${topic.routing.routingKey}#${encodeURIComponent(mode)}#${encodeURIComponent(subscriberId)}`,
+    });
+  },
+};
+type TransportSubscriptionsOwner = Readonly<typeof transportSubscriptions>;
+/** Owns transport-subscription construction and validation. */
+export const TransportSubscriptions: TransportSubscriptionsOwner =
+  Object.freeze(transportSubscriptions);
+const TransportSubscriptionParts = {
+  normalizeId(value: string): string {
+    const id = TransportTopicParts.requiredText(value, "subscriberId");
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(id) || /^\d+$/u.test(id))
+      throw new Error(
+        "Transport subscriberId must use logical-name format (letters/digits followed by " +
+          "letters/digits/underscores/hyphens, not endpoints, paths, hostnames, or PIDs).",
+      );
+    return id;
+  },
+  normalizeMode(value: string): TransportSubscriptionMode {
+    const mode = TransportTopicParts.requiredText(value, "mode");
+    if (mode !== "competing-consumer" && mode !== "fan-out")
+      throw new Error("Transport mode must be one of: competing-consumer, fan-out.");
+    return mode;
+  },
+};
 
-function normalizeTransportSignalKind<Kind extends TransportSignalKind>(value: Kind): Kind {
-  const signalKind = normalizeRequiredText(value, "signalKind");
-
-  if (!transportSignalKindSet.has(signalKind)) {
-    throw new Error(`Transport signalKind must be one of: ${transportSignalKinds.join(", ")}.`);
-  }
-
-  return signalKind as Kind;
-}
-
-function normalizeTransportSubscriptionMode(value: string): TransportSubscriptionMode {
-  const mode = normalizeRequiredText(value, "mode");
-
-  if (!transportSubscriptionModeSet.has(mode)) {
-    throw new Error(`Transport mode must be one of: ${transportSubscriptionModes.join(", ")}.`);
-  }
-
-  return mode as TransportSubscriptionMode;
-}
-
-function normalizeMessageTypeUrl(value: string): string {
-  const messageTypeUrl = normalizeRequiredText(value, "messageTypeUrl");
-  const separatorIndex = messageTypeUrl.indexOf("/");
-
-  if (
-    separatorIndex <= 0 ||
-    separatorIndex === messageTypeUrl.length - 1 ||
-    /\s/u.test(messageTypeUrl)
-  ) {
-    throw new Error("Transport messageTypeUrl must use canonical 'prefix/type.name' format.");
-  }
-
-  return messageTypeUrl;
-}
-
-function normalizeSemanticTags(
-  semanticTags: readonly TransportSemanticTag[] | undefined,
-): readonly TransportSemanticTag[] {
-  if (semanticTags === undefined || semanticTags.length === 0) {
-    return Object.freeze([]);
-  }
-
-  const normalized = [
-    ...new Set(semanticTags.map((tag) => normalizeRequiredText(tag, "semanticTag"))),
-  ].sort(compareTransportStrings);
-
-  return Object.freeze(normalized);
-}
-
-function createRoutingKey(
-  signalKind: TransportSignalKind,
-  messageTypeUrl: string,
-  semanticTags: readonly TransportSemanticTag[],
-): string {
-  const topicSegment = `${signalKind}:${encodeRoutingSegment(messageTypeUrl)}`;
-
-  if (semanticTags.length === 0) {
-    return topicSegment;
-  }
-
-  return `${topicSegment}:${semanticTags.map(encodeRoutingSegment).join(",")}`;
-}
-
-function encodeRoutingSegment(value: string): string {
-  return encodeURIComponent(value);
-}
-
-function compareTransportStrings(left: string, right: string): number {
-  if (left < right) {
-    return -1;
-  }
-
-  if (left > right) {
-    return 1;
-  }
-
-  return 0;
-}
+const transportOperations = {
+  /** Checks an operation's nested topic kind.
+   * @param operation Specifies the operation to inspect.
+   * @param signalKind Specifies the expected signal kind.
+   * @returns Returns whether the nested topic kind matches.
+   */
+  hasKind<
+    Operation extends PublishTransportOperation | RequestTransportOperation,
+    Kind extends Operation["topic"]["signalKind"],
+  >(
+    operation: Operation,
+    signalKind: Kind & NoInfer<Operation["topic"]["signalKind"]>,
+  ): operation is Extract<Operation, { readonly topic: TransportTopic<Kind> }> {
+    return operation.topic.signalKind === signalKind;
+  },
+};
+type TransportOperationsOwner = Readonly<typeof transportOperations>;
+/** Owns transport-operation kind checks. */
+export const TransportOperations: TransportOperationsOwner = Object.freeze(transportOperations);

@@ -76,9 +76,15 @@ describe("rejection companion generator", () => {
     });
     expect(output.imports).toContainEqual({
       from: "@spine-event-engine/core",
-      name: "createRejectionThrowable",
+      name: "RejectionThrowable",
       typeOnly: false,
     });
+    expect(output.imports).not.toContainEqual({
+      from: "@spine-event-engine/core",
+      name: "RejectionThrowable",
+      typeOnly: true,
+    });
+    expect(output.printed.flat().join("")).toContain("RejectionThrowable.create(");
     expect(output.printed.flat().join("")).toContain("MessageInitShape");
   });
 });

@@ -15,6 +15,11 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   #open = true;
   readonly #recordSpec: RecordSpec<I, R>;
 
+  /** Creates storage for one context and record specification.
+   * @param context The storage and tenant context.
+   * @param recordSpec The records managed by this storage.
+   * @returns The created storage.
+   */
   constructor(context: StorageContext, recordSpec: RecordSpec<I, R>) {
     this.#context = context;
     this.#recordSpec = recordSpec;
@@ -25,28 +30,39 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return this.#context;
   }
 
-  /** Declarative record specification for this storage. */
+  /** Returns the declarative record specification for this storage.
+   * @returns The managed record specification.
+   */
   get recordSpec(): RecordSpec<I, R> {
     return this.#recordSpec;
   }
 
-  /** Close this record storage. Future operations fail. */
+  /** Closes this record storage. Future operations fail. */
   close(): void {
     this.#open = false;
   }
 
-  /** Whether this record storage still accepts operations. */
+  /** Returns whether this record storage still accepts operations.
+   * @returns Whether the storage is open.
+   */
   isOpen(): boolean {
     return this.#open;
   }
 
-  /** Delete one stored record by actual storage slot ID. */
+  /** Deletes one stored record by actual storage slot ID.
+   * @param id The storage slot identifier.
+   * @returns Whether a record was deleted.
+   */
   async delete(id: I): Promise<boolean> {
     this.requireOpen();
     return this.deleteRecord(this.#recordSpec.cloneId(id));
   }
 
-  /** Read one record by actual storage slot ID, optionally applying a simple field mask. */
+  /** Reads one record by actual storage slot ID, optionally applying a mask.
+   * @param id The storage slot identifier.
+   * @param options The read options.
+   * @returns The matching record, if present.
+   */
   async read(id: I, options: RecordReadOptions = {}): Promise<R | undefined> {
     this.requireOpen();
     const record = await this.readRecord(this.#recordSpec.cloneId(id));
@@ -57,8 +73,10 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   /**
-   * Read matching logical record identifiers derived from stored record bodies
+   * Reads matching logical record identifiers derived from stored record bodies
    * in deterministic query order.
+   * @param query The record query.
+   * @returns The matching logical identifiers.
    */
   async index(query: RecordQuery<I> = {}): Promise<readonly I[]> {
     this.requireOpen();
@@ -71,11 +89,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   /**
-   * Query records by actual storage slot IDs, columns, sorting,
+   * Processes records by actual storage slot IDs, columns, sorting,
    * continuations, limits, and optional masks.
    *
    * `RecordQuery.ids`, when present, filters storage slot IDs rather than
    * logical IDs derived from record bodies.
+   * @param query The record query.
+   * @returns The matching records.
    */
   async query(query: RecordQuery<I> = {}): Promise<readonly R[]> {
     this.requireOpen();
@@ -88,11 +108,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   /**
-   * Query stored records together with the actual storage slot IDs they
+   * Processes stored records together with the actual storage slot IDs they
    * currently occupy in the requested sorted and continued order.
    *
    * `RecordQuery.ids`, when present, filters those storage slot IDs rather
    * than logical IDs derived from record bodies.
+   * @param query The record query.
+   * @returns The matching storage entries.
    */
   async queryEntries(query: RecordQuery<I> = {}): Promise<readonly RecordEntry<I, R>[]> {
     this.requireOpen();
@@ -107,13 +129,19 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     );
   }
 
-  /** Execute one provider-independent normalized query plan. */
+  /** Executes one provider-independent normalized query plan.
+   * @param plan The validated normalized plan.
+   * @returns The matching records.
+   */
   async queryPlan(plan: NormalizedQueryPlan<I>): Promise<readonly R[]> {
     const entries = await this.queryPlanEntries(plan);
     return entries.map((entry) => entry.record);
   }
 
-  /** Execute a normalized plan and retain actual storage slot IDs for version lookup. */
+  /** Executes a normalized plan and retains actual storage slot IDs.
+   * @param plan The validated normalized plan.
+   * @returns The matching storage entries.
+   */
   async queryPlanEntries(plan: NormalizedQueryPlan<I>): Promise<readonly RecordEntry<I, R>[]> {
     this.requireOpen();
     StorageQueryPolicy.validate(plan, this.queryCapabilities());
@@ -133,14 +161,16 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     );
   }
 
-  /** Write one record, replacing any previous value with the same ID. */
+  /** Writes one record, replacing any previous value with the same ID.
+   * @param record The record to write.
+   */
   async write(record: R): Promise<void> {
     this.requireOpen();
     await this.writeRecord(this.#recordSpec.materialize(record));
   }
 
   /**
-   * Compare the current stored record for one ID with an expected value and
+   * Compares the current stored record for one ID with an expected value and
    * write or delete only when they still match.
    *
    * Implementations must apply this atomically across independently opened
@@ -150,6 +180,10 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
    * applied. The `id` argument names an actual storage slot, not a logical ID
    * derived from a record body. Adapters that cannot guarantee this behavior
    * are not valid for delivery leasing or deduplication.
+   * @param id The storage slot identifier.
+   * @param expected The expected current record.
+   * @param next The record to write, or undefined to delete.
+   * @returns Whether the conditional mutation was applied.
    */
   async compareAndSet(id: I, expected: R | undefined, next: R | undefined): Promise<boolean> {
     this.requireOpen();
@@ -160,7 +194,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     );
   }
 
-  /** Write records in order, failing before persistence if any materialization step fails. */
+  /** Writes records in order, materializing all values before persistence.
+   * @param records The records to write.
+   */
   async writeAll(records: Iterable<R>): Promise<void> {
     this.requireOpen();
     const materializedRecords = [...records].map((record) => this.#recordSpec.materialize(record));
@@ -221,6 +257,8 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
  * `RecordSpec.idValueIn(...)`.
  */
 export interface RecordEntry<I, R extends Message> {
+  /** Identifies the actual storage slot. */
   readonly id: I;
+  /** Holds the stored record value. */
   readonly record: R;
 }

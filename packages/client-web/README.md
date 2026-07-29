@@ -204,7 +204,7 @@ recovery reaches `connected`.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import { Client } from "@spine-event-engine/client-web";
 import {
   QueryIdSchema,
@@ -217,7 +217,7 @@ import { TaskListSchema } from "@example/tasks-proto/task_list_pb";
 
 const client = Client.forGrpcWeb("https://api.example.test", { tenant: "tasks" });
 const target = create(TargetSchema, {
-  type: deriveTypeUrl(TaskListSchema),
+  type: TypeUrls.derive(TaskListSchema),
   criterion: { case: "includeAll", value: true },
 });
 const query = create(QuerySchema, {
@@ -250,7 +250,7 @@ reconnects; do not infer an Event history from the notification.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import { Client } from "@spine-event-engine/client-web";
 import { TargetSchema, TopicIdSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { TaskCreatedSchema } from "@example/tasks-proto/task_events_pb";
@@ -259,7 +259,7 @@ const client = Client.forGrpcWeb("https://api.example.test", { tenant: "tasks" }
 const eventTopic = create(TopicSchema, {
   id: create(TopicIdSchema, { value: "task-created" }),
   target: create(TargetSchema, {
-    type: deriveTypeUrl(TaskCreatedSchema),
+    type: TypeUrls.derive(TaskCreatedSchema),
     criterion: { case: "includeAll", value: true },
   }),
 });

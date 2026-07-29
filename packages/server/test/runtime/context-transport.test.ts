@@ -4,7 +4,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
-import { packCommand, packEvent } from "@spine-event-engine/core";
+import { SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -62,7 +62,7 @@ describe("ContextTransport", () => {
     const transport = new RecordingSignalTransport();
 
     const handle = await ContextTransport.open({ context, transport });
-    const command = packCommand({
+    const command = SignalEnvelopes.command({
       id: create(CommandIdSchema, { uuid: "transport-command" }),
       context: create(CommandContextSchema, {
         actorContext: create(ActorContextSchema, {
@@ -252,7 +252,7 @@ describe("ContextTransport", () => {
 });
 
 function commandDispatcher(
-  onDispatch: (command: ReturnType<typeof packCommand>) => void | Promise<void>,
+  onDispatch: (command: ReturnType<typeof SignalEnvelopes.command>) => void | Promise<void>,
 ): CommandDispatcher {
   return {
     messageSchemas: () => [ProjectionStateSchema],
@@ -261,7 +261,7 @@ function commandDispatcher(
 }
 
 function createTransportCommand(id: string) {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
@@ -274,7 +274,7 @@ function createTransportCommand(id: string) {
 }
 
 function createTransportEvent(id: string) {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       version: create(VersionSchema, { number: 1 }),

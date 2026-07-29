@@ -4,7 +4,7 @@ import process from "node:process";
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { packEvent } from "@spine-event-engine/core";
+import { SignalEnvelopes } from "@spine-event-engine/core";
 import { EventContextSchema, EventIdSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   Aggregate,
@@ -17,7 +17,7 @@ import {
   defineEntityHandlers,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
+import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
 
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.ts";
 
@@ -37,7 +37,7 @@ class TaskAggregate extends Aggregate {
       entityId: command.id,
     };
     observe("command-handled", "command", command.id);
-    return packEvent({
+    return SignalEnvelopes.event({
       id: create(EventIdSchema, { value: `event-${command.id}` }),
       context: create(EventContextSchema),
       schema: ProjectionStateSchema,
@@ -52,11 +52,14 @@ class TaskAggregate extends Aggregate {
   applyTask(event) {
     this.startTransaction();
     this.update((draft) =>
-      Object.assign(draft,       create(AggregateStateSchema, {
-        id: event.id,
-        name: event.name,
-        archived: false,
-      })),
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, {
+          id: event.id,
+          name: event.name,
+          archived: false,
+        }),
+      ),
     );
     this.commitTransaction();
   }
@@ -65,11 +68,14 @@ class TaskAggregate extends Aggregate {
 class TaskProjection extends Projection {
   subscribeTask(event) {
     this.update((draft) =>
-      Object.assign(draft,       create(ProjectionStateSchema, {
-        id: event.id,
-        name: `${event.name} (projected)`,
-        priority: event.priority + 1,
-      })),
+      Object.assign(
+        draft,
+        create(ProjectionStateSchema, {
+          id: event.id,
+          name: `${event.name} (projected)`,
+          priority: event.priority + 1,
+        }),
+      ),
     );
     observe("primary-projected", eventSource(event.id), event.id);
   }
@@ -78,23 +84,23 @@ class TaskProjection extends Projection {
 class AuditProjection extends Projection {
   subscribeTask(event) {
     this.update((draft) =>
-      Object.assign(draft,       create(SingularSetOnceStateSchema, {
-        id: event.id,
-        mutableNote: `${event.name} (audited)`,
-      })),
+      Object.assign(
+        draft,
+        create(SingularSetOnceStateSchema, {
+          id: event.id,
+          mutableNote: `${event.name} (audited)`,
+        }),
+      ),
     );
     observe("secondary-projected", eventSource(event.id), event.id);
   }
 }
 
-const transport = createZeroMqTransport(
-  createZeroMqAdapterConfig({ ipcDirectory, adapterIdentity }),
-  {
-    requestTimeoutMs: transportTimeoutMs,
-    receiveTimeoutMs: 100,
-    onBackgroundFailure: (error) => reportFailure("transport", error),
-  },
-);
+const transport = createZeroMqTransport(ZeroMqConfig.create({ ipcDirectory, adapterIdentity }), {
+  requestTimeoutMs: transportTimeoutMs,
+  receiveTimeoutMs: 100,
+  onBackgroundFailure: (error) => reportFailure("transport", error),
+});
 ServerEnvironment.when(EnvironmentType.Local).use({
   storageFactory: new InMemoryStorageFactory(),
   transport,

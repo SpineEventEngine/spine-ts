@@ -7,7 +7,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import {
   CommandSchema,
   EventSchema,
@@ -25,10 +25,7 @@ import {
   type TransportSubscription,
   type TransportSubscriptionHandle,
 } from "@spine-event-engine/transport";
-import {
-  createZeroMqAdapterConfig,
-  createZeroMqTransport,
-} from "@spine-event-engine/transport/zeromq";
+import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -122,7 +119,7 @@ describe("RuntimeTransportBinding", () => {
     const result = await transport.request({
       topic: requireFirst(plan.commands.topics),
       envelope: create(CommandSchema, {
-        message: create(AnySchema, { typeUrl: deriveTypeUrl(EventSchema) }),
+        message: create(AnySchema, { typeUrl: TypeUrls.derive(EventSchema) }),
       }),
     });
 
@@ -133,7 +130,7 @@ describe("RuntimeTransportBinding", () => {
         code: "MALFORMED_ENVELOPE",
         diagnostics: {
           boundedContext: "RuntimeTasks",
-          messageType: deriveTypeUrl(EventSchema),
+          messageType: TypeUrls.derive(EventSchema),
           reason: "unexpected message type URL",
           runtimeState: "running",
         },
@@ -168,7 +165,7 @@ describe("RuntimeTransportBinding", () => {
     const wrongEnvelope = await transport.request({
       topic: requireFirst(plan.commands.topics),
       envelope: create(EventSchema, {
-        message: create(AnySchema, { typeUrl: deriveTypeUrl(EventSchema) }),
+        message: create(AnySchema, { typeUrl: TypeUrls.derive(EventSchema) }),
       }) as unknown as Command,
     });
     const missingMessage = await transport.request({
@@ -185,7 +182,7 @@ describe("RuntimeTransportBinding", () => {
       failure: {
         diagnostics: {
           reason: "unexpected envelope type",
-          messageType: deriveTypeUrl(EventSchema),
+          messageType: TypeUrls.derive(EventSchema),
         },
       },
     });
@@ -220,7 +217,7 @@ describe("RuntimeTransportBinding", () => {
         $typeName: CommandSchema.typeName,
         message: {
           $typeName: AnySchema.typeName,
-          typeUrl: deriveTypeUrl(CommandSchema),
+          typeUrl: TypeUrls.derive(CommandSchema),
           value: "not bytes",
         },
       } as unknown as Command,
@@ -233,7 +230,7 @@ describe("RuntimeTransportBinding", () => {
         code: "MALFORMED_ENVELOPE",
         diagnostics: {
           reason: "malformed generated envelope",
-          messageType: deriveTypeUrl(CommandSchema),
+          messageType: TypeUrls.derive(CommandSchema),
         },
       },
     });
@@ -511,7 +508,7 @@ describe("RuntimeTransportBinding", () => {
   it("runs command and event callbacks over the ZeroMQ-backed transport", async () => {
     const ipcDirectory = await mkdtemp(path.join(ipcTemporaryRoot, "sz-runtime-"));
     const transport = createZeroMqTransport(
-      createZeroMqAdapterConfig({
+      ZeroMqConfig.create({
         ipcDirectory,
         adapterIdentity: `runtime-${String(process.pid)}-${String(Date.now())}`,
       }),
@@ -730,13 +727,13 @@ function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [fil
 
 function createCommandEnvelope(): Command {
   return create(CommandSchema, {
-    message: create(AnySchema, { typeUrl: deriveTypeUrl(CommandSchema) }),
+    message: create(AnySchema, { typeUrl: TypeUrls.derive(CommandSchema) }),
   });
 }
 
 function createEventEnvelope(): Event {
   return create(EventSchema, {
-    message: create(AnySchema, { typeUrl: deriveTypeUrl(EventSchema) }),
+    message: create(AnySchema, { typeUrl: TypeUrls.derive(EventSchema) }),
   });
 }
 

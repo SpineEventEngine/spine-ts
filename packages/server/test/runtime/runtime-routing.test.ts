@@ -2,7 +2,7 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-engine/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -167,8 +167,8 @@ describe("server runtime routing", () => {
         messageTypeUrl,
       })),
     ).toEqual([
-      { signalKind: "command", messageTypeUrl: deriveTypeUrl(AggregateStateSchema) },
-      { signalKind: "command", messageTypeUrl: deriveTypeUrl(CommandSchema) },
+      { signalKind: "command", messageTypeUrl: TypeUrls.derive(AggregateStateSchema) },
+      { signalKind: "command", messageTypeUrl: TypeUrls.derive(CommandSchema) },
     ]);
     expect(plan.commands.topics.map(({ semanticTags }) => semanticTags)).toEqual([
       ["example.tags.ProjectionTag", "example.tags.SharedTag"],
@@ -190,7 +190,7 @@ describe("server runtime routing", () => {
         subscriptionDescriptorKey: plan.commands.subscriptions[0]?.descriptorKey,
         message: {
           fullTypeName: "AggregateState",
-          typeUrl: deriveTypeUrl(AggregateStateSchema),
+          typeUrl: TypeUrls.derive(AggregateStateSchema),
         },
       },
       {
@@ -201,7 +201,7 @@ describe("server runtime routing", () => {
         subscriptionDescriptorKey: plan.commands.subscriptions[1]?.descriptorKey,
         message: {
           fullTypeName: "spine.core.Command",
-          typeUrl: deriveTypeUrl(CommandSchema),
+          typeUrl: TypeUrls.derive(CommandSchema),
         },
       },
     ]);
@@ -238,7 +238,7 @@ describe("server runtime routing", () => {
     expectTypeOf<(typeof plan.deferred)[number]>().toEqualTypeOf<DeferredRoutingSeam>();
     expect(
       plan.events.topics.map(({ signalKind, messageTypeUrl }) => ({ signalKind, messageTypeUrl })),
-    ).toEqual([{ signalKind: "event", messageTypeUrl: deriveTypeUrl(EventSchema) }]);
+    ).toEqual([{ signalKind: "event", messageTypeUrl: TypeUrls.derive(EventSchema) }]);
     expect(plan.events.topics.map(({ semanticTags }) => semanticTags)).toEqual([
       ["example.tags.AggregateTag", "example.tags.ProjectionTag", "example.tags.SharedTag"],
     ]);
@@ -272,7 +272,7 @@ describe("server runtime routing", () => {
         subscriptionDescriptorKey: firstSubscriberRoute?.subscriptionDescriptorKey,
         message: {
           fullTypeName: EventSchema.typeName,
-          typeUrl: deriveTypeUrl(EventSchema),
+          typeUrl: TypeUrls.derive(EventSchema),
         },
       },
       {
@@ -283,7 +283,7 @@ describe("server runtime routing", () => {
         subscriptionDescriptorKey: secondSubscriberRoute?.subscriptionDescriptorKey,
         message: {
           fullTypeName: EventSchema.typeName,
-          typeUrl: deriveTypeUrl(EventSchema),
+          typeUrl: TypeUrls.derive(EventSchema),
         },
       },
     ]);

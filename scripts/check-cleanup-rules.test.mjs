@@ -763,7 +763,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { packCommand, packEvent } from "@spine-event-engine/core";',
+        'import { SignalEnvelopes } from "@spine-event-engine/core";',
         'import { EventIdSchema, type Command, type Event } from "@spine-event-engine/proto";',
         "import { Apply, Assign, Command, React, Subscribe,",
         '  materializeDecoratedEntityHandlers } from "@spine-event-engine/server";',
@@ -776,17 +776,17 @@ describe("check-cleanup-rules", () => {
         "    this.startTransaction();",
         "    this.commitTransaction();",
         "    this.rollbackTransaction();",
-        "    return packEvent({ id: EventIdSchema });",
+        "    return SignalEnvelopes.event({ id: EventIdSchema });",
         "  }",
         "",
         "  @Command(TaskCommand)",
         "  commandTask(command: TaskCommand): Command {",
-        "    return packCommand({});",
+        "    return SignalEnvelopes.command({});",
         "  }",
         "",
         "  @React(TaskCreated)",
         "  reactToTask(event: TaskCreated): Event {",
-        "    return packEvent({ id: EventIdSchema });",
+        "    return SignalEnvelopes.event({ id: EventIdSchema });",
         "  }",
         "",
         "  @Subscribe(TaskCreated)",
@@ -815,8 +815,8 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("startTransaction");
     expect(result.stderr).toContain("commitTransaction");
     expect(result.stderr).toContain("rollbackTransaction");
-    expect(result.stderr).toContain("packEvent");
-    expect(result.stderr).toContain("packCommand");
+    expect(result.stderr).toContain("SignalEnvelopes.event");
+    expect(result.stderr).toContain("SignalEnvelopes.command");
     expect(result.stderr).toContain("EventIdSchema");
     expect(result.stderr).toContain("materializeDecoratedEntityHandlers");
     expect(result.stderr).toContain("handler return type Event");
@@ -1434,7 +1434,7 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { packEvent as emit } from "@spine-event-engine/core";',
+        'import { SignalEnvelopes } from "@spine-event-engine/core";',
         'import * as core from "@spine-event-engine/core";',
         'import { EventIdSchema as EID } from "@spine-event-engine/proto";',
         'import * as proto from "@spine-event-engine/proto";',
@@ -1442,7 +1442,7 @@ describe("check-cleanup-rules", () => {
         'import * as server from "@spine-event-engine/server";',
         "",
         "emit({});",
-        "core.packCommand({});",
+        "core.SignalEnvelopes.command({});",
         "void EID;",
         "void proto.EventIdSchema;",
         "materialize(class Demo {});",
@@ -1456,8 +1456,8 @@ describe("check-cleanup-rules", () => {
     const result = runChecker(repoRoot);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("packEvent");
-    expect(result.stderr).toContain("packCommand");
+    expect(result.stderr).toContain("SignalEnvelopes.event");
+    expect(result.stderr).toContain("SignalEnvelopes.command");
     expect(result.stderr).toContain("EventIdSchema");
     expect(result.stderr).toContain("materializeDecoratedEntityHandlers");
   });
@@ -1470,9 +1470,9 @@ describe("check-cleanup-rules", () => {
         'import * as core from "@spine-event-engine/core";',
         'import * as proto from "@spine-event-engine/proto";',
         "",
-        "const emit = core.packEvent;",
+        "const emit = core.SignalEnvelopes.event;",
         "const eid = proto.EventIdSchema;",
-        "const helpers = { emit: core.packEvent, eid: proto.EventIdSchema };",
+        "const helpers = { emit: core.SignalEnvelopes.event, eid: proto.EventIdSchema };",
         "",
         "emit({});",
         "void eid;",
@@ -1487,7 +1487,7 @@ describe("check-cleanup-rules", () => {
     const result = runChecker(repoRoot);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("packEvent");
+    expect(result.stderr).toContain("SignalEnvelopes.event");
     expect(result.stderr).toContain("EventIdSchema");
   });
 
@@ -1502,9 +1502,9 @@ describe("check-cleanup-rules", () => {
         "const container = { core, proto };",
         "const { core: heldCore, proto: heldProto } = container;",
         "",
-        "container.core.packEvent({});",
+        "container.core.SignalEnvelopes.event({});",
         "void container.proto.EventIdSchema;",
-        "heldCore.packCommand({});",
+        "heldCore.SignalEnvelopes.command({});",
         "void heldProto.EventIdSchema;",
         "",
       ].join("\n"),
@@ -1515,8 +1515,8 @@ describe("check-cleanup-rules", () => {
     const result = runChecker(repoRoot);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("packEvent");
-    expect(result.stderr).toContain("packCommand");
+    expect(result.stderr).toContain("SignalEnvelopes.event");
+    expect(result.stderr).toContain("SignalEnvelopes.command");
     expect(result.stderr).toContain("EventIdSchema");
   });
 
@@ -1610,7 +1610,7 @@ describe("check-cleanup-rules", () => {
         "const c = core;",
         "const p = proto;",
         "const s = server;",
-        "const { packEvent: emit } = c;",
+        "const { SignalEnvelopes.event: emit } = c;",
         "const { EventIdSchema: eid } = p;",
         "const { materializeDecoratedEntityHandlers: materialize } = s;",
         "",
@@ -1626,7 +1626,7 @@ describe("check-cleanup-rules", () => {
     const result = runChecker(repoRoot);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("packEvent");
+    expect(result.stderr).toContain("SignalEnvelopes.event");
     expect(result.stderr).toContain("EventIdSchema");
     expect(result.stderr).toContain("materializeDecoratedEntityHandlers");
   });
@@ -1939,11 +1939,11 @@ describe("check-cleanup-rules", () => {
     writeExampleSource(
       repoRoot,
       [
-        'import { type packEvent } from "@spine-event-engine/core";',
+        'import { SignalEnvelopes } from "@spine-event-engine/core";',
         'import { Assign } from "@spine-event-engine/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
-        "type PackEventType = typeof packEvent;",
+        "type PackEventType = typeof SignalEnvelopes.event;",
         "",
         "class DemoAggregate {",
         "  @Assign",
@@ -3450,7 +3450,7 @@ describe("check-cleanup-rules", () => {
         "    return command as P.Event;",
         "  }",
         "}",
-        "C.packEvent({});",
+        "C.SignalEnvelopes.event({});",
         "S.materializeDecoratedEntityHandlers(StateAggregate);",
         "",
       ].join("\n"),
@@ -3463,7 +3463,7 @@ describe("check-cleanup-rules", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("@Assign(...)");
     expect(result.stderr).toContain("handler return type P.Event");
-    expect(result.stderr).toContain("packEvent");
+    expect(result.stderr).toContain("SignalEnvelopes.event");
     expect(result.stderr).toContain("materializeDecoratedEntityHandlers");
   });
 

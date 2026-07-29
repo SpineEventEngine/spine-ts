@@ -3,7 +3,7 @@ import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 import {
-  assertEntityHistoryConformance,
+  EntityHistoryConformance,
   type EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
 
@@ -24,7 +24,7 @@ describe("Datastore entity history", () => {
   it("supplies the frozen current/state/event history SPI", async () => {
     const backend = new HistoryDatastoreBackend();
     const factory = new DatastoreStorageFactory({ client: backend.client() as never });
-    await assertEntityHistoryConformance({
+    await EntityHistoryConformance.check({
       create: (entityInput: EntityStorageInput<string, StringValue>) =>
         factory.createEntityStorage(entityInput),
       reopen: (entityInput: EntityStorageInput<string, StringValue>) =>

@@ -8,22 +8,28 @@ import type { Storage, StorageContext } from "./storage.js";
 export abstract class StorageFactory implements Storage {
   #open = true;
 
-  /** Close the storage factory. Future storage creation fails. */
+  /** Closes the storage factory. Future storage creation fails. */
   close(): void {
     this.#open = false;
   }
 
-  /** Whether the storage factory still accepts storage creation. */
+  /** Returns whether the storage factory accepts storage creation.
+   * @returns Whether the factory is open.
+   */
   isOpen(): boolean {
     return this.#open;
   }
 
   /**
-   * Create a record storage for one context and one declarative record specification.
+   * Creates a record storage for one context and one declarative record specification.
    *
    * Repeated calls for the same logical context and record specification must
    * observe the same backing records and return independently closeable storage
    * handles.
+   *
+   * @param context - Supplies the bounded-context and tenant scope.
+   * @param recordSpec - Supplies the declarative physical record layout.
+   * @returns The independently closeable record storage handle.
    */
   createRecordStorage<I, R extends Message>(
     context: StorageContext,

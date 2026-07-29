@@ -222,7 +222,7 @@ registry:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { TypeRegistry, packAny, unpackAny, unpackAnyUsing } from "@spine-event-engine/core";
+import { TypeRegistry, AnyMessages } from "@spine-event-engine/core";
 import { CommandIdSchema, spineProtoModule } from "@spine-event-engine/proto";
 import { usersProtoModule } from "@acme/users-model";
 import { UserIdSchema } from "@acme/users-model/generated/acme/users/v1/users_pb.js";
@@ -234,18 +234,21 @@ const user = create(UserIdSchema, { value: "author-1" });
 const chat = create(ChatSchema, { author: user, text: "Hello" });
 const commandId = create(CommandIdSchema, { uuid: "command-1" });
 
-const packedChat = packAny(ChatSchema, chat);
-const knownChat = unpackAny(packedChat, ChatSchema);
-const dynamicUser = unpackAnyUsing(registry, packAny(UserIdSchema, user));
-const dynamicSpine = unpackAnyUsing(registry, packAny(CommandIdSchema, commandId));
+const packedChat = AnyMessages.pack(ChatSchema, chat);
+const knownChat = AnyMessages.unpack(packedChat, ChatSchema);
+const dynamicUser = AnyMessages.unpackUsing(registry, AnyMessages.pack(UserIdSchema, user));
+const dynamicSpine = AnyMessages.unpackUsing(
+  registry,
+  AnyMessages.pack(CommandIdSchema, commandId),
+);
 
 void knownChat;
 void dynamicUser;
 void dynamicSpine;
 ```
 
-`packAny` and `unpackAny` require the expected schema and are the normal choice
-at typed boundaries. `unpackAnyUsing` is for a value whose schema is selected
+`AnyMessages.pack` and `AnyMessages.unpack` require the expected schema and are the normal choice
+at typed boundaries. `AnyMessages.unpackUsing` is for a value whose schema is selected
 at runtime; it returns `undefined` for a type URL absent from the registry.
 The generated Chat application is the runnable in-repository example of this
 layout: it composes `@spine-event-engine/example-chat-model`, obtains Users through its
@@ -732,7 +735,7 @@ state masks, repeated ordering, and positive limits:
 ```ts
 import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
-import { unpackAny } from "@spine-event-engine/core";
+import { AnyMessages } from "@spine-event-engine/core";
 import {
   Client,
   EntityQuery,
@@ -775,7 +778,7 @@ const taskListQuery = EntityQuery.select({
 
 const result = await client.onBehalfOf("alice").send(taskListQuery);
 const packedState = firstState(result);
-if (packedState !== undefined) console.log(unpackAny(packedState, TaskListSchema));
+if (packedState !== undefined) console.log(AnyMessages.unpack(packedState, TaskListSchema));
 await client.close();
 
 function firstState(response: QueryResponse): Any | undefined {
@@ -852,7 +855,7 @@ Asynchronous activation failures reject pending and future iterator reads.
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { Client } from "@spine-event-engine/client-web";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import {
   QueryIdSchema,
   QuerySchema,
@@ -868,14 +871,14 @@ const subscriptionClient = Client.forGrpcWeb("https://api.example.test", { tenan
 const query = create(QuerySchema, {
   id: create(QueryIdSchema, { value: "task-list-query" }),
   target: create(TargetSchema, {
-    type: deriveTypeUrl(TaskListSchema),
+    type: TypeUrls.derive(TaskListSchema),
     criterion: { case: "includeAll", value: true },
   }),
 });
 const topic = create(TopicSchema, {
   id: create(TopicIdSchema, { value: "task-list-topic" }),
   target: create(TargetSchema, {
-    type: deriveTypeUrl(TaskListSchema),
+    type: TypeUrls.derive(TaskListSchema),
     criterion: { case: "includeAll", value: true },
   }),
 });
@@ -1004,7 +1007,7 @@ message fixtures from the consumer test-support package.
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { BlackBox } from "@spine-event-engine/testing";
-import { deriveTypeUrl } from "@spine-event-engine/core";
+import { TypeUrls } from "@spine-event-engine/core";
 import { TargetSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { taskListQuery, tasksContext } from "@example/tasks-test-support";
 import { CreateTaskSchema } from "../generated/acme/tasks/v1/task_commands_pb.js";
@@ -1030,7 +1033,7 @@ try {
   console.log(observed.message);
   const taskListTopic = create(TopicSchema, {
     target: create(TargetSchema, {
-      type: deriveTypeUrl(TaskListSchema),
+      type: TypeUrls.derive(TaskListSchema),
       criterion: { case: "includeAll", value: true },
     }),
   });

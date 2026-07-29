@@ -3,7 +3,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packEvent } from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -382,7 +382,7 @@ describe("EventBus", () => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
-    const subscription = eventBusAccess.subscribe(bus, deriveTypeUrl(ProjectionStateSchema), {
+    const subscription = eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
       onEvent: (event) => {
         observed.push(`event:${event.id?.value ?? "missing"}`);
       },
@@ -415,7 +415,7 @@ describe("EventBus", () => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
-    const typeUrl = deriveTypeUrl(ProjectionStateSchema);
+    const typeUrl = TypeUrls.derive(ProjectionStateSchema);
     const secondSubscription: { current?: { unsubscribe(): void } } = {};
 
     eventBusAccess.subscribe(bus, typeUrl, {
@@ -456,7 +456,7 @@ describe("EventBus", () => {
         observed.push(`dispatch:${event.id?.value ?? "missing"}`);
       }),
     ]);
-    const subscription = eventBusAccess.subscribe(bus, deriveTypeUrl(ProjectionStateSchema), {
+    const subscription = eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
       onEvent: (event) => {
         observed.push(`event:${event.id?.value ?? "missing"}`);
       },
@@ -478,7 +478,7 @@ describe("EventBus", () => {
     const closing = bus.close();
 
     expect(() =>
-      eventBusAccess.subscribe(bus, deriveTypeUrl(ProjectionStateSchema), {
+      eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
         onEvent: () => undefined,
       }),
     ).toThrow(/closed/i);
@@ -486,7 +486,7 @@ describe("EventBus", () => {
     await closing;
 
     expect(() =>
-      eventBusAccess.subscribe(bus, deriveTypeUrl(ProjectionStateSchema), {
+      eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
         onEvent: () => undefined,
       }),
     ).toThrow(/closed/i);
@@ -496,7 +496,7 @@ describe("EventBus", () => {
     const notBus = {} as EventBus;
 
     expect(() =>
-      eventBusAccess.subscribe(notBus, deriveTypeUrl(ProjectionStateSchema), {
+      eventBusAccess.subscribe(notBus, TypeUrls.derive(ProjectionStateSchema), {
         onEvent: () => undefined,
       }),
     ).toThrow("Event subscription requires an EventBus instance.");
@@ -747,10 +747,10 @@ function createEventDispatcher(
 }
 
 function createProjectionEvent(id: string) {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId: packAny(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
       version: create(VersionSchema, { number: 1 }),
     }),
     schema: ProjectionStateSchema,

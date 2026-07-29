@@ -11,13 +11,7 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import {
-  deriveTypeUrl,
-  packAny,
-  packCommand,
-  packEvent,
-  unpackAny,
-} from "@spine-event-engine/core";
+import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
   type Command as SpineCommand,
@@ -320,7 +314,7 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       ];
     }
 
-    return packEvent({
+    return SignalEnvelopes.event({
       id: create(EventIdSchema, { value: `event-${command.name}` }),
       context: create(EventContextSchema),
       schema: AggregateStateSchema,
@@ -1749,9 +1743,11 @@ describe("repository signal routing", () => {
     expect(storedEvents.slice(0, eventsBeforeRejection.length)).toEqual(eventsBeforeRejection);
     expect(rejectionEvents).toHaveLength(1);
     expect(event?.id?.value).toBe("command-rejected-1");
-    expect(event?.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+    expect(event?.message?.typeUrl).toBe(TypeUrls.derive(TaskAlreadyDoneSchema));
     expect(
-      event?.message === undefined ? undefined : unpackAny(event.message, TaskAlreadyDoneSchema),
+      event?.message === undefined
+        ? undefined
+        : AnyMessages.unpack(event.message, TaskAlreadyDoneSchema),
     ).toEqual(create(TaskAlreadyDoneSchema, { id: taskId }));
     expect(event?.context?.rejection?.command).toEqual(originalCommand);
     expect(event?.context?.rejection?.stacktrace).toBe(rejection.stack);
@@ -1760,8 +1756,11 @@ describe("repository signal routing", () => {
       case: "pastMessage",
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "command-rejected" })),
-          typeUrl: deriveTypeUrl(AggregateStateSchema),
+          id: AnyMessages.pack(
+            CommandIdSchema,
+            create(CommandIdSchema, { uuid: "command-rejected" }),
+          ),
+          typeUrl: TypeUrls.derive(AggregateStateSchema),
         }),
         actorContext: create(ActorContextSchema, {
           actor: create(UserIdSchema, { value: "user-1" }),
@@ -1958,7 +1957,7 @@ describe("repository signal routing", () => {
     expect(normalEvents).toHaveLength(1);
     expect(normalEvents[0]?.id?.value).toBe("concurrent-first-1");
     expect(rejectionEvents).toHaveLength(1);
-    expect(rejectionEvents[0]?.message?.typeUrl).toBe(deriveTypeUrl(TaskAlreadyDoneSchema));
+    expect(rejectionEvents[0]?.message?.typeUrl).toBe(TypeUrls.derive(TaskAlreadyDoneSchema));
   });
 
   it("rehydrates archived and deleted lifecycle flags for generated Aggregate handlers", async () => {
@@ -2096,16 +2095,22 @@ describe("repository signal routing", () => {
       case: "pastMessage",
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: packAny(EventIdSchema, create(EventIdSchema, { value: "event-reactor-source" })),
-          typeUrl: deriveTypeUrl(ProjectionStateSchema),
+          id: AnyMessages.pack(
+            EventIdSchema,
+            create(EventIdSchema, { value: "event-reactor-source" }),
+          ),
+          typeUrl: TypeUrls.derive(ProjectionStateSchema),
         }),
         actorContext: create(ActorContextSchema, {
           tenantId: createTenantId("tenant-b"),
         }),
         grandOrigin: create(OriginSchema, {
           message: create(MessageIdSchema, {
-            id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-            typeUrl: deriveTypeUrl(AggregateStateSchema),
+            id: AnyMessages.pack(
+              CommandIdSchema,
+              create(CommandIdSchema, { uuid: "past-command" }),
+            ),
+            typeUrl: TypeUrls.derive(AggregateStateSchema),
           }),
           actorContext: create(ActorContextSchema, {
             tenantId: createTenantId("tenant-b"),
@@ -2173,7 +2178,7 @@ describe("repository signal routing", () => {
     if (command?.message === undefined) {
       throw new Error("Expected a produced command message.");
     }
-    expect(unpackAny(command.message, AggregateStateSchema)).toEqual(
+    expect(AnyMessages.unpack(command.message, AggregateStateSchema)).toEqual(
       create(AggregateStateSchema, {
         id: "task-command",
         name: "Task command",
@@ -2202,8 +2207,8 @@ describe("repository signal routing", () => {
     });
     const sourceGrandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: deriveTypeUrl(AggregateStateSchema),
+        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+        typeUrl: TypeUrls.derive(AggregateStateSchema),
       }),
       actorContext: sourceActorContext,
     });
@@ -2214,8 +2219,11 @@ describe("repository signal routing", () => {
     expect(commands[0]?.context?.origin).toEqual(
       create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: packAny(EventIdSchema, create(EventIdSchema, { value: "event-command-origin" })),
-          typeUrl: deriveTypeUrl(ProjectionStateSchema),
+          id: AnyMessages.pack(
+            EventIdSchema,
+            create(EventIdSchema, { value: "event-command-origin" }),
+          ),
+          typeUrl: TypeUrls.derive(ProjectionStateSchema),
         }),
         actorContext: sourceActorContext,
         grandOrigin: sourceGrandOrigin,
@@ -2770,10 +2778,13 @@ describe("repository signal routing", () => {
 
   it("keeps a primitive Unknown producer subject to first-field equality", () => {
     const repository = createRoutingRepository();
-    const event = packEvent({
+    const event = SignalEnvelopes.event({
       id: create(EventIdSchema, { value: "event-primitive-unknown" }),
       context: create(EventContextSchema, {
-        producerId: packAny(StringValueSchema, create(StringValueSchema, { value: "Unknown" })),
+        producerId: AnyMessages.pack(
+          StringValueSchema,
+          create(StringValueSchema, { value: "Unknown" }),
+        ),
         rejection: {},
       }),
       schema: ProjectionStateSchema,
@@ -2790,7 +2801,7 @@ describe("repository signal routing", () => {
   it("routes message-valued event IDs by their primitive value field", () => {
     const repository = createUserIdProjectionRepository();
     const route = repository.routeEvent(
-      packEvent({
+      SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "event-user-id" }),
         context: create(EventContextSchema, {
           version: create(VersionSchema, { number: 1 }),
@@ -2811,7 +2822,7 @@ describe("repository signal routing", () => {
     const repository = createMessageIdTaskRepository();
     const taskId = create(TaskIdSchema, { value: "message-id-task" });
     const route = repository.routeEvent(
-      packEvent({
+      SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "event-message-id-task" }),
         context: create(EventContextSchema, {
           version: create(VersionSchema, { number: 1 }),
@@ -2837,7 +2848,7 @@ describe("repository signal routing", () => {
 
     expect(() =>
       repository.routeEvent(
-        packEvent({
+        SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "event-wrong-message-id-type" }),
           context: create(EventContextSchema, {
             version: create(VersionSchema, { number: 1 }),
@@ -2901,7 +2912,7 @@ describe("repository signal routing", () => {
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced event message.");
     }
-    expect(unpackAny(producedMessage, ProjectionStateSchema)).toEqual(
+    expect(AnyMessages.unpack(producedMessage, ProjectionStateSchema)).toEqual(
       create(ProjectionStateSchema, {
         id: "pm-task",
         name: "ProcessManager event",
@@ -2946,7 +2957,7 @@ describe("repository signal routing", () => {
         status: "DELIVERED",
         inboxId: {
           targetId: "pm-inbox",
-          targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+          targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
         },
       },
     ]);
@@ -2963,7 +2974,7 @@ describe("repository signal routing", () => {
     if (storedCommand === undefined) {
       throw new Error("Expected a stored process-manager command signal.");
     }
-    const storedEnvelope = unpackAny(storedCommand, CommandSchema);
+    const storedEnvelope = AnyMessages.unpack(storedCommand, CommandSchema);
     if (storedEnvelope === undefined) {
       throw new Error("Expected a readable stored process-manager command envelope.");
     }
@@ -2973,9 +2984,11 @@ describe("repository signal routing", () => {
     expect(
       storedEnvelope.message === undefined
         ? undefined
-        : unpackAny(storedEnvelope.message, AggregateStateSchema),
+        : AnyMessages.unpack(storedEnvelope.message, AggregateStateSchema),
     ).toEqual(
-      command.message === undefined ? undefined : unpackAny(command.message, AggregateStateSchema),
+      command.message === undefined
+        ? undefined
+        : AnyMessages.unpack(command.message, AggregateStateSchema),
     );
   });
 
@@ -3222,7 +3235,7 @@ describe("repository signal routing", () => {
         },
         inboxId: {
           targetId: "pm-unbound",
-          targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+          targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
         },
         signalId: "command-pm-unbound",
         label: "HANDLE_COMMAND",
@@ -3366,7 +3379,7 @@ describe("repository signal routing", () => {
       new Date("2026-07-08T09:03:00.000Z"),
       1n,
       {
-        targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
       },
     );
 
@@ -3470,8 +3483,11 @@ describe("repository signal routing", () => {
       case: "pastMessage",
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "command-pm-dispatch" })),
-          typeUrl: deriveTypeUrl(AggregateStateSchema),
+          id: AnyMessages.pack(
+            CommandIdSchema,
+            create(CommandIdSchema, { uuid: "command-pm-dispatch" }),
+          ),
+          typeUrl: TypeUrls.derive(AggregateStateSchema),
         }),
         actorContext: create(ActorContextSchema, {
           actor: create(UserIdSchema, { value: "user-1" }),
@@ -3612,10 +3628,10 @@ describe("repository signal routing", () => {
     await delivery.inbox.receive({
       inboxId: {
         targetId: "pm-older",
-        targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
       },
       signalId: "event-older",
-      signal: packAny(EventSchema, createProjectionEvent("event-older", "pm-older"), {
+      signal: AnyMessages.pack(EventSchema, createProjectionEvent("event-older", "pm-older"), {
         validate: false,
       }),
       label: "REACT_UPON_EVENT",
@@ -3749,7 +3765,7 @@ describe("repository signal routing", () => {
         message.status === "TO_DELIVER" &&
         message.inboxId.targetId === "pm-fail",
     );
-    expect(failed?.inboxId.targetTypeUrl).toBe(deriveTypeUrl(ProcessManagerStateSchema));
+    expect(failed?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProcessManagerStateSchema));
     expect(pending.some((message) => message.inboxId.targetId === "pm-later")).toBe(false);
 
     const delivered = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
@@ -3760,7 +3776,7 @@ describe("repository signal routing", () => {
         message.status === "DELIVERED" &&
         message.inboxId.targetId === "pm-later",
     );
-    expect(later?.inboxId.targetTypeUrl).toBe(deriveTypeUrl(ProcessManagerStateSchema));
+    expect(later?.inboxId.targetTypeUrl).toBe(TypeUrls.derive(ProcessManagerStateSchema));
   });
 
   it("guards each target of a multi-target Process Manager route independently", async () => {
@@ -4141,7 +4157,7 @@ describe("repository signal routing", () => {
       3n,
       {
         signalId: "event-pm-replay-malformed",
-        signal: packAny(
+        signal: AnyMessages.pack(
           AggregateStateSchema,
           create(AggregateStateSchema, {
             id: "pm-replay",
@@ -4242,8 +4258,8 @@ describe("repository signal routing", () => {
     });
     const sourceGrandOrigin = create(OriginSchema, {
       message: create(MessageIdSchema, {
-        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-        typeUrl: deriveTypeUrl(AggregateStateSchema),
+        id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+        typeUrl: TypeUrls.derive(AggregateStateSchema),
       }),
       actorContext: sourceActorContext,
     });
@@ -4261,8 +4277,8 @@ describe("repository signal routing", () => {
     expect(commands[0]?.context?.origin).toEqual(
       create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: packAny(EventIdSchema, create(EventIdSchema, { value: "event-pm-command" })),
-          typeUrl: deriveTypeUrl(ProjectionStateSchema),
+          id: AnyMessages.pack(EventIdSchema, create(EventIdSchema, { value: "event-pm-command" })),
+          typeUrl: TypeUrls.derive(ProjectionStateSchema),
         }),
         actorContext: sourceActorContext,
         grandOrigin: sourceGrandOrigin,
@@ -4272,7 +4288,7 @@ describe("repository signal routing", () => {
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced command message.");
     }
-    expect(unpackAny(producedMessage, AggregateStateSchema)).toEqual(
+    expect(AnyMessages.unpack(producedMessage, AggregateStateSchema)).toEqual(
       create(AggregateStateSchema, {
         id: "pm-event-command",
         name: "Task follow-up command",
@@ -4351,7 +4367,7 @@ describe("repository signal routing", () => {
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced command message.");
     }
-    expect(unpackAny(producedMessage, AggregateStateSchema)).toEqual(
+    expect(AnyMessages.unpack(producedMessage, AggregateStateSchema)).toEqual(
       create(AggregateStateSchema, {
         id: "pm-first-field",
         name: "Task follow-up command",
@@ -4538,7 +4554,7 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide()).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 2,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await expect(
       context.stand().readVersioned(ProjectionStateSchema, "task-catch-up"),
@@ -4601,7 +4617,7 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-catch-up-tenant", {
@@ -4674,7 +4690,7 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide()).resolves.toEqual({
       replayedEventCount: 2,
       clearedEntityCount: 2,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema), deriveTypeUrl(TaskListSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema), TypeUrls.derive(TaskListSchema)],
     });
     await expect(context.stand().read(ProjectionStateSchema, "task-primary")).resolves.toEqual(
       create(ProjectionStateSchema, {
@@ -4701,7 +4717,7 @@ describe("repository signal routing", () => {
 
     await context.eventBus().post(createProjectionEvent("event-shared-state", "task-shared-state"));
     await context.eventBus().post(
-      packEvent({
+      SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "event-unmatched-state" }),
         context: create(EventContextSchema, {
           version: create(VersionSchema, { number: 1 }),
@@ -4725,7 +4741,7 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide()).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
   });
@@ -4773,7 +4789,7 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide({ tenantId: rawTenantId })).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-space-tenant", {
@@ -4816,7 +4832,7 @@ describe("repository signal routing", () => {
     await expect(context.catchUpReadSide({ tenantId: "domain:example.com" })).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 0,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-domain-tenant", {
@@ -4854,7 +4870,7 @@ describe("repository signal routing", () => {
       {
         replayedEventCount: 1,
         clearedEntityCount: 0,
-        clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+        clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
       },
     );
     await expect(
@@ -4975,7 +4991,7 @@ describe("repository signal routing", () => {
     await expect(first).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 2);
     expect(BlockingCatchUpProjection.completedCalls).toBe(1);
@@ -4984,7 +5000,7 @@ describe("repository signal routing", () => {
     await expect(second).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     expect(BlockingCatchUpProjection.completedCalls).toBe(2);
   });
@@ -5022,7 +5038,7 @@ describe("repository signal routing", () => {
     await expect(catchUp).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 2);
     expect(BlockingCatchUpProjection.completedCalls).toBe(1);
@@ -5069,7 +5085,7 @@ describe("repository signal routing", () => {
     await expect(catchUp).resolves.toEqual({
       replayedEventCount: 1,
       clearedEntityCount: 1,
-      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      clearedStateTypes: [TypeUrls.derive(ProjectionStateSchema)],
     });
     await expect(close).resolves.toBe("closed");
   });
@@ -5219,7 +5235,9 @@ describe("repository signal routing", () => {
       (event) => event.context?.rejection !== undefined,
     );
     expect(
-      stored?.message === undefined ? undefined : unpackAny(stored.message, TaskAlreadyDoneSchema),
+      stored?.message === undefined
+        ? undefined
+        : AnyMessages.unpack(stored.message, TaskAlreadyDoneSchema),
     ).toEqual(expectedPayload);
     expect(stored?.context?.rejection?.command).toEqual(originalCommand);
     expect(stored?.context?.rejection?.stacktrace).toBe(rejection.stack);
@@ -5293,7 +5311,7 @@ describe("repository signal routing", () => {
     expect(delivered[0]).toMatchObject({
       inboxId: {
         targetId: "task-inbox",
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
       signalId: "event-inbox",
       label: "UPDATE_SUBSCRIBER",
@@ -5302,7 +5320,9 @@ describe("repository signal routing", () => {
     expect(delivered[0]?.keepUntil).toBeInstanceOf(Date);
 
     const storedEvent =
-      delivered[0]?.signal === undefined ? undefined : unpackAny(delivered[0].signal, EventSchema);
+      delivered[0]?.signal === undefined
+        ? undefined
+        : AnyMessages.unpack(delivered[0].signal, EventSchema);
 
     expect(storedEvent?.id?.value).toBe("event-inbox");
   });
@@ -5330,7 +5350,7 @@ describe("repository signal routing", () => {
       1n,
       {
         label: "UPDATE_SUBSCRIBER",
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
     );
     const { signal: ignoredSignal, ...missingSignal } = valid;
@@ -5345,15 +5365,15 @@ describe("repository signal routing", () => {
         label: "UPDATE_SUBSCRIBER",
         signalId: "event-projection-replay-undecodable",
         signal: create(AnySchema, {
-          typeUrl: deriveTypeUrl(EventSchema),
+          typeUrl: TypeUrls.derive(EventSchema),
           value: new Uint8Array([0]),
         }),
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
     );
     const invalidPayload = await storePmInboxEvent(
       delivery,
-      packEvent({
+      SignalEnvelopes.event({
         id: create(EventIdSchema, { value: "event-projection-invalid-payload" }),
         context: create(EventContextSchema, {
           ...(tenantAOrigin === undefined ? {} : { origin: tenantAOrigin }),
@@ -5366,7 +5386,7 @@ describe("repository signal routing", () => {
       {
         label: "UPDATE_SUBSCRIBER",
         signalId: "event-projection-replay-invalid-payload",
-        signal: packAny(
+        signal: AnyMessages.pack(
           EventSchema,
           create(EventSchema, {
             id: create(EventIdSchema, { value: "event-projection-invalid-payload" }),
@@ -5374,13 +5394,13 @@ describe("repository signal routing", () => {
               ...(tenantAOrigin === undefined ? {} : { origin: tenantAOrigin }),
             }),
             message: create(AnySchema, {
-              typeUrl: deriveTypeUrl(ProjectionStateSchema),
+              typeUrl: TypeUrls.derive(ProjectionStateSchema),
               value: new Uint8Array([255]),
             }),
           }),
           { validate: false },
         ),
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
     );
     const missingTenant = await storePmInboxEvent(
@@ -5391,7 +5411,7 @@ describe("repository signal routing", () => {
       {
         label: "UPDATE_SUBSCRIBER",
         signalId: "event-projection-replay-missing-tenant",
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
     );
     const mismatchedTenant = await storePmInboxEvent(
@@ -5404,7 +5424,7 @@ describe("repository signal routing", () => {
       {
         label: "UPDATE_SUBSCRIBER",
         signalId: "event-projection-replay-mismatched-tenant",
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
     );
     const mismatchedTarget = await storePmInboxEvent(
@@ -5416,7 +5436,7 @@ describe("repository signal routing", () => {
         label: "UPDATE_SUBSCRIBER",
         signalId: "event-projection-replay-mismatched-target",
         targetId: "other-projection",
-        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+        targetTypeUrl: TypeUrls.derive(ProjectionStateSchema),
       },
     );
 
@@ -5913,7 +5933,7 @@ describe("repository signal routing", () => {
 
     expect(() =>
       repository.routeEvent(
-        packEvent({
+        SignalEnvelopes.event({
           id: create(EventIdSchema, { value: "event-non-finite-field" }),
           context: create(EventContextSchema, {
             version: create(VersionSchema, { number: 1 }),
@@ -6934,7 +6954,7 @@ function createAggregateEvent(
   version: number,
   name = "Task",
 ): SpineEvent {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       version: create(VersionSchema, { number: version }),
@@ -6949,7 +6969,7 @@ function createAggregateEvent(
 }
 
 function createAggregateCommand(id: string, aggregateId: string, name = "Task", tenantId?: string) {
-  return packCommand({
+  return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
@@ -6978,7 +6998,7 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
 function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
-    message: packAny(
+    message: AnyMessages.pack(
       AggregateStateSchema,
       create(AggregateStateSchema, {
         id: aggregateId,
@@ -6997,7 +7017,7 @@ function createTaskCommand(id: string, taskId: string, title = "Task") {
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: packAny(
+    message: AnyMessages.pack(
       TaskSchema,
       create(TaskSchema, {
         id: create(TaskIdSchema, { value: taskId }),
@@ -7026,7 +7046,7 @@ function createValidatedCommand(id: string, aggregateId: string, name: string, t
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: packAny(
+    message: AnyMessages.pack(
       ValidatedTaskCommandSchema,
       create(ValidatedTaskCommandSchema, {
         id: aggregateId,
@@ -7054,7 +7074,7 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
-    message: packAny(
+    message: AnyMessages.pack(
       AggregateStateSchema,
       create(AggregateStateSchema, {
         id: aggregateId,
@@ -7101,10 +7121,10 @@ async function storeProcessManagerInboxCommand(
   const message = await delivery.inbox.receive({
     inboxId: {
       targetId: overrides.targetId ?? readAggregateId(command),
-      targetTypeUrl: overrides.targetTypeUrl ?? deriveTypeUrl(ProcessManagerStateSchema),
+      targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProcessManagerStateSchema),
     },
     signalId: overrides.signalId ?? command.id?.uuid ?? "missing-command-id",
-    signal: packAny(CommandSchema, command, { validate: false }),
+    signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
     label: "HANDLE_COMMAND",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
@@ -7131,10 +7151,10 @@ async function storePmInboxEvent(
   const message = await delivery.inbox.receive({
     inboxId: {
       targetId: overrides.targetId ?? readProjectionId(event),
-      targetTypeUrl: overrides.targetTypeUrl ?? deriveTypeUrl(ProcessManagerStateSchema),
+      targetTypeUrl: overrides.targetTypeUrl ?? TypeUrls.derive(ProcessManagerStateSchema),
     },
     signalId: overrides.signalId ?? event.id?.value ?? "missing-event-id",
-    signal: overrides.signal ?? packAny(EventSchema, event, { validate: false }),
+    signal: overrides.signal ?? AnyMessages.pack(EventSchema, event, { validate: false }),
     label: overrides.label ?? "REACT_UPON_EVENT",
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
@@ -7147,13 +7167,15 @@ async function storePmInboxEvent(
 
 function readAggregateId(command: SpineCommand): string {
   const message =
-    command.message === undefined ? undefined : unpackAny(command.message, AggregateStateSchema);
+    command.message === undefined
+      ? undefined
+      : AnyMessages.unpack(command.message, AggregateStateSchema);
 
   if (message === undefined) {
     const validated =
       command.message === undefined
         ? undefined
-        : unpackAny(command.message, ValidatedTaskCommandSchema);
+        : AnyMessages.unpack(command.message, ValidatedTaskCommandSchema);
     if (validated === undefined) {
       throw new Error("Expected a readable process-manager command payload.");
     }
@@ -7165,7 +7187,9 @@ function readAggregateId(command: SpineCommand): string {
 
 function readProjectionId(event: SpineEvent): string {
   const message =
-    event.message === undefined ? undefined : unpackAny(event.message, ProjectionStateSchema);
+    event.message === undefined
+      ? undefined
+      : AnyMessages.unpack(event.message, ProjectionStateSchema);
 
   if (message === undefined) {
     throw new Error("Expected a readable process-manager event payload.");
@@ -7175,7 +7199,7 @@ function readProjectionId(event: SpineEvent): string {
 }
 
 function createValidatedEvent(id: string, aggregateId: string, name: string): SpineEvent {
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema),
     schema: ValidatedAggregateStateSchema,
@@ -7202,7 +7226,7 @@ function createProjectionEvent(
 ) {
   const origin = projectionEventOrigin(options);
 
-  return packEvent({
+  return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       ...(origin === undefined ? {} : { origin }),
@@ -7223,7 +7247,7 @@ function createProjectionEvent(
 function createContextlessProjectionEvent(id: string, entityId: string) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
-    message: packAny(
+    message: AnyMessages.pack(
       ProjectionStateSchema,
       create(ProjectionStateSchema, {
         id: entityId,
@@ -7253,8 +7277,8 @@ function projectionEventOrigin(options: {
       case: "pastMessage" as const,
       value: create(OriginSchema, {
         message: create(MessageIdSchema, {
-          id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
-          typeUrl: deriveTypeUrl(AggregateStateSchema),
+          id: AnyMessages.pack(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+          typeUrl: TypeUrls.derive(AggregateStateSchema),
         }),
         actorContext: create(ActorContextSchema, {
           tenantId: createTenantId(options.pastMessageTenantId, options.pastMessageTenantKind),
@@ -7299,20 +7323,24 @@ function projectionProducerId(options: {
   readonly producerMessage?: AggregateState;
 }) {
   if (options.producerMessage !== undefined) {
-    return packAny(AggregateStateSchema, options.producerMessage);
+    return AnyMessages.pack(AggregateStateSchema, options.producerMessage);
   }
   if (options.producerNumber !== undefined) {
-    return packAny(DoubleValueSchema, create(DoubleValueSchema, { value: options.producerNumber }));
+    return AnyMessages.pack(
+      DoubleValueSchema,
+      create(DoubleValueSchema, { value: options.producerNumber }),
+    );
   }
   if (options.producerId !== undefined) {
-    return packAny(UserIdSchema, create(UserIdSchema, { value: options.producerId }));
+    return AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: options.producerId }));
   }
   return undefined;
 }
 
 function readReadableProducerId(event: { readonly context?: unknown } | undefined) {
   const producerId = (
-    event?.context as { readonly producerId?: ReturnType<typeof packAny> | undefined } | undefined
+    event?.context as
+      { readonly producerId?: ReturnType<typeof AnyMessages.pack> | undefined } | undefined
   )?.producerId;
 
   if (producerId === undefined) {
@@ -7320,10 +7348,10 @@ function readReadableProducerId(event: { readonly context?: unknown } | undefine
   }
 
   return (
-    unpackAny(producerId, DoubleValueSchema)?.value ??
-    unpackAny(producerId, UserIdSchema)?.value ??
-    unpackAny(producerId, StringValueSchema)?.value ??
-    unpackAny(producerId, BoolValueSchema)?.value
+    AnyMessages.unpack(producerId, DoubleValueSchema)?.value ??
+    AnyMessages.unpack(producerId, UserIdSchema)?.value ??
+    AnyMessages.unpack(producerId, StringValueSchema)?.value ??
+    AnyMessages.unpack(producerId, BoolValueSchema)?.value
   );
 }
 

@@ -1,7 +1,7 @@
 import * as http2 from "node:http2";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createTransportTopic } from "@spine-event-engine/transport";
+import { TransportTopics } from "@spine-event-engine/transport";
 
 import { BoundedContext, EnvironmentType, Server, ServerEnvironment } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
@@ -325,7 +325,7 @@ describe("Server lifecycle integration", () => {
       });
       await once(session, "remoteSettings");
       releaseActive = worker.holdNextStart("PAUSED");
-      const transportTopic = createTransportTopic({
+      const transportTopic = TransportTopics.create({
         signalKind: "system",
         messageTypeUrl: "type.spine.io/server.lifecycle.ActiveClose",
       });

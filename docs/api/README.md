@@ -96,8 +96,8 @@ Core exports include deterministic type URL derivation, registry and metadata
 types, the default registry for the curated Spine schema set, single-message
 validation result/check helpers, `ValidationException`, structured
 `ValidationError` creation, the initial transition-validation seam,
-`RejectionThrowable`, `createRejectionThrowable()`, and
-`isRejectionThrowable()`. Generated rejection companions create validated
+`RejectionThrowable`, `RejectionThrowable.create()`, and
+`RejectionThrowable.is()`. Generated rejection companions create validated
 throwables through this factory contract. Repository command execution now
 recognizes them only through the guard after rollback and schedules a regular
 rejection event for independent EventBus posting. Build-time analysis
@@ -113,8 +113,8 @@ rejected-command payload forms and throwable stack from
 recorded in `storedEventDispatchFailures()`, is not reflected in the client
 `Ack`, and has no promised retry.
 Core envelope construction exports include
-`packAny()`, `unpackAny()`,
-`packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
+`AnyMessages.pack()`, `AnyMessages.unpack()`,
+`SignalEnvelopes.command()`, `SignalEnvelopes.event()`, `PackAnyOptions`, `PackCommandInput`, and
 `PackEventInput`.
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
@@ -841,9 +841,9 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportSignalEnvelope`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
-`TransportSubscriptionHandle`, `SignalTransport`, `createTransportTopic()`, and
-`createTransportSubscription()`, `isTransportOperationKind()`, and
-`isTransportTopicKind()`. This root surface is contract-only: it defines
+`TransportSubscriptionHandle`, `SignalTransport`, `TransportTopics.create()`, and
+`TransportSubscriptions.create()`, `TransportOperations.hasKind()`, and
+`TransportTopics.hasKind()`. This root surface is contract-only: it defines
 immutable topic/subscription value objects, deterministic adapter-agnostic
 routing keys, handler callback signatures, and graceful async close behavior.
 It does not expose ZeroMQ socket types, endpoint strings, multipart frames,
@@ -854,8 +854,8 @@ runtime wiring.
 The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
 native dependency remains outside the root TypeDoc entry point. The
 adapter-scoped `@spine-event-engine/transport/zeromq` subpath exports exactly
-`createZeroMqAdapterConfig()`, `createZeroMqTransport()`,
-`ZeroMqAdapterConfig`, `ZeroMqAdapterConfigInput`, `ZeroMqTransportScope`, and
+`ZeroMqConfig`, `ZeroMqConfigInput`, `createZeroMqTransport()`,
+`ZeroMqTransportScope`, and
 `ZeroMqTransportOptions` for local IPC deployments. It derives deterministic
 IPC endpoints from adapter config and transport routing descriptors internally,
 then exposes only the
@@ -875,27 +875,27 @@ paths:
 
 ```ts
 import {
-  isTransportOperationKind,
-  isTransportTopicKind,
+  TransportOperations,
+  TransportTopics,
   type RequestTransportOperation,
   type TransportTopic,
 } from "@spine-event-engine/transport";
 
 function onTransportRequest(operation: RequestTransportOperation<{ readonly id: string }>): void {
-  if (isTransportOperationKind(operation, "command")) {
+  if (TransportOperations.hasKind(operation, "command")) {
     operation.envelope; // Inferred as the generated Command type.
   }
 }
 
 function onTransportTopic(topic: TransportTopic): void {
-  if (isTransportTopicKind(topic, "event")) {
+  if (TransportTopics.hasKind(topic, "event")) {
     topic.signalKind; // Inferred as "event".
   }
 }
 ```
 
-`isTransportOperationKind()` always compares `operation.topic.signalKind`, and
-`isTransportTopicKind()` always compares `topic.signalKind`. They provide type
+`TransportOperations.hasKind()` always compares `operation.topic.signalKind`, and
+`TransportTopics.hasKind()` always compares `topic.signalKind`. They provide type
 narrowing, not validation of untrusted input or envelope content, and neither
 inspects the envelope. The topic helper narrows only the top-level
 `signalKind`; it does not validate or narrow the routing descriptor or

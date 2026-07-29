@@ -12,31 +12,48 @@ import {
   type TransportSignalEnvelope,
   type TransportSignalKind,
   type TransportTopic,
-  createTransportSubscription,
-  createTransportTopic,
-  isTransportOperationKind,
-  isTransportTopicKind,
+  TransportSubscriptions,
+  TransportTopics,
+  TransportOperations,
 } from "../src/index.js";
 
 describe("@spine-event-engine/transport", () => {
+  it("exposes immutable public owner methods", () => {
+    const rejectsReassignment = () => {
+      // @ts-expect-error Frozen owner methods cannot be reassigned.
+      TransportTopics.create = () => {
+        throw new Error("unreachable");
+      };
+    };
+    void rejectsReassignment;
+    for (const [owner, method] of [
+      [TransportTopics, "create"],
+      [TransportSubscriptions, "create"],
+      [TransportOperations, "hasKind"],
+    ] as const) {
+      expect(Object.isFrozen(owner)).toBe(true);
+      expect(Object.getOwnPropertyDescriptor(owner, method)?.writable).toBe(false);
+    }
+  });
+
   it("creates copy-safe topics with deterministic routing keys", () => {
     const semanticTags = ["tenant", "event", "tenant"] as const;
-    const topic = createTransportTopic({
+    const topic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: " type.spine.io/example.TaskCreated ",
       semanticTags,
     });
-    const sameTopic = createTransportTopic({
+    const sameTopic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
       semanticTags: ["event", "tenant"],
     });
-    const reorderedTopic = createTransportTopic({
+    const reorderedTopic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
       semanticTags: ["event.alpha", "event0", "event_Alpha"],
     });
-    const reorderedSameTopic = createTransportTopic({
+    const reorderedSameTopic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/example.TaskCreated",
       semanticTags: ["event_Alpha", "event.alpha", "event0"],
@@ -63,7 +80,7 @@ describe("@spine-event-engine/transport", () => {
   });
 
   it("creates copy-safe subscription descriptors with deterministic keys", () => {
-    const subscription = createTransportSubscription({
+    const subscription = TransportSubscriptions.create({
       subscriberId: " projection-worker ",
       topic: {
         signalKind: "event",
@@ -99,32 +116,32 @@ describe("@spine-event-engine/transport", () => {
 
   it("rejects malformed routing inputs", () => {
     expect(() =>
-      createTransportTopic({
+      TransportTopics.create({
         signalKind: "command",
         messageTypeUrl: " ",
       }),
     ).toThrow(/messageTypeUrl/);
     expect(() =>
-      createTransportTopic({
+      TransportTopics.create({
         signalKind: "command",
         messageTypeUrl: "type.spine.io",
       }),
     ).toThrow(/prefix\/type\.name/);
     expect(() =>
-      createTransportTopic({
+      TransportTopics.create({
         signalKind: "command",
         messageTypeUrl: "/example.TaskCreated",
       }),
     ).toThrow(/prefix\/type\.name/);
     expect(() =>
-      createTransportTopic({
+      TransportTopics.create({
         signalKind: "command",
         messageTypeUrl: "type.spine.io/ example.TaskCreated",
       }),
     ).toThrow(/prefix\/type\.name/);
 
     expect(() =>
-      createTransportSubscription({
+      TransportSubscriptions.create({
         subscriberId: " ",
         topic: {
           signalKind: "query",
@@ -136,7 +153,7 @@ describe("@spine-event-engine/transport", () => {
 
   it("keeps simple logical ids valid and endpoint-shaped ids invalid", () => {
     expect(() =>
-      createTransportSubscription({
+      TransportSubscriptions.create({
         subscriberId: "projection_worker",
         topic: {
           signalKind: "query",
@@ -158,7 +175,7 @@ describe("@spine-event-engine/transport", () => {
 
     for (const invalidId of invalidIds) {
       expect(() =>
-        createTransportSubscription({
+        TransportSubscriptions.create({
           subscriberId: invalidId,
           topic: {
             signalKind: "query",
@@ -171,20 +188,20 @@ describe("@spine-event-engine/transport", () => {
 
   it("rejects unknown runtime signal kinds and subscription modes", () => {
     expect(() =>
-      createTransportTopic({
+      TransportTopics.create({
         signalKind: "delivery" as TransportSignalKind,
         messageTypeUrl: "type.spine.io/example.TaskDelivery",
       }),
     ).toThrow(/signalKind/);
     expect(() =>
-      createTransportTopic({
+      TransportTopics.create({
         signalKind: "side-channel" as TransportSignalKind,
         messageTypeUrl: "type.spine.io/example.TaskCreated",
       }),
     ).toThrow(/signalKind/);
 
     expect(() =>
-      createTransportSubscription({
+      TransportSubscriptions.create({
         subscriberId: "projection-worker",
         mode: "round-robin" as never,
         topic: {
@@ -194,7 +211,7 @@ describe("@spine-event-engine/transport", () => {
       }),
     ).toThrow(/mode/);
     expect(() =>
-      createTransportSubscription({
+      TransportSubscriptions.create({
         subscriberId: "projection-worker",
         mode: "round-robin" as never,
         topic: {
@@ -246,15 +263,15 @@ describe("@spine-event-engine/transport", () => {
     expectTypeOf<SignalTransport["publish"]>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<SignalTransport["request"]>().returns.resolves.toEqualTypeOf<unknown>();
 
-    const commandTopic = createTransportTopic({
+    const commandTopic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/spine.core.Command",
     });
-    const eventTopic = createTransportTopic({
+    const eventTopic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/spine.core.Event",
     });
-    const systemTopic = createTransportTopic({
+    const systemTopic = TransportTopics.create({
       signalKind: "system",
       messageTypeUrl: "type.spine.io/private.SystemMessage",
     });
@@ -342,10 +359,10 @@ describe("@spine-event-engine/transport", () => {
         // @ts-expect-error a nested kind check does not narrow the complete operation union.
         expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
       }
-      if (isTransportOperationKind(operation, "command")) {
+      if (TransportOperations.hasKind(operation, "command")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
       }
-      if (isTransportOperationKind(operation, "system")) {
+      if (TransportOperations.hasKind(operation, "system")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<PrivateEnvelope>();
       }
     };
@@ -356,31 +373,31 @@ describe("@spine-event-engine/transport", () => {
         // @ts-expect-error a nested kind check does not narrow the complete operation union.
         expectTypeOf(operation.envelope).toEqualTypeOf<Event>();
       }
-      if (isTransportOperationKind(operation, "event")) {
+      if (TransportOperations.hasKind(operation, "event")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<Event>();
       }
-      if (isTransportOperationKind(operation, "query")) {
+      if (TransportOperations.hasKind(operation, "query")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<PrivateEnvelope>();
       }
       // @ts-expect-error restricted operation kinds reject kinds outside their union.
-      isTransportOperationKind(operation, "command");
+      TransportOperations.hasKind(operation, "command");
     };
     const narrowTopic = (topic: TransportTopic): void => {
       if (topic.signalKind === "command") {
         // @ts-expect-error a nested kind check does not narrow the complete topic contract.
         expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
       }
-      if (isTransportTopicKind(topic, "command")) {
+      if (TransportTopics.hasKind(topic, "command")) {
         expectTypeOf(topic.signalKind).toEqualTypeOf<"command">();
         expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
       }
     };
     const rejectUnrelatedTopicKind = (topic: TransportTopic<"command" | "system">): void => {
       // @ts-expect-error restricted topic kinds reject kinds outside their union.
-      isTransportTopicKind(topic, "event");
+      TransportTopics.hasKind(topic, "event");
     };
     const rejectSubscription = (): void => {
-      const subscription = createTransportSubscription({
+      const subscription = TransportSubscriptions.create({
         subscriberId: "projection-worker",
         topic: {
           signalKind: "event",
@@ -389,27 +406,27 @@ describe("@spine-event-engine/transport", () => {
       });
 
       // @ts-expect-error subscriptions are topic-only containers, not transport operations.
-      isTransportOperationKind(subscription, "event");
+      TransportOperations.hasKind(subscription, "event");
     };
     const narrowOpenOperation = (operation: OpenPublishOperation): void => {
-      if (isTransportOperationKind(operation, "command")) {
+      if (TransportOperations.hasKind(operation, "command")) {
         expectTypeOf(operation.envelope).toEqualTypeOf<Command>();
         expectTypeOf(operation.operationRefinement).toEqualTypeOf<"open-operation">();
       }
     };
     const narrowOpenTopic = (topic: OpenTopic): void => {
-      if (isTransportTopicKind(topic, "event")) {
+      if (TransportTopics.hasKind(topic, "event")) {
         expectTypeOf(topic.signalKind).toEqualTypeOf<"event">();
         expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
         expectTypeOf(topic.topicRefinement).toEqualTypeOf<"open-topic">();
       }
     };
     const narrowDualValue = (value: OpenDualValue): void => {
-      if (isTransportOperationKind(value, "command")) {
+      if (TransportOperations.hasKind(value, "command")) {
         expectTypeOf(value.envelope).toEqualTypeOf<Command>();
         expectTypeOf(value.dualRefinement).toEqualTypeOf<"dual">();
       }
-      if (isTransportTopicKind(value, "event")) {
+      if (TransportTopics.hasKind(value, "event")) {
         expectTypeOf(value.signalKind).toEqualTypeOf<"event">();
         expectTypeOf(value.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
         expectTypeOf(value.dualRefinement).toEqualTypeOf<"dual">();
@@ -442,14 +459,14 @@ describe("@spine-event-engine/transport", () => {
       }),
     );
 
-    if (isTransportTopicKind(topic, "command")) {
+    if (TransportTopics.hasKind(topic, "command")) {
       expectTypeOf(topic.signalKind).toEqualTypeOf<"command">();
       expectTypeOf(topic.routing.signalKind).toEqualTypeOf<TransportSignalKind>();
       // @ts-expect-error the helper does not observe or narrow the routing descriptor.
       expectTypeOf(topic.routing.signalKind).toEqualTypeOf<"command">();
     }
 
-    expect(isTransportTopicKind(topic, "command")).toBe(true);
+    expect(TransportTopics.hasKind(topic, "command")).toBe(true);
     expect(topic.routing.signalKind).toBe("event");
   });
 
@@ -460,11 +477,11 @@ describe("@spine-event-engine/transport", () => {
         readonly dualRefinement: "dual";
       };
     const widenDualValue = (value: OpenDualValue): OpenDualValue => value;
-    const eventTopic = createTransportTopic({
+    const eventTopic = TransportTopics.create({
       signalKind: "event",
       messageTypeUrl: "type.spine.io/spine.core.Event",
     });
-    const commandTopic = createTransportTopic({
+    const commandTopic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/spine.core.Command",
     });
@@ -481,17 +498,17 @@ describe("@spine-event-engine/transport", () => {
       }),
     );
 
-    expect(isTransportOperationKind(dualValue, "command")).toBe(true);
-    expect(isTransportOperationKind(dualValue, "event")).toBe(false);
-    expect(isTransportTopicKind(dualValue, "event")).toBe(true);
-    expect(isTransportTopicKind(dualValue, "command")).toBe(false);
+    expect(TransportOperations.hasKind(dualValue, "command")).toBe(true);
+    expect(TransportOperations.hasKind(dualValue, "event")).toBe(false);
+    expect(TransportTopics.hasKind(dualValue, "event")).toBe(true);
+    expect(TransportTopics.hasKind(dualValue, "command")).toBe(false);
     expect(envelopeReads).toBe(0);
   });
 
   it("classifies accepted topic and operation domains without inspecting envelopes", () => {
     const widenTopic = (value: TransportTopic) => value;
     const widenOperation = (value: PublishTransportOperation) => value;
-    const commandTopic = createTransportTopic({
+    const commandTopic = TransportTopics.create({
       signalKind: "command",
       messageTypeUrl: "type.spine.io/spine.core.Command",
     });
@@ -508,10 +525,10 @@ describe("@spine-event-engine/transport", () => {
       }),
     );
 
-    expect(isTransportTopicKind(topic, "command")).toBe(true);
-    expect(isTransportTopicKind(topic, "event")).toBe(false);
-    expect(isTransportOperationKind(operation, "command")).toBe(true);
-    expect(isTransportOperationKind(operation, "event")).toBe(false);
+    expect(TransportTopics.hasKind(topic, "command")).toBe(true);
+    expect(TransportTopics.hasKind(topic, "event")).toBe(false);
+    expect(TransportOperations.hasKind(operation, "command")).toBe(true);
+    expect(TransportOperations.hasKind(operation, "event")).toBe(false);
     expect(envelopeReads).toBe(0);
     expect(operation.topic).toBe(topic);
     expect(Object.isFrozen(operation)).toBe(true);
