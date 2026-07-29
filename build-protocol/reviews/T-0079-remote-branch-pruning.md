@@ -106,3 +106,26 @@ Return the complete accepted batch to the existing implementer. The
 expected/configured profile remains `gpt-5.6-terra`, medium reasoning,
 explicitly dispatched. Runtime self-metadata will be recorded if returned;
 otherwise the immutable configured profile is the evidence.
+
+## Correction Result and Review Wave 2 Assignments
+
+- The execution records now include the exact
+  `git push --atomic --force-with-lease origin` retry with fully qualified
+  deletion refspecs.
+- The committed expected-ref TSV and published read-only `git ls-remote`
+  verifier assert the exact two-head name set, exact `main`, one valid dynamic
+  T-0079 tip, and the exact 17 archive tag name/SHA pairs with no extras.
+- The orchestrator executed the published block live:
+  `CLOSED_WORLD_PASS heads=2`, exact `main` `0fa0b39c`, one valid dynamic
+  T-0079 SHA, and `tags=17`.
+
+Review immutable correction range `afca27bc..bd204d53`:
+
+- Existing style/maintainability reviewer; expected/configured
+  `gpt-5.6-terra`, high reasoning.
+- Existing documentation reviewer; immutable configured
+  `gpt-5.6-luna`, medium reasoning.
+
+Both roles and profiles are explicit before dispatch. Runtime self-metadata
+will be recorded if returned; otherwise the immutable configured profiles are
+the available evidence.
