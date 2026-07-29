@@ -2,9 +2,8 @@
 
 ## Review Endpoint
 
-Accepted task endpoint from immutable base
-`1a42f3ba8f23cc6091ae3b6d8e994dec8c3b0b80`. The containing T-0080D task
-commit is the reviewed endpoint and is recorded after commit creation.
+Accepted task endpoint `88b6e19c` from immutable base
+`1a42f3ba8f23cc6091ae3b6d8e994dec8c3b0b80`.
 
 ## Required Concerns
 
