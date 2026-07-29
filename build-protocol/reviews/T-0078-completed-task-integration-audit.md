@@ -106,6 +106,22 @@ all-ref abbreviation resolution, regenerate and re-audit the count, and add a
 generated-file equality check. Runtime self-metadata will be recorded when
 returned; if unavailable, the configured profile is the available evidence.
 
+## Review Wave 3 Assignments
+
+Review immutable correction range `3aa9b02d..f1183eee`:
+
+- Existing style/maintainability reviewer; expected/configured
+  `gpt-5.6-terra`, high reasoning. Verify explicit top-level status semantics,
+  immutable inputs, fixed preservation handling, `--check`, and closure of all
+  accepted findings.
+- Existing documentation reviewer; immutable configured
+  `gpt-5.6-luna`, medium reasoning. Verify the corrected 172-record count,
+  status vocabulary, ancestry/rescue statements, and reproduction guidance.
+
+Both existing roles and profiles are explicit before dispatch. Runtime
+self-metadata will be recorded when returned; otherwise the configured
+immutable profiles are the available evidence.
+
 ## Review Wave 2 Correction Result
 
 - Existing implementer profile: explicitly configured `gpt-5.6-terra`, medium
