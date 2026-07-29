@@ -9,7 +9,7 @@ import {
 } from "@spine-event-engine/proto/delivery-server";
 import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
 
-import { createInMemoryDeliveryServerCore } from "../../src/index.js";
+import { InMemoryDelivery } from "../../src/index.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
@@ -17,7 +17,7 @@ const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worke
 
 describe("in-memory Shards", () => {
   it("allows exactly one active pickup and allows reacquisition after worker-agnostic release", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const request = create(PickUpShardSchema, { shard, worker });
     const results = await Promise.all(
       Array.from({ length: 20 }, () => Promise.resolve(core.shards.pickShard(request, context))),
@@ -30,7 +30,7 @@ describe("in-memory Shards", () => {
   });
 
   it("detaches already-picked-up workers and requires a release worker", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const request = create(PickUpShardSchema, { shard, worker });
     await core.shards.pickShard(request, context);
     const rejected = await core.shards.pickShard(request, context);
@@ -46,7 +46,7 @@ describe("in-memory Shards", () => {
 
   it("uses strict automatic and inclusive manual expiration boundaries", async () => {
     let now = 100;
-    const core = createInMemoryDeliveryServerCore({ processingTimeoutMs: 10, now: () => now });
+    const core = InMemoryDelivery.create({ processingTimeoutMs: 10, now: () => now });
     const request = create(PickUpShardSchema, { shard, worker });
     await core.shards.pickShard(request, context);
     now = 110;
@@ -68,13 +68,13 @@ describe("in-memory Shards", () => {
   it("takes over one millisecond after timeout and never takes over when timeout is zero", async () => {
     let now = 0;
     const request = create(PickUpShardSchema, { shard, worker });
-    const strict = createInMemoryDeliveryServerCore({ processingTimeoutMs: 10, now: () => now });
+    const strict = InMemoryDelivery.create({ processingTimeoutMs: 10, now: () => now });
     await strict.shards.pickShard(request, context);
     now = 11;
     await expect(strict.shards.pickShard(request, context)).resolves.toMatchObject({
       value: { case: "pickedUp" },
     });
-    const disabled = createInMemoryDeliveryServerCore({ processingTimeoutMs: 0, now: () => now });
+    const disabled = InMemoryDelivery.create({ processingTimeoutMs: 0, now: () => now });
     await disabled.shards.pickShard(request, context);
     now = 1_000_000;
     await expect(disabled.shards.pickShard(request, context)).resolves.toMatchObject({
@@ -85,17 +85,17 @@ describe("in-memory Shards", () => {
   it("rejects an invalid clock before storing a shard session", async () => {
     const request = create(PickUpShardSchema, { shard, worker });
     for (const now of [Number.NaN, -62_135_596_800_001, 253_402_300_800_000]) {
-      const core = createInMemoryDeliveryServerCore({ now: () => now });
+      const core = InMemoryDelivery.create({ now: () => now });
       await expect(core.shards.pickShard(request, context)).rejects.toBeInstanceOf(RangeError);
     }
-    const healthy = createInMemoryDeliveryServerCore({ now: () => 0 });
+    const healthy = InMemoryDelivery.create({ now: () => 0 });
     await expect(healthy.shards.pickShard(request, context)).resolves.toMatchObject({
       value: { case: "pickedUp" },
     });
   });
 
   it("treats absent and repeated releases as no-ops regardless of supplied worker", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const request = create(PickUpShardSchema, { shard, worker });
     await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
     await core.shards.pickShard(request, context);
@@ -113,7 +113,7 @@ describe("in-memory Shards", () => {
   });
 
   it("rejects malformed shard workers and protobuf-overflow durations", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     await expect(
       core.shards.pickShard(
         create(PickUpShardSchema, { shard: { index: -1, ofTotal: 1 }, worker }),
@@ -143,7 +143,7 @@ describe("in-memory Shards", () => {
   });
 
   it("rejects impossible shard identities before pickup or release admission", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const impossible = create(ShardIndexSchema, { index: 1, ofTotal: 1 });
     await expect(
       core.shards.pickShard(create(PickUpShardSchema, { shard: impossible, worker }), context),
@@ -160,7 +160,7 @@ describe("in-memory Shards", () => {
   });
 
   it("rejects a new session once tracked-shard capacity is full", async () => {
-    const core = createInMemoryDeliveryServerCore({ maxTrackedShards: 1 });
+    const core = InMemoryDelivery.create({ maxTrackedShards: 1 });
     const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     await core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
     await expect(
@@ -169,7 +169,7 @@ describe("in-memory Shards", () => {
   });
 
   it("prunes released message-free shards so normal churn does not consume capacity", async () => {
-    const core = createInMemoryDeliveryServerCore({ maxTrackedShards: 1 });
+    const core = InMemoryDelivery.create({ maxTrackedShards: 1 });
     const other = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     await core.shards.pickShard(create(PickUpShardSchema, { shard, worker }), context);
     await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
@@ -180,7 +180,7 @@ describe("in-memory Shards", () => {
 
   it("does not manually expire below the threshold", async () => {
     let now = 0;
-    const core = createInMemoryDeliveryServerCore({ now: () => now });
+    const core = InMemoryDelivery.create({ now: () => now });
     const request = create(PickUpShardSchema, { shard, worker });
     await core.shards.pickShard(request, context);
     now = 9;
@@ -198,7 +198,7 @@ describe("in-memory Shards", () => {
 
   it("releases every eligible active shard atomically at the manual boundary", async () => {
     let now = 0;
-    const core = createInMemoryDeliveryServerCore({ now: () => now });
+    const core = InMemoryDelivery.create({ now: () => now });
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     await core.shards.pickShard(create(PickUpShardSchema, { shard: first, worker }), context);

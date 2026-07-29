@@ -6,6 +6,7 @@ export class MutationAdmission {
   #scheduled = false;
   #closed = false;
 
+  /** Closes admission and rejects pending mutations. */
   close(): void {
     this.#closed = true;
     const error = new ConnectError("Delivery server is closed.", Code.Unavailable);
@@ -13,10 +14,15 @@ export class MutationAdmission {
     this.#pending = [];
   }
 
+  /** Queues one synchronous state mutation.
+   * @param signal Cancels admission before commit.
+   * @param commit Performs the linearized mutation.
+   * @returns Resolves with the committed value.
+   */
   run<T>(signal: AbortSignal | undefined, commit: () => T): Promise<T> {
     if (this.#closed)
       return Promise.reject(new ConnectError("Delivery server is closed.", Code.Unavailable));
-    if (signal?.aborted) return Promise.reject(abortError(signal));
+    if (signal?.aborted) return Promise.reject(this.#abortError(signal));
     if (this.#pending.length >= 100)
       return Promise.reject(
         new ConnectError("Delivery mutation queue is full.", Code.ResourceExhausted),
@@ -24,7 +30,7 @@ export class MutationAdmission {
     return new Promise<T>((resolve, reject) => {
       const admission = () => {
         if (signal?.aborted) {
-          reject(abortError(signal));
+          reject(this.#abortError(signal));
           return;
         }
         try {
@@ -49,8 +55,8 @@ export class MutationAdmission {
     this.#pending = [];
     for (const admission of pending) admission.admit();
   }
-}
 
-function abortError(signal: AbortSignal): Error {
-  return signal.reason instanceof Error ? signal.reason : new Error("Delivery mutation aborted.");
+  #abortError(signal: AbortSignal): Error {
+    return signal.reason instanceof Error ? signal.reason : new Error("Delivery mutation aborted.");
+  }
 }

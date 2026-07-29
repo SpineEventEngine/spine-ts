@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createInMemoryDeliveryServerCore,
   DeliveryServer,
+  InMemoryDelivery,
+  type DeliveryCore,
+  type DeliveryCoreOptions,
   type DeliveryServerOptions,
 } from "../src/index.js";
 
-describe("createInMemoryDeliveryServerCore", () => {
+describe("InMemoryDelivery", () => {
   it("creates an isolated core with only Inbox and Shard handler seams", () => {
-    const core = createInMemoryDeliveryServerCore();
+    const options: DeliveryCoreOptions = {};
+    const core: DeliveryCore = InMemoryDelivery.create(options);
 
     expect(core.inbox).toBeDefined();
     expect(core.shards).toBeDefined();

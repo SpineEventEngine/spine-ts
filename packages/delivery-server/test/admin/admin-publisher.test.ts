@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { ShardIndexSchema } from "@spine-event-engine/proto/delivery";
 
-import { createAdminPublisher } from "../../src/admin/admin-service.js";
+import { AdminPublisher } from "../../src/admin/admin-service.js";
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
 
 const context = { signal: new AbortController().signal } as never;
@@ -13,7 +13,7 @@ const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
 
 describe("Admin publisher", () => {
   it("drops changes before the acknowledgement and publishes complete later observations", async () => {
-    const publisher = createAdminPublisher(new InMemoryDeliveryState());
+    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
       [Symbol.asyncIterator]();
@@ -30,7 +30,7 @@ describe("Admin publisher", () => {
   });
 
   it("completes a waiting stream during publisher shutdown", async () => {
-    const publisher = createAdminPublisher(new InMemoryDeliveryState());
+    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
       [Symbol.asyncIterator]();
@@ -41,7 +41,7 @@ describe("Admin publisher", () => {
   });
 
   it("rejects the 101st pending update with the stable resource error", async () => {
-    const publisher = createAdminPublisher(new InMemoryDeliveryState());
+    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
       [Symbol.asyncIterator]();
@@ -61,7 +61,7 @@ describe("Admin publisher", () => {
 
   it("maintains exact message counts without scanning canonical messages", () => {
     const state = new InMemoryDeliveryState();
-    const publisher = createAdminPublisher(state);
+    const publisher = AdminPublisher.create(state);
     publisher.recordMessageTransition(shard, 1);
     publisher.recordMessageTransition(shard, 1);
     publisher.recordMessageTransition(shard, -1);
@@ -71,7 +71,7 @@ describe("Admin publisher", () => {
   });
 
   it("removes an iterator returned by its caller", async () => {
-    const publisher = createAdminPublisher(new InMemoryDeliveryState());
+    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), context)
       [Symbol.asyncIterator]();
@@ -83,7 +83,7 @@ describe("Admin publisher", () => {
 
   it("unregisters and clears a waiting subscriber on caller cancellation", async () => {
     const controller = new AbortController();
-    const publisher = createAdminPublisher(new InMemoryDeliveryState());
+    const publisher = AdminPublisher.create(new InMemoryDeliveryState());
     const stream = publisher.service
       .subscribeToShardUpdates(create(EmptySchema), { signal: controller.signal } as never)
       [Symbol.asyncIterator]();

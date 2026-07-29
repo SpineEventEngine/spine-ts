@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createInMemoryDeliveryServerCore, DeliveryServer } from "../../src/index.js";
+import { DeliveryServer, InMemoryDelivery } from "../../src/index.js";
 
 describe("DeliveryServer configuration", () => {
   it("uses documented defaults and keeps configured zero", () => {
@@ -22,10 +22,10 @@ describe("DeliveryServer configuration", () => {
     expect(() => new DeliveryServer({ maxTrackedShards: 1_001 })).toThrow(
       "Delivery server tracked shard limit is invalid.",
     );
-    expect(() => createInMemoryDeliveryServerCore({ maxTrackedShards: 1_001 })).toThrow(
+    expect(() => InMemoryDelivery.create({ maxTrackedShards: 1_001 })).toThrow(
       "Delivery server maxTrackedShards is invalid.",
     );
-    expect(() => createInMemoryDeliveryServerCore({ maxRetainedMessages: 0 })).toThrow(
+    expect(() => InMemoryDelivery.create({ maxRetainedMessages: 0 })).toThrow(
       "Delivery server maxRetainedMessages is invalid.",
     );
   });

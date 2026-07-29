@@ -6,7 +6,7 @@ import type { EntityStorageInput } from "@spine-event-engine/storage/internal/en
 import { EntityHistoryConformance } from "../../storage/src/entity/history-conformance.js";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 
-import { CanonicalMysqlValue, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
+import { CanonicalMysqlValues, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
 import { entityHistorySchema } from "../src/mysql/entity-history.js";
 import {
   assertQueryProviderConformance,
@@ -666,7 +666,7 @@ describe("MysqlStorageFactory", () => {
       providerCalls: () => connectionAcquires,
       beforeRead: () => {
         operationRows = queryProviderConformanceRecords.map((value) => ({
-          slot_key: CanonicalMysqlValue.encode(value, 768),
+          slot_key: CanonicalMysqlValues.encode(value, 768),
           payload: toBinary(StringValueSchema, create(StringValueSchema, { value })),
         }));
       },
@@ -1574,7 +1574,7 @@ describe("MysqlStorageFactory", () => {
     connectionFailureAt = undefined;
     operationRows = [
       {
-        entity_key: CanonicalMysqlValue.encode("task", 768),
+        entity_key: CanonicalMysqlValues.encode("task", 768),
         producer_version: 1n,
         seconds: 1n,
         nanos: 0,
@@ -1935,11 +1935,11 @@ describe("MysqlStorageFactory", () => {
     expect(query?.sql).toContain("f0.value_kind = ? AND f0.value_data IN (?)");
     expect(query?.sql).toContain("ORDER BY r.slot_key ASC");
     expect(query?.values).toHaveLength(6);
-    expect(query?.values?.[0]).toEqual(CanonicalMysqlValue.encode("state", 255));
+    expect(query?.values?.[0]).toEqual(CanonicalMysqlValues.encode("state", 255));
     expect(query?.values?.[3]).toEqual(
-      CanonicalMysqlValue.encode(["Tasks", false, StringValueSchema.typeName], 512),
+      CanonicalMysqlValues.encode(["Tasks", false, StringValueSchema.typeName], 512),
     );
-    expect(query?.values?.[5]).toEqual(CanonicalMysqlValue.encode("slot-1", 768));
+    expect(query?.values?.[5]).toEqual(CanonicalMysqlValues.encode("slot-1", 768));
     await factory.close();
   });
 
@@ -2142,9 +2142,9 @@ describe("MysqlStorageFactory", () => {
         .filter(({ sql }) => sql.startsWith("INSERT INTO `spine_ts_records`"))
         .map(({ values }) => values?.[2]),
     ).toEqual([
-      CanonicalMysqlValue.encode("first", 768),
-      CanonicalMysqlValue.encode("second", 768),
-      CanonicalMysqlValue.encode("first", 768),
+      CanonicalMysqlValues.encode("first", 768),
+      CanonicalMysqlValues.encode("second", 768),
+      CanonicalMysqlValues.encode("first", 768),
     ]);
     await factory.close();
   });
@@ -2458,7 +2458,7 @@ describe("MysqlStorageFactory", () => {
     operationRows = [{ payload: encodedPayload }];
     await expect(storage.read("ready")).resolves.toEqual(payload);
     operationRows = [
-      { slot_key: CanonicalMysqlValue.encode("ready"), payload: encodedPayload },
+      { slot_key: CanonicalMysqlValues.encode("ready"), payload: encodedPayload },
       { slot_key: "corrupt", payload: encodedPayload },
     ];
     await expect(storage.queryEntries({})).rejects.toBeInstanceOf(MysqlStorageDataError);
@@ -2499,20 +2499,20 @@ describe("MysqlStorageFactory", () => {
     const open = SortableMysqlColumnValue.encode("open");
     const two = SortableMysqlColumnValue.encode(2);
     expect(query?.values).toEqual([
-      CanonicalMysqlValue.encode("state", 255),
+      CanonicalMysqlValues.encode("state", 255),
       open.kind,
       open.data,
       two.kind,
       two.data,
-      CanonicalMysqlValue.encode("state", 255),
-      CanonicalMysqlValue.encode(["Tasks", false, StringValueSchema.typeName], 512),
-      CanonicalMysqlValue.encode(null, 255),
+      CanonicalMysqlValues.encode("state", 255),
+      CanonicalMysqlValues.encode(["Tasks", false, StringValueSchema.typeName], 512),
+      CanonicalMysqlValues.encode(null, 255),
       open.kind,
       open.kind,
       open.data,
       open.kind,
       open.data,
-      CanonicalMysqlValue.encode("slot", 768),
+      CanonicalMysqlValues.encode("slot", 768),
       3,
     ]);
     await factory.close();

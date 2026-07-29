@@ -20,7 +20,7 @@ import {
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 
-import { CanonicalMysqlValue, SortableMysqlColumnValue } from "./value-codec.js";
+import { CanonicalMysqlValues, SortableMysqlColumnValue } from "./value-codec.js";
 import {
   MysqlEntityStorage,
   type MysqlEntityConnectionProvider,
@@ -94,28 +94,100 @@ const expectedIndexes = new Map<string, readonly string[]>([
 const expectedForeignKey = ["scope_key", "tenant_key", "slot_key"] as const;
 const expectedNullability = "NO";
 
-function entityExpectedNullability(): string {
-  return entityHistorySchema.columnNullable ? "YES" : "NO";
-}
-function entityTableNames(): readonly string[] {
-  return entityHistorySchema.tables.map((table) => table.name);
-}
+/** Verifies the fixed entity-history schema owned by the MySQL factory. */
+const EntitySchemaVerification = Object.freeze(
+  new (class {
+    nullability(): string {
+      return entityHistorySchema.columnNullable ? "YES" : "NO";
+    }
 
-function entityColumnExpectations() {
-  return new Map(
-    entityHistorySchema.tables.flatMap((table) =>
-      table.columns.map((column) => [`${table.name}.${column.name}`, column] as const),
-    ),
-  );
-}
+    tables(): readonly string[] {
+      return entityHistorySchema.tables.map((table) => table.name);
+    }
 
-function entityIndexExpectations() {
-  return new Map(
-    entityHistorySchema.tables.flatMap((table) =>
-      table.indexes.map((index) => [`${table.name}.${index.name}`, index] as const),
-    ),
-  );
-}
+    columns() {
+      return new Map(
+        entityHistorySchema.tables.flatMap((table) =>
+          table.columns.map((column) => [`${table.name}.${column.name}`, column] as const),
+        ),
+      );
+    }
+
+    indexes() {
+      return new Map(
+        entityHistorySchema.tables.flatMap((table) =>
+          table.indexes.map((index) => [`${table.name}.${index.name}`, index] as const),
+        ),
+      );
+    }
+
+    async verify(connection: PoolConnection): Promise<void> {
+      const tables = EntitySchemaVerification.tables();
+      const expectedColumns = EntitySchemaVerification.columns();
+      const expectedIndexes = EntitySchemaVerification.indexes();
+      const names = tables.map((table) => `'${table}'`).join(", ");
+      const [columns] = await connection.query<SchemaColumn[]>(
+        `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, COLUMN_TYPE AS column_type,
+              IS_NULLABLE AS is_nullable, EXTRA AS extra FROM information_schema.columns
+       WHERE table_schema = DATABASE() AND table_name IN (${names})`,
+      );
+      const actual = new Map(columns.map((row) => [`${row.table_name}.${row.column_name}`, row]));
+      for (const [column, expected] of expectedColumns) {
+        const row = actual.get(column);
+        if (
+          row?.column_type !== expected.mysqlType ||
+          row.is_nullable !== EntitySchemaVerification.nullability() ||
+          row.extra.toLowerCase() !== (expected.autoIncrement === true ? "auto_increment" : "")
+        )
+          throw new MysqlStorageSchemaError(`MySQL entity schema is incompatible at ${column}.`);
+      }
+      if (actual.size !== expectedColumns.size)
+        throw new MysqlStorageSchemaError("MySQL entity schema has unexpected columns.");
+      const [actualTables] = await connection.query<SchemaTable[]>(
+        `SELECT TABLE_NAME AS table_name, ENGINE AS engine FROM information_schema.tables
+       WHERE table_schema = DATABASE() AND table_name IN (${names})`,
+      );
+      if (
+        actualTables.length !== tables.length ||
+        actualTables.some(
+          (table) => table.engine?.toLowerCase() !== entityHistorySchema.engine.toLowerCase(),
+        )
+      )
+        throw new MysqlStorageSchemaError("MySQL entity tables must use InnoDB.");
+      const [indexes] = await connection.query<SchemaIndex[]>(
+        `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, SEQ_IN_INDEX AS seq_in_index,
+              COLUMN_NAME AS column_name, NON_UNIQUE AS non_unique, COLLATION AS collation
+       FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name IN (${names})
+       ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`,
+      );
+      const actualIndexes = new Map<string, SchemaIndex[]>();
+      for (const row of indexes) {
+        const name = `${row.table_name}.${row.index_name}`;
+        const rows = actualIndexes.get(name) ?? [];
+        if (row.seq_in_index !== rows.length + 1)
+          throw new MysqlStorageSchemaError(`MySQL entity index is incompatible at ${name}.`);
+        rows.push(row);
+        actualIndexes.set(name, rows);
+      }
+      if (actualIndexes.size !== expectedIndexes.size)
+        throw new MysqlStorageSchemaError("MySQL entity schema has unexpected indexes.");
+      for (const [index, expected] of expectedIndexes) {
+        const rows = actualIndexes.get(index);
+        if (
+          rows?.length !== expected.columns.length ||
+          rows.some(
+            (row, position) =>
+              row.column_name !== expected.columns[position]?.name ||
+              row.non_unique !== (expected.primary === true || expected.unique === true ? 0 : 1) ||
+              row.collation?.toUpperCase() !==
+                (expected.columns[position].direction === "DESC" ? "D" : "A"),
+          )
+        )
+          throw new MysqlStorageSchemaError(`MySQL entity index is incompatible at ${index}.`);
+      }
+    }
+  })(),
+);
 
 /** Explicit connection and pool settings for the owned MySQL adapter pool. */
 export interface MysqlStorageOptions {
@@ -136,6 +208,11 @@ export interface MysqlStorageOptions {
 
 /** Thrown when the adapter cannot safely use the supplied MySQL configuration. */
 export class MysqlStorageConfigurationError extends Error {
+  /**
+   * Creates a configuration error with the validation message.
+   * @param message The invalid setting.
+   * @returns A configuration error.
+   */
   constructor(message: string) {
     super(message);
     this.name = "MysqlStorageConfigurationError";
@@ -144,6 +221,7 @@ export class MysqlStorageConfigurationError extends Error {
 
 /** Thrown when the adapter cannot connect, initialize, or close without exposing provider details. */
 export class MysqlStorageConnectionError extends Error {
+  /** Creates the stable connection-failure error. @returns A connection error. */
   constructor() {
     super("MySQL storage could not connect, initialize, or close.");
     this.name = "MysqlStorageConnectionError";
@@ -152,6 +230,11 @@ export class MysqlStorageConnectionError extends Error {
 
 /** Thrown when fixed adapter-owned tables do not have the required shape. */
 export class MysqlStorageSchemaError extends Error {
+  /**
+   * Creates a schema error with the incompatible detail.
+   * @param message The schema detail.
+   * @returns A schema error.
+   */
   constructor(message: string) {
     super(message);
     this.name = "MysqlStorageSchemaError";
@@ -160,6 +243,7 @@ export class MysqlStorageSchemaError extends Error {
 
 /** Thrown when durable MySQL record data cannot be decoded safely. */
 export class MysqlStorageDataError extends Error {
+  /** Creates the stable invalid-data error. @returns A data error. */
   constructor() {
     super("MySQL storage data could not be decoded.");
     this.name = "MysqlStorageDataError";
@@ -168,6 +252,7 @@ export class MysqlStorageDataError extends Error {
 
 /** Thrown when a record operation cannot complete without exposing provider details. */
 export class MysqlStorageOperationError extends Error {
+  /** Creates the stable record-operation error. @returns An operation error. */
   constructor() {
     super("MySQL storage record operation could not complete.");
     this.name = "MysqlStorageOperationError";
@@ -189,9 +274,13 @@ export class MysqlStorageFactory extends StorageFactory {
     this.#pool = pool;
   }
 
-  /** Connects, creates or verifies the fixed schema, and returns a ready-to-use factory. */
+  /**
+   * Connects, creates or verifies the fixed schema, and returns a ready-to-use factory.
+   * @param options The MySQL connection and pool settings.
+   * @returns A connected storage factory.
+   */
   static async create(options: MysqlStorageOptions): Promise<MysqlStorageFactory> {
-    const url = validateOptions(options);
+    const url = MysqlOptions.validate(options);
     const pool = createPool({
       host: url.hostname,
       ...(url.port.length > 0 ? { port: Number(url.port) } : {}),
@@ -246,6 +335,8 @@ export class MysqlStorageFactory extends StorageFactory {
    *
    * The factory closes all live bundles during shutdown. MySQL is the only
    * implementation; PostgreSQL support is future work.
+   * @param input The entity storage contract.
+   * @returns An entity history storage handle.
    */
   createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
@@ -255,7 +346,7 @@ export class MysqlStorageFactory extends StorageFactory {
       input,
       this.entityConnections(),
       this.database,
-      verifyEntitySchema,
+      (connection) => EntitySchemaVerification.verify(connection),
       () => this.#handles.delete(handle),
     );
     this.#handles.add(handle);
@@ -314,7 +405,7 @@ export class MysqlStorageFactory extends StorageFactory {
     try {
       await connection.query(createRecordsTable);
       await connection.query(createColumnsTable);
-      await verifySchema(connection);
+      await RecordSchemaVerification.verify(connection);
     } finally {
       connection.release();
     }
@@ -378,7 +469,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     private readonly onClose: () => void,
   ) {
     super(context, recordSpec);
-    this.#scope = CanonicalMysqlValue.encode(
+    this.#scope = CanonicalMysqlValues.encode(
       [context.name, context.multitenant, recordSpec.schema.typeName],
       scopeKeyBytes,
     );
@@ -391,7 +482,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 
   protected async deleteRecord(id: I): Promise<boolean> {
-    const slot = CanonicalMysqlValue.encode(id, slotKeyBytes);
+    const slot = CanonicalMysqlValues.encode(id, slotKeyBytes);
     const tenant = this.tenant();
     const connection = await this.acquireConnection();
     try {
@@ -412,7 +503,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
 
   protected async queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
     const tenant = this.tenant();
-    const compiled = compileQuery(query, this.#scope, tenant);
+    const compiled = MysqlQueries.compile(query, this.#scope, tenant);
     if (compiled === undefined) return [];
     const connection = await this.acquireConnection();
     try {
@@ -420,7 +511,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
         compiled.sql,
         compiled.values as (Uint8Array | number)[],
       );
-      return rows.map((row) => decodeQueryRow(this.recordSpec, row));
+      return rows.map((row) => MysqlRecords.decodeQueryRow(this.recordSpec, row));
     } catch (error) {
       if (error instanceof MysqlStorageDataError) throw error;
       throw new MysqlStorageOperationError();
@@ -440,14 +531,14 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     const tenant = this.tenant();
-    const compiled = compilePlan(plan, this.#scope, tenant);
+    const compiled = MysqlQueries.plan(plan, this.#scope, tenant);
     const connection = await this.acquireConnection();
     try {
       const [rows] = await connection.query<QueryRow[]>(
         compiled.sql,
         compiled.values as (Uint8Array | number)[],
       );
-      return rows.map((row) => decodeQueryRow(this.recordSpec, row));
+      return rows.map((row) => MysqlRecords.decodeQueryRow(this.recordSpec, row));
     } catch (error) {
       if (error instanceof MysqlStorageDataError) throw error;
       throw new MysqlStorageOperationError();
@@ -457,7 +548,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 
   protected async readRecord(id: I): Promise<R | undefined> {
-    const slot = CanonicalMysqlValue.encode(id, slotKeyBytes);
+    const slot = CanonicalMysqlValues.encode(id, slotKeyBytes);
     const tenant = this.tenant();
     const connection = await this.acquireConnection();
     try {
@@ -486,7 +577,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
-    const slot = CanonicalMysqlValue.encode(id, slotKeyBytes);
+    const slot = CanonicalMysqlValues.encode(id, slotKeyBytes);
     const expectedPayload = expected === undefined ? undefined : this.payload(expected.record);
     const replacement = next === undefined ? undefined : this.prepare(next, slot);
     const tenant = this.tenant();
@@ -501,7 +592,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
             [this.#scope, tenant, replacement.slot, replacement.payload],
           );
         } catch (error) {
-          duplicateCreate = isDuplicateKey(error);
+          duplicateCreate = MysqlRecords.duplicateKey(error);
           throw error;
         }
         await this.insertColumns(connection, tenant, replacement);
@@ -522,7 +613,10 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
         return true;
       } else {
         if (!(current.payload instanceof Uint8Array)) throw new MysqlStorageDataError();
-        if (expectedPayload === undefined || !sameBytes(current.payload, expectedPayload)) {
+        if (
+          expectedPayload === undefined ||
+          !MysqlRecords.sameBytes(current.payload, expectedPayload)
+        ) {
           await connection.rollback();
           return false;
         }
@@ -610,14 +704,14 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
 
   private prepare(
     record: ReturnType<RecordSpec<I, R>["materialize"]>,
-    slot = CanonicalMysqlValue.encode(record.id, slotKeyBytes),
+    slot = CanonicalMysqlValues.encode(record.id, slotKeyBytes),
   ): PreparedRecord {
     return {
       slot,
       payload: this.payload(record.record),
       columns: [...record.columns].map(([name, value]) => ({
-        name: encodeColumnName(name),
-        value: encodeColumnValue(value),
+        name: MysqlColumns.encodeName(name),
+        value: MysqlColumns.encodeValue(value),
       })),
     };
   }
@@ -659,12 +753,12 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 
   private tenant(): Uint8Array {
-    if (!this.context.multitenant) return CanonicalMysqlValue.encode(null, tenantKeyBytes);
+    if (!this.context.multitenant) return CanonicalMysqlValues.encode(null, tenantKeyBytes);
     const tenantId = this.context.tenantId;
     if (tenantId === undefined || tenantId.trim().length === 0) {
       throw new MysqlStorageConfigurationError("Multitenant storage requires context.tenantId.");
     }
-    return CanonicalMysqlValue.encode(tenantId, tenantKeyBytes);
+    return CanonicalMysqlValues.encode(tenantId, tenantKeyBytes);
   }
 }
 
@@ -685,231 +779,6 @@ interface PreparedRecord {
   }[];
 }
 
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return (
-    left.byteLength === right.byteLength && left.every((value, index) => value === right[index])
-  );
-}
-
-function isDuplicateKey(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && Reflect.get(error, "code") === "ER_DUP_ENTRY"
-  );
-}
-
-function encodeColumnName(name: string): Uint8Array {
-  if (name.trim().length === 0)
-    throw new MysqlStorageConfigurationError("MySQL record column name must not be blank.");
-  return CanonicalMysqlValue.encode(name, columnNameBytes);
-}
-
-function encodeColumnValue(value: unknown): { readonly data: Uint8Array; readonly kind: number } {
-  try {
-    return SortableMysqlColumnValue.encode(value);
-  } catch {
-    throw new MysqlStorageConfigurationError("MySQL record column has an unsupported value.");
-  }
-}
-
-function compileQuery<I>(
-  query: RecordQuery<I>,
-  scope: Uint8Array,
-  tenant: Uint8Array,
-): CompiledQuery | undefined {
-  validateQuery(query);
-  const filters = query.filters ?? [];
-  const filterValues = filters.map((filter) => ({
-    column: queryColumn(filter.column),
-    values: Array.isArray(filter.value) ? filter.value : [filter.value],
-  }));
-  if (filterValues.some((filter) => filter.values.length === 0)) return undefined;
-
-  const ids = query.ids?.map((id) => CanonicalMysqlValue.encode(id, slotKeyBytes)) ?? [];
-  const sorts: { readonly column: string; readonly direction: "ASC" | "DESC" }[] = (
-    query.sort ?? []
-  ).map((order) => ({
-    column: queryColumn(order.field),
-    direction: order.direction === "desc" ? "DESC" : "ASC",
-  }));
-  const joins: SqlClause[] = [];
-
-  for (const [index, filter] of filterValues.entries()) {
-    if (filter.column === "id") continue;
-    const alias = `f${String(index)}`;
-    const encoded = uniqueEncoded(filter.values.map(encodeColumnValue));
-    joins.push(columnFilter(alias, filter.column, encoded));
-  }
-  for (const [index, sort] of sorts.entries()) {
-    if (sort.column === "id") continue;
-    const alias = `s${String(index)}`;
-    joins.push({
-      sql: `INNER JOIN ${columnsTable} AS ${alias}
-         ON ${alias}.scope_key = r.scope_key AND ${alias}.tenant_key = r.tenant_key
-        AND ${alias}.slot_key = r.slot_key AND ${alias}.column_name = ?`,
-      values: [encodeColumnName(sort.column)],
-    });
-  }
-
-  const where: SqlClause[] = [
-    { sql: "r.scope_key = ?", values: [scope] },
-    { sql: "r.tenant_key = ?", values: [tenant] },
-  ];
-  if (ids.length > 0) {
-    where.push({ sql: `r.slot_key IN (${placeholders(ids.length)})`, values: ids });
-  }
-  for (const filter of filterValues) {
-    if (filter.column !== "id") continue;
-    const encoded = filter.values.map((value) => CanonicalMysqlValue.encode(value, slotKeyBytes));
-    where.push({ sql: `r.slot_key IN (${placeholders(encoded.length)})`, values: encoded });
-  }
-  const continuation = compileContinuation(query, sorts);
-  if (continuation !== undefined) {
-    where.push(continuation);
-  }
-  const order = [
-    ...sorts.map((sort, index) =>
-      sort.column === "id"
-        ? `r.slot_key ${sort.direction}`
-        : `s${String(index)}.value_kind ${sort.direction}, s${String(index)}.value_data ${sort.direction}`,
-    ),
-    "r.slot_key ASC",
-  ];
-  let window: SqlClause = { sql: "", values: [] };
-  if (query.limit !== undefined) {
-    window = { sql: " LIMIT ?", values: [query.limit] };
-    if (query.offset !== undefined) {
-      window = { sql: " LIMIT ? OFFSET ?", values: [query.limit, query.offset] };
-    }
-  } else if (query.offset !== undefined) {
-    window = { sql: " LIMIT 18446744073709551615 OFFSET ?", values: [query.offset] };
-  }
-  const values = [
-    ...joins.flatMap((clause) => clause.values),
-    ...where.flatMap((clause) => clause.values),
-    ...window.values,
-  ];
-  if (values.length > maxQueryBinds) {
-    throw new MysqlStorageConfigurationError(
-      `MySQL queries support at most ${String(maxQueryBinds)} bound values.`,
-    );
-  }
-  return {
-    sql: `SELECT r.slot_key, r.payload FROM ${recordsTable} AS r
-${joins.map((clause) => clause.sql).join("\n")}
-WHERE ${where.map((clause) => clause.sql).join(" AND ")}
-ORDER BY ${order.join(", ")}${window.sql}`,
-    values,
-  };
-}
-
-function compilePlan<I>(
-  plan: NormalizedQueryPlan<I>,
-  scope: Uint8Array,
-  tenant: Uint8Array,
-): CompiledQuery {
-  const comparisons = collectComparisons(plan.predicate);
-  const joins: SqlClause[] = comparisons.map((comparison, index) => ({
-    sql: `LEFT JOIN ${columnsTable} AS p${String(index)}
-       ON p${String(index)}.scope_key = r.scope_key AND p${String(index)}.tenant_key = r.tenant_key
-      AND p${String(index)}.slot_key = r.slot_key AND p${String(index)}.column_name = ?`,
-    values: [encodeColumnName(comparison.column)],
-  }));
-  for (const [index, order] of (plan.order ?? []).entries()) {
-    joins.push({
-      sql: `LEFT JOIN ${columnsTable} AS s${String(index)}
-       ON s${String(index)}.scope_key = r.scope_key AND s${String(index)}.tenant_key = r.tenant_key
-      AND s${String(index)}.slot_key = r.slot_key AND s${String(index)}.column_name = ?`,
-      values: [encodeColumnName(order.column)],
-    });
-  }
-  const where: SqlClause[] = [
-    { sql: "r.scope_key = ?", values: [scope] },
-    { sql: "r.tenant_key = ?", values: [tenant] },
-  ];
-  if (plan.predicate !== undefined) {
-    where.push(compilePredicate(plan.predicate, comparisons));
-  }
-  const order = [
-    ...(plan.order ?? []).flatMap((item, index) => {
-      const direction = item.direction === "desc" ? "DESC" : "ASC";
-      return [
-        `s${String(index)}.value_kind ${direction}`,
-        `s${String(index)}.value_data ${direction}`,
-      ];
-    }),
-    "r.slot_key ASC",
-  ];
-  const materializationLimit =
-    plan.candidateLimit === undefined ? plan.limit : plan.candidateLimit + 1;
-  const window: SqlClause =
-    materializationLimit === undefined
-      ? { sql: "", values: [] }
-      : { sql: " LIMIT ?", values: [materializationLimit] };
-  const values = [
-    ...joins.flatMap((clause) => clause.values),
-    ...where.flatMap((clause) => clause.values),
-    ...window.values,
-  ];
-  if (values.length > maxQueryBinds) {
-    throw new MysqlStorageConfigurationError(
-      `MySQL queries support at most ${String(maxQueryBinds)} bound values.`,
-    );
-  }
-  return {
-    sql: `SELECT r.slot_key, r.payload FROM ${recordsTable} AS r
-${joins.map((clause) => clause.sql).join("\n")}
-WHERE ${where.map((clause) => clause.sql).join(" AND ")}
-ORDER BY ${order.join(", ")}${window.sql}`,
-    values,
-  };
-}
-
-function collectComparisons<I>(
-  predicate: NormalizedQueryPredicate<I> | undefined,
-): readonly Extract<NormalizedQueryPredicate<I>, { readonly kind: "comparison" }>[] {
-  if (predicate === undefined || predicate.kind === "ids") return [];
-  if (predicate.kind === "comparison") return [predicate];
-  return predicate.predicates.flatMap(collectComparisons);
-}
-
-function compilePredicate<I>(
-  predicate: NormalizedQueryPredicate<I>,
-  comparisons: readonly Extract<NormalizedQueryPredicate<I>, { readonly kind: "comparison" }>[],
-): SqlClause {
-  if (predicate.kind === "ids") {
-    const ids = predicate.ids.map((id) => CanonicalMysqlValue.encode(id, slotKeyBytes));
-    return { sql: `r.slot_key IN (${placeholders(ids.length)})`, values: ids };
-  }
-  if (predicate.kind === "comparison") {
-    const index = comparisons.indexOf(predicate);
-    const alias = `p${String(index)}`;
-    const encoded = encodeColumnValue(predicate.value);
-    if (predicate.operator === "equal") {
-      return {
-        sql: `(${alias}.value_kind = ? AND ${alias}.value_data = ?)`,
-        values: [encoded.kind, encoded.data],
-      };
-    }
-    const comparison =
-      predicate.operator === "greaterThan"
-        ? ">"
-        : predicate.operator === "greaterOrEqual"
-          ? ">="
-          : predicate.operator === "lessThan"
-            ? "<"
-            : "<=";
-    return {
-      sql: `(${alias}.value_kind = ? AND ${alias}.value_data ${comparison} ?)`,
-      values: [encoded.kind, encoded.data],
-    };
-  }
-  const children = predicate.predicates.map((child) => compilePredicate(child, comparisons));
-  return {
-    sql: `(${children.map((child) => child.sql).join(predicate.kind === "either" ? " OR " : " AND ")})`,
-    values: children.flatMap((child) => child.values),
-  };
-}
-
 interface SqlClause {
   readonly sql: string;
   readonly values: readonly unknown[];
@@ -917,335 +786,527 @@ interface SqlClause {
 
 type CompiledQuery = SqlClause;
 
-function validateQuery<I>(query: RecordQuery<I>): void {
-  const filters = query.filters ?? [];
-  if (filters.length > maxQueryFilters) {
-    throw new MysqlStorageConfigurationError(
-      `MySQL queries support at most ${String(maxQueryFilters)} filters.`,
-    );
-  }
-  for (const filter of filters) {
-    if (Array.isArray(filter.value) && filter.value.length > maxFilterValues) {
-      throw new MysqlStorageConfigurationError(
-        `MySQL query filters support at most ${String(maxFilterValues)} values.`,
+/** Owns MySQL record value comparisons and decoding. */
+const MysqlRecords = Object.freeze(
+  new (class {
+    sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+      return (
+        left.byteLength === right.byteLength && left.every((value, index) => value === right[index])
       );
     }
-  }
-  if ((query.ids?.length ?? 0) > maxQueryIds) {
-    throw new MysqlStorageConfigurationError(
-      `MySQL queries support at most ${String(maxQueryIds)} IDs.`,
-    );
-  }
-  if ((query.sort?.length ?? 0) > maxQuerySorts) {
-    throw new MysqlStorageConfigurationError(
-      `MySQL queries support at most ${String(maxQuerySorts)} sort fields.`,
-    );
-  }
-}
 
-function queryColumn(column: string): string {
-  if (column === "id") return column;
-  if (column.trim().length === 0 || column.includes(".")) {
-    throw new MysqlStorageConfigurationError("MySQL queries require a materialized column or id.");
-  }
-  encodeColumnName(column);
-  return column;
-}
+    duplicateKey(error: unknown): boolean {
+      return (
+        typeof error === "object" && error !== null && Reflect.get(error, "code") === "ER_DUP_ENTRY"
+      );
+    }
 
-function columnFilter(
-  alias: string,
-  column: string,
-  values: readonly { readonly data: Uint8Array; readonly kind: number }[],
-): SqlClause {
-  const groups = groupEncoded(values);
-  return {
-    sql: `INNER JOIN ${columnsTable} AS ${alias}
+    decodeQueryRow<I, R extends Message>(spec: RecordSpec<I, R>, row: QueryRow): RecordEntry<I, R> {
+      if (!(row.slot_key instanceof Uint8Array) || !(row.payload instanceof Uint8Array)) {
+        throw new MysqlStorageDataError();
+      }
+      try {
+        return {
+          id: CanonicalMysqlValues.decode(row.slot_key) as I,
+          record: fromBinary(spec.schema, row.payload, { readUnknownFields: false }),
+        };
+      } catch {
+        throw new MysqlStorageDataError();
+      }
+    }
+  })(),
+);
+
+/** Owns MySQL record-column encoding and grouping. */
+const MysqlColumns = Object.freeze(
+  new (class {
+    encodeName(name: string): Uint8Array {
+      if (name.trim().length === 0)
+        throw new MysqlStorageConfigurationError("MySQL record column name must not be blank.");
+      return CanonicalMysqlValues.encode(name, columnNameBytes);
+    }
+
+    encodeValue(value: unknown): { readonly data: Uint8Array; readonly kind: number } {
+      try {
+        return SortableMysqlColumnValue.encode(value);
+      } catch {
+        throw new MysqlStorageConfigurationError("MySQL record column has an unsupported value.");
+      }
+    }
+
+    unique(values: readonly { readonly data: Uint8Array; readonly kind: number }[]) {
+      const seen = new Set<string>();
+      return values.filter((value) => {
+        const key = `${String(value.kind)}:${this.key(value.data)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    }
+
+    group(values: readonly { readonly data: Uint8Array; readonly kind: number }[]) {
+      const groups = new Map<number, { readonly data: Uint8Array; readonly kind: number }[]>();
+      for (const value of values) {
+        const group = groups.get(value.kind) ?? [];
+        group.push(value);
+        groups.set(value.kind, group);
+      }
+      return [...groups.values()];
+    }
+
+    key(value: Uint8Array): string {
+      return [...value].join(",");
+    }
+  })(),
+);
+
+/** Compiles bounded MySQL record queries. */
+const MysqlQueries = Object.freeze(
+  new (class {
+    compile<I>(
+      query: RecordQuery<I>,
+      scope: Uint8Array,
+      tenant: Uint8Array,
+    ): CompiledQuery | undefined {
+      this.validate(query);
+      const filters = query.filters ?? [];
+      const filterValues = filters.map((filter) => ({
+        column: this.column(filter.column),
+        values: Array.isArray(filter.value) ? filter.value : [filter.value],
+      }));
+      if (filterValues.some((filter) => filter.values.length === 0)) return undefined;
+
+      const ids = query.ids?.map((id) => CanonicalMysqlValues.encode(id, slotKeyBytes)) ?? [];
+      const sorts: { readonly column: string; readonly direction: "ASC" | "DESC" }[] = (
+        query.sort ?? []
+      ).map((order) => ({
+        column: this.column(order.field),
+        direction: order.direction === "desc" ? "DESC" : "ASC",
+      }));
+      const joins: SqlClause[] = [];
+
+      for (const [index, filter] of filterValues.entries()) {
+        if (filter.column === "id") continue;
+        const alias = `f${String(index)}`;
+        const encoded = MysqlColumns.unique(
+          filter.values.map((value) => MysqlColumns.encodeValue(value)),
+        );
+        joins.push(this.filter(alias, filter.column, encoded));
+      }
+      for (const [index, sort] of sorts.entries()) {
+        if (sort.column === "id") continue;
+        const alias = `s${String(index)}`;
+        joins.push({
+          sql: `INNER JOIN ${columnsTable} AS ${alias}
+         ON ${alias}.scope_key = r.scope_key AND ${alias}.tenant_key = r.tenant_key
+        AND ${alias}.slot_key = r.slot_key AND ${alias}.column_name = ?`,
+          values: [MysqlColumns.encodeName(sort.column)],
+        });
+      }
+
+      const where: SqlClause[] = [
+        { sql: "r.scope_key = ?", values: [scope] },
+        { sql: "r.tenant_key = ?", values: [tenant] },
+      ];
+      if (ids.length > 0) {
+        where.push({ sql: `r.slot_key IN (${this.placeholders(ids.length)})`, values: ids });
+      }
+      for (const filter of filterValues) {
+        if (filter.column !== "id") continue;
+        const encoded = filter.values.map((value) =>
+          CanonicalMysqlValues.encode(value, slotKeyBytes),
+        );
+        where.push({
+          sql: `r.slot_key IN (${this.placeholders(encoded.length)})`,
+          values: encoded,
+        });
+      }
+      const continuation = this.continuation(query, sorts);
+      if (continuation !== undefined) {
+        where.push(continuation);
+      }
+      const order = [
+        ...sorts.map((sort, index) =>
+          sort.column === "id"
+            ? `r.slot_key ${sort.direction}`
+            : `s${String(index)}.value_kind ${sort.direction}, s${String(index)}.value_data ${sort.direction}`,
+        ),
+        "r.slot_key ASC",
+      ];
+      let window: SqlClause = { sql: "", values: [] };
+      if (query.limit !== undefined) {
+        window = { sql: " LIMIT ?", values: [query.limit] };
+        if (query.offset !== undefined) {
+          window = { sql: " LIMIT ? OFFSET ?", values: [query.limit, query.offset] };
+        }
+      } else if (query.offset !== undefined) {
+        window = { sql: " LIMIT 18446744073709551615 OFFSET ?", values: [query.offset] };
+      }
+      const values = [
+        ...joins.flatMap((clause) => clause.values),
+        ...where.flatMap((clause) => clause.values),
+        ...window.values,
+      ];
+      if (values.length > maxQueryBinds) {
+        throw new MysqlStorageConfigurationError(
+          `MySQL queries support at most ${String(maxQueryBinds)} bound values.`,
+        );
+      }
+      return {
+        sql: `SELECT r.slot_key, r.payload FROM ${recordsTable} AS r
+${joins.map((clause) => clause.sql).join("\n")}
+WHERE ${where.map((clause) => clause.sql).join(" AND ")}
+ORDER BY ${order.join(", ")}${window.sql}`,
+        values,
+      };
+    }
+
+    plan<I>(plan: NormalizedQueryPlan<I>, scope: Uint8Array, tenant: Uint8Array): CompiledQuery {
+      const comparisons = this.comparisons(plan.predicate);
+      const joins: SqlClause[] = comparisons.map((comparison, index) => ({
+        sql: `LEFT JOIN ${columnsTable} AS p${String(index)}
+       ON p${String(index)}.scope_key = r.scope_key AND p${String(index)}.tenant_key = r.tenant_key
+      AND p${String(index)}.slot_key = r.slot_key AND p${String(index)}.column_name = ?`,
+        values: [MysqlColumns.encodeName(comparison.column)],
+      }));
+      for (const [index, order] of (plan.order ?? []).entries()) {
+        joins.push({
+          sql: `LEFT JOIN ${columnsTable} AS s${String(index)}
+       ON s${String(index)}.scope_key = r.scope_key AND s${String(index)}.tenant_key = r.tenant_key
+      AND s${String(index)}.slot_key = r.slot_key AND s${String(index)}.column_name = ?`,
+          values: [MysqlColumns.encodeName(order.column)],
+        });
+      }
+      const where: SqlClause[] = [
+        { sql: "r.scope_key = ?", values: [scope] },
+        { sql: "r.tenant_key = ?", values: [tenant] },
+      ];
+      if (plan.predicate !== undefined) {
+        where.push(this.predicate(plan.predicate, comparisons));
+      }
+      const order = [
+        ...(plan.order ?? []).flatMap((item, index) => {
+          const direction = item.direction === "desc" ? "DESC" : "ASC";
+          return [
+            `s${String(index)}.value_kind ${direction}`,
+            `s${String(index)}.value_data ${direction}`,
+          ];
+        }),
+        "r.slot_key ASC",
+      ];
+      const materializationLimit =
+        plan.candidateLimit === undefined ? plan.limit : plan.candidateLimit + 1;
+      const window: SqlClause =
+        materializationLimit === undefined
+          ? { sql: "", values: [] }
+          : { sql: " LIMIT ?", values: [materializationLimit] };
+      const values = [
+        ...joins.flatMap((clause) => clause.values),
+        ...where.flatMap((clause) => clause.values),
+        ...window.values,
+      ];
+      if (values.length > maxQueryBinds) {
+        throw new MysqlStorageConfigurationError(
+          `MySQL queries support at most ${String(maxQueryBinds)} bound values.`,
+        );
+      }
+      return {
+        sql: `SELECT r.slot_key, r.payload FROM ${recordsTable} AS r
+${joins.map((clause) => clause.sql).join("\n")}
+WHERE ${where.map((clause) => clause.sql).join(" AND ")}
+ORDER BY ${order.join(", ")}${window.sql}`,
+        values,
+      };
+    }
+
+    comparisons<I>(
+      predicate: NormalizedQueryPredicate<I> | undefined,
+    ): readonly Extract<NormalizedQueryPredicate<I>, { readonly kind: "comparison" }>[] {
+      if (predicate === undefined || predicate.kind === "ids") return [];
+      if (predicate.kind === "comparison") return [predicate];
+      return predicate.predicates.flatMap((child) => this.comparisons(child));
+    }
+
+    predicate<I>(
+      predicate: NormalizedQueryPredicate<I>,
+      comparisons: readonly Extract<NormalizedQueryPredicate<I>, { readonly kind: "comparison" }>[],
+    ): SqlClause {
+      if (predicate.kind === "ids") {
+        const ids = predicate.ids.map((id) => CanonicalMysqlValues.encode(id, slotKeyBytes));
+        return { sql: `r.slot_key IN (${this.placeholders(ids.length)})`, values: ids };
+      }
+      if (predicate.kind === "comparison") {
+        const index = comparisons.indexOf(predicate);
+        const alias = `p${String(index)}`;
+        const encoded = MysqlColumns.encodeValue(predicate.value);
+        if (predicate.operator === "equal") {
+          return {
+            sql: `(${alias}.value_kind = ? AND ${alias}.value_data = ?)`,
+            values: [encoded.kind, encoded.data],
+          };
+        }
+        const comparison =
+          predicate.operator === "greaterThan"
+            ? ">"
+            : predicate.operator === "greaterOrEqual"
+              ? ">="
+              : predicate.operator === "lessThan"
+                ? "<"
+                : "<=";
+        return {
+          sql: `(${alias}.value_kind = ? AND ${alias}.value_data ${comparison} ?)`,
+          values: [encoded.kind, encoded.data],
+        };
+      }
+      const children = predicate.predicates.map((child) => this.predicate(child, comparisons));
+      return {
+        sql: `(${children.map((child) => child.sql).join(predicate.kind === "either" ? " OR " : " AND ")})`,
+        values: children.flatMap((child) => child.values),
+      };
+    }
+
+    validate<I>(query: RecordQuery<I>): void {
+      const filters = query.filters ?? [];
+      if (filters.length > maxQueryFilters) {
+        throw new MysqlStorageConfigurationError(
+          `MySQL queries support at most ${String(maxQueryFilters)} filters.`,
+        );
+      }
+      for (const filter of filters) {
+        if (Array.isArray(filter.value) && filter.value.length > maxFilterValues) {
+          throw new MysqlStorageConfigurationError(
+            `MySQL query filters support at most ${String(maxFilterValues)} values.`,
+          );
+        }
+      }
+      if ((query.ids?.length ?? 0) > maxQueryIds) {
+        throw new MysqlStorageConfigurationError(
+          `MySQL queries support at most ${String(maxQueryIds)} IDs.`,
+        );
+      }
+      if ((query.sort?.length ?? 0) > maxQuerySorts) {
+        throw new MysqlStorageConfigurationError(
+          `MySQL queries support at most ${String(maxQuerySorts)} sort fields.`,
+        );
+      }
+    }
+
+    column(column: string): string {
+      if (column === "id") return column;
+      if (column.trim().length === 0 || column.includes(".")) {
+        throw new MysqlStorageConfigurationError(
+          "MySQL queries require a materialized column or id.",
+        );
+      }
+      MysqlColumns.encodeName(column);
+      return column;
+    }
+
+    filter(
+      alias: string,
+      column: string,
+      values: readonly { readonly data: Uint8Array; readonly kind: number }[],
+    ): SqlClause {
+      const groups = MysqlColumns.group(values);
+      return {
+        sql: `INNER JOIN ${columnsTable} AS ${alias}
      ON ${alias}.scope_key = r.scope_key AND ${alias}.tenant_key = r.tenant_key
     AND ${alias}.slot_key = r.slot_key AND ${alias}.column_name = ?
     AND (${groups
       .map(
         (group) =>
-          `${alias}.value_kind = ? AND ${alias}.value_data IN (${placeholders(group.length)})`,
+          `${alias}.value_kind = ? AND ${alias}.value_data IN (${this.placeholders(group.length)})`,
       )
       .join(" OR ")})`,
-    values: [
-      encodeColumnName(column),
-      ...groups.flatMap((group) => [group[0]?.kind, ...group.map((value) => value.data)]),
-    ],
-  };
-}
-
-function compileContinuation<I>(
-  query: RecordQuery<I>,
-  sorts: readonly { readonly column: string; readonly direction: "ASC" | "DESC" }[],
-): CompiledQuery | undefined {
-  const after = query.after;
-  if (after === undefined) return undefined;
-  const comparisons: string[] = [];
-  const values: unknown[] = [];
-  const equal: string[] = [];
-  for (const [index, sort] of sorts.entries()) {
-    const value = after.values[index]?.value;
-    const before = equalValues(sorts.slice(0, index), after);
-    if (sort.column === "id") {
-      comparisons.push(
-        [...equal, `r.slot_key ${sort.direction === "ASC" ? ">" : "<"} ?`].join(" AND "),
-      );
-      values.push(...before, CanonicalMysqlValue.encode(value, slotKeyBytes));
-      equal.push("r.slot_key = ?");
-      continue;
+        values: [
+          MysqlColumns.encodeName(column),
+          ...groups.flatMap((group) => [group[0]?.kind, ...group.map((value) => value.data)]),
+        ],
+      };
     }
-    const encoded = encodeColumnValue(value);
-    const alias = `s${String(index)}`;
-    const comparison = sort.direction === "ASC" ? ">" : "<";
-    comparisons.push(
-      [
-        ...equal,
-        `(${alias}.value_kind ${comparison} ? OR (${alias}.value_kind = ? AND ${alias}.value_data ${comparison} ?))`,
-      ].join(" AND "),
-    );
-    values.push(...before, encoded.kind, encoded.kind, encoded.data);
-    equal.push(`${alias}.value_kind = ? AND ${alias}.value_data = ?`);
-  }
-  comparisons.push([...equal, "r.slot_key > ?"].join(" AND "));
-  values.push(...equalValues(sorts, after), CanonicalMysqlValue.encode(after.id, slotKeyBytes));
-  return { sql: `(${comparisons.map((comparison) => `(${comparison})`).join(" OR ")})`, values };
-}
 
-function equalValues(
-  sorts: readonly { readonly column: string }[],
-  after: NonNullable<RecordQuery<unknown>["after"]>,
-): readonly unknown[] {
-  return sorts.flatMap((sort, index) => {
-    const value = after.values[index]?.value;
-    if (sort.column === "id") return [CanonicalMysqlValue.encode(value, slotKeyBytes)];
-    const encoded = encodeColumnValue(value);
-    return [encoded.kind, encoded.data];
-  });
-}
+    continuation<I>(
+      query: RecordQuery<I>,
+      sorts: readonly { readonly column: string; readonly direction: "ASC" | "DESC" }[],
+    ): CompiledQuery | undefined {
+      const after = query.after;
+      if (after === undefined) return undefined;
+      const comparisons: string[] = [];
+      const values: unknown[] = [];
+      const equal: string[] = [];
+      for (const [index, sort] of sorts.entries()) {
+        const value = after.values[index]?.value;
+        const before = this.equality(sorts.slice(0, index), after);
+        if (sort.column === "id") {
+          comparisons.push(
+            [...equal, `r.slot_key ${sort.direction === "ASC" ? ">" : "<"} ?`].join(" AND "),
+          );
+          values.push(...before, CanonicalMysqlValues.encode(value, slotKeyBytes));
+          equal.push("r.slot_key = ?");
+          continue;
+        }
+        const encoded = MysqlColumns.encodeValue(value);
+        const alias = `s${String(index)}`;
+        const comparison = sort.direction === "ASC" ? ">" : "<";
+        comparisons.push(
+          [
+            ...equal,
+            `(${alias}.value_kind ${comparison} ? OR ` +
+              `(${alias}.value_kind = ? AND ${alias}.value_data ${comparison} ?))`,
+          ].join(" AND "),
+        );
+        values.push(...before, encoded.kind, encoded.kind, encoded.data);
+        equal.push(`${alias}.value_kind = ? AND ${alias}.value_data = ?`);
+      }
+      comparisons.push([...equal, "r.slot_key > ?"].join(" AND "));
+      values.push(
+        ...this.equality(sorts, after),
+        CanonicalMysqlValues.encode(after.id, slotKeyBytes),
+      );
+      return {
+        sql: `(${comparisons.map((comparison) => `(${comparison})`).join(" OR ")})`,
+        values,
+      };
+    }
 
-function placeholders(count: number): string {
-  return Array.from({ length: count }, () => "?").join(", ");
-}
+    equality(
+      sorts: readonly { readonly column: string }[],
+      after: NonNullable<RecordQuery<unknown>["after"]>,
+    ): readonly unknown[] {
+      return sorts.flatMap((sort, index) => {
+        const value = after.values[index]?.value;
+        if (sort.column === "id") return [CanonicalMysqlValues.encode(value, slotKeyBytes)];
+        const encoded = MysqlColumns.encodeValue(value);
+        return [encoded.kind, encoded.data];
+      });
+    }
 
-function uniqueEncoded(
-  values: readonly { readonly data: Uint8Array; readonly kind: number }[],
-): readonly { readonly data: Uint8Array; readonly kind: number }[] {
-  const seen = new Set<string>();
-  return values.filter((value) => {
-    const key = `${String(value.kind)}:${bytesKey(value.data)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
+    placeholders(count: number): string {
+      return Array.from({ length: count }, () => "?").join(", ");
+    }
+  })(),
+);
 
-function groupEncoded(
-  values: readonly { readonly data: Uint8Array; readonly kind: number }[],
-): readonly (readonly { readonly data: Uint8Array; readonly kind: number }[])[] {
-  const groups = new Map<number, { readonly data: Uint8Array; readonly kind: number }[]>();
-  for (const value of values) {
-    const group = groups.get(value.kind) ?? [];
-    group.push(value);
-    groups.set(value.kind, group);
-  }
-  return [...groups.values()];
-}
+/** Validates MySQL storage connection options. */
+const MysqlOptions = Object.freeze(
+  new (class {
+    validate(options: MysqlStorageOptions): URL {
+      let url: URL;
+      try {
+        url = new URL(options.url);
+      } catch {
+        throw new MysqlStorageConfigurationError(
+          "MysqlStorageOptions.url must be a valid MySQL URL.",
+        );
+      }
 
-function bytesKey(value: Uint8Array): string {
-  return [...value].join(",");
-}
+      if (
+        url.protocol !== "mysql:" ||
+        url.pathname === "/" ||
+        url.search.length > 0 ||
+        url.hash.length > 0
+      ) {
+        throw new MysqlStorageConfigurationError(
+          "MysqlStorageOptions.url must use mysql:, name a database, and omit query/hash settings.",
+        );
+      }
+      if (
+        options.connectionLimit !== undefined &&
+        (!Number.isInteger(options.connectionLimit) || options.connectionLimit <= 0)
+      ) {
+        throw new MysqlStorageConfigurationError(
+          "MysqlStorageOptions.connectionLimit must be positive.",
+        );
+      }
+      if (
+        options.connectTimeoutMs !== undefined &&
+        (!Number.isInteger(options.connectTimeoutMs) || options.connectTimeoutMs <= 0)
+      ) {
+        throw new MysqlStorageConfigurationError(
+          "MysqlStorageOptions.connectTimeoutMs must be positive.",
+        );
+      }
+      return url;
+    }
+  })(),
+);
 
-function decodeQueryRow<I, R extends Message>(
-  spec: RecordSpec<I, R>,
-  row: QueryRow,
-): RecordEntry<I, R> {
-  if (!(row.slot_key instanceof Uint8Array) || !(row.payload instanceof Uint8Array)) {
-    throw new MysqlStorageDataError();
-  }
-  try {
-    return {
-      id: CanonicalMysqlValue.decode(row.slot_key) as I,
-      record: fromBinary(spec.schema, row.payload, { readUnknownFields: false }),
-    };
-  } catch {
-    throw new MysqlStorageDataError();
-  }
-}
-
-function validateOptions(options: MysqlStorageOptions): URL {
-  let url: URL;
-  try {
-    url = new URL(options.url);
-  } catch {
-    throw new MysqlStorageConfigurationError("MysqlStorageOptions.url must be a valid MySQL URL.");
-  }
-
-  if (
-    url.protocol !== "mysql:" ||
-    url.pathname === "/" ||
-    url.search.length > 0 ||
-    url.hash.length > 0
-  ) {
-    throw new MysqlStorageConfigurationError(
-      "MysqlStorageOptions.url must use mysql:, name a database, and omit query/hash settings.",
-    );
-  }
-  if (
-    options.connectionLimit !== undefined &&
-    (!Number.isInteger(options.connectionLimit) || options.connectionLimit <= 0)
-  ) {
-    throw new MysqlStorageConfigurationError(
-      "MysqlStorageOptions.connectionLimit must be positive.",
-    );
-  }
-  if (
-    options.connectTimeoutMs !== undefined &&
-    (!Number.isInteger(options.connectTimeoutMs) || options.connectTimeoutMs <= 0)
-  ) {
-    throw new MysqlStorageConfigurationError(
-      "MysqlStorageOptions.connectTimeoutMs must be positive.",
-    );
-  }
-  return url;
-}
-
-async function verifySchema(connection: PoolConnection): Promise<void> {
-  const [rows] = await connection.query<SchemaColumn[]>(
-    `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name,
+/** Verifies the fixed MySQL record-storage schema. */
+const RecordSchemaVerification = Object.freeze(
+  new (class {
+    async verify(connection: PoolConnection): Promise<void> {
+      const [rows] = await connection.query<SchemaColumn[]>(
+        `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name,
             COLUMN_TYPE AS column_type, COLUMN_DEFAULT AS column_default,
             IS_NULLABLE AS is_nullable
      FROM information_schema.columns
      WHERE table_schema = DATABASE()
        AND table_name IN ('spine_ts_records', 'spine_ts_columns')`,
-  );
-  const actualColumns = new Map(rows.map((row) => [`${row.table_name}.${row.column_name}`, row]));
+      );
+      const actualColumns = new Map(
+        rows.map((row) => [`${row.table_name}.${row.column_name}`, row]),
+      );
 
-  for (const [column, expectedType] of expectedColumns) {
-    const actual = actualColumns.get(column);
-    if (actual?.column_type !== expectedType || actual.is_nullable !== expectedNullability) {
-      throw new MysqlStorageSchemaError(`MySQL adapter schema is incompatible at ${column}.`);
-    }
-  }
-  if (actualColumns.size !== expectedColumns.size) {
-    throw new MysqlStorageSchemaError("MySQL adapter schema has unexpected columns.");
-  }
-  if (
-    actualColumns.get("spine_ts_records.schema_version")?.column_default !== String(schemaVersion)
-  ) {
-    throw new MysqlStorageSchemaError("MySQL adapter schema version is incompatible.");
-  }
-  const [tables] = await connection.query<SchemaTable[]>(
-    `SELECT TABLE_NAME AS table_name, ENGINE AS engine
+      for (const [column, expectedType] of expectedColumns) {
+        const actual = actualColumns.get(column);
+        if (actual?.column_type !== expectedType || actual.is_nullable !== expectedNullability) {
+          throw new MysqlStorageSchemaError(`MySQL adapter schema is incompatible at ${column}.`);
+        }
+      }
+      if (actualColumns.size !== expectedColumns.size) {
+        throw new MysqlStorageSchemaError("MySQL adapter schema has unexpected columns.");
+      }
+      if (
+        actualColumns.get("spine_ts_records.schema_version")?.column_default !==
+        String(schemaVersion)
+      ) {
+        throw new MysqlStorageSchemaError("MySQL adapter schema version is incompatible.");
+      }
+      const [tables] = await connection.query<SchemaTable[]>(
+        `SELECT TABLE_NAME AS table_name, ENGINE AS engine
      FROM information_schema.tables
      WHERE table_schema = DATABASE()
        AND table_name IN ('spine_ts_records', 'spine_ts_columns')`,
-  );
-  if (tables.length !== 2 || tables.some((table) => table.engine?.toLowerCase() !== "innodb")) {
-    throw new MysqlStorageSchemaError("MySQL adapter tables must use InnoDB.");
-  }
-  await verifyIndexes(connection);
-  await verifyForeignKey(connection);
-}
+      );
+      if (tables.length !== 2 || tables.some((table) => table.engine?.toLowerCase() !== "innodb")) {
+        throw new MysqlStorageSchemaError("MySQL adapter tables must use InnoDB.");
+      }
+      await this.indexes(connection);
+      await this.foreignKey(connection);
+    }
 
-/** Verifies the fixed lazy entity-history schema before it receives rows. */
-export async function verifyEntitySchema(connection: PoolConnection): Promise<void> {
-  const entityTables = entityTableNames();
-  const expectedEntityColumns = entityColumnExpectations();
-  const expectedEntityIndexes = entityIndexExpectations();
-  const names = entityTables.map((table) => `'${table}'`).join(", ");
-  const [columns] = await connection.query<SchemaColumn[]>(
-    `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, COLUMN_TYPE AS column_type,
-            IS_NULLABLE AS is_nullable, EXTRA AS extra FROM information_schema.columns
-     WHERE table_schema = DATABASE() AND table_name IN (${names})`,
-  );
-  const actual = new Map(columns.map((row) => [`${row.table_name}.${row.column_name}`, row]));
-  for (const [column, expected] of expectedEntityColumns) {
-    const row = actual.get(column);
-    if (
-      row?.column_type !== expected.mysqlType ||
-      row.is_nullable !== entityExpectedNullability() ||
-      row.extra.toLowerCase() !== (expected.autoIncrement === true ? "auto_increment" : "")
-    )
-      throw new MysqlStorageSchemaError(`MySQL entity schema is incompatible at ${column}.`);
-  }
-  if (actual.size !== expectedEntityColumns.size)
-    throw new MysqlStorageSchemaError("MySQL entity schema has unexpected columns.");
-  const [tables] = await connection.query<SchemaTable[]>(
-    `SELECT TABLE_NAME AS table_name, ENGINE AS engine FROM information_schema.tables
-     WHERE table_schema = DATABASE() AND table_name IN (${names})`,
-  );
-  if (
-    tables.length !== entityTables.length ||
-    tables.some((table) => table.engine?.toLowerCase() !== entityHistorySchema.engine.toLowerCase())
-  )
-    throw new MysqlStorageSchemaError("MySQL entity tables must use InnoDB.");
-  const [indexes] = await connection.query<SchemaIndex[]>(
-    `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, SEQ_IN_INDEX AS seq_in_index,
-            COLUMN_NAME AS column_name, NON_UNIQUE AS non_unique, COLLATION AS collation
-     FROM information_schema.statistics
-     WHERE table_schema = DATABASE() AND table_name IN (${names})
-     ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`,
-  );
-  const actualIndexes = new Map<string, SchemaIndex[]>();
-  for (const row of indexes) {
-    const name = `${row.table_name}.${row.index_name}`;
-    const rowsForIndex = actualIndexes.get(name) ?? [];
-    if (row.seq_in_index !== rowsForIndex.length + 1)
-      throw new MysqlStorageSchemaError(`MySQL entity index is incompatible at ${name}.`);
-    rowsForIndex.push(row);
-    actualIndexes.set(name, rowsForIndex);
-  }
-  if (actualIndexes.size !== expectedEntityIndexes.size)
-    throw new MysqlStorageSchemaError("MySQL entity schema has unexpected indexes.");
-  for (const [index, expected] of expectedEntityIndexes) {
-    const rows = actualIndexes.get(index);
-    if (
-      rows?.length !== expected.columns.length ||
-      rows.some(
-        (row, position) =>
-          row.column_name !== expected.columns[position]?.name ||
-          row.non_unique !== (expected.primary === true || expected.unique === true ? 0 : 1) ||
-          row.collation?.toUpperCase() !==
-            (expected.columns[position].direction === "DESC" ? "D" : "A"),
-      )
-    )
-      throw new MysqlStorageSchemaError(`MySQL entity index is incompatible at ${index}.`);
-  }
-}
-
-async function verifyIndexes(connection: PoolConnection): Promise<void> {
-  const [rows] = await connection.query<SchemaIndex[]>(
-    `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name,
+    async indexes(connection: PoolConnection): Promise<void> {
+      const [rows] = await connection.query<SchemaIndex[]>(
+        `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name,
             SEQ_IN_INDEX AS seq_in_index, COLUMN_NAME AS column_name
      FROM information_schema.statistics
      WHERE table_schema = DATABASE()
        AND table_name IN ('spine_ts_records', 'spine_ts_columns')
      ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`,
-  );
-  const actualIndexes = new Map<string, string[]>();
-  for (const row of rows) {
-    const key = `${row.table_name}.${row.index_name}`;
-    const columns = actualIndexes.get(key) ?? [];
-    if (row.seq_in_index !== columns.length + 1) {
-      throw new MysqlStorageSchemaError(`MySQL adapter index is incompatible at ${key}.`);
+      );
+      const actualIndexes = new Map<string, string[]>();
+      for (const row of rows) {
+        const key = `${row.table_name}.${row.index_name}`;
+        const columns = actualIndexes.get(key) ?? [];
+        if (row.seq_in_index !== columns.length + 1) {
+          throw new MysqlStorageSchemaError(`MySQL adapter index is incompatible at ${key}.`);
+        }
+        columns.push(row.column_name);
+        actualIndexes.set(key, columns);
+      }
+      if (actualIndexes.size !== expectedIndexes.size) {
+        throw new MysqlStorageSchemaError("MySQL adapter schema has unexpected indexes.");
+      }
+      for (const [index, expectedColumnsForIndex] of expectedIndexes) {
+        if (!this.sameColumns(actualIndexes.get(index), expectedColumnsForIndex)) {
+          throw new MysqlStorageSchemaError(`MySQL adapter index is incompatible at ${index}.`);
+        }
+      }
     }
-    columns.push(row.column_name);
-    actualIndexes.set(key, columns);
-  }
-  if (actualIndexes.size !== expectedIndexes.size) {
-    throw new MysqlStorageSchemaError("MySQL adapter schema has unexpected indexes.");
-  }
-  for (const [index, expectedColumnsForIndex] of expectedIndexes) {
-    if (!sameColumns(actualIndexes.get(index), expectedColumnsForIndex)) {
-      throw new MysqlStorageSchemaError(`MySQL adapter index is incompatible at ${index}.`);
-    }
-  }
-}
 
-async function verifyForeignKey(connection: PoolConnection): Promise<void> {
-  const [rows] = await connection.query<SchemaForeignKey[]>(
-    `SELECT kcu.TABLE_NAME AS table_name, kcu.CONSTRAINT_NAME AS constraint_name,
+    async foreignKey(connection: PoolConnection): Promise<void> {
+      const [rows] = await connection.query<SchemaForeignKey[]>(
+        `SELECT kcu.TABLE_NAME AS table_name, kcu.CONSTRAINT_NAME AS constraint_name,
             kcu.ORDINAL_POSITION AS ordinal_position, kcu.COLUMN_NAME AS column_name,
             kcu.REFERENCED_TABLE_NAME AS referenced_table_name,
             kcu.REFERENCED_COLUMN_NAME AS referenced_column_name, rc.DELETE_RULE AS delete_rule
@@ -1258,30 +1319,32 @@ async function verifyForeignKey(connection: PoolConnection): Promise<void> {
        AND kcu.TABLE_NAME = 'spine_ts_columns'
        AND kcu.CONSTRAINT_NAME = 'spine_ts_columns_record_fk'
      ORDER BY kcu.ORDINAL_POSITION`,
-  );
-  if (
-    rows.length !== expectedForeignKey.length ||
-    rows.some(
-      (row, index) =>
-        row.table_name !== "spine_ts_columns" ||
-        row.constraint_name !== "spine_ts_columns_record_fk" ||
-        row.ordinal_position !== index + 1 ||
-        row.column_name !== expectedForeignKey[index] ||
-        row.referenced_table_name !== "spine_ts_records" ||
-        row.referenced_column_name !== expectedForeignKey[index] ||
-        row.delete_rule.toUpperCase() !== "CASCADE",
-    )
-  ) {
-    throw new MysqlStorageSchemaError("MySQL adapter foreign key is incompatible.");
-  }
-}
+      );
+      if (
+        rows.length !== expectedForeignKey.length ||
+        rows.some(
+          (row, index) =>
+            row.table_name !== "spine_ts_columns" ||
+            row.constraint_name !== "spine_ts_columns_record_fk" ||
+            row.ordinal_position !== index + 1 ||
+            row.column_name !== expectedForeignKey[index] ||
+            row.referenced_table_name !== "spine_ts_records" ||
+            row.referenced_column_name !== expectedForeignKey[index] ||
+            row.delete_rule.toUpperCase() !== "CASCADE",
+        )
+      ) {
+        throw new MysqlStorageSchemaError("MySQL adapter foreign key is incompatible.");
+      }
+    }
 
-function sameColumns(actual: readonly string[] | undefined, expected: readonly string[]): boolean {
-  return (
-    actual?.length === expected.length &&
-    actual.every((column, index) => column === expected[index])
-  );
-}
+    sameColumns(actual: readonly string[] | undefined, expected: readonly string[]): boolean {
+      return (
+        actual?.length === expected.length &&
+        actual.every((column, index) => column === expected[index])
+      );
+    }
+  })(),
+);
 
 interface SchemaColumn extends RowDataPacket {
   readonly table_name: string;

@@ -1,6 +1,6 @@
 export {
-  createInMemoryDeliveryServerCore,
-  type InMemoryDeliveryServerCore,
-  type InMemoryDeliveryServerCoreOptions,
+  InMemoryDelivery,
+  type DeliveryCore,
+  type DeliveryCoreOptions,
 } from "./core/in-memory-delivery-core.js";
 export { DeliveryServer, type DeliveryServerOptions } from "./server/delivery-server.js";

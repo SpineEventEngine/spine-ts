@@ -1,46 +1,46 @@
 import { describe, expect, it } from "vitest";
 
-import { CanonicalMysqlValue, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
+import { CanonicalMysqlValues, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
 
-describe("CanonicalMysqlValue", () => {
+describe("CanonicalMysqlValues", () => {
   it("round-trips canonical nested slot IDs without preserving object key order", () => {
     const id = { z: [undefined, new Uint8Array([0, 255]), -4n], a: "case-sensitive" };
 
-    const encoded = CanonicalMysqlValue.encode(id);
+    const encoded = CanonicalMysqlValues.encode(id);
 
-    expect(CanonicalMysqlValue.decode(encoded)).toEqual({
+    expect(CanonicalMysqlValues.decode(encoded)).toEqual({
       a: "case-sensitive",
       z: [undefined, new Uint8Array([0, 255]), -4n],
     });
-    expect(CanonicalMysqlValue.encode({ a: "case-sensitive", z: id.z })).toEqual(encoded);
+    expect(CanonicalMysqlValues.encode({ a: "case-sensitive", z: id.z })).toEqual(encoded);
   });
 
   it("rejects non-finite, cyclic, and oversized IDs before database work", () => {
     const cyclic: { self?: unknown } = {};
     cyclic.self = cyclic;
 
-    expect(() => CanonicalMysqlValue.encode(Number.NaN)).toThrow("unsupported");
-    expect(() => CanonicalMysqlValue.encode(cyclic)).toThrow("unsupported");
-    expect(() => CanonicalMysqlValue.encode("x".repeat(769))).toThrow("too large");
+    expect(() => CanonicalMysqlValues.encode(Number.NaN)).toThrow("unsupported");
+    expect(() => CanonicalMysqlValues.encode(cyclic)).toThrow("unsupported");
+    expect(() => CanonicalMysqlValues.encode("x".repeat(769))).toThrow("too large");
   });
 
   it("rejects malformed and non-canonical aliases instead of decoding another slot", () => {
-    expect(() => CanonicalMysqlValue.decode(new TextEncoder().encode('["number","-0"]'))).toThrow(
+    expect(() => CanonicalMysqlValues.decode(new TextEncoder().encode('["number","-0"]'))).toThrow(
       "valid record identifier",
     );
     expect(() =>
-      CanonicalMysqlValue.decode(
+      CanonicalMysqlValues.decode(
         new TextEncoder().encode('["object",["a",["string","one"]],["a",["string","two"]]]'),
       ),
     ).toThrow("valid record identifier");
-    expect(() => CanonicalMysqlValue.decode(new Uint8Array([255, 0, 1]))).toThrow(
+    expect(() => CanonicalMysqlValues.decode(new Uint8Array([255, 0, 1]))).toThrow(
       "valid record identifier",
     );
   });
 
   it("decodes every supported canonical scalar, byte, and collection form", () => {
     const decode = (value: unknown) =>
-      CanonicalMysqlValue.decode(new TextEncoder().encode(JSON.stringify(value)));
+      CanonicalMysqlValues.decode(new TextEncoder().encode(JSON.stringify(value)));
 
     expect(decode(["undefined"])).toBeUndefined();
     expect(decode(["null"])).toBeNull();
@@ -53,7 +53,7 @@ describe("CanonicalMysqlValue", () => {
 
   it("rejects invalid canonical byte and object payloads", () => {
     const decode = (value: unknown) =>
-      CanonicalMysqlValue.decode(new TextEncoder().encode(JSON.stringify(value)));
+      CanonicalMysqlValues.decode(new TextEncoder().encode(JSON.stringify(value)));
 
     expect(() => decode(["bytes", [256]])).toThrow("valid record identifier");
     expect(() => decode(["object", ["z", ["null"]], ["a", ["null"]]])).toThrow(

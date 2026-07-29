@@ -11,7 +11,7 @@ import {
   MysqlStorageFactory,
   MysqlStorageOperationError,
 } from "../src/index.js";
-import { CanonicalMysqlValue, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
+import { CanonicalMysqlValues, SortableMysqlColumnValue } from "../src/mysql/value-codec.js";
 
 const url = process.env.SPINE_TS_MYSQL_URL ?? "";
 const mysqlDescribe = url.length > 0 ? describe : describe.skip;
@@ -400,7 +400,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       await expect(storage.read(id)).resolves.toEqual(create(StringValueSchema, { value }));
     }
     const exactSlot = "x".repeat(755);
-    expect(CanonicalMysqlValue.encode(exactSlot)).toHaveLength(768);
+    expect(CanonicalMysqlValues.encode(exactSlot)).toHaveLength(768);
     ids.set(exactSlot, exactSlot);
     await storage.write(create(StringValueSchema, { value: exactSlot }));
     await expect(storage.read(exactSlot)).resolves.toEqual(
@@ -443,7 +443,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     try {
       const [stale] = await pool.query<CountRow[]>(
         "SELECT COUNT(*) AS count FROM `spine_ts_columns` WHERE column_name = ?",
-        [CanonicalMysqlValue.encode("old", 255)],
+        [CanonicalMysqlValues.encode("old", 255)],
       );
       expect(stale).toEqual([{ count: 2 }]);
       expect(await oldStorage.delete("a")).toBe(true);
@@ -513,10 +513,10 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         `SELECT value_data FROM \`spine_ts_columns\`
          WHERE scope_key = ? AND tenant_key = ? AND slot_key = ? AND column_name = ?`,
         [
-          CanonicalMysqlValue.encode(["Rollback", false, StringValueSchema.typeName], 512),
-          CanonicalMysqlValue.encode(null, 255),
-          CanonicalMysqlValue.encode("constant-slot", 768),
-          CanonicalMysqlValue.encode("value", 255),
+          CanonicalMysqlValues.encode(["Rollback", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(null, 255),
+          CanonicalMysqlValues.encode("constant-slot", 768),
+          CanonicalMysqlValues.encode("value", 255),
         ],
       );
       expect(columns).toHaveLength(1);
@@ -553,9 +553,9 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         "UPDATE `spine_ts_records` SET payload = ? WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?",
         [
           new Uint8Array([255]),
-          CanonicalMysqlValue.encode([context.name, false, StringValueSchema.typeName], 512),
-          CanonicalMysqlValue.encode(null, 255),
-          CanonicalMysqlValue.encode("bad", 768),
+          CanonicalMysqlValues.encode([context.name, false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(null, 255),
+          CanonicalMysqlValues.encode("bad", 768),
         ],
       );
       await expect(storage.read("bad")).rejects.toBeInstanceOf(MysqlStorageDataError);
@@ -663,9 +663,9 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
          WHERE scope_key = ? AND tenant_key = ? AND column_name = ? AND value_kind = ? AND value_data = ?
          ORDER BY slot_key ASC`,
         [
-          CanonicalMysqlValue.encode(["Queries", false, StringValueSchema.typeName], 512),
-          CanonicalMysqlValue.encode(null, 255),
-          CanonicalMysqlValue.encode("state", 255),
+          CanonicalMysqlValues.encode(["Queries", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(null, 255),
+          CanonicalMysqlValues.encode("state", 255),
           SortableMysqlColumnValue.encode("open").kind,
           SortableMysqlColumnValue.encode("open").data,
         ],
@@ -839,9 +839,9 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         `SELECT payload FROM \`spine_ts_records\`
          WHERE scope_key = ? AND tenant_key = ? AND slot_key = ? FOR UPDATE`,
         [
-          CanonicalMysqlValue.encode(["CloseRace", false, StringValueSchema.typeName], 512),
-          CanonicalMysqlValue.encode(null, 255),
-          CanonicalMysqlValue.encode("admitted", 768),
+          CanonicalMysqlValues.encode(["CloseRace", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(null, 255),
+          CanonicalMysqlValues.encode("admitted", 768),
         ],
       );
       write = storage.write(create(StringValueSchema, { value: "admitted" }));
@@ -910,11 +910,11 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         createdAt: create(TimestampSchema, { seconds: BigInt(version) }),
       });
     }
-    const scope = CanonicalMysqlValue.encode(
+    const scope = CanonicalMysqlValues.encode(
       [input.context.name, "single-tenant", input.storageKey],
       512,
     );
-    const entity = CanonicalMysqlValue.encode("same", 768);
+    const entity = CanonicalMysqlValues.encode("same", 768);
     const lockName = entityLockName(new URL(url).pathname.slice(1), scope, entity);
     const controlPool = createPool({ uri: url });
     const control = await controlPool.getConnection();
@@ -1020,8 +1020,8 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         `SELECT slot_key, value_data FROM \`spine_ts_columns\`
          WHERE scope_key = ? AND tenant_key = ? ORDER BY slot_key ASC`,
         [
-          CanonicalMysqlValue.encode(["BatchRollback", false, StringValueSchema.typeName], 512),
-          CanonicalMysqlValue.encode(null, 255),
+          CanonicalMysqlValues.encode(["BatchRollback", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(null, 255),
         ],
       );
       expect(
@@ -1031,11 +1031,11 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         })),
       ).toEqual([
         {
-          slot_key: CanonicalMysqlValue.encode("a", 768),
+          slot_key: CanonicalMysqlValues.encode("a", 768),
           value_data: SortableMysqlColumnValue.encode("a-old").data,
         },
         {
-          slot_key: CanonicalMysqlValue.encode("b", 768),
+          slot_key: CanonicalMysqlValues.encode("b", 768),
           value_data: SortableMysqlColumnValue.encode("b-old").data,
         },
       ]);

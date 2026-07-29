@@ -21,6 +21,7 @@ export type DatastoreStorageOptions = DatastoreOptions;
 
 /** Adapter-local query bound for query paths requiring client-side reconciliation. */
 export interface DatastoreStorageFactoryInput {
+  /** The caller-owned Datastore client used by created storage handles. */
   readonly client: Datastore;
   /** Maximum entities reconciled locally by one query; must be a positive finite integer. */
   readonly maxClientSideScan?: number;
@@ -36,10 +37,19 @@ export interface DatastoreStorageFactoryInput {
  * callers retry. Identical immutable retries are safe; divergent content fails.
  */
 export interface DatastoreEntityStorageHandle<I, S extends Message> {
+  /** Provides current-record persistence for the entity scope. */
   readonly current: EntityRecordStorage<I, S>;
+  /** Provides state-history persistence for the entity scope. */
   readonly states: EntityStateHistoryPort<I, S>;
+  /** Provides event-history persistence for the entity scope. */
   readonly events: EntityEventHistoryPort<I>;
+  /** Closes this handle without closing its caller-owned Datastore client. */
   close(): void;
+  /**
+   * Returns whether this handle accepts new operations.
+   *
+   * @returns `true` while the handle is open.
+   */
   isOpen(): boolean;
 }
 
@@ -48,6 +58,12 @@ export class DatastoreStorageFactory extends StorageFactory {
   readonly #client: Datastore;
   readonly #maxClientSideScan: number;
 
+  /**
+   * Creates a factory over a caller-owned Datastore client.
+   *
+   * @param input The client and optional client-side scan bound.
+   * @returns The initialized storage factory.
+   */
   constructor(input: DatastoreStorageFactoryInput) {
     super();
     this.#client = input.client;
@@ -57,7 +73,12 @@ export class DatastoreStorageFactory extends StorageFactory {
     }
   }
 
-  /** Creates an adapter with caller-supplied Google Cloud client configuration. */
+  /**
+   * Creates an adapter with caller-supplied Google Cloud client configuration.
+   *
+   * @param options The Google Cloud Datastore client settings.
+   * @returns A storage factory that owns the client it creates.
+   */
   static create(options: DatastoreStorageOptions): DatastoreStorageFactory {
     return new DatastoreStorageFactory({ client: new Datastore(options) });
   }
@@ -69,6 +90,9 @@ export class DatastoreStorageFactory extends StorageFactory {
    * API. Each result is independently closeable, never closes the injected
    * client, binds its layout before access, and does not make current and
    * history calls atomic with one another.
+   *
+   * @param input The frozen framework storage input for one durable entity scope.
+   * @returns An independently closeable entity-history provider handle.
    */
   createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,

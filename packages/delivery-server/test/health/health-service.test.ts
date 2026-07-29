@@ -7,12 +7,12 @@ import {
 } from "@spine-event-engine/proto/delivery-server";
 import { create } from "@bufbuild/protobuf";
 
-import { createHealthService } from "../../src/health/health-service.js";
+import { HealthHandlers } from "../../src/health/health-service.js";
 
 describe("delivery health", () => {
   it("serves overall and every registered descriptor but not unknown names", () => {
     let serving = true;
-    const health = createHealthService(() => serving);
+    const health = HealthHandlers.create(() => serving);
     for (const service of [
       "",
       "grpc.health.v1.Health",
@@ -39,7 +39,7 @@ describe("delivery health", () => {
   });
 
   it("does not implement health watch", () => {
-    const health = createHealthService(() => true);
+    const health = HealthHandlers.create(() => true);
     expect(() =>
       health.watch(create(HealthCheckRequestSchema, { service: "" }), {} as never),
     ).toThrow(expect.objectContaining({ code: Code.Unimplemented }));

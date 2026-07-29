@@ -9,10 +9,10 @@ import {
   InboxService,
   ShardService,
 } from "@spine-event-engine/proto/delivery-server";
-import { createHealthService } from "../health/health-service.js";
-import { createDeliveryAssembly } from "./assembly.js";
-import { resolveConfiguration } from "./config.js";
-import { runDeliveryServerShutdown } from "./shutdown.js";
+import { HealthHandlers } from "../health/health-service.js";
+import { DeliveryAssembly } from "./assembly.js";
+import { DeliveryConfig, type DeliveryConfiguration } from "./config.js";
+import { DeliveryShutdown } from "./shutdown.js";
 
 /** Construction-time configuration for {@link DeliveryServer}. */
 export interface DeliveryServerOptions {
@@ -63,13 +63,13 @@ export class DeliveryServer {
   /** Configured listener host, resolved and validated during construction. */
   readonly host: string;
   #port: number;
-  readonly #configuration: ReturnType<typeof resolveConfiguration>;
+  readonly #configuration: DeliveryConfiguration;
   #server: http2.Http2Server | undefined;
   #start: Promise<this> | undefined;
   #close: Promise<void> | undefined;
   #started = false;
   #serving = true;
-  #assembly: ReturnType<typeof createDeliveryAssembly> | undefined;
+  #assembly: ReturnType<typeof DeliveryAssembly.create> | undefined;
   readonly #sessions = new Set<http2.ServerHttp2Session>();
 
   /**
@@ -77,24 +77,30 @@ export class DeliveryServer {
    *
    * Invalid options or environment values fail synchronously before any listener
    * is created or bound.
+   *
+   * @param options Holds explicit listener and retained-state options.
+   * @returns The constructed terminal-lifecycle server.
    */
   constructor(options: DeliveryServerOptions = {}) {
-    this.#configuration = resolveConfiguration(options);
+    this.#configuration = DeliveryConfig.resolve(options);
     this.host = this.#configuration.host;
     this.#port = this.#configuration.port;
   }
 
   /**
-   * Configured port before startup, or the actual bound port after a successful
+   * Returns the configured port before startup or the bound port after a successful
    * ephemeral (`0`) bind.
+   *
+   * @returns The configured or bound listener port.
    */
   get port(): number {
     return this.#port;
   }
 
   /**
-   * Configured HTTP base URL of the running cleartext HTTP/2 listener.
+   * Returns the HTTP base URL of the running cleartext HTTP/2 listener.
    *
+   * @returns The configured listener base URL.
    * @throws If read before startup completes successfully.
    */
   get baseUrl(): string {
@@ -107,6 +113,8 @@ export class DeliveryServer {
    *
    * Concurrent and repeated calls share the same promise and listener. A failed
    * or closed instance is terminal and cannot retry startup.
+   *
+   * @returns The shared startup promise.
    */
   start(): Promise<this> {
     if (this.#close !== undefined) return Promise.reject(new Error("Delivery server is closed."));
@@ -116,14 +124,14 @@ export class DeliveryServer {
   }
 
   /**
-   * Runs ordered terminal shutdown once.
+   * Closes ordered terminal resources once.
    *
    * Concurrent and repeated calls share one promise. Closing before startup
    * prevents binding; closing during startup waits for reached-resource cleanup.
    */
   close(): Promise<void> {
     if (this.#close !== undefined) return this.#close;
-    this.#close = runDeliveryServerShutdown({
+    this.#close = DeliveryShutdown.run({
       markNotServing: () => {
         this.#serving = false;
       },
@@ -141,7 +149,7 @@ export class DeliveryServer {
         }
         const server = this.#server;
         if (server?.listening) {
-          const closing = closeServer(server);
+          const closing = this.#closeListener(server);
           for (const session of this.#sessions) session.close();
           await closing;
         }
@@ -151,7 +159,7 @@ export class DeliveryServer {
   }
 
   async #startOnce(): Promise<this> {
-    const core = createDeliveryAssembly(this.#configuration);
+    const core = DeliveryAssembly.create(this.#configuration);
     this.#assembly = core;
     const server = http2.createServer(
       connectNodeAdapter({
@@ -161,7 +169,7 @@ export class DeliveryServer {
           router.service(AdminService, core.admin);
           router.service(
             Health,
-            createHealthService(() => this.#serving),
+            HealthHandlers.create(() => this.#serving),
           );
         },
         readMaxBytes: this.#configuration.maxInboundMessageBytes,
@@ -173,46 +181,48 @@ export class DeliveryServer {
     });
     this.#server = server;
     try {
-      const address = await listen(server, this.host, this.#port);
+      const address = await this.#listen(server, this.host, this.#port);
       this.#port = address.port;
       this.#started = true;
       return this;
     } catch (error) {
-      await closeServer(server);
+      await this.#closeListener(server);
       throw error;
     }
   }
-}
 
-function listen(server: http2.Http2Server, host: string, port: number): Promise<AddressInfo> {
-  return new Promise((resolve, reject) => {
-    const done = () => {
-      server.off("error", fail);
-      server.off("listening", ready);
-    };
-    const fail = (error: Error) => {
-      done();
-      reject(error);
-    };
-    const ready = () => {
-      done();
-      resolve(server.address() as AddressInfo);
-    };
-    server.once("error", fail);
-    server.once("listening", ready);
-    server.listen(port, host);
-  });
-}
-
-function closeServer(server: http2.Http2Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!server.listening) {
-      resolve();
-      return;
-    }
-    server.close((error) => {
-      if (error === undefined) resolve();
-      else reject(error);
+  /** Waits for a cleartext HTTP/2 listener to bind and reports its address. */
+  #listen(server: http2.Http2Server, host: string, port: number): Promise<AddressInfo> {
+    return new Promise((resolve, reject) => {
+      const done = () => {
+        server.off("error", fail);
+        server.off("listening", ready);
+      };
+      const fail = (error: Error) => {
+        done();
+        reject(error);
+      };
+      const ready = () => {
+        done();
+        resolve(server.address() as AddressInfo);
+      };
+      server.once("error", fail);
+      server.once("listening", ready);
+      server.listen(port, host);
     });
-  });
+  }
+
+  /** Closes a bound cleartext HTTP/2 listener without changing terminal state. */
+  #closeListener(server: http2.Http2Server): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!server.listening) {
+        resolve();
+        return;
+      }
+      server.close((error) => {
+        if (error === undefined) resolve();
+        else reject(error);
+      });
+    });
+  }
 }

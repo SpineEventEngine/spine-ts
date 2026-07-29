@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { runDeliveryServerShutdown } from "../../src/server/shutdown.js";
+import { DeliveryShutdown } from "../../src/server/shutdown.js";
 
 describe("delivery server shutdown order", () => {
   it("marks health, fences admission, completes Admin, then closes network", async () => {
     const phases: string[] = [];
-    await runDeliveryServerShutdown({
+    await DeliveryShutdown.run({
       markNotServing: () => phases.push("health"),
       closeAdmission: () => phases.push("admission"),
       closeAdmin: () => phases.push("admin"),

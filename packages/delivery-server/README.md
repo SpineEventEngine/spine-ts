@@ -1,6 +1,6 @@
 # @spine-event-engine/delivery-server
 
-`createInMemoryDeliveryServerCore()` provides the in-memory simple-server Inbox
+`InMemoryDelivery.create()` provides the in-memory simple-server Inbox
 and Shard handlers for caller-owned router registration. This low-level core
 has no listener, Admin, health, configuration, or process lifecycle ownership;
 the same package also exports the standalone `DeliveryServer` described below.
@@ -8,9 +8,9 @@ the same package also exports the standalone `DeliveryServer` described below.
 ```ts
 import { createRouterTransport } from "@connectrpc/connect";
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
-import { createInMemoryDeliveryServerCore } from "@spine-event-engine/delivery-server";
+import { InMemoryDelivery } from "@spine-event-engine/delivery-server";
 
-const core = createInMemoryDeliveryServerCore({
+const core = InMemoryDelivery.create({
   processingTimeoutMs: 30_000,
   maxRetainedMessages: 10_000,
   maxRetainedBytes: 32 * 1024 * 1024,

@@ -17,9 +17,9 @@ import {
 } from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDeliveryState } from "../../src/core/in-memory-delivery-state.js";
-import { createInboxService } from "../../src/core/inbox-service.js";
+import { InboxHandlers } from "../../src/core/inbox-service.js";
 import { MutationAdmission } from "../../src/core/mutation-admission.js";
-import { createShardService } from "../../src/core/shard-service.js";
+import { ShardHandlers } from "../../src/core/shard-service.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
@@ -39,7 +39,7 @@ describe("Shard transition notifications", () => {
   it("notifies initial pickup, stale takeover, explicit release, and expired release in admission order", async () => {
     let now = 0;
     const transitions: string[] = [];
-    const shards = createShardService(
+    const shards = ShardHandlers.create(
       new InMemoryDeliveryState(),
       new MutationAdmission(),
       () => now,
@@ -64,7 +64,7 @@ describe("Shard transition notifications", () => {
 
   it("does not notify failed pickup or missing release", async () => {
     const transitions: number[] = [];
-    const shards = createShardService(
+    const shards = ShardHandlers.create(
       new InMemoryDeliveryState(),
       new MutationAdmission(),
       () => 0,
@@ -82,7 +82,7 @@ describe("Shard transition notifications", () => {
 describe("Inbox transition notifications", () => {
   it("notifies actual insert/remove transitions in batch input order but suppresses no-ops", async () => {
     const transitions: number[] = [];
-    const inbox = createInboxService(
+    const inbox = InboxHandlers.create(
       new InMemoryDeliveryState(),
       new MutationAdmission(),
       (value) => transitions.push(value.index),

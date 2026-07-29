@@ -1,7 +1,7 @@
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import {
   Health,
-  HealthCheckResponse_ServingStatus,
+  HealthCheckResponse_ServingStatus as ServingStatus,
 } from "@spine-event-engine/proto/delivery-server";
 
 const known = new Set([
@@ -12,16 +12,25 @@ const known = new Set([
   "spine.delivery.AdminService",
 ]);
 
-export function createHealthService(serving: () => boolean): ServiceImpl<typeof Health> {
-  return {
-    check: (request) => ({
-      status:
-        serving() && known.has(request.service)
-          ? HealthCheckResponse_ServingStatus.SERVING
-          : HealthCheckResponse_ServingStatus.NOT_SERVING,
-    }),
-    watch: () => {
-      throw new ConnectError("Delivery health watch is not implemented.", Code.Unimplemented);
-    },
-  };
-}
+/** Provides Delivery health handler implementations. */
+export const HealthHandlers: Readonly<{
+  create(serving: () => boolean): ServiceImpl<typeof Health>;
+}> = Object.freeze({
+  /** Creates health handlers.
+   * @param serving Reports whether the server accepts traffic.
+   * @returns Provides Connect health handlers.
+   */
+  create(serving: () => boolean): ServiceImpl<typeof Health> {
+    return {
+      check: (request) => ({
+        status:
+          serving() && known.has(request.service)
+            ? ServingStatus.SERVING
+            : ServingStatus.NOT_SERVING,
+      }),
+      watch: () => {
+        throw new ConnectError("Delivery health watch is not implemented.", Code.Unimplemented);
+      },
+    };
+  },
+});

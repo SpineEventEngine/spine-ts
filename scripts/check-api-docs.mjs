@@ -352,9 +352,9 @@ const expectedDeliveryClientExports = [
   "RemovalQuarantineRecord",
 ];
 const expectedDeliveryServerExports = [
-  "createInMemoryDeliveryServerCore",
-  "InMemoryDeliveryServerCore",
-  "InMemoryDeliveryServerCoreOptions",
+  "InMemoryDelivery",
+  "DeliveryCore",
+  "DeliveryCoreOptions",
   "DeliveryServer",
   "DeliveryServerOptions",
 ];

@@ -19,14 +19,14 @@ import {
   ShardIndexSchema,
 } from "@spine-event-engine/proto/delivery";
 
-import { createInMemoryDeliveryServerCore } from "../../src/index.js";
+import { InMemoryDelivery } from "../../src/index.js";
 
 const context = { signal: new AbortController().signal } as never;
 const shard = create(ShardIndexSchema, { index: 0, ofTotal: 2 });
 
 describe("in-memory Inbox", () => {
   it("upserts duplicate identities and returns detached strict ordered pages", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     await core.inbox.writeOne(create(WriteMessageSchema, { message: message("a", 1, 2) }), context);
     await core.inbox.writeOne(create(WriteMessageSchema, { message: message("a", 2, 3) }), context);
     await core.inbox.writeOne(create(WriteMessageSchema, { message: message("b", 2, 1) }), context);
@@ -50,7 +50,7 @@ describe("in-memory Inbox", () => {
   });
 
   it("rejects malformed direct messages before mutation", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     await expect(
       core.inbox.writeOne(create(WriteMessageSchema, { message: message("", 1, 1) }), context),
     ).rejects.toMatchObject({ code: Code.InvalidArgument });
@@ -78,7 +78,7 @@ describe("in-memory Inbox", () => {
   });
 
   it("rejects poison direct-RPC records and atomically rejects a mixed batch", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const poison = message("poison", 1, 1);
     poison.payload = { case: undefined };
     await expect(
@@ -106,7 +106,7 @@ describe("in-memory Inbox", () => {
   });
 
   it("rejects retained message, byte, and shard capacity atomically", async () => {
-    const messages = createInMemoryDeliveryServerCore({ maxRetainedMessages: 1 });
+    const messages = InMemoryDelivery.create({ maxRetainedMessages: 1 });
     await expect(
       messages.inbox.writeMany(
         create(WriteMessagesSchema, {
@@ -118,7 +118,7 @@ describe("in-memory Inbox", () => {
     ).rejects.toMatchObject({ code: Code.ResourceExhausted });
     expect((await messages.inbox.findOne(id("one", shard), context)).message).toBeUndefined();
 
-    const bytes = createInMemoryDeliveryServerCore({ maxRetainedBytes: 1 });
+    const bytes = InMemoryDelivery.create({ maxRetainedBytes: 1 });
     await expect(
       bytes.inbox.writeOne(
         create(WriteMessageSchema, { message: message("bytes", 1, 1) }),
@@ -126,7 +126,7 @@ describe("in-memory Inbox", () => {
       ),
     ).rejects.toMatchObject({ code: Code.ResourceExhausted });
 
-    const shards = createInMemoryDeliveryServerCore({ maxTrackedShards: 1 });
+    const shards = InMemoryDelivery.create({ maxTrackedShards: 1 });
     const other = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
     await shards.inbox.writeOne(
       create(WriteMessageSchema, { message: message("first", 1, 1) }),
@@ -141,7 +141,7 @@ describe("in-memory Inbox", () => {
   });
 
   it("bounds full records and explicitly rejects an oversized requested page", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const records = Array.from({ length: 5 }, (_, index) =>
       message(`large-${String(index)}`, 1, index, shard, 0, 900_000),
     );
@@ -182,7 +182,7 @@ describe("in-memory Inbox", () => {
   });
 
   it("rejects write and remove batch lengths before inspecting records", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     for (const request of [
       core.inbox.writeMany(
         create(WriteMessagesSchema, { shard, message: Array.from({ length: 101 }, () => ({})) }),
@@ -203,7 +203,7 @@ describe("in-memory Inbox", () => {
   });
 
   it("rejects impossible shard identities before Inbox reads or admission", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const impossible = create(ShardIndexSchema, { index: 2, ofTotal: 2 });
     await expect(
       core.inbox.writeOne(
@@ -231,7 +231,7 @@ describe("in-memory Inbox", () => {
   });
 
   it("keeps same UUIDs in different full shard identities and batch changes atomic", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const other = create(ShardIndexSchema, { index: 0, ofTotal: 3 });
     await core.inbox.writeOne(
       create(WriteMessageSchema, { message: message("same", 1, 1) }),
@@ -278,7 +278,7 @@ describe("in-memory Inbox", () => {
   });
 
   it("uses strict nanos and bounded pages and starts a new core empty", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     await core.inbox.writeOne(
       create(WriteMessageSchema, { message: message("nanos", 1, 1, shard, 5) }),
       context,
@@ -308,12 +308,12 @@ describe("in-memory Inbox", () => {
       ),
     ).toThrow();
     expect(
-      (await createInMemoryDeliveryServerCore().inbox.findOne(id("nanos", shard), context)).message,
+      (await InMemoryDelivery.create().inbox.findOne(id("nanos", shard), context)).message,
     ).toBeUndefined();
   });
 
   it("selects newest pending by timestamp, version, then UUID", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     await core.inbox.writeOne(
       create(WriteMessageSchema, { message: message("a", 2, 1, shard, 1) }),
       context,

@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import { InboxService, ShardService } from "@spine-event-engine/proto/delivery-server";
 import { ShardIndex } from "@spine-event-engine/server";
-import { createInMemoryDeliveryServerCore } from "../../delivery-server/src/index.js";
+import { InMemoryDelivery } from "../../delivery-server/src/index.js";
 import { DeliveryClient, DeliveryOutcomeUnknownError, RemoteWorkRegistry } from "../src/index.js";
 import { domainMessage } from "./shared-fixtures.js";
 
 describe("in-memory delivery core response loss", () => {
   it("makes a committed write reconcilable after its response is lost", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const transport = createRouterTransport((router) => {
       router.service(InboxService, {
         ...core.inbox,
@@ -26,7 +26,7 @@ describe("in-memory delivery core response loss", () => {
   });
 
   it("makes a committed removal observable after its response is lost", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const initial = createRouterTransport((router) => router.service(InboxService, core.inbox));
     const message = domainMessage("remove");
     await DeliveryClient.usingTransport(initial).writeOne(message);
@@ -45,7 +45,7 @@ describe("in-memory delivery core response loss", () => {
   });
 
   it("quarantines a lost pickup outcome without issuing another pickup", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     let pickups = 0;
     const transport = createRouterTransport((router) => {
       router.service(ShardService, {
@@ -66,7 +66,7 @@ describe("in-memory delivery core response loss", () => {
   });
 
   it("proves a lost release committed through a direct subsequent pickup", async () => {
-    const core = createInMemoryDeliveryServerCore();
+    const core = InMemoryDelivery.create();
     const normal = DeliveryClient.usingTransport(
       createRouterTransport((router) => router.service(ShardService, core.shards)),
     );
@@ -91,7 +91,7 @@ describe("in-memory delivery core response loss", () => {
 
   it("proves a lost expiration release committed through a direct pickup", async () => {
     let now = 10;
-    const core = createInMemoryDeliveryServerCore({ now: () => now });
+    const core = InMemoryDelivery.create({ now: () => now });
     const normal = DeliveryClient.usingTransport(
       createRouterTransport((router) => router.service(ShardService, core.shards)),
     );
@@ -116,7 +116,7 @@ describe("in-memory delivery core response loss", () => {
 
   it("observes 101 committed expired shard sessions", async () => {
     let now = 0;
-    const core = createInMemoryDeliveryServerCore({ now: () => now });
+    const core = InMemoryDelivery.create({ now: () => now });
     const client = DeliveryClient.usingTransport(
       createRouterTransport((router) => router.service(ShardService, core.shards)),
     );
@@ -132,7 +132,7 @@ describe("in-memory delivery core response loss", () => {
 
   it("classifies an oversized post-commit expiration response as unknown", async () => {
     let now = 0;
-    const core = createInMemoryDeliveryServerCore({ now: () => now });
+    const core = InMemoryDelivery.create({ now: () => now });
     const normal = DeliveryClient.usingTransport(
       createRouterTransport((router) => router.service(ShardService, core.shards)),
     );

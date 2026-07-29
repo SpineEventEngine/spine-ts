@@ -19,7 +19,7 @@ import {
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import { createHash } from "node:crypto";
 
-import { CanonicalMysqlValue } from "./value-codec.js";
+import { CanonicalMysqlValues } from "./value-codec.js";
 import {
   MysqlStorageDataError,
   MysqlStorageOperationError,
@@ -56,14 +56,21 @@ interface EntityTableSchema {
 }
 
 interface EntityHistorySchema {
+  /** Whether all generated columns are non-nullable. */
   readonly columnNullable: boolean;
+  /** Names the required MySQL table engine. */
   readonly engine: string;
+  /** Describes the durable entity-history tables. */
   readonly tables: readonly EntityTableSchema[];
 }
 
+/** Describes the immutable MySQL entity-history schema contract. */
 export const entityHistorySchema: EntityHistorySchema = {
+  /** Keeps all durable entity-history columns non-nullable. */
   columnNullable: false,
+  /** Requires MySQL's transactional InnoDB engine. */
   engine: "InnoDB",
+  /** Defines the durable entity-history table layouts. */
   tables: [
     {
       name: "spine_ts_entity_specs",
@@ -168,34 +175,37 @@ export const entityHistorySchema: EntityHistorySchema = {
   ],
 };
 
-const tables = entityHistorySchema.tables.map(createEntityHistoryTable);
-
-function createEntityHistoryTable(table: EntityTableSchema): string {
-  const definitions = [
-    ...table.columns.map(entityColumnDefinition),
-    ...table.indexes.map((index) => {
-      const columns = index.columns
-        .map((column) => `${column.name}${column.direction === "DESC" ? " DESC" : ""}`)
-        .join(", ");
-      if (index.primary === true) {
-        return `PRIMARY KEY (${columns})`;
-      }
-      return `${index.unique === true ? "UNIQUE " : ""}INDEX ${index.name} (${columns})`;
-    }),
-  ].join(",\n     ");
-  return `CREATE TABLE IF NOT EXISTS ${table.name} (\n     ${definitions}\n   ) ENGINE=${entityHistorySchema.engine}`;
-}
-
-function entityColumnDefinition(column: EntityColumnSchema): string {
-  const nullability = entityHistorySchema.columnNullable ? "" : " NOT NULL";
-  const generation = column.autoIncrement === true ? " AUTO_INCREMENT" : "";
-  return `${column.name} ${column.ddlType}${nullability}${generation}`;
-}
+const EntityHistoryTables = Object.freeze({
+  create(table: EntityTableSchema): string {
+    const definitions = [
+      ...table.columns.map(EntityHistoryTables.column),
+      ...table.indexes.map((index) => {
+        const columns = index.columns
+          .map((column) => `${column.name}${column.direction === "DESC" ? " DESC" : ""}`)
+          .join(", ");
+        if (index.primary === true) {
+          return `PRIMARY KEY (${columns})`;
+        }
+        return `${index.unique === true ? "UNIQUE " : ""}INDEX ${index.name} (${columns})`;
+      }),
+    ].join(",\n     ");
+    return `CREATE TABLE IF NOT EXISTS ${table.name} (\n     ${definitions}\n   ) ENGINE=${entityHistorySchema.engine}`;
+  },
+  column(column: EntityColumnSchema): string {
+    const nullability = entityHistorySchema.columnNullable ? "" : " NOT NULL";
+    const generation = column.autoIncrement === true ? " AUTO_INCREMENT" : "";
+    return `${column.name} ${column.ddlType}${nullability}${generation}`;
+  },
+});
+const tables = entityHistorySchema.tables.map(EntityHistoryTables.create);
 
 /** A factory-owned, lifecycle-admitted entity connection lease seam. */
 export interface MysqlEntityConnectionProvider {
+  /** Acquires an admitted MySQL connection lease. @returns A connection lease. */
   acquire(): Promise<PoolConnection>;
+  /** Clears a successful or failed connection lease. @param connection The lease to release. */
   release(connection: PoolConnection): void;
+  /** Removes an unusable connection lease. @param connection The lease to destroy. */
   destroy(connection: PoolConnection): void;
 }
 
@@ -207,21 +217,38 @@ export interface MysqlEntityConnectionProvider {
  * live handle during factory shutdown. It is not a remote history API.
  */
 export interface MysqlEntityStorageHandle<I, S extends Message> {
+  /** Stores current entity records. */
   readonly current: EntityRecordStorage<I, S>;
+  /** Stores state history records. */
   readonly states: EntityStateHistoryPort<I, S>;
+  /** Stores event history records. */
   readonly events: EntityEventHistoryPort<I>;
+  /** Closes this storage handle. */
   close(): void;
+  /** Determines whether this handle remains open. @returns Whether the handle is open. */
   isOpen(): boolean;
 }
 
 /** Provider-neutral-shaped MySQL implementation; only the MySQL dialect is supplied today. */
 export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStorageHandle<I, S> {
+  /** Stores current entity records. */
   readonly current: EntityRecordStorage<I, S>;
+  /** Stores state history records. */
   readonly states: EntityStateHistoryPort<I, S>;
+  /** Stores event history records. */
   readonly events: EntityEventHistoryPort<I>;
   #open = true;
   #schemaReady: Promise<void> | undefined;
 
+  /**
+   * Creates an independently closeable entity-history handle.
+   * @param input The entity storage contract.
+   * @param connections The factory-owned lease provider.
+   * @param database The MySQL database name for lock isolation.
+   * @param verifySchema The schema verification operation.
+   * @param onClose The factory callback that forgets this handle.
+   * @returns A configured entity-history handle.
+   */
   constructor(
     private readonly input: EntityStorageInput<I, S>,
     private readonly connections: MysqlEntityConnectionProvider,
@@ -229,7 +256,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     private readonly verifySchema: (connection: PoolConnection) => Promise<void>,
     private readonly onClose: () => void,
   ) {
-    const scope = scopeFor(input);
+    const scope = EntityValues.scope(input);
     this.current = {
       read: async (id) => this.readCurrent(scope, id),
       write: async (record) => this.writeCurrent(scope, record),
@@ -249,6 +276,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     };
   }
 
+  /** Closes this handle and unregisters it from its factory. */
   close(): void {
     if (this.#open) {
       this.#open = false;
@@ -256,6 +284,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     }
   }
 
+  /** Determines whether this handle remains open. @returns Whether the handle is open. */
   isOpen(): boolean {
     return this.#open;
   }
@@ -283,7 +312,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         "SELECT fingerprint FROM spine_ts_entity_specs WHERE scope_key = ?",
         [scope],
       );
-      if (rows.length !== 1 || !same(rows[0]?.fingerprint, fingerprint))
+      if (rows.length !== 1 || !EntityValues.same(rows[0]?.fingerprint, fingerprint))
         throw new Error("Entity storage has an incompatible record specification.");
     } catch (error) {
       failure =
@@ -291,7 +320,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         (error instanceof Error &&
           error.message === "Entity storage has an incompatible record specification.")
           ? error
-          : operationError();
+          : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined) this.release(c, failure);
@@ -305,7 +334,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
       for (const sql of tables) await c.query(sql);
       await this.verifySchema(c);
     } catch (error) {
-      failure = error instanceof MysqlStorageSchemaError ? error : operationError();
+      failure = error instanceof MysqlStorageSchemaError ? error : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined) this.release(c, failure);
@@ -319,28 +348,28 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
       c = await this.connections.acquire();
       const [r] = await c.execute<CurrentRow[]>(
         "SELECT payload, version, archived, deleted FROM spine_ts_entity_current WHERE scope_key=? AND entity_key=?",
-        [scope, key(this.input, id)],
+        [scope, EntityValues.key(this.input, id)],
       );
       const x = r[0];
       return x === undefined
         ? undefined
         : {
             id: this.input.id.clone(id),
-            state: decode(this.input.stateSchema, x.payload),
+            state: EntityValues.decode(this.input.stateSchema, x.payload),
             version: BigInt(x.version),
             archived: Boolean(x.archived),
             deleted: Boolean(x.deleted),
           };
     } catch (error) {
-      failure = error instanceof MysqlStorageDataError ? error : operationError();
+      failure = error instanceof MysqlStorageDataError ? error : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined) this.release(c, failure);
     }
   }
   private async writeCurrent(scope: Uint8Array, r: EntityRecord<I, S>): Promise<void> {
-    signed64(r.version, "Current record version");
-    key(this.input, r.id);
+    EntityInputs.signed64(r.version, "Current record version");
+    EntityValues.key(this.input, r.id);
     if (this.input.id.key(r.id) !== this.input.id.key(this.input.extractId(r.state))) {
       throw new MysqlStorageDataError();
     }
@@ -355,7 +384,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
            archived=VALUES(archived), deleted=VALUES(deleted)`,
         [
           scope,
-          key(this.input, r.id),
+          EntityValues.key(this.input, r.id),
           toBinary(this.input.stateSchema, r.state),
           r.version,
           r.archived,
@@ -363,7 +392,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         ],
       );
     } catch {
-      throw operationError();
+      throw EntityErrors.operation();
     }
   }
   private async queryCurrent(scope: Uint8Array, plan: NormalizedQueryPlan<I>) {
@@ -386,9 +415,10 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         throw new Error(`Storage query exceeded the candidate limit of ${String(candidateLimit)}.`);
       return StorageQueryEvaluator.evaluate(
         rows.map((row) => {
-          const state = decode(this.input.stateSchema, row.payload);
+          const state = EntityValues.decode(this.input.stateSchema, row.payload);
           const id = this.input.id.clone(this.input.extractId(state));
-          if (!same(row.entity_key, key(this.input, id))) throw new MysqlStorageDataError();
+          if (!EntityValues.same(row.entity_key, EntityValues.key(this.input, id)))
+            throw new MysqlStorageDataError();
           const record = Object.freeze({
             id: this.input.id.clone(id),
             state: Object.freeze(state),
@@ -410,19 +440,19 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         plan,
       );
     } catch (error) {
-      failure = error instanceof MysqlStorageDataError ? error : operationError();
+      failure = error instanceof MysqlStorageDataError ? error : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined) this.release(c, failure);
     }
   }
   private async appendState(scope: Uint8Array, r: EntityStateHistoryRecord<I, S>): Promise<void> {
-    signed64(r.version, "State-history version");
-    timestamp(r.createdAt);
-    key(this.input, r.entityId);
+    EntityInputs.signed64(r.version, "State-history version");
+    EntityInputs.timestamp(r.createdAt);
+    EntityValues.key(this.input, r.entityId);
     await this.ready(scope);
     const payload = toBinary(this.input.stateSchema, r.state),
-      entity = key(this.input, r.entityId);
+      entity = EntityValues.key(this.input, r.entityId);
     let c: PoolConnection | undefined;
     let locked = false;
     let destroyed = false;
@@ -441,7 +471,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
           [scope, entity, r.version, r.createdAt.seconds, r.createdAt.nanos, payload],
         );
       } catch (error) {
-        if (!isDuplicate(error)) throw error;
+        if (!EntityErrors.duplicate(error)) throw error;
         const [rows] = await c.execute<StateRow[]>(
           `SELECT seconds,nanos,payload FROM spine_ts_entity_states
            WHERE scope_key=? AND entity_key=? AND version=? FOR UPDATE`,
@@ -452,7 +482,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
           x === undefined ||
           BigInt(x.seconds) !== r.createdAt.seconds ||
           x.nanos !== r.createdAt.nanos ||
-          !same(x.payload, payload)
+          !EntityValues.same(x.payload, payload)
         )
           throw new Error("State-history retry has divergent content.");
       }
@@ -464,7 +494,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         (error.message === "State-history retry has divergent content." ||
           error.message === "Entity history storage is closed.")
           ? error
-          : operationError();
+          : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined && locked)
@@ -478,7 +508,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     depth: number,
     from?: bigint,
   ): Promise<readonly EntityStateHistoryRecord<I, S>[]> {
-    depthCheck(depth);
+    EntityInputs.depth(depth);
     await this.ready(scope);
     let c: PoolConnection | undefined;
     let failure: unknown;
@@ -488,13 +518,15 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         `SELECT version,seconds,nanos,payload FROM spine_ts_entity_states
          WHERE scope_key=? AND entity_key=? ${from === undefined ? "" : "AND version < ?"}
          ORDER BY version DESC, seconds DESC, nanos DESC LIMIT ${String(depth)}`,
-        from === undefined ? [scope, key(this.input, id)] : [scope, key(this.input, id), from],
+        from === undefined
+          ? [scope, EntityValues.key(this.input, id)]
+          : [scope, EntityValues.key(this.input, id), from],
       );
       return Object.freeze(
         r.map((x) =>
           Object.freeze({
             entityId: this.input.id.clone(id),
-            state: Object.freeze(decode(this.input.stateSchema, x.payload)),
+            state: Object.freeze(EntityValues.decode(this.input.stateSchema, x.payload)),
             version: BigInt(x.version),
             createdAt: Object.freeze(
               create(TimestampSchema, { seconds: BigInt(x.seconds), nanos: x.nanos }),
@@ -504,14 +536,16 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
       );
     } catch (error) {
       failure =
-        error instanceof MysqlStorageDataError || isClosedError(error) ? error : operationError();
+        error instanceof MysqlStorageDataError || EntityErrors.closed(error)
+          ? error
+          : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined) this.release(c, failure);
     }
   }
   private async stateAt(scope: Uint8Array, id: I, at: Timestamp): Promise<S | undefined> {
-    timestamp(at);
+    EntityInputs.timestamp(at);
     await this.ready(scope);
     let c: PoolConnection | undefined;
     let failure: unknown;
@@ -522,14 +556,16 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
          WHERE scope_key=? AND entity_key=?
            AND (seconds < ? OR (seconds=? AND nanos<=?))
          ORDER BY seconds DESC,nanos DESC,version DESC LIMIT 1`,
-        [scope, key(this.input, id), at.seconds, at.seconds, at.nanos],
+        [scope, EntityValues.key(this.input, id), at.seconds, at.seconds, at.nanos],
       );
       return r[0] === undefined
         ? undefined
-        : Object.freeze(decode(this.input.stateSchema, r[0].payload));
+        : Object.freeze(EntityValues.decode(this.input.stateSchema, r[0].payload));
     } catch (error) {
       failure =
-        error instanceof MysqlStorageDataError || isClosedError(error) ? error : operationError();
+        error instanceof MysqlStorageDataError || EntityErrors.closed(error)
+          ? error
+          : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined) this.release(c, failure);
@@ -539,7 +575,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     if (!Number.isSafeInteger(keep) || keep < 0)
       throw new Error("State-history trim count must be a non-negative safe integer.");
     await this.ready(scope);
-    const entity = key(this.input, id);
+    const entity = EntityValues.key(this.input, id);
     let c: PoolConnection | undefined;
     let locked = false;
     let destroyed = false;
@@ -572,14 +608,14 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
           committed = true;
         } catch {
           if (!committed) await c.rollback().catch(() => undefined);
-          failure = operationError();
+          failure = EntityErrors.operation();
           throw failure;
         } finally {
           // A close after the commit intentionally prevents the next bounded chunk.
         }
       }
     } catch (error) {
-      failure = isClosedError(error) ? error : operationError();
+      failure = EntityErrors.closed(error) ? error : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined && locked)
@@ -594,13 +630,13 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     const eventId = r.event.id?.value;
     if (eventId === undefined || eventId.trim() === "")
       throw new Error("Event history requires an event ID.");
-    signed64(r.producerVersion, "Event-history producer version");
-    timestamp(r.createdAt);
-    key(this.input, r.entityId);
+    EntityInputs.signed64(r.producerVersion, "Event-history producer version");
+    EntityInputs.timestamp(r.createdAt);
+    EntityValues.key(this.input, r.entityId);
     await this.ready(scope);
     const payload = toBinary(EventSchema, r.event),
       eventKey = new TextEncoder().encode(eventId),
-      entity = key(this.input, r.entityId);
+      entity = EntityValues.key(this.input, r.entityId);
     try {
       await this.exec(
         `INSERT INTO spine_ts_entity_events
@@ -617,7 +653,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         ],
       );
     } catch (error) {
-      if (!isDuplicate(error)) throw operationError();
+      if (!EntityErrors.duplicate(error)) throw EntityErrors.operation();
       let c: PoolConnection | undefined;
       let failure: unknown;
       try {
@@ -630,11 +666,11 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         const x = rows[0];
         if (
           x === undefined ||
-          !same(x.entity_key, entity) ||
+          !EntityValues.same(x.entity_key, entity) ||
           BigInt(x.producer_version) !== r.producerVersion ||
           BigInt(x.seconds) !== r.createdAt.seconds ||
           x.nanos !== r.createdAt.nanos ||
-          !same(x.payload, payload)
+          !EntityValues.same(x.payload, payload)
         )
           throw new Error("Event-history retry has divergent content.");
       } catch (reconciliationError) {
@@ -643,7 +679,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
           reconciliationError.message === "Event-history retry has divergent content."
         )
           failure = reconciliationError;
-        else failure = operationError();
+        else failure = EntityErrors.operation();
         throw failure;
       } finally {
         if (c !== undefined) this.release(c, failure);
@@ -656,7 +692,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     depth: number,
     from?: bigint,
   ): Promise<readonly Event[]> {
-    depthCheck(depth);
+    EntityInputs.depth(depth);
     await this.ready(scope);
     let c: PoolConnection | undefined;
     let failure: unknown;
@@ -667,12 +703,18 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
          WHERE scope_key=? AND entity_key=? ${from === undefined ? "" : "AND producer_version < ?"}
          ORDER BY producer_version DESC,seconds DESC,nanos DESC,event_key DESC
          LIMIT ${String(depth)}`,
-        from === undefined ? [scope, key(this.input, id)] : [scope, key(this.input, id), from],
+        from === undefined
+          ? [scope, EntityValues.key(this.input, id)]
+          : [scope, EntityValues.key(this.input, id), from],
       );
-      return Object.freeze(r.map((x) => Object.freeze(decode(EventSchema, x.payload))));
+      return Object.freeze(
+        r.map((x) => Object.freeze(EntityValues.decode(EventSchema, x.payload))),
+      );
     } catch (error) {
       failure =
-        error instanceof MysqlStorageDataError || isClosedError(error) ? error : operationError();
+        error instanceof MysqlStorageDataError || EntityErrors.closed(error)
+          ? error
+          : EntityErrors.operation();
       throw failure;
     } finally {
       if (c !== undefined) this.release(c, failure);
@@ -686,7 +728,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     at: Timestamp,
     descriptor: EntityTruncateDescriptor,
   ): Promise<void> {
-    timestamp(at);
+    EntityInputs.timestamp(at);
     await this.ready(scope);
     let highWaterLease: PoolConnection | undefined;
     let highWater: WriteOrderRow | undefined;
@@ -701,13 +743,13 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
       ]);
       highWater = rows[0];
     } catch (error) {
-      highWaterFailure = isClosedError(error) ? error : operationError();
+      highWaterFailure = EntityErrors.closed(error) ? error : EntityErrors.operation();
       throw highWaterFailure;
     } finally {
       if (highWaterLease !== undefined) this.release(highWaterLease, highWaterFailure);
     }
     if (highWater === undefined) return;
-    const cutoff = writeOrder(highWater.write_order);
+    const cutoff = EntityValues.writeOrder(highWater.write_order);
     for (;;) {
       this.requireOpen();
       let c: PoolConnection | undefined;
@@ -732,7 +774,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         await c.commit();
       } catch {
         await c?.rollback().catch(() => undefined);
-        failure = operationError();
+        failure = EntityErrors.operation();
         throw failure;
       } finally {
         if (c !== undefined) this.release(c, failure);
@@ -757,7 +799,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
       this.connections.release(connection);
     } catch {
       if (priorFailure !== undefined) return;
-      throw operationError();
+      throw EntityErrors.operation();
     }
   }
 
@@ -768,9 +810,9 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   ): Promise<void> {
     const [rows] = await c.execute<LockRow[]>(
       "SELECT GET_LOCK(?, @@SESSION.innodb_lock_wait_timeout) AS acquired",
-      [lockName(this.database, scope, entity)],
+      [this.lockName(scope, entity)],
     );
-    if (rows.length !== 1 || Number(rows[0]?.acquired) !== 1) throw operationError();
+    if (rows.length !== 1 || Number(rows[0]?.acquired) !== 1) throw EntityErrors.operation();
   }
 
   private async releaseEntityLock(
@@ -781,7 +823,7 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
   ): Promise<boolean> {
     try {
       const [rows] = await c.execute<LockRow[]>("SELECT RELEASE_LOCK(?) AS released", [
-        lockName(this.database, scope, entity),
+        this.lockName(scope, entity),
       ]);
       if (rows.length !== 1 || Number(rows[0]?.released) !== 1) throw new Error();
       return false;
@@ -790,10 +832,20 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
         this.connections.destroy(c);
       } catch {
         if (priorFailure !== undefined) return true;
-        throw operationError();
+        throw EntityErrors.operation();
       }
       return true;
     }
+  }
+  private lockName(scope: Uint8Array, entity: Uint8Array): string {
+    const hash = createHash("sha256")
+      .update(this.database)
+      .update("\0")
+      .update(scope)
+      .update("\0")
+      .update(entity)
+      .digest("hex");
+    return `spine_ts_${hash.slice(0, 55)}`;
   }
 }
 interface EntityTruncateDescriptor {
@@ -863,72 +915,66 @@ interface LockRow extends RowDataPacket {
   acquired?: number | null;
   released?: number | null;
 }
-function scopeFor<I, S extends Message>(i: EntityStorageInput<I, S>): Uint8Array {
-  if (i.layout.trim() === "" || i.id.fingerprint.trim() === "")
-    throw new Error("Entity storage requires non-blank layout and ID codec fingerprints.");
-  const tenant = i.context.multitenant ? i.context.tenantId : undefined;
-  if (i.context.multitenant && (tenant === undefined || tenant.trim() === ""))
-    throw new Error("Multitenant storage requires context.tenantId.");
-  return CanonicalMysqlValue.encode(
-    [i.context.name, i.context.multitenant ? tenant : "single-tenant", i.storageKey],
-    scopeBytes,
-  );
-}
-function key<I, S extends Message>(i: EntityStorageInput<I, S>, id: I): Uint8Array {
-  return CanonicalMysqlValue.encode(i.id.key(id), idBytes);
-}
-function decode<S extends Message>(schema: GenMessage<S>, payload: Uint8Array): S {
-  try {
-    return clone(schema, fromBinary(schema, payload, { readUnknownFields: false }));
-  } catch {
-    throw new MysqlStorageDataError();
-  }
-}
-function same(a: Uint8Array | undefined, b: Uint8Array): boolean {
-  return a?.length === b.length && a.every((x, i) => x === b[i]);
-}
-function depthCheck(depth: number): void {
-  if (!Number.isSafeInteger(depth) || depth <= 0)
-    throw new Error("History depth must be a positive safe integer.");
-}
-function signed64(value: bigint, name: string): void {
-  if (value < -(1n << 63n) || value > (1n << 63n) - 1n)
-    throw new Error(`${name} must be a signed 64-bit integer.`);
-}
-function timestamp(value: Timestamp): void {
-  signed64(value.seconds, "Timestamp seconds");
-  if (!Number.isInteger(value.nanos) || value.nanos < 0 || value.nanos > 999_999_999)
-    throw new Error("Timestamp nanos must be an integer from 0 through 999999999.");
-}
-function writeOrder(value: string | bigint | number): bigint {
-  try {
-    const order = BigInt(value);
-    if (order <= 0n) throw new Error();
-    return order;
-  } catch {
-    throw new MysqlStorageDataError();
-  }
-}
-function lockName(database: string, scope: Uint8Array, entity: Uint8Array): string {
-  const hash = createHash("sha256")
-    .update(database)
-    .update("\0")
-    .update(scope)
-    .update("\0")
-    .update(entity)
-    .digest("hex");
-  // MySQL allows at most 64 characters; the adapter namespace leaves 55 hex
-  // characters (220 bits) from SHA-256, which keeps names database-specific.
-  return `spine_ts_${hash.slice(0, 55)}`;
-}
-function isDuplicate(error: unknown): boolean {
-  return (
-    typeof error === "object" && error !== null && Reflect.get(error, "code") === "ER_DUP_ENTRY"
-  );
-}
-function isClosedError(error: unknown): boolean {
-  return error instanceof Error && error.message === "Entity history storage is closed.";
-}
-function operationError(): Error {
-  return new MysqlStorageOperationError();
-}
+const EntityValues = Object.freeze({
+  scope<I, S extends Message>(i: EntityStorageInput<I, S>): Uint8Array {
+    if (i.layout.trim() === "" || i.id.fingerprint.trim() === "")
+      throw new Error("Entity storage requires non-blank layout and ID codec fingerprints.");
+    const tenant = i.context.multitenant ? i.context.tenantId : undefined;
+    if (i.context.multitenant && (tenant === undefined || tenant.trim() === ""))
+      throw new Error("Multitenant storage requires context.tenantId.");
+    return CanonicalMysqlValues.encode(
+      [i.context.name, i.context.multitenant ? tenant : "single-tenant", i.storageKey],
+      scopeBytes,
+    );
+  },
+  key<I, S extends Message>(i: EntityStorageInput<I, S>, id: I): Uint8Array {
+    return CanonicalMysqlValues.encode(i.id.key(id), idBytes);
+  },
+  decode<S extends Message>(schema: GenMessage<S>, payload: Uint8Array): S {
+    try {
+      return clone(schema, fromBinary(schema, payload, { readUnknownFields: false }));
+    } catch {
+      throw new MysqlStorageDataError();
+    }
+  },
+  same(a: Uint8Array | undefined, b: Uint8Array): boolean {
+    return a?.length === b.length && a.every((x, i) => x === b[i]);
+  },
+  writeOrder(value: string | bigint | number): bigint {
+    try {
+      const order = BigInt(value);
+      if (order <= 0n) throw new Error();
+      return order;
+    } catch {
+      throw new MysqlStorageDataError();
+    }
+  },
+});
+const EntityInputs = Object.freeze({
+  depth(depth: number): void {
+    if (!Number.isSafeInteger(depth) || depth <= 0)
+      throw new Error("History depth must be a positive safe integer.");
+  },
+  signed64(value: bigint, name: string): void {
+    if (value < -(1n << 63n) || value > (1n << 63n) - 1n)
+      throw new Error(`${name} must be a signed 64-bit integer.`);
+  },
+  timestamp(value: Timestamp): void {
+    EntityInputs.signed64(value.seconds, "Timestamp seconds");
+    if (!Number.isInteger(value.nanos) || value.nanos < 0 || value.nanos > 999_999_999)
+      throw new Error("Timestamp nanos must be an integer from 0 through 999999999.");
+  },
+});
+const EntityErrors = Object.freeze({
+  duplicate(error: unknown): boolean {
+    return (
+      typeof error === "object" && error !== null && Reflect.get(error, "code") === "ER_DUP_ENTRY"
+    );
+  },
+  closed(error: unknown): boolean {
+    return error instanceof Error && error.message === "Entity history storage is closed.";
+  },
+  operation(): Error {
+    return new MysqlStorageOperationError();
+  },
+});

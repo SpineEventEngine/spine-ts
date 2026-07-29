@@ -18,14 +18,14 @@ import {
   type ShardIndex,
 } from "@spine-event-engine/proto/delivery";
 
-import { createDeliveryAssembly } from "../../src/server/assembly.js";
+import { DeliveryAssembly } from "../../src/server/assembly.js";
 
 const context = { signal: new AbortController().signal } as never;
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
 
 describe("delivery assembly Admin projection", () => {
   it("tracks actual counts and prunes released message-free shards from snapshots", async () => {
-    const assembly = createDeliveryAssembly();
+    const assembly = DeliveryAssembly.create();
     const first = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const second = create(ShardIndexSchema, { index: 1, ofTotal: 2 });
     const firstMessage = message("first", first);
@@ -54,7 +54,7 @@ describe("delivery assembly Admin projection", () => {
   });
 
   it("discards a real mutation before ACK eligibility and publishes the later complete count", async () => {
-    const assembly = createDeliveryAssembly();
+    const assembly = DeliveryAssembly.create();
     const only = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
     const iterator = assembly.admin
       .subscribeToShardUpdates(create(EmptySchema), context)
