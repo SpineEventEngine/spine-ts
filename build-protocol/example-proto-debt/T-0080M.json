@@ -1,0 +1,938 @@
+[
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "field:display_name#1",
+    "name": "display_name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:display_name#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "field:id#1",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "field:id#2",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#2 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "field:id#3",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#3 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "field:name#1",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "field:project_id#1",
+    "name": "project_id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:project_id#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "message:CreateProject#1",
+    "name": "CreateProject",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:CreateProject#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "message:CreateTask#1",
+    "name": "CreateTask",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:CreateTask#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/commands.proto",
+    "identity": "message:EnrollPerson#1",
+    "name": "EnrollPerson",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:EnrollPerson#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "field:display_name#1",
+    "name": "display_name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:display_name#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "field:id#1",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "field:id#2",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#2 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "field:id#3",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#3 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "field:name#1",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "field:project_id#1",
+    "name": "project_id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:project_id#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "message:Person#1",
+    "name": "Person",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:Person#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "message:Project#1",
+    "name": "Project",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:Project#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/entities.proto",
+    "identity": "message:Task#1",
+    "name": "Task",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:Task#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "field:display_name#1",
+    "name": "display_name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:display_name#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "field:id#1",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "field:id#2",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#2 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "field:id#3",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#3 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "field:name#1",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "field:project_id#1",
+    "name": "project_id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:project_id#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "message:PersonEnrolled#1",
+    "name": "PersonEnrolled",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:PersonEnrolled#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "message:ProjectCreated#1",
+    "name": "ProjectCreated",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:ProjectCreated#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/events.proto",
+    "identity": "message:TaskCreated#1",
+    "name": "TaskCreated",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:TaskCreated#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#1",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#10",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#10 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#11",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#11 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#12",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#12 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#13",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#13 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#14",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#14 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#15",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#15 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#16",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#16 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#17",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#17 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#18",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#18 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#19",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#19 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#2",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#2 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#20",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#20 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#21",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#21 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#22",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#22 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#23",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#23 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#24",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#24 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#25",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#25 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#26",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#26 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#27",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#27 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#28",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#28 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#29",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#29 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#3",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#3 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#30",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#30 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#4",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#4 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#5",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#5 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#6",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#6 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#7",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#7 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#8",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#8 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:id#9",
+    "name": "id",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:id#9 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#1",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#10",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#10 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#11",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#11 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#12",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#12 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#13",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#13 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#14",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#14 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#15",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#15 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#16",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#16 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#17",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#17 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#18",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#18 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#19",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#19 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#2",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#2 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#20",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#20 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#3",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#3 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#4",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#4 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#5",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#5 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#6",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#6 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#7",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#7 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#8",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#8 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:name#9",
+    "name": "name",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:name#9 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#1",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#10",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#10 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#2",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#2 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#3",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#3 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#4",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#4 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#5",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#5 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#6",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#6 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#7",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#7 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#8",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#8 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "field:updates#9",
+    "name": "updates",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt field:updates#9 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:ActivityFeed#1",
+    "name": "ActivityFeed",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:ActivityFeed#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:AssigneeWorkload#1",
+    "name": "AssigneeWorkload",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:AssigneeWorkload#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:AssignmentManager#1",
+    "name": "AssignmentManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:AssignmentManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:AssignmentView#1",
+    "name": "AssignmentView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:AssignmentView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:AuditManager#1",
+    "name": "AuditManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:AuditManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:AuditView#1",
+    "name": "AuditView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:AuditView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:CapacityView#1",
+    "name": "CapacityView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:CapacityView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:CleanupManager#1",
+    "name": "CleanupManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:CleanupManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:CleanupView#1",
+    "name": "CleanupView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:CleanupView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:DueDateManager#1",
+    "name": "DueDateManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:DueDateManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:DueDateView#1",
+    "name": "DueDateView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:DueDateView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:NotificationManager#1",
+    "name": "NotificationManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:NotificationManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:PersonIndex#1",
+    "name": "PersonIndex",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:PersonIndex#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:PriorityCounters#1",
+    "name": "PriorityCounters",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:PriorityCounters#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:ProgressView#1",
+    "name": "ProgressView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:ProgressView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:ProjectIndex#1",
+    "name": "ProjectIndex",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:ProjectIndex#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:ProjectLifecycleManager#1",
+    "name": "ProjectLifecycleManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:ProjectLifecycleManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:ProjectLifecycleView#1",
+    "name": "ProjectLifecycleView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:ProjectLifecycleView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:ProjectSummary#1",
+    "name": "ProjectSummary",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:ProjectSummary#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:StatusCounters#1",
+    "name": "StatusCounters",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:StatusCounters#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:StatusManager#1",
+    "name": "StatusManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:StatusManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:SubscriptionFanoutManager#1",
+    "name": "SubscriptionFanoutManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:SubscriptionFanoutManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:SubscriptionFanoutView#1",
+    "name": "SubscriptionFanoutView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:SubscriptionFanoutView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:TaskDependencyManager#1",
+    "name": "TaskDependencyManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:TaskDependencyManager#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:TaskDependencyView#1",
+    "name": "TaskDependencyView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:TaskDependencyView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:TaskIndex#1",
+    "name": "TaskIndex",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:TaskIndex#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:TaskList#1",
+    "name": "TaskList",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:TaskList#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:TenantView#1",
+    "name": "TenantView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:TenantView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:UserView#1",
+    "name": "UserView",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:UserView#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "missing-comment",
+    "file": "examples/project-management/proto/spine/example/project_management/v1/read_models.proto",
+    "identity": "message:WorkloadManager#1",
+    "name": "WorkloadManager",
+    "disposition": "migration-debt",
+    "reason": "Pre-T-0080C authored Proto quality debt message:WorkloadManager#1 requires remediation by the assigned slice."
+  }
+]

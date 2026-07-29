@@ -97,6 +97,14 @@ export function main(argv = process.argv.slice(2)) {
     return verifyStatus;
   }
 
+  const exampleQualityStatus = runCommand("authored example Proto quality", process.execPath, [
+    join(repoRoot, "scripts/check-example-proto-quality.mjs"),
+  ]);
+
+  if (exampleQualityStatus !== 0) {
+    return exampleQualityStatus;
+  }
+
   const descriptorStatus = runCommand("frozen descriptor compatibility", process.execPath, [
     join(repoRoot, "packages/proto/scripts/verify-descriptor-compatibility.mjs"),
   ]);

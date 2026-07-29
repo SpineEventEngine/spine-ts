@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Complete.
 
 ## Parent And Dependency
 
@@ -79,3 +79,59 @@ Standard. This changes Proto quality tooling, not serialized contracts.
 - Style/maintainability: relevant to checker integration.
 - Performance/reliability: N/A if source scanning remains bounded and no
   runtime/serialized contract changes.
+
+## Implementation Assignment
+
+- Existing role: implementer.
+- Ownership: authored-example Proto checker integration/tests, explicit
+  provenance classification, exact partitioned Proto debt, and T-0080C
+  evidence only. No example Proto or generated TypeScript remediation.
+- Expected/configured model: `gpt-5.6-terra`.
+- Expected/configured reasoning: medium.
+- Both fields are explicit in dispatch.
+- Implementation follows red-green-refactor; debt is generated only after the
+  complete focused behavior is green.
+- Runtime metadata is recorded when exposed; otherwise the immutable configured
+  role/profile and self-introspection limitation are accepted absent visible
+  mismatch or fallback.
+
+## Implementation Evidence
+
+- The existing implementer was explicitly configured as `gpt-5.6-terra` with
+  medium reasoning. Runtime model/reasoning self-introspection is unavailable
+  on this surface; no visible fallback or mismatch appeared.
+- Red fixtures first established the missing checker, then the missing nested
+  example-root and map-field behavior. Focused green coverage checks comments,
+  named forms, snake/enum semantics, copied provenance, exact debt failures,
+  immutable baseline identity, workflow integration, and escaped diagnostics.
+- `scripts/check-example-proto-quality.mjs` classifies each tracked example
+  Proto only through its package manifest. Explicit copied entries require a
+  pinned Spine upstream repository, 40-character commit, and confined upstream
+  path; copied sources are excluded from authored comment/name enforcement.
+- Exact migration debt is pinned to immutable pre-T-0080C baseline
+  `b1a3dc7b1f21e4f7239014ea56f451941ef7addd`: K 32, L 34, M 117, N 54
+  (237 total). New, malformed/broadened, duplicate, stale, and post-baseline
+  entries fail; no operational baseline override exists.
+- `pnpm proto:lint` invokes the check before descriptor compatibility. No
+  example Proto, generated TypeScript, wire declaration, copied Spine source,
+  or JVM build changed.
+
+## Review Wave 1 Correction Evidence
+
+- The correction remains in the explicitly configured existing implementer
+  profile `gpt-5.6-terra` / medium; runtime self-introspection remains
+  unavailable with no visible mismatch or fallback.
+- Package manifests are now derived only from tracked Proto package roots.
+  An untracked manifest cannot authorize a tracked Proto file.
+- Immutable baseline reads use `git --no-replace-objects show` and cache parsed
+  debt keys per pinned file. The focused regression creates a replacement ref
+  only to prove it cannot authorize debt; no fixture relies on it for success.
+- Chat-model and users-model debt belongs to T-0080J. Current exact partitions
+  are J 32, K 0, L 34, M 117, N 54 (237 total), all pinned to
+  `b1a3dc7b1f21e4f7239014ea56f451941ef7addd`.
+- The checker now returns stable diagnostics for non-array copied-source lists,
+  rejects absolute upstream paths, and rejects mechanical templates including
+  `This is a field.`. The pure production-used debt validator explicitly tests
+  malformed/broadened, duplicate, stale, and post-baseline records without a
+  fixture baseline override. Focused tests, direct checker, Proto lint, tooling
+  typecheck, ESLint, Prettier, diff check, and canonical lint pass.
