@@ -2,7 +2,7 @@
 
 ## Status
 
-Complete; reviewed and final verification passed; ready for `main` integration.
+Complete; merged, post-merge verified, and remotely synchronized.
 
 ## Classification
 
@@ -190,3 +190,8 @@ rescue branches, and all 15 legacy archive refs at the recorded exact SHAs.
 - The task worktree is clean and its local/remote branch tips match.
 - Direct remote verification matched `main`, T-0078, both rescue refs, and all
   15 legacy archive refs to their recorded exact SHAs.
+- `main` fast-forwarded to reviewed task endpoint `a4122d7d`; the merged commit
+  and tree exactly matched the verified task endpoint.
+- The post-merge gate repeated inventory byte equality, structure/ancestry,
+  Node syntax, full-diff whitespace, and changed-file formatting checks on
+  `main`; all passed.
