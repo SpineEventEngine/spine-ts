@@ -47,7 +47,31 @@ Before dispatch:
 - Orchestrator-dispatched read-only content/topology scan: expected
   `gpt-5.6-terra`, medium reasoning; explicit dispatch fields required.
 
-Runtime metadata and results are pending.
+Both dispatches explicitly set the expected model and reasoning. The surface
+did not expose actual runtime-model metadata; the immutable configured
+`gpt-5.6-terra`/medium profile is the available evidence, so both results are
+accepted under the protocol.
+
+Implementation assignment:
+
+- Existing implementer role, bounded to the primary-worktree hygiene rule and
+  recovery records: expected `gpt-5.6-terra`, medium reasoning; explicit
+  dispatch fields required.
+
+## Investigation Result
+
+- Local `main` stopped at `f826acec` after T-0071 on 2026-07-24.
+- Later tasks used isolated worktrees and advanced `origin/main` by 45 commits,
+  but the primary checkout was never synchronized.
+- Early Wave 3/4 exploration accumulated in that stale primary checkout.
+- The rescued client/query, Chat, Proto tooling, and guide changes were later
+  integrated in evolved form by T-0072, T-0073, and T-0075.
+- The raw research prompt and scratch planning records are unique historical
+  artifacts, not unfinished product work.
+- Rescue commit `def03a41` preserves every non-human-review path on
+  `origin/rescue/dirty-root-20260729`.
+- The primary checkout now matches `origin/main` at `39e64841`; only the two
+  protected human-review files remain untouched and untracked.
 
 ## Review Dispositions
 
@@ -60,4 +84,4 @@ Runtime metadata and results are pending.
 
 ## Verification
 
-Pending.
+Recovery-state verification passed. Protocol-change verification is pending.
