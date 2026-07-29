@@ -167,8 +167,7 @@ dated pending body text is chronology, not unimplemented product work.
 - Branch: `task/T-0037b-bounded-generation-run-coordinator`
 - Safe-stop commit: `4adb0b4f`
 - Implementation endpoint: `066c295d4860754be97341b802e05faa0da92370`
-- Review package:
-  `.superpowers/sdd/review-40329cad..066c295d.diff`
+- The transient review package was removed after the recorded review completed.
 - State: Round 5 is complete with two accepted P1 findings, every reviewer is
   closed, and no fix worker is assigned.
 - Last coordinator verification: four files, 180 focused tests, both
