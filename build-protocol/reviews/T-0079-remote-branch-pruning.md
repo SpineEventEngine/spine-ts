@@ -129,3 +129,26 @@ Review immutable correction range `afca27bc..bd204d53`:
 Both roles and profiles are explicit before dispatch. Runtime self-metadata
 will be recorded if returned; otherwise the immutable configured profiles are
 the available evidence.
+
+## Review Wave 2
+
+- Style/maintainability: CLEAN. Both prior findings are closed; the reviewer
+  confirmed the exact atomic/lease flags, fully qualified deletion refspecs,
+  safe read-only verifier, dynamic T-0079 handling, TSV semantics, and macOS
+  command correctness.
+- Documentation: CLEAN. The reviewer confirmed the accounting, exact expected
+  refs, atomic chronology, audit consistency, and pending task-closure state.
+- Runtime self-metadata was unavailable for both reviewers. Their immutable
+  configured `gpt-5.6-terra`/high and `gpt-5.6-luna`/medium profiles are the
+  accepted evidence.
+
+## Final Dispositions
+
+- Style/maintainability: CLEAN.
+- Documentation completeness: CLEAN.
+- TypeScript/API: N/A because no source, export, declaration, generated model,
+  package, or public API changed.
+- Performance/reliability: N/A because no runtime, persistence, concurrency,
+  lifecycle, retry, or resource behavior changed.
+- Security: N/A because no product security boundary, dependency, credential,
+  or deployment behavior changed.

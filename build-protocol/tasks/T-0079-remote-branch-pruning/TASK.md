@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress.
+Complete; reviewed and final verification passed; ready for `main` integration.
 
 ## Classification
 
@@ -144,3 +144,6 @@ every unique historical or rescue tip under an immutable remote tag.
   read-only `ls-remote`/sort/diff/count commands that compare the committed
   expectations and fail on missing or extra head/tag refs. A fresh direct query
   was blocked by transient DNS; no local refs are used as published evidence.
+- Final live verification later succeeded with exactly two head names, exact
+  `main`, one valid dynamic T-0079 tip, and all 17 exact archive tag mappings.
+- Documentation and style/maintainability Review Wave 2 are CLEAN.
