@@ -1,9 +1,13 @@
 # Datastore orders load example
 
-This generated-Protobuf test app composes its domain with a caller-provided
-`StorageFactory`. The optional Datastore entrypoint creates the adapter only at
-composition; handlers never depend on provider types. Its fixed runtime topology
-is two aggregates (`Order`, `Sku`), two process managers, and ten projections.
+This generated-Protobuf example composes its domain with a caller-provided
+`StorageFactory`: `createDatastoreOrdersContext` and
+`startDatastoreOrdersServer` are provider-neutral. For Datastore-specific
+composition, `startOrdersDatastoreServer` creates the Datastore adapter at the
+entrypoint; domain handlers do not depend on provider types.
+
+The fixed topology has two aggregates (`Order` and `Sku`), ten projections, and
+two process managers: 14 repositories in total.
 
 Build the workspace first:
 
@@ -11,7 +15,13 @@ Build the workspace first:
 pnpm typecheck:build
 ```
 
-Run one independent-user loopback scenario:
+Run the complete three-file, 11-test example suite:
+
+```bash
+pnpm --config.verify-deps-before-run=false exec vitest run examples/datastore-orders/test/proto-module.test.ts examples/datastore-orders/test/topology.test.ts examples/datastore-orders/test/load-runner.test.ts
+```
+
+The load script accepts only 10, 100, or 1,000 independent users:
 
 ```bash
 SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --filter @spine-event-engine/example-datastore-orders load
@@ -19,21 +29,19 @@ SPINE_DATASTORE_ORDERS_LOAD_USERS=100 pnpm --filter @spine-event-engine/example-
 SPINE_DATASTORE_ORDERS_LOAD_USERS=1000 pnpm --filter @spine-event-engine/example-datastore-orders load
 ```
 
-Each user is an independent asynchronous command/query/subscription actor with
-its own subscription iterator. The runner multiplexes those actors over at most
-16 HTTP/2 sessions and schedules at most 10 actors concurrently. This lets the
-1,000-user scenario measure sustained application traffic rather than local
-listener or one-shot queue saturation. Each actor posts an `Order` command,
-waits for `OrderSummary` query visibility, consumes a correlated subscription
-update, then closes its resources. JSON results report completed
-command/query/subscription paths, latency percentiles, failures, and throughput.
+Each user has a unique command/query/subscription identity and subscription
+iterator, but users do not each own an HTTP/2 session. The runner creates at
+most 16 shared client sessions and executes users in waves of at most 10.
 
-The focused topology test runs the real gRPC path and 10-user smoke scenario:
+For a successful user, command acknowledgement and query visibility are timed
+from immediately before command submission. Subscription delivery is timed
+from the wait for that user's first subscription update. Every RPC receives the
+user's `AbortController` signal. A timeout aborts that controller and clears
+its timer; cleanup then aborts the user, waits at most 500 ms for
+`iterator.return()`, and tolerates the expected cancellation race. After all
+users settle, the outer run aborts the shared session pool. It does not issue a
+subscription cancellation RPC.
 
-```bash
-pnpm vitest run examples/datastore-orders/test/topology.test.ts
-```
-
-This is an in-memory local test/load specimen, not Datastore emulator evidence
-or a production benchmark. Sandboxes that deny `127.0.0.1` listeners need a
-loopback-permitted environment for the real scenarios.
+The test and load script start an in-memory loopback server. They demonstrate
+the example's local command/query/subscription behavior, not live Datastore
+service behavior, emulator validation, a benchmark, or a saturation result.

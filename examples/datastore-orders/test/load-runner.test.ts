@@ -18,9 +18,19 @@ import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { datastoreOrdersLoadLevels, runDatastoreOrdersLoad } from "../src/load-runner.js";
+import { LatencyDistribution } from "../src/internal/latency-distribution.js";
 import { OrderSummarySchema } from "../generated/spine/example/datastore_orders/v1/read_models_pb.js";
 
 describe("datastore-orders load runner", () => {
+  it("calculates nearest-rank percentiles from unsorted latencies and zeros empty distributions", () => {
+    expect(LatencyDistribution.from([40, 10, 30, 20, 50]).percentiles()).toEqual({
+      p50Ms: 30,
+      p95Ms: 50,
+      p99Ms: 50,
+    });
+    expect(LatencyDistribution.from([]).percentiles()).toEqual({ p50Ms: 0, p95Ms: 0, p99Ms: 0 });
+  });
+
   it("runs ten users over real gRPC and reports command, query, subscription, and metrics", async () => {
     const modulePath = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
     expect(existsSync(modulePath)).toBe(true);
