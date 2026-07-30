@@ -360,3 +360,29 @@ serialized-contract changes across the repository.
   explicit dispatch.
 - The correction is accepted for commit, immediate push, and restart of the
   complete repository verification gate.
+
+## Coverage Timeout Correction
+
+- The coverage suite's only failure was a 5.107-second timeout in a cleanup
+  integration case that launches eight checker processes.
+- Isolated execution takes about 2.5 seconds, and the complete cleanup suite
+  passes 107/107.
+- Only this case receives a 15-second timeout. Production behavior and test
+  assertions remain unchanged; focused coverage and full verification follow.
+- Performance/reliability review uses explicit `gpt-5.6-terra` / high
+  configuration. Documentation, API, style, and security are N/A.
+- Reliability review confirms the allowance is proportionate, corrects the
+  invocation count, and requires the synchronous checker child to be bounded.
+  `runChecker` now has a 10-second process timeout beneath the 15-second test
+  allowance; focused re-review follows.
+
+## Coverage Timeout Acceptance
+
+- Cleanup passes 107/107 with formatting and diff-integrity checks.
+- Focused performance/reliability re-review is clean: the checker child bound
+  is effective and the test allowance remains proportionate.
+- Runtime metadata was unavailable; the immutable configured
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high profile matched
+  the explicit dispatch.
+- The correction is accepted for commit, immediate push, and restart of the
+  complete repository verification gate.

@@ -109,6 +109,7 @@ function run(command, args, cwd) {
 function runChecker(repoRoot) {
   return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], {
     encoding: "utf8",
+    timeout: 10_000,
   });
 }
 
@@ -609,7 +610,7 @@ describe("check-cleanup-rules", () => {
     );
     const moved = runChecker(repoRoot);
     expect(moved.stderr).toContain("packages/demo/src/index.ts:5 retainedBoundary()#1");
-  });
+  }, 15_000);
 
   it("keeps ordinary fixture necessity records independent of the production baseline", () => {
     const repoRoot = createFixture();

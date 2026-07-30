@@ -144,6 +144,33 @@ N/A for this type-only correction.
 
 The correction is accepted for commit, immediate push, and full verification.
 
+## Coverage Timeout Correction
+
+Full coverage exposed a 5.107-second timeout in the cleanup test that invokes
+the checker eight times against temporary Git repositories. Isolated execution
+completes in about 2.5 seconds, and the full cleanup suite passes 107/107. The
+correction changes only that integration case's timeout to 15 seconds.
+Performance/reliability reopens to verify the bound; all other review concerns
+are N/A absent behavior or contract changes.
+
+The first reliability review confirmed the 15-second allowance is
+proportionate but found that Vitest cannot interrupt the synchronous checker
+child, and it corrected the launch count from nine to eight. `runChecker` now
+has its own 10-second process timeout so a wedged child returns before the
+per-test allowance. Focused reliability re-review remains open.
+
+## Coverage Timeout Final Disposition
+
+- Performance/reliability: clean after correction and focused re-review. The
+  10-second child timeout is effective, the 15-second test allowance is
+  proportionate, and all eight checker invocations remain covered.
+- Documentation, TypeScript/API, style/maintainability, and security: N/A.
+- Runtime metadata was unavailable; the immutable configured
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high profile matched
+  the explicit dispatch.
+
+The correction is accepted for commit, immediate push, and full verification.
+
 ## Client Node Documentation Reconciliation
 
 The equipped documentation gates additionally require:
