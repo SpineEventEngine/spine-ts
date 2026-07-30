@@ -20,31 +20,44 @@ import { SignalMetadata } from "@spine-event-engine/server";
 
 import { CreateOrderSchema } from "../generated/spine/example/datastore_orders/v1/commands_pb.js";
 import { OrderSummarySchema } from "../generated/spine/example/datastore_orders/v1/read_models_pb.js";
+import { LatencyDistribution, type LatencyPercentiles } from "./internal/latency-distribution.js";
+
+export type { LatencyPercentiles } from "./internal/latency-distribution.js";
 
 /** Supported independent-user levels for the local datastore-orders scenario. */
 export const datastoreOrdersLoadLevels = [10, 100, 1000] as const;
+/** A supported count of independent users for a load run. */
 export type DatastoreOrdersLoadLevel = (typeof datastoreOrdersLoadLevels)[number];
 
+/** Configures a datastore-orders load run. */
 export interface DatastoreOrdersLoadOptions {
+  /** Base URL of the server receiving the load. */
   readonly baseUrl: string;
+  /** Number of independent users to execute. */
   readonly users: DatastoreOrdersLoadLevel;
+  /** Maximum duration for each visibility operation, in milliseconds. */
   readonly visibilityTimeoutMs?: number;
 }
 
-export interface LatencyPercentiles {
-  readonly p50Ms: number;
-  readonly p95Ms: number;
-  readonly p99Ms: number;
-}
+/** Summarizes a completed datastore-orders load run. */
 export interface DatastoreOrdersLoadResult {
+  /** Number of requested independent users. */
   readonly users: number;
+  /** Number of users whose command-query-subscription flow rejected. */
   readonly failedUsers: number;
+  /** Number of users with an acknowledged command. */
   readonly commandAcknowledgements: number;
+  /** Number of users whose query observed the created order. */
   readonly queryVisibilities: number;
+  /** Number of users whose subscription delivered the created order. */
   readonly subscriptionDeliveries: number;
+  /** Percentiles for command acknowledgement latency. */
   readonly commandAcknowledgementLatency: LatencyPercentiles;
+  /** Percentiles for query visibility latency. */
   readonly queryVisibilityLatency: LatencyPercentiles;
+  /** Percentiles for subscription delivery latency. */
   readonly subscriptionDeliveryLatency: LatencyPercentiles;
+  /** Successful user flows per elapsed second. */
   readonly throughputPerSecond: number;
   /** Bounded classification of rejected users for diagnostic load runs. */
   readonly failureMessages: Readonly<Record<string, number>>;
@@ -54,7 +67,11 @@ const metadata = new SignalMetadata();
 const maximumSharedSessions = 16;
 const maximumConcurrentUsers = 10;
 
-/** Runs independent clients through the generated command, query, and subscription services. */
+/** Runs independent clients through the generated command, query, and subscription services.
+ *
+ * @param options - Server and user-count settings for the run.
+ * @returns Aggregate successes, failures, latency percentiles, and throughput.
+ */
 export async function runDatastoreOrdersLoad(
   options: DatastoreOrdersLoadOptions,
 ): Promise<DatastoreOrdersLoadResult> {
@@ -83,7 +100,7 @@ class DatastoreOrdersLoadRun {
     const startedAt = performance.now();
     try {
       const settled = await this.settleUsers();
-      return summarize(this.options.users, settled, performance.now() - startedAt);
+      return this.summarize(settled, performance.now() - startedAt);
     } finally {
       for (const session of this.sessions) session.abort();
     }
@@ -104,55 +121,53 @@ class DatastoreOrdersLoadRun {
   private runUser(index: number): Promise<UserResult> {
     const session = this.sessions[index % this.sessions.length];
     if (session === undefined) throw new Error("Load runner did not allocate an HTTP/2 session.");
-    return runUser(this.options.baseUrl, index, this.timeoutMs, session);
+    return new DatastoreOrdersUserRun(
+      this.options.baseUrl,
+      index,
+      this.timeoutMs,
+      session,
+    ).execute();
   }
-}
 
-function summarize(
-  users: number,
-  settled: readonly PromiseSettledResult<UserResult>[],
-  elapsedMs: number,
-): DatastoreOrdersLoadResult {
-  const results = settled.flatMap((result) =>
-    result.status === "fulfilled" ? [result.value] : [],
-  );
-  return {
-    users,
-    failedUsers: settled.length - results.length,
-    commandAcknowledgements: results.length,
-    queryVisibilities: results.length,
-    subscriptionDeliveries: results.length,
-    commandAcknowledgementLatency: percentiles(
-      results.map((result) => result.commandAcknowledgementMs),
-    ),
-    queryVisibilityLatency: percentiles(results.map((result) => result.queryVisibilityMs)),
-    subscriptionDeliveryLatency: percentiles(
-      results.map((result) => result.subscriptionDeliveryMs),
-    ),
-    throughputPerSecond: elapsedMs === 0 ? 0 : (results.length * 1_000) / elapsedMs,
-    failureMessages: classifyFailures(settled),
-  };
-}
-
-function classifyFailures(
-  settled: readonly PromiseSettledResult<UserResult>[],
-): Record<string, number> {
-  const messages: Record<string, number> = {};
-  for (const result of settled) {
-    if (result.status !== "rejected") continue;
-    const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
-    messages[message] = (messages[message] ?? 0) + 1;
+  private summarize(
+    settled: readonly PromiseSettledResult<UserResult>[],
+    elapsedMs: number,
+  ): DatastoreOrdersLoadResult {
+    const results = settled.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
+    return {
+      users: this.options.users,
+      failedUsers: settled.length - results.length,
+      commandAcknowledgements: results.length,
+      queryVisibilities: results.length,
+      subscriptionDeliveries: results.length,
+      commandAcknowledgementLatency: LatencyDistribution.from(
+        results.map((result) => result.commandAcknowledgementMs),
+      ).percentiles(),
+      queryVisibilityLatency: LatencyDistribution.from(
+        results.map((result) => result.queryVisibilityMs),
+      ).percentiles(),
+      subscriptionDeliveryLatency: LatencyDistribution.from(
+        results.map((result) => result.subscriptionDeliveryMs),
+      ).percentiles(),
+      throughputPerSecond: elapsedMs === 0 ? 0 : (results.length * 1_000) / elapsedMs,
+      failureMessages: this.classifyFailures(settled),
+    };
   }
-  return messages;
-}
 
-async function runUser(
-  baseUrl: string,
-  index: number,
-  timeoutMs: number,
-  session: Http2SessionManager,
-): Promise<UserResult> {
-  return await new DatastoreOrdersUserRun(baseUrl, index, timeoutMs, session).execute();
+  private classifyFailures(
+    settled: readonly PromiseSettledResult<UserResult>[],
+  ): Record<string, number> {
+    const messages: Record<string, number> = {};
+    for (const result of settled) {
+      if (result.status !== "rejected") continue;
+      const message =
+        result.reason instanceof Error ? result.reason.message : String(result.reason);
+      messages[message] = (messages[message] ?? 0) + 1;
+    }
+    return messages;
+  }
 }
 
 interface SubscriptionRead {
@@ -199,8 +214,8 @@ class DatastoreOrdersUserRun {
   }
 
   private async startSubscription(): Promise<SubscriptionRead> {
-    const subscription = await withTimeout(
-      this.subscriptions.subscribe(topic(this.id, this.actorContext), {
+    const subscription = await this.withTimeout(
+      this.subscriptions.subscribe(this.topic(), {
         signal: this.controller.signal,
       }),
       "subscription creation",
@@ -211,12 +226,12 @@ class DatastoreOrdersUserRun {
       .activate(subscription, { signal: this.controller.signal })
       [Symbol.asyncIterator]();
     const firstUpdate = iterator.next();
-    void ignoreCancellation(firstUpdate);
+    void this.ignoreCancellation(firstUpdate);
     return { iterator, firstUpdate };
   }
 
   private async postCommand(submittedAt: number): Promise<number> {
-    const acknowledgement = await withTimeout(
+    const acknowledgement = await this.withTimeout(
       this.commands.post(this.command(), { signal: this.controller.signal }),
       "command acknowledgement",
       this.timeoutMs,
@@ -251,7 +266,7 @@ class DatastoreOrdersUserRun {
   }
 
   private async readQuery() {
-    return await withTimeout(
+    return await this.withTimeout(
       this.queries.read(this.query(), { signal: this.controller.signal }),
       "query visibility read",
       this.timeoutMs,
@@ -262,7 +277,7 @@ class DatastoreOrdersUserRun {
   private query() {
     return create(QuerySchema, {
       id: create(QueryIdSchema, { value: `load-query-${this.id}-${randomUUID()}` }),
-      target: target(this.id),
+      target: this.target(),
       context: this.actorContext,
     });
   }
@@ -282,7 +297,7 @@ class DatastoreOrdersUserRun {
     firstUpdate: Promise<IteratorResult<SubscriptionUpdate>>,
   ): Promise<number> {
     const startedAt = performance.now();
-    const update = await withTimeout(
+    const update = await this.withTimeout(
       firstUpdate,
       "order subscription update",
       this.timeoutMs,
@@ -305,10 +320,64 @@ class DatastoreOrdersUserRun {
     );
   }
 
+  private topic() {
+    return create(TopicSchema, {
+      id: create(TopicIdSchema, { value: `load-topic-${this.id}` }),
+      target: this.target(),
+      context: this.actorContext,
+    });
+  }
+
+  private target() {
+    return create(TargetSchema, {
+      type: TypeUrls.derive(OrderSummarySchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          idFilter: {
+            id: [
+              AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: this.id })),
+            ],
+          },
+        }),
+      },
+    });
+  }
+
+  private async ignoreCancellation(promise: Promise<unknown>): Promise<void> {
+    try {
+      await promise;
+    } catch {
+      // The pending subscription read can reject as expected during cleanup.
+    }
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    label: string,
+    timeoutMs: number,
+    controller?: AbortController,
+  ): Promise<T> {
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timeout = setTimeout(() => {
+            controller?.abort();
+            reject(new Error(`${label} timed out after ${String(timeoutMs)}ms.`));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+    }
+  }
+
   private async cleanup(iterator?: AsyncIterator<SubscriptionUpdate>): Promise<void> {
     this.controller.abort();
     try {
-      await withTimeout(
+      await this.withTimeout(
         Promise.resolve(iterator?.return?.()).then(() => undefined),
         "subscription cleanup",
         500,
@@ -316,68 +385,5 @@ class DatastoreOrdersUserRun {
     } catch {
       // Cancellation races are expected after the shared controller is aborted.
     }
-  }
-}
-
-function topic(id: string, actorContext: ReturnType<typeof metadata.actorContext>) {
-  return create(TopicSchema, {
-    id: create(TopicIdSchema, { value: `load-topic-${id}` }),
-    target: target(id),
-    context: actorContext,
-  });
-}
-function target(id: string) {
-  return create(TargetSchema, {
-    type: TypeUrls.derive(OrderSummarySchema),
-    criterion: {
-      case: "filters",
-      value: create(TargetFiltersSchema, {
-        idFilter: {
-          id: [AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: id }))],
-        },
-      }),
-    },
-  });
-}
-function percentiles(values: readonly number[]): LatencyPercentiles {
-  const sorted = [...values].sort((a, b) => a - b);
-  return {
-    p50Ms: percentile(sorted, 0.5),
-    p95Ms: percentile(sorted, 0.95),
-    p99Ms: percentile(sorted, 0.99),
-  };
-}
-function percentile(sorted: readonly number[], ratio: number): number {
-  return sorted.length === 0
-    ? 0
-    : (sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * ratio) - 1)] ?? 0);
-}
-async function ignoreCancellation(promise: Promise<unknown>): Promise<void> {
-  try {
-    await promise;
-  } catch {
-    // The pending subscription read can reject as expected during cleanup.
-  }
-}
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  label: string,
-  timeoutMs: number,
-  controller?: AbortController,
-): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => {
-          controller?.abort();
-          reject(new Error(`${label} timed out after ${String(timeoutMs)}ms.`));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout !== undefined) clearTimeout(timeout);
   }
 }
