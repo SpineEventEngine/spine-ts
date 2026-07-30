@@ -116,3 +116,35 @@ serialized-contract changes across the repository.
   partition non-overlapping implementation ownership, preserve public/runtime
   behavior, define focused gates/review lanes, and avoid another broad
   discovery round. Runtime metadata or its limitation is required.
+
+## Accepted Bounded Plan
+
+- Constructor enforcement is correct: remove 26 existing constructor
+  `@returns` tags while retaining summaries and parameter documentation.
+- O1 owns 134 Storage-family rows across 16 reported files:
+  `storage` 90, `storage-datastore` 33, and `storage-rdbms` 11. It includes 22
+  invalid constructor-return tags.
+- O2 owns 63 missing async/lifecycle return descriptions across 25 reported
+  `server` files.
+- O3 owns 40 rows across 14 Auth, Client Web, Core, Delivery Server, and
+  Transport files plus:
+  `packages/client-react/src/index.ts`,
+  `scripts/check-cleanup-rules.mjs`,
+  `scripts/check-cleanup-rules.test.mjs`,
+  `scripts/check-api-docs.mjs`, and `docs/api/README.md`.
+- O3 treats all six cleanup failures as one `SignalEnvelopes.event/command`
+  member-resolution defect, documents one named React provider props
+  parameter, and replaces obsolete Proto Tools flat-helper expectations with
+  the current `ProtoConfig` object. It must not restore compatibility exports.
+- All debt ledgers stay empty. The exact 129 standalone necessities remain
+  unchanged: F 107, G 13, L 2, M 3, N 4.
+- O1/O2 prove identical non-comment TypeScript tokens. Every track runs owned
+  TSDoc closure, changed-file ESLint/Prettier, and diff integrity. O3 also
+  proves cleanup 105/105, the production checker, TypeDoc without the React
+  warning, and API-doc truth.
+- One combined review wave covers documentation, TypeScript/API,
+  style/maintainability, and factual performance/reliability claims. Security
+  is N/A because no security boundary changes.
+- The splitter ran as the existing `requirements_splitter`, explicitly
+  `gpt-5.6-sol` / high. Runtime self-introspection is unavailable with no
+  mismatch.
