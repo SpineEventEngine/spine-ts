@@ -225,3 +225,16 @@ change; otherwise standard.
 - Acceptance requires zero live/stale T-0080H TSDoc, standalone-function, and
   semantic-name debt; no old H1-H4 API references; successful Proto/example
   generation; four-package type/build/tests; and scoped quality checks.
+
+## H5 Documentation Reclassification
+
+- Canonical regeneration proves 107 TSDoc rows are genuine rather than stale:
+  client-node 18, delivery-client 11, Proto tools 74, and testing 4.
+- Three independent bounded documentation corrections run from pushed base
+  `ffa1860b`: client-node plus testing, delivery-client, and Proto tools.
+- Each existing implementer is explicitly `gpt-5.6-terra` / medium and owns
+  package source/tests/README only. The H5 reconciliation writer retains sole
+  ownership of the shared ledgers and may not mask live rows.
+- Corrections add concise accurate summaries, parameters, returns, and type or
+  property explanations without changing runtime behavior or public types.
+  Documentation and API review reopen after mechanical verification.
