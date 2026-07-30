@@ -16,7 +16,7 @@ async function main(argv = process.argv.slice(2)) {
   const tempRoot = mkdtempSync(join(tempParent, "spine-handler-registry-"));
 
   try {
-    const { analyzeBuildHandlers, GeneratedRegistryWriter } = await loadBuildTool(tempRoot);
+    const { BuildHandlerAnalyzer, GeneratedRegistryWriter } = await loadBuildTool(tempRoot);
     const program = createProgram(options.project, {
       redirects: options.sourceGeneratedRedirects ?? [
         {
@@ -25,7 +25,7 @@ async function main(argv = process.argv.slice(2)) {
         },
       ],
     });
-    const analysis = analyzeBuildHandlers(program);
+    const analysis = BuildHandlerAnalyzer.analyze(program);
 
     if (analysis.diagnostics.length > 0) {
       printDiagnostics(analysis.diagnostics);
@@ -169,7 +169,7 @@ async function loadBuildTool(tempRoot) {
   const writer = await import(pathToFileURL(join(tempRoot, "generated-registry-writer.mjs")).href);
 
   return {
-    analyzeBuildHandlers: analyzer.analyzeBuildHandlers,
+    BuildHandlerAnalyzer: analyzer.BuildHandlerAnalyzer,
     GeneratedRegistryWriter: writer.GeneratedRegistryWriter,
   };
 }

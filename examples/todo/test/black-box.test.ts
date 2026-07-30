@@ -37,7 +37,7 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { analyzeBuildHandlers } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
+import { BuildHandlerAnalyzer } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
 import {
   CompleteTaskSchema,
@@ -1359,7 +1359,7 @@ function assertGeneratedRegistryFresh(): void {
       ? {}
       : { projectReferences: parsed.projectReferences }),
   });
-  const analysis = analyzeBuildHandlers(program);
+  const analysis = BuildHandlerAnalyzer.analyze(program);
 
   if (analysis.diagnostics.length > 0) {
     throw new Error("Generated handler registry analysis failed.");

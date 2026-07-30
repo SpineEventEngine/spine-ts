@@ -144,3 +144,14 @@ change; otherwise standard.
   is required before acceptance. Writers may not spawn subagents, edit shared H
   ledgers/logs/guides/API expectations, commit, or push. They return exact
   resolved identities and complete package verification evidence.
+
+## Shared Generation Bootstrap Correction
+
+- H1/H3 verification exposed a stale root consumer of the T-0080F handler
+  analyzer rename. `scripts/generate-handler-registry.mjs` and the exact Todo
+  registry-freshness test now call `BuildHandlerAnalyzer.analyze`.
+- Full Proto generation passes all checksum, example-quality, and 49 frozen
+  descriptor checks. The permitted Todo BlackBox suite passes 33/33; an initial
+  sandbox-only 20-test loopback failure is superseded.
+- This common correction is committed on the umbrella and propagated to the
+  three isolated H worktrees before their final verification.
