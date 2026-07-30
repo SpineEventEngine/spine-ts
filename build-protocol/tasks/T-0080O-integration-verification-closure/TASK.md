@@ -420,3 +420,13 @@ workspace links/build artifacts, focused post-merge checks pass:
 
 The two protected human-review files remain untouched and untracked. T-0080O
 and the parent program are closed.
+
+## Remote And Workspace Closure
+
+- The completed umbrella and `main` were pushed and remote equality was
+  proved.
+- All 34 obsolete remote T-0080 task branches were proven merged before
+  deletion.
+- Their clean merged local worktrees and branches were removed without force.
+- Origin retains only `main` and the intentional unmerged rescue branch that
+  preserves unrelated primary-checkout test edits.
