@@ -211,7 +211,6 @@ export class MysqlStorageConfigurationError extends Error {
   /**
    * Creates a configuration error with the validation message.
    * @param message The invalid setting.
-   * @returns A configuration error.
    */
   constructor(message: string) {
     super(message);
@@ -221,7 +220,7 @@ export class MysqlStorageConfigurationError extends Error {
 
 /** Thrown when the adapter cannot connect, initialize, or close without exposing provider details. */
 export class MysqlStorageConnectionError extends Error {
-  /** Creates the stable connection-failure error. @returns A connection error. */
+  /** Creates the stable connection-failure error. */
   constructor() {
     super("MySQL storage could not connect, initialize, or close.");
     this.name = "MysqlStorageConnectionError";
@@ -233,7 +232,6 @@ export class MysqlStorageSchemaError extends Error {
   /**
    * Creates a schema error with the incompatible detail.
    * @param message The schema detail.
-   * @returns A schema error.
    */
   constructor(message: string) {
     super(message);
@@ -243,7 +241,7 @@ export class MysqlStorageSchemaError extends Error {
 
 /** Thrown when durable MySQL record data cannot be decoded safely. */
 export class MysqlStorageDataError extends Error {
-  /** Creates the stable invalid-data error. @returns A data error. */
+  /** Creates the stable invalid-data error. */
   constructor() {
     super("MySQL storage data could not be decoded.");
     this.name = "MysqlStorageDataError";
@@ -252,7 +250,7 @@ export class MysqlStorageDataError extends Error {
 
 /** Thrown when a record operation cannot complete without exposing provider details. */
 export class MysqlStorageOperationError extends Error {
-  /** Creates the stable record-operation error. @returns An operation error. */
+  /** Creates the stable record-operation error. */
   constructor() {
     super("MySQL storage record operation could not complete.");
     this.name = "MysqlStorageOperationError";
@@ -312,13 +310,20 @@ export class MysqlStorageFactory extends StorageFactory {
     }
   }
 
-  /** Closes the owned pool once; every repeated call observes the same completion. */
+  /** Closes the owned pool once; every repeated call observes the same completion.
+   * @returns Completes when the pool is closed.
+   */
   // eslint-disable-next-line @typescript-eslint/no-misused-promises -- TypeScript allows this async lifecycle override.
   override close(): Promise<void> {
     this.#closePromise ??= this.closePool();
     return this.#closePromise;
   }
 
+  /** Creates a MySQL-backed record storage.
+   * @param context The storage context.
+   * @param recordSpec The record specification.
+   * @returns The created record storage.
+   */
   protected override onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,

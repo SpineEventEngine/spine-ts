@@ -26,7 +26,6 @@ export class EventStore {
    *
    * @param context - Specifies the storage context.
    * @param factory - Creates the backing record storage.
-   * @returns Creates the event store.
    */
   constructor(context: StorageContext, factory: StorageFactory) {
     this.#context = context;
@@ -52,6 +51,7 @@ export class EventStore {
    * Validates that one generated Spine event can be appended without storing it.
    *
    * @param event - Supplies the event to validate.
+   * @returns Completes when the event is accepted.
    */
   async accept(event: Event): Promise<void> {
     const record = clone(EventSchema, event);
@@ -82,6 +82,7 @@ export class EventStore {
    * Writes one generated Spine event, rejecting missing, blank, or duplicate IDs.
    *
    * @param event - Supplies the event to append.
+   * @returns Completes when the event is appended.
    */
   async append(event: Event): Promise<void> {
     const record = clone(EventSchema, event);
@@ -93,6 +94,7 @@ export class EventStore {
    * Writes generated Spine events in order, rejecting missing, blank, or duplicate IDs.
    *
    * @param events - Supplies the events to append.
+   * @returns Completes when the events are appended.
    */
   async appendAll(events: Iterable<Event>): Promise<void> {
     const records = [...events].map((event) => clone(EventSchema, event));
@@ -201,7 +203,9 @@ export type OnEventAccepted = (event: Event) => Promise<void> | void;
 
 /** One-shot rollback token scoped to one successful event-store append. */
 export interface EventRollback {
-  /** Deletes the events appended by the operation that created this token. */
+  /** Deletes the events appended by the operation that created this token.
+   * @returns Completes when the events are deleted.
+   */
   rollback(): Promise<void>;
 }
 

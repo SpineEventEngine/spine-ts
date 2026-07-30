@@ -17,7 +17,6 @@ export class InMemoryStorageFactory extends StorageFactory {
 
   /** Creates a factory with a fresh backend, or deliberately shares one.
    * @param backend - Selects the backend to own or share.
-   * @returns The created storage factory.
    */
   constructor(backend: InMemoryStorageBackend = new InMemoryStorageBackend()) {
     super();
@@ -38,6 +37,11 @@ export class InMemoryStorageFactory extends StorageFactory {
     return this.#entities.create(input as EntityStorageInput<unknown, Message>);
   }
 
+  /** Creates an in-memory record storage.
+   * @param context The storage context.
+   * @param recordSpec The record specification.
+   * @returns The created record storage.
+   */
   protected onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,

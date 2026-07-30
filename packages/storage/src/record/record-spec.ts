@@ -22,7 +22,6 @@ export class RecordSpec<I, R extends Message> {
    *
    * @throws Error if two declared columns have the same name.
    * @param input The schema, identity, and column definitions.
-   * @returns The created record specification.
    */
   constructor(input: {
     readonly schema: GenMessage<R>;

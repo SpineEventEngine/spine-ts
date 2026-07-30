@@ -39,6 +39,11 @@ export abstract class StorageFactory implements Storage {
     return this.onCreateRecordStorage(context, recordSpec);
   }
 
+  /** Creates a provider-specific record storage.
+   * @param context The storage context.
+   * @param recordSpec The record specification.
+   * @returns The created record storage.
+   */
   protected abstract onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,

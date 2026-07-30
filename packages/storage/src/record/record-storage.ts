@@ -18,14 +18,15 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   /** Creates storage for one context and record specification.
    * @param context The storage and tenant context.
    * @param recordSpec The records managed by this storage.
-   * @returns The created storage.
    */
   constructor(context: StorageContext, recordSpec: RecordSpec<I, R>) {
     this.#context = context;
     this.#recordSpec = recordSpec;
   }
 
-  /** Context that scopes this storage and its tenant slices. */
+  /** Returns the context that scopes this storage and its tenant slices.
+   * @returns The storage context.
+   */
   protected get context(): StorageContext {
     return this.#context;
   }
@@ -163,6 +164,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
 
   /** Writes one record, replacing any previous value with the same ID.
    * @param record The record to write.
+   * @returns Completes when the record is written.
    */
   async write(record: R): Promise<void> {
     this.requireOpen();
@@ -196,6 +198,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
 
   /** Writes records in order, materializing all values before persistence.
    * @param records The records to write.
+   * @returns Completes when the records are written.
    */
   async writeAll(records: Iterable<R>): Promise<void> {
     this.requireOpen();
@@ -203,41 +206,70 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     await this.writeAllRecords(materializedRecords);
   }
 
+  /** Deletes the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @returns Whether a record was deleted.
+   */
   protected abstract deleteRecord(id: I): Promise<boolean>;
   /**
-   * Query stored records together with their actual storage slot IDs.
+   * Returns stored records together with their actual storage slot IDs.
    *
    * Implementations must return `RecordEntry.id` as the concrete storage slot
    * identifier for the row or document that currently stores the record.
    * `RecordStorage.index()` derives logical record identifiers from
    * `RecordEntry.record`, so adapters must not substitute logical IDs into
    * `RecordEntry.id` here.
+   * @param query The record query.
+   * @returns The matching storage entries.
    */
   protected abstract queryRecordEntries(
     query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]>;
 
-  /** Logical normalized features admitted before provider access. */
+  /** Returns logical normalized features admitted before provider access.
+   * @returns The supported query capabilities.
+   */
   protected queryCapabilities(): StorageQueryCapabilities {
     return { comparisons: [], features: [] };
   }
 
-  /** Provider candidate retrieval; shared evaluation applies the complete plan afterward. */
+  /** Returns provider candidates for a normalized plan; shared evaluation applies the complete plan afterward.
+   * @param plan The normalized query plan.
+   * @returns The candidate storage entries.
+   */
   protected queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     void plan;
     return this.queryRecordEntries({});
   }
+  /** Reads the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @returns The stored record, if present.
+   */
   protected abstract readRecord(id: I): Promise<R | undefined>;
+  /** Compares and conditionally replaces the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @param expected The expected materialized record.
+   * @param next The replacement materialized record, if any.
+   * @returns Whether the conditional mutation was applied.
+   */
   protected abstract compareAndSetRecord(
     id: I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean>;
+  /** Writes materialized records.
+   * @param records The materialized records to write.
+   * @returns Completes when the records are written.
+   */
   protected abstract writeAllRecords(
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void>;
+  /** Writes one materialized record.
+   * @param record The materialized record to write.
+   * @returns Completes when the record is written.
+   */
   protected abstract writeRecord(
     record: ReturnType<RecordSpec<I, R>["materialize"]>,
   ): Promise<void>;
