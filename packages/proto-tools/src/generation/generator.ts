@@ -120,7 +120,7 @@ export interface GenerationLockOperations {
 /** Result of a bounded generation-claim liveness probe. */
 export type ClaimLiveness = "alive" | "dead" | "indeterminate";
 
-/** Runs the packaged Buf executable in a synchronous subprocess.
+/** Executes the packaged Buf executable in a synchronous subprocess.
  *
  * @param command The executable path.
  * @param arguments_ The command-line arguments.

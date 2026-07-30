@@ -62,14 +62,15 @@ type SupportedEntryConstraint<
   Entries extends EntityColumnEntries,
 > = Exclude<keyof Entries, SupportedStateFieldName<Schema>> extends never ? unknown : never;
 
+/** Brands generated column definitions for nominal type safety. */
+declare const generatedDefinitionBrand: unique symbol;
+
 /**
- * Describes nominal descriptor-backed column metadata emitted next to an Entity schema.
+ * Describes descriptor-backed column metadata emitted next to an Entity schema.
  *
  * The package root exports this type, but not its value constructor. Application
  * code therefore consumes generated metadata instead of authoring string keys.
  */
-declare const generatedDefinitionBrand: unique symbol;
-
 export interface EntityColumnDefinition<
   Schema extends GenMessage<Message>,
   Entries extends EntityColumnEntries,
