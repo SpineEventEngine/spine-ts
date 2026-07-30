@@ -196,8 +196,9 @@ void [policy, contexts];
 `activate`, and `cancel`. Policies receive decoded target/message facts and
 only allowlisted transport facts (`service`, `method`, optional origin,
 request/correlation IDs, peer address, and user agent). Credentials never
-enter those facts or ordinary diagnostics. `transportFacts()` drops unlisted
-headers. A `TypeRegistryLookup` can decode a command payload for policy; unknown
+enter those facts or ordinary diagnostics. `TransportFacts.from()` drops
+unlisted headers. `IncomingRequests.decode()` decodes gateway input for policy;
+a `TypeRegistryLookup` can decode a command payload; unknown
 or malformed `Any` remains a safe type-URL-only fact.
 
 | Gateway operation | Required gate                                     | Context rule                                                 | Ownership rule                                     |
@@ -251,7 +252,7 @@ import type {
   UnaryForwarder,
   SubscriptionBindings,
 } from "@spine-event-engine/auth";
-import { transportFacts } from "@spine-event-engine/auth";
+import { IncomingRequests, TransportFacts } from "@spine-event-engine/auth";
 
 type Authentication = Authenticator["authenticate"];
 type SessionResolution = SessionResolver["resolve"];
@@ -262,7 +263,8 @@ type IdentityResolution = IdentityMapping["resolve"];
 type ProviderExchange = OidcVerifiedIdentityProvider["exchangeAuthorizationCode"];
 type SessionIssue = ApplicationSessionIssuer["issue"];
 type RevocationLookup = SignedTokenRevocation["isRevoked"];
-type RequestFacts = typeof transportFacts;
+type RequestDecoding = typeof IncomingRequests.decode;
+type RequestFacts = typeof TransportFacts.from;
 type NativeCredential = NativeGatewayRequestContext["credential"];
 type NativeTransport = NativeGatewayRequestContext["transport"];
 type NativeForward = UnaryForwarder["forward"];
@@ -295,6 +297,7 @@ void [
   ProviderExchange,
   SessionIssue,
   RevocationLookup,
+  RequestDecoding,
   RequestFacts,
   NativeCredential,
   NativeTransport,
@@ -303,11 +306,11 @@ void [
 ];
 ```
 
-`transportFacts(input)` is the public constructor for the allowlisted
+`TransportFacts.from(input)` is the public constructor for the allowlisted
 `TransportRequestContext`; it intentionally excludes credentials and unknown
-headers. `NativeGatewayRequestContext.credential()` and `.transport()` are the
-HTTP-adapter extraction points. `SubscriptionBindings` is trusted
-infrastructure: it receives private `BackendSubscriptionEnvelope` values only
+headers. `IncomingRequests.decode(input)` decodes incoming gateway requests.
+`NativeGatewayRequestContext.credential()` and `.transport()` are the HTTP-adapter
+extraction points. `SubscriptionBindings` is trusted infrastructure: it receives private `BackendSubscriptionEnvelope` values only
 from the gateway and supplies a fresh copy only to gateway-controlled backend
 callbacks.
 

@@ -407,7 +407,6 @@ function scanProto(file, source) {
         index += 1;
         continue;
       }
-      const next = tokens[index + 1];
       const name = namedDeclaration(tokens, index);
       if (["message", "enum", "service", "oneof"].includes(token.value) && name !== undefined) {
         const kind = token.value;
