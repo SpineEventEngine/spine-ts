@@ -6,7 +6,6 @@ export class RecordColumn<R extends object, V = unknown> {
    * @param name The stable column name.
    * @param read The record value reader.
    * @param valueType The stable provider-visible value type.
-   * @returns The created column.
    */
   constructor(
     readonly name: string,

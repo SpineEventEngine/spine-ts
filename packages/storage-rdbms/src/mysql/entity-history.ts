@@ -247,7 +247,6 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
    * @param database The MySQL database name for lock isolation.
    * @param verifySchema The schema verification operation.
    * @param onClose The factory callback that forgets this handle.
-   * @returns A configured entity-history handle.
    */
   constructor(
     private readonly input: EntityStorageInput<I, S>,

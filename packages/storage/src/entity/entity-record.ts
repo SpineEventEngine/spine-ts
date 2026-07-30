@@ -29,6 +29,7 @@ export interface EntityRecordStorage<I, S extends Message> {
    * Writes the latest record for an entity.
    *
    * @param record - Supplies the record to store.
+   * @returns Completes when the record is stored.
    */
   write(record: EntityRecord<I, S>): Promise<void>;
   /**

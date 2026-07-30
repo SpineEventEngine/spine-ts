@@ -31,7 +31,6 @@ export class MemoryEntityStorageFactory {
    * Creates a factory with a fresh backend, or deliberately shares `backend`.
    *
    * @param backend - Supplies the backend to share between factory handles.
-   * @returns Creates the scoped entity-storage factory.
    */
   constructor(backend: InMemoryStorageBackend = new InMemoryStorageBackend()) {
     this.#backend = backend;
@@ -76,7 +75,6 @@ export class InMemoryEntityStorage<I, S extends Message> {
    *
    * @param input - Supplies the entity storage configuration.
    * @param backend - Supplies the scoped in-memory data structures.
-   * @returns Creates the scoped entity storage handle.
    */
   constructor(input: EntityStorageInput<I, S>, backend: EntityBackend) {
     this.current = new MemoryEntityRecordStorage({
@@ -215,7 +213,6 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
    * Creates a current-record adapter over supplied or fresh record storage.
    *
    * @param input - Supplies state, ID, column, and record-storage configuration.
-   * @returns Creates the current-record adapter.
    */
   constructor(input: {
     readonly stateSchema: GenMessage<S>;
@@ -252,6 +249,7 @@ export class MemoryEntityRecordStorage<I, S extends Message> implements EntityRe
    * Stores an independent copy of one current entity record.
    *
    * @param record - Supplies the current record to store.
+   * @returns Completes when the record is stored.
    */
   write(record: EntityRecord<I, S>): Promise<void> {
     return Promise.resolve().then(() => {
@@ -331,7 +329,6 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
    * Creates an event-history adapter over supplied or fresh event storage.
    *
    * @param input - Supplies ID, maintenance, and event-storage configuration.
-   * @returns Creates the event-history adapter.
    */
   constructor(input: {
     readonly idKey: (id: I) => string;
@@ -350,6 +347,7 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
    * Stores one immutable event-history record idempotently.
    *
    * @param record - Supplies the event-history record to append.
+   * @returns Completes when the record is stored.
    */
   append(record: EntityEventHistoryRecord<I>): Promise<void> {
     return Promise.resolve().then(() => {
@@ -408,6 +406,7 @@ export class MemoryEntityEventHistory<I> implements EntityEventHistoryPort<I> {
    * Deletes events created before the supplied timestamp in maintenance chunks.
    *
    * @param olderThan - Specifies the exclusive event creation-time boundary.
+   * @returns Completes when maintenance finishes.
    */
   async truncate(olderThan: Timestamp): Promise<void> {
     this.requireOpen();
@@ -467,7 +466,6 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
    * Creates a state-history adapter over supplied or fresh state storage.
    *
    * @param input - Supplies state, ID, maintenance, queue, and record configuration.
-   * @returns Creates the state-history adapter.
    */
   constructor(input: {
     readonly stateSchema: GenMessage<S>;
@@ -490,6 +488,7 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
    * Stores one immutable state-history record idempotently.
    *
    * @param record - Supplies the state-history record to append.
+   * @returns Completes when the record is stored.
    */
   async append(record: EntityStateHistoryRecord<I, S>): Promise<void> {
     this.requireOpen();
@@ -561,6 +560,7 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
    *
    * @param entityId - Supplies the entity identifier to trim.
    * @param keepMostRecent - Specifies how many recent records to retain.
+   * @returns Completes when maintenance finishes.
    */
   async trim(entityId: I, keepMostRecent: number): Promise<void> {
     this.requireOpen();
@@ -596,6 +596,7 @@ export class InMemoryEntityHistory<I, S extends Message> implements EntityStateH
    * Deletes state records created before the supplied timestamp in maintenance chunks.
    *
    * @param olderThan - Specifies the exclusive state creation-time boundary.
+   * @returns Completes when maintenance finishes.
    */
   async truncate(olderThan: Timestamp): Promise<void> {
     this.requireOpen();

@@ -16,7 +16,6 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
    * @param context - Supplies the storage and tenant context.
    * @param recordSpec - Supplies the record materialization specification.
    * @param tenantRecords - Supplies shared tenant records when factory-owned.
-   * @returns The created in-memory record storage.
    */
   constructor(
     context: StorageContext,
@@ -28,10 +27,20 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     this.#records = tenantRecords ?? (() => this.localRecords(localTenants));
   }
 
+  /** Deletes the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @returns Whether a record was deleted.
+   */
   protected deleteRecord(id: I): Promise<boolean> {
     return Promise.resolve(this.records().delete(id));
   }
 
+  /** Compares and conditionally replaces the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @param expected The expected materialized record.
+   * @param next The replacement materialized record, if any.
+   * @returns Whether the conditional mutation was applied.
+   */
   protected compareAndSetRecord(
     id: I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
@@ -40,12 +49,19 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return Promise.resolve(this.records().compareAndSet(id, expected, next));
   }
 
+  /** Returns records matching a query.
+   * @param query The record query.
+   * @returns The matching storage entries.
+   */
   protected override queryRecordEntries(
     query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     return Promise.resolve(this.records().queryEntries(this.recordSpec, query));
   }
 
+  /** Returns the supported in-memory query capabilities.
+   * @returns The supported query capabilities.
+   */
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
@@ -53,6 +69,10 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     };
   }
 
+  /** Returns candidate records for a normalized query plan.
+   * @param plan The normalized query plan.
+   * @returns The candidate storage entries.
+   */
   protected override queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
@@ -63,10 +83,18 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     );
   }
 
+  /** Reads the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @returns The stored record, if present.
+   */
   protected readRecord(id: I): Promise<R | undefined> {
     return Promise.resolve(this.records().read(id));
   }
 
+  /** Writes materialized records.
+   * @param records The materialized records to write.
+   * @returns Completes when the records are written.
+   */
   protected writeAllRecords(
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void> {
@@ -74,6 +102,10 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return Promise.resolve();
   }
 
+  /** Writes one materialized record.
+   * @param record The materialized record to write.
+   * @returns Completes when the record is written.
+   */
   protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
     this.records().write(record);
     return Promise.resolve();

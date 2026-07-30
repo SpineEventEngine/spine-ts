@@ -13,10 +13,12 @@ export interface EntityStateHistoryStorage<I, S extends Message> {
   /** Updates retained versioned states for one entity.
    * @param entityId The entity whose history is trimmed.
    * @param keepMostRecent The number of newest states to keep.
+   * @returns Completes when maintenance finishes.
    */
   trim(entityId: I, keepMostRecent: number): Promise<void>;
   /** Removes states created strictly before the supplied time.
    * @param olderThan The exclusive retention cutoff.
+   * @returns Completes when maintenance finishes.
    */
   truncate(olderThan: Timestamp): Promise<void>;
 }
@@ -27,6 +29,7 @@ export interface EntityEventStorage<I> {
   readonly [entityEventHistoryEntity]?: I;
   /** Removes events created strictly before the supplied time.
    * @param olderThan The exclusive retention cutoff.
+   * @returns Completes when maintenance finishes.
    */
   truncate(olderThan: Timestamp): Promise<void>;
 }
@@ -38,6 +41,7 @@ export interface EntityStateHistoryPort<I, S extends Message> extends EntityStat
 > {
   /** Stores one versioned state-history record.
    * @param record The state-history record to append.
+   * @returns Completes when the record is stored.
    */
   append(record: EntityStateHistoryRecord<I, S>): Promise<void>;
   /** Reads versioned states backward from an optional version.
@@ -63,6 +67,7 @@ export interface EntityStateHistoryPort<I, S extends Message> extends EntityStat
 export interface EntityEventHistoryPort<I> extends EntityEventStorage<I> {
   /** Stores one diagnostic event-history record.
    * @param record The event-history record to append.
+   * @returns Completes when the record is stored.
    */
   append(record: EntityEventHistoryRecord<I>): Promise<void>;
   /** Reads diagnostic events backward from an optional version.

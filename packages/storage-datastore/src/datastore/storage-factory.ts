@@ -62,7 +62,6 @@ export class DatastoreStorageFactory extends StorageFactory {
    * Creates a factory over a caller-owned Datastore client.
    *
    * @param input The client and optional client-side scan bound.
-   * @returns The initialized storage factory.
    */
   constructor(input: DatastoreStorageFactoryInput) {
     super();
@@ -101,6 +100,11 @@ export class DatastoreStorageFactory extends StorageFactory {
     return new DatastoreEntityStorage(input, this.#client);
   }
 
+  /** Creates a Datastore-backed record storage.
+   * @param context The storage context.
+   * @param recordSpec The record specification.
+   * @returns The created record storage.
+   */
   protected onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,

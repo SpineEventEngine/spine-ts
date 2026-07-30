@@ -135,7 +135,6 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
    * @param recordSpec Schema, identifier, and column materialization contract.
    * @param client Injected Datastore client owned by the factory.
    * @param maxClientSideScan Maximum candidate records to materialize locally.
-   * @returns A newly initialized record storage handle.
    */
   constructor(
     context: StorageContext,
@@ -147,6 +146,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     this.#codec = new FlatEntityCodec(context, recordSpec, maxClientSideScan);
   }
 
+  /** Deletes the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @returns Whether a record was deleted.
+   */
   protected async deleteRecord(id: I): Promise<boolean> {
     const key = this.#codec.key(this.client, id);
     const entity = DatastoreResults.first(await this.client.get(key, wrappedReadOptions));
@@ -159,6 +162,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     return true;
   }
 
+  /** Returns records matching a query.
+   * @param _query The record query.
+   * @returns The matching storage entries.
+   */
   protected async queryRecordEntries(
     _query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
@@ -186,6 +193,9 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     return LocalQueryResults.apply(entries, _query);
   }
 
+  /** Returns the supported Datastore query capabilities.
+   * @returns The supported query capabilities.
+   */
   protected override queryCapabilities(): StorageQueryCapabilities {
     return {
       comparisons: ["equal", "greaterThan", "lessThan", "greaterOrEqual", "lessOrEqual"],
@@ -193,6 +203,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     };
   }
 
+  /** Returns candidate records for a normalized query plan.
+   * @param plan The normalized query plan.
+   * @returns The candidate storage entries.
+   */
   protected override async queryPlanRecordEntries(
     plan: NormalizedQueryPlan<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
@@ -220,6 +234,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     }));
   }
 
+  /** Reads the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @returns The stored record, if present.
+   */
   protected async readRecord(id: I): Promise<R | undefined> {
     const entity = DatastoreResults.first(
       await this.client.get(this.#codec.key(this.client, id), wrappedReadOptions),
@@ -228,6 +246,12 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     return entity === undefined ? undefined : this.#codec.decode(entity);
   }
 
+  /** Compares and conditionally replaces the record at one storage slot.
+   * @param id The storage slot identifier.
+   * @param expected The expected materialized record.
+   * @param next The replacement materialized record, if any.
+   * @returns Whether the conditional mutation was applied.
+   */
   protected async compareAndSetRecord(
     id: I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
@@ -283,6 +307,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     }
   }
 
+  /** Writes materialized records.
+   * @param records The materialized records to write.
+   * @returns Completes when the records are written.
+   */
   protected async writeAllRecords(
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void> {
@@ -300,6 +328,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     }
   }
 
+  /** Writes one materialized record.
+   * @param record The materialized record to write.
+   * @returns Completes when the record is written.
+   */
   protected async writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
     const data = this.#codec.encode(record.record, record.columns, record.id);
     await this.client.save({
@@ -382,7 +414,6 @@ export class DatastoreQueryLimitError extends Error {
    * Creates the scan-budget error.
    *
    * @param maxClientSideScan Configured maximum number of locally scanned candidates.
-   * @returns A query limit error instance.
    */
   constructor(readonly maxClientSideScan: number) {
     super(`Datastore query exceeded the client-side scan limit of ${String(maxClientSideScan)}.`);

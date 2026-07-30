@@ -20,7 +20,6 @@ export class QueryCandidateLimitError extends Error {
    * Creates a candidate-limit error.
    *
    * @param candidateLimit - Specifies the exceeded candidate budget.
-   * @returns Creates the candidate-limit error instance.
    */
   constructor(readonly candidateLimit: number) {
     super(`Storage query exceeded the candidate limit of ${String(candidateLimit)}.`);

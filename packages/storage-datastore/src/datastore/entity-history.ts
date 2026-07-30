@@ -61,7 +61,6 @@ export class DatastoreEntityStorage<I, S extends Message> {
    *
    * @param input The frozen framework storage input for this durable entity scope.
    * @param client The caller-owned Datastore client used for provider operations.
-   * @returns The initialized entity-history provider handle.
    */
   constructor(input: EntityStorageInput<I, S>, client: Datastore) {
     const codec = new EntityCodec(input, client, new OperationGate());
