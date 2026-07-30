@@ -299,3 +299,19 @@ serialized-contract changes across the repository.
 - Reviewer profiles were immutable Luna/medium documentation and explicit
   Terra/high API/style; runtime introspection was unavailable with no mismatch.
 - The correction is accepted for commit, immediate push, and merge.
+
+## Client Node Documentation Reconciliation
+
+- Equipped lint/TSDoc, To-do/Proto tests 19/19, and cleanup 107/107 pass.
+- TypeDoc/snippet gates expose only stale Client Node documentation:
+  expectations and `docs/USER_GUIDE.md` still list removed flat
+  `all`/`either`/`eq`/`ge`/`gt`/`le`/`lt` helpers, while current
+  `EntityQuery` owns those methods. The Client Node README correctly uses the
+  object but omits its local `owner` example declaration.
+- The existing O3 Terra/medium context owns exactly
+  `scripts/check-api-docs.mjs`, `docs/USER_GUIDE.md`, and
+  `packages/client-node/README.md`. It removes flat expectations/imports,
+  rewrites the guide calls to `EntityQuery.*`, and declares the README example
+  owner without changing any runtime source.
+- Equipped TypeDoc/API, snippet, global lint/TSDoc, formatting, and diff gates
+  follow. Documentation/API re-review; style/reliability are N/A.

@@ -122,3 +122,14 @@ unchanged.
 - Performance/reliability: N/A.
 
 The correction is accepted for commit, immediate push, and umbrella merge.
+
+## Client Node Documentation Reconciliation
+
+The equipped documentation gates additionally require:
+
+- removing obsolete flat query helpers from Client Node API expectations and
+  user-guide imports;
+- using the current `EntityQuery.*` methods in the guide;
+- declaring the Client Node README example's `owner` value.
+
+Documentation and TypeScript/API reopen only for these three files.
