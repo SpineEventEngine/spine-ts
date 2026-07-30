@@ -211,3 +211,17 @@ change; otherwise standard.
 - Focused tests must preserve context/client ownership, actor/tenant/time-zone
   scope, subscription cleanup, retryable close, timeout, and eventual-wait
   semantics.
+
+## H5 Reconciliation Dispatch
+
+- H5 starts from reviewed, pushed umbrella commit `31132142` on isolated branch
+  `task/T-0080H5-reconciliation`.
+- One existing implementer, explicitly `gpt-5.6-terra` / medium, owns the exact
+  shared imports, generator templates, generated example consumers, guides,
+  and T-0080H debt ledgers affected by H1-H4.
+- H5 regenerates outputs through canonical tooling, never hand-edits ignored
+  generated Proto output, and leaves T-0080O's shared API-export expectation
+  checker untouched.
+- Acceptance requires zero live/stale T-0080H TSDoc, standalone-function, and
+  semantic-name debt; no old H1-H4 API references; successful Proto/example
+  generation; four-package type/build/tests; and scoped quality checks.
