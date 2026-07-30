@@ -2,32 +2,34 @@ import { describe, expect, it } from "vitest";
 
 import {
   maximumChatIdentifierBytes,
-  maximumChatMessageTextBytes,
-  validateChatMessageInput,
+  maximumChatTextBytes,
+  ChatMessageValidation,
 } from "../src/message-validation.js";
 
 describe("Chat message validation", () => {
+  const validation = new ChatMessageValidation();
+
   it("accepts bounded identifiers, text, and a valid timestamp", () => {
     expect(() => {
-      validateChatMessageInput(validInput());
+      validation.validate(validInput());
     }).not.toThrow();
     expect(maximumChatIdentifierBytes).toBe(128);
-    expect(maximumChatMessageTextBytes).toBe(4_096);
+    expect(maximumChatTextBytes).toBe(4_096);
   });
 
   it("measures multibyte identifiers and text in UTF-8 bytes", () => {
     expect(() => {
-      validateChatMessageInput({
+      validation.validate({
         ...validInput(),
         id: "é".repeat(64),
         text: "é".repeat(2_048),
       });
     }).not.toThrow();
     expect(() => {
-      validateChatMessageInput({ ...validInput(), id: "é".repeat(65) });
+      validation.validate({ ...validInput(), id: "é".repeat(65) });
     }).toThrow(RangeError);
     expect(() => {
-      validateChatMessageInput({ ...validInput(), text: "é".repeat(2_049) });
+      validation.validate({ ...validInput(), text: "é".repeat(2_049) });
     }).toThrow(RangeError);
   });
 
@@ -44,7 +46,7 @@ describe("Chat message validation", () => {
     ["large nanos", { postedAt: { seconds: 1n, nanos: 1_000_000_000 } }],
   ] as const)("rejects %s", (_label, invalid) => {
     expect(() => {
-      validateChatMessageInput({ ...validInput(), ...invalid });
+      validation.validate({ ...validInput(), ...invalid });
     }).toThrow(RangeError);
   });
 });
