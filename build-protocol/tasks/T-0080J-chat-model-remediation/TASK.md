@@ -85,3 +85,25 @@ change serialized/API contracts.
   acceptance gates.
 - Runtime metadata is recorded when exposed; otherwise the immutable configured
   profile and limitation are recorded.
+
+## Accepted Bounded Plan
+
+- Inventory: five authored Proto files, eight messages, 24 fields, and exactly
+  32 missing comments. There is zero semantic-name, TSDoc, standalone-function,
+  or authored TypeScript production debt.
+- No copied Spine Proto exists under either model root. Imported Spine, Google,
+  and Users contracts remain dependency-owned and untouched.
+- No rename or consumer edit is justified. Proto packages, file paths, field
+  numbers/types/order/options, Chat type-URL prefix, Users fallback type URL,
+  package/module identities, manifests, and Users→Spine / Chat→Users+Spine
+  dependency direction remain frozen.
+- One existing implementer, explicitly `gpt-5.6-terra` / medium, owns only the
+  five Proto files and `example-proto-debt/T-0080J.json` on isolated branch
+  `task/T-0080J-chat-model`.
+- Acceptance uses dependency-first generation, model/app/web typebuild,
+  registry/package payload/consumer tests, Proto lint/cleanliness, copied-source
+  diff, untracked generated-output proof, formatting, cleanup, and diff checks.
+- Documentation Luna/medium and API/Protobuf Terra/high reviews are relevant;
+  style and reliability are N/A for comment/debt-only changes.
+- Splitter runtime self-introspection was unavailable for the explicit Sol/high
+  profile, with no visible mismatch.
