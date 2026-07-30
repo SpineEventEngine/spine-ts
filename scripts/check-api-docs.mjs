@@ -215,8 +215,8 @@ const expectedAuthExports = [
   "UnaryGatewayRejection",
   "UnaryGatewayRequest",
   "UnaryGatewayResult",
-  "decodeIncomingRequest",
-  "transportFacts",
+  "IncomingRequests",
+  "TransportFacts",
 ];
 const expectedCoreExports = [
   "DEFAULT_TYPE_URL_PREFIX",

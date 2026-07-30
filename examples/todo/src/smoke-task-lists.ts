@@ -17,14 +17,14 @@ export interface InspectedTaskListRows {
 }
 
 /** Inspects bounded task-list query rows and formats safe smoke diagnostics. */
-export class SmokeTaskLists {
+export const SmokeTaskLists = {
   /**
    * Decodes bounded task-list rows and records unavailable or omitted-row diagnostics.
    *
    * @param response - Query response whose entity states are inspected.
    * @returns Retained task lists with sanitized diagnostics.
    */
-  static inspectRows(response: QueryResponse): InspectedTaskListRows {
+  inspectRows(response: QueryResponse): InspectedTaskListRows {
     const taskLists: TaskList[] = [];
     let unavailableRows = 0;
     const inspectedRows = response.message.slice(0, maxInspectedRows);
@@ -62,7 +62,7 @@ export class SmokeTaskLists {
     }
 
     return { diagnostics, taskLists };
-  }
+  },
 
   /**
    * Creates bounded diagnostic text without control characters.
@@ -70,7 +70,7 @@ export class SmokeTaskLists {
    * @param value - Value to convert into safe diagnostic text.
    * @returns Bounded diagnostic text, or a blank marker.
    */
-  static sanitizeValue(value: unknown): string {
+  sanitizeValue(value: unknown): string {
     let cleaned = "";
     const boundedValue = String(value).slice(0, maxDiagnosticInputLength);
     for (const character of boundedValue) {
@@ -79,5 +79,5 @@ export class SmokeTaskLists {
     }
     cleaned = cleaned.trim();
     return cleaned === "" ? "<blank>" : cleaned.slice(0, maxDiagnosticLength);
-  }
-}
+  },
+};
