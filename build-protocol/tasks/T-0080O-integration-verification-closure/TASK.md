@@ -286,3 +286,16 @@ serialized-contract changes across the repository.
   runtime introspection unavailable and no mismatch.
 - Documentation, TypeScript/API, and style reopen read-only for this batch.
   Reliability remains N/A.
+
+## Equipped Correction Review Acceptance
+
+- Documentation is clean for current Auth object APIs, exact signature
+  examples, preserved security/limitation guidance, and To-do object TSDoc.
+- TypeScript/API is clean: both `SmokeTaskLists` member call shapes are
+  preserved with no constructor consumers; Auth source and expectations match;
+  guide value imports/type queries are valid.
+- Style/maintainability is clean for cohesive object grouping and deterministic
+  checker/expectation edits. Reliability remains N/A.
+- Reviewer profiles were immutable Luna/medium documentation and explicit
+  Terra/high API/style; runtime introspection was unavailable with no mismatch.
+- The correction is accepted for commit, immediate push, and merge.
