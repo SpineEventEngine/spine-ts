@@ -269,3 +269,22 @@ standard.
   clean while the implementation class remains internal.
 - All implementation lanes are accepted for scoped commit, immediate push, and
   integration. M5 then owns README accuracy and exact ledger closure.
+
+## M5 Reconciliation Dispatch
+
+- Reviewed M1-M4 commits are merged through pushed integration commit
+  `b5c780ca`.
+- One existing implementer, explicitly `gpt-5.6-terra` / medium, owns only
+  `examples/project-management/README.md` and the four exact T-0080M debt
+  partitions.
+- README must correct the topology-only test claim, document the exact focused
+  test/load commands, distinguish command/query time origins from subscription
+  timing, state supported load levels and 10-user smoke, describe actual
+  correlation/cleanup, and avoid roadmap, benchmark, SLO, or RPC-cancellation
+  overclaims.
+- Ledgers target empty TSDoc/Proto/name arrays and exactly three necessities for
+  `createProjectManagementContext`, `startProjectManagementServer`, and
+  `runProjectManagementLoad`.
+- The writer may not edit source/Proto/tests/package/generated/shared tooling,
+  commit, push, build Spine JVM, or spawn. Runtime metadata or its limitation is
+  required.
