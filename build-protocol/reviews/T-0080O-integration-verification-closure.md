@@ -139,3 +139,12 @@ Documentation and TypeScript/API reopen only for these three files.
 - Documentation verifies the query example and surrounding guidance.
 - TypeScript/API verifies exact current exports and valid member calls.
 - Style and performance/reliability are N/A for this documentation-only batch.
+
+## Client Node Correction Final Disposition
+
+- Documentation: clean.
+- TypeScript/API: clean.
+- Style/maintainability: N/A.
+- Performance/reliability: N/A.
+
+The correction is accepted for commit, immediate push, and umbrella merge.

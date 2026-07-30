@@ -326,3 +326,16 @@ serialized-contract changes across the repository.
 - The original implementer remains explicit Terra/medium with runtime metadata
   unavailable and no mismatch.
 - Documentation and TypeScript/API reopen read-only. Style/reliability are N/A.
+
+## Client Node Review Acceptance
+
+- Documentation is clean: the user-guide query preserves IDs, predicates,
+  masks, ordering, limit, and result handling through current `EntityQuery.*`
+  methods; the README owner example is self-contained.
+- TypeScript/API is clean: Client Node exports `EntityQuery` and none of the
+  removed flat helpers; expectations match exactly and all shown call shapes
+  exist.
+- Reviewer profiles are immutable Luna/medium documentation and explicit
+  Terra/high API, with runtime introspection unavailable and no mismatch.
+- Style/reliability remain N/A. The correction is accepted for commit/push/
+  merge.
