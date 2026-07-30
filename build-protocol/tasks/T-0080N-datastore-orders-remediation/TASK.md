@@ -174,3 +174,33 @@ behavior changes; otherwise standard.
   cleanup, and shutdown.
 - Reviewers are read-only, inspect N1-N4 as one complete wave, may not spawn,
   and must report runtime metadata or its limitation. Security remains N/A.
+
+## Complete Review Wave Result
+
+- Documentation accepts all Proto/TSDoc and finds only M5 README work: replace
+  the incomplete test command, document timing/timeout/cleanup/shared-session
+  ownership, remove the unsupported sustained-traffic claim, and keep
+  in-memory evidence boundaries explicit.
+- Style/maintainability is clean for naming, exact rename, comment accuracy,
+  load/user ownership, compact methods, and absence of generic utilities.
+- TypeScript/API/Proto confirms identical Proto tokens, exact public rename,
+  unchanged signatures/package/generated/topology/runner boundaries, and finds
+  one wording defect: p50 is nearest-rank fiftieth percentile, not conventional
+  median.
+- Reliability accepts storage composition, pool/waves, uniqueness, RPC
+  signals, timeout abort/clear, correlation, failure accounting, cleanup, and
+  shutdown. It requests deterministic non-empty varied nearest-rank coverage.
+- Reviewer profiles were Luna/medium documentation and explicit Terra/high
+  style/API/reliability. Runtime self-introspection was unavailable with no
+  mismatch.
+
+## Consolidated Correction Batch
+
+- N4 moves percentile calculation into a cohesive internal module absent from
+  package exports, corrects p50 wording, and adds direct exact varied/empty
+  percentile tests without changing the public type/runner signatures.
+- N5 later updates README to the final focused test count and all accepted
+  storage/load/timing/cleanup/evidence wording while closing exact ledgers.
+- Only API documentation and reliability reopen for N4; documentation reopens
+  for final README. Style needs confirmation only if extraction broadens
+  ownership or method structure.
