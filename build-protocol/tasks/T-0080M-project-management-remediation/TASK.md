@@ -236,3 +236,20 @@ standard.
   for M4 method cohesion, reliability for the percentile test and lifecycle,
   and API/Proto only to confirm unchanged tokens/exports. The same configured
   reviewer profiles apply.
+
+## Focused Re-review Result
+
+- Documentation accepts corrected M2/M3 semantics and retains only the expected
+  M5 README command/claim finding.
+- Style/maintainability accepts all method lengths, cohesion, naming, test
+  structure, and absence of generic utilities or accidental exports.
+- API/Proto confirms all tokens, exports, declarations, topology, and package
+  boundaries, but finds nine task-triggered projection field comments too
+  generic: handlers map project ID to `id` and task ID to `name`.
+- Reliability accepts lifecycle sequencing and cleanup, but rejects the
+  varied-live-delay percentile test as non-deterministic and insufficient to
+  prove exact nearest-rank selection.
+- The final narrow correction returns to the original M2/M4 context: make those
+  nine Proto mappings explicit, and replace live timing assertions with exact
+  deterministic p50/p95/p99 evidence through an internal module that is not
+  exposed by package exports.
