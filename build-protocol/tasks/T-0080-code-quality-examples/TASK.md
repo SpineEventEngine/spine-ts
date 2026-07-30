@@ -2,10 +2,10 @@
 
 ## Status
 
-Ready for `main` integration. T-0080A-O are complete, reviewed, integrated
-into the pushed umbrella branch, and verified. The repository-wide
-`pnpm verify` gate is green; only post-merge verification, final remote
-synchronization, and obsolete-branch closure remain.
+Complete. T-0080A-O are reviewed, integrated into `main`, and verified. The
+repository-wide `pnpm verify` gate and focused byte-identical post-merge checks
+are green. The completed umbrella and `main` are synchronized to origin at the
+closure boundary.
 
 ## Classification
 

@@ -2,8 +2,8 @@
 
 ## Status
 
-Implementation, review, and repository-wide verification complete. Ready for
-`main` integration and post-merge closure.
+Complete. Implementation, review, repository-wide verification, `main`
+integration, and focused post-merge verification are complete.
 
 ## Parent And Dependencies
 
@@ -405,3 +405,18 @@ umbrella branch:
 All canonical review concerns are closed. Security remains N/A because this
 program does not change a security boundary. The branch is accepted for
 `main` integration.
+
+## Post-Merge Verification
+
+`main` fast-forwards to the exact verified T-0080 commit, with matching ref and
+tree identity and no conflict resolution. After refreshing ignored local
+workspace links/build artifacts, focused post-merge checks pass:
+
+- build and tooling typechecks;
+- cleanup and TSDoc enforcement;
+- TypeScript documentation snippets;
+- generated Proto cleanliness and release readiness;
+- Server public-API and cleanup suites, 117/117 tests.
+
+The two protected human-review files remain untouched and untracked. T-0080O
+and the parent program are closed.

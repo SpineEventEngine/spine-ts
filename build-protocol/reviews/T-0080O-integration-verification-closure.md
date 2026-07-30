@@ -123,6 +123,14 @@ unchanged.
 
 The correction is accepted for commit, immediate push, and umbrella merge.
 
+## Post-Merge Disposition
+
+`main` fast-forwards to the byte-identical verified commit. Focused post-merge
+typecheck, enforcement, documentation, generated-cleanliness,
+release-readiness, and 117 corrected tests pass. No conflict or source
+correction occurs during integration. All review concerns remain closed, and
+T-0080 is accepted as complete.
+
 ## Server Typecheck Correction Dispatch
 
 The final full gate found one stale test-only type assertion group. The five

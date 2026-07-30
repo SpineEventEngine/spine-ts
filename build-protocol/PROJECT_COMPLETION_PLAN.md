@@ -1,16 +1,14 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release and post-release JVM parity Waves 1 through 4 complete;
-T-0080 authored-API/example quality correction verified and ready for `main`
-integration
+Status: Initial release, post-release JVM parity Waves 1 through 4, and T-0080
+authored-API/example quality correction complete
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Active integration frontier: T-0080 is the active corrective program. Wave
-5 packaging and deployment still requires its separate human Q&A before
-implementation starts.
+No implementation frontier is active. Wave 5 packaging and deployment still
+requires its separate human Q&A before implementation starts.
 
 ## Purpose
 
