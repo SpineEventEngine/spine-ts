@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+In progress.
 
 ## Parent And Dependencies
 
@@ -74,3 +74,14 @@ change serialized/API contracts.
 - Documentation and TypeScript/API-doc lanes are relevant.
 - Style/maintainability is relevant for model TypeScript ownership.
 - Performance/reliability is N/A absent runtime behavior/resource changes.
+
+## Planning Dispatch
+
+- The existing requirements splitter is explicitly assigned
+  `gpt-5.6-sol` / high at this high-risk public/serialized-contract boundary.
+- It is read-only, may not spawn subagents, and must return exact authored
+  Proto/TypeScript inventory, copied-source exclusions, wire/type-URL/package
+  invariants, consumer ownership, bounded implementation tracks, and focused
+  acceptance gates.
+- Runtime metadata is recorded when exposed; otherwise the immutable configured
+  profile and limitation are recorded.
