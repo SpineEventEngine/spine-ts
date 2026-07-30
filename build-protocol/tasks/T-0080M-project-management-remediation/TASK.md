@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Accepted.
 
 ## Parent And Dependencies
 
@@ -288,3 +288,32 @@ standard.
 - The writer may not edit source/Proto/tests/package/generated/shared tooling,
   commit, push, build Spine JVM, or spawn. Runtime metadata or its limitation is
   required.
+
+## Final Acceptance
+
+- README now accurately documents the 3/20/10/33 topology, generation/build,
+  the exact three-file nine-test command, supported load levels and real
+  10-user smoke, acknowledgement/query/subscription correlation and timing,
+  cleanup ordering, exclusions, and non-benchmark/non-SLO limitations.
+- TSDoc, Proto-comment, and semantic-name partitions are empty. The standalone
+  partition contains exactly the three checker-valid necessities for
+  `createProjectManagementContext`, `startProjectManagementServer`, and
+  `runProjectManagementLoad`.
+- Final integrated verification passes clean generation, package build/prepack,
+  example Proto quality, cleanup, project-management TSDoc, 40 protected
+  checksums, 49 frozen descriptors, Proto lint and generated cleanliness,
+  changed-file ESLint/Prettier, diff integrity, all three focused files and nine
+  tests, and the real 10-user run with zero failures and 10/10 acknowledgement,
+  query, and subscription completion.
+- Documentation re-review is clean. All implementation/re-review profiles and
+  runtime metadata limitations are recorded; no JVM build ran.
+- The checker regression batch passes 158/164 tests. Its six failures reproduce
+  unchanged on the pushed umbrella baseline: commit `88b6e19c` replaced flat
+  helper names with dotted `SignalEnvelopes.event/command`, while the AST
+  resolver still compares single import/member names to dotted strings. T-0080O
+  owns this pre-existing tooling regression.
+- `docs:check` generates TypeDoc but fails the pre-existing
+  `@spine-event-engine/proto-tools` export-expectation drift and emits the known
+  React `children` warning. T-0080O owns both global documentation gates.
+- T-0080M is accepted for final commit, immediate push, umbrella integration,
+  and post-integration verification.

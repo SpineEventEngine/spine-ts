@@ -5,8 +5,8 @@
     "kind": "function-declaration",
     "identity": "createProjectManagementContext()#1",
     "name": "createProjectManagementContext",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createProjectManagementContext()#1 requires remediation by the assigned slice."
+    "disposition": "necessity",
+    "reason": "createProjectManagementContext remains a TypeScript framework boundary callable export for package consumers."
   },
   {
     "rule": "standalone-function",
@@ -14,53 +14,8 @@
     "kind": "function-declaration",
     "identity": "startProjectManagementServer()#1",
     "name": "startProjectManagementServer",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration startProjectManagementServer()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "createQuery()#1",
-    "name": "createQuery",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createQuery()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "createTopic()#1",
-    "name": "createTopic",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createTopic()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "ignoreCancellation()#1",
-    "name": "ignoreCancellation",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration ignoreCancellation()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "percentile()#1",
-    "name": "percentile",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration percentile()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "percentiles()#1",
-    "name": "percentiles",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration percentiles()#1 requires remediation by the assigned slice."
+    "disposition": "necessity",
+    "reason": "startProjectManagementServer remains a TypeScript framework boundary callable export for package consumers."
   },
   {
     "rule": "standalone-function",
@@ -68,43 +23,7 @@
     "kind": "function-declaration",
     "identity": "runProjectManagementLoad()#1",
     "name": "runProjectManagementLoad",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration runProjectManagementLoad()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "runUser()#1",
-    "name": "runUser",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration runUser()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "target()#1",
-    "name": "target",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration target()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "waitForVisibility()#1",
-    "name": "waitForVisibility",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration waitForVisibility()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/project-management/src/load-runner.ts",
-    "kind": "function-declaration",
-    "identity": "withTimeout()#1",
-    "name": "withTimeout",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration withTimeout()#1 requires remediation by the assigned slice."
+    "disposition": "necessity",
+    "reason": "runProjectManagementLoad remains a TypeScript framework boundary callable export for package consumers."
   }
 ]

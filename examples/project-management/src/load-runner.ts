@@ -65,7 +65,7 @@ export interface ProjectManagementLoadResult {
 const metadata = new SignalMetadata();
 
 /**
- * Runs independent asynchronous users against the real generated gRPC services.
+ * Executes independent asynchronous users against the real generated gRPC services.
  *
  * @param options Configures the server, user level, and bounded visibility waits.
  * @returns Summarizes acknowledged commands, visible queries, deliveries, failures, and latency.
