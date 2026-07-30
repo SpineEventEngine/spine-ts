@@ -27,7 +27,9 @@ export type EntityColumnValueKind =
 export interface EntityColumnDefinitionEntry<
   Comparison extends EntityComparison = EntityComparison,
 > {
+  /** Identifies the generated Protobuf field declared as a column. */
   readonly field: DescField;
+  /** Identifies the comparison family supported by the field. */
   readonly comparison: Comparison;
 }
 
@@ -72,8 +74,9 @@ export interface EntityColumnDefinition<
   Schema extends GenMessage<Message>,
   Entries extends EntityColumnEntries,
 > {
+  /** Brands metadata with its owning schema and generated entries. */
   readonly [generatedDefinitionBrand]: readonly [Schema, Entries];
-  /** @internal Exact generated entries, validated again during registration. */
+  /** Stores exact generated entries, validated again during registration. @internal */
   readonly entries: Entries;
 }
 
@@ -127,8 +130,11 @@ export type EntityColumns<
       OperatorsFor<Entries[Name]>
     >;
   } & {
+    /** Identifies the Entity version system column. */
     readonly version: EntityColumn<Schema, "version", Version>;
+    /** Identifies the Entity archived system column. */
     readonly archived: EntityColumn<Schema, "archived", boolean, EntityEqualityOperator>;
+    /** Identifies the Entity deleted system column. */
     readonly deleted: EntityColumn<Schema, "deleted", boolean, EntityEqualityOperator>;
   }
 >;

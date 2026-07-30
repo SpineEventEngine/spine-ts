@@ -213,7 +213,7 @@ export class BlackBox {
   /**
    * Stops admission, cancels owned subscriptions, and closes the client and server once.
    *
-   * @returns A shared promise for the close operation.
+   * @returns A shared promise that resolves after cleanup completes.
    */
   close(): Promise<void> {
     this.#closing ??= this.closeOnce();
@@ -307,7 +307,7 @@ export interface BlackBoxTestAccess {
    */
   create(resources: BlackBoxTestResources): BlackBox;
   /**
-   * Tracks a generic subscription-like handle for lifecycle regression tests.
+   * Returns a generic subscription-like handle for lifecycle regression tests.
    *
    * @param blackBox - The BlackBox that owns the handle.
    * @param handle - The cancelable async handle to track.
@@ -346,7 +346,7 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
     return blackBox;
   },
   /**
-   * Tracks a generic subscription-like handle for lifecycle regression tests.
+   * Returns a generic subscription-like handle for lifecycle regression tests.
    *
    * @param blackBox - The BlackBox that owns the handle.
    * @param handle - The cancelable async handle to track.
@@ -435,7 +435,11 @@ export interface BlackBoxTestResources {
 
 /** Internal async handle accepted by the BlackBox lifecycle test seam. */
 export type BlackBoxTestHandle = {
-  /** Cancels the tracked handle. */
+  /**
+   * Cancels the tracked handle.
+   *
+   * @returns A promise that resolves after cancellation completes.
+   */
   cancel(): Promise<void>;
 } & AsyncIterable<unknown>;
 

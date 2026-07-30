@@ -69,15 +69,21 @@ type StateName<Schema extends GenMessage<Message>> = Exclude<
 
 /** Represents one typed leaf comparison in an Entity query predicate. */
 export interface EntityComparisonPredicate<Column extends EntityColumn = EntityColumn> {
+  /** Identifies this predicate as a leaf comparison. */
   readonly kind: "comparison";
+  /** Identifies the column compared by this predicate. */
   readonly column: Column;
+  /** Identifies the comparison operator applied to the column. */
   readonly operator: EntityColumnOperator<Column>;
+  /** Stores the value compared with the column. */
   readonly value: Exclude<EntityColumnValue<Column>, undefined>;
 }
 
 /** Represents a nested conjunction or disjunction in an Entity query predicate. */
 export interface EntityGroup<Column extends EntityColumn = EntityColumn> {
+  /** Identifies the logical operation that combines the predicates. */
   readonly kind: "all" | "either";
+  /** Lists the predicates combined by this group. */
   readonly predicates: readonly EntityPredicate<Column>[];
 }
 
@@ -99,7 +105,7 @@ export class EntityQueryBuilder<
   readonly #order: { readonly column: EntityColumn; readonly direction: "asc" | "desc" }[] = [];
   #limit: number | undefined;
 
-  /** Creates a builder through {@link EntityQuery.select}.
+  /** Creates a builder for one Entity query.
    *
    * @param input - Schema, registered columns, and actor context for the query.
    */
