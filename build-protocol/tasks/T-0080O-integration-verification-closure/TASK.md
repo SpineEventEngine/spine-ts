@@ -2,8 +2,8 @@
 
 ## Status
 
-In progress. Repository-wide residuals are measured and bounded planning is
-active.
+Implementation, review, and repository-wide verification complete. Ready for
+`main` integration and post-merge closure.
 
 ## Parent And Dependencies
 
@@ -386,3 +386,22 @@ serialized-contract changes across the repository.
   the explicit dispatch.
 - The correction is accepted for commit, immediate push, and restart of the
   complete repository verification gate.
+
+## Final Verification
+
+`pnpm --config.verify-deps-before-run=false verify` passes from the integrated
+umbrella branch:
+
+- generation validates 40 Spine Proto checksums and 49 frozen descriptors;
+- build/tooling typechecks, ESLint, cleanup, TSDoc, and formatting pass;
+- 160 test files pass and 3 skip; 3,148 tests pass and 25 skip;
+- coverage passes at 93.97% statements, 90.04% branches, 94.29% functions,
+  and 94.79% lines;
+- TypeDoc validates all expected exports across the 13 public package
+  surfaces;
+- generated Proto cleanliness and release readiness pass, including 66 package
+  imports, 44 package assets, and 144 relative Markdown links.
+
+All canonical review concerns are closed. Security remains N/A because this
+program does not change a security boundary. The branch is accepted for
+`main` integration.
