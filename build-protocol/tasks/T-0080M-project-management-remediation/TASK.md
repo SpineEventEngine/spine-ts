@@ -109,3 +109,19 @@ standard.
   readiness.
 - Splitter runtime self-introspection was unavailable for explicit
   `gpt-5.6-sol` / high, with no visible mismatch.
+
+## Implementation Dispatch
+
+- M1 owns only `commands.proto`, `entities.proto`, and `events.proto`; M2 owns
+  only `read_models.proto`; M3 owns only `src/index.ts`.
+- Each writer uses the existing implementer role, explicitly
+  `gpt-5.6-terra` / medium. Both model and reasoning fields are explicit in
+  every dispatch.
+- Writers may not edit another track, shared tooling, package/workspace files,
+  generated output, ledgers, or records; may not commit, push, build Spine JVM,
+  or spawn subagents; and must report runtime metadata or its limitation.
+- M1 and M2 add comments only and prove non-comment token identity. M3 resolves
+  the 108 TSDoc rows without changing declaration kinds, public exports,
+  topology, handlers, or behavior.
+- M4 is dispatched after one implementation slot returns. M5 follows complete
+  integration and review.
