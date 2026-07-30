@@ -42,7 +42,11 @@ export { todoProtoModule } from "../generated/proto-module.js";
 
 /** Task aggregate for the create-task example flow. */
 export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
-  /** Handle `CreateTask` and produce the domain event stored by the context. */
+  /** Creates a task and produces its stored domain event.
+   *
+   * @param command - The command that supplies the task title.
+   * @returns The event that records the created task.
+   */
   @Assign
   createTask(command: CreateTask): TaskCreated {
     const id = clone(TaskIdSchema, this.id);
@@ -63,7 +67,11 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     });
   }
 
-  /** Handle `RenameTask` and produce the event stored by the context. */
+  /** Renames a task and produces its stored domain event.
+   *
+   * @param command - The command that supplies the replacement title.
+   * @returns The event that records the task rename.
+   */
   @Assign
   renameTask(command: RenameTask): TaskRenamed {
     const id = clone(TaskIdSchema, this.id);
@@ -84,7 +92,11 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     });
   }
 
-  /** Handle `CompleteTask` and produce the event stored by the context. */
+  /** Completes a task and produces its stored domain event.
+   *
+   * @param command - The command that requests task completion.
+   * @returns The event that records the task completion.
+   */
   @Assign
   completeTask(command: CompleteTask): TaskCompleted {
     void command;
@@ -106,7 +118,11 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     return create(TaskCompletedSchema, { id });
   }
 
-  /** Handle `ReopenTask` and produce the event stored by the context. */
+  /** Reopens a task and produces its stored domain event.
+   *
+   * @param command - The command that requests task reopening.
+   * @returns The event that records the task reopening.
+   */
   @Assign
   reopenTask(command: ReopenTask): TaskReopened {
     void command;
@@ -131,23 +147,33 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
 
 /** Read-side task list projection for visible task queries. */
 export class TaskListProjection extends Projection<string, typeof TaskListSchema, number> {
-  /** Observe attempts to complete a task that is already complete. */
+  /** Observes a rejection for completing an already complete task.
+   *
+   * @param rejection - The rejection that identifies the completed task.
+   * @param context - The event context that marks the rejection.
+   */
   @Subscribe
   onTaskAlreadyDone(rejection: TaskAlreadyDoneMessage, context: EventContext): void {
-    void taskId(rejection.id);
+    void taskIds.require(rejection.id);
     void context.rejection;
   }
 
-  /** Observe attempts to reopen a task that is still open. */
+  /** Observes a rejection for reopening an open task.
+   *
+   * @param rejection - The rejection that identifies the open task.
+   */
   @Subscribe
   onTaskNotDone(rejection: TaskNotDoneMessage): void {
-    void taskId(rejection.id);
+    void taskIds.require(rejection.id);
   }
 
-  /** Add newly created tasks to the read-side list. */
+  /** Adds a created task to the read-side list.
+   *
+   * @param event - The event that supplies the new task details.
+   */
   @Subscribe
   onTaskCreated(event: TaskCreated): void {
-    const id = taskId(event.id);
+    const id = taskIds.require(event.id);
 
     this.update((draft) =>
       Object.assign(
@@ -168,10 +194,13 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     );
   }
 
-  /** Rename an existing task in the read-side list. */
+  /** Renames an existing task in the read-side list.
+   *
+   * @param event - The event that supplies the replacement title.
+   */
   @Subscribe
   onTaskRenamed(event: TaskRenamed): void {
-    const id = taskId(event.id);
+    const id = taskIds.require(event.id);
 
     this.update((draft) =>
       Object.assign(
@@ -193,10 +222,13 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     );
   }
 
-  /** Mark an existing task completed in the read-side list. */
+  /** Marks an existing task completed in the read-side list.
+   *
+   * @param event - The event that identifies the completed task.
+   */
   @Subscribe
   onTaskCompleted(event: TaskCompleted): void {
-    const id = taskId(event.id);
+    const id = taskIds.require(event.id);
 
     this.update((draft) => {
       const tasks = draft.tasks.map((task) =>
@@ -219,10 +251,13 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     });
   }
 
-  /** Mark an existing task open in the read-side list. */
+  /** Marks an existing task open in the read-side list.
+   *
+   * @param event - The event that identifies the reopened task.
+   */
   @Subscribe
   onTaskReopened(event: TaskReopened): void {
-    const id = taskId(event.id);
+    const id = taskIds.require(event.id);
 
     this.update((draft) => {
       const tasks = draft.tasks.map((task) =>
@@ -246,7 +281,10 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   }
 }
 
-/** Assemble the in-memory single-tenant Tasks bounded context. */
+/** Creates the in-memory single-tenant Tasks bounded context.
+ *
+ * @returns The assembled Tasks bounded context.
+ */
 export async function createTodoContext(): Promise<BoundedContext> {
   return BoundedContext.singleTenant("Tasks")
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
@@ -266,7 +304,11 @@ export interface TodoServerOptions {
 /** Running standalone to-do example server. */
 export type TodoServer = RunningServer;
 
-/** Start the standalone to-do example server with in-memory storage. */
+/** Starts the standalone to-do example server with in-memory storage.
+ *
+ * @param options - Optional listener host and port overrides.
+ * @returns The running server, which callers must close when finished.
+ */
 export async function startTodoServer(options: TodoServerOptions = {}): Promise<TodoServer> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 8080;
@@ -275,21 +317,25 @@ export async function startTodoServer(options: TodoServerOptions = {}): Promise<
     .start();
 }
 
-function taskId(id: TaskId | undefined): TaskId {
-  if (id === undefined) {
-    throw new Error("Framework-provided task ID is missing.");
-  }
+const taskIds = {
+  require(id: TaskId | undefined): TaskId {
+    if (id === undefined) {
+      throw new Error("Framework-provided task ID is missing.");
+    }
 
-  return clone(TaskIdSchema, id);
-}
+    return clone(TaskIdSchema, id);
+  },
+};
 
-function isEntrypoint(): boolean {
-  return (
-    process.argv[1] !== undefined && import.meta.url === new URL(process.argv[1], "file:").href
-  );
-}
+const todoEntrypoint = {
+  isCurrentModule(): boolean {
+    return (
+      process.argv[1] !== undefined && import.meta.url === new URL(process.argv[1], "file:").href
+    );
+  },
+};
 
-if (isEntrypoint()) {
+if (todoEntrypoint.isCurrentModule()) {
   startTodoServer()
     .then((server) => {
       console.log(`To-do example server listening at ${server.baseUrl}`);
