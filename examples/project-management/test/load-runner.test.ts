@@ -21,9 +21,19 @@ import { SubscriptionService } from "@spine-event-engine/proto/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { projectManagementLoadLevels, runProjectManagementLoad } from "../src/load-runner.js";
+import { LatencyDistribution } from "../src/internal/latency-distribution.js";
 import { ProjectSummarySchema } from "../generated/spine/example/project_management/v1/read_models_pb.js";
 
 describe("project-management load runner", () => {
+  it("calculates exact nearest-rank percentiles for varied and empty values", () => {
+    expect(LatencyDistribution.from([20, 1, 50, 10, 5, 100, 2, 3, 4, 6])).toEqual({
+      p50Ms: 5,
+      p95Ms: 100,
+      p99Ms: 100,
+    });
+    expect(LatencyDistribution.from([])).toEqual({ p50Ms: 0, p95Ms: 0, p99Ms: 0 });
+  });
+
   it("runs ten users over real gRPC and reports command, query, subscription, cleanup, and metrics", async () => {
     const modulePath = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
     expect(existsSync(modulePath)).toBe(true);
