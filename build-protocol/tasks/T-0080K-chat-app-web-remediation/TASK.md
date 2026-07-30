@@ -83,3 +83,37 @@ public example workflow code moves; otherwise standard.
   behavior-invariant, test, and bounded-writer plan.
 - Both model and reasoning fields are explicit. Runtime metadata is recorded if
   exposed; otherwise the configured profile and limitation are recorded.
+
+## Accepted Bounded Plan
+
+- Exact debt is 58 TSDoc rows, 20 standalone-function rows, one semantic-name
+  row, and zero Proto rows. Tests, ignored generated output, and `dist` are
+  excluded; the tracked browser fixture remains authored production-fixture
+  code.
+- K1 owns only app authorization policy/source tests: 13 TSDoc and two
+  standalone rows move into cohesive `ChatAuthorizationPolicy` behavior.
+- K2 owns app runtime/validation, focused tests, app README, and exact interop
+  startup consumers: 17 TSDoc, eight standalone, and one name row move into
+  cohesive application and validation owners.
+- K3 owns web UI/browser fixture, focused tests, and web README: 28 TSDoc and
+  ten standalone rows move into cohesive view/post/fixture owners while named
+  React components remain idiomatic function-valued declarations.
+- K4 runs after integration and owns only the three K ledgers and family
+  README. It targets exact zero debt; any retained function requires an exact
+  checker-valid necessity reason.
+- The three implementation writers use separate branches/worktrees with
+  non-overlapping production ownership. Each is an existing implementer,
+  explicitly `gpt-5.6-terra` / medium, may not spawn, and must preserve all
+  auth/session, command, Projection, query/subscription, best-effort recovery,
+  React Strict Mode, browser transport, shutdown, registry/package/generated,
+  and end-user prohibition invariants.
+- Baseline passes the canonical workspace build, 58 focused Vitest tests with
+  loopback permission, and three local Playwright browsers. No model/Proto,
+  registry, manifest, package-coordinate, lockfile, or workspace metadata
+  change is permitted.
+- All four canonical review concerns apply after one complete integration
+  verification wave. Final security and Proto-specific review are N/A at this
+  milestone because release readiness owns security and K changes no serialized
+  contracts.
+- Splitter runtime self-introspection was unavailable for the explicit
+  Sol/high profile, with no visible mismatch.
