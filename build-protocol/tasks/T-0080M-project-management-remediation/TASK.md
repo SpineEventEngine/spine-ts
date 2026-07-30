@@ -140,3 +140,42 @@ standard.
 - The writer may not edit Proto, topology source, docs, ledgers, records,
   package/shared/generated files, commit, push, build Spine JVM, or spawn.
   Runtime metadata or its limitation is required.
+
+## Implementation Wave Completion
+
+- M1 adds exactly 27 comments to the three core Proto files. M2 adds exactly 90
+  comments to `read_models.proto`. Both prove identical non-comment tokens,
+  pass 40 protected checksums and diff integrity, and expose only their expected
+  stale ledger rows.
+- M3 resolves all 108 `src/index.ts` TSDoc rows without changing non-comment
+  tokens, declarations, exports, topology, handlers, or behavior. Full build,
+  ESLint, Prettier, and 3 topology tests pass.
+- M4 resolves 22 load-runner TSDoc rows, retains only the exported standalone
+  runner, and moves nine helpers into cohesive per-user and latency owners.
+  Full build, ESLint, Prettier, 4 load-runner tests, zero live TSDoc findings,
+  exactly nine stale necessities, and diff integrity pass.
+- The clean integration baseline passes generation, full TypeScript build, all
+  three focused files and eight tests, and the real 10-user loopback run with
+  zero failed users and complete acknowledgement/query/subscription counts.
+- Every writer was the existing implementer role, explicitly
+  `gpt-5.6-terra` / medium. Runtime self-introspection was unavailable, with no
+  visible mismatch.
+
+## Complete Review Wave Assignments
+
+- Style/maintainability uses the existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across helper ownership/cohesion, name limits, exact
+  scope, and absence of generic utility dumping.
+- Documentation uses the immutable existing reviewer configured
+  `gpt-5.6-luna` / medium, across 117 Proto comments, 130 TSDoc rows, and
+  eventual README accuracy requirements.
+- TypeScript/API documentation uses the existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across exported declarations, emitted contracts,
+  Proto/wire identity, and generated consumers.
+- Performance/reliability uses the existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across concurrency, correlations, timing,
+  zero-elapsed and percentile behavior, failure accounting, cancellation,
+  iterator/session cleanup, and shutdown.
+- Reviewers are read-only, inspect M1-M4 as one complete wave, may not spawn,
+  and must report runtime metadata or its limitation. Security remains N/A
+  because the slice changes no trust boundary.
