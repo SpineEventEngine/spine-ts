@@ -68,3 +68,14 @@ Runtime self-introspection or its limitation is required with every result.
 - O1 remains closed. API remains closed absent signature/export drift.
 - Re-review is limited to documentation/reliability for O2 and
   documentation/style/reliability for O3.
+
+## Correction Evidence And Re-review
+
+- O2 has zero scoped TSDoc, exact non-comment identity, and clean
+  formatting/diff checks after its five wording corrections.
+- O3 has zero owned TSDoc and closes the three resolver bypasses with focused
+  3/3 and full 107/107 cleanup tests. Production checker, script lint,
+  formatting, and diff integrity pass.
+- Documentation rechecks only the seven wording corrections. Style rechecks
+  nested import-equals, local shadowing, and indirect owner propagation.
+  Reliability rechecks both groups. API remains accepted.

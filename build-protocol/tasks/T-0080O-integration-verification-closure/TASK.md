@@ -211,3 +211,21 @@ serialized-contract changes across the repository.
 - Reviewer profiles were immutable Luna/medium documentation and explicit
   Terra/high API, style, and reliability. Runtime self-introspection was
   unavailable with no visible mismatch.
+
+## Correction Completion And Focused Re-review
+
+- O2 corrects exactly five return descriptions across Command Bus, Event Bus,
+  their bounded-context pass-through endpoints, and Delivery Loop. Scoped
+  TSDoc is zero, non-comment token identity remains exact, and formatting/diff
+  checks pass.
+- O3 corrects Browser Session and Client lifecycle wording and closes nested
+  import-equals, local-shadowing, and indirect-owner alias gaps.
+- Red/green focused coverage passes 3/3. The full cleanup suite now passes
+  107/107; production enforcement, owned TSDoc, script lint, formatting, and
+  diff integrity pass.
+- Both existing implementer contexts remained explicit
+  `gpt-5.6-terra` / medium. Runtime self-introspection was unavailable with no
+  mismatch.
+- Documentation reopens for O2/O3 wording, style for the three resolver paths,
+  and reliability for both. API remains closed because no signature/export
+  changed.
