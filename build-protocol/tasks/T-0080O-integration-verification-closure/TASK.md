@@ -184,3 +184,30 @@ serialized-contract changes across the repository.
   completion claims and cleanup alias coverage.
 - Reviewers inspect O1/O2/O3 as one read-only wave, may not edit or spawn, and
   must report actual runtime metadata or its limitation. Security is N/A.
+
+## Combined Review Result And Correction Batch
+
+- TypeScript/API is clean: O1/O2 token identity, scoped TSDoc, constructor
+  rules, React signature/arity, Proto Tools exports, and absence of package/
+  Proto drift are accepted.
+- Documentation/reliability require O2 to correct return semantics for
+  `CommandBus.post`, `EventBus.post`, their bounded-context pass-through
+  endpoints, and `DeliveryLoop.close`: dispatch promises settle after queued
+  work completes and may reject; the delivery loop settles after its active
+  run.
+- Documentation/reliability require O3 to say `BrowserSession.close()` requests
+  cancellation, and `Client.close()` requests general cancellation while
+  awaiting subscription/transport cleanup.
+- Style/reliability find three P1 cleanup-resolver gaps: nested direct
+  import-equals members such as `Core.SignalEnvelopes.event`, local bindings
+  shadowing tracked Core/owner aliases, and alias-to-alias propagation after
+  `const envelopes = core.SignalEnvelopes`.
+- O3 adds focused event/command regressions for all three paths while retaining
+  type-only and local-lookalike exclusions. No generic resolver redesign is
+  authorized.
+- O1 remains closed. O2 reopens documentation/reliability only; O3 reopens
+  documentation, style, and reliability. API remains closed unless a
+  correction changes signatures/exports.
+- Reviewer profiles were immutable Luna/medium documentation and explicit
+  Terra/high API, style, and reliability. Runtime self-introspection was
+  unavailable with no visible mismatch.
