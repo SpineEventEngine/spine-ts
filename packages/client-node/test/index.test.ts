@@ -50,6 +50,14 @@ describe("@spine-event-engine/client-node", () => {
     expect(() => Reflect.construct(clientRoot.Client as never, [])).toThrow();
     expect(clientRoot.ClientProtocolError).toBeTypeOf("function");
     expect(clientRoot.EntityColumn).toBeTypeOf("function");
+    expect(typeof clientRoot.EntityQuery.eq).toBe("function");
+    expect(typeof clientRoot.EntityQuery.gt).toBe("function");
+    expect(typeof clientRoot.EntityQuery.lt).toBe("function");
+    expect(typeof clientRoot.EntityQuery.ge).toBe("function");
+    expect(typeof clientRoot.EntityQuery.le).toBe("function");
+    expect(typeof clientRoot.EntityQuery.all).toBe("function");
+    expect(typeof clientRoot.EntityQuery.either).toBe("function");
+    expect("eq" in clientRoot).toBe(false);
     expectTypeOf<"query" extends keyof ClientRoot ? true : false>().toEqualTypeOf<false>();
     expectTypeOf<
       "subscribeToState" extends keyof ClientRoot ? true : false

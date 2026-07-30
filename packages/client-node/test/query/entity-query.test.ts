@@ -10,8 +10,8 @@ import {
 } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
-import { EntityColumn, EntityQuery, all, either, eq, ge, gt, le, lt } from "../../src/index.js";
-import { defineGeneratedEntityColumns } from "../../src/codegen/index.js";
+import { EntityColumn, EntityQuery } from "../../src/index.js";
+import { GeneratedEntityColumns } from "../../src/codegen/index.js";
 import {
   FixtureStatus,
   ProjectionStateSchema,
@@ -20,7 +20,7 @@ import {
 
 const columns = EntityColumn.register(
   ProjectionStateSchema,
-  defineGeneratedEntityColumns(ProjectionStateSchema, {
+  GeneratedEntityColumns.define(ProjectionStateSchema, {
     title: { field: ProjectionStateSchema.field.title, comparison: "ordering" as const },
     priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" as const },
     status: { field: ProjectionStateSchema.field.status, comparison: "equality" as const },
@@ -37,9 +37,10 @@ const columns = EntityColumn.register(
 const context = create(ActorContextSchema, {
   actor: create(UserIdSchema, { value: "query-user" }),
 });
+const { eq, gt } = EntityQuery;
 const scalarColumns = EntityColumn.register(
   ScalarProjectionStateSchema,
-  defineGeneratedEntityColumns(ScalarProjectionStateSchema, {
+  GeneratedEntityColumns.define(ScalarProjectionStateSchema, {
     doubleValue: {
       field: ScalarProjectionStateSchema.field.doubleValue,
       comparison: "ordering" as const,
@@ -80,9 +81,12 @@ describe("EntityQuery", () => {
     const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .byId("task-1", "task-2")
       .where(
-        all(
-          ge(columns.priority, 2),
-          either(eq(columns.status, FixtureStatus.OPEN), lt(columns.title, "Z")),
+        EntityQuery.all(
+          EntityQuery.ge(columns.priority, 2),
+          EntityQuery.either(
+            EntityQuery.eq(columns.status, FixtureStatus.OPEN),
+            EntityQuery.lt(columns.title, "Z"),
+          ),
         ),
       )
       .mask("id", "title", "priority")
@@ -116,11 +120,11 @@ describe("EntityQuery", () => {
 
   it("supports every frozen comparison operator with typed values", () => {
     const predicates = [
-      eq(columns.title, "A"),
-      gt(columns.priority, 1),
-      lt(columns.priority, 4),
-      ge(columns.priority, 2),
-      le(columns.priority, 3),
+      EntityQuery.eq(columns.title, "A"),
+      EntityQuery.gt(columns.priority, 1),
+      EntityQuery.lt(columns.priority, 4),
+      EntityQuery.ge(columns.priority, 2),
+      EntityQuery.le(columns.priority, 3),
     ];
 
     expect(predicates.map((predicate) => predicate.operator)).toEqual([
@@ -140,12 +144,12 @@ describe("EntityQuery", () => {
     })
       .byId("task-1", "task-2")
       .where(
-        all(
-          eq(columns.active, false),
-          gt(columns.priority, 0),
-          lt(columns.priority, 100),
-          ge(columns.priority, 1),
-          le(columns.priority, 20),
+        EntityQuery.all(
+          EntityQuery.eq(columns.active, false),
+          EntityQuery.gt(columns.priority, 0),
+          EntityQuery.lt(columns.priority, 100),
+          EntityQuery.ge(columns.priority, 1),
+          EntityQuery.le(columns.priority, 20),
         ),
       )
       .build();
@@ -179,15 +183,15 @@ describe("EntityQuery", () => {
   it("packs descriptor and system column value families", () => {
     const query = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .where(
-        all(
-          eq(columns.active, false),
-          eq(columns.fingerprint, new Uint8Array([1, 2])),
-          eq(columns.status, FixtureStatus.CLOSED),
-          eq(columns.sequence, 4n),
-          gt(columns.dueAt, create(TimestampSchema, { seconds: 2n })),
-          eq(columns.version, create(VersionSchema, { number: 3 })),
-          eq(columns.archived, false),
-          eq(columns.deleted, false),
+        EntityQuery.all(
+          EntityQuery.eq(columns.active, false),
+          EntityQuery.eq(columns.fingerprint, new Uint8Array([1, 2])),
+          EntityQuery.eq(columns.status, FixtureStatus.CLOSED),
+          EntityQuery.eq(columns.sequence, 4n),
+          EntityQuery.gt(columns.dueAt, create(TimestampSchema, { seconds: 2n })),
+          EntityQuery.eq(columns.version, create(VersionSchema, { number: 3 })),
+          EntityQuery.eq(columns.archived, false),
+          EntityQuery.eq(columns.deleted, false),
         ),
       )
       .mask("title")
@@ -213,7 +217,7 @@ describe("EntityQuery", () => {
       columns,
       context,
     })
-      .where(eq(columns.title, "A"))
+      .where(EntityQuery.eq(columns.title, "A"))
       .build();
     const orderOnly = EntityQuery.select({ schema: ProjectionStateSchema, columns, context })
       .orderBy(columns.title)
@@ -235,15 +239,15 @@ describe("EntityQuery", () => {
       context,
     })
       .where(
-        all(
-          eq(scalarColumns.doubleValue, 1.5),
-          eq(scalarColumns.floatValue, 2.5),
-          eq(scalarColumns.uint64Value, 3n),
-          eq(scalarColumns.fixed64Value, 4n),
-          eq(scalarColumns.uint32Value, 5),
-          eq(scalarColumns.fixed32Value, 4_294_967_295),
-          eq(scalarColumns.sfixed64Value, 7n),
-          eq(scalarColumns.sint64Value, 8n),
+        EntityQuery.all(
+          EntityQuery.eq(scalarColumns.doubleValue, 1.5),
+          EntityQuery.eq(scalarColumns.floatValue, 2.5),
+          EntityQuery.eq(scalarColumns.uint64Value, 3n),
+          EntityQuery.eq(scalarColumns.fixed64Value, 4n),
+          EntityQuery.eq(scalarColumns.uint32Value, 5),
+          EntityQuery.eq(scalarColumns.fixed32Value, 4_294_967_295),
+          EntityQuery.eq(scalarColumns.sfixed64Value, 7n),
+          EntityQuery.eq(scalarColumns.sint64Value, 8n),
         ),
       )
       .build();
