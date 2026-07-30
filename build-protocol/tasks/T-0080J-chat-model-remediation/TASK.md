@@ -107,3 +107,12 @@ change serialized/API contracts.
   style and reliability are N/A for comment/debt-only changes.
 - Splitter runtime self-introspection was unavailable for the explicit Sol/high
   profile, with no visible mismatch.
+
+## Implementation Replacement
+
+- The first explicit Terra/medium implementer produced no edit or blocker and
+  was interrupted after repeated status requests; the isolated worktree
+  remained clean.
+- A fresh existing implementer, explicitly `gpt-5.6-terra` / medium, receives
+  the unchanged five-Proto/one-ledger scope in the same clean worktree.
+- Runtime metadata or its limitation remains required before acceptance.
