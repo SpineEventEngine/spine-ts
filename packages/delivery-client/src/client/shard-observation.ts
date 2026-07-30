@@ -8,12 +8,16 @@ import {
   type RemoteShardObservation,
 } from "./types.js";
 
+/** Buffers one bounded, reconnecting remote shard-observation stream. */
 export class ShardObservationStream implements DeliveryShardObservationStream {
   readonly #values: RemoteShardObservation[] = [];
   readonly #waiters: ((result: IteratorResult<RemoteShardObservation>) => void)[] = [];
   #error: Error | undefined;
   #done = false;
 
+  /** Creates and begins an observation stream.
+   * @param config Supplies bounded transport, decoding, and cleanup operations.
+   */
   constructor(
     private readonly config: {
       readonly signal: AbortSignal;
@@ -34,12 +38,17 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
     void this.#pump();
   }
 
+  /** Cancels this stream and releases its local resources.
+   */
   cancel(): void {
     if (this.#done) return;
     this.config.cancel();
     this.#finish();
   }
 
+  /** Returns this stream's async iterator.
+   * @returns An iterator that yields detached observations.
+   */
   [Symbol.asyncIterator](): AsyncIterator<RemoteShardObservation> {
     return {
       next: () => this.#next(),
@@ -73,7 +82,7 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
           )
             throw error;
           if (attempt === this.config.reconnects) throw new DeliveryShardObservationError();
-          await pause(this.config.reconnectBackoffMs, this.config.signal);
+          await ShardObservationStream.#pause(this.config.reconnectBackoffMs, this.config.signal);
         }
       }
     } catch (error) {
@@ -122,30 +131,32 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
     const result: IteratorResult<RemoteShardObservation> = { done: true, value: undefined };
     for (const resolve of this.#waiters.splice(0)) resolve(result);
   }
-}
 
-function pause(delay: number, signal: AbortSignal): Promise<void> {
-  if (delay === 0)
-    return signal.aborted
-      ? Promise.reject(
+  static #pause(delay: number, signal: AbortSignal): Promise<void> {
+    if (delay === 0)
+      return signal.aborted
+        ? Promise.reject(
+            signal.reason instanceof Error
+              ? signal.reason
+              : new Error("Delivery observation aborted."),
+          )
+        : Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const finish = (reason?: Error) => {
+        signal.removeEventListener("abort", abort);
+        if (reason === undefined) resolve();
+        else reject(reason);
+      };
+      const timer = setTimeout(finish, delay);
+      const abort = () => {
+        clearTimeout(timer);
+        finish(
           signal.reason instanceof Error
             ? signal.reason
             : new Error("Delivery observation aborted."),
-        )
-      : Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(done, delay);
-    const abort = () => {
-      clearTimeout(timer);
-      done(
-        signal.reason instanceof Error ? signal.reason : new Error("Delivery observation aborted."),
-      );
-    };
-    function done(reason?: Error) {
-      signal.removeEventListener("abort", abort);
-      if (reason === undefined) resolve();
-      else reject(reason);
-    }
-    signal.addEventListener("abort", abort, { once: true });
-  });
+        );
+      };
+      signal.addEventListener("abort", abort, { once: true });
+    });
+  }
 }
