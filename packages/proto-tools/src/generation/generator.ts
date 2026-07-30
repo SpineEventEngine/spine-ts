@@ -23,6 +23,14 @@ import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest
 
 /** Bounded seams used to test failure handling while retaining real Buf integration. */
 export interface GenerationOperations {
+  /** Executes Buf for the staged model sources.
+   *
+   * @param moduleRoot The temporary Buf module root.
+   * @param output The temporary generated-output directory.
+   * @param owned The package-relative Proto paths to generate.
+   * @param packageName The owning model package name.
+   * @param runner The optional subprocess runner.
+   */
   readonly runBuf?: (
     moduleRoot: string,
     output: string,
@@ -30,6 +38,12 @@ export interface GenerationOperations {
     packageName: string,
     runner?: SubprocessRunner,
   ) => void;
+  /** Updates generated imports that belong to direct model dependencies.
+   *
+   * @param output The generated-output directory.
+   * @param owners The package that owns each Proto path.
+   * @param currentPackage The model package being generated.
+   */
   readonly rewriteImports?: (
     output: string,
     owners: Readonly<
@@ -37,32 +51,82 @@ export interface GenerationOperations {
     >,
     currentPackage: string,
   ) => void;
+  /** Writes the generated module descriptor.
+   *
+   * @param output The generated-output directory.
+   * @param exportName The generated module export name.
+   * @param packageName The owning model package name.
+   * @param dependencies The direct model-module dependencies.
+   */
   readonly writeModule?: (
     output: string,
     exportName: string,
     packageName: string,
     dependencies: readonly { readonly name: string; readonly moduleExport: string }[],
   ) => void;
+  /** Applies a filesystem rename during publication, backup, or rollback.
+   *
+   * @param from The current source path.
+   * @param to The destination path.
+   */
   readonly rename?: (from: string, to: string) => void;
+  /** Overrides manifest publication filesystem operations for tests. */
   readonly manifestOperations?: Partial<ManifestFileOperations>;
+  /** Runs a subprocess for Buf generation or validation. */
   readonly runProcess?: SubprocessRunner;
+  /** Overrides generation-claim filesystem operations for tests. */
   readonly lockOperations?: Partial<GenerationLockOperations>;
 }
 
 /** Bounded lock seams for deterministic ownership and cleanup tests. */
 export interface GenerationLockOperations {
+  /** Creates a lock file with its owner content.
+   *
+   * @param path The unique lock-file path.
+   * @param content The serialized owner metadata.
+   */
   readonly create: (path: string, content: string) => void;
+  /** Lists the entries in a package directory.
+   *
+   * @param directory The package directory to inspect.
+   * @returns The directory entry names.
+   */
   readonly list: (directory: string) => readonly string[];
+  /** Reads the content of a lock file.
+   *
+   * @param path The lock-file path.
+   * @returns The serialized owner metadata.
+   */
   readonly read: (path: string) => string;
+  /** Inspects the kind of a lock-file entry.
+   *
+   * @param path The lock-file path.
+   * @returns Whether the entry is regular, symbolic, or another kind.
+   */
   readonly inspect: (path: string) => "regular" | "symlink" | "other";
+  /** Removes a lock file.
+   *
+   * @param path The lock-file path.
+   */
   readonly remove: (path: string) => void;
+  /** Determines whether a lock owner is still running.
+   *
+   * @param pid The candidate process identifier.
+   * @returns The liveness result for the candidate process.
+   */
   readonly liveness: (pid: number) => ClaimLiveness;
 }
 
 /** Result of a bounded generation-claim liveness probe. */
 export type ClaimLiveness = "alive" | "dead" | "indeterminate";
 
-/** Bounded process runner used for the packaged Buf executable. */
+/** Runs the packaged Buf executable synchronously.
+ *
+ * @param command The executable path.
+ * @param arguments_ The command-line arguments.
+ * @param options The working-directory, encoding, timeout, and buffer options.
+ * @returns The synchronous subprocess result.
+ */
 export type SubprocessRunner = (
   command: string,
   arguments_: readonly string[],
@@ -79,6 +143,7 @@ const bufMaxBuffer = 1_048_576;
 
 /** Bounded seams for atomic application-registry publication failures. */
 export interface CompositionOperations {
+  /** Overrides registry publication filesystem operations for tests. */
   readonly registryOperations?: Partial<ManifestFileOperations>;
 }
 
@@ -105,11 +170,12 @@ const defaultLockOperations: GenerationLockOperations = {
 };
 
 /** Reports Proto artifact generation failures. */
-const ProtoGenerationErrors: Readonly<{ fail(owner: string, message: string): never }> = Object.freeze({
-  fail(owner: string, message: string): never {
-    throw new Error(`spine-proto: ${owner}: ${message}`);
-  },
-});
+const ProtoGenerationErrors: Readonly<{ fail(owner: string, message: string): never }> =
+  Object.freeze({
+    fail(owner: string, message: string): never {
+      throw new Error(`spine-proto: ${owner}: ${message}`);
+    },
+  });
 
 /** Generates and composes deterministic Protobuf package artifacts. */
 const protoGeneration = Object.freeze({
@@ -120,7 +186,8 @@ const protoGeneration = Object.freeze({
    */
   generate(packageRoot: string, operations: GenerationOperations = {}): void {
     const config = ProtoConfig.read(packageRoot);
-    if (config.mode !== "model") ProtoGenerationErrors.fail(packageRoot, "generate requires model mode");
+    if (config.mode !== "model")
+      ProtoGenerationErrors.fail(packageRoot, "generate requires model mode");
     const lock = protoGeneration.acquireLock(
       packageRoot,
       config.packageName,
@@ -219,7 +286,10 @@ const protoGeneration = Object.freeze({
             const owner = JSON.parse(lockOperations.read(path)) as { pid?: unknown };
             if (typeof owner.pid !== "number" || owner.pid <= 0) throw new Error();
             if (lockOperations.liveness(owner.pid) !== "dead")
-              ProtoGenerationErrors.fail(packageName, "generation already in progress for this package");
+              ProtoGenerationErrors.fail(
+                packageName,
+                "generation already in progress for this package",
+              );
             lockOperations.remove(path);
           } catch (error) {
             if (error instanceof Error && error.message.startsWith("spine-proto:")) throw error;
@@ -344,17 +414,16 @@ const protoGeneration = Object.freeze({
     }
   },
 
-  resolveExportedProto(
-    requesterRoot: string,
-    packageName: string,
-    protoPath: string,
-  ): string {
+  resolveExportedProto(requesterRoot: string, packageName: string, protoPath: string): string {
     try {
       return createRequire(join(requesterRoot, "package.json")).resolve(
         `${packageName}/proto/${protoPath}`,
       );
     } catch {
-      return ProtoGenerationErrors.fail(packageName, `cannot resolve exported Proto source ${protoPath}`);
+      return ProtoGenerationErrors.fail(
+        packageName,
+        `cannot resolve exported Proto source ${protoPath}`,
+      );
     }
   },
 
@@ -410,7 +479,8 @@ const protoGeneration = Object.freeze({
       maxBuffer: bufMaxBuffer,
     });
     protoGeneration.assertBufResult(packageName, "validation", built);
-    if (!existsSync(output)) ProtoGenerationErrors.fail(packageName, "Buf generated no owned output");
+    if (!existsSync(output))
+      ProtoGenerationErrors.fail(packageName, "Buf generated no owned output");
   },
 
   assertBufResult(
@@ -421,7 +491,10 @@ const protoGeneration = Object.freeze({
     if (result.error !== undefined) {
       if ((result.error as NodeJS.ErrnoException).code === "ETIMEDOUT")
         ProtoGenerationErrors.fail(packageName, `Buf ${phase} timed out`);
-      ProtoGenerationErrors.fail(packageName, `Buf ${phase} could not start: ${result.error.message}`);
+      ProtoGenerationErrors.fail(
+        packageName,
+        `Buf ${phase} could not start: ${result.error.message}`,
+      );
     }
     if (result.signal !== null)
       ProtoGenerationErrors.fail(packageName, `Buf ${phase} ended by signal ${result.signal}`);
@@ -484,7 +557,8 @@ const protoGeneration = Object.freeze({
     packageName: string,
     dependencies: readonly { readonly name: string; readonly moduleExport: string }[],
   ): void {
-    const generated = protoGeneration.files(output)
+    const generated = protoGeneration
+      .files(output)
       .filter((file) => file.endsWith("_pb.ts"))
       .sort()
       .map((file, index) => ({
@@ -586,7 +660,23 @@ const protoGeneration = Object.freeze({
 
 /** Generates and composes deterministic Protobuf package artifacts. */
 export const ProtoGeneration: Readonly<{
+  /** Generates a model package's Protobuf-ES sources and module descriptor.
+   *
+   * @param packageRoot The root of the model package to generate.
+   * @param operations Optional bounded filesystem and process seams for tests.
+   */
   generate(packageRoot: string, operations?: GenerationOperations): void;
+  /** Determines the liveness of a generation-claim owner.
+   *
+   * @param pid The process identifier to probe.
+   * @param probe The optional signal-zero probe to run.
+   * @returns Whether the claim owner is alive, dead, or indeterminate.
+   */
   claimLiveness(pid: number, probe?: (candidate: number) => unknown): ClaimLiveness;
+  /** Composes an application's deterministic model registry.
+   *
+   * @param packageRoot The root of the application package to compose.
+   * @param operations Optional bounded manifest publication seams for tests.
+   */
   compose(packageRoot: string, operations?: CompositionOperations): void;
 }> = Object.freeze(protoGeneration);

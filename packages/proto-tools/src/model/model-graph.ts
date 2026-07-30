@@ -8,20 +8,31 @@ import { readManifestAt } from "../io/manifest-reader.js";
 import { RegistryDependency } from "./registry-dependency.js";
 import { NpmPackageName } from "./npm-package-name.js";
 
+/** Describes one installed model package in a resolved dependency graph. */
 export interface ResolvedModel {
+  /** Names the resolved model package. */
   readonly name: string;
+  /** States the resolved package version. */
   readonly version: string;
+  /** Names the package export that provides its Proto module. */
   readonly moduleExport: string;
+  /** Locates the installed package root. */
   readonly root: string;
 }
 
+/** Identifies the model package that owns a generated Proto path. */
 export interface ProtoOwner {
+  /** Names the package that owns the Proto path. */
   readonly packageName: string;
+  /** Names the package-relative generated import subpath. */
   readonly generatedExport: string;
 }
 
+/** Contains the resolved model packages and their Proto-path owners. */
 export interface ResolvedModelGraph {
+  /** Lists model packages in deterministic dependency order. */
   readonly models: readonly ResolvedModel[];
+  /** Maps every owned Proto path to its model package. */
   readonly protoOwners: Readonly<Record<string, ProtoOwner>>;
 }
 

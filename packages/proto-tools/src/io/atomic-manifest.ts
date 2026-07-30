@@ -3,11 +3,22 @@ import { basename, dirname, join } from "node:path";
 
 /** Filesystem operations used to stage and atomically replace a manifest. */
 export interface ManifestFileOperations {
-  /** Writes complete content to its unique staging file. */
+  /** Writes complete content to a unique staging file.
+   *
+   * @param path The staging-file path.
+   * @param content The complete content to write.
+   */
   readonly writeFile: (path: string, content: string) => void;
-  /** Renames the staging file over the destination manifest. */
+  /** Renames a staging file over the destination manifest.
+   *
+   * @param from The completed staging-file path.
+   * @param to The destination manifest path.
+   */
   readonly rename: (from: string, to: string) => void;
-  /** Removes a failed staging file. */
+  /** Removes a failed staging file.
+   *
+   * @param path The staging-file path to remove.
+   */
   readonly remove: (path: string) => void;
 }
 

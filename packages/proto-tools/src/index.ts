@@ -7,53 +7,56 @@ import { NpmPackageName } from "./model/npm-package-name.js";
 /** Version shared by the configuration and published manifest JSON documents. */
 export const manifestFormatVersion = 1;
 
+/** Configures an independently published Proto model package. */
 export interface ModelConfig {
-  /** Contract version. */
+  /** Declares the version of this configuration contract. */
   readonly formatVersion: 1;
   /** Selects an independently published model package. */
   readonly mode: "model";
-  /** Name matching the owning package.json file. */
+  /** Names the owning npm package. */
   readonly packageName: string;
-  /** Package-contained canonical Proto source root. */
+  /** Locates the package-contained canonical Proto sources. */
   readonly protoRoot: string;
-  /** Package-contained generated TypeScript filesystem root. */
+  /** Locates the package-contained generated TypeScript files. */
   readonly generatedRoot: string;
-  /** Package export subpath root for generated imports. */
+  /** Names the generated import subpath root. */
   readonly exportRoot: string;
-  /** Direct model package dependencies from the npm registry. */
+  /** Lists direct model packages from the npm registry. */
   readonly dependencies: readonly string[];
-  /** Generated model-module export name. */
+  /** Names the generated model-module export. */
   readonly moduleExport: string;
 }
 
+/** Configures an application that composes published Proto model packages. */
 export interface ApplicationConfig {
-  /** Contract version. */
+  /** Declares the version of this configuration contract. */
   readonly formatVersion: 1;
   /** Selects application model composition. */
   readonly mode: "application";
-  /** Direct model package dependencies from the npm registry. */
+  /** Lists direct model packages from the npm registry. */
   readonly modelPackages: readonly string[];
-  /** Package-contained generated registry output path. */
+  /** Locates the generated package registry source file. */
   readonly registryOutput: string;
 }
 
 /** Version-one model or application configuration selected by mode. */
 export type SpineProtoConfig = ModelConfig | ApplicationConfig;
 
+/** Describes the Proto sources and generated exports owned by a model package. */
 export interface ProtoManifest {
-  /** Manifest contract version. */
+  /** Declares the version of this manifest contract. */
   readonly formatVersion: 1;
-  /** Package that owns every listed Proto source. */
+  /** Names the package that owns every listed Proto source. */
   readonly packageName: string;
-  /** Published version matching the owning package.json file. */
+  /** States the declared version from the owning package.json file. */
   readonly packageVersion: string;
-  /** Canonical package-relative owned Proto paths. */
+  /** Lists canonical package-relative Proto paths owned by the package. */
   readonly protoFiles: readonly string[];
-  /** Maps each Proto path to a package-relative generated npm import subpath. */
+  /** Maps each Proto path to its generated package-relative import subpath. */
   readonly generatedExports: Readonly<Record<string, string>>;
-  /** Direct model dependencies. */
+  /** Lists direct model-package dependencies. */
   readonly dependencies: readonly string[];
-  /** Generated ProtoModule export name. */
+  /** Names the generated ProtoModule export. */
   readonly moduleExport: string;
 }
 
@@ -239,7 +242,10 @@ const ProtoPackage = Object.freeze({
       packageJson.name,
     );
     if (manifest.packageName !== packageJson.name)
-      ProtoPackageErrors.fail(packageJson.name, "manifest packageName must match package.json name");
+      ProtoPackageErrors.fail(
+        packageJson.name,
+        "manifest packageName must match package.json name",
+      );
     if (manifest.packageVersion !== packageJson.version)
       ProtoPackageErrors.fail(
         packageJson.name,
@@ -263,13 +269,13 @@ const ProtoPackage = Object.freeze({
   },
 
   /** Builds a deterministic manifest from a model package's owned Proto paths. */
-  manifestForPackage(
-    packageRoot: string,
-    ownedProtoFiles?: readonly string[],
-  ): ProtoManifest {
+  manifestForPackage(packageRoot: string, ownedProtoFiles?: readonly string[]): ProtoManifest {
     const config = ProtoPackage.configFromPackage(packageRoot);
     if (config.mode !== "model")
-      ProtoPackageErrors.fail(ProtoPackage.readPackage(packageRoot).name, "manifest requires model mode");
+      ProtoPackageErrors.fail(
+        ProtoPackage.readPackage(packageRoot).name,
+        "manifest requires model mode",
+      );
     const packageJson = ProtoPackage.readPackage(packageRoot);
     if (ownedProtoFiles !== undefined && ownedProtoFiles.length > 10000)
       ProtoPackageErrors.fail(packageJson.name, "owned Proto paths exceeds 10000 entries");
@@ -389,7 +395,8 @@ const ProtoPackage = Object.freeze({
           entry = directoryHandle.readSync()
         ) {
           encountered += 1;
-          if (encountered > 10000) ProtoPackageErrors.fail(name, "proto source exceeds 10000 entries");
+          if (encountered > 10000)
+            ProtoPackageErrors.fail(name, "proto source exceeds 10000 entries");
           const relativePath =
             directory.relativePath === "" ? entry.name : `${directory.relativePath}/${entry.name}`;
           if (entry.isDirectory()) {
@@ -461,12 +468,7 @@ const ProtoPackage = Object.freeze({
     return path;
   },
 
-  assertNoSymlinkAncestor(
-    packageRoot: string,
-    name: string,
-    path: string,
-    label: string,
-  ): void {
+  assertNoSymlinkAncestor(packageRoot: string, name: string, path: string, label: string): void {
     let current = packageRoot;
     for (const segment of path.split("/")) {
       current = join(current, segment);
@@ -586,11 +588,7 @@ const ProtoPackage = Object.freeze({
     );
   },
 
-  assertRecordBound(
-    name: string,
-    record: Readonly<Record<string, unknown>>,
-    label: string,
-  ): void {
+  assertRecordBound(name: string, record: Readonly<Record<string, unknown>>, label: string): void {
     let count = 0;
     for (const key in record) {
       if (!Object.hasOwn(record, key)) continue;
@@ -599,11 +597,7 @@ const ProtoPackage = Object.freeze({
     }
   },
 
-  stringRecord(
-    value: unknown,
-    name: string,
-    label: string,
-  ): Readonly<Record<string, string>> {
+  stringRecord(value: unknown, name: string, label: string): Readonly<Record<string, string>> {
     if (value === undefined) return {};
     const record = ProtoPackage.objectValue(name, value, label);
     if (!Object.values(record).every((item) => typeof item === "string"))
@@ -624,22 +618,39 @@ const ProtoPackage = Object.freeze({
 });
 
 /** Provides access to the versioned Proto package configuration. */
-export const ProtoConfig: Readonly<{ read(packageRoot: string): SpineProtoConfig }> = Object.freeze(
-  {
-    /** Reads and validates `spine-proto.json` at a package root.
-     *
-     * @param packageRoot The package root that contains the configuration.
-     * @returns The validated model or application configuration.
-     */
-    read(packageRoot: string): SpineProtoConfig {
-      return ProtoPackage.configFromPackage(packageRoot);
-    },
+export const ProtoConfig: Readonly<{
+  /** Reads and validates `spine-proto.json` at a package root.
+   *
+   * @param packageRoot The package root that contains the configuration.
+   * @returns The validated model or application configuration.
+   */
+  read(packageRoot: string): SpineProtoConfig;
+}> = Object.freeze({
+  /** Reads and validates `spine-proto.json` at a package root.
+   *
+   * @param packageRoot The package root that contains the configuration.
+   * @returns The validated model or application configuration.
+   */
+  read(packageRoot: string): SpineProtoConfig {
+    return ProtoPackage.configFromPackage(packageRoot);
   },
-);
+});
 
 /** Provides access to deterministic Proto package manifests. */
 export const ProtoManifest: Readonly<{
+  /** Reads and validates a package manifest.
+   *
+   * @param packageRoot The package root that owns the manifest.
+   * @param manifestPath The optional manifest path within the package root.
+   * @returns The validated manifest.
+   */
   read(packageRoot: string, manifestPath?: string): ProtoManifest;
+  /** Creates a deterministic manifest from package-owned Proto paths.
+   *
+   * @param packageRoot The model package root.
+   * @param ownedProtoFiles Optional explicit package-relative Proto paths.
+   * @returns The created manifest.
+   */
   create(packageRoot: string, ownedProtoFiles?: readonly string[]): ProtoManifest;
 }> = Object.freeze({
   /** Reads and validates a package manifest.
