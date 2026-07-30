@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Accepted.
 
 ## Parent And Dependencies
 
@@ -159,3 +159,50 @@ standard.
   Terra/high profiles, with no visible mismatch.
 - L1, L2, and L3 are accepted for scoped commit, immediate push, and integration
   into `task/T-0080L-todo`; L4 then owns exact ledgers and docs.
+
+## L4 Reconciliation Dispatch
+
+- Reviewed commits `a7eee4af`, `142fb167`, and `27812934` are merged into
+  pushed integration commit `ddb6b05f`.
+- One existing implementer, explicitly `gpt-5.6-terra` / medium, owns only
+  `examples/todo/README.md`, `examples/todo/USER_GUIDE.md`, and the four exact
+  T-0080L debt partitions.
+- L4 regenerates exact ledgers, targets empty TSDoc/Proto/name arrays, and keeps
+  only checker-valid declaration-specific necessities for deliberately
+  preserved `createTodoContext`/`startTodoServer` standalone exports.
+- Docs change only where final ownership syntax or command verification
+  requires it; all accepted workflows and limitations stay intact.
+- The implementer may not edit source/Proto/tests/package/generated/shared
+  tooling, commit, push, build JVM, or spawn. Runtime metadata or its limitation
+  is required.
+
+## L4 Source Correction Dispatch
+
+- L4 reaches empty TSDoc/Proto/name ledgers and two exact public-callable
+  necessities, but correctly refuses to suppress three live TSDoc findings:
+  `renameTask`, `reopenTask`, and `onTaskRenamed`.
+- Their accurate summaries begin with verbs outside the deterministic checker
+  allowlist. The original L2 existing implementer, explicitly Terra/medium,
+  changes only those summaries to equally accurate checker-recognized
+  third-person verbs and reruns scoped checks.
+- L4 then reruns exact checkers. Documentation re-review reopens only for the
+  three summaries; API/style/reliability remain closed absent contract or
+  behavior change.
+
+## Final Acceptance
+
+- L4 records empty TSDoc, Proto-comment, and semantic-name partitions. The
+  standalone partition contains only the two checker-valid necessities for the
+  intentionally public `createTodoContext` and `startTodoServer` package
+  boundaries.
+- The three source-summary corrections are documentation-only. The reopened
+  documentation lane reports clean, with immutable `gpt-5.6-luna` / medium
+  configuration and unavailable runtime self-introspection.
+- Final integrated verification passes example Proto quality, cleanup rules,
+  scoped TSDoc, 40 protected Proto checksums, 49 frozen descriptors, generated
+  cleanliness, clean generation, package build/prepack, all four focused test
+  files and 56 tests, and diff integrity.
+- No README or USER_GUIDE change is required because public ownership syntax,
+  commands, package coordinates, workflows, and limitations did not change.
+- T-0080L is accepted for commit, immediate push, umbrella integration, and
+  post-integration verification.

@@ -67,7 +67,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     });
   }
 
-  /** Renames a task and produces its stored domain event.
+  /** Updates a task title and produces its stored domain event.
    *
    * @param command - The command that supplies the replacement title.
    * @returns The event that records the task rename.
@@ -118,7 +118,7 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     return create(TaskCompletedSchema, { id });
   }
 
-  /** Reopens a task and produces its stored domain event.
+  /** Marks a task open and produces its stored domain event.
    *
    * @param command - The command that requests task reopening.
    * @returns The event that records the task reopening.
@@ -194,7 +194,7 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     );
   }
 
-  /** Renames an existing task in the read-side list.
+  /** Updates an existing task in the read-side list.
    *
    * @param event - The event that supplies the replacement title.
    */

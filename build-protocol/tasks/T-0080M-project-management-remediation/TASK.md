@@ -64,3 +64,48 @@ standard.
 - Style/maintainability, documentation, and TypeScript/API docs are relevant.
 - Performance/reliability is relevant only if moved behavior affects load,
   query, resource, or lifecycle semantics.
+
+## Planning Dispatch
+
+- T-0080M planning runs read-only in parallel with T-0080L reconciliation.
+- Because authored Proto/public contracts and load/query behavior are high-risk
+  boundaries, the existing requirements splitter is explicitly assigned
+  `gpt-5.6-sol` / high.
+- The splitter may not edit or spawn and must inventory the exact 130 TSDoc,
+  12 standalone-function, 117 Proto-comment, and zero semantic-name rows;
+  freeze wire/package/generated/load/query/lifecycle invariants; and propose
+  bounded non-overlapping ownership and exact gates.
+- Both model and reasoning fields are explicit. Runtime metadata or its
+  limitation is required.
+
+## Accepted Bounded Plan
+
+- Exact debt is 130 TSDoc rows, 12 standalone-function rows, 117 Proto-comment
+  rows, and zero semantic-name rows. No rename is justified.
+- M1 owns the command, entity, and event Proto files and adds 27 comments. M2
+  owns `read_models.proto` and adds 90 comments. Neither changes a non-comment
+  Proto token.
+- M3 owns `src/index.ts`, resolves 108 TSDoc rows, and preserves the established
+  public `createProjectManagementContext` and
+  `startProjectManagementServer` callables while moving only private behavior
+  behind cohesive owners.
+- M4 owns `src/load-runner.ts`, resolves 22 TSDoc rows, preserves the exported
+  `runProjectManagementLoad` boundary, and moves nine private helpers behind
+  cohesive per-user-load and latency owners.
+- M5 runs after integration and owns README plus the four exact M ledgers. It
+  targets zero TSDoc/Proto/name debt and exactly three necessities for the
+  deliberately public package boundaries.
+- The Proto package, type URL, npm package, aggregate/projection/process-manager
+  topology, repository count, load levels, per-user resource model, command
+  acknowledgement, exact-ID query, correlated subscription, all-settled
+  failure accounting, nearest-rank percentiles, zero-elapsed throughput,
+  iterator cleanup, and server shutdown are frozen.
+- M1-M4 use non-overlapping isolated ownership. Each implementation writer is
+  an existing implementer, explicitly `gpt-5.6-terra` / medium, and may not
+  spawn.
+- The focused suite contains eight tests and includes one mandatory real
+  10-user loopback load run.
+- All four canonical review concerns apply. Security is N/A until release
+  readiness.
+- Splitter runtime self-introspection was unavailable for explicit
+  `gpt-5.6-sol` / high, with no visible mismatch.

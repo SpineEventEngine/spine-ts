@@ -5,17 +5,8 @@
     "kind": "function-declaration",
     "identity": "createTodoContext()#1",
     "name": "createTodoContext",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createTodoContext()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/todo/src/index.ts",
-    "kind": "function-declaration",
-    "identity": "isEntrypoint()#1",
-    "name": "isEntrypoint",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration isEntrypoint()#1 requires remediation by the assigned slice."
+    "disposition": "necessity",
+    "reason": "createTodoContext remains a TypeScript framework boundary callable export for package consumers."
   },
   {
     "rule": "standalone-function",
@@ -23,34 +14,7 @@
     "kind": "function-declaration",
     "identity": "startTodoServer()#1",
     "name": "startTodoServer",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration startTodoServer()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/todo/src/index.ts",
-    "kind": "function-declaration",
-    "identity": "taskId()#1",
-    "name": "taskId",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration taskId()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/todo/src/smoke-task-lists.ts",
-    "kind": "function-declaration",
-    "identity": "inspectTaskListRows()#1",
-    "name": "inspectTaskListRows",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration inspectTaskListRows()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "examples/todo/src/smoke-task-lists.ts",
-    "kind": "function-declaration",
-    "identity": "sanitizeSmokeValue()#1",
-    "name": "sanitizeSmokeValue",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration sanitizeSmokeValue()#1 requires remediation by the assigned slice."
+    "disposition": "necessity",
+    "reason": "startTodoServer remains a TypeScript framework boundary callable export for package consumers."
   }
 ]
