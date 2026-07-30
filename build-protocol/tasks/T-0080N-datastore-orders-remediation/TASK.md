@@ -2,7 +2,8 @@
 
 ## Status
 
-Planned.
+Complete. Reviewed task branch endpoint `f29354af` is integrated into the
+T-0080 umbrella at `d918d26b`, pushed, and post-integration verified.
 
 ## Parent And Dependencies
 
@@ -295,3 +296,19 @@ behavior changes; otherwise standard.
   visible profile mismatch.
 - N5 is accepted for commit and immediate push. The focused 11-test runtime
   gate remains due after integration into the dependency-equipped umbrella.
+
+## Final Integration Verification
+
+- Authored Proto generation passes with 40 Spine source checksums, 49 frozen
+  descriptors, and example Proto quality clean. The Datastore Orders
+  TypeScript project build passes.
+- ESLint, Prettier, cleanup/structure enforcement, generated-tree cleanliness,
+  and `git diff --check` pass.
+- Native loopback verification passes all three focused files and 11 tests.
+  The initial sandboxed attempt was correctly classified as six `listen EPERM`
+  failures and rerun natively.
+- The documented 10-user scenario completes 10 command acknowledgements,
+  10 query visibilities, and 10 subscription deliveries with zero failed
+  users.
+- T-0080N is complete. T-0080O owns the remaining repository-wide checker/API
+  documentation reconciliation and final full gate.

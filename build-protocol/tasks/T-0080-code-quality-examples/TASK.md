@@ -2,9 +2,10 @@
 
 ## Status
 
-In progress. T-0080A-G and T-0080I are complete and reviewed; T-0080G remains
-on its pushed isolated branch pending integration into the umbrella. T-0080H
-starts after F/G integration and combined checker reconciliation.
+In progress. T-0080A-N are complete, reviewed, integrated into the pushed
+umbrella branch, and verified at their change-sensitive boundaries. T-0080O
+is the remaining repository-wide reconciliation, full verification,
+`main` integration, remote synchronization, and obsolete-branch closure.
 
 ## Classification
 
