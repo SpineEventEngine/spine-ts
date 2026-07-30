@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress.
+Accepted for commit and integration.
 
 ## Parent And Dependencies
 
@@ -116,3 +116,79 @@ change serialized/API contracts.
 - A fresh existing implementer, explicitly `gpt-5.6-terra` / medium, receives
   the unchanged five-Proto/one-ledger scope in the same clean worktree.
 - Runtime metadata or its limitation remains required before acceptance.
+
+## Review Correction Dispatch
+
+- Review found that split-token comment placement bypasses the line-oriented
+  Proto quality scanner, producing a false zero ledger.
+- One existing implementer, explicitly `gpt-5.6-terra` / medium, owns the five
+  Proto comments, J ledger, and only
+  `scripts/check-example-proto-quality.mjs` plus its focused tests.
+- Acceptance requires leading declaration comments, accurate read-side
+  Projection wording, a red/green bypass regression, exact 32-declaration
+  recognition, and the original package/wire gates.
+
+## Correction Completion And Re-review
+
+- All 32 comments now precede declaration tokens; `ChatMessageView` is described
+  as a read-side Projection.
+- The checker and its regression test reject comments inserted between
+  declaration tokens. All focused mechanical gates pass, including 14 checker
+  tests, generation/lint/verification, 40 source checksums, 49 descriptors,
+  model/app/web typebuild, and 123 consumer/workflow/cleanliness tests.
+- The correction implementer was explicitly `gpt-5.6-terra` / medium. Runtime
+  self-introspection was unavailable, with no visible mismatch.
+- Re-review assigns documentation to immutable `gpt-5.6-luna` / medium,
+  API/Protobuf to explicit `gpt-5.6-terra` / high, and checker style to explicit
+  `gpt-5.6-terra` / high. Reliability is N/A for build tooling and comments.
+
+## Checker Re-review Correction
+
+- Documentation and API/Protobuf re-reviews are clean.
+- Style/maintainability found that split comments can still evade RPC, enum
+  value, modifier, map, and qualified-type declaration recognition.
+- The same existing implementer, explicitly `gpt-5.6-terra` / medium, extends
+  the scanner/test correction across all supported declaration prefixes and
+  normalizes production Proto fields to readable one-line declarations.
+- Only explicit Terra/high style re-review reopens after deterministic gates.
+  Runtime metadata or its limitation remains required.
+
+## Complete-Prefix Correction Completion
+
+- The scanner now treats comments anywhere in every supported declaration
+  prefix as split-token comments and still records the declaration as missing
+  documentation.
+- Sixteen focused checker tests cover RPC, enum, modifier, map, qualified-type,
+  simple declaration, and valid whitespace cases. All original Proto, build,
+  consumer, workflow, and cleanliness gates pass, including 123 focused tests.
+- The implementer was explicitly Terra/medium; runtime self-introspection was
+  unavailable with no visible mismatch. Only explicit Terra/high style
+  re-review is reopened.
+
+## Map Assignment Correction
+
+- Style re-review found one remaining valid map boundary: a comment between the
+  field name and `=` could still suppress declaration recognition.
+- The same explicit Terra/medium implementer owns only the map parser step and
+  exact regression fixture, followed by accepted deterministic gates.
+- Only explicit Terra/high style re-review reopens; runtime metadata or its
+  limitation remains required.
+
+## Map Assignment Correction Completion
+
+- Map type, field name, and assignment parsing now carry split-comment state
+  independently, and the exact valid regression fixture is enforced.
+- Checker 16/16 and all affected Proto integrity/format/diff gates pass.
+- The implementer was explicitly Terra/medium; runtime introspection was
+  unavailable with no mismatch. Final explicit Terra/high style re-review is
+  assigned read-only.
+
+## Final Acceptance
+
+- Documentation, API/Protobuf, and style/maintainability reviews are clean.
+  Reliability is N/A because no runtime behavior or resource lifecycle changes.
+- One deterministic scanner-format finding was corrected; Prettier, checker
+  16/16, direct quality, generation, four-project typebuild, Proto lint/source/
+  descriptor/generated checks, and diff integrity pass afterward.
+- T-0080J is accepted for commit, push, umbrella integration, and
+  post-integration verification.
