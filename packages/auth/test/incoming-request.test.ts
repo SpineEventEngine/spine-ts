@@ -15,9 +15,9 @@ import {
 } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
-import { decodeIncomingRequest, transportFacts } from "../src/index.js";
+import { IncomingRequests, TransportFacts } from "../src/index.js";
 
-describe("decodeIncomingRequest", () => {
+describe("IncomingRequests.decode", () => {
   it("creates exhaustive request facts while keeping credentials out of transport diagnostics", () => {
     const context = create(ActorContextSchema);
     const command = create(CommandSchema, {
@@ -29,7 +29,7 @@ describe("decodeIncomingRequest", () => {
     });
     const query = create(QuerySchema, { context });
     const subscription = create(SubscriptionSchema, { topic: create(TopicSchema, { context }) });
-    const transport = transportFacts({
+    const transport = TransportFacts.from({
       service: "spine.client.CommandService",
       method: "Post",
       headers: {
@@ -41,23 +41,23 @@ describe("decodeIncomingRequest", () => {
     });
 
     const requests = [
-      decodeIncomingRequest({
+      IncomingRequests.decode({
         kind: "command",
         value: toBinary(CommandSchema, command),
         transport,
       }),
-      decodeIncomingRequest({ kind: "query", value: toBinary(QuerySchema, query), transport }),
-      decodeIncomingRequest({
+      IncomingRequests.decode({ kind: "query", value: toBinary(QuerySchema, query), transport }),
+      IncomingRequests.decode({
         kind: "subscribe",
         value: toBinary(TopicSchema, subscription.topic ?? create(TopicSchema)),
         transport,
       }),
-      decodeIncomingRequest({
+      IncomingRequests.decode({
         kind: "activate",
         value: toBinary(SubscriptionSchema, subscription),
         transport,
       }),
-      decodeIncomingRequest({
+      IncomingRequests.decode({
         kind: "cancel",
         value: toBinary(SubscriptionSchema, subscription),
         transport,
@@ -87,7 +87,10 @@ describe("decodeIncomingRequest", () => {
 describe("packed command decoding", () => {
   it("decodes a registered message but safely preserves unknown and malformed Any as type-url-only facts", () => {
     const context = create(ActorContextSchema);
-    const transport = transportFacts({ service: "spine.client.CommandService", method: "Post" });
+    const transport = TransportFacts.from({
+      service: "spine.client.CommandService",
+      method: "Post",
+    });
     const registered = create(CommandSchema, {
       context: create(CommandContextSchema, { actorContext: context }),
       message: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "user-1" }), {
@@ -111,7 +114,7 @@ describe("packed command decoding", () => {
     const registry = new TypeRegistry([UserIdSchema]);
 
     expect(
-      decodeIncomingRequest({
+      IncomingRequests.decode({
         kind: "command",
         value: toBinary(CommandSchema, registered),
         transport,
@@ -119,7 +122,7 @@ describe("packed command decoding", () => {
       }),
     ).toMatchObject({ kind: "command", message: { value: "user-1" } });
     expect(
-      decodeIncomingRequest({
+      IncomingRequests.decode({
         kind: "command",
         value: toBinary(CommandSchema, unknown),
         transport,
@@ -131,7 +134,7 @@ describe("packed command decoding", () => {
       messageType: "type.example.test/Unknown",
     });
     expect(
-      decodeIncomingRequest({
+      IncomingRequests.decode({
         kind: "command",
         value: toBinary(CommandSchema, malformed),
         transport,
@@ -160,17 +163,21 @@ describe("outer envelope decoding", () => {
     const query = create(QuerySchema, { context: queryContext, target: queryTarget });
     const topic = create(TopicSchema, { context: topicContext, target: topicTarget });
     const subscription = create(SubscriptionSchema, { topic });
-    const transport = transportFacts({ service: "spine.client.QueryService", method: "Read" });
+    const transport = TransportFacts.from({ service: "spine.client.QueryService", method: "Read" });
 
     expect(
-      decodeIncomingRequest({ kind: "query", value: toBinary(QuerySchema, query), transport }),
+      IncomingRequests.decode({ kind: "query", value: toBinary(QuerySchema, query), transport }),
     ).toMatchObject({
       kind: "query",
       target: { type: "type.example.test/Query", criterion: { case: "includeAll", value: true } },
       requestedContext: { actor: { value: "query-actor" } },
     });
     expect(
-      decodeIncomingRequest({ kind: "subscribe", value: toBinary(TopicSchema, topic), transport }),
+      IncomingRequests.decode({
+        kind: "subscribe",
+        value: toBinary(TopicSchema, topic),
+        transport,
+      }),
     ).toMatchObject({
       kind: "subscribe",
       target: { type: "type.example.test/Topic", criterion: { case: "includeAll", value: true } },
@@ -178,7 +185,7 @@ describe("outer envelope decoding", () => {
     });
     for (const kind of ["activate", "cancel"] as const) {
       expect(
-        decodeIncomingRequest({
+        IncomingRequests.decode({
           kind,
           value: toBinary(SubscriptionSchema, subscription),
           transport,
@@ -190,7 +197,7 @@ describe("outer envelope decoding", () => {
     }
     for (const kind of ["query", "subscribe", "activate", "cancel"] as const) {
       expect(
-        decodeIncomingRequest({ kind, value: new Uint8Array([255]), transport }),
+        IncomingRequests.decode({ kind, value: new Uint8Array([255]), transport }),
       ).toBeUndefined();
     }
   });
@@ -198,16 +205,16 @@ describe("outer envelope decoding", () => {
 
 describe("fallback request facts", () => {
   it("uses safe empty facts for envelopes that omit optional context, target, topic, or packed message", () => {
-    const transport = transportFacts({
+    const transport = TransportFacts.from({
       service: "spine.client.SubscriptionService",
       method: "Activate",
     });
-    const command = decodeIncomingRequest({
+    const command = IncomingRequests.decode({
       kind: "command",
       value: toBinary(CommandSchema, create(CommandSchema)),
       transport,
     });
-    const query = decodeIncomingRequest({
+    const query = IncomingRequests.decode({
       kind: "query",
       value: toBinary(QuerySchema, create(QuerySchema)),
       transport,
@@ -226,7 +233,7 @@ describe("fallback request facts", () => {
       requestedContext: { language: 0 },
     });
     expect(
-      decodeIncomingRequest({
+      IncomingRequests.decode({
         kind: "subscribe",
         value: toBinary(TopicSchema, create(TopicSchema)),
         transport,
@@ -238,7 +245,7 @@ describe("fallback request facts", () => {
     });
     for (const kind of ["activate", "cancel"] as const) {
       expect(
-        decodeIncomingRequest({
+        IncomingRequests.decode({
           kind,
           value: toBinary(SubscriptionSchema, subscription),
           transport,
@@ -249,7 +256,7 @@ describe("fallback request facts", () => {
 
   it("normalizes allowlisted headers while retaining optional transport facts", () => {
     expect(
-      transportFacts({
+      TransportFacts.from({
         service: "spine.client.QueryService",
         method: "Read",
         origin: "https://example.test",
@@ -265,7 +272,7 @@ describe("fallback request facts", () => {
       peerAddress: "127.0.0.1",
       userAgent: "test-agent",
     });
-    expect(transportFacts({ service: "spine.client.QueryService", method: "Read" })).toEqual({
+    expect(TransportFacts.from({ service: "spine.client.QueryService", method: "Read" })).toEqual({
       service: "spine.client.QueryService",
       method: "Read",
     });

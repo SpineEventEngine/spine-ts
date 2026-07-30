@@ -17,21 +17,40 @@ import {
 
 /** A result observed after a request is started by an effect. */
 export type RequestObservation<Result> =
-  | Readonly<{ readonly status: "idle" | "loading" }>
-  | Readonly<{ readonly status: "success"; readonly value: Result }>
-  | Readonly<{ readonly status: "error"; readonly error: unknown }>;
+  | Readonly<{
+      /** Identifies an idle or loading request. */
+      readonly status: "idle" | "loading";
+    }>
+  | Readonly<{
+      /** Identifies a successful request. */
+      readonly status: "success";
+      /** Holds the request result. */
+      readonly value: Result;
+    }>
+  | Readonly<{
+      /** Identifies a failed request. */
+      readonly status: "error";
+      /** Holds the observed failure. */
+      readonly error: unknown;
+    }>;
 
 /** The current delivery and lifecycle state of one effect-owned subscription. */
 export interface SubscriptionObservation {
+  /** Identifies the current subscription connection state. */
   readonly status: "idle" | "connecting" | "connected" | "error";
+  /** Holds the latest delivery, when one exists. */
   readonly delivery: SubscriptionDelivery | undefined;
+  /** Holds the latest lifecycle notice, when one exists. */
   readonly lifecycle: SubscriptionLifecycle | undefined;
+  /** Holds the latest observation error, when one exists. */
   readonly error: unknown;
 }
 
 /** Properties accepted by the client request provider. */
 export interface SpineClientProviderProps {
+  /** Supplies the application-owned client request scope. */
   readonly request: ClientRequest;
+  /** Supplies descendant React content. */
   readonly children?: ReactNode;
 }
 
@@ -44,12 +63,18 @@ const subscriptionIdle = Object.freeze({
   error: undefined,
 });
 
-/** Makes one application-owned client request scope available to descendant observers. */
+/** Renders one application-owned client request scope for descendants.
+ * @param request Supplies the application-owned request scope.
+ * @param children Supplies descendant React content.
+ * @returns Returns the provider element.
+ */
 export function SpineClientProvider({ request, children }: SpineClientProviderProps): ReactElement {
   return createElement(requestContext.Provider, { value: request }, children);
 }
 
-/** Returns the application-owned request scope supplied by {@link SpineClientProvider}. */
+/** Gets the application-owned request scope supplied by the provider.
+ * @returns Returns the current request scope.
+ */
 export function useSpineClient(): ClientRequest {
   const request = useContext(requestContext);
   if (request === undefined) throw new Error("A SpineClientProvider is required.");
@@ -60,6 +85,9 @@ export function useSpineClient(): ClientRequest {
  * Starts one asynchronous request after commit and observes only its live generation.
  * The factory must be stable for the supplied dependency list and forward the provided signal.
  * Cancellation is cooperative: a factory that ignores the signal may continue its underlying work.
+ * @param request Starts the asynchronous operation with an abort signal.
+ * @param dependencies Identifies when React must start a new operation.
+ * @returns Returns the latest request observation.
  */
 export function useRequest<Result>(
   request: (signal: AbortSignal) => Promise<Result>,
@@ -88,7 +116,11 @@ export function useRequest<Result>(
   return state;
 }
 
-/** Starts one raw Entity Query after commit using the provider request scope. */
+/** Starts one raw Entity Query after commit using the provider request scope.
+ * @param query Creates the query sent by the effect.
+ * @param dependencies Identifies when React must send the query again.
+ * @returns Returns the latest query observation.
+ */
 export function useEntityQuery(
   query: () => Parameters<ClientRequest["send"]>[0],
   dependencies: readonly unknown[],
@@ -101,6 +133,10 @@ export function useEntityQuery(
  * Creates, activates, and observes an entity subscription after commit.
  * The factory must call the public `createSubscription(topic, { kind: "entity", authoritativeQuery })`
  * contract, which performs the authoritative re-query after reconnect.
+ * @param topic Supplies the subscription topic.
+ * @param authoritativeQuery Creates the recovery query after reconnect.
+ * @param dependencies Identifies when React must recreate the subscription.
+ * @returns Returns the latest subscription observation.
  */
 export function useEntitySubscription(
   topic: Parameters<ClientRequest["createSubscription"]>[0],
@@ -111,7 +147,7 @@ export function useEntitySubscription(
   dependencies: readonly unknown[],
 ): SubscriptionObservation {
   const request = useSpineClient();
-  return useSubscription(
+  return SubscriptionObservers.use(
     () => request.createSubscription(topic, { kind: "entity", authoritativeQuery }),
     [request, ...dependencies],
   );
@@ -120,129 +156,145 @@ export function useEntitySubscription(
 /**
  * Creates, activates, and observes an exposed-event subscription after commit.
  * Event gaps are published as lifecycle notices; they are not inferred as history.
+ * @param createSubscription Creates the event subscription.
+ * @param dependencies Identifies when React must recreate the subscription.
+ * @returns Returns the latest subscription observation.
  */
 export function useEventSubscription(
   createSubscription: () => Promise<Subscription>,
   dependencies: readonly unknown[],
 ): SubscriptionObservation {
-  return useSubscription(createSubscription, dependencies);
+  return SubscriptionObservers.use(createSubscription, dependencies);
 }
 
-/** Returns the independently delivered lifecycle notification for a subscription observation. */
+/** Returns the independently delivered lifecycle notification for a subscription observation.
+ * @param observation Supplies the subscription observation.
+ * @returns Returns its latest lifecycle notification.
+ */
 export function useSubscriptionLifecycle(
   observation: SubscriptionObservation,
 ): SubscriptionLifecycle | undefined {
   return observation.lifecycle;
 }
 
-/** Returns the most recently delivered entity/event update or authoritative entity recovery. */
+/** Returns the most recently delivered entity/event update or authoritative entity recovery.
+ * @param observation Supplies the subscription observation.
+ * @returns Returns its latest delivery.
+ */
 export function useSubscriptionDelivery(
   observation: SubscriptionObservation,
 ): SubscriptionDelivery | undefined {
   return observation.delivery;
 }
 
-function useSubscription(
-  createSubscription: () => Promise<Subscription>,
-  dependencies: readonly unknown[],
-): SubscriptionObservation {
-  const [state, setState] = useState<SubscriptionObservation>(subscriptionIdle);
-  const generation = useRef(0);
-  useEffect(() => {
-    const current = ++generation.current;
-    let live = true;
-    let handle: Subscription | undefined;
-    let cancelled: Promise<void> | undefined;
-    const isLive = () => live;
-    const cancel = () => {
-      if (handle === undefined) return Promise.resolve();
-      cancelled ??= Promise.resolve()
-        .then(() => handle?.cancel())
-        .catch(() => undefined);
-      return cancelled;
-    };
-    const publish = (next: SubscriptionObservation) => {
-      setState(next);
-    };
+const SubscriptionObservers = Object.freeze({
+  use(
+    createSubscription: () => Promise<Subscription>,
+    dependencies: readonly unknown[],
+  ): SubscriptionObservation {
+    const [state, setState] = useState<SubscriptionObservation>(subscriptionIdle);
+    const generation = useRef(0);
+    useEffect(() => {
+      const current = ++generation.current;
+      let live = true;
+      let handle: Subscription | undefined;
+      let cancelled: Promise<void> | undefined;
+      const isLive = () => live;
+      const cancel = () => {
+        if (handle === undefined) return Promise.resolve();
+        cancelled ??= Promise.resolve()
+          .then(() => handle?.cancel())
+          .catch(() => undefined);
+        return cancelled;
+      };
+      const publish = (next: SubscriptionObservation) => {
+        setState(next);
+      };
 
-    publish({ status: "connecting", delivery: undefined, lifecycle: undefined, error: undefined });
-    void Promise.resolve()
-      .then(() => (isLive() ? createSubscription() : undefined))
-      .then(async (created) => {
-        if (created === undefined) return;
-        handle = created;
-        if (!isLive()) {
-          await cancel();
-          return;
-        }
-        await handle.activate();
-        if (!live) {
-          await cancel();
-          return;
-        }
-        publish({
-          status: "connected",
-          delivery: undefined,
-          lifecycle: undefined,
-          error: undefined,
-        });
-        void observeDeliveries(handle, () => live, setState, cancel);
-        void observeLifecycle(handle, () => live, setState, cancel);
-      })
-      .catch((error: unknown) => {
-        if (live && generation.current === current) {
-          setState({ status: "error", delivery: undefined, lifecycle: undefined, error });
-          void cancel();
-        }
+      publish({
+        status: "connecting",
+        delivery: undefined,
+        lifecycle: undefined,
+        error: undefined,
       });
-    return () => {
-      live = false;
+      void Promise.resolve()
+        .then(() => (isLive() ? createSubscription() : undefined))
+        .then(async (created) => {
+          if (created === undefined) return;
+          handle = created;
+          if (!isLive()) {
+            await cancel();
+            return;
+          }
+          await handle.activate();
+          if (!live) {
+            await cancel();
+            return;
+          }
+          publish({
+            status: "connected",
+            delivery: undefined,
+            lifecycle: undefined,
+            error: undefined,
+          });
+          void SubscriptionObservers.observeDeliveries(handle, () => live, setState, cancel);
+          void SubscriptionObservers.observeLifecycle(handle, () => live, setState, cancel);
+        })
+        .catch((error: unknown) => {
+          if (live && generation.current === current) {
+            setState({ status: "error", delivery: undefined, lifecycle: undefined, error });
+            void cancel();
+          }
+        });
+      return () => {
+        live = false;
+        void cancel();
+      };
+    }, dependencies);
+    return state;
+  },
+
+  async observeDeliveries(
+    subscription: Subscription,
+    live: () => boolean,
+    onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
+    cancel: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      for await (const delivery of subscription.updates) {
+        if (live()) onSetState((previous) => ({ ...previous, delivery }));
+      }
+    } catch (error: unknown) {
+      if (live())
+        onSetState((previous) => ({
+          ...previous,
+          status: "error",
+          error,
+          lifecycle: previous.lifecycle,
+        }));
       void cancel();
-    };
-  }, dependencies);
-  return state;
-}
-
-async function observeDeliveries(
-  subscription: Subscription,
-  live: () => boolean,
-  onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
-  cancel: () => Promise<void>,
-): Promise<void> {
-  try {
-    for await (const delivery of subscription.updates) {
-      if (live()) onSetState((previous) => ({ ...previous, delivery }));
     }
-  } catch (error: unknown) {
-    if (live())
-      onSetState((previous) => ({
-        ...previous,
-        status: "error",
-        error,
-        lifecycle: previous.lifecycle,
-      }));
-    void cancel();
-  }
-}
+  },
 
-async function observeLifecycle(
-  subscription: Subscription,
-  live: () => boolean,
-  onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
-  cancel: () => Promise<void>,
-): Promise<void> {
-  try {
-    for await (const lifecycle of subscription.lifecycle) {
-      if (live()) onSetState((previous) => ({ ...previous, lifecycle }));
+  async observeLifecycle(
+    subscription: Subscription,
+    live: () => boolean,
+    onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
+    cancel: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      for await (const lifecycle of subscription.lifecycle) {
+        if (live()) onSetState((previous) => ({ ...previous, lifecycle }));
+      }
+    } catch (error: unknown) {
+      if (live())
+        onSetState((previous) => ({
+          ...previous,
+          status: "error",
+          error,
+          lifecycle: previous.lifecycle,
+        }));
+      void cancel();
     }
-  } catch (error: unknown) {
-    if (live())
-      onSetState((previous) => ({
-        ...previous,
-        status: "error",
-        error,
-        lifecycle: previous.lifecycle,
-      }));
-    void cancel();
-  }
-}
+  },
+});

@@ -40,7 +40,9 @@ import type {
  * supplied bounds must be positive safe integers.
  */
 export interface SubscriptionRelayLimits {
+  /** Limits the number of queued updates. */
   readonly maxMessages?: number;
+  /** Limits the total queued update bytes. */
   readonly maxBytes?: number;
 }
 
@@ -61,17 +63,22 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
   #terminal: unknown;
   #closed = false;
 
+  /** Creates a bounded FIFO relay.
+   * @param limits The optional message and byte bounds.
+   * @returns The configured relay.
+   */
   constructor(limits: SubscriptionRelayLimits = {}) {
-    this.#limits = relayLimits(limits);
+    this.#limits = NativeGatewayValues.relayLimits(limits);
   }
 
   /**
    * Copies and validates an update before FIFO admission. Count precedes bytes;
    * either bound rejects with `ResourceExhausted`.
+   * @param update The update bytes to admit.
    */
   push(update: SubscriptionUpdateWire): Promise<void> {
     try {
-      if (this.#closed) throw terminalError(this.#terminal);
+      if (this.#closed) throw NativeGatewayValues.terminalError(this.#terminal);
       const nextMessages = this.#queue.length + 1;
       if (nextMessages > this.#limits.maxMessages)
         return this.#failOverflow("message", this.#limits.maxMessages, nextMessages);
@@ -99,7 +106,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
       this.#queue.push(bytes);
       return Promise.resolve();
     } catch (error) {
-      return rejectedRelayPromise(error);
+      return NativeRelayValues.rejectedRelayPromise(error);
     }
   }
 
@@ -108,12 +115,16 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
     this.#finish();
   }
 
-  /** Terminates queued and future consumers, purging bytes; it can supersede graceful drain. */
+  /** Throws queued and future consumers, purging bytes.
+   * @param reason The terminal failure reason.
+   */
   fail(reason: unknown): void {
     this.#finish(reason);
   }
 
-  /** Returns the public iterator; `return()` cancels it and purges queued bytes, while `throw()` fails it. */
+  /** Returns the public iterator; `return()` cancels it and purges queued bytes, while `throw()` fails it.
+   * @returns The single public update iterator.
+   */
   [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
     return {
       next: () => this.#next(),
@@ -123,7 +134,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
       },
       throw: (reason) => {
         this.#finish(reason);
-        return rejectedRelayPromise(reason);
+        return NativeRelayValues.rejectedRelayPromise(reason);
       },
     };
   }
@@ -142,7 +153,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
       }
     }
     if (this.#closed) {
-      if (this.#terminal !== undefined) throw terminalError(this.#terminal);
+      if (this.#terminal !== undefined) throw NativeGatewayValues.terminalError(this.#terminal);
       return { done: true, value: undefined };
     }
     return new Promise((resolve, reject) => this.#waiters.push({ resolve, reject }));
@@ -181,11 +192,14 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
   }
 }
 
-function rejectedRelayPromise(reason: unknown): Promise<never> {
-  return Promise.resolve().then(() => {
-    throw reason;
-  });
-}
+/** Owns relay rejection completion values. */
+const NativeRelayValues = Object.freeze({
+  rejectedRelayPromise(reason: unknown): Promise<never> {
+    return Promise.resolve().then(() => {
+      throw reason;
+    });
+  },
+});
 
 /**
  * Native Connect adapter. Post/Read use their matching Command/Query descriptors;
@@ -195,11 +209,18 @@ function rejectedRelayPromise(reason: unknown): Promise<never> {
 export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForwarder {
   readonly #transport: Transport;
 
+  /** Creates a native adapter over one Connect transport.
+   * @param transport The native Connect transport.
+   * @returns The configured subscription creator.
+   */
   constructor(transport: Transport) {
     this.#transport = transport;
   }
 
-  /** Forwards an admitted Post or Read envelope through its matching native descriptor. */
+  /** Sends an admitted Post or Read envelope through its matching native descriptor.
+   * @param request The admitted unary request envelope.
+   * @returns The encoded native response.
+   */
   async forward(request: {
     readonly service: string;
     readonly method: string;
@@ -225,7 +246,11 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
   }
 
-  /** Creates a native subscription with the supplied admitted cancellation signal. */
+  /** Creates a native subscription with the supplied admitted cancellation signal.
+   * @param request The admitted subscription topic.
+   * @param signal The admitted cancellation signal.
+   * @returns The private backend subscription envelope.
+   */
   async subscribe(
     request: SubscriptionTopicWire,
     signal: SubscriptionAbortSignal,
@@ -237,7 +262,10 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     return { kind: "backend-subscription-envelope", bytes: toBinary(SubscriptionSchema, result) };
   }
 
-  /** Relays native Activate updates through the supplied asynchronous public-update sink. */
+  /** Streams native Activate updates through the supplied asynchronous public-update sink.
+   * @param request The public and private subscription envelopes plus update sink.
+   * @param signal The admitted cancellation signal.
+   */
   async activate(
     request: {
       readonly wire: PublicSubscriptionWire;
@@ -257,7 +285,10 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
       });
   }
 
-  /** Cancels the native subscription represented by the private backend envelope. */
+  /** Cancels the native subscription represented by the private backend envelope.
+   * @param request The public and private subscription envelopes.
+   * @param signal The admitted cancellation signal.
+   */
   async cancel(
     request: {
       readonly wire: PublicSubscriptionWire;
@@ -271,7 +302,10 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     );
   }
 
-  /** Performs mandatory native cancellation/disposal compensation for a private envelope. */
+  /** Performs mandatory native cancellation/disposal compensation for a private envelope.
+   * @param envelope The private backend subscription envelope.
+   * @param signal The admitted cancellation signal.
+   */
   async dispose(
     envelope: BackendSubscriptionEnvelope,
     signal: SubscriptionAbortSignal,
@@ -285,9 +319,15 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
 
 /** Application-owned extractor of browser credentials and allowlisted request facts from Connect context. */
 export interface NativeGatewayRequestContext {
-  /** Extracts credentials for the gateway only; they are never forwarded to native services. */
+  /** Reads credentials for the gateway only; they are never forwarded to native services.
+   * @param context The incoming Connect handler context.
+   * @returns The extracted request credential.
+   */
   credential(context: HandlerContext): RequestCredential;
-  /** Extracts the allowlisted authorization and diagnostic transport view for the gateway only. */
+  /** Reads the allowlisted authorization and diagnostic transport view for the gateway only.
+   * @param context The incoming Connect handler context.
+   * @returns The allowed transport facts.
+   */
   transport(context: HandlerContext): TransportRequestContext;
 }
 
@@ -324,249 +364,256 @@ export interface NativeGatewayServicesOptions {
  * validation rejections map to `InvalidArgument`. Terminal context/iterator paths abort native
  * work. Natural completion drains FIFO updates, whereas failure or iterator cancellation purges
  * them.
+ * @param options The unary, subscription, context, and relay dependencies.
+ * @returns The native Connect service implementations.
  */
 export function createNativeGatewayServices(
   options: NativeGatewayServicesOptions,
 ): NativeGatewayServices {
   return {
     authentication: {
-      resolveContext: async (request, context) => resolveContext(options, request, context),
+      resolveContext: async (request, context) =>
+        NativeGatewayValues.resolveContext(options, request, context),
     },
     command: {
-      post: async (request, context) => commandResponse(options, request, context),
+      post: async (request, context) =>
+        NativeGatewayValues.commandResponse(options, request, context),
     },
     query: {
-      read: async (request, context) => queryResponse(options, request, context),
+      read: async (request, context) =>
+        NativeGatewayValues.queryResponse(options, request, context),
     },
     subscription: {
       subscribe: async (request, context) => {
         const result = await options.subscriptions.handle(
-          subscriptionRequest(
+          NativeGatewayValues.subscriptionRequest(
             "Subscribe",
             toBinary(TopicSchema, request),
             context,
             options.requests,
           ),
         );
-        if (result.kind !== "subscribed") throw gatewayResultError(result);
+        if (result.kind !== "subscribed") throw NativeGatewayValues.gatewayResultError(result);
         return fromBinary(SubscriptionSchema, result.wire.bytes);
       },
-      activate: (request, context) => activate(options, request, context),
+      activate: (request, context) => NativeGatewayValues.activate(options, request, context),
       cancel: async (request, context) => {
         const result = await options.subscriptions.handle(
-          subscriptionRequest(
+          NativeGatewayValues.subscriptionRequest(
             "Cancel",
             toBinary(SubscriptionSchema, request),
             context,
             options.requests,
           ),
         );
-        if (result.kind !== "cancelled") throw gatewayResultError(result);
+        if (result.kind !== "cancelled") throw NativeGatewayValues.gatewayResultError(result);
         return create(SubscriptionService.method.cancel.output);
       },
     },
   };
 }
 
-async function resolveContext(
-  options: NativeGatewayServicesOptions,
-  request: Parameters<ServiceImpl<typeof AuthenticationService>["resolveContext"]>[0],
-  context: HandlerContext,
-): Promise<
-  ReturnType<typeof fromBinary<typeof AuthenticationService.method.resolveContext.output>>
-> {
-  const result = await options.unary.handle({
-    service: "spine.auth.AuthenticationService",
-    method: "ResolveContext",
-    value: toBinary(AuthenticationService.method.resolveContext.input, request),
-    credential: options.requests.credential(context),
-    transport: options.requests.transport(context),
-    signal: context.signal,
-  });
-  if (result.kind === "rejected") throw unaryError(result);
-  if (result.kind !== "resolved")
-    throw new ConnectError("gateway forwarded ResolveContext unexpectedly", Code.Internal);
-  return fromBinary(AuthenticationService.method.resolveContext.output, result.value);
-}
+/** Owns native Connect gateway conversion, response, and error values. */
+const NativeGatewayValues = Object.freeze({
+  async resolveContext(
+    options: NativeGatewayServicesOptions,
+    request: Parameters<ServiceImpl<typeof AuthenticationService>["resolveContext"]>[0],
+    context: HandlerContext,
+  ): Promise<
+    ReturnType<typeof fromBinary<typeof AuthenticationService.method.resolveContext.output>>
+  > {
+    const result = await options.unary.handle({
+      service: "spine.auth.AuthenticationService",
+      method: "ResolveContext",
+      value: toBinary(AuthenticationService.method.resolveContext.input, request),
+      credential: options.requests.credential(context),
+      transport: options.requests.transport(context),
+      signal: context.signal,
+    });
+    if (result.kind === "rejected") throw NativeGatewayValues.unaryError(result);
+    if (result.kind !== "resolved")
+      throw new ConnectError("gateway forwarded ResolveContext unexpectedly", Code.Internal);
+    return fromBinary(AuthenticationService.method.resolveContext.output, result.value);
+  },
 
-async function commandResponse(
-  options: NativeGatewayServicesOptions,
-  request: Command,
-  context: HandlerContext,
-): Promise<ReturnType<typeof fromBinary<typeof CommandService.method.post.output>>> {
-  const result = await options.unary.handle({
-    service: "spine.client.CommandService",
-    method: "Post",
-    value: toBinary(CommandService.method.post.input, request),
-    credential: options.requests.credential(context),
-    transport: options.requests.transport(context),
-    signal: context.signal,
-  });
-  if (result.kind === "rejected") throw unaryError(result);
-  return fromBinary(CommandService.method.post.output, result.value);
-}
+  async commandResponse(
+    options: NativeGatewayServicesOptions,
+    request: Command,
+    context: HandlerContext,
+  ): Promise<ReturnType<typeof fromBinary<typeof CommandService.method.post.output>>> {
+    const result = await options.unary.handle({
+      service: "spine.client.CommandService",
+      method: "Post",
+      value: toBinary(CommandService.method.post.input, request),
+      credential: options.requests.credential(context),
+      transport: options.requests.transport(context),
+      signal: context.signal,
+    });
+    if (result.kind === "rejected") throw NativeGatewayValues.unaryError(result);
+    return fromBinary(CommandService.method.post.output, result.value);
+  },
 
-async function queryResponse(
-  options: NativeGatewayServicesOptions,
-  request: Query,
-  context: HandlerContext,
-): Promise<QueryResponse> {
-  const result = await options.unary.handle({
-    service: "spine.client.QueryService",
-    method: "Read",
-    value: toBinary(QueryService.method.read.input, request),
-    credential: options.requests.credential(context),
-    transport: options.requests.transport(context),
-    signal: context.signal,
-  });
-  if (result.kind === "rejected") throw unaryError(result);
-  return fromBinary(QueryService.method.read.output, result.value);
-}
+  async queryResponse(
+    options: NativeGatewayServicesOptions,
+    request: Query,
+    context: HandlerContext,
+  ): Promise<QueryResponse> {
+    const result = await options.unary.handle({
+      service: "spine.client.QueryService",
+      method: "Read",
+      value: toBinary(QueryService.method.read.input, request),
+      credential: options.requests.credential(context),
+      transport: options.requests.transport(context),
+      signal: context.signal,
+    });
+    if (result.kind === "rejected") throw NativeGatewayValues.unaryError(result);
+    return fromBinary(QueryService.method.read.output, result.value);
+  },
 
-function activate(
-  options: NativeGatewayServicesOptions,
-  request: Subscription,
-  context: HandlerContext,
-): AsyncIterable<SubscriptionUpdate> {
-  const relay = new SubscriptionUpdateRelay(options.relay);
-  const controller = new AbortController();
-  let closed = false;
-  const close = (reason: unknown, abort: boolean): void => {
-    if (closed) {
-      if (reason === undefined) return;
-      context.signal.removeEventListener("abort", onAbort);
+  activate(
+    options: NativeGatewayServicesOptions,
+    request: Subscription,
+    context: HandlerContext,
+  ): AsyncIterable<SubscriptionUpdate> {
+    const relay = new SubscriptionUpdateRelay(options.relay);
+    const controller = new AbortController();
+    let closed = false;
+    const close = (reason: unknown, abort: boolean): void => {
+      if (closed) {
+        if (reason === undefined) return;
+        context.signal.removeEventListener("abort", onAbort);
+        if (abort) controller.abort();
+        relay.fail(reason);
+        return;
+      }
+      closed = true;
       if (abort) controller.abort();
-      relay.fail(reason);
-      return;
+      if (reason === undefined) relay.close();
+      else {
+        context.signal.removeEventListener("abort", onAbort);
+        relay.fail(reason);
+      }
+    };
+    const onAbort = () => {
+      close(new ConnectError("subscription stream cancelled", Code.Canceled), true);
+    };
+    context.signal.addEventListener("abort", onAbort, { once: true });
+    if (context.signal.aborted) {
+      onAbort();
+      return NativeGatewayValues.activationStream(relay, (reason) => {
+        close(reason, true);
+      });
     }
-    closed = true;
-    if (abort) controller.abort();
-    if (reason === undefined) relay.close();
-    else {
-      context.signal.removeEventListener("abort", onAbort);
-      relay.fail(reason);
-    }
-  };
-  const onAbort = () => {
-    close(new ConnectError("subscription stream cancelled", Code.Canceled), true);
-  };
-  context.signal.addEventListener("abort", onAbort, { once: true });
-  if (context.signal.aborted) {
-    onAbort();
-    return activationStream(relay, (reason) => {
+    void options.subscriptions
+      .handle({
+        ...NativeGatewayValues.subscriptionRequest(
+          "Activate",
+          toBinary(SubscriptionSchema, request),
+          context,
+          options.requests,
+        ),
+        updates: (update) => relay.push(update),
+        signal: controller.signal,
+      })
+      .then((result) => {
+        if (result.kind !== "activated")
+          close(NativeGatewayValues.gatewayResultError(result), true);
+        else close(undefined, false);
+      })
+      .catch((error: unknown) => {
+        close(error, true);
+      });
+    return NativeGatewayValues.activationStream(relay, (reason) => {
       close(reason, true);
     });
-  }
-  void options.subscriptions
-    .handle({
-      ...subscriptionRequest(
-        "Activate",
-        toBinary(SubscriptionSchema, request),
-        context,
-        options.requests,
-      ),
-      updates: (update) => relay.push(update),
-      signal: controller.signal,
-    })
-    .then((result) => {
-      if (result.kind !== "activated") close(gatewayResultError(result), true);
-      else close(undefined, false);
-    })
-    .catch((error: unknown) => {
-      close(error, true);
-    });
-  return activationStream(relay, (reason) => {
-    close(reason, true);
-  });
-}
+  },
 
-function activationStream(
-  relay: SubscriptionUpdateRelay,
-  onClose: (reason: unknown) => void,
-): AsyncIterable<SubscriptionUpdate> {
-  return {
-    [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
-      const iterator = relay[Symbol.asyncIterator]();
-      return {
-        next: () => iterator.next(),
-        return: () => {
-          onClose(new ConnectError("subscription stream cancelled", Code.Canceled));
-          return Promise.resolve({ done: true, value: undefined });
-        },
-        throw: (reason) => {
-          onClose(reason);
-          return rejectedRelayPromise(reason);
-        },
-      };
-    },
-  };
-}
+  activationStream(
+    relay: SubscriptionUpdateRelay,
+    onClose: (reason: unknown) => void,
+  ): AsyncIterable<SubscriptionUpdate> {
+    return {
+      [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
+        const iterator = relay[Symbol.asyncIterator]();
+        return {
+          next: () => iterator.next(),
+          return: () => {
+            onClose(new ConnectError("subscription stream cancelled", Code.Canceled));
+            return Promise.resolve({ done: true, value: undefined });
+          },
+          throw: (reason) => {
+            onClose(reason);
+            return NativeRelayValues.rejectedRelayPromise(reason);
+          },
+        };
+      },
+    };
+  },
 
-function subscriptionRequest(
-  method: "Subscribe" | "Activate" | "Cancel",
-  bytes: Uint8Array,
-  context: HandlerContext,
-  requests: NativeGatewayRequestContext,
-) {
-  return {
-    service: "spine.client.SubscriptionService",
-    method,
-    wire:
-      method === "Subscribe"
-        ? { kind: "subscription-topic" as const, bytes }
-        : { kind: "public-subscription" as const, bytes },
-    credential: requests.credential(context),
-    transport: requests.transport(context),
-  };
-}
+  subscriptionRequest(
+    method: "Subscribe" | "Activate" | "Cancel",
+    bytes: Uint8Array,
+    context: HandlerContext,
+    requests: NativeGatewayRequestContext,
+  ) {
+    return {
+      service: "spine.client.SubscriptionService",
+      method,
+      wire:
+        method === "Subscribe"
+          ? { kind: "subscription-topic" as const, bytes }
+          : { kind: "public-subscription" as const, bytes },
+      credential: requests.credential(context),
+      transport: requests.transport(context),
+    };
+  },
 
-function unaryError(
-  result: Extract<UnaryGatewayResult, { readonly kind: "rejected" }>,
-): ConnectError {
-  const code =
-    result.reason === "unauthenticated"
-      ? Code.Unauthenticated
-      : result.reason === "forbidden"
-        ? Code.PermissionDenied
-        : result.reason === "request-too-large"
-          ? Code.ResourceExhausted
-          : result.reason === "unknown-operation"
-            ? Code.Unimplemented
-            : Code.InvalidArgument;
-  return new ConnectError(`gateway rejected ${result.reason}`, code);
-}
-
-function gatewayResultError(result: SubscriptionGatewayResult): ConnectError {
-  if (result.kind !== "rejected")
-    return new ConnectError(
-      "subscription gateway returned an unexpected operation result",
-      Code.Internal,
-    );
-  const code =
-    result.reason === "unauthenticated"
-      ? Code.Unauthenticated
-      : result.reason === "forbidden" || result.reason === "denied"
-        ? Code.PermissionDenied
-        : result.reason === "request-too-large" || result.reason === "binding-capacity-exceeded"
-          ? Code.ResourceExhausted
-          : result.reason === "binding-busy"
-            ? Code.Aborted
+  unaryError(result: Extract<UnaryGatewayResult, { readonly kind: "rejected" }>): ConnectError {
+    const code =
+      result.reason === "unauthenticated"
+        ? Code.Unauthenticated
+        : result.reason === "forbidden"
+          ? Code.PermissionDenied
+          : result.reason === "request-too-large"
+            ? Code.ResourceExhausted
             : result.reason === "unknown-operation"
               ? Code.Unimplemented
               : Code.InvalidArgument;
-  return new ConnectError(`gateway rejected ${result.reason}`, code);
-}
+    return new ConnectError(`gateway rejected ${result.reason}`, code);
+  },
 
-function relayLimits(input: SubscriptionRelayLimits): Required<SubscriptionRelayLimits> {
-  const limits = { ...relayDefaults, ...input };
-  for (const limit of Object.values(limits))
-    if (!Number.isSafeInteger(limit) || limit <= 0)
-      throw new RangeError("subscription relay limits must be positive safe integers");
-  return limits;
-}
+  gatewayResultError(result: SubscriptionGatewayResult): ConnectError {
+    if (result.kind !== "rejected")
+      return new ConnectError(
+        "subscription gateway returned an unexpected operation result",
+        Code.Internal,
+      );
+    const code =
+      result.reason === "unauthenticated"
+        ? Code.Unauthenticated
+        : result.reason === "forbidden" || result.reason === "denied"
+          ? Code.PermissionDenied
+          : result.reason === "request-too-large" || result.reason === "binding-capacity-exceeded"
+            ? Code.ResourceExhausted
+            : result.reason === "binding-busy"
+              ? Code.Aborted
+              : result.reason === "unknown-operation"
+                ? Code.Unimplemented
+                : Code.InvalidArgument;
+    return new ConnectError(`gateway rejected ${result.reason}`, code);
+  },
 
-function terminalError(reason: unknown): Error {
-  return reason instanceof Error
-    ? reason
-    : new ConnectError("subscription stream closed", Code.Canceled);
-}
+  relayLimits(input: SubscriptionRelayLimits): Required<SubscriptionRelayLimits> {
+    const limits = { ...relayDefaults, ...input };
+    for (const limit of Object.values(limits))
+      if (!Number.isSafeInteger(limit) || limit <= 0)
+        throw new RangeError("subscription relay limits must be positive safe integers");
+    return limits;
+  },
+
+  terminalError(reason: unknown): Error {
+    return reason instanceof Error
+      ? reason
+      : new ConnectError("subscription stream closed", Code.Canceled);
+  },
+});

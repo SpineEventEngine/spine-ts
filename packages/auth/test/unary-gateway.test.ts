@@ -20,7 +20,7 @@ import {
   type IncomingRequest,
   type UnaryGatewayRequest,
   UnaryGateway,
-  transportFacts,
+  TransportFacts,
 } from "../src/index.js";
 
 const clockTimestamp = create(TimestampSchema, { seconds: 101n });
@@ -110,7 +110,7 @@ function request(service: string, method: string, value: Uint8Array): UnaryGatew
     method,
     value,
     credential: { kind: "bearer" as const, value: "credential-never-forwarded" },
-    transport: transportFacts({ service, method }),
+    transport: TransportFacts.from({ service, method }),
   };
 }
 
@@ -511,7 +511,7 @@ describe("UnaryGateway", () => {
     });
 
     const mismatchedTransport = {
-      ...transportFacts({ service: "spine.client.QueryService", method: "Read" }),
+      ...TransportFacts.from({ service: "spine.client.QueryService", method: "Read" }),
       credential: "discarded-runtime-extra",
     };
     await gateway.handle({

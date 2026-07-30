@@ -31,7 +31,7 @@ const DEFAULT_COLLISION_ATTEMPTS = 3;
 const DEFAULT_TIMEOUT = 30 * 1_000;
 const DEFAULT_MAX_URL = 4_096;
 const MAX_TIMESTAMP_MILLISECONDS = 253_402_300_799_999;
-const BASE64URL_32_BYTES = /^[A-Za-z0-9_-]{43}$/;
+const base64Url32 = /^[A-Za-z0-9_-]{43}$/;
 const RFC7636_VERIFIER = /^[A-Za-z0-9\-._~]{43,128}$/;
 
 /**
@@ -64,22 +64,28 @@ export class OidcFlow {
   readonly #callbacks = new Set<AbortController>();
   #closed = false;
 
+  /** Creates a bounded authorization-code flow.
+   * @param options The trusted provider, callback, transaction, grant, and session settings.
+   * @returns The configured OIDC flow.
+   */
   constructor(options: OidcFlowOptions) {
-    this.#authorizationEndpoint = strictHttpsUrl(
+    this.#authorizationEndpoint = OidcFlowValues.strictHttpsUrl(
       options.authorizationEndpoint,
       "authorizationEndpoint",
     );
-    strictHttpsUrl(options.callbackUri, "callbackUri");
+    OidcFlowValues.strictHttpsUrl(options.callbackUri, "callbackUri");
     this.#callbackUri = options.callbackUri;
-    this.#clientId = nonEmpty(options.clientId, "clientId");
-    this.#scopes = validScopes(options.scopes);
-    this.#allowedPostLoginRedirects = validRedirects(options.allowedPostLoginRedirects);
+    this.#clientId = OidcFlowValues.nonEmpty(options.clientId, "clientId");
+    this.#scopes = OidcFlowValues.validScopes(options.scopes);
+    this.#allowedPostLoginRedirects = OidcFlowValues.validRedirects(
+      options.allowedPostLoginRedirects,
+    );
     validateProvider(options.provider);
-    validateFunction(
+    OidcFlowValues.validateFunction(
       (options.identityMapping as unknown as Record<string, unknown>).resolve,
       "identityMapping.resolve",
     );
-    validateFunction(
+    OidcFlowValues.validateFunction(
       (options.sessionIssuer as unknown as Record<string, unknown>).issue,
       "sessionIssuer.issue",
     );
@@ -89,63 +95,77 @@ export class OidcFlow {
     this.#sessionIssuer = options.sessionIssuer;
     this.#clock = options.clock ?? { now: Date.now };
     this.#random = options.randomBytes ?? nodeRandomBytes;
-    this.#transactionTtlMilliseconds = positiveSafeInteger(
+    this.#transactionTtlMilliseconds = OidcFlowValues.positiveSafeInteger(
       options.transactionTtlMilliseconds ?? DEFAULT_TRANSACTION_TTL,
       "transactionTtlMilliseconds",
     );
-    this.#grantTtlMilliseconds = positiveSafeInteger(
+    this.#grantTtlMilliseconds = OidcFlowValues.positiveSafeInteger(
       options.grantTtlMilliseconds ?? DEFAULT_GRANT_TTL,
       "grantTtlMilliseconds",
     );
-    this.#maxTransactions = positiveSafeInteger(
+    this.#maxTransactions = OidcFlowValues.positiveSafeInteger(
       options.maxTransactions ?? DEFAULT_CAPACITY,
       "maxTransactions",
     );
-    this.#maxGrants = positiveSafeInteger(options.maxGrants ?? DEFAULT_CAPACITY, "maxGrants");
-    this.#collisionAttempts = positiveSafeInteger(
+    this.#maxGrants = OidcFlowValues.positiveSafeInteger(
+      options.maxGrants ?? DEFAULT_CAPACITY,
+      "maxGrants",
+    );
+    this.#collisionAttempts = OidcFlowValues.positiveSafeInteger(
       options.collisionAttempts ?? DEFAULT_COLLISION_ATTEMPTS,
       "collisionAttempts",
     );
-    this.#operationTimeoutMilliseconds = positiveSafeInteger(
+    this.#operationTimeoutMilliseconds = OidcFlowValues.positiveSafeInteger(
       options.operationTimeoutMilliseconds ?? DEFAULT_TIMEOUT,
       "operationTimeoutMilliseconds",
     );
-    this.#maxAuthorizationUrlLength = positiveSafeInteger(
+    this.#maxAuthorizationUrlLength = OidcFlowValues.positiveSafeInteger(
       options.maxAuthorizationUrlLength ?? DEFAULT_MAX_URL,
       "maxAuthorizationUrlLength",
     );
   }
 
-  /** Starts one finite authorization-code transaction without exposing any application credential. */
+  /** Starts one finite authorization-code transaction without exposing any application credential.
+   * @param input The browser redirect and requested scopes.
+   * @returns The authorization URL and state, or a rejection.
+   */
   start(input: OidcFlowStartInput): OidcFlowStartResult {
-    if (this.#isClosed()) return rejected("closed");
-    const request = snapshotStartInput(input);
-    if (request === undefined || !validStartInput(request, this.#allowedPostLoginRedirects))
-      return rejected("invalid-input");
+    if (this.#isClosed()) return OidcFlowValues.rejected("closed");
+    const request = OidcFlowValues.snapshotStartInput(input);
+    if (
+      request === undefined ||
+      !OidcFlowValues.validStartInput(request, this.#allowedPostLoginRedirects)
+    )
+      return OidcFlowValues.rejected("invalid-input");
     const now = this.#now();
-    if (now === undefined) return rejected("closed");
-    if (this.#closed) return rejected("closed");
+    if (now === undefined) return OidcFlowValues.rejected("closed");
+    if (this.#closed) return OidcFlowValues.rejected("closed");
     this.#sweepExpired(now);
-    if (this.#transactions.size >= this.#maxTransactions) return rejected("capacity-exceeded");
+    if (this.#transactions.size >= this.#maxTransactions)
+      return OidcFlowValues.rejected("capacity-exceeded");
 
     for (let attempt = 0; attempt < this.#collisionAttempts; attempt += 1) {
       const material = this.#transactionMaterial();
       if (material === undefined) {
-        if (this.#isClosed()) return rejected("closed");
+        if (this.#isClosed()) return OidcFlowValues.rejected("closed");
         continue;
       }
       try {
         const current = this.#now();
-        if (current === undefined) return rejected("closed");
+        if (current === undefined) return OidcFlowValues.rejected("closed");
         this.#sweepExpired(current);
-        if (this.#isClosed()) return rejected("closed");
-        if (this.#transactions.size >= this.#maxTransactions) return rejected("capacity-exceeded");
+        if (this.#isClosed()) return OidcFlowValues.rejected("closed");
+        if (this.#transactions.size >= this.#maxTransactions)
+          return OidcFlowValues.rejected("capacity-exceeded");
         if (this.#transactions.has(material.state) || this.#transactionMaterialInUse(material))
           continue;
-        const transactionExpiry = expiryAt(current, this.#transactionTtlMilliseconds);
+        const transactionExpiry = OidcFlowValues.expiryAt(
+          current,
+          this.#transactionTtlMilliseconds,
+        );
         if (transactionExpiry === undefined) {
           this.#failClosed();
-          return rejected("clock-failure");
+          return OidcFlowValues.rejected("clock-failure");
         }
         const authorizationUrl = this.#authorizationUrl(
           material.state,
@@ -153,7 +173,7 @@ export class OidcFlow {
           Buffer.from(material.providerVerifierBytes).toString("base64url"),
           request.browserCodeChallenge,
         );
-        if (authorizationUrl === undefined) return rejected("invalid-input");
+        if (authorizationUrl === undefined) return OidcFlowValues.rejected("invalid-input");
         this.#transactions.set(material.state, {
           nonce: material.nonce,
           providerVerifier: Uint8Array.from(material.providerVerifierBytes),
@@ -166,39 +186,41 @@ export class OidcFlow {
         material.bytes.forEach((bytes) => bytes.fill(0));
       }
     }
-    return rejected("entropy-exhausted");
+    return OidcFlowValues.rejected("entropy-exhausted");
   }
 
   /**
-   * Atomically consumes a callback state before provider verification or mapping.
+   * Processes a callback state before provider verification or mapping.
    * A rejected callback never restores its transaction.
+   * @param input The callback state and provider response.
+   * @returns The callback result, including a one-time grant when accepted.
    */
   async callback(input: OidcFlowCallbackInput): Promise<OidcFlowCallbackResult> {
-    if (this.#isClosed()) return callbackRejected("closed");
-    const state = snapshotCallbackState(input);
-    if (state === undefined) return callbackRejected("invalid-input");
+    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
+    const state = OidcFlowValues.snapshotCallbackState(input);
+    if (state === undefined) return OidcFlowValues.callbackRejected("invalid-input");
     const now = this.#now();
-    if (now === undefined) return callbackRejected("closed");
-    if (this.#isClosed()) return callbackRejected("closed");
+    if (now === undefined) return OidcFlowValues.callbackRejected("closed");
+    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
     const transaction = this.#transactions.get(state);
-    if (transaction === undefined) return callbackRejected("not-found");
+    if (transaction === undefined) return OidcFlowValues.callbackRejected("not-found");
     this.#transactions.delete(state);
-    const callback = snapshotCallbackInput(input);
-    if (callback === undefined || !validCallbackInput(callback)) {
+    const callback = OidcFlowValues.snapshotCallbackInput(input);
+    if (callback === undefined || !OidcFlowValues.validCallbackInput(callback)) {
       transaction.providerVerifier.fill(0);
-      return callbackRejected("invalid-input");
+      return OidcFlowValues.callbackRejected("invalid-input");
     }
     if (now >= transaction.expiresAt) {
       transaction.providerVerifier.fill(0);
-      return callbackRejected("expired");
+      return OidcFlowValues.callbackRejected("expired");
     }
     if (callback.error !== undefined) {
       transaction.providerVerifier.fill(0);
-      return callbackRejected("provider-error");
+      return OidcFlowValues.callbackRejected("provider-error");
     }
     if (callback.responseIssuer !== undefined && callback.responseIssuer !== this.#providerIssuer) {
       transaction.providerVerifier.fill(0);
-      return callbackRejected("issuer-mismatch");
+      return OidcFlowValues.callbackRejected("issuer-mismatch");
     }
 
     const providerVerifier = Buffer.from(transaction.providerVerifier).toString("base64url");
@@ -213,36 +235,37 @@ export class OidcFlow {
         signal,
       }),
     );
-    if (this.#isClosed()) return callbackRejected("closed");
+    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
     let verified: ExternalIdentity | undefined;
     try {
-      verified = validExternalIdentity(identity, this.#providerIssuer);
+      verified = OidcFlowValues.validExternalIdentity(identity, this.#providerIssuer);
     } catch {
       verified = undefined;
     }
-    if (verified === undefined) return callbackRejected("verification-failed");
+    if (verified === undefined) return OidcFlowValues.callbackRejected("verification-failed");
     const resolved = await this.#runBounded((signal) =>
       this.#identityMapping.resolve(verified, signal),
     );
-    if (this.#isClosed()) return callbackRejected("closed");
-    const mapped = snapshotResolvedIdentity(resolved, verified);
-    if (mapped === undefined) return callbackRejected("mapping-failed");
+    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
+    const mapped = OidcFlowValues.snapshotResolvedIdentity(resolved, verified);
+    if (mapped === undefined) return OidcFlowValues.callbackRejected("mapping-failed");
 
     const current = this.#now();
-    if (current === undefined) return callbackRejected("closed");
+    if (current === undefined) return OidcFlowValues.callbackRejected("closed");
     this.#sweepGrants(current);
-    if (this.#isClosed()) return callbackRejected("closed");
-    if (this.#grants.size >= this.#maxGrants) return callbackRejected("capacity-exceeded");
-    const expiry = expiryAt(current, this.#grantTtlMilliseconds);
+    if (this.#isClosed()) return OidcFlowValues.callbackRejected("closed");
+    if (this.#grants.size >= this.#maxGrants)
+      return OidcFlowValues.callbackRejected("capacity-exceeded");
+    const expiry = OidcFlowValues.expiryAt(current, this.#grantTtlMilliseconds);
     if (expiry === undefined) {
       this.#failClosed();
-      return callbackRejected("clock-failure");
+      return OidcFlowValues.callbackRejected("clock-failure");
     }
     const grant = this.#nextGrant();
     if (grant === undefined)
-      return callbackRejected(this.#isClosed() ? "closed" : "entropy-exhausted");
+      return OidcFlowValues.callbackRejected(this.#isClosed() ? "closed" : "entropy-exhausted");
     if (this.#isClosed() || this.#grants.size >= this.#maxGrants || this.#grants.has(grant))
-      return callbackRejected(this.#isClosed() ? "closed" : "entropy-exhausted");
+      return OidcFlowValues.callbackRejected(this.#isClosed() ? "closed" : "entropy-exhausted");
     this.#grants.set(grant, {
       identity: mapped,
       browserCodeChallenge: transaction.browserCodeChallenge,
@@ -258,32 +281,43 @@ export class OidcFlow {
   }
 
   /**
-   * Detaches a grant before validating browser PKCE proof or issuing a session.
+   * Processes a grant before validating browser PKCE proof or issuing a session.
    * All failures deliberately have the same result to avoid grant-state enumeration.
+   * @param input The grant and browser PKCE proof.
+   * @returns The issued application session or an enumeration-safe rejection.
    */
   async exchange(input: OidcFlowExchangeInput): Promise<OidcFlowExchangeResult> {
-    const grantRequest = snapshotGrantExchangeInput(input);
-    if (this.#isClosed() || grantRequest === undefined || !validGrant(grantRequest.grant))
-      return exchangeRejected();
+    const grantRequest = OidcFlowValues.snapshotGrantExchangeInput(input);
+    if (
+      this.#isClosed() ||
+      grantRequest === undefined ||
+      !OidcFlowValues.validGrant(grantRequest.grant)
+    )
+      return OidcFlowValues.exchangeRejected();
     const now = this.#now();
-    if (now === undefined) return exchangeRejected();
+    if (now === undefined) return OidcFlowValues.exchangeRejected();
     const grant = this.#grants.get(grantRequest.grant);
-    if (grant === undefined) return exchangeRejected();
+    if (grant === undefined) return OidcFlowValues.exchangeRejected();
     this.#grants.delete(grantRequest.grant);
-    const browserCodeVerifier = snapshotBrowserCodeVerifier(input);
+    const browserCodeVerifier = OidcFlowValues.snapshotBrowserCodeVerifier(input);
     if (
       now >= grant.expiresAt ||
       browserCodeVerifier === undefined ||
-      !validBrowserCodeVerifier(browserCodeVerifier)
+      !OidcFlowValues.validBrowserCodeVerifier(browserCodeVerifier)
     )
-      return exchangeRejected();
-    if (!constantTimeEquals(sha256Base64Url(browserCodeVerifier), grant.browserCodeChallenge))
-      return exchangeRejected();
+      return OidcFlowValues.exchangeRejected();
+    if (
+      !OidcFlowValues.constantTimeEquals(
+        OidcFlowValues.sha256Base64Url(browserCodeVerifier),
+        grant.browserCodeChallenge,
+      )
+    )
+      return OidcFlowValues.exchangeRejected();
     const issued = await this.#runBounded((signal) =>
       this.#sessionIssuer.issue(grant.identity.principal, signal),
     );
-    const safeIssue = snapshotSessionIssue(issued);
-    if (this.#isClosed() || safeIssue === undefined) return exchangeRejected();
+    const safeIssue = OidcFlowValues.snapshotSessionIssue(issued);
+    if (this.#isClosed() || safeIssue === undefined) return OidcFlowValues.exchangeRejected();
     return Object.freeze({
       kind: "issued",
       credential: safeIssue.credential,
@@ -291,7 +325,7 @@ export class OidcFlow {
     });
   }
 
-  /** Terminally discards all retained OIDC transaction material. */
+  /** Closes the flow and discards retained OIDC transaction material. */
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
@@ -322,7 +356,7 @@ export class OidcFlow {
     parameters.set("scope", this.#scopes.join(" "));
     parameters.set("state", state);
     parameters.set("nonce", nonce);
-    parameters.set("code_challenge", sha256Base64Url(providerVerifier));
+    parameters.set("code_challenge", OidcFlowValues.sha256Base64Url(providerVerifier));
     parameters.set("code_challenge_method", "S256");
     // The browser challenge is retained for the later, distinct application-session grant.
     void browserCodeChallenge;
@@ -407,19 +441,20 @@ export class OidcFlow {
 
   #transactionMaterialInUse(material: TransactionMaterial): boolean {
     const verifier = Buffer.from(material.providerVerifierBytes).toString("base64url");
-    const challenge = sha256Base64Url(verifier);
+    const challenge = OidcFlowValues.sha256Base64Url(verifier);
     return [...this.#transactions.values()].some(
       (transaction) =>
         transaction.nonce === material.nonce ||
-        sha256Base64Url(Buffer.from(transaction.providerVerifier).toString("base64url")) ===
-          challenge,
+        OidcFlowValues.sha256Base64Url(
+          Buffer.from(transaction.providerVerifier).toString("base64url"),
+        ) === challenge,
     );
   }
 
   #now(): number | undefined {
     try {
       const now = this.#clock.now();
-      if (!validTimestamp(now)) throw new Error("invalid clock");
+      if (!OidcFlowValues.validTimestamp(now)) throw new Error("invalid clock");
       return now;
     } catch {
       this.#failClosed();
@@ -480,119 +515,7 @@ interface Grant {
   readonly expiresAt: number;
 }
 
-function rejected(
-  reason: "invalid-input" | "capacity-exceeded" | "entropy-exhausted" | "clock-failure" | "closed",
-): OidcFlowStartResult {
-  return Object.freeze({ kind: "rejected", reason });
-}
-
-function callbackRejected(
-  reason:
-    | "invalid-input"
-    | "not-found"
-    | "expired"
-    | "provider-error"
-    | "issuer-mismatch"
-    | "verification-failed"
-    | "mapping-failed"
-    | "capacity-exceeded"
-    | "entropy-exhausted"
-    | "clock-failure"
-    | "closed",
-): OidcFlowCallbackResult {
-  return Object.freeze({ kind: "rejected", reason });
-}
-
-function exchangeRejected(): OidcFlowExchangeResult {
-  return Object.freeze({ kind: "rejected" });
-}
-
-function strictHttpsUrl(value: string, name: string): URL {
-  const url = parseUrl(value, name);
-  if (url.protocol !== "https:" || url.username !== "" || url.password !== "" || url.hash !== "")
-    throw new TypeError(`${name} must be an exact HTTPS URL without credentials or fragment`);
-  return url;
-}
-
-function parseUrl(value: string, name: string): URL {
-  if (typeof value !== "string" || value.length === 0 || value.length > 4_096)
-    throw new TypeError(`${name} must be a bounded non-empty URL`);
-  try {
-    return new URL(value);
-  } catch {
-    throw new TypeError(`${name} must be a URL`);
-  }
-}
-
-function validScopes(scopes: unknown): readonly string[] {
-  if (!Array.isArray(scopes) || scopes.length === 0 || scopes.length > 64)
-    throw new TypeError("scopes must be a non-empty bounded list");
-  const copy = scopes.map((scope) => {
-    if (typeof scope !== "string" || scope.length === 0 || scope.length > 256 || /\s/.test(scope))
-      throw new TypeError("scopes must contain bounded non-empty tokens");
-    return scope;
-  });
-  if (new Set(copy).size !== copy.length || !copy.includes("openid"))
-    throw new TypeError("scopes must be unique and include openid");
-  return Object.freeze(copy);
-}
-
-function validRedirects(redirects: unknown): ReadonlySet<string> {
-  if (!Array.isArray(redirects) || redirects.length === 0 || redirects.length > 1_000)
-    throw new TypeError("allowedPostLoginRedirects must be a non-empty bounded list");
-  const copy = redirects.map((redirect) => {
-    if (typeof redirect !== "string")
-      throw new TypeError("allowedPostLoginRedirects entries must be strings");
-    const url = strictHttpsUrl(redirect, "allowedPostLoginRedirects entry");
-    return url.toString();
-  });
-  if (new Set(copy).size !== copy.length)
-    throw new TypeError("allowedPostLoginRedirects must be unique");
-  return new Set(copy);
-}
-
-function validStartInput(
-  input: { readonly browserCodeChallenge: unknown; readonly postLoginRedirect: unknown },
-  redirects: ReadonlySet<string>,
-): input is OidcFlowStartInput {
-  if (
-    typeof input.browserCodeChallenge !== "string" ||
-    !BASE64URL_32_BYTES.test(input.browserCodeChallenge)
-  )
-    return false;
-  if (typeof input.postLoginRedirect !== "string" || input.postLoginRedirect.length > 4_096)
-    return false;
-  try {
-    return redirects.has(strictHttpsUrl(input.postLoginRedirect, "postLoginRedirect").toString());
-  } catch {
-    return false;
-  }
-}
-
-function snapshotStartInput(
-  input: unknown,
-): { readonly browserCodeChallenge: unknown; readonly postLoginRedirect: unknown } | undefined {
-  try {
-    if (!plainRecord(input)) return undefined;
-    return Object.freeze({
-      browserCodeChallenge: input.browserCodeChallenge,
-      postLoginRedirect: input.postLoginRedirect,
-    });
-  } catch {
-    return undefined;
-  }
-}
-
-function snapshotCallbackState(input: unknown): string | undefined {
-  try {
-    if (!plainRecord(input)) return undefined;
-    const state = input.state;
-    return validGrant(state) ? state : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
+/** Owns OIDC flow input snapshots, validation, and immutable result values. */
 interface CallbackInputSnapshot {
   readonly code: unknown;
   readonly error: unknown;
@@ -611,315 +534,459 @@ type ValidCallbackInputSnapshot =
       readonly responseIssuer: string | undefined;
     };
 
-function snapshotCallbackInput(input: unknown): CallbackInputSnapshot | undefined {
-  try {
-    if (!plainRecord(input)) return undefined;
-    return Object.freeze({
-      code: input.code,
-      error: input.error,
-      responseIssuer: input.responseIssuer,
+const OidcFlowValues = Object.freeze({
+  rejected(
+    reason:
+      "invalid-input" | "capacity-exceeded" | "entropy-exhausted" | "clock-failure" | "closed",
+  ): OidcFlowStartResult {
+    return Object.freeze({ kind: "rejected", reason });
+  },
+
+  callbackRejected(
+    reason:
+      | "invalid-input"
+      | "not-found"
+      | "expired"
+      | "provider-error"
+      | "issuer-mismatch"
+      | "verification-failed"
+      | "mapping-failed"
+      | "capacity-exceeded"
+      | "entropy-exhausted"
+      | "clock-failure"
+      | "closed",
+  ): OidcFlowCallbackResult {
+    return Object.freeze({ kind: "rejected", reason });
+  },
+
+  exchangeRejected(): OidcFlowExchangeResult {
+    return Object.freeze({ kind: "rejected" });
+  },
+
+  strictHttpsUrl(value: string, name: string): URL {
+    const url = OidcFlowValues.parseUrl(value, name);
+    if (url.protocol !== "https:" || url.username !== "" || url.password !== "" || url.hash !== "")
+      throw new TypeError(`${name} must be an exact HTTPS URL without credentials or fragment`);
+    return url;
+  },
+
+  parseUrl(value: string, name: string): URL {
+    if (typeof value !== "string" || value.length === 0 || value.length > 4_096)
+      throw new TypeError(`${name} must be a bounded non-empty URL`);
+    try {
+      return new URL(value);
+    } catch {
+      throw new TypeError(`${name} must be a URL`);
+    }
+  },
+
+  validScopes(scopes: unknown): readonly string[] {
+    if (!Array.isArray(scopes) || scopes.length === 0 || scopes.length > 64)
+      throw new TypeError("scopes must be a non-empty bounded list");
+    const copy = scopes.map((scope) => {
+      if (typeof scope !== "string" || scope.length === 0 || scope.length > 256 || /\s/.test(scope))
+        throw new TypeError("scopes must contain bounded non-empty tokens");
+      return scope;
     });
-  } catch {
-    return undefined;
-  }
-}
+    if (new Set(copy).size !== copy.length || !copy.includes("openid"))
+      throw new TypeError("scopes must be unique and include openid");
+    return Object.freeze(copy);
+  },
 
-function validCallbackInput(input: CallbackInputSnapshot): input is ValidCallbackInputSnapshot {
-  const codeValid = typeof input.code === "string" && boundedNonEmpty(input.code);
-  const errorValid = typeof input.error === "string" && boundedNonEmpty(input.error);
-  if (codeValid === errorValid) return false;
-  if (input.responseIssuer === undefined) return true;
-  return (
-    typeof input.responseIssuer === "string" &&
-    input.responseIssuer.length <= 4_096 &&
-    isStrictHttpsUrl(input.responseIssuer)
-  );
-}
-
-function validGrant(value: unknown): value is string {
-  return typeof value === "string" && BASE64URL_32_BYTES.test(value);
-}
-
-function snapshotGrantExchangeInput(input: unknown): { readonly grant: unknown } | undefined {
-  try {
-    if (!plainRecord(input)) return undefined;
-    return Object.freeze({ grant: input.grant });
-  } catch {
-    return undefined;
-  }
-}
-
-function snapshotBrowserCodeVerifier(input: unknown): unknown {
-  try {
-    if (!plainRecord(input)) return undefined;
-    return input.browserCodeVerifier;
-  } catch {
-    return undefined;
-  }
-}
-
-function validBrowserCodeVerifier(value: unknown): value is string {
-  return typeof value === "string" && RFC7636_VERIFIER.test(value);
-}
-
-function validExternalIdentity(identity: unknown, issuer: string): ExternalIdentity | undefined {
-  try {
-    if (!plainRecord(identity)) return undefined;
-    const actualIssuer = identity.issuer;
-    const subject = identity.subject;
-    const claims = identity.claims;
-    if (actualIssuer !== issuer || !boundedNonEmpty(subject)) return undefined;
-    const copiedClaims = claims === undefined ? undefined : copyBoundedRecord(claims, true);
-    if (claims !== undefined && copiedClaims === undefined) return undefined;
-    return Object.freeze({
-      issuer,
-      subject,
-      ...(copiedClaims === undefined ? {} : { claims: copiedClaims }),
+  validRedirects(redirects: unknown): ReadonlySet<string> {
+    if (!Array.isArray(redirects) || redirects.length === 0 || redirects.length > 1_000)
+      throw new TypeError("allowedPostLoginRedirects must be a non-empty bounded list");
+    const copy = redirects.map((redirect) => {
+      if (typeof redirect !== "string")
+        throw new TypeError("allowedPostLoginRedirects entries must be strings");
+      const url = OidcFlowValues.strictHttpsUrl(redirect, "allowedPostLoginRedirects entry");
+      return url.toString();
     });
-  } catch {
-    return undefined;
-  }
-}
+    if (new Set(copy).size !== copy.length)
+      throw new TypeError("allowedPostLoginRedirects must be unique");
+    return new Set(copy);
+  },
 
-function snapshotResolvedIdentity(
-  identity: unknown,
-  expected: ExternalIdentity,
-): ResolvedApplicationIdentity | undefined {
-  try {
+  validStartInput(
+    input: { readonly browserCodeChallenge: unknown; readonly postLoginRedirect: unknown },
+    redirects: ReadonlySet<string>,
+  ): input is OidcFlowStartInput {
     if (
-      identity === undefined ||
-      identity === null ||
-      typeof identity !== "object" ||
-      Array.isArray(identity)
+      typeof input.browserCodeChallenge !== "string" ||
+      !base64Url32.test(input.browserCodeChallenge)
     )
-      return undefined;
-    const candidate = identity as ResolvedApplicationIdentity;
-    const externalIdentity = candidate.externalIdentity;
-    const principal = candidate.principal;
-    if (!plainRecord(externalIdentity) || !plainRecord(principal)) return undefined;
-    const issuer = externalIdentity.issuer;
-    const subject = externalIdentity.subject;
-    const claims = externalIdentity.claims;
-    const id = principal.id;
-    const attributes = principal.attributes;
-    if (issuer !== expected.issuer || subject !== expected.subject || !boundedNonEmpty(id))
-      return undefined;
-    const copiedClaims = claims === undefined ? undefined : copyBoundedRecord(claims, true);
-    const copiedAttributes =
-      attributes === undefined ? undefined : copyBoundedRecord(attributes, false);
-    if (
-      (claims !== undefined && copiedClaims === undefined) ||
-      (attributes !== undefined && copiedAttributes === undefined)
-    )
-      return undefined;
-    const mappedClaims = copiedClaims ?? {};
-    const expectedClaims = expected.claims ?? {};
-    const mappedClaimEntries = Object.entries(mappedClaims);
-    if (
-      mappedClaimEntries.length !== Object.keys(expectedClaims).length ||
-      mappedClaimEntries.some(([name, value]) => expectedClaims[name] !== value)
-    )
-      return undefined;
-    const snapshot: ResolvedApplicationIdentity = {
-      externalIdentity: expected,
-      principal: Object.freeze({
-        id,
-        ...(copiedAttributes === undefined ? {} : { attributes: copiedAttributes }),
-      }),
-    };
-    return Object.freeze(snapshot);
-  } catch {
-    return undefined;
-  }
-}
+      return false;
+    if (typeof input.postLoginRedirect !== "string" || input.postLoginRedirect.length > 4_096)
+      return false;
+    try {
+      return redirects.has(
+        OidcFlowValues.strictHttpsUrl(input.postLoginRedirect, "postLoginRedirect").toString(),
+      );
+    } catch {
+      return false;
+    }
+  },
 
-function copyBoundedRecord(
-  value: unknown,
-  rejectTokens: boolean,
-): Readonly<Record<string, string>> | undefined {
-  if (!plainRecord(value)) return undefined;
-  const entries = Object.entries(value);
-  if (entries.length > 32) return undefined;
-  let characters = 0;
-  const copy: Record<string, string> = {};
-  for (const [name, item] of entries) {
-    if (!boundedNonEmpty(name) || !boundedNonEmpty(item) || (rejectTokens && tokenLikeClaim(name)))
+  snapshotStartInput(
+    input: unknown,
+  ): { readonly browserCodeChallenge: unknown; readonly postLoginRedirect: unknown } | undefined {
+    try {
+      if (!OidcFlowValues.plainRecord(input)) return undefined;
+      return Object.freeze({
+        browserCodeChallenge: input.browserCodeChallenge,
+        postLoginRedirect: input.postLoginRedirect,
+      });
+    } catch {
       return undefined;
-    characters += name.length + item.length;
-    if (characters > 4_096) return undefined;
-    Object.defineProperty(copy, name, {
-      value: item,
-      enumerable: true,
-      configurable: true,
-      writable: true,
+    }
+  },
+
+  snapshotCallbackState(input: unknown): string | undefined {
+    try {
+      if (!OidcFlowValues.plainRecord(input)) return undefined;
+      const state = input.state;
+      return OidcFlowValues.validGrant(state) ? state : undefined;
+    } catch {
+      return undefined;
+    }
+  },
+
+  snapshotCallbackInput(input: unknown): CallbackInputSnapshot | undefined {
+    try {
+      if (!OidcFlowValues.plainRecord(input)) return undefined;
+      return Object.freeze({
+        code: input.code,
+        error: input.error,
+        responseIssuer: input.responseIssuer,
+      });
+    } catch {
+      return undefined;
+    }
+  },
+
+  validCallbackInput(input: CallbackInputSnapshot): input is ValidCallbackInputSnapshot {
+    const codeValid = typeof input.code === "string" && OidcFlowValues.boundedNonEmpty(input.code);
+    const errorValid =
+      typeof input.error === "string" && OidcFlowValues.boundedNonEmpty(input.error);
+    if (codeValid === errorValid) return false;
+    if (input.responseIssuer === undefined) return true;
+    return (
+      typeof input.responseIssuer === "string" &&
+      input.responseIssuer.length <= 4_096 &&
+      OidcFlowValues.isStrictHttpsUrl(input.responseIssuer)
+    );
+  },
+
+  validGrant(value: unknown): value is string {
+    return typeof value === "string" && base64Url32.test(value);
+  },
+
+  snapshotGrantExchangeInput(input: unknown): { readonly grant: unknown } | undefined {
+    try {
+      if (!OidcFlowValues.plainRecord(input)) return undefined;
+      return Object.freeze({ grant: input.grant });
+    } catch {
+      return undefined;
+    }
+  },
+
+  snapshotBrowserCodeVerifier(input: unknown): unknown {
+    try {
+      if (!OidcFlowValues.plainRecord(input)) return undefined;
+      return input.browserCodeVerifier;
+    } catch {
+      return undefined;
+    }
+  },
+
+  validBrowserCodeVerifier(value: unknown): value is string {
+    return typeof value === "string" && RFC7636_VERIFIER.test(value);
+  },
+
+  validExternalIdentity(identity: unknown, issuer: string): ExternalIdentity | undefined {
+    try {
+      if (!OidcFlowValues.plainRecord(identity)) return undefined;
+      const actualIssuer = identity.issuer;
+      const subject = identity.subject;
+      const claims = identity.claims;
+      if (actualIssuer !== issuer || !OidcFlowValues.boundedNonEmpty(subject)) return undefined;
+      const copiedClaims =
+        claims === undefined ? undefined : OidcFlowValues.copyBoundedRecord(claims, true);
+      if (claims !== undefined && copiedClaims === undefined) return undefined;
+      return Object.freeze({
+        issuer,
+        subject,
+        ...(copiedClaims === undefined ? {} : { claims: copiedClaims }),
+      });
+    } catch {
+      return undefined;
+    }
+  },
+
+  snapshotResolvedIdentity(
+    identity: unknown,
+    expected: ExternalIdentity,
+  ): ResolvedApplicationIdentity | undefined {
+    try {
+      if (
+        identity === undefined ||
+        identity === null ||
+        typeof identity !== "object" ||
+        Array.isArray(identity)
+      )
+        return undefined;
+      const candidate = identity as ResolvedApplicationIdentity;
+      const externalIdentity = candidate.externalIdentity;
+      const principal = candidate.principal;
+      if (!OidcFlowValues.plainRecord(externalIdentity) || !OidcFlowValues.plainRecord(principal))
+        return undefined;
+      const issuer = externalIdentity.issuer;
+      const subject = externalIdentity.subject;
+      const claims = externalIdentity.claims;
+      const id = principal.id;
+      const attributes = principal.attributes;
+      if (
+        issuer !== expected.issuer ||
+        subject !== expected.subject ||
+        !OidcFlowValues.boundedNonEmpty(id)
+      )
+        return undefined;
+      const copiedClaims =
+        claims === undefined ? undefined : OidcFlowValues.copyBoundedRecord(claims, true);
+      const copiedAttributes =
+        attributes === undefined ? undefined : OidcFlowValues.copyBoundedRecord(attributes, false);
+      if (
+        (claims !== undefined && copiedClaims === undefined) ||
+        (attributes !== undefined && copiedAttributes === undefined)
+      )
+        return undefined;
+      const mappedClaims = copiedClaims ?? {};
+      const expectedClaims = expected.claims ?? {};
+      const mappedClaimEntries = Object.entries(mappedClaims);
+      if (
+        mappedClaimEntries.length !== Object.keys(expectedClaims).length ||
+        mappedClaimEntries.some(([name, value]) => expectedClaims[name] !== value)
+      )
+        return undefined;
+      const snapshot: ResolvedApplicationIdentity = {
+        externalIdentity: expected,
+        principal: Object.freeze({
+          id,
+          ...(copiedAttributes === undefined ? {} : { attributes: copiedAttributes }),
+        }),
+      };
+      return Object.freeze(snapshot);
+    } catch {
+      return undefined;
+    }
+  },
+
+  copyBoundedRecord(
+    value: unknown,
+    rejectTokens: boolean,
+  ): Readonly<Record<string, string>> | undefined {
+    if (!OidcFlowValues.plainRecord(value)) return undefined;
+    const entries = Object.entries(value);
+    if (entries.length > 32) return undefined;
+    let characters = 0;
+    const copy: Record<string, string> = {};
+    for (const [name, item] of entries) {
+      if (
+        !OidcFlowValues.boundedNonEmpty(name) ||
+        !OidcFlowValues.boundedNonEmpty(item) ||
+        (rejectTokens && OidcFlowValues.tokenLikeClaim(name))
+      )
+        return undefined;
+      characters += name.length + item.length;
+      if (characters > 4_096) return undefined;
+      Object.defineProperty(copy, name, {
+        value: item,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return Object.freeze(copy);
+  },
+
+  validPrincipal(principal: unknown): principal is AuthenticatedPrincipal {
+    const candidate = principal as AuthenticatedPrincipal;
+    if (
+      principal === null ||
+      typeof principal !== "object" ||
+      !OidcFlowValues.boundedNonEmpty(candidate.id)
+    )
+      return false;
+    const attributes = candidate.attributes;
+    if (attributes === undefined) return true;
+    let characters = 0;
+    const entries = Object.entries(attributes);
+    if (entries.length > 32) return false;
+    return entries.every(([name, value]) => {
+      if (!OidcFlowValues.boundedNonEmpty(name) || !OidcFlowValues.boundedNonEmpty(value))
+        return false;
+      characters += name.length + value.length;
+      return characters <= 4_096;
     });
-  }
-  return Object.freeze(copy);
-}
+  },
 
-function validPrincipal(principal: unknown): principal is AuthenticatedPrincipal {
-  const candidate = principal as AuthenticatedPrincipal;
-  if (principal === null || typeof principal !== "object" || !boundedNonEmpty(candidate.id))
-    return false;
-  const attributes = candidate.attributes;
-  if (attributes === undefined) return true;
-  let characters = 0;
-  const entries = Object.entries(attributes);
-  if (entries.length > 32) return false;
-  return entries.every(([name, value]) => {
-    if (!boundedNonEmpty(name) || !boundedNonEmpty(value)) return false;
-    characters += name.length + value.length;
-    return characters <= 4_096;
-  });
-}
+  validSessionIssue(issue: unknown): issue is ApplicationSessionIssue {
+    if (!OidcFlowValues.plainRecord(issue)) return false;
+    const credential = issue.credential;
+    const session = issue.session;
+    if (!OidcFlowValues.plainRecord(credential) || !OidcFlowValues.plainRecord(session))
+      return false;
+    return (
+      (credential.kind === "bearer" || credential.kind === "cookie") &&
+      OidcFlowValues.boundedNonEmpty(credential.value) &&
+      OidcFlowValues.validPrincipal(session.principal) &&
+      OidcFlowValues.validSessionTimestamp(session.expiresAt)
+    );
+  },
 
-function validSessionIssue(issue: unknown): issue is ApplicationSessionIssue {
-  if (!plainRecord(issue)) return false;
-  const credential = issue.credential;
-  const session = issue.session;
-  if (!plainRecord(credential) || !plainRecord(session)) return false;
-  return (
-    (credential.kind === "bearer" || credential.kind === "cookie") &&
-    boundedNonEmpty(credential.value) &&
-    validPrincipal(session.principal) &&
-    validSessionTimestamp(session.expiresAt)
-  );
-}
-
-function snapshotSessionIssue(
-  issue: unknown,
-): { readonly credential: RequestCredential; readonly session: ResolvedSession } | undefined {
-  try {
-    const rawIssue = issue as ApplicationSessionIssue | undefined;
-    const credential = rawIssue?.credential;
-    const session = rawIssue?.session;
-    const principal = session?.principal;
-    const expiry = session?.expiresAt;
-    const attributes = principal?.attributes;
-    if (attributes !== undefined && !plainRecord(attributes)) return undefined;
-    const snapshot = {
-      credential:
-        credential === undefined ? undefined : { kind: credential.kind, value: credential.value },
-      session:
-        principal === undefined || expiry === undefined
-          ? undefined
-          : {
-              principal: {
-                id: principal.id,
-                attributes: attributes === undefined ? undefined : { ...attributes },
+  snapshotSessionIssue(
+    issue: unknown,
+  ): { readonly credential: RequestCredential; readonly session: ResolvedSession } | undefined {
+    try {
+      const rawIssue = issue as ApplicationSessionIssue | undefined;
+      const credential = rawIssue?.credential;
+      const session = rawIssue?.session;
+      const principal = session?.principal;
+      const expiry = session?.expiresAt;
+      const attributes = principal?.attributes;
+      if (attributes !== undefined && !OidcFlowValues.plainRecord(attributes)) return undefined;
+      const snapshot = {
+        credential:
+          credential === undefined ? undefined : { kind: credential.kind, value: credential.value },
+        session:
+          principal === undefined || expiry === undefined
+            ? undefined
+            : {
+                principal: {
+                  id: principal.id,
+                  attributes: attributes === undefined ? undefined : { ...attributes },
+                },
+                expiresAt: { seconds: expiry.seconds, nanos: expiry.nanos },
               },
-              expiresAt: { seconds: expiry.seconds, nanos: expiry.nanos },
-            },
-    };
-    if (!validSessionIssue(snapshot)) return undefined;
-    return Object.freeze({
-      credential: Object.freeze(snapshot.credential),
-      session: copyResolvedSession(snapshot.session),
+      };
+      if (!OidcFlowValues.validSessionIssue(snapshot)) return undefined;
+      return Object.freeze({
+        credential: Object.freeze(snapshot.credential),
+        session: OidcFlowValues.copyResolvedSession(snapshot.session),
+      });
+    } catch {
+      return undefined;
+    }
+  },
+
+  validSessionTimestamp(value: unknown): value is Timestamp {
+    if (!OidcFlowValues.plainRecord(value)) return false;
+    return (
+      typeof value.seconds === "bigint" &&
+      value.seconds >= -62_135_596_800n &&
+      value.seconds <= 253_402_300_799n &&
+      typeof value.nanos === "number" &&
+      Number.isSafeInteger(value.nanos) &&
+      value.nanos >= 0 &&
+      value.nanos < 1_000_000_000
+    );
+  },
+
+  copyResolvedSession(session: ResolvedSession): ResolvedSession {
+    const attributes = session.principal.attributes;
+    const principal = Object.freeze({
+      id: session.principal.id,
+      ...(attributes === undefined ? {} : { attributes: Object.freeze({ ...attributes }) }),
     });
-  } catch {
-    return undefined;
-  }
-}
+    return Object.freeze({
+      principal,
+      expiresAt: create(TimestampSchema, {
+        seconds: session.expiresAt.seconds,
+        nanos: session.expiresAt.nanos,
+      }),
+    });
+  },
 
-function validSessionTimestamp(value: unknown): value is Timestamp {
-  if (!plainRecord(value)) return false;
-  return (
-    typeof value.seconds === "bigint" &&
-    value.seconds >= -62_135_596_800n &&
-    value.seconds <= 253_402_300_799n &&
-    typeof value.nanos === "number" &&
-    Number.isSafeInteger(value.nanos) &&
-    value.nanos >= 0 &&
-    value.nanos < 1_000_000_000
-  );
-}
+  boundedNonEmpty(value: unknown): value is string {
+    return typeof value === "string" && value.length > 0 && value.length <= 4_096;
+  },
 
-function copyResolvedSession(session: ResolvedSession): ResolvedSession {
-  const attributes = session.principal.attributes;
-  const principal = Object.freeze({
-    id: session.principal.id,
-    ...(attributes === undefined ? {} : { attributes: Object.freeze({ ...attributes }) }),
-  });
-  return Object.freeze({
-    principal,
-    expiresAt: create(TimestampSchema, {
-      seconds: session.expiresAt.seconds,
-      nanos: session.expiresAt.nanos,
-    }),
-  });
-}
+  plainRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+    const prototype = Reflect.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  },
 
-function boundedNonEmpty(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= 4_096;
-}
+  tokenLikeClaim(name: string): boolean {
+    return /(^|[_-])(access[_-]?token|refresh[_-]?token|id[_-]?token|token)([_-]|$)/iu.test(name);
+  },
 
-function plainRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Reflect.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+  isStrictHttpsUrl(value: string): boolean {
+    try {
+      OidcFlowValues.strictHttpsUrl(value, "issuer");
+      return true;
+    } catch {
+      return false;
+    }
+  },
 
-function tokenLikeClaim(name: string): boolean {
-  return /(^|[_-])(access[_-]?token|refresh[_-]?token|id[_-]?token|token)([_-]|$)/iu.test(name);
-}
+  nonEmpty(value: string, name: string): string {
+    if (typeof value !== "string" || value.length === 0 || value.length > 4_096)
+      throw new TypeError(`${name} must be a bounded non-empty string`);
+    return value;
+  },
 
-function isStrictHttpsUrl(value: string): boolean {
-  try {
-    strictHttpsUrl(value, "issuer");
-    return true;
-  } catch {
-    return false;
-  }
-}
+  validateProvider(provider: unknown): asserts provider is OidcVerifiedIdentityProvider {
+    if (!OidcFlowValues.plainRecord(provider)) throw new TypeError("provider is required");
+    if (typeof provider.issuer !== "string") throw new TypeError("provider.issuer is required");
+    OidcFlowValues.strictHttpsUrl(provider.issuer, "provider.issuer");
+    OidcFlowValues.validateFunction(
+      provider.exchangeAuthorizationCode,
+      "provider.exchangeAuthorizationCode",
+    );
+  },
 
-function nonEmpty(value: string, name: string): string {
-  if (typeof value !== "string" || value.length === 0 || value.length > 4_096)
-    throw new TypeError(`${name} must be a bounded non-empty string`);
-  return value;
-}
+  validateFunction(value: unknown, name: string): void {
+    if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
+  },
 
-function validateProvider(provider: unknown): asserts provider is OidcVerifiedIdentityProvider {
-  if (!plainRecord(provider)) throw new TypeError("provider is required");
-  if (typeof provider.issuer !== "string") throw new TypeError("provider.issuer is required");
-  strictHttpsUrl(provider.issuer, "provider.issuer");
-  validateFunction(provider.exchangeAuthorizationCode, "provider.exchangeAuthorizationCode");
-}
+  positiveSafeInteger(value: number, name: string): number {
+    if (!Number.isSafeInteger(value) || value <= 0)
+      throw new TypeError(`${name} must be a positive safe integer`);
+    return value;
+  },
 
-function validateFunction(value: unknown, name: string): void {
-  if (typeof value !== "function") throw new TypeError(`${name} must be a function`);
-}
+  validTimestamp(value: number): boolean {
+    return (
+      Number.isSafeInteger(value) &&
+      value >= -62_135_596_800_000 &&
+      value <= MAX_TIMESTAMP_MILLISECONDS
+    );
+  },
 
-function positiveSafeInteger(value: number, name: string): number {
-  if (!Number.isSafeInteger(value) || value <= 0)
-    throw new TypeError(`${name} must be a positive safe integer`);
-  return value;
-}
+  expiryAt(now: number, ttl: number): number | undefined {
+    const value = now + ttl;
+    return OidcFlowValues.validTimestamp(value) ? value : undefined;
+  },
 
-function validTimestamp(value: number): boolean {
-  return (
-    Number.isSafeInteger(value) &&
-    value >= -62_135_596_800_000 &&
-    value <= MAX_TIMESTAMP_MILLISECONDS
-  );
-}
+  sha256Base64Url(value: string): string {
+    // Node's synchronous hash keeps start() atomic and avoids retaining the verifier buffer.
+    return createHash("sha256").update(value, "ascii").digest("base64url");
+  },
 
-function expiryAt(now: number, ttl: number): number | undefined {
-  const value = now + ttl;
-  return validTimestamp(value) ? value : undefined;
-}
+  constantTimeEquals(left: string, right: string): boolean {
+    const leftBytes = Buffer.from(left, "ascii");
+    const rightBytes = Buffer.from(right, "ascii");
+    try {
+      return (
+        leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes)
+      );
+    } finally {
+      leftBytes.fill(0);
+      rightBytes.fill(0);
+    }
+  },
+});
 
-function sha256Base64Url(value: string): string {
-  // Node's synchronous hash keeps start() atomic and avoids retaining the verifier buffer.
-  return createHash("sha256").update(value, "ascii").digest("base64url");
-}
-
-function constantTimeEquals(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left, "ascii");
-  const rightBytes = Buffer.from(right, "ascii");
-  try {
-    return leftBytes.byteLength === rightBytes.byteLength && timingSafeEqual(leftBytes, rightBytes);
-  } finally {
-    leftBytes.fill(0);
-    rightBytes.fill(0);
-  }
-}
+const validateProvider: (provider: unknown) => asserts provider is OidcVerifiedIdentityProvider =
+  OidcFlowValues.validateProvider;
