@@ -79,7 +79,7 @@ export class ChatMessageAggregate extends Aggregate<MessageId, typeof ChatMessag
 
 /** Full-visible read-side entity for one chat message. */
 export class ChatMessageViewProjection extends Projection<MessageId, typeof ChatMessageViewSchema> {
-  /** Materializes each posted message as its own Projection row.
+  /** Updates the Projection row for each posted message.
    *
    * @param event - The event whose message fields become the row state.
    */

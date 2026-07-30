@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Accepted for commit and integration.
 
 ## Parent And Dependencies
 
@@ -199,3 +199,89 @@ public example workflow code moves; otherwise standard.
   Luna/medium and Terra/high profiles, with no visible mismatch.
 - K1, K2, and K3 are accepted for scoped commit, immediate branch push, and
   integration into `task/T-0080K-chat-app-web`.
+
+## K4 Reconciliation Dispatch
+
+- Reviewed endpoint commits `96408dde`, `ff77d29f`, and `d9ea93ca` are merged
+  into pushed integration commit `4141faef`.
+- One existing implementer, explicitly `gpt-5.6-terra` / medium, owns only the
+  three K debt ledgers and `examples/chat/README.md`.
+- K4 regenerates exact ledgers against the integrated source, targets empty
+  TSDoc/semantic/standalone arrays, and writes the family entry guide against
+  the final application and browser APIs, commands, auth/transport topology,
+  Projection semantics, test levels, and best-effort limitations.
+- The implementer may not edit source, tests, package/model/Proto/generated
+  files, commit, push, or spawn. Runtime metadata or its limitation is required.
+
+## Integrated-Gate Correction Dispatch
+
+- K4 exact scanning finds one live TSDoc association issue:
+  `ChatMessageViewProjection.onMessagePosted()` documentation sits above
+  `@Subscribe`, outside the checker's declaration association.
+- Node interop finds one pre-existing auth cutover gap in the K2-owned harness:
+  it imports removed `transportFacts()` instead of `TransportFacts.from()`.
+- The original K2 existing implementer, explicitly Terra/medium, receives both
+  exact corrections in its current context before completing K4. It may edit
+  only `examples/chat/app/src/index.ts` and
+  `examples/chat/web/test/interop/harness.mjs` beyond K4 ownership.
+- Acceptance requires zero live K checker findings and the three Node interop
+  files passing. Documentation/API re-review reopens only for the affected
+  method/harness contract; reliability reopens only if behavior changes.
+
+## K4 And Integrated Correction Completion
+
+- All three K ledgers are exact empty arrays. Cleanup and K-scoped TSDoc checks
+  pass without suppression.
+- The family README now documents the four private packages, exact root
+  generation/build/test/Playwright/full-interop commands, startup/close API,
+  session/gateway responsibilities, Projection/query/subscription semantics,
+  duplicate/acknowledgement outcomes, transport choices, best-effort limits,
+  registry composition, and no-publication status.
+- Decorated Projection method documentation is checker-associated without
+  runtime change. The harness uses current `TransportFacts.from()`; the
+  concurrency-one Node interop suite passes 6/6 after the prior import failure.
+- Four-project Chat build, 29 app tests, generated cleanliness, formatting, and
+  diff integrity pass. Global API-doc/snippet checks still expose only
+  pre-recorded out-of-scope Proto-tools/client-node/auth-guide debt assigned to
+  T-0080O.
+- The existing implementer was explicitly Terra/medium; runtime introspection
+  was unavailable with no mismatch.
+- Re-review assigns immutable Luna/medium documentation for the method/family
+  guide and explicit Terra/high API for the current auth harness seam. Style
+  and reliability remain closed because the corrections are documentation and
+  an exact public-name migration with passing unchanged behavior.
+
+## K4 Re-review Correction
+
+- API re-review is clean for `TransportFacts.from()` and the exact zero ledgers.
+- An independent tracking check found one family-guide wording error:
+  `app/src/model-registry.ts` is tracked composed source, not ignored output.
+  The K4 Terra/medium writer corrected the sentence; only generated Proto,
+  handler output, and `dist` are described as ignored.
+- Formatting and diff integrity pass. Immutable Luna/medium documentation
+  re-review reopens for that exact sentence only.
+
+## Final Acceptance
+
+- Final documentation re-review is clean, including tracked registry versus
+  ignored generated output. API re-review is clean for
+  `TransportFacts.from()` and exact zero ledgers.
+- Deterministic migration corrections restore the established extension-guide
+  link label and exact app dependency sentence without changing their meaning.
+  Migration/generated/Proto-workflow tests pass 63/63 afterward.
+- Integrated evidence passes: generation and four-project/workspace typebuild;
+  60 focused Vitest tests; 29 K4 app tests; 6 Node interop tests; 3 local
+  Playwright browsers; full Docker/Envoy/gateway/backend browser topology with
+  9 passed and 12 intentionally skipped matrix cases; cleanup and K-scoped
+  TSDoc; three exact empty ledgers; formatting; Proto source/lint/descriptor/
+  generated checks; frozen model/registry/package/lock/workspace invariants;
+  and diff integrity.
+- Global API-doc/snippet failures are limited to already recorded
+  Proto-tools/client-node/auth-guide debt assigned to T-0080O. TSX lint has no
+  matching repository ESLint configuration, but typebuild and browser/component
+  tests cover the changed TSX.
+- All four canonical review concerns are closed. Runtime introspection remained
+  unavailable for configured Luna/medium and Terra/high reviewers, with no
+  visible mismatch.
+- T-0080K is accepted for commit, immediate push, umbrella integration, and
+  post-integration verification.

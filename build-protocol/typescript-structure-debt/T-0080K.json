@@ -1,11 +1,1 @@
-[
-  {
-    "rule": "semantic-name",
-    "file": "examples/chat/app/src/message-validation.ts",
-    "kind": "variable",
-    "identity": "variable:maximumChatMessageTextBytes#1",
-    "name": "maximumChatMessageTextBytes",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 semantic-name migration debt owned by the assigned remediation slice."
-  }
-]
+[]

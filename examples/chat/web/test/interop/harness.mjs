@@ -31,7 +31,7 @@ import {
   OpaqueSessionCookies,
   OpaqueSessions,
   SubscriptionGateway,
-  transportFacts,
+  TransportFacts,
   UnaryGateway,
 } from "../../../../../packages/auth/dist/index.js";
 import {
@@ -191,7 +191,7 @@ export async function startTopology({ lifecycle = {} } = {}) {
           return extracted.kind === "rejected" ? { kind: "bearer", value: "" } : extracted;
         },
         transport: (context) =>
-          transportFacts({
+          TransportFacts.from({
             service: "browser",
             method: "gateway",
             origin: context.requestHeader.get("origin") ?? undefined,

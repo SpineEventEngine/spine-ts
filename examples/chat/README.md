@@ -1,54 +1,120 @@
 # Chat example family
 
-This directory groups the complete Projection-backed Chat example. It is a
-four-package workspace family, not one published package:
+This is the repository's end-to-end Chat example. Start here when you want a
+small Spine application with commands, Projection reads, browser delivery, and
+an authentication gateway. It is one four-package workspace family, not four
+published npm packages:
 
-- `app/` (`@spine-event-engine/example-chat-app`) is the in-memory server and
-  application handlers.
-- `model/` (`@spine-event-engine/example-chat-model`) owns Chat Proto messages,
-  commands, events, and rejections.
-- `users-model/` (`@spine-event-engine/example-chat-users-model`) independently
-  owns the User identifier model used by Chat.
-- `web/` (`@spine-event-engine/example-chat-web`) is the React browser fixture.
+- `users-model/` owns the `UserId` Proto model.
+- `model/` owns Chat Proto messages, commands, events, and rejections.
+- `app/` owns the in-memory server, Aggregate, Projection, and application
+  registry/handler composition.
+- `web/` owns the React fixture built on `client-react` and `client-web`.
 
-The app directly depends on `users-model` and `model`; `model` also depends on
-`users-model`, and `web` depends on both model packages. Registry composition
-may reach Users transitively through Chat's model module. The browser calls the
-application through public client APIs and does not import application handlers.
+The app directly depends on `users-model` and `model`; the Chat model also
+imports `users-model`, so the composed application registry reaches `UserId`
+through the model module. `app/src/model-registry.ts` is tracked composed
+source. Generated Proto, handler output, and `dist` are ignored build products:
+generate them; never edit them. Nothing in this family is published to npm.
 
-## Generate, build, and test
+## Run it from a fresh checkout
 
-From the repository root, regenerate all model output, the app registry, and
-handler metadata before a build or focused test:
+All commands below run from the repository root. Install the locked dependency
+graph, then generate the ignored outputs:
 
 ```sh
+pnpm install --frozen-lockfile
 pnpm proto:generate
-pnpm typecheck:build:generated
-pnpm exec vitest run examples/chat/app/test examples/chat/web/test/chat-web.test.tsx
 ```
 
-`model/` and `users-model/` own generated Proto output. `app/` owns its
-composed model registry and generated handler registry. Generated directories
-are ignored and must be produced by the commands above, never edited by hand.
-For local package commands, use `pnpm --dir examples/chat/app proto:compose`,
-`pnpm --dir examples/chat/app handlers:generate`, or
-`pnpm --dir examples/chat/web test:browser` as appropriate.
+Build exactly the four Chat projects after generation:
 
-## Server, browser, and authentication topology
+```sh
+pnpm exec tsc -b \
+  examples/chat/users-model/tsconfig.json \
+  examples/chat/model/tsconfig.json \
+  examples/chat/app/tsconfig.json \
+  examples/chat/web/tsconfig.json
+```
 
-The app starts an in-memory, loopback Chat server. The browser fixture talks to
-an authentication gateway through Envoy; the browser never connects to the
-backend directly. The hosting application establishes its session, while the
-gateway resolves trusted actor, tenant, room permissions, and subscription
-ownership. See the app and web READMEs plus the
-[browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
-for integration details.
+Run the focused server and jsdom browser tests:
 
-`PostMessage` creates a message aggregate and a `ChatMessageView` Projection.
-The browser posts commands, queries room-filtered views, and subscribes to the
-same Projection topic. Duplicate message IDs record the domain rejection event
-without changing the admitted command transport acknowledgement.
+```sh
+pnpm --config.verify-deps-before-run=false exec vitest run \
+  examples/chat/app/test \
+  examples/chat/web/test/chat-web.test.tsx
+```
 
-Subscriptions are best-effort notifications, not a complete event stream.
-Notifications may be duplicated, omitted, or reordered; clients reconnect and
-re-query the authoritative Projection state when a gap is possible.
+Run the local browser fixture in Chromium, Firefox, and WebKit:
+
+```sh
+pnpm --config.verify-deps-before-run=false --dir examples/chat/web test:browser
+```
+
+On a fresh machine, install those browser binaries first:
+
+```sh
+pnpm exec playwright install chromium firefox webkit
+```
+
+The full browser interoperability topology starts a Chat backend, a native
+authentication gateway, and Envoy with local TLS. It needs Docker/Envoy and
+the Playwright browsers:
+
+```sh
+pnpm exec node examples/chat/web/test/interop/browser/run.mjs
+```
+
+The jsdom test exercises the deterministic in-memory request only. The local
+Playwright fixture exercises the browser UI. The full command is the only one
+that exercises the HTTPS browser-to-Envoy-to-gateway-to-backend route.
+
+## Application and session boundary
+
+`app/` is a library, not a server CLI. A caller creates and closes its runtime:
+
+```ts
+const application = new ChatApplication();
+const server = await application.start({ host: "127.0.0.1", port: 0 });
+try {
+  // Use server.baseUrl.
+} finally {
+  await server.close();
+}
+```
+
+The app defaults to loopback and an ephemeral port, uses in-memory storage, and
+allows at most 1,000 active subscriptions. A host application establishes the
+browser session and creates a fresh `ClientRequest` after sign-in. The browser
+session object is informational, never a credential; cookie/bearer transport
+setup belongs to `client-web`.
+
+The gateway is the trust boundary. It authenticates the request, supplies the
+trusted actor, optional tenant, and clock, authorizes the requested room, and
+owns subscription activation/cancellation. The browser never reaches the Chat
+backend directly. gRPC-Web is the default browser protocol; use binary Connect
+only for a separately configured Connect-capable endpoint—clients do not probe
+or fall back between them.
+
+## What the browser does
+
+The browser sends `PostMessage` commands, then reads room-filtered
+`ChatMessageView` Projection entities with an authoritative Query and
+subscribes to the same Projection topic. It does not consume an event stream
+or keep an unbounded aggregate message list.
+
+Each browser-generated `MessageId` identifies one message Aggregate. A repeat,
+including a concurrent repeat, keeps the first Aggregate and Projection state
+and produces no second Projection update. The admitted transport call still
+acknowledges `{ kind: "ok" }`; the domain outcome is exactly one stored
+`MessageAlreadyPosted` rejection event beside the first normal event.
+
+Subscription deliveries are best-effort notices, not complete history. They
+may be duplicated, omitted, or reordered. On reconnect or a possible gap, the
+client re-queries the authoritative Projection state; it makes no completeness
+promise and cannot recover intermediate history.
+
+For app-specific details, see [app/README.md](app/README.md). For browser
+integration, session setup, and Envoy extension requirements, see
+[web/README.md](web/README.md) and the
+[browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
