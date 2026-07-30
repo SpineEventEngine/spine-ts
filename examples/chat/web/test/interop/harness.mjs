@@ -37,7 +37,7 @@ import {
 import {
   ChatAuthorizationPolicy,
   ChatContextResolver,
-  startChatServer,
+  ChatApplication,
   typeRegistry,
 } from "../../../../../examples/chat/app/dist/src/index.js";
 import { renderEnvoy } from "../../../../../interop/envoy/render.mjs";
@@ -49,7 +49,8 @@ const image =
 /** Starts only test-owned processes and always closes them in reverse dependency order. */
 export async function startTopology({ lifecycle = {} } = {}) {
   const runCommand = lifecycle.run ?? run;
-  const startBackend = lifecycle.startBackend ?? startChatServer;
+  const application = new ChatApplication();
+  const startBackend = lifecycle.startBackend ?? application.start.bind(application);
   const createGateway = lifecycle.createGateway;
   const listenGateway = lifecycle.listen ?? listen;
   const closeGateway = lifecycle.closeGateway ?? close;

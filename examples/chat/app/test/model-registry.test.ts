@@ -38,9 +38,11 @@ import {
 } from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
 import { describe, expect, it } from "vitest";
 
-import { createChatContext, packUserId, typeRegistry, unpackChatValue } from "../dist/src/index.js";
+import { ChatApplication, typeRegistry } from "../dist/src/index.js";
 
 describe("Chat Projection backend", () => {
+  const application = new ChatApplication();
+
   it("transitively decodes Chat and Users model values", () => {
     const user = create(UserIdSchema, { value: "ada" });
     const message = create(ChatMessageSchema, {
@@ -50,15 +52,27 @@ describe("Chat Projection backend", () => {
       text: "hello",
       postedAt: create(TimestampSchema, { seconds: 1n }),
     });
-    expect(unpackChatValue(AnyMessages.pack(ChatMessageSchema, message))?.$typeName).toBe(
-      ChatMessageSchema.typeName,
+    expect(
+      AnyMessages.unpackUsing(typeRegistry, AnyMessages.pack(ChatMessageSchema, message))
+        ?.$typeName,
+    ).toBe(ChatMessageSchema.typeName);
+    expect(AnyMessages.unpackUsing(typeRegistry, AnyMessages.pack(UserIdSchema, user))).toEqual(
+      user,
     );
-    expect(unpackChatValue(packUserId(user))).toEqual(user);
     expect(typeRegistry.findByFullName(UserIdSchema.typeName)?.schema).toBe(UserIdSchema);
   });
 
+  it("starts an in-memory server on loopback by default", async () => {
+    const server = await application.start();
+    try {
+      expect(new URL(server.baseUrl).hostname).toBe("127.0.0.1");
+    } finally {
+      await server.close();
+    }
+  });
+
   it("creates one room-filtered Projection row and subscription update per message", async () => {
-    const context = await createChatContext();
+    const context = await application.createContext();
     const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
     const client = Client.connectTo(server.baseUrl);
     const author = create(UserIdSchema, { value: "ada" });
@@ -101,7 +115,7 @@ describe("Chat Projection backend", () => {
 
   it("rejects a reused MessageId without overwriting its Projection", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const context = await createChatContext(storageFactory);
+    const context = await application.createContext(storageFactory);
     const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
     const client = Client.connectTo(server.baseUrl);
     const eventStore = new EventStore({ name: "Chat", multitenant: false }, storageFactory);
@@ -163,7 +177,7 @@ describe("Chat Projection backend", () => {
 
   it("atomically rejects one of two concurrent posts sharing a MessageId", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const context = await createChatContext(storageFactory);
+    const context = await application.createContext(storageFactory);
     const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
     const client = Client.connectTo(server.baseUrl);
     const eventStore = new EventStore({ name: "Chat", multitenant: false }, storageFactory);
@@ -231,7 +245,7 @@ describe("Chat Projection backend", () => {
     ["large nanos", { time: create(TimestampSchema, { seconds: 1n, nanos: 1_000_000_000 }) }],
   ];
   it.each(invalidPosts)("rejects %s before state/event publication", async (_label, invalid) => {
-    const context = await createChatContext();
+    const context = await application.createContext();
     const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
     const client = Client.connectTo(server.baseUrl);
     const id = invalid.id ?? "valid-message";

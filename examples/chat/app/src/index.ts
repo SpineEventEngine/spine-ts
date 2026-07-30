@@ -1,5 +1,4 @@
-import { clone, create, type Message as ProtoMessage } from "@bufbuild/protobuf";
-import { AnyMessages } from "@spine-event-engine/core";
+import { clone, create } from "@bufbuild/protobuf";
 import {
   Aggregate,
   Assign,
@@ -25,25 +24,25 @@ import {
   MessagePostedSchema,
   type MessagePosted,
 } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/events_pb.js";
-import {
-  UserIdSchema,
-  type UserId,
-} from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
-
-import { typeRegistry } from "./model-registry.js";
-import { validateChatMessageInput } from "./message-validation.js";
+import { ChatMessageValidation } from "./message-validation.js";
 import { MessageAlreadyPosted } from "./rejections.js";
 
 export { typeRegistry } from "./model-registry.js";
 export { chatProtoModule } from "@spine-event-engine/example-chat-model";
 export { ChatAuthorizationPolicy, ChatContextResolver } from "./chat-policy.js";
 
+const messageValidation = new ChatMessageValidation();
+
 /** Command-side state for one bounded chat message identified by `MessageId`. */
 export class ChatMessageAggregate extends Aggregate<MessageId, typeof ChatMessageSchema> {
-  /** Persist one message and publish its read-side input event. */
+  /** Persists one message and publishes its read-side input event.
+   *
+   * @param command - The validated command that supplies message fields.
+   * @returns The event that creates the corresponding Projection row.
+   */
   @Assign
   postMessage(command: PostMessage): MessagePosted {
-    validateChatMessageInput({
+    messageValidation.validate({
       id: command.id?.value,
       room: command.room?.value,
       author: command.author?.value,
@@ -80,7 +79,10 @@ export class ChatMessageAggregate extends Aggregate<MessageId, typeof ChatMessag
 
 /** Full-visible read-side entity for one chat message. */
 export class ChatMessageViewProjection extends Projection<MessageId, typeof ChatMessageViewSchema> {
-  /** Materialize each posted message as its own Projection row. */
+  /** Materializes each posted message as its own Projection row.
+   *
+   * @param event - The event whose message fields become the row state.
+   */
   @Subscribe
   onMessagePosted(event: MessagePosted): void {
     this.update((draft) =>
@@ -98,44 +100,45 @@ export class ChatMessageViewProjection extends Projection<MessageId, typeof Chat
   }
 }
 
-/** Builds the single-tenant Chat context with in-memory storage by default. */
-export async function createChatContext(
-  storageFactory: StorageFactory = new InMemoryStorageFactory(),
-): Promise<BoundedContext> {
-  return BoundedContext.singleTenant("Chat")
-    .withStorageFactory(storageFactory)
-    .withGeneratedRegistryRoot(new URL("..", import.meta.url))
-    .add(ChatMessageAggregate)
-    .add(ChatMessageViewProjection)
-    .buildAsync();
-}
-
 /** Optional listener overrides; host defaults to loopback and port defaults to an ephemeral port. */
 export interface ChatServerOptions {
+  /** Selects the network interface that receives Chat requests. */
   readonly host?: string;
+  /** Selects the TCP port that receives Chat requests. */
   readonly port?: number;
 }
 
-/** Starts the runnable Chat server using an in-memory storage backend. */
-export async function startChatServer(options: ChatServerOptions = {}): Promise<RunningServer> {
-  return Server.atPort(options.port ?? 0, {
-    host: options.host ?? "127.0.0.1",
-    services: { subscriptionLimit: 1_000 },
-  })
-    .add(await createChatContext())
-    .start();
-}
+/** Owns assembly and local startup for the Chat application. */
+export class ChatApplication {
+  /** Builds the single-tenant Chat context with in-memory storage by default.
+   *
+   * @param storageFactory - The storage backend that records Chat state and events.
+   * @returns The assembled Chat bounded context.
+   */
+  async createContext(
+    storageFactory: StorageFactory = new InMemoryStorageFactory(),
+  ): Promise<BoundedContext> {
+    return BoundedContext.singleTenant("Chat")
+      .withStorageFactory(storageFactory)
+      .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+      .add(ChatMessageAggregate)
+      .add(ChatMessageViewProjection)
+      .buildAsync();
+  }
 
-/** Dynamically decodes registered application model values. */
-export function unpackChatValue(
-  value: Parameters<typeof AnyMessages.unpackUsing>[1],
-): ProtoMessage | undefined {
-  return AnyMessages.unpackUsing(typeRegistry, value);
-}
-
-/** Packs a user identifier for use by a Chat application boundary. */
-export function packUserId(user: UserId): Parameters<typeof AnyMessages.unpackUsing>[1] {
-  return AnyMessages.pack(UserIdSchema, user);
+  /** Starts the Chat server with in-memory storage.
+   *
+   * @param options - Optional loopback host and ephemeral-port overrides.
+   * @returns The running server, which callers must close when finished.
+   */
+  async start(options: ChatServerOptions = {}): Promise<RunningServer> {
+    return Server.atPort(options.port ?? 0, {
+      host: options.host ?? "127.0.0.1",
+      services: { subscriptionLimit: 1_000 },
+    })
+      .add(await this.createContext())
+      .start();
+  }
 }
 
 export type { ChatMessage, ChatMessageView };
