@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for commit and integration.
+Complete.
 
 ## Parent And Dependencies
 
@@ -285,3 +285,14 @@ public example workflow code moves; otherwise standard.
   visible mismatch.
 - T-0080K is accepted for commit, immediate push, umbrella integration, and
   post-integration verification.
+
+## Durable Closure
+
+- Reviewed T-0080K commit `af192912` is pushed on both the task integration and
+  umbrella branches.
+- Post-integration cleanup and K-scoped TSDoc pass; all three ledgers remain
+  empty. Generation, four Chat projects, 60 focused tests, rebuilt-auth
+  interop 6/6, and generated cleanliness pass on the exact merged commit.
+- Full local and Docker/Envoy browser evidence was established on the same
+  runtime tree before the final documentation-only migration wording change.
+- T-0080K is durably complete. T-0080L starts the flat to-do example.

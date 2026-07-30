@@ -65,3 +65,15 @@ standard.
 - Style/maintainability, documentation, and TypeScript/API docs are relevant.
 - Performance/reliability is relevant for any moved server/IPC/subscription
   ownership; otherwise record N/A.
+
+## Planning Dispatch
+
+- T-0080L starts after pushed T-0080K commit `af192912`.
+- Because authored Proto/public example contracts may change, the existing
+  requirements splitter is explicitly assigned `gpt-5.6-sol` / high.
+- The splitter is read-only, may not spawn, and must inventory the exact 39
+  TSDoc, six standalone-function, 34 Proto-comment, and zero semantic-name rows;
+  freeze copied/generated/wire/package/workflow invariants; propose bounded
+  ownership and exact focused gates.
+- Both model and reasoning fields are explicit. Runtime metadata or its honest
+  limitation is required.
