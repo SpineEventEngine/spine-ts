@@ -215,3 +215,24 @@ standard.
 - Only documentation/style/reliability concerns affected by the corrections
   reopen. API/Proto needs confirmation only that Proto non-comment tokens and
   exported contracts remain unchanged.
+
+## Correction Completion And Re-review
+
+- M2 revises all 20 projection and 10 process-manager Proto summaries to
+  describe only fixed-topology ID/name rows or generic handled-event update
+  counters. The normalized non-comment hash remains identical; 40 protected
+  checksums and diff integrity pass.
+- M3 mirrors those factual semantics in TSDoc. All non-comment tokens remain
+  identical; zero live TSDoc findings, project build, ESLint, Prettier, three
+  topology tests, and diff integrity pass.
+- M4 reduces `execute()` to a short lifecycle orchestrator with cohesive
+  subscription, command, query, correlation, and cleanup steps. A fifth
+  load-runner test exercises ten varied acknowledgement samples through the
+  public runner without exporting private latency machinery.
+- M4 project build, ESLint, Prettier, all five tests, zero live TSDoc findings,
+  exactly nine stale necessities, and diff integrity pass. Cleanup still aborts
+  controller and session before bounded iterator return.
+- Focused re-review reopens documentation for M2/M3 and eventual README, style
+  for M4 method cohesion, reliability for the percentile test and lifecycle,
+  and API/Proto only to confirm unchanged tokens/exports. The same configured
+  reviewer profiles apply.
