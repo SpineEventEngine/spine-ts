@@ -100,6 +100,7 @@ export class EventBus {
   /** Posts an event for persistence and asynchronous dispatch.
    *
    * @param event the event envelope to post.
+   * @returns A promise that settles after persistence and dispatch complete and may reject.
    */
   post(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
@@ -117,6 +118,7 @@ export class EventBus {
    * Close is idempotent and returns the same close outcome on repeated calls.
    * Runtime and event-store close hooks are both attempted; failures reject as
    * an `AggregateError`.
+   * @returns A promise that settles after the event bus closes.
    *
    */
   close(): Promise<void> {

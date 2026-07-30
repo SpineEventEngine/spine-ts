@@ -114,6 +114,7 @@ export interface EnvironmentAttachmentsOptions {
    * Calls the retained lifecycle failure reporter.
    *
    * @param causes - Lists the failures to report.
+   * @returns A promise that settles after the failures are reported.
    */
   readonly report?: (causes: readonly unknown[]) => Promise<void>;
   /** Injects transition faults used by lifecycle tests. */
@@ -497,7 +498,9 @@ export class EnvironmentAttachments {
     return attachment;
   }
 
-  /** Stops delivery work while preserving a retryable failed stop. */
+  /** Stops delivery work while preserving a retryable failed stop.
+   * @returns A promise that settles after delivery work stops.
+   */
   stopDelivery(): Promise<void> {
     if (this.#permanentlyClosed) {
       return Promise.reject(EnvironmentAttachmentAssembly.environmentClosedError());
@@ -580,7 +583,9 @@ export class EnvironmentAttachments {
     return stop.promise;
   }
 
-  /** Retries a previously rejected delivery stop. */
+  /** Retries a previously rejected delivery stop.
+   * @returns A promise that settles after the stop retry completes.
+   */
   retryDeliveryStop(): Promise<void> {
     if (this.#permanentlyClosed) {
       return Promise.reject(EnvironmentAttachmentAssembly.environmentClosedError());
@@ -801,6 +806,7 @@ export class EnvironmentAttachments {
    * Accepts permanent close after all active registrations retire.
    *
    * @internal
+   * @returns A promise that resolves after permanent close is admitted.
    */
   admitPermanentClose(): Promise<void> {
     if (this.#permanentlyClosed) {
@@ -863,6 +869,7 @@ export class EnvironmentAttachments {
    * Removes one attached registration.
    *
    * @param attachment - Identifies the attachment to detach.
+   * @returns A promise that settles after the attachment detaches.
    */
   detach(attachment: EnvironmentAttachmentHandle): Promise<void> {
     const attached = this.#handles.get(attachment);
@@ -887,6 +894,7 @@ export class EnvironmentAttachments {
    * Retries rejected detachment for one attachment.
    *
    * @param attachment - Identifies the attachment to retry.
+   * @returns A promise that settles after the detach retry completes.
    */
   retryDetach(attachment: EnvironmentAttachmentHandle): Promise<void> {
     const attached = this.#handles.get(attachment);
@@ -1026,7 +1034,9 @@ export class EnvironmentAttachments {
     }
   }
 
-  /** Retries rollback following a rejected attachment start. */
+  /** Retries rollback following a rejected attachment start.
+   * @returns A promise that settles after failed-start rollback retries.
+   */
   retryFailedStart(): Promise<void> {
     const rollback = this.#failedRollback;
     if (rollback === undefined) {

@@ -16,6 +16,7 @@ export interface TenantIndex {
   all(): Promise<readonly string[]>;
   /** Records one tenant ID when the context is multitenant.
    * @param _tenantId The tenant ID to retain.
+   * @returns A promise that resolves after the tenant is recorded.
    */
   keep(_tenantId: string): Promise<void>;
   /** Closes the backing storage used by this index. */

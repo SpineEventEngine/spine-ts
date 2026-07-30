@@ -90,6 +90,7 @@ export class DeliveryReadiness {
    * @param scopes Lists the routes that may receive buffered readiness.
    * @param onReady Observes readiness after routed ownership begins.
    * @param options Allows an empty configured route set when `allowEmpty` is true.
+   * @returns A promise that resolves after the readiness transition completes.
    */
   transition(
     scopes: readonly DeliveryReady[],
@@ -182,6 +183,7 @@ export class DeliveryReadiness {
 export interface DeliveryHandoff {
   /** Completes the claim after draining the durable message.
    * @param onDrain Drains the message associated with this claim.
+   * @returns A promise that resolves after the claim drains and completes.
    */
   complete(onDrain: () => Promise<void>): Promise<void>;
   /** Cancels the claim without draining it. */

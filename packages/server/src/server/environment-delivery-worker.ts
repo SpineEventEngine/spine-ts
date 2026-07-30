@@ -48,9 +48,15 @@ export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
   notify?(scope: DeliveryRunScope): void;
   /** Stops work owned by supplied owners. @param ownerKeys - Identifies owners to stop. */
   stopOwners(ownerKeys: readonly string[]): void;
-  /** Awaits active work for supplied owners. @param ownerKeys - Identifies owners to await. */
+  /** Awaits active work for supplied owners.
+   * @param ownerKeys - Identifies owners to await.
+   * @returns A promise that resolves after selected owner work settles.
+   */
   awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void>;
-  /** Closes workers for supplied owners. @param ownerKeys - Identifies owners to retire. */
+  /** Closes workers for supplied owners.
+   * @param ownerKeys - Identifies owners to retire.
+   * @returns A promise that settles after selected owners retire.
+   */
   retireOwners(ownerKeys: readonly string[]): Promise<void>;
 }
 
@@ -130,7 +136,9 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     EnvironmentDeliveryValues.throwFailures(failures, "Environment delivery worker stop failed.");
   }
 
-  /** Awaits every configured worker and supervisor. */
+  /** Awaits every configured worker and supervisor.
+   * @returns A promise that resolves after all configured work settles.
+   */
   async awaitSettled(): Promise<void> {
     await Promise.all([
       ...Array.from(this.#workers.values(), (worker) => worker.awaitSettled()),
@@ -138,7 +146,9 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     ]);
   }
 
-  /** Closes every configured worker and supervisor. */
+  /** Closes every configured worker and supervisor.
+   * @returns A promise that settles after all configured resources retire.
+   */
   async retire(): Promise<void> {
     const settled = await Promise.allSettled([
       ...Array.from(this.#workers.values(), (worker) =>
@@ -182,7 +192,10 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     );
   }
 
-  /** Awaits selected owners. @param ownerKeys - Identifies owners to await. */
+  /** Awaits selected owners.
+   * @param ownerKeys - Identifies owners to await.
+   * @returns A promise that resolves after selected owner work settles.
+   */
   async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
     const selected = ownerKeys.map((key) => ({
       worker: this.#requiredWorker(key),
@@ -196,7 +209,10 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     );
   }
 
-  /** Closes selected owners and releases local state. @param ownerKeys - Identifies owners to retire. */
+  /** Closes selected owners and releases local state.
+   * @param ownerKeys - Identifies owners to retire.
+   * @returns A promise that settles after selected owners retire.
+   */
   async retireOwners(ownerKeys: readonly string[]): Promise<void> {
     const selected = ownerKeys.map((key) => ({
       key,

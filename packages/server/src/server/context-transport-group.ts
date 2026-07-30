@@ -28,6 +28,7 @@ export class ContextTransportGroup {
    * Opens transport bindings for contexts in their supplied order.
    *
    * @param contexts - Supplies the contexts whose intake must be opened.
+   * @returns A promise that resolves after all context bindings open.
    */
   async open(contexts: readonly BoundedContext[]): Promise<void> {
     for (const context of contexts) {
@@ -43,7 +44,9 @@ export class ContextTransportGroup {
     }
   }
 
-  /** Closes opened bindings, retaining unsuccessful closes for a later retry. */
+  /** Closes opened bindings, retaining unsuccessful closes for a later retry.
+   * @returns A promise that settles after every close attempt finishes.
+   */
   close(): Promise<void> {
     this.#closeGroup ??= new RetryableCloseGroup(
       this.#handles,

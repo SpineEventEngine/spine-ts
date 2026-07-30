@@ -85,7 +85,9 @@ export class DeliveryWorker {
     }
   }
 
-  /** Closes active loops after they finish. */
+  /** Closes active loops after they finish.
+   * @returns A promise that settles after the worker closes.
+   */
   async close(): Promise<void> {
     this.stop();
     await this.#running;
@@ -272,6 +274,7 @@ export interface DeliveryWorkerAccess {
    * Awaits the current active start without interrupting it.
    *
    * @param worker The worker to inspect.
+   * @returns A promise that resolves after the worker's active run settles.
    */
   awaitSettled(worker: DeliveryWorker): Promise<void>;
   /**
@@ -282,6 +285,7 @@ export interface DeliveryWorkerAccess {
    * Requires a successful prior `stop()`, then permanently closes public and
    * internal starts and awaits active settlement. Prior active rejection is
    * treated as settled; no fallible resource cleanup follows closure.
+   * @returns A promise that settles after the worker retires.
    */
   retire(worker: DeliveryWorker): Promise<void>;
 }

@@ -18,12 +18,14 @@ export interface EventDispatcher {
   /** Validates one generated Spine event before the bus stores it.
    *
    * @param event the event envelope to validate.
+   * @returns A promise that resolves after validation completes.
    */
   accept?(event: Event): Promise<void>;
 
   /** Dispatches one generated Spine event envelope.
    *
    * @param event the event envelope to dispatch.
+   * @returns A promise that resolves after the event is dispatched.
    */
   dispatch(event: Event): Promise<void>;
 }

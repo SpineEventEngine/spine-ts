@@ -455,6 +455,7 @@ export interface RunningServer {
    * phases until a retry. Sibling servers and process-wide facilities remain
    * available. Concurrent calls share one attempt; later calls retry only
    * unfinished cleanup, preserving stable flattened failure order.
+   * @returns A promise that settles after server-owned cleanup completes.
    */
   close(): Promise<void>;
 }

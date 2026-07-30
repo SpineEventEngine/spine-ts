@@ -61,6 +61,7 @@ export interface RuntimeTransportBindingHandle {
   /**
    * Stops transport intake, closes transport registrations, then closes the bound
    * runtime.
+   * @returns A promise that settles after bindings and the runtime close.
    *
    */
   close(): Promise<void>;

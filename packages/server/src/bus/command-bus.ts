@@ -81,6 +81,7 @@ export class CommandBus {
   /** Posts a command for asynchronous dispatch.
    *
    * @param command the command envelope to post.
+   * @returns A promise that settles after queued command dispatch completes and may reject.
    */
   post(command: Command): Promise<void> {
     const accepted = clone(CommandSchema, command);
@@ -97,6 +98,7 @@ export class CommandBus {
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
    * Runtime close failures reject the returned promise.
+   * @returns A promise that settles after the command bus closes.
    *
    */
   close(): Promise<void> {

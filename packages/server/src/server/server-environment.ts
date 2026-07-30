@@ -136,6 +136,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    * Admission permanently closes the environment and prevents reuse. If it is
    * in use, closure rejects without owned-facility teardown. Failed facility
    * closes are retryable and already closed facilities are not closed again.
+   * @returns A promise that settles after the environment and owned facilities close.
    *
    */
   close(): Promise<void> {

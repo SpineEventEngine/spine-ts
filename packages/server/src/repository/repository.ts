@@ -596,6 +596,7 @@ export interface ProcessManagerInboxTarget {
    *
    * @param message - The durable message to replay.
    * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @returns A promise that resolves after the message is replayed.
    */
   replay(message: ProcessManagerInboxMessage, deliveryTenantId?: string): Promise<void>;
 }
@@ -610,6 +611,7 @@ export interface ProcessManagerInbox {
    *
    * @param message - The durable inbox row to replay.
    * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @returns A promise that resolves after the row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
   /** Writes and locally delivers one durable inbox row.
@@ -661,6 +663,7 @@ export interface ProjectionInboxTarget {
    *
    * @param message - The durable message to replay.
    * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @returns A promise that resolves after the message is replayed.
    */
   replay(message: ProjectionInboxMessage, deliveryTenantId?: string): Promise<void>;
 }
@@ -675,6 +678,7 @@ export interface ProjectionInbox {
    *
    * @param message - The durable inbox row to replay.
    * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @returns A promise that resolves after the row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
   /** Writes and locally delivers one durable inbox row.
@@ -730,6 +734,7 @@ export interface RepositoryAccess {
   /** Dispatches an event directly to a projection repository.
    * @param repository - The projection repository to dispatch to.
    * @param event - The event to dispatch.
+   * @returns A promise that resolves after the projection receives the event.
    */
   dispatchProjectionDirect(repository: RepositoryView, event: Event): Promise<void>;
   /** Binds a built runtime to a repository.

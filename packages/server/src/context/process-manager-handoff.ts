@@ -66,6 +66,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   /** Dispatches a durable inbox row through its process-manager target.
    * @param message Contains the persisted inbox row to replay.
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
+   * @returns A promise that resolves after the inbox row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
     return this.#replay(message, deliveryTenantId);
