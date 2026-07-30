@@ -65,6 +65,12 @@ import {
 
 /** Project aggregate used by the load scenario. */
 export class ProjectAggregate extends Aggregate<string, typeof ProjectSchema> {
+  /**
+   * Creates a project and emits its creation event.
+   *
+   * @param command The requested project creation.
+   * @returns The event recording the created project.
+   */
   @Assign
   createProject(command: CreateProject): ProjectCreated {
     this.update((draft) =>
@@ -76,6 +82,12 @@ export class ProjectAggregate extends Aggregate<string, typeof ProjectSchema> {
 
 /** Task aggregate retained to model the fixed three-aggregate topology. */
 export class TaskAggregate extends Aggregate<string, typeof TaskSchema> {
+  /**
+   * Creates a task and emits its creation event.
+   *
+   * @param command The requested task creation.
+   * @returns The event recording the created task.
+   */
   @Assign
   createTask(command: CreateTask): TaskCreated {
     this.update((draft) =>
@@ -87,6 +99,12 @@ export class TaskAggregate extends Aggregate<string, typeof TaskSchema> {
 
 /** Person aggregate retained to model the fixed three-aggregate topology. */
 export class PersonAggregate extends Aggregate<string, typeof PersonSchema> {
+  /**
+   * Registers a person and emits its enrollment event.
+   *
+   * @param command The requested person enrollment.
+   * @returns The event recording the enrolled person.
+   */
   @Assign
   enrollPerson(command: EnrollPerson): PersonEnrolled {
     this.update((draft) =>
@@ -96,90 +114,162 @@ export class PersonAggregate extends Aggregate<string, typeof PersonSchema> {
   }
 }
 
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class ProjectSummaryProjection extends Projection<string, typeof ProjectSummarySchema> {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(ProjectSummarySchema, { id: event.id, name: event.name })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class TaskListProjection extends Projection<string, typeof TaskListSchema> {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(TaskListSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class StatusCountersProjection extends Projection<string, typeof StatusCountersSchema> {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(StatusCountersSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class PriorityCountersProjection extends Projection<string, typeof PriorityCountersSchema> {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(PriorityCountersSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class AssigneeWorkloadProjection extends Projection<string, typeof AssigneeWorkloadSchema> {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(AssigneeWorkloadSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class ActivityFeedProjection extends Projection<string, typeof ActivityFeedSchema> {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(ActivityFeedSchema, { id: event.id, name: event.name })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class TenantViewProjection extends Projection<string, typeof TenantViewSchema> {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(TenantViewSchema, { id: event.id, name: event.name })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class UserViewProjection extends Projection<string, typeof UserViewSchema> {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(UserViewSchema, { id: event.id, name: event.name })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class DueDateViewProjection extends Projection<string, typeof DueDateViewSchema> {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(DueDateViewSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class AssignmentViewProjection extends Projection<string, typeof AssignmentViewSchema> {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(AssignmentViewSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class ProjectLifecycleViewProjection extends Projection<
   string,
   typeof ProjectLifecycleViewSchema
 > {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(ProjectLifecycleViewSchema, { id: event.id, name: event.name })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class TaskDependencyViewProjection extends Projection<
   string,
   typeof TaskDependencyViewSchema
 > {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -189,17 +279,29 @@ export class TaskDependencyViewProjection extends Projection<
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class AuditViewProjection extends Projection<string, typeof AuditViewSchema> {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(AuditViewSchema, { id: event.id, name: event.name })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class SubscriptionFanoutViewProjection extends Projection<
   string,
   typeof SubscriptionFanoutViewSchema
 > {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -209,42 +311,78 @@ export class SubscriptionFanoutViewProjection extends Projection<
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class CleanupViewProjection extends Projection<string, typeof CleanupViewSchema> {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(CleanupViewSchema, { id: event.id, name: event.name })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering project's ID and name. */
 export class ProjectIndexProjection extends Projection<string, typeof ProjectIndexSchema> {
+  /**
+   * Records a triggering project's ID and name in the fixed-topology row.
+   *
+   * @param event The event that supplies the project data.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(ProjectIndexSchema, { id: event.id, name: event.name })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class TaskIndexProjection extends Projection<string, typeof TaskIndexSchema> {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(TaskIndexSchema, { id: event.projectId, name: event.id })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering person's ID and display name. */
 export class PersonIndexProjection extends Projection<string, typeof PersonIndexSchema> {
+  /**
+   * Records a triggering person's ID and display name in the fixed-topology row.
+   *
+   * @param event The event that supplies the person data.
+   */
   @Subscribe onPersonEnrolled(event: PersonEnrolled): void {
     this.update((draft) =>
       Object.assign(draft, create(PersonIndexSchema, { id: event.id, name: event.displayName })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering person's ID and display name. */
 export class CapacityViewProjection extends Projection<string, typeof CapacityViewSchema> {
+  /**
+   * Records a triggering person's ID and display name in the fixed-topology row.
+   *
+   * @param event The event that supplies the person data.
+   */
   @Subscribe onPersonEnrolled(event: PersonEnrolled): void {
     this.update((draft) =>
       Object.assign(draft, create(CapacityViewSchema, { id: event.id, name: event.displayName })),
     );
   }
 }
+/** Represents a fixed-topology row that records a triggering task's project ID and task ID. */
 export class ProgressViewProjection extends Projection<string, typeof ProgressViewSchema> {
+  /**
+   * Records a triggering task's project ID and task ID in the fixed-topology row.
+   *
+   * @param event The event that supplies the task data.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(ProgressViewSchema, { id: event.projectId, name: event.id })),
@@ -252,7 +390,13 @@ export class ProgressViewProjection extends Projection<string, typeof ProgressVi
   }
 }
 
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class AssignmentManager extends ProcessManager<string, typeof AssignmentManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for a task-created event.
+   *
+   * @param event The task-created event that triggers the update.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -263,7 +407,13 @@ export class AssignmentManager extends ProcessManager<string, typeof AssignmentM
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class DueDateManager extends ProcessManager<string, typeof DueDateManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for a task-created event.
+   *
+   * @param event The task-created event that triggers the update.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -274,7 +424,13 @@ export class DueDateManager extends ProcessManager<string, typeof DueDateManager
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class StatusManager extends ProcessManager<string, typeof StatusManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for a task-created event.
+   *
+   * @param event The task-created event that triggers the update.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -285,7 +441,13 @@ export class StatusManager extends ProcessManager<string, typeof StatusManagerSc
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class NotificationManager extends ProcessManager<string, typeof NotificationManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for a project-created event.
+   *
+   * @param event The project-created event that triggers the update.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -296,7 +458,13 @@ export class NotificationManager extends ProcessManager<string, typeof Notificat
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class WorkloadManager extends ProcessManager<string, typeof WorkloadManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for a task-created event.
+   *
+   * @param event The task-created event that triggers the update.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -307,10 +475,16 @@ export class WorkloadManager extends ProcessManager<string, typeof WorkloadManag
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class ProjectLifecycleManager extends ProcessManager<
   string,
   typeof ProjectLifecycleManagerSchema
 > {
+  /**
+   * Updates the generic counter by incrementing it for a project-created event.
+   *
+   * @param event The project-created event that triggers the update.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -321,10 +495,16 @@ export class ProjectLifecycleManager extends ProcessManager<
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class TaskDependencyManager extends ProcessManager<
   string,
   typeof TaskDependencyManagerSchema
 > {
+  /**
+   * Updates the generic counter by incrementing it for a task-created event.
+   *
+   * @param event The task-created event that triggers the update.
+   */
   @Subscribe onTaskCreated(event: TaskCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -335,7 +515,13 @@ export class TaskDependencyManager extends ProcessManager<
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class AuditManager extends ProcessManager<string, typeof AuditManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for a project-created event.
+   *
+   * @param event The project-created event that triggers the update.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(AuditManagerSchema, { id: this.id, updates: draft.updates + 1 })),
@@ -343,10 +529,16 @@ export class AuditManager extends ProcessManager<string, typeof AuditManagerSche
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class SubscriptionFanoutManager extends ProcessManager<
   string,
   typeof SubscriptionFanoutManagerSchema
 > {
+  /**
+   * Updates the generic counter by incrementing it for a project-created event.
+   *
+   * @param event The project-created event that triggers the update.
+   */
   @Subscribe onProjectCreated(event: ProjectCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -357,7 +549,13 @@ export class SubscriptionFanoutManager extends ProcessManager<
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class CleanupManager extends ProcessManager<string, typeof CleanupManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for a person-enrolled event.
+   *
+   * @param event The person-enrolled event that triggers the update.
+   */
   @Subscribe onPersonEnrolled(event: PersonEnrolled): void {
     this.update((draft) =>
       Object.assign(
@@ -450,7 +648,11 @@ export const projectManagementTopology: {
   ],
 } as const;
 
-/** Assemble the fixed project-management topology with in-memory storage. */
+/**
+ * Creates the fixed project-management topology with in-memory storage.
+ *
+ * @returns The assembled bounded context.
+ */
 export async function createProjectManagementContext(): Promise<BoundedContext> {
   return BoundedContext.singleTenant("ProjectManagement")
     .withGeneratedRegistryRoot(new URL("..", import.meta.url))
@@ -490,13 +692,22 @@ export async function createProjectManagementContext(): Promise<BoundedContext> 
     .buildAsync();
 }
 
+/** Configures the local project-management server. */
 export interface ProjectManagementServerOptions {
+  /** Specifies the network host to bind. */
   readonly host?: string;
+  /** Specifies the network port to bind. */
   readonly port?: number;
 }
+/** Represents a running project-management server. */
 export type ProjectManagementServer = RunningServer;
 
-/** Start the local gRPC-compatible server used by smoke and load clients. */
+/**
+ * Starts the local gRPC-compatible server used by smoke and load clients.
+ *
+ * @param options The network binding options for the server.
+ * @returns The running project-management server.
+ */
 export async function startProjectManagementServer(
   options: ProjectManagementServerOptions = {},
 ): Promise<ProjectManagementServer> {
