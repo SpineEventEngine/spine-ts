@@ -2,6 +2,24 @@ syntax = "proto3";
 package spine.example.project_management.v1;
 import "spine/options.proto";
 option (type_url_prefix) = "type.spine.example.project-management";
-message CreateProject { string id = 1 [(required) = true]; string name = 2 [(required) = true]; }
-message CreateTask { string id = 1 [(required) = true]; string project_id = 2 [(required) = true]; }
-message EnrollPerson { string id = 1 [(required) = true]; string display_name = 2 [(required) = true]; }
+// Starts a new project.
+message CreateProject {
+  // Carries the project identifier.
+  string id = 1 [(required) = true];
+  // Carries the project's display name.
+  string name = 2 [(required) = true];
+}
+// Starts a new task.
+message CreateTask {
+  // Carries the task identifier.
+  string id = 1 [(required) = true];
+  // References the task's project.
+  string project_id = 2 [(required) = true];
+}
+// Registers a new person.
+message EnrollPerson {
+  // Carries the person's identifier.
+  string id = 1 [(required) = true];
+  // Carries the person's display name.
+  string display_name = 2 [(required) = true];
+}
