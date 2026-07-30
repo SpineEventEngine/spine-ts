@@ -4,18 +4,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-import {
-  createTestBlackBox,
-  openTestBlackBox,
-  trackTestHandle,
-} from "../dist/black-box/internal-test-access.js";
+import { BlackBoxTestAccess } from "../dist/black-box/internal-test-access.js";
 
 test("close drains subscriptions, then client, then server, even when each phase fails", async () => {
   const calls = [];
   const subscriptionFailure = new Error("subscription");
   const clientFailure = new Error("client");
   const serverFailure = new Error("server");
-  const blackBox = createTestBlackBox({
+  const blackBox = BlackBoxTestAccess.create({
     client: {
       close: async () => {
         calls.push("client");
@@ -50,7 +46,7 @@ test("close drains subscriptions, then client, then server, even when each phase
 
 test("concurrent close shares its outcome and invokes every resource once", async () => {
   const calls = [];
-  const blackBox = createTestBlackBox({
+  const blackBox = BlackBoxTestAccess.create({
     client: {
       close: async () => {
         calls.push("client");
@@ -83,7 +79,7 @@ test("startup failure retains the primary error and appends acquired cleanup fai
   const cleanup = new Error("server close");
 
   await assert.rejects(
-    openTestBlackBox({
+    BlackBoxTestAccess.open({
       start: async () => ({
         close: async () => {
           calls.push("server");
@@ -127,7 +123,7 @@ test("tracked state, event, and observed handles cancel exactly once before Blac
   for (const operation of ["cancel", "return", "throw"]) {
     for (const kind of ["state", "event", "observed"]) {
       let cancellations = 0;
-      const blackBox = createTestBlackBox({
+      const blackBox = BlackBoxTestAccess.create({
         client: { close: async () => {} },
         server: { close: async () => {} },
       });
@@ -143,7 +139,7 @@ test("tracked state, event, and observed handles cancel exactly once before Blac
           },
         }),
       };
-      const tracked = trackTestHandle(blackBox, handle);
+      const tracked = BlackBoxTestAccess.track(blackBox, handle);
       const iterator = tracked[Symbol.asyncIterator]();
       if (operation === "cancel") await tracked.cancel();
       if (operation === "return") await iterator.return();

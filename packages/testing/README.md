@@ -22,8 +22,9 @@ await subscription.cancel();
 the local server.
 
 `BlackBox` also retains its public `postEvent`, `eventually`, tenant, zone, and
-timeout workflows. Set tenant and zone on a scope before issuing protocol work;
-the supplied timeout bounds polling and must be a positive finite duration.
+timeout workflows. Set tenant and zone in `BlackBox.from()` options before
+creating scopes. Timeout, interval, and per-call eventual timing values must be
+positive integers.
 `eventually` is for observable asynchronous consequences, not a replacement for
 asserting the immediate command outcome. The helper runs only against its local
 ephemeral server and does not provide cross-process, browser, authentication, or
