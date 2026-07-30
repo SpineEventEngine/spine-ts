@@ -54,6 +54,7 @@ export const MAX_DELIVERY_WORKER_BYTES = 128;
 
 /** Raised when a frozen delivery-server response cannot be represented safely. */
 export class DeliveryProtocolError extends Error {
+  /** Creates an error for an invalid delivery-server response. */
   constructor() {
     super("Delivery server returned an invalid inbox message.");
     this.name = "DeliveryProtocolError";
@@ -62,6 +63,7 @@ export class DeliveryProtocolError extends Error {
 
 /** Raised when the timestamp-only delivery wire page cannot continue without loss. */
 export class DeliveryPagingError extends Error {
+  /** Creates an error for a page that cannot continue safely. */
   constructor() {
     super("Delivery server page cannot be continued safely.");
     this.name = "DeliveryPagingError";
@@ -70,6 +72,7 @@ export class DeliveryPagingError extends Error {
 
 /** Raised when durable removal-quarantine state cannot safely be used. */
 export class DeliveryQuarantineError extends Error {
+  /** Creates an error for unavailable removal-quarantine state. */
   constructor() {
     super("Delivery removal quarantine is unavailable.");
     this.name = "DeliveryQuarantineError";
@@ -85,10 +88,12 @@ export interface RemovalQuarantine {
   get(id: string): Promise<RemovalQuarantineRecord | undefined>;
   /** Persists a compact recovery record before a removal can continue.
    * @param record Describes the recovery state to persist.
+   * @returns A promise that resolves after the record is persisted.
    */
   put(record: RemovalQuarantineRecord): Promise<void>;
   /** Deletes the recovery record after its remote state is confirmed.
    * @param id Identifies the quarantined inbox message.
+   * @returns A promise that resolves after the record is deleted.
    */
   delete(id: string): Promise<void>;
 }
@@ -105,6 +110,7 @@ export interface RemovalQuarantineRecord {
 
 /** Raised when a slow observer exceeds the bounded shard-update buffer. */
 export class ShardObservationOverflowError extends Error {
+  /** Creates an error for a full shard-observation buffer. */
   constructor() {
     super("Delivery shard observation buffer overflowed.");
     this.name = "ShardObservationOverflowError";
@@ -113,6 +119,7 @@ export class ShardObservationOverflowError extends Error {
 
 /** Raised when a shard observation stream ends without a usable recovery. */
 export class DeliveryShardObservationError extends Error {
+  /** Creates an error for a failed shard-observation stream. */
   constructor() {
     super("Delivery shard observation stream failed.");
     this.name = "DeliveryShardObservationError";
@@ -130,6 +137,7 @@ export class DeliveryOutcomeUnknownError extends Error {
     | "PICK_UP_SHARD"
     | "RELEASE_SHARD"
     | "RELEASE_EXPIRED";
+  /** Identifies the observation required to reconcile the mutation outcome. */
   readonly reconciliation: Readonly<
     | { readonly kind: "FIND_MESSAGE"; readonly messageIds: readonly string[] }
     | { readonly kind: "OBSERVE_SHARD"; readonly shards: readonly ShardIndex[] }

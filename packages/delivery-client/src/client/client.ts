@@ -232,7 +232,7 @@ export class DeliveryClient {
   }
 
   /**
-   * Read and decode the first bounded ordered page for one shard.
+   * Reads and decodes the first bounded ordered page for one shard.
    *
    * A server rejects an encoded response above 4 MiB with `RESOURCE_EXHAUSTED`;
    * retry this safe read with a smaller `pageSize`.
@@ -291,6 +291,7 @@ export class DeliveryClient {
   /** Writes one message with exactly one delivery-server RPC attempt.
    * @param message Supplies the message to write.
    * @param options Bounds or cancels the mutation.
+   * @returns A promise that completes after the delivery server accepts the message.
    */
   async writeOne(message: InboxMessage, options: DeliveryMutationOptions = {}): Promise<void> {
     const wire = DeliveryMessageCodec.encode(message);
@@ -304,6 +305,7 @@ export class DeliveryClient {
   /** Removes one message with exactly one delivery-server RPC attempt.
    * @param message Supplies the message to remove.
    * @param options Bounds or cancels the mutation.
+   * @returns A promise that completes after the delivery server removes the message.
    */
   async removeOne(message: InboxMessage, options: DeliveryMutationOptions = {}): Promise<void> {
     const wire = DeliveryMessageCodec.encode(message);
@@ -317,6 +319,7 @@ export class DeliveryClient {
   /** Writes one bounded same-shard batch with exactly one delivery-server RPC attempt.
    * @param messages Supplies the messages to write.
    * @param options Bounds or cancels the mutation.
+   * @returns A promise that completes after the delivery server accepts the batch.
    */
   async writeMany(
     messages: readonly InboxMessage[],
@@ -333,6 +336,7 @@ export class DeliveryClient {
   /** Removes one bounded same-shard batch with exactly one delivery-server RPC attempt.
    * @param messages Supplies the messages to remove.
    * @param options Bounds or cancels the mutation.
+   * @returns A promise that completes after the delivery server removes the batch.
    */
   async removeMany(
     messages: readonly InboxMessage[],
@@ -346,7 +350,7 @@ export class DeliveryClient {
     );
   }
 
-  /** Picks up a shard once.
+  /** Acquires a shard once.
    * @param shardIndex Identifies the shard to acquire.
    * @param workerId Identifies the worker requesting exclusive ownership.
    * @param options Bounds or cancels the mutation.
@@ -381,9 +385,10 @@ export class DeliveryClient {
     return DeliveryShardCodec.decodePicked(response.value.value, shardIndex, workerId);
   }
 
-  /** Releases an exclusive shard session once.
+  /** Performs one exclusive shard-session release.
    * @param value Supplies the session to release.
    * @param options Bounds or cancels the mutation.
+   * @returns A promise that completes after the delivery server releases the session.
    */
   async release(value: RemoteShardSession, options: DeliveryMutationOptions = {}): Promise<void> {
     const sessionShard = DeliveryShardCodec.encode(value.shard);
@@ -405,7 +410,7 @@ export class DeliveryClient {
     );
   }
 
-  /** Releases sessions inactive for a positive duration.
+  /** Performs releases for sessions inactive for a positive duration.
    * @param inactivityMs Supplies the minimum inactivity in milliseconds.
    * @param options Bounds or cancels the mutation.
    * @returns Detached sessions released by the remote service.
@@ -439,7 +444,7 @@ export class DeliveryClient {
   }
 
   /**
-   * Permanently aborts active reads and streams. This synchronous, idempotent
+   * Closes this client by permanently aborting active reads and streams. This synchronous, idempotent
    * method also aborts an owned HTTP/2 session, but never closes injected transport.
    */
   close(): void {
