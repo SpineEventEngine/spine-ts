@@ -736,17 +736,7 @@ state masks, repeated ordering, and positive limits:
 import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { AnyMessages } from "@spine-event-engine/core";
-import {
-  Client,
-  EntityQuery,
-  all,
-  either,
-  eq,
-  ge,
-  gt,
-  le,
-  lt,
-} from "@spine-event-engine/client-node";
+import { Client, EntityQuery } from "@spine-event-engine/client-node";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 import type { QueryResponse } from "@spine-event-engine/proto/client";
 import { TaskListColumns } from "@example/tasks-proto/task_list_columns";
@@ -761,13 +751,16 @@ const taskListQuery = EntityQuery.select({
 })
   .byId("list-1", "list-2")
   .where(
-    all(
-      eq(TaskListColumns.archived, false),
-      gt(TaskListColumns.openTaskCount, 0),
-      lt(TaskListColumns.openTaskCount, 100),
-      ge(TaskListColumns.openTaskCount, 1),
-      le(TaskListColumns.openTaskCount, 20),
-      either(eq(TaskListColumns.deleted, false), eq(TaskListColumns.archived, false)),
+    EntityQuery.all(
+      EntityQuery.eq(TaskListColumns.archived, false),
+      EntityQuery.gt(TaskListColumns.openTaskCount, 0),
+      EntityQuery.lt(TaskListColumns.openTaskCount, 100),
+      EntityQuery.ge(TaskListColumns.openTaskCount, 1),
+      EntityQuery.le(TaskListColumns.openTaskCount, 20),
+      EntityQuery.either(
+        EntityQuery.eq(TaskListColumns.deleted, false),
+        EntityQuery.eq(TaskListColumns.archived, false),
+      ),
     ),
   )
   .mask("id", "openTaskCount")
