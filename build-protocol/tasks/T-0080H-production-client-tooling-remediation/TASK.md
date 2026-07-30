@@ -238,3 +238,14 @@ change; otherwise standard.
 - Corrections add concise accurate summaries, parameters, returns, and type or
   property explanations without changing runtime behavior or public types.
   Documentation and API review reopen after mechanical verification.
+
+## H10 Final Summary Correction
+
+- Corrected-checker regeneration reduces H debt to eight genuine summary rows:
+  four `EntityQueryBuilder` methods, `EntityColumnDefinition`,
+  `SubprocessRunner`, `ManifestFileOperations.rename`, and
+  `BlackBox.eventually`.
+- One existing implementer, explicitly `gpt-5.6-terra` / medium, owns only
+  those exact comments on isolated branch `task/T-0080H10-final-docs`.
+- No runtime, type, ledger, guide, checker, commit, or push changes are allowed.
+  Focused package gates and documentation/API re-review precede integration.
