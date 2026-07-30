@@ -155,3 +155,59 @@ change; otherwise standard.
   sandbox-only 20-test loopback failure is superseded.
 - This common correction is committed on the umbrella and propagated to the
   three isolated H worktrees before their final verification.
+
+## Parallel Track Checkpoints And Replacements
+
+- H1 client-node resolves all 71 TSDoc and 32 standalone identities with zero
+  name debt. Proto generation, client-node build, 5 files / 41 tests, built
+  exports, generator behavior, lint/format, and diff integrity pass. Wider Todo
+  fixture compilation is deferred to integrated H5 import/build reconciliation.
+- H2 delivery-client preserves public docs, both concise Proto aliases, and 19
+  owner migrations. Typecheck and 77 tests pass; permitted loopback and built
+  entry verification remain. The 42-function codec/83-doc block is incomplete.
+- H3 Proto tooling preserves the new root owners and 17 migrations.
+  Source typecheck, generation, 79/83 pre-bootstrap tests, and 4/4 bootstrap CLI
+  tests pass. Generated Proto prerequisites are now present; 44 index/generator
+  functions remain.
+- The prior H2/H3 contexts ended without claiming completion. Fresh existing
+  implementers are explicitly configured as `gpt-5.6-terra` / medium in the
+  same dirty isolated worktrees. Both fields are explicit; runtime metadata or
+  its limitation is required. They preserve accepted edits, do not edit shared
+  records, and complete the remaining whole tracks.
+
+## H1-H3 Implementation Completion
+
+- **H1:** zero live client-node TSDoc/name/standalone debt in source; query
+  predicates move to `EntityQuery`, generated-column definition to
+  `GeneratedEntityColumns.define`, and packaged generation to
+  `EntityColumnGenerator`. Independent build and 5 files / 41 tests pass.
+- **H2:** zero raw delivery-client functions and zero live documentation
+  findings; 42 codec helpers use three cohesive codecs, remote helpers use
+  frozen `RemoteValues`, and concise local Proto aliases replace long bindings.
+  Independent typecheck and permitted 10 files / 81 tests pass.
+- **H3:** zero raw Proto-tools functions and zero live documentation findings;
+  `ProtoConfig`, `ProtoManifest`, `ProtoGeneration`, and `ProtoPackage` own the
+  public/internal workflows. Independent build and 3 files / 83 tests pass,
+  including packed consumer acceptance.
+- Implementer profiles were explicit `gpt-5.6-terra` / medium. Runtime
+  self-introspection was unavailable with no visible mismatch. Shared H ledger
+  rows remain stale by design for serialized H5.
+- A single complete review wave spans all three isolated endpoints before any
+  branch commit or merge. Style, API, and reliability reviewers are explicitly
+  `gpt-5.6-terra` / high; documentation uses its immutable
+  `gpt-5.6-luna` / medium role.
+
+## H4 Testing Dispatch
+
+- H4 starts after the reviewed H1-H3 integration at umbrella commit
+  `725da0dd`, on isolated branch `task/T-0080H4-testing`.
+- One existing implementer, explicitly `gpt-5.6-terra` / medium, owns only
+  `packages/testing` source/tests/README. Shared H ledgers, guides, API
+  expectations, task records, commits, and pushes remain orchestrator-owned.
+- Acceptance keeps the public `BlackBox` contract and behavior while moving
+  the 15 internal startup, normalization, value, waiting, and cleanup helpers
+  into cohesive owners; it resolves the 33 testing documentation rows and
+  returns exact identities for H5 reconciliation.
+- Focused tests must preserve context/client ownership, actor/tenant/time-zone
+  scope, subscription cleanup, retryable close, timeout, and eventual-wait
+  semantics.
