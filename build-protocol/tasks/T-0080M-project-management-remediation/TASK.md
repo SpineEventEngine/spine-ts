@@ -125,3 +125,18 @@ standard.
   topology, handlers, or behavior.
 - M4 is dispatched after one implementation slot returns. M5 follows complete
   integration and review.
+
+## M4 Implementation Dispatch
+
+- After M2 returns, its existing implementer context is reassigned to M4 with
+  explicit `gpt-5.6-terra` / medium configuration.
+- M4 owns `src/load-runner.ts` and may adjust its load script/tests only where
+  compatibility verification requires it. It resolves 22 TSDoc rows, preserves
+  exported `runProjectManagementLoad`, and moves nine private helpers behind
+  cohesive per-user-load and latency owners.
+- Exact concurrency, correlation, timing, percentile, zero-elapsed,
+  all-settled, cancellation, iterator, session, and server-shutdown behavior is
+  frozen. No generic utility container or new public helper is allowed.
+- The writer may not edit Proto, topology source, docs, ledgers, records,
+  package/shared/generated files, commit, push, build Spine JVM, or spawn.
+  Runtime metadata or its limitation is required.
