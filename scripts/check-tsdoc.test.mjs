@@ -121,14 +121,14 @@ describe("check-tsdoc", () => {
     expect(result.stderr).not.toContain("entry.test.ts");
   });
 
-  it("requires third-person callable summaries and honest return tags", () => {
+  it("requires third-person callable summaries and rejects return tags on bare void callables", () => {
     const repoRoot = createFixture();
     writeSource(
       repoRoot,
       "packages/demo/src/index.ts",
       [
         "/** Create an item.\n * @param name The name.\n * @returns Nothing.\n */",
-        "export async function createItem(name: string): Promise<void> {",
+        "export function createItem(name: string): void {",
         "  void name;",
         "}",
         "",
@@ -256,7 +256,7 @@ describe("check-tsdoc", () => {
     expect(stale.stderr).toContain("missing-summary");
   });
 
-  it("uses semantic return types for inferred void, Promise<void>, and non-void callables", () => {
+  it("requires documented asynchronous completion but accepts bare void without a return tag", () => {
     const repoRoot = createFixture();
     writeSource(
       repoRoot,
@@ -264,10 +264,20 @@ describe("check-tsdoc", () => {
       [
         "/** Performs work. */",
         "export const performsWork = () => {};",
-        "/** Performs async work. */",
-        "export const performsAsyncWork = async () => {};",
+        "/** Performs async work.\n * @returns Completes the work asynchronously.\n */",
+        "export const performsAsyncWork = async (): Promise<void> => {};",
         "/** Finds a value.\n * @returns The found value.\n */",
         "export const findsValue = () => 'value';",
+        "/** Groups work operations. */",
+        "export const work = {",
+        "  /** Completes nested work.\n   * @returns Completes the nested work asynchronously.\n   */",
+        "  async complete(): Promise<void> {},",
+        "};",
+        "/** Represents an asynchronous contract. */",
+        "export interface AsyncContract {",
+        "  /** Delivers a value.\n   * @returns Completes delivery asynchronously.\n   */",
+        "  deliver(): Promise<void>;",
+        "}",
         "",
       ].join("\n"),
     );
@@ -276,6 +286,35 @@ describe("check-tsdoc", () => {
     const result = runChecker(repoRoot);
 
     expect(result.status).toBe(0);
+  });
+
+  it("requires return descriptions for Promise<void> methods at every exported nesting level", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Represents a worker. */",
+        "export class Worker {",
+        "  /** Runs work. */",
+        "  async run(): Promise<void> {}",
+        "}",
+        "/** Groups worker operations. */",
+        "export const workers = {",
+        "  /** Stops work. */",
+        "  async stop(): Promise<void> {},",
+        "};",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("missing-returns");
+    expect(result.stderr).toContain("Worker.run()");
+    expect(result.stderr).toContain("workers.stop()");
   });
 
   it("follows public barrel exports without requiring re-export comments", () => {

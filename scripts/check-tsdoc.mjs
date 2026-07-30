@@ -831,7 +831,7 @@ function hasCompleteCallableDocumentation(node, checker) {
     (tag) => tag.name === "returns" || tag.name === "return",
   );
   if (ts.isConstructorDeclaration(node)) return returns.length === 0;
-  return isVoidResult(node, checker)
+  return isBareVoidResult(node, checker)
     ? returns.length === 0
     : returns.length === 1 && !isPlaceholder(returns[0].description);
 }
@@ -879,7 +879,7 @@ function inspectCallable(node, file, name, checker, failures, documentationNode 
   );
   if (ts.isConstructorDeclaration(node)) {
     if (returns.length > 0) failures.push({ rule: "constructor-returns", file, name: identity });
-  } else if (isVoidResult(node, checker)) {
+  } else if (isBareVoidResult(node, checker)) {
     if (returns.length > 0) failures.push({ rule: "void-returns", file, name: identity });
   } else if (returns.length !== 1) {
     failures.push({
@@ -940,15 +940,21 @@ function bindingNames(name) {
   );
 }
 
-function isVoidResult(node, checker) {
+/**
+ * Determines whether a callable returns directly without a result value.
+ *
+ * A `Promise<void>` still returns an asynchronous completion value, so its
+ * documentation must describe that completion with `@returns`.
+ *
+ * @param node The callable declaration to inspect.
+ * @param checker The TypeScript semantic checker for the declaration.
+ * @returns Whether the callable has a direct `void` or `undefined` result.
+ */
+function isBareVoidResult(node, checker) {
   const signature = checker.getSignatureFromDeclaration(node);
   if (signature === undefined) return false;
   const type = checker.getReturnTypeOfSignature(signature);
-  if ((type.flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined)) !== 0) return true;
-  const promised = checker.getPromisedTypeOfPromise(type);
-  return (
-    promised !== undefined && (promised.flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined)) !== 0
-  );
+  return (type.flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined)) !== 0;
 }
 
 function isExported(node) {
