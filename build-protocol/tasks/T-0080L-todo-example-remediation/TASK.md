@@ -107,3 +107,55 @@ standard.
   wave. Security is N/A until release readiness.
 - Splitter runtime self-introspection was unavailable for explicit Sol/high,
   with no visible mismatch.
+
+## Implementation Wave Completion
+
+- L1 changes only six authored Proto files, adds exactly 34 leading comments,
+  and preserves every non-comment token. Protected source checksums, formatting,
+  and diff integrity pass; generation waits for L4 to remove exact stale ledger
+  rows.
+- L2 changes only `src/index.ts`, resolves 30 TSDoc rows, and moves private ID
+  and entrypoint behavior to named owners while preserving established public
+  callable exports. Generation/build, 33 black-box tests, exports, lint, format,
+  and diff checks pass.
+- L3 changes only smoke row source/script/test, resolves nine TSDoc and two
+  standalone rows with one `SmokeTaskLists` owner, and preserves all bounds and
+  session abort behavior. Build, 3 tests, real start+smoke, formatting, diff,
+  and process cleanup pass.
+- Only exact stale L rows remain for L4. No writer changed package/workspace/
+  lock/manifests/config/entity-column/generated or another writer's ownership.
+- Every writer was explicitly `gpt-5.6-terra` / medium. Runtime introspection
+  was unavailable, with no visible mismatch.
+
+## Complete Review Wave Assignments
+
+- Style/maintainability: existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across private owners, preserved callables, smoke
+  structure, naming, and exact scope.
+- Documentation: existing immutable reviewer configured
+  `gpt-5.6-luna` / medium, across 39 TSDoc rows and 34 Proto comments.
+- TypeScript/API docs: existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across public exports, Proto/wire contracts, generated
+  consumer compatibility, and package boundaries.
+- Performance/reliability: existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across handler/state semantics, smoke bounds, IPC/
+  multi-process behavior, subscriptions, and shutdown.
+- All reviewers are read-only, inspect the three isolated endpoints as one
+  complete wave, may not spawn, and must state runtime metadata or its
+  limitation.
+
+## Complete Review Wave Result
+
+- Documentation is clean across all 34 Proto comments and 39 TSDoc rows.
+- Style/maintainability is clean for private owners, preserved public callables,
+  smoke cohesion, names, comment placement, and exact scope.
+- TypeScript/API/Protobuf is clean: public exports/signatures and emitted
+  declarations are preserved, all Proto non-comment tokens are identical, and
+  generated/package boundaries remain unchanged.
+- Performance/reliability is clean across handler/state/rejection behavior,
+  server defaults/lifecycle, subscriptions, smoke bounds/redaction/session
+  abort, IPC/multi-process shutdown, and runtime-neutral Proto changes.
+- Reviewer runtime introspection was unavailable for configured Luna/medium and
+  Terra/high profiles, with no visible mismatch.
+- L1, L2, and L3 are accepted for scoped commit, immediate push, and integration
+  into `task/T-0080L-todo`; L4 then owns exact ledgers and docs.
