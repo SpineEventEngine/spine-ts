@@ -125,3 +125,22 @@ change; otherwise standard.
   acceptance and scoped quality gates. Final H runs combined four-package
   verification and one complete style, documentation, API, and reliability
   review wave. Repository-wide coverage remains T-0080O-owned.
+
+## Parallel Implementation Assignments
+
+- **H1 client-node:** existing implementer, branch
+  `task/T-0080H1-client-node`, isolated worktree
+  `.worktrees/T-0080H1-client-node`, explicitly configured
+  `gpt-5.6-terra` / medium.
+- **H2 delivery-client:** existing implementer, branch
+  `task/T-0080H2-delivery-client`, isolated worktree
+  `.worktrees/T-0080H2-delivery-client`, explicitly configured
+  `gpt-5.6-terra` / medium.
+- **H3 Proto tooling:** existing implementer, branch
+  `task/T-0080H3-proto-tools`, isolated worktree
+  `.worktrees/T-0080H3-proto-tools`, explicitly configured
+  `gpt-5.6-terra` / medium.
+- Every model/reasoning field is explicit. Runtime metadata or its limitation
+  is required before acceptance. Writers may not spawn subagents, edit shared H
+  ledgers/logs/guides/API expectations, commit, or push. They return exact
+  resolved identities and complete package verification evidence.
