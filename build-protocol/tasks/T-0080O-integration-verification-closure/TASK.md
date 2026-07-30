@@ -315,3 +315,14 @@ serialized-contract changes across the repository.
   owner without changing any runtime source.
 - Equipped TypeDoc/API, snippet, global lint/TSDoc, formatting, and diff gates
   follow. Documentation/API re-review; style/reliability are N/A.
+
+## Client Node Correction Completion And Review
+
+- API expectations no longer list flat query helpers. The user guide uses
+  `EntityQuery.all/either/eq/ge/gt/le/lt`, and the Client Node README declares
+  its example owner.
+- Stale-reference scanning, API-checker lint, formatting, and diff integrity
+  pass. Isolated TypeDoc/snippets remain package-link blocked.
+- The original implementer remains explicit Terra/medium with runtime metadata
+  unavailable and no mismatch.
+- Documentation and TypeScript/API reopen read-only. Style/reliability are N/A.

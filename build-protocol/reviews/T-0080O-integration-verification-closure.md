@@ -133,3 +133,9 @@ The equipped documentation gates additionally require:
 - declaring the Client Node README example's `owner` value.
 
 Documentation and TypeScript/API reopen only for these three files.
+
+## Client Node Correction Review Dispatch
+
+- Documentation verifies the query example and surrounding guidance.
+- TypeScript/API verifies exact current exports and valid member calls.
+- Style and performance/reliability are N/A for this documentation-only batch.
