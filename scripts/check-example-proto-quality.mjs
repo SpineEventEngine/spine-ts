@@ -408,10 +408,11 @@ function scanProto(file, source) {
         continue;
       }
       const next = tokens[index + 1];
-      if (["message", "enum", "service", "oneof"].includes(token.value) && next?.kind === "word") {
+      const name = namedDeclaration(tokens, index);
+      if (["message", "enum", "service", "oneof"].includes(token.value) && name !== undefined) {
         const kind = token.value;
-        record(kind, next.value, next, leading);
-        index += 2;
+        record(kind, name.token.value, token, name.split ? undefined : leading);
+        index = name.index + 1;
         while (index < tokens.length && tokens[index].value !== "{") index += 1;
         if (tokens[index]?.value === "{") {
           index += 1;
@@ -423,9 +424,9 @@ function scanProto(file, source) {
         leading = undefined;
         continue;
       }
-      if (token.value === "rpc" && next?.kind === "word") {
-        record("rpc", next.value, next, leading);
-        index += 2;
+      if (token.value === "rpc" && name !== undefined) {
+        record("rpc", name.token.value, token, name.split ? undefined : leading);
+        index = name.index + 1;
         while (index < tokens.length && ![";", "{"].includes(tokens[index].value)) index += 1;
         if (tokens[index]?.value === "{") {
           index += 1;
@@ -434,9 +435,11 @@ function scanProto(file, source) {
         leading = undefined;
         continue;
       }
-      if (context === "enum" && token.kind === "word" && tokens[index + 1]?.value === "=") {
-        record("enum-value", token.value, token, leading);
-        index += 1;
+      const enumValue =
+        context === "enum" && token.kind === "word" ? enumValueName(tokens, index) : undefined;
+      if (enumValue !== undefined) {
+        record("enum-value", token.value, token, enumValue.split ? undefined : leading);
+        index = enumValue.index;
         while (index < tokens.length && tokens[index].value !== ";") index += 1;
         index += 1;
         leading = undefined;
@@ -445,7 +448,7 @@ function scanProto(file, source) {
       if (["message", "oneof"].includes(context) && token.kind === "word") {
         const field = fieldName(tokens, index);
         if (field !== undefined) {
-          record("field", field.value, field, leading);
+          record("field", field.token.value, field.start, field.split ? undefined : leading);
           while (index < tokens.length && tokens[index].value !== ";") index += 1;
           index += 1;
           leading = undefined;
@@ -460,24 +463,72 @@ function scanProto(file, source) {
   return failures;
 }
 
+function namedDeclaration(tokens, index) {
+  const next = skippedTokens(tokens, index + 1);
+  return next.token?.kind === "word"
+    ? { token: next.token, index: next.index, split: next.skippedComment }
+    : undefined;
+}
+
+function enumValueName(tokens, index) {
+  const next = skippedTokens(tokens, index + 1);
+  return next.token?.value === "=" ? { index: next.index, split: next.skippedComment } : undefined;
+}
+
 function fieldName(tokens, index) {
   let cursor = index;
-  if (["repeated", "optional", "required"].includes(tokens[cursor]?.value)) cursor += 1;
+  const start = tokens[cursor];
+  let split = false;
+  if (["repeated", "optional", "required"].includes(start?.value)) {
+    cursor += 1;
+    ({ cursor, split } = fieldTokens(tokens, cursor, split));
+  }
   if (tokens[cursor]?.value === "map") {
     cursor += 1;
-    if (tokens[cursor]?.value !== "<") return undefined;
-    while (cursor < tokens.length && tokens[cursor]?.value !== ">") cursor += 1;
+    for (const value of ["<", "word", ",", "word", ">"]) {
+      ({ cursor, split } = fieldTokens(tokens, cursor, split));
+      if (value === "word" ? tokens[cursor]?.kind !== "word" : tokens[cursor]?.value !== value)
+        return undefined;
+      cursor += 1;
+    }
+    ({ cursor, split } = fieldTokens(tokens, cursor, split));
+    if (tokens[cursor]?.kind !== "word") return undefined;
+    const field = tokens[cursor];
     cursor += 1;
-    return tokens[cursor]?.kind === "word" && tokens[cursor + 1]?.value === "="
-      ? tokens[cursor]
-      : undefined;
+    ({ cursor, split } = fieldTokens(tokens, cursor, split));
+    return tokens[cursor]?.value === "=" ? { token: field, split, start } : undefined;
   }
   if (tokens[cursor]?.kind !== "word") return undefined;
   cursor += 1;
-  while (tokens[cursor]?.value === ".") cursor += 2;
-  return tokens[cursor]?.kind === "word" && tokens[cursor + 1]?.value === "="
-    ? tokens[cursor]
-    : undefined;
+  while (true) {
+    ({ cursor, split } = fieldTokens(tokens, cursor, split));
+    if (tokens[cursor]?.value !== ".") break;
+    cursor += 1;
+    ({ cursor, split } = fieldTokens(tokens, cursor, split));
+    if (tokens[cursor]?.kind !== "word") return undefined;
+    cursor += 1;
+  }
+  ({ cursor, split } = fieldTokens(tokens, cursor, split));
+  if (tokens[cursor]?.kind !== "word") return undefined;
+  const field = tokens[cursor];
+  cursor += 1;
+  ({ cursor, split } = fieldTokens(tokens, cursor, split));
+  return tokens[cursor]?.value === "=" ? { token: field, split, start } : undefined;
+}
+
+function fieldTokens(tokens, index, split) {
+  const next = skippedTokens(tokens, index);
+  return { cursor: next.index, split: split || next.skippedComment };
+}
+
+function skippedTokens(tokens, index) {
+  let cursor = index;
+  let skippedComment = false;
+  while (tokens[cursor]?.kind === "comment") {
+    skippedComment = true;
+    cursor += 1;
+  }
+  return { index: cursor, token: tokens[cursor], skippedComment };
 }
 
 function tokenize(source) {

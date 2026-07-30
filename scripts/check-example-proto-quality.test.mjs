@@ -98,6 +98,132 @@ service FormService { rpc Submit(Form) returns (Form); }
     expect(text).toContain("missing-comment rpc:Submit#1");
   });
 
+  it("requires comments before declaration tokens rather than between declaration tokens", () => {
+    const root = fixture();
+    writeModel(
+      root,
+      "placement",
+      `syntax = "proto3";
+package spine.example.placement.v1;
+message // Describes the model.
+Model {
+  string // Stores the value.
+  value = 1;
+}
+`,
+    );
+
+    const text = checkExampleProtoQuality(root).join("\n");
+    expect(text).toContain("missing-comment message:Model#1");
+    expect(text).toContain("missing-comment field:value#1");
+  });
+
+  it("rejects comments inside RPC, enum-value, and field declaration prefixes", () => {
+    const root = fixture();
+    writeModel(
+      root,
+      "prefixes",
+      `syntax = "proto3";
+package spine.example.prefixes.v1;
+// Defines a request model.
+message Request {}
+// Defines a response model.
+message Response {}
+// Defines a model with fields.
+message Model {
+  // Documents a repeated field value.
+  repeated // Splits the field declaration.
+  string tags = 1;
+  // Documents an optional field value.
+  optional // Splits the field declaration.
+  string alias = 2;
+  // Documents a map field value.
+  map // Splits the field declaration.
+  <string, string> labels = 3;
+  // Documents a map key field value.
+  map< // Splits the map key declaration.
+  string, string> labels_by_key = 4;
+  // Documents a map separator field value.
+  map<string // Splits the map separator declaration.
+  , string> labels_by_separator = 5;
+  // Documents a map value field value.
+  map<string, // Splits the map value declaration.
+  string> labels_by_value = 6;
+  // Documents a map name field value.
+  map<string, string> // Splits the map field name declaration.
+  labels_by_name = 7;
+  // Documents a map assignment field value.
+  map<string, string> labels_by_assignment // Splits the map assignment declaration.
+  = 8;
+  // Documents a qualified first boundary value.
+  example // Splits the field declaration.
+  .prefixes.v1.Request owner_after_first = 8;
+  // Documents a qualified second boundary value.
+  example. // Splits the field declaration.
+  prefixes.v1.Request owner_after_second = 9;
+  // Documents a qualified third boundary value.
+  example.prefixes // Splits the field declaration.
+  .v1.Request owner_after_third = 10;
+  // Documents a qualified fourth boundary value.
+  example.prefixes.v1. // Splits the field declaration.
+  Request owner_after_fourth = 11;
+  // Documents a qualified field name value.
+  example.prefixes.v1.Request // Splits the field declaration.
+  owner_after_name = 12;
+}
+// Defines a message state enum.
+enum State {
+  // Documents the open state.
+  STATE_OPEN // Splits the enum value declaration.
+  = 0;
+}
+// Defines a service endpoint.
+service ModelService {
+  // Documents the model request.
+  rpc // Splits the RPC declaration.
+  Submit(Request) returns (Response);
+}
+`,
+    );
+
+    const text = checkExampleProtoQuality(root).join("\n");
+    expect(text).toContain("missing-comment field:tags#1");
+    expect(text).toContain("missing-comment field:alias#1");
+    expect(text).toContain("missing-comment field:labels#1");
+    expect(text).toContain("missing-comment field:labels_by_key#1");
+    expect(text).toContain("missing-comment field:labels_by_separator#1");
+    expect(text).toContain("missing-comment field:labels_by_value#1");
+    expect(text).toContain("missing-comment field:labels_by_name#1");
+    expect(text).toContain("missing-comment field:labels_by_assignment#1");
+    expect(text).toContain("missing-comment field:owner_after_first#1");
+    expect(text).toContain("missing-comment field:owner_after_second#1");
+    expect(text).toContain("missing-comment field:owner_after_third#1");
+    expect(text).toContain("missing-comment field:owner_after_fourth#1");
+    expect(text).toContain("missing-comment field:owner_after_name#1");
+    expect(text).toContain("missing-comment enum-value:STATE_OPEN#1");
+    expect(text).toContain("missing-comment rpc:Submit#1");
+  });
+
+  it("accepts ordinary whitespace within a declaration after a leading comment", () => {
+    const root = fixture();
+    writeModel(
+      root,
+      "whitespace",
+      `syntax = "proto3";
+package spine.example.whitespace.v1;
+// Defines a valid whitespace-tolerant model.
+message
+Model {
+  // Stores the value in this model.
+  string
+  value = 1;
+}
+`,
+    );
+
+    expect(checkExampleProtoQuality(root)).toEqual([]);
+  });
+
   it("excludes explicitly copied sources while rejecting path-only provenance claims", () => {
     const root = fixture();
     const source = `syntax = "proto3";\npackage spine.example.copied.v1;\nmessage UnchangedCopiedNameWithFiveParts {}\n`;
