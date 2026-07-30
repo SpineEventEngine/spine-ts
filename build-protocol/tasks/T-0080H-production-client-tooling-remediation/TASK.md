@@ -2,7 +2,7 @@
 
 ## Status
 
-Planned.
+Complete.
 
 ## Parent And Dependencies
 
@@ -249,3 +249,17 @@ change; otherwise standard.
   those exact comments on isolated branch `task/T-0080H10-final-docs`.
 - No runtime, type, ledger, guide, checker, commit, or push changes are allowed.
   Focused package gates and documentation/API re-review precede integration.
+
+## Completion
+
+- Client-node query and generated-column APIs, delivery-client operations,
+  BlackBox testing internals, and Proto tooling use cohesive documented owners.
+- The TSDoc checker distinguishes bare `void` from asynchronous
+  `Promise<void>` completion and passes 39 focused tests.
+- T-0080H TSDoc, standalone-function, and semantic-name ledgers are exactly
+  zero. Canonical cleanup enforcement passes.
+- Post-integration generation/cleanliness, four-package build, 19 files / 216
+  Vitest tests, 21 native Node tests, lint, format, and diff integrity pass.
+- All relevant review lanes are closed with recorded dispositions. The
+  integrated umbrella commit `e85e1550` is pushed to origin; final record commit
+  and later T-0080O/main integration remain orchestrator-owned.
