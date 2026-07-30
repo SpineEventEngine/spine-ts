@@ -265,3 +265,20 @@ behavior changes; otherwise standard.
   focused files/11 tests, and may not change the completed README/ledgers.
 - Documentation and API review reopen only if the correction changes claims or
   declarations beyond checker-conforming TSDoc.
+
+## N5 Pre-review Verification And Review Dispatch
+
+- Exact example Proto-quality and cleanup/structure enforcement pass with
+  empty TSDoc, Proto-comment, and TypeScript-structure debt and exactly four
+  approved standalone necessities.
+- Prettier passes for all seven changed README/source/ledger files, and
+  `git diff --check` is clean.
+- The isolated worktree cannot execute the focused Vitest suite because its
+  workspace dependency links resolve outside this branch; zero tests were
+  collected. The same exact three-file/11-test command must run after
+  integration into the dependency-equipped umbrella worktree.
+- The existing documentation reviewer is dispatched explicitly with
+  `gpt-5.6-luna` and medium reasoning over README factual accuracy, command
+  usability, and the six corrected TSDoc rows. Style, API/Proto, and
+  reliability remain closed because this batch changes only checker-conforming
+  documentation and exact ledgers.
