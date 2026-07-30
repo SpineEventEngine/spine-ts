@@ -117,3 +117,85 @@ public example workflow code moves; otherwise standard.
   contracts.
 - Splitter runtime self-introspection was unavailable for the explicit
   Sol/high profile, with no visible mismatch.
+
+## Implementation Wave Completion
+
+- K1 changes only authorization policy/source tests. Room-filter evaluation is
+  private policy behavior, malformed input fails closed, 13 TSDoc rows and two
+  standalone rows are resolved, and build, 12 tests, lint, format, and diff
+  checks pass.
+- K2 changes only app runtime/validation, two focused tests, app README, and the
+  allowed interop startup consumer. `ChatApplication` owns context/startup,
+  `ChatMessageValidation` owns private checks, trivial `Any` wrappers are gone,
+  the long name is shortened, and build, 29 tests, lint, format, generated
+  cleanliness, and diff checks pass.
+- K3 changes only web UI, browser fixture, and web README. Cohesive view/post/
+  notice and fixture/queue owners replace standalone behavior while named React
+  components remain. Build, 19 focused tests, three Playwright browsers,
+  formatting, TypeDoc with zero errors, and diff checks pass.
+- The only checker failures are the exact stale K rows intentionally reserved
+  for K4 reconciliation. No writer changed Proto/model/registry/manifests/
+  packages/lock/generated output or another writer's ownership.
+- Every writer was explicitly `gpt-5.6-terra` / medium. Runtime
+  self-introspection was unavailable, with no visible mismatch.
+
+## Complete Review Wave Assignments
+
+- Style/maintainability: existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across all three endpoints and cohesive ownership.
+- Documentation: existing immutable reviewer configured
+  `gpt-5.6-luna` / medium, across TSDoc and app/web guides.
+- TypeScript/API docs: existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across public app/web contracts and compatibility.
+- Performance/reliability: existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across authorization bounds, server lifecycle,
+  subscriptions, abort fencing, Strict Mode, browser transport, and shutdown.
+- All reviewers are read-only, inspect the three isolated worktrees as one
+  complete wave, and may not spawn subagents. Runtime metadata or its honest
+  limitation is required before accepting results.
+
+## Complete Review Wave Findings
+
+- Documentation finds two P2 corrections: K1 `authorize()` must describe its
+  boolean result rather than implying conditional resolution, and exported K3
+  `ChatBrowserApp` needs explicit `@param props` and `@returns`.
+- Style/maintainability finds one P2 correction: replace the static,
+  single-method `ChatSubscriptionNotice` facade with an idiomatic named
+  function-valued React component.
+- TypeScript/API and performance/reliability are clean. Public replacements,
+  registry/contracts, authorization bounds, concurrency, Projection delivery,
+  lifecycle, subscription, fencing, browser, and shutdown behavior are
+  accepted.
+- One correction batch returns to the original K1 and K3 existing implementers,
+  each explicitly `gpt-5.6-terra` / medium. K2 remains closed. Only
+  documentation re-review applies to K1; documentation and
+  style/maintainability re-review apply to K3.
+- Reviewer runtime introspection was unavailable for configured Luna/medium and
+  Terra/high profiles, with no visible mismatch.
+
+## Correction Batch Completion
+
+- K1 now documents that authorization resolves to true when allowed and false
+  otherwise. Twelve policy tests, formatting, source TSDoc, and diff checks
+  pass with no runtime change.
+- K3 now documents `ChatBrowserApp`'s `props` and `ReactElement` result and uses
+  a named function-valued `ChatSubscriptionNotice` React component with
+  unchanged status/alert DOM behavior. Typebuild, 18 component tests,
+  formatting, source TSDoc, and diff checks pass.
+- Both correction writers were the original existing implementers, explicitly
+  Terra/medium. Runtime introspection was unavailable with no mismatch.
+- Re-review assigns immutable Luna/medium documentation across K1/K3 and
+  explicit Terra/high style/maintainability for K3 only. API and reliability
+  remain closed.
+
+## Endpoint Acceptance
+
+- Documentation re-review is clean for K1 and K3.
+- Style/maintainability re-review is clean for K3's named notice component.
+- All four canonical review concerns are closed across the complete
+  implementation wave. Stale K ledgers and the family README remain K4
+  responsibilities after integration.
+- Reviewer runtime introspection remained unavailable for configured
+  Luna/medium and Terra/high profiles, with no visible mismatch.
+- K1, K2, and K3 are accepted for scoped commit, immediate branch push, and
+  integration into `task/T-0080K-chat-app-web`.
