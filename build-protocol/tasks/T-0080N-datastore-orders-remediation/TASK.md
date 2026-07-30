@@ -282,3 +282,16 @@ behavior changes; otherwise standard.
   usability, and the six corrected TSDoc rows. Style, API/Proto, and
   reliability remain closed because this batch changes only checker-conforming
   documentation and exact ledgers.
+
+## N5 Documentation Review Acceptance
+
+- Documentation review is clean for the README's composition, topology,
+  command, load-level, pooling/wave, timing, abort/cleanup, and evidence-limit
+  claims and for all corrected TSDoc.
+- The reviewer confirms three empty debt ledgers and exactly four accurate
+  standalone necessities.
+- The immutable reviewer profile is `documentation_reviewer`,
+  `gpt-5.6-luna` / medium. Runtime self-introspection is unavailable, with no
+  visible profile mismatch.
+- N5 is accepted for commit and immediate push. The focused 11-test runtime
+  gate remains due after integration into the dependency-equipped umbrella.

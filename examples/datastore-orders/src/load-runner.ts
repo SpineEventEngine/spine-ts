@@ -67,7 +67,7 @@ const metadata = new SignalMetadata();
 const maximumSharedSessions = 16;
 const maximumConcurrentUsers = 10;
 
-/** Runs independent clients through the generated command, query, and subscription services.
+/** Executes independent clients through the generated command, query, and subscription services.
  *
  * @param options - Server and user-count settings for the run.
  * @returns Aggregate successes, failures, latency percentiles, and throughput.
