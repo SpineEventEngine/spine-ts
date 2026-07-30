@@ -21,26 +21,41 @@ const defaultOperations: ManifestFileOperations = {
   },
 };
 
-/** Replaces a manifest only after complete content exists in a unique sibling staging file. */
-export function writeManifestAtomically(
-  target: string,
-  content: string,
-  operations: Partial<ManifestFileOperations> = {},
-): void {
-  const fileOperations = { ...defaultOperations, ...operations };
-  const staging = join(
-    dirname(target),
-    `.${basename(target)}.${String(process.pid)}.${crypto.randomUUID()}.tmp`,
-  );
-  try {
-    fileOperations.writeFile(staging, content);
-    fileOperations.rename(staging, target);
-  } catch (error) {
+/** Publishes manifest files through complete sibling staging files. */
+export const ManifestFile: Readonly<{
+  writeAtomically(
+    target: string,
+    content: string,
+    operations?: Partial<ManifestFileOperations>,
+  ): void;
+}> = Object.freeze({
+  /** Replaces a manifest only after complete content exists in a unique sibling staging file.
+   *
+   * @param target The manifest file to replace.
+   * @param content The complete manifest content.
+   * @param operations Optional filesystem seams used by failure tests.
+   * @returns Nothing.
+   */
+  writeAtomically(
+    target: string,
+    content: string,
+    operations: Partial<ManifestFileOperations> = {},
+  ): void {
+    const fileOperations = { ...defaultOperations, ...operations };
+    const staging = join(
+      dirname(target),
+      `.${basename(target)}.${String(process.pid)}.${crypto.randomUUID()}.tmp`,
+    );
     try {
-      fileOperations.remove(staging);
-    } catch {
-      // Preserve the primary write or rename failure.
+      fileOperations.writeFile(staging, content);
+      fileOperations.rename(staging, target);
+    } catch (error) {
+      try {
+        fileOperations.remove(staging);
+      } catch {
+        // Preserves the primary write or rename failure.
+      }
+      throw error;
     }
-    throw error;
-  }
-}
+  },
+});

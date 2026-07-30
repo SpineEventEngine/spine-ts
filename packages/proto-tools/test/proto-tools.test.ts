@@ -17,16 +17,33 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { writeManifestAtomically } from "../src/io/atomic-manifest.js";
-import { createManifest, readConfig, readManifest } from "../src/index.js";
+import { ManifestFile } from "../src/io/atomic-manifest.js";
+import { ProtoConfig, ProtoManifest } from "../src/index.js";
 import {
-  composeApplication,
-  generateModel,
+  ProtoGeneration,
   type GenerationLockOperations,
   type GenerationOperations,
-  probeGenerationClaimLiveness,
 } from "../src/generation/generator.js";
-import { resolveModelGraph } from "../src/model/model-graph.js";
+import { ModelGraph } from "../src/model/model-graph.js";
+
+const readConfig = (...args: Parameters<typeof ProtoConfig.read>) => ProtoConfig.read(...args);
+const readManifest = (...args: Parameters<typeof ProtoManifest.read>) =>
+  ProtoManifest.read(...args);
+const createManifest = (...args: Parameters<typeof ProtoManifest.create>) =>
+  ProtoManifest.create(...args);
+const writeManifestAtomically = (...args: Parameters<typeof ManifestFile.writeAtomically>) => {
+  ManifestFile.writeAtomically(...args);
+};
+const resolveModelGraph = (...args: Parameters<typeof ModelGraph.resolve>) =>
+  ModelGraph.resolve(...args);
+const generateModel = (...args: Parameters<typeof ProtoGeneration.generate>) => {
+  ProtoGeneration.generate(...args);
+};
+const composeApplication = (...args: Parameters<typeof ProtoGeneration.compose>) => {
+  ProtoGeneration.compose(...args);
+};
+const probeGenerationClaimLiveness = (...args: Parameters<typeof ProtoGeneration.claimLiveness>) =>
+  ProtoGeneration.claimLiveness(...args);
 
 function packageDirectory(name: string): string {
   const directory = mkdtempSync(join(tmpdir(), "spine-proto-tools-"));

@@ -10,6 +10,22 @@ spine-proto compose  # application package only
 spine-proto handlers # application package only
 ```
 
+The binary is the primary public API. Programs that need to inspect the same
+version-one files can use the compact root API without reimplementing its path
+and package validation:
+
+```ts
+import { ProtoConfig, ProtoManifest } from "@spine-event-engine/proto-tools";
+
+const config = ProtoConfig.read(process.cwd());
+const manifest = ProtoManifest.read(process.cwd());
+const nextManifest = ProtoManifest.create(process.cwd()); // model packages only
+```
+
+`ProtoConfig.read()` returns either model or application configuration selected
+by `mode`. `ProtoManifest.create()` discovers model-owned Proto files unless an
+explicit, package-relative file list is supplied.
+
 ## Model packages: `generate`
 
 A model package owns canonical `.proto` files and exports one `ProtoModule`.
