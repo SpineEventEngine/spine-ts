@@ -67,3 +67,16 @@ behavior changes; otherwise standard.
   `git diff --check`.
 - Style/maintainability, documentation, TypeScript/API docs, and
   performance/reliability are relevant when persistence/load ownership moves.
+
+## Planning Dispatch
+
+- T-0080N starts after completed and pushed T-0080M commit `28c0f379`.
+- Authored Proto/public contracts plus persistence/load lifecycle make planning
+  high-risk. The existing requirements splitter is explicitly assigned
+  `gpt-5.6-sol` / high.
+- The splitter is read-only, may not spawn, and must inventory the exact 79
+  TSDoc, 13 standalone-function, 54 Proto-comment, and one structural row;
+  freeze wire/package/generated/Datastore/query/load/cleanup invariants; and
+  propose bounded non-overlapping ownership and exact gates.
+- Both model and reasoning fields are explicit. Runtime metadata or its honest
+  limitation is required.
