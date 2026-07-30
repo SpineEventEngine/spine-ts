@@ -12,10 +12,10 @@ import {
   PageOfMessagesSchema,
   OptionalInboxMessageSchema,
   ShardInfoListSchema,
-  LiquorPickUpOutcomeSchema,
+  LiquorPickUpOutcomeSchema as PickUpOutcomeSchema,
   ExpiredSessionsReleasedSchema,
   PickUpShardSchema,
-  ReadMessagesSinceTimeSchema,
+  ReadMessagesSinceTimeSchema as ReadMessagesSchema,
   RemoveMessageSchema,
   RemoveMessagesSchema,
   ReleaseExpiredSessionsSchema,
@@ -39,33 +39,7 @@ import {
   type RemoteShardSession,
 } from "./types.js";
 import { ShardObservationStream } from "./shard-observation.js";
-import {
-  backoff,
-  bounded,
-  callOptions,
-  decodeInboxMessage,
-  decodePickedUpSession,
-  decodeReleasedSession,
-  decodeShardObservation,
-  decodeShardUpdate,
-  encodeDuration,
-  encodeInboxBatch,
-  encodeInboxMessage,
-  encodeMessageId,
-  encodeShard,
-  encodeTimestamp,
-  encodeWorker,
-  normalizeOptions,
-  pageSize,
-  protocol,
-  requestBytes,
-  responseBytes,
-  retries,
-  snapshotShard,
-  timeout,
-  validBaseUrl,
-  validateAlreadyPickedUp,
-} from "../wire/codec.js";
+import { DeliveryMessageCodec, DeliveryRequestCodec, DeliveryShardCodec } from "../wire/codec.js";
 
 export {
   DeliveryOutcomeUnknownError,
@@ -92,7 +66,7 @@ export type {
   RemovalQuarantineRecord,
 } from "./types.js";
 
-/** Node delivery-server client over a caller-owned Connect transport. */
+/** Provides a Node client for the frozen delivery-server gRPC API. */
 export class DeliveryClient {
   readonly #inbox: ReturnType<typeof createClient<typeof InboxService>>;
   readonly #shards: ReturnType<typeof createClient<typeof ShardService>>;
@@ -112,12 +86,14 @@ export class DeliveryClient {
     options: DeliveryClientOptions,
     onCloseOwnedTransport?: () => void,
   ) {
-    this.#pageSize = pageSize(options.pageSize ?? 100);
-    this.#readRetries = retries(options.readRetries ?? 0);
-    this.#retryBackoffMs = backoff(options.retryBackoffMs ?? 0);
-    this.#observationReconnects = retries(options.observationReconnects ?? 0);
-    this.#observationReconnectBackoffMs = backoff(options.observationReconnectBackoffMs ?? 0);
-    this.#observationBufferSize = bounded(
+    this.#pageSize = DeliveryRequestCodec.pageSize(options.pageSize ?? 100);
+    this.#readRetries = DeliveryRequestCodec.retries(options.readRetries ?? 0);
+    this.#retryBackoffMs = DeliveryRequestCodec.backoff(options.retryBackoffMs ?? 0);
+    this.#observationReconnects = DeliveryRequestCodec.retries(options.observationReconnects ?? 0);
+    this.#observationReconnectBackoffMs = DeliveryRequestCodec.backoff(
+      options.observationReconnectBackoffMs ?? 0,
+    );
+    this.#observationBufferSize = DeliveryRequestCodec.bounded(
       options.observationBufferSize ?? 100,
       1,
       1_000,
@@ -129,27 +105,36 @@ export class DeliveryClient {
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
   }
 
-  /** The bounded page size configured for this client. */
+  /** Gets the bounded page size configured for this client.
+   * @returns The maximum number of messages requested by default.
+   */
   get pageSize(): number {
     return this.#pageSize;
   }
 
-  /** Create a client over a caller-owned standard Connect transport. */
+  /** Creates a client over a caller-owned standard Connect transport.
+   * @param transport Sends requests to the remote delivery service.
+   * @param options Configures bounded reads and observations.
+   * @returns A client that never closes the supplied transport.
+   */
   static usingTransport(transport: Transport, options: DeliveryClientOptions = {}): DeliveryClient {
     return new DeliveryClient(transport, options);
   }
 
   /**
-   * Connect to a JVM delivery server with a client-owned HTTP/2 gRPC session.
+   * Connects to a JVM delivery server with a client-owned HTTP/2 gRPC session.
    *
    * The URL and options are validated before opening the session. `close()` is
    * synchronous: it aborts active calls and the owned session immediately; it
    * does not wait for remote stream cleanup. Use {@link usingTransport} when
    * the caller owns the transport lifecycle.
+   * @param baseUrl Supplies the absolute HTTP(S) delivery-server origin.
+   * @param options Configures bounded reads and observations.
+   * @returns A client that aborts its owned session when closed.
    */
   static connectTo(baseUrl: string, options: DeliveryClientOptions = {}): DeliveryClient {
-    const normalized = normalizeOptions(options);
-    validBaseUrl(baseUrl);
+    const normalized = DeliveryRequestCodec.normalize(options);
+    DeliveryRequestCodec.baseUrl(baseUrl);
     const sessions = new Http2SessionManager(baseUrl);
     return new DeliveryClient(
       createGrpcTransport({
@@ -165,21 +150,29 @@ export class DeliveryClient {
     );
   }
 
-  /** Read validated detached Admin observations; callers may mutate returned values safely. */
+  /** Reads validated detached Admin observations.
+   * @param options Bounds or cancels the read.
+   * @returns Detached observations that callers may safely mutate.
+   */
   async shardSnapshot(
     options: DeliveryFindOneOptions = {},
   ): Promise<readonly RemoteShardObservation[]> {
     const request = create(EmptySchema);
-    requestBytes(EmptySchema, request);
+    DeliveryRequestCodec.requestBytes(EmptySchema, request);
     const response = await this.#read(options, (signal, timeoutMs) =>
-      this.#admin.getShardInfo(request, callOptions(signal, timeoutMs)),
+      this.#admin.getShardInfo(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
-    responseBytes(ShardInfoListSchema, response);
-    if (response.shards.length > MAX_DELIVERY_TRACKED_SHARDS) throw protocol();
-    return Object.freeze(response.shards.map(decodeShardObservation));
+    DeliveryRequestCodec.responseBytes(ShardInfoListSchema, response);
+    if (response.shards.length > MAX_DELIVERY_TRACKED_SHARDS) throw DeliveryRequestCodec.protocol();
+    return Object.freeze(
+      response.shards.map((value) => DeliveryShardCodec.decodeObservation(value)),
+    );
   }
 
-  /** Start an ACK-gated bounded Admin shard-update observation stream. */
+  /** Starts an ACK-gated bounded Admin shard-update observation stream.
+   * @param options Bounds or cancels stream setup and lifetime.
+   * @returns A cancellable stream of detached shard observations.
+   */
   observeShardUpdates(options: DeliveryFindOneOptions = {}): DeliveryShardObservationStream {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
@@ -191,16 +184,19 @@ export class DeliveryClient {
     this.#activeReads.add(controller);
     return new ShardObservationStream({
       signal: controller.signal,
-      timeoutMs: timeout(options.timeoutMs ?? 30_000),
+      timeoutMs: DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000),
       capacity: this.#observationBufferSize,
       reconnects: this.#observationReconnects,
       reconnectBackoffMs: this.#observationReconnectBackoffMs,
       open: (signal, timeoutMs) =>
-        this.#admin.subscribeToShardUpdates(create(EmptySchema), callOptions(signal, timeoutMs)),
+        this.#admin.subscribeToShardUpdates(
+          create(EmptySchema),
+          DeliveryRequestCodec.callOptions(signal, timeoutMs),
+        ),
       acknowledge: (frame) => frame.value.case === "created" && frame.value.value,
       decodeUpdate: (frame) => {
-        if (frame.value.case !== "update") throw protocol();
-        return decodeShardUpdate(frame.value.value);
+        if (frame.value.case !== "update") throw DeliveryRequestCodec.protocol();
+        return DeliveryShardCodec.decodeUpdate(frame.value.value);
       },
       finish: () => {
         options.signal?.removeEventListener("abort", callerAbort);
@@ -212,23 +208,27 @@ export class DeliveryClient {
     });
   }
 
-  /** Find and decode one inbox message, or `undefined` when it is absent. */
+  /** Finds and decodes one inbox message.
+   * @param id Identifies the inbox message and its shard.
+   * @param options Bounds or cancels the safe read.
+   * @returns The detached message, or `undefined` when absent.
+   */
   async findOne(
     id: InboxMessageId,
     options: DeliveryFindOneOptions = {},
   ): Promise<InboxMessage | undefined> {
     const request = create(InboxMessageIdSchema, {
-      uuid: encodeMessageId(id),
-      index: encodeShard(id.shard),
+      uuid: DeliveryMessageCodec.encodeId(id),
+      index: DeliveryShardCodec.encode(id.shard),
     });
-    requestBytes(InboxMessageIdSchema, request);
+    DeliveryRequestCodec.requestBytes(InboxMessageIdSchema, request);
     const response = await this.#read(options, (signal, timeoutMs) =>
       this.#inbox.findOne(request, { timeoutMs, signal }),
     );
-    responseBytes(OptionalInboxMessageSchema, response);
+    DeliveryRequestCodec.responseBytes(OptionalInboxMessageSchema, response);
     return response.message === undefined
       ? undefined
-      : decodeInboxMessage(response.message, id.shard);
+      : DeliveryMessageCodec.decode(response.message, id.shard);
   }
 
   /**
@@ -236,167 +236,210 @@ export class DeliveryClient {
    *
    * A server rejects an encoded response above 4 MiB with `RESOURCE_EXHAUSTED`;
    * retry this safe read with a smaller `pageSize`.
+   * @param shardIndex Identifies the shard to read.
+   * @param options Supplies page continuation, size, and read bounds.
+   * @returns Detached messages in remote timestamp order.
    */
   async readPage(
     shardIndex: ShardIndex,
     options: DeliveryReadPageOptions = {},
   ): Promise<readonly InboxMessage[]> {
-    const size = options.pageSize === undefined ? this.#pageSize : pageSize(options.pageSize);
+    const size =
+      options.pageSize === undefined
+        ? this.#pageSize
+        : DeliveryRequestCodec.pageSize(options.pageSize);
     const sinceWhen =
-      options.sinceWhen === undefined ? undefined : encodeTimestamp(options.sinceWhen);
-    const request = create(ReadMessagesSinceTimeSchema, {
-      shard: encodeShard(shardIndex),
+      options.sinceWhen === undefined
+        ? undefined
+        : DeliveryRequestCodec.timestamp(options.sinceWhen);
+    const request = create(ReadMessagesSchema, {
+      shard: DeliveryShardCodec.encode(shardIndex),
       pageSize: size,
       ...(sinceWhen === undefined ? {} : { sinceWhen }),
     });
-    requestBytes(ReadMessagesSinceTimeSchema, request);
+    DeliveryRequestCodec.requestBytes(ReadMessagesSchema, request);
     const response = await this.#read(options, (signal, timeoutMs) =>
       this.#inbox.findManyInShard(request, { timeoutMs, signal }),
     );
-    responseBytes(PageOfMessagesSchema, response);
-    if (response.message.length > size) throw protocol();
+    DeliveryRequestCodec.responseBytes(PageOfMessagesSchema, response);
+    if (response.message.length > size) throw DeliveryRequestCodec.protocol();
     return Object.freeze(
-      response.message.map((message) => decodeInboxMessage(message, shardIndex)),
+      response.message.map((message) => DeliveryMessageCodec.decode(message, shardIndex)),
     );
   }
 
-  /** Find and decode the newest pending message in a shard, if one exists. */
+  /** Finds and decodes the newest pending message in a shard.
+   * @param shardIndex Identifies the shard to inspect.
+   * @param options Bounds or cancels the safe read.
+   * @returns The detached newest message, or `undefined` when absent.
+   */
   async newestPending(
     shardIndex: ShardIndex,
     options: DeliveryFindOneOptions = {},
   ): Promise<InboxMessage | undefined> {
-    const request = encodeShard(shardIndex);
-    requestBytes(ShardIndexSchema, request);
+    const request = DeliveryShardCodec.encode(shardIndex);
+    DeliveryRequestCodec.requestBytes(ShardIndexSchema, request);
     const response = await this.#read(options, (signal, timeoutMs) =>
       this.#inbox.newestMessageToDeliver(request, { timeoutMs, signal }),
     );
-    responseBytes(OptionalInboxMessageSchema, response);
+    DeliveryRequestCodec.responseBytes(OptionalInboxMessageSchema, response);
     return response.message === undefined
       ? undefined
-      : decodeInboxMessage(response.message, shardIndex);
+      : DeliveryMessageCodec.decode(response.message, shardIndex);
   }
 
-  /** Write one message with exactly one delivery-server RPC attempt. */
+  /** Writes one message with exactly one delivery-server RPC attempt.
+   * @param message Supplies the message to write.
+   * @param options Bounds or cancels the mutation.
+   */
   async writeOne(message: InboxMessage, options: DeliveryMutationOptions = {}): Promise<void> {
-    const wire = encodeInboxMessage(message);
+    const wire = DeliveryMessageCodec.encode(message);
     const request = create(WriteMessageSchema, { message: wire });
-    requestBytes(WriteMessageSchema, request);
+    DeliveryRequestCodec.requestBytes(WriteMessageSchema, request);
     await this.#mutation("WRITE_ONE", [message.id.value], options, (signal, timeoutMs) =>
-      this.#inbox.writeOne(request, callOptions(signal, timeoutMs)),
+      this.#inbox.writeOne(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
   }
 
-  /** Remove one message with exactly one delivery-server RPC attempt. */
+  /** Removes one message with exactly one delivery-server RPC attempt.
+   * @param message Supplies the message to remove.
+   * @param options Bounds or cancels the mutation.
+   */
   async removeOne(message: InboxMessage, options: DeliveryMutationOptions = {}): Promise<void> {
-    const wire = encodeInboxMessage(message);
+    const wire = DeliveryMessageCodec.encode(message);
     const request = create(RemoveMessageSchema, { message: wire });
-    requestBytes(RemoveMessageSchema, request);
+    DeliveryRequestCodec.requestBytes(RemoveMessageSchema, request);
     await this.#mutation("REMOVE_ONE", [message.id.value], options, (signal, timeoutMs) =>
-      this.#inbox.removeOne(request, callOptions(signal, timeoutMs)),
+      this.#inbox.removeOne(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
   }
 
-  /** Write one bounded same-shard batch with exactly one delivery-server RPC attempt. */
+  /** Writes one bounded same-shard batch with exactly one delivery-server RPC attempt.
+   * @param messages Supplies the messages to write.
+   * @param options Bounds or cancels the mutation.
+   */
   async writeMany(
     messages: readonly InboxMessage[],
     options: DeliveryMutationOptions = {},
   ): Promise<void> {
-    const batch = encodeInboxBatch(messages);
+    const batch = DeliveryMessageCodec.encodeBatch(messages);
     const request = create(WriteMessagesSchema, { shard: batch.shard, message: batch.messages });
-    requestBytes(WriteMessagesSchema, request);
+    DeliveryRequestCodec.requestBytes(WriteMessagesSchema, request);
     await this.#mutation("WRITE_MANY", batch.ids, options, (signal, timeoutMs) =>
-      this.#inbox.writeMany(request, callOptions(signal, timeoutMs)),
+      this.#inbox.writeMany(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
   }
 
-  /** Remove one bounded same-shard batch with exactly one delivery-server RPC attempt. */
+  /** Removes one bounded same-shard batch with exactly one delivery-server RPC attempt.
+   * @param messages Supplies the messages to remove.
+   * @param options Bounds or cancels the mutation.
+   */
   async removeMany(
     messages: readonly InboxMessage[],
     options: DeliveryMutationOptions = {},
   ): Promise<void> {
-    const batch = encodeInboxBatch(messages);
+    const batch = DeliveryMessageCodec.encodeBatch(messages);
     const request = create(RemoveMessagesSchema, { shard: batch.shard, message: batch.messages });
-    requestBytes(RemoveMessagesSchema, request);
+    DeliveryRequestCodec.requestBytes(RemoveMessagesSchema, request);
     await this.#mutation("REMOVE_MANY", batch.ids, options, (signal, timeoutMs) =>
-      this.#inbox.removeMany(request, callOptions(signal, timeoutMs)),
+      this.#inbox.removeMany(request, DeliveryRequestCodec.callOptions(signal, timeoutMs)),
     );
   }
 
-  /** Pick up a shard once, returning a detached exclusive session safe for caller mutation. */
+  /** Picks up a shard once.
+   * @param shardIndex Identifies the shard to acquire.
+   * @param workerId Identifies the worker requesting exclusive ownership.
+   * @param options Bounds or cancels the mutation.
+   * @returns A detached exclusive session, or `undefined` when held elsewhere.
+   */
   async pickUp(
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<RemoteShardSession | undefined> {
-    const requestedShard = encodeShard(shardIndex);
-    const requestedWorker = encodeWorker(workerId);
+    const requestedShard = DeliveryShardCodec.encode(shardIndex);
+    const requestedWorker = DeliveryShardCodec.encodeWorker(workerId);
     const response = await this.#mutation(
       "PICK_UP_SHARD",
-      [snapshotShard(shardIndex)],
+      [DeliveryShardCodec.snapshot(shardIndex)],
       options,
       (signal, timeoutMs) => {
         const request = create(PickUpShardSchema, {
           shard: requestedShard,
           worker: requestedWorker,
         });
-        requestBytes(PickUpShardSchema, request);
-        return this.#shards.pickShard(request, callOptions(signal, timeoutMs));
+        DeliveryRequestCodec.requestBytes(PickUpShardSchema, request);
+        return this.#shards.pickShard(request, DeliveryRequestCodec.callOptions(signal, timeoutMs));
       },
     );
-    responseBytes(LiquorPickUpOutcomeSchema, response);
+    DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response);
     if (response.value.case === "alreadyPickedUp") {
-      validateAlreadyPickedUp(response.value.value, shardIndex);
+      DeliveryShardCodec.validatePicked(response.value.value, shardIndex);
       return undefined;
     }
-    if (response.value.case !== "pickedUp") throw protocol();
-    return decodePickedUpSession(response.value.value, shardIndex, workerId);
+    if (response.value.case !== "pickedUp") throw DeliveryRequestCodec.protocol();
+    return DeliveryShardCodec.decodePicked(response.value.value, shardIndex, workerId);
   }
 
-  /** Release an exclusive shard session once. */
+  /** Releases an exclusive shard session once.
+   * @param value Supplies the session to release.
+   * @param options Bounds or cancels the mutation.
+   */
   async release(value: RemoteShardSession, options: DeliveryMutationOptions = {}): Promise<void> {
-    const sessionShard = encodeShard(value.shard);
-    const sessionWorker = encodeWorker(value.worker);
+    const sessionShard = DeliveryShardCodec.encode(value.shard);
+    const sessionWorker = DeliveryShardCodec.encodeWorker(value.worker);
     if (!(value.whenPicked instanceof Date) || Number.isNaN(value.whenPicked.getTime()))
       throw new TypeError("Delivery shard session is invalid.");
     await this.#mutation(
       "RELEASE_SHARD",
-      [snapshotShard(value.shard)],
+      [DeliveryShardCodec.snapshot(value.shard)],
       options,
       (signal, timeoutMs) => {
         const request = create(ReleaseShardSchema, { shard: sessionShard, worker: sessionWorker });
-        requestBytes(ReleaseShardSchema, request);
-        return this.#shards.releaseSession(request, callOptions(signal, timeoutMs));
+        DeliveryRequestCodec.requestBytes(ReleaseShardSchema, request);
+        return this.#shards.releaseSession(
+          request,
+          DeliveryRequestCodec.callOptions(signal, timeoutMs),
+        );
       },
     );
   }
 
-  /** Release and observe all sessions inactive for the supplied positive duration in milliseconds. */
+  /** Releases sessions inactive for a positive duration.
+   * @param inactivityMs Supplies the minimum inactivity in milliseconds.
+   * @param options Bounds or cancels the mutation.
+   * @returns Detached sessions released by the remote service.
+   */
   async releaseExpired(
     inactivityMs: number,
     options: DeliveryMutationOptions = {},
   ): Promise<readonly ReleasedShardSession[]> {
-    const inactivityPeriod = encodeDuration(inactivityMs);
+    const inactivityPeriod = DeliveryRequestCodec.duration(inactivityMs);
     const response = await this.#mutation(
       "RELEASE_EXPIRED",
       "ALL_SHARDS",
       options,
       (signal, timeoutMs) => {
         const request = create(ReleaseExpiredSessionsSchema, { inactivityPeriod });
-        requestBytes(ReleaseExpiredSessionsSchema, request);
-        return this.#shards.releaseSessions(request, callOptions(signal, timeoutMs));
+        DeliveryRequestCodec.requestBytes(ReleaseExpiredSessionsSchema, request);
+        return this.#shards.releaseSessions(
+          request,
+          DeliveryRequestCodec.callOptions(signal, timeoutMs),
+        );
       },
     );
     try {
-      responseBytes(ExpiredSessionsReleasedSchema, response);
-      if (response.shard.length > MAX_DELIVERY_TRACKED_SHARDS) throw protocol();
-      return Object.freeze(response.shard.map(decodeReleasedSession));
+      DeliveryRequestCodec.responseBytes(ExpiredSessionsReleasedSchema, response);
+      if (response.shard.length > MAX_DELIVERY_TRACKED_SHARDS)
+        throw DeliveryRequestCodec.protocol();
+      return Object.freeze(response.shard.map((value) => DeliveryShardCodec.decodeReleased(value)));
     } catch {
       throw new DeliveryOutcomeUnknownError("RELEASE_EXPIRED", "ALL_SHARDS");
     }
   }
 
   /**
-   * Permanently abort active reads and streams. This synchronous, idempotent
+   * Permanently aborts active reads and streams. This synchronous, idempotent
    * method also aborts an owned HTTP/2 session, but never closes injected transport.
    */
   close(): void {
@@ -413,7 +456,7 @@ export class DeliveryClient {
   ): Promise<T> {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
-    const timeoutMs = timeout(options.timeoutMs ?? 30_000);
+    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000);
     const controller = new AbortController();
     const abort = () => {
       controller.abort(options.signal?.reason);
@@ -427,9 +470,9 @@ export class DeliveryClient {
         } catch (error) {
           if (controller.signal.aborted) throw error;
           if (error instanceof ConnectError && error.code === Code.ResourceExhausted) throw error;
-          if (!retryableReadError(error)) throw protocol();
+          if (!DeliveryClient.#isRetryableReadError(error)) throw DeliveryRequestCodec.protocol();
           if (attempt === this.#readRetries) throw error;
-          await pause(this.#retryBackoffMs, controller.signal);
+          await DeliveryClient.#pause(this.#retryBackoffMs, controller.signal);
         }
       }
     } finally {
@@ -446,7 +489,7 @@ export class DeliveryClient {
   ): Promise<T> {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
-    const timeoutMs = timeout(options.timeoutMs ?? 30_000);
+    const timeoutMs = DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000);
     const controller = new AbortController();
     const abort = () => {
       controller.abort(options.signal?.reason);
@@ -456,31 +499,34 @@ export class DeliveryClient {
     try {
       return await invoke(controller.signal, timeoutMs);
     } catch (error) {
-      if (error instanceof ConnectError && error.code === Code.InvalidArgument) throw protocol();
+      if (error instanceof ConnectError && error.code === Code.InvalidArgument)
+        throw DeliveryRequestCodec.protocol();
       throw new DeliveryOutcomeUnknownError(operation, reconciliation);
     } finally {
       options.signal?.removeEventListener("abort", abort);
       this.#activeReads.delete(controller);
     }
   }
-}
 
-function pause(delay: number, signal: AbortSignal): Promise<void> {
-  if (delay === 0) return Promise.resolve();
-  return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, delay);
-    const abort = () => {
-      clearTimeout(timer);
-      reject(signal.reason instanceof Error ? signal.reason : new Error("Delivery read aborted."));
-    };
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
+  static #pause(delay: number, signal: AbortSignal): Promise<void> {
+    if (delay === 0) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal.removeEventListener("abort", abort);
+        resolve();
+      }, delay);
+      const abort = () => {
+        clearTimeout(timer);
+        reject(
+          signal.reason instanceof Error ? signal.reason : new Error("Delivery read aborted."),
+        );
+      };
+      signal.addEventListener("abort", abort, { once: true });
+    });
+  }
 
-function retryableReadError(error: unknown): boolean {
-  if (!(error instanceof ConnectError)) return true;
-  return error.code === Code.Unavailable || error.code === Code.DeadlineExceeded;
+  static #isRetryableReadError(error: unknown): boolean {
+    if (!(error instanceof ConnectError)) return true;
+    return error.code === Code.Unavailable || error.code === Code.DeadlineExceeded;
+  }
 }

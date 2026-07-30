@@ -5,28 +5,39 @@ import { ShardIndex } from "@spine-event-engine/server";
  * `nodeId` and `value` must be non-blank and together occupy at most 128 UTF-8 bytes.
  */
 export interface DeliveryWorkerId {
+  /** Identifies the application node that owns this worker. */
   readonly nodeId: string;
+  /** Identifies this worker within its application node. */
   readonly value: string;
 }
 
 /** A remote exclusive shard session that can be released by this client. */
 export interface RemoteShardSession {
+  /** Identifies the exclusive session kind accepted by the remote service. */
   readonly kind: "EXCLUSIVE";
+  /** Identifies the shard held by this session. */
   readonly shard: ShardIndex;
+  /** Identifies the worker that acquired this session. */
   readonly worker: DeliveryWorkerId;
+  /** Records when the remote service granted the session. */
   readonly whenPicked: Date;
 }
 
 /** A detached observation of a session released for inactivity. */
 export interface ReleasedShardSession extends RemoteShardSession {
+  /** Records when the remote service released the inactive session. */
   readonly whenReleased: Date;
 }
 
 /** A detached Admin observation of one remote delivery shard. */
 export interface RemoteShardObservation {
+  /** Identifies the observed shard. */
   readonly shard: ShardIndex;
+  /** Describes whether the shard is currently held. */
   readonly status: "PICKED" | "NOT_PICKED";
+  /** Records the most recent pickup when the server provides it. */
   readonly lastPicked?: Date;
+  /** Counts messages currently reported for the shard. */
   readonly messages: number;
 }
 
@@ -67,15 +78,28 @@ export class DeliveryQuarantineError extends Error {
 
 /** Caller-owned durable, capacity-bounded state for unknown remote removals. */
 export interface RemovalQuarantine {
+  /** Reads the recovery record for an inbox-message key.
+   * @param id Identifies the quarantined inbox message.
+   * @returns The persisted recovery record, when present.
+   */
   get(id: string): Promise<RemovalQuarantineRecord | undefined>;
+  /** Persists a compact recovery record before a removal can continue.
+   * @param record Describes the recovery state to persist.
+   */
   put(record: RemovalQuarantineRecord): Promise<void>;
+  /** Deletes the recovery record after its remote state is confirmed.
+   * @param id Identifies the quarantined inbox message.
+   */
   delete(id: string): Promise<void>;
 }
 
 /** Compact recovery state persisted before callback admission and removal. */
 export interface RemovalQuarantineRecord {
+  /** Identifies the quarantined inbox message. */
   readonly id: string;
+  /** Records whether callback admission or remote removal was reached. */
   readonly phase: "ADMITTED" | "REMOVING";
+  /** Stores the SHA-256 fingerprint of the admitted message. */
   readonly fingerprint: string;
 }
 
@@ -97,6 +121,7 @@ export class DeliveryShardObservationError extends Error {
 
 /** Raised when a write may have reached the delivery server but its result was lost. */
 export class DeliveryOutcomeUnknownError extends Error {
+  /** Identifies the mutation whose remote outcome could not be established. */
   readonly operation:
     | "WRITE_ONE"
     | "WRITE_MANY"
@@ -111,6 +136,10 @@ export class DeliveryOutcomeUnknownError extends Error {
     | { readonly kind: "OBSERVE_SHARD"; readonly scope: "ALL_SHARDS" }
   >;
 
+  /** Creates an error with the safe observation required before further action.
+   * @param operation Identifies the mutation with an unknown outcome.
+   * @param reconciliation Identifies messages or shards that must be observed.
+   */
   constructor(
     operation: DeliveryOutcomeUnknownError["operation"],
     reconciliation: readonly string[] | readonly ShardIndex[] | "ALL_SHARDS",
@@ -145,29 +174,42 @@ export class DeliveryOutcomeUnknownError extends Error {
 
 /** Options for constructing a delivery client. */
 export interface DeliveryClientOptions {
+  /** Limits messages requested in one read page. */
   readonly pageSize?: number;
+  /** Limits retries for safe read operations. */
   readonly readRetries?: number;
+  /** Delays each safe-read retry in milliseconds. */
   readonly retryBackoffMs?: number;
+  /** Limits reconnects for a shard-observation stream. */
   readonly observationReconnects?: number;
+  /** Delays each observation reconnect in milliseconds. */
   readonly observationReconnectBackoffMs?: number;
+  /** Limits queued observations and pending consumers. */
   readonly observationBufferSize?: number;
 }
 /** A cancellable, bounded stream of detached remote shard observations. */
 export interface DeliveryShardObservationStream extends AsyncIterable<RemoteShardObservation> {
+  /** Cancels the observation stream and releases its local listeners. */
   cancel(): void;
 }
 /** Options for one side-effect-free read operation. */
 export interface DeliveryFindOneOptions {
+  /** Cancels the operation when the caller no longer needs its result. */
   readonly signal?: AbortSignal;
+  /** Limits the operation duration in milliseconds. */
   readonly timeoutMs?: number;
 }
 /** A bounded read page request; the wire contract can continue only by timestamp. */
 export interface DeliveryReadPageOptions extends DeliveryFindOneOptions {
+  /** Continues a timestamp-ordered page after this received time. */
   readonly sinceWhen?: Date;
+  /** Limits messages requested for this page. */
   readonly pageSize?: number;
 }
 /** Options for one non-idempotent delivery mutation. */
 export interface DeliveryMutationOptions {
+  /** Cancels the mutation before its transport call completes. */
   readonly signal?: AbortSignal;
+  /** Limits the mutation duration in milliseconds. */
   readonly timeoutMs?: number;
 }

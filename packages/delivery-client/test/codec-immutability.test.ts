@@ -12,7 +12,7 @@ import {
   DeliveryQuarantineError,
   RemoteInbox,
 } from "../src/index.js";
-import { decodeInboxMessage } from "../src/wire/codec.js";
+import { DeliveryMessageCodec } from "../src/wire/codec.js";
 import { message, transport } from "./shared-fixtures.js";
 
 describe("delivery codec and immutable snapshots", () => {
@@ -31,13 +31,15 @@ describe("delivery codec and immutable snapshots", () => {
       }),
     });
 
-    expect(() => decodeInboxMessage(wire, ShardIndex.single())).toThrow(DeliveryProtocolError);
+    expect(() => DeliveryMessageCodec.decode(wire, ShardIndex.single())).toThrow(
+      DeliveryProtocolError,
+    );
   });
 
   it("isolates decoded mutable dates and payload bytes from later caller mutation", () => {
     const wire = message("command");
-    const first = decodeInboxMessage(wire, ShardIndex.single());
-    const second = decodeInboxMessage(wire, ShardIndex.single());
+    const first = DeliveryMessageCodec.decode(wire, ShardIndex.single());
+    const second = DeliveryMessageCodec.decode(wire, ShardIndex.single());
     const expectedPayload = Array.from(second.signal?.value ?? []);
 
     first.whenReceived.setTime(9_999);
