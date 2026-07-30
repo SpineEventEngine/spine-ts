@@ -11,34 +11,110 @@ import { createRoot } from "react-dom/client";
 
 import { ChatBrowserApp, type BrowserChatSession } from "./index.js";
 
-const lifecycle = asyncQueue<{ readonly state: "gapPossible"; readonly generation: number }>();
-const updates = asyncQueue<unknown>();
-let active = false;
-let queryCount = 0;
-let authoritativeQuery: (() => unknown) | undefined;
-const lateQuery = Promise.withResolvers<ReturnType<typeof response>>();
-const request = {
-  send: async () => {
-    queryCount += 1;
-    return queryCount === 1 ? response("initial fixture message") : lateQuery.promise;
-  },
-  post: async () => ({ kind: "ok" as const }),
-  createSubscription: async (_topic: unknown, options: { authoritativeQuery: () => unknown }) => {
-    authoritativeQuery = options.authoritativeQuery;
+class ChatBrowserFixture {
+  private readonly lifecycle = new FixtureQueue<{
+    readonly state: "gapPossible";
+    readonly generation: number;
+  }>();
+  private readonly updates = new FixtureQueue<unknown>();
+  private readonly lateQuery = Promise.withResolvers<ReturnType<ChatBrowserFixture["response"]>>();
+  private activeSubscription = false;
+  private queries = 0;
+  private authoritativeQuery: (() => unknown) | undefined;
+
+  readonly request = {
+    send: async () => {
+      this.queries += 1;
+      return this.queries === 1 ? this.response("initial fixture message") : this.lateQuery.promise;
+    },
+    post: async () => ({ kind: "ok" as const }),
+    createSubscription: async (_topic: unknown, options: { authoritativeQuery: () => unknown }) => {
+      this.authoritativeQuery = options.authoritativeQuery;
+      return {
+        activate: async () => {
+          this.activeSubscription = true;
+        },
+        cancel: async () => {
+          this.activeSubscription = false;
+          this.lifecycle.close();
+          this.updates.close();
+        },
+        lifecycle: this.lifecycle.values,
+        updates: this.updates.values,
+      };
+    },
+  };
+
+  gap(): void {
+    this.lifecycle.push({ state: "gapPossible", generation: 1 });
+  }
+
+  recover(): void {
+    this.authoritativeQuery?.();
+    this.updates.push({
+      kind: "resynchronization",
+      response: this.response("recovered fixture message"),
+    });
+  }
+
+  active(): boolean {
+    return this.activeSubscription;
+  }
+
+  queryCount(): number {
+    return this.queries;
+  }
+
+  resolveLate(): void {
+    this.lateQuery.resolve(this.response("late fixture message"));
+  }
+
+  private response(text: string) {
     return {
-      activate: async () => {
-        active = true;
-      },
-      cancel: async () => {
-        active = false;
-        lifecycle.close();
-        updates.close();
-      },
-      lifecycle: lifecycle.values,
-      updates: updates.values,
+      message: [
+        {
+          state: AnyMessages.pack(
+            ChatMessageViewSchema,
+            create(ChatMessageViewSchema, {
+              id: create(MessageIdSchema, { value: text }),
+              room: create(ChatRoomIdSchema, { value: "general" }),
+              author: create(UserIdSchema, { value: "browser-fixture" }),
+              text,
+              postedAt: create(TimestampSchema, { seconds: 1n }),
+            }),
+          ),
+        },
+      ],
     };
-  },
-};
+  }
+}
+
+class FixtureQueue<T> {
+  private readonly pending: ((result: IteratorResult<T>) => void)[] = [];
+  private closed = false;
+
+  readonly values: AsyncIterable<T> = {
+    [Symbol.asyncIterator]: () => ({
+      next: () =>
+        new Promise<IteratorResult<T>>((resolve) => {
+          if (this.closed) resolve({ done: true, value: undefined as never });
+          else this.pending.push(resolve);
+        }),
+    }),
+  };
+
+  push(value: T): void {
+    this.pending.shift()?.({ done: false, value });
+  }
+
+  close(): void {
+    this.closed = true;
+    for (const resolve of this.pending.splice(0))
+      resolve({ done: true, value: undefined as never });
+  }
+}
+
+const fixture = new ChatBrowserFixture();
 const session: BrowserChatSession = {
   status: "signedIn",
   actor: "browser-fixture",
@@ -46,7 +122,7 @@ const session: BrowserChatSession = {
 };
 const root = createRoot(document.getElementById("root")!);
 
-root.render(<ChatBrowserApp room="general" request={request as never} session={session} />);
+root.render(<ChatBrowserApp room="general" request={fixture.request as never} session={session} />);
 
 declare global {
   interface Window {
@@ -62,57 +138,10 @@ declare global {
 }
 
 window.chatBrowserFixture = Object.freeze({
-  gap: () => lifecycle.push({ state: "gapPossible", generation: 1 }),
-  recover: () => {
-    authoritativeQuery?.();
-    updates.push({ kind: "resynchronization", response: response("recovered fixture message") });
-  },
+  gap: () => fixture.gap(),
+  recover: () => fixture.recover(),
   teardown: () => root.unmount(),
-  active: () => active,
-  queryCount: () => queryCount,
-  resolveLate: () => lateQuery.resolve(response("late fixture message")),
+  active: () => fixture.active(),
+  queryCount: () => fixture.queryCount(),
+  resolveLate: () => fixture.resolveLate(),
 });
-
-function response(text: string) {
-  return {
-    message: [
-      {
-        state: AnyMessages.pack(
-          ChatMessageViewSchema,
-          create(ChatMessageViewSchema, {
-            id: create(MessageIdSchema, { value: text }),
-            room: create(ChatRoomIdSchema, { value: "general" }),
-            author: create(UserIdSchema, { value: "browser-fixture" }),
-            text,
-            postedAt: create(TimestampSchema, { seconds: 1n }),
-          }),
-        ),
-      },
-    ],
-  };
-}
-
-function asyncQueue<T>() {
-  const pending: ((result: IteratorResult<T>) => void)[] = [];
-  let closed = false;
-  return {
-    values: {
-      [Symbol.asyncIterator]() {
-        return {
-          next: () =>
-            new Promise<IteratorResult<T>>((resolve) => {
-              if (closed) resolve({ done: true, value: undefined as never });
-              else pending.push(resolve);
-            }),
-        };
-      },
-    } as AsyncIterable<T>,
-    push(value: T) {
-      pending.shift()?.({ done: false, value });
-    },
-    close() {
-      closed = true;
-      for (const resolve of pending.splice(0)) resolve({ done: true, value: undefined as never });
-    },
-  };
-}

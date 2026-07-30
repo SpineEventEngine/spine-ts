@@ -16,7 +16,7 @@ import {
   useSubscriptionLifecycle,
 } from "@spine-event-engine/client-react";
 import type { ClientRequest, SubscriptionLifecycle } from "@spine-event-engine/client-web";
-import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilterSchema,
@@ -43,28 +43,42 @@ import {
   type ReactElement,
 } from "react";
 
-/** Application-owned browser session state. Actor data is informational, never a credential. */
+/** Describes application-owned browser session state. Actor data is informational, never a credential. */
 export type BrowserChatSession =
-  | Readonly<{ readonly status: "guest"; readonly signIn: () => Promise<BrowserChatSession> }>
   | Readonly<{
+      /** Describes the unauthenticated session state. */
+      readonly status: "guest";
+      /** Starts application-owned sign-in. @returns Resolves to the resulting session. */
+      readonly signIn: () => Promise<BrowserChatSession>;
+    }>
+  | Readonly<{
+      /** Describes the authenticated session state. */
       readonly status: "signedIn";
+      /** Identifies the informational actor shown in posted messages. */
       readonly actor: string;
+      /** Starts application-owned sign-in. @returns Resolves to the resulting session. */
       readonly signIn: () => Promise<BrowserChatSession>;
     }>;
 
-/** Props for the deliberately small browser Chat fixture. */
+/** Defines props for the deliberately small browser Chat fixture. */
 export interface ChatBrowserAppProps {
+  /** Supplies the application-owned session boundary. */
   readonly session: BrowserChatSession;
+  /** Supplies the public browser client request. */
   readonly request: ClientRequest;
+  /** Identifies the room displayed by this fixture. */
   readonly room: string;
+  /** Creates a message identifier for a new post. @returns Returns the identifier. */
   readonly createMessageId?: () => string;
 }
 
 /**
- * Browser Chat fixture using public client-web and client-react contracts.
- * Subscription updates are hints only: the room Query is the authoritative state.
+ * Renders the browser Chat fixture using public client-web and client-react contracts.
+ *
+ * @param props Supplies the session, request, and selected room.
+ * @returns Returns the fixture user interface.
  */
-export function ChatBrowserApp(props: ChatBrowserAppProps): ReactElement {
+export const ChatBrowserApp = function ChatBrowserApp(props: ChatBrowserAppProps): ReactElement {
   const [session, setSession] = useState(props.session);
   const [signInError, setSignInError] = useState<unknown>();
   const [signingIn, setSigningIn] = useState(false);
@@ -112,32 +126,31 @@ export function ChatBrowserApp(props: ChatBrowserAppProps): ReactElement {
     { request: props.request },
     createElement(ChatRoom, { ...props, session, key: props.room }),
   );
-}
+};
 
-function ChatRoom({
+const ChatRoom = function ChatRoom({
   room,
   request,
   session,
-  createMessageId = defaultMessageId,
+  createMessageId = ChatPost.createId,
 }: ChatBrowserAppProps & {
   readonly session: Extract<BrowserChatSession, { readonly status: "signedIn" }>;
 }): ReactElement {
+  const view = new ChatRoomView(room);
   const [recovered, setRecovered] = useState<QueryResponse | undefined>(undefined);
   const [refreshed, setRefreshed] = useState<QueryResponse | undefined>(undefined);
   const [text, setText] = useState("");
   const [postError, setPostError] = useState<unknown>();
   const [posting, setPosting] = useState(false);
-  const pendingPost = useRef<ReturnType<typeof postMessage> | undefined>(undefined);
+  const pendingPost = useRef<ReturnType<ChatPost["create"]> | undefined>(undefined);
   const refreshInFlight = useRef(false);
   const refreshPending = useRef(false);
   const refreshController = useRef<AbortController | undefined>(undefined);
   const refreshGeneration = useRef(0);
   const postController = useRef<AbortController | undefined>(undefined);
   const postGeneration = useRef(0);
-  const query = useEntityQuery(() => createRoomQuery(room), [room]);
-  const subscription = useEntitySubscription(createRoomTopic(room), () => createRoomQuery(room), [
-    room,
-  ]);
+  const query = useEntityQuery(() => view.query(), [room]);
+  const subscription = useEntitySubscription(view.topic(), () => view.query(), [room]);
   const lifecycle = useSubscriptionLifecycle(subscription);
   const delivery = useSubscriptionDelivery(subscription);
   useEffect(
@@ -162,13 +175,13 @@ function ChatRoom({
       try {
         do {
           refreshPending.current = false;
-          const response = await request.send(createRoomQuery(room), { signal: controller.signal });
+          const response = await request.send(view.query(), { signal: controller.signal });
           if (generation !== refreshGeneration.current) return;
           setRefreshed(response);
           setRecovered(undefined);
         } while (refreshPending.current);
       } catch {
-        // A hint refresh is best effort; unmount and client cancellation are intentionally silent.
+        // Hint refreshes are best effort; unmount and client cancellation are intentionally silent.
       } finally {
         if (generation === refreshGeneration.current) {
           refreshInFlight.current = false;
@@ -177,7 +190,6 @@ function ChatRoom({
       }
     })();
   };
-
   useEffect(() => {
     if (lifecycle?.state === "gapPossible") queueRefresh();
   }, [lifecycle]);
@@ -189,7 +201,7 @@ function ChatRoom({
     event.preventDefault();
     if (posting) return;
     const next =
-      pendingPost.current ?? postMessage(room, session.actor, text.trim(), createMessageId());
+      pendingPost.current ?? new ChatPost(room, session.actor).create(text, createMessageId());
     if (next.text.length === 0) return;
     pendingPost.current = next;
     setPosting(true);
@@ -217,12 +229,12 @@ function ChatRoom({
     );
   };
   const response = recovered ?? refreshed ?? (query.status === "success" ? query.value : undefined);
-  const rows = response === undefined ? [] : roomRows(response, room);
+  const rows = response === undefined ? [] : view.rows(response);
   return createElement(
     "main",
     undefined,
     createElement("h1", undefined, `Chat: ${room}`),
-    lifecycleNotice(lifecycle),
+    createElement(ChatSubscriptionNotice, { lifecycle }),
     postError === undefined
       ? undefined
       : createElement("p", { role: "alert" }, "Message was not posted. Please retry."),
@@ -246,9 +258,84 @@ function ChatRoom({
       createElement("button", { type: "submit", disabled: posting }, posting ? "Posting…" : "Post"),
     ),
   );
+};
+
+class ChatRoomView {
+  constructor(private readonly room: string) {}
+
+  query(): Query {
+    return create(QuerySchema, {
+      id: create(QueryIdSchema, { value: `chat-room-${this.room}` }),
+      context: create(ActorContextSchema),
+      target: create(TargetSchema, {
+        type: TypeUrls.derive(ChatMessageViewSchema),
+        criterion: {
+          case: "filters",
+          value: create(TargetFiltersSchema, {
+            filter: [
+              create(CompositeFilterSchema, {
+                operator: CompositeFilter_CompositeOperator.ALL,
+                filter: [
+                  create(FilterSchema, {
+                    fieldPath: { fieldName: ["room"] },
+                    operator: Filter_Operator.EQUAL,
+                    value: AnyMessages.pack(
+                      ChatRoomIdSchema,
+                      create(ChatRoomIdSchema, { value: this.room }),
+                    ),
+                  }),
+                ],
+              }),
+            ],
+          }),
+        },
+      }),
+    });
+  }
+
+  topic(): Topic {
+    return create(TopicSchema, {
+      id: create(TopicIdSchema, { value: `chat-room-${this.room}` }),
+      context: create(ActorContextSchema),
+      target: this.query().target,
+    });
+  }
+
+  rows(response: QueryResponse): readonly ChatMessageView[] {
+    return response.message.flatMap((entry) => {
+      if (entry.state === undefined) return [];
+      const row = AnyMessages.unpack(entry.state, ChatMessageViewSchema);
+      return row?.room?.value === this.room ? [row] : [];
+    });
+  }
 }
 
-function lifecycleNotice(lifecycle: SubscriptionLifecycle | undefined): ReactElement | undefined {
+class ChatPost {
+  constructor(
+    private readonly room: string,
+    private readonly actor: string,
+  ) {}
+
+  static createId(): string {
+    return crypto.randomUUID();
+  }
+
+  create(text: string, id: string) {
+    return create(PostMessageSchema, {
+      id: create(MessageIdSchema, { value: id }),
+      room: create(ChatRoomIdSchema, { value: this.room }),
+      author: create(UserIdSchema, { value: this.actor }),
+      text: text.trim(),
+      postedAt: create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) }),
+    });
+  }
+}
+
+const ChatSubscriptionNotice = function ChatSubscriptionNotice({
+  lifecycle,
+}: {
+  readonly lifecycle: SubscriptionLifecycle | undefined;
+}): ReactElement | undefined {
   if (lifecycle?.state === "gapPossible" || lifecycle?.state === "resynchronizing")
     return createElement(
       "p",
@@ -258,67 +345,4 @@ function lifecycleNotice(lifecycle: SubscriptionLifecycle | undefined): ReactEle
   if (lifecycle?.state === "failed")
     return createElement("p", { role: "alert" }, "Message updates disconnected.");
   return undefined;
-}
-
-/** Build the room-filtered Projection query used for every authoritative refresh. */
-export function createRoomQuery(room: string): Query {
-  return create(QuerySchema, {
-    id: create(QueryIdSchema, { value: `chat-room-${room}` }),
-    context: create(ActorContextSchema),
-    target: create(TargetSchema, {
-      type: TypeUrls.derive(ChatMessageViewSchema),
-      criterion: {
-        case: "filters",
-        value: create(TargetFiltersSchema, {
-          filter: [
-            create(CompositeFilterSchema, {
-              operator: CompositeFilter_CompositeOperator.ALL,
-              filter: [
-                create(FilterSchema, {
-                  fieldPath: { fieldName: ["room"] },
-                  operator: Filter_Operator.EQUAL,
-                  value: AnyMessages.pack(
-                    ChatRoomIdSchema,
-                    create(ChatRoomIdSchema, { value: room }),
-                  ),
-                }),
-              ],
-            }),
-          ],
-        }),
-      },
-    }),
-  });
-}
-
-/** Build the room-specific Projection topic; Chat messages are never event topics. */
-export function createRoomTopic(room: string): Topic {
-  return create(TopicSchema, {
-    id: create(TopicIdSchema, { value: `chat-room-${room}` }),
-    context: create(ActorContextSchema),
-    target: createRoomQuery(room).target,
-  });
-}
-
-/** Decode only ChatMessageView Projection entities matching the selected room. */
-export function roomRows(response: QueryResponse, room: string): readonly ChatMessageView[] {
-  return response.message.flatMap((entry) => {
-    if (entry.state === undefined) return [];
-    const row = AnyMessages.unpack(entry.state, ChatMessageViewSchema);
-    return row?.room?.value === room ? [row] : [];
-  });
-}
-
-function postMessage(room: string, actor: string, text: string, id: string) {
-  return create(PostMessageSchema, {
-    id: create(MessageIdSchema, { value: id }),
-    room: create(ChatRoomIdSchema, { value: room }),
-    author: create(UserIdSchema, { value: actor }),
-    text,
-    postedAt: create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) }),
-  });
-}
-
-function defaultMessageId(): string {
-  return crypto.randomUUID();
-}
+};

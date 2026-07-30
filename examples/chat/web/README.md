@@ -5,6 +5,12 @@ fixture. It composes the public `@spine-event-engine/client-react` hooks and
 the application-owned `ClientRequest`; it does not replace the hooks, cache
 entities, or model chat messages as events.
 
+The fixture has two seams. `ChatBrowserApp` receives the hosting application's
+session and `ClientRequest`; production hosts can provide a gRPC-Web or Connect
+browser request through `client-web`. `browser-fixture.tsx` supplies only a
+deterministic in-memory request for local browser acceptance. It is not a
+browser transport, authentication provider, or delivery guarantee.
+
 The complete browser/authentication extension contract and its limitations are
 in the [browser client and gateway guide](../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
 
@@ -27,6 +33,22 @@ unmount are ignored. Command failures, including resolved Spine `error` and
 `rejection` outcomes, retain their generated message ID and exact text for a
 single-flight retry. A later normal room refresh supersedes any recovered
 state.
+
+## Running the fixture
+
+From the repository root, generate and build the workspace before starting the
+fixture in a fresh checkout:
+
+```sh
+pnpm typecheck
+pnpm --dir examples/chat/web exec vite --host 127.0.0.1 --port 4175
+```
+
+Open the printed local URL. The page uses the deterministic signed-in fixture
+session; a real host passes its own session and request to `ChatBrowserApp`.
+The fixture's `Post` acknowledgement clears the input. Transport errors and
+resolved `error` or `rejection` outcomes retain the same generated command ID
+and trimmed text for one retry; blank text never posts a command.
 
 The focused component test is:
 
