@@ -96,6 +96,11 @@ export class DescriptorMetadataError extends Error {
   /** Stable code for callers/tests that need structured failure handling. */
   readonly code: DescriptorMetadataErrorCode;
 
+  /** Creates a descriptor metadata error.
+   *
+   * @param code - Stable failure code.
+   * @param message - Human-readable explanation of the invalid descriptor.
+   */
   constructor(code: DescriptorMetadataErrorCode, message: string) {
     super(message);
     this.name = "DescriptorMetadataError";
@@ -104,12 +109,20 @@ export class DescriptorMetadataError extends Error {
   }
 }
 
-/** Return whether the schema declares Spine `(entity)` metadata. */
+/** Determines whether a schema declares Spine `(entity)` metadata.
+ *
+ * @param schema - Generated schema to inspect.
+ * @returns `true` when the schema declares an entity option.
+ */
 export function isEntitySchema(schema: DescriptorMessageSchema): boolean {
   return hasOption(schema, entity);
 }
 
-/** Derive deterministic entity metadata from a Protobuf-ES schema descriptor. */
+/** Describes deterministic entity metadata from a Protobuf-ES schema descriptor.
+ *
+ * @param schema - Generated entity-state schema to describe.
+ * @returns Frozen metadata derived from the schema descriptor.
+ */
 export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
   schema: Schema,
 ): EntityMetadata<Schema> {
@@ -121,9 +134,9 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
   }
 
   const entityOption = getOption(schema, entity);
-  const kind = normalizeEntityKind(schema, entityOption.kind);
-  const declaredVisibility = normalizeDeclaredVisibility(schema, entityOption.visibility);
-  const visibility = resolveVisibility(kind, declaredVisibility);
+  const kind = EntityDescriptors.kind(schema, entityOption.kind);
+  const declaredVisibility = EntityDescriptors.visibility(schema, entityOption.visibility);
+  const visibility = EntityDescriptors.resolvedVisibility(kind, declaredVisibility);
   const idFieldDescriptor = schema.fields[0];
 
   if (idFieldDescriptor === undefined) {
@@ -133,18 +146,18 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
     );
   }
 
-  const idField = createFieldMetadata(idFieldDescriptor);
+  const idField = EntityDescriptors.field(idFieldDescriptor);
   const firstFieldRoutingHint: FirstFieldRoutingHint = Object.freeze({
     strategy: "first-field",
     field: idField,
   });
-  const columns = collectColumns(schema, kind);
+  const columns = EntityDescriptors.columns(schema, kind);
   const setOnceFields = Object.freeze(
     schema.fields
       .filter((field) => hasOption(field, set_once) && getOption(field, set_once))
-      .map(createFieldMetadata),
+      .map(EntityDescriptors.field),
   );
-  const semanticTags = collectSemanticTags(schema);
+  const semanticTags = EntityDescriptors.tags(schema);
   const metadata: EntityMetadata<Schema> = {
     schema,
     descriptor: schema,
@@ -165,130 +178,91 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
   return Object.freeze(metadata);
 }
 
-function createFieldMetadata<Field extends DescField>(
-  field: Field,
-): DescriptorFieldMetadata<Field> {
-  return Object.freeze({
-    descriptor: field,
-    name: field.name,
-    localName: field.localName,
-    jsonName: field.jsonName,
-    number: field.number,
-  });
-}
-
-function normalizeEntityKind(
-  schema: DescriptorMessageSchema,
-  value: EntityOption["kind"],
-): EntityKind {
-  switch (value) {
-    case EntityOption_Kind.AGGREGATE:
-      return "aggregate";
-    case EntityOption_Kind.PROJECTION:
-      return "projection";
-    case EntityOption_Kind.PROCESS_MANAGER:
-      return "process-manager";
-    case EntityOption_Kind.ENTITY:
-      return "entity";
-    case EntityOption_Kind.KIND_UNKNOWN:
-    default:
-      throw new DescriptorMetadataError(
-        "UNSUPPORTED_ENTITY_KIND",
-        `Schema "${schema.typeName}" declares unsupported entity kind "${formatEntityKind(value)}".`,
-      );
-  }
-}
-
-function normalizeDeclaredVisibility(
-  schema: DescriptorMessageSchema,
-  value: EntityOption["visibility"],
-): DeclaredEntityVisibility {
-  switch (value) {
-    case EntityOption_Visibility.DEFAULT:
-      return "default";
-    case EntityOption_Visibility.NONE:
-      return "none";
-    case EntityOption_Visibility.SUBSCRIBE:
-      return "subscribe";
-    case EntityOption_Visibility.QUERY:
-      return "query";
-    case EntityOption_Visibility.FULL:
-      return "full";
-    default:
-      throw new DescriptorMetadataError(
-        "UNSUPPORTED_ENTITY_VISIBILITY",
-        `Schema "${schema.typeName}" declares unsupported entity visibility "${String(value)}".`,
-      );
-  }
-}
-
-function resolveVisibility(kind: EntityKind, declared: DeclaredEntityVisibility): EntityVisibility {
-  if (declared !== "default") {
-    return declared;
-  }
-
-  return kind === "projection" ? "full" : "none";
-}
-
-function collectColumns(
-  schema: DescriptorMessageSchema,
-  kind: EntityKind,
-): readonly DescriptorFieldMetadata[] {
-  if (!supportsColumns(kind)) {
-    return Object.freeze([]);
-  }
-
-  return Object.freeze(
-    schema.fields
-      .filter((field) => hasOption(field, column) && getOption(field, column))
-      .map((field) => {
-        validateColumnField(schema, field);
-        return createFieldMetadata(field);
-      }),
-  );
-}
-
-function supportsColumns(kind: EntityKind): boolean {
-  return kind === "projection" || kind === "process-manager";
-}
-
-function validateColumnField(schema: DescriptorMessageSchema, field: DescField): void {
-  if (field.fieldKind === "list" || field.fieldKind === "map") {
-    throw new DescriptorMetadataError(
-      "INVALID_COLUMN_FIELD",
-      `Entity column field "${schema.typeName}.${field.name}" must be singular; ` +
-        "repeated and map fields are unsupported.",
+/** Owns private descriptor normalization used to build entity metadata. */
+const EntityDescriptors = Object.freeze({
+  field<Field extends DescField>(field: Field): DescriptorFieldMetadata<Field> {
+    return Object.freeze({
+      descriptor: field,
+      name: field.name,
+      localName: field.localName,
+      jsonName: field.jsonName,
+      number: field.number,
+    });
+  },
+  kind(schema: DescriptorMessageSchema, value: EntityOption["kind"]): EntityKind {
+    switch (value) {
+      case EntityOption_Kind.AGGREGATE:
+        return "aggregate";
+      case EntityOption_Kind.PROJECTION:
+        return "projection";
+      case EntityOption_Kind.PROCESS_MANAGER:
+        return "process-manager";
+      case EntityOption_Kind.ENTITY:
+        return "entity";
+      default:
+        throw new DescriptorMetadataError(
+          "UNSUPPORTED_ENTITY_KIND",
+          `Schema "${schema.typeName}" declares unsupported entity kind ` +
+            `"${EntityOption_Kind[value] || String(value)}".`,
+        );
+    }
+  },
+  visibility(
+    schema: DescriptorMessageSchema,
+    value: EntityOption["visibility"],
+  ): DeclaredEntityVisibility {
+    switch (value) {
+      case EntityOption_Visibility.DEFAULT:
+        return "default";
+      case EntityOption_Visibility.NONE:
+        return "none";
+      case EntityOption_Visibility.SUBSCRIBE:
+        return "subscribe";
+      case EntityOption_Visibility.QUERY:
+        return "query";
+      case EntityOption_Visibility.FULL:
+        return "full";
+      default:
+        throw new DescriptorMetadataError(
+          "UNSUPPORTED_ENTITY_VISIBILITY",
+          `Schema "${schema.typeName}" declares unsupported entity visibility "${String(value)}".`,
+        );
+    }
+  },
+  resolvedVisibility(kind: EntityKind, declared: DeclaredEntityVisibility): EntityVisibility {
+    return declared === "default" ? (kind === "projection" ? "full" : "none") : declared;
+  },
+  columns(schema: DescriptorMessageSchema, kind: EntityKind): readonly DescriptorFieldMetadata[] {
+    if (kind !== "projection" && kind !== "process-manager") return Object.freeze([]);
+    return Object.freeze(
+      schema.fields
+        .filter((field) => hasOption(field, column) && getOption(field, column))
+        .map((field) => {
+          if (field.fieldKind === "list" || field.fieldKind === "map")
+            throw new DescriptorMetadataError(
+              "INVALID_COLUMN_FIELD",
+              `Entity column field "${schema.typeName}.${field.name}" must be singular; ` +
+                "repeated and map fields are unsupported.",
+            );
+          return EntityDescriptors.field(field);
+        }),
     );
-  }
-}
-
-function collectSemanticTags(schema: DescriptorMessageSchema): readonly string[] {
-  const tags = new Set<string>();
-
-  if (hasOption(schema.file, every_is)) {
-    tags.add(readSemanticTag(getOption(schema.file, every_is).javaType, schema.file.name));
-  }
-
-  if (hasOption(schema, is)) {
-    tags.add(readSemanticTag(getOption(schema, is).javaType, schema.typeName));
-  }
-
-  return Object.freeze([...tags].sort());
-}
-
-function readSemanticTag(rawValue: string, owner: string): string {
-  const value = rawValue.trim();
-
-  if (value.length === 0) {
-    throw new DescriptorMetadataError(
-      "INVALID_SEMANTIC_TAG",
-      `Entity semantic tag option "${owner}" must declare a non-empty java_type.`,
-    );
-  }
-
-  return value;
-}
-
-function formatEntityKind(value: number): string {
-  return EntityOption_Kind[value] ?? String(value);
-}
+  },
+  tags(schema: DescriptorMessageSchema): readonly string[] {
+    const tags = new Set<string>();
+    if (hasOption(schema.file, every_is))
+      tags.add(EntityDescriptors.tag(getOption(schema.file, every_is).javaType, schema.file.name));
+    if (hasOption(schema, is))
+      tags.add(EntityDescriptors.tag(getOption(schema, is).javaType, schema.typeName));
+    return Object.freeze([...tags].sort());
+  },
+  tag(rawValue: string, owner: string): string {
+    const value = rawValue.trim();
+    if (value.length === 0)
+      throw new DescriptorMetadataError(
+        "INVALID_SEMANTIC_TAG",
+        `Entity semantic tag option "${owner}" must declare a non-empty java_type.`,
+      );
+    return value;
+  },
+});

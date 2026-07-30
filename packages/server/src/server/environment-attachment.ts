@@ -22,23 +22,44 @@ import { EnvironmentDeliveryRecords } from "./environment-delivery-records.js";
 
 export type { EnvironmentGenerationWorker } from "./environment-delivery-worker.js";
 
-/** @internal Ownership relation for one package-internal environment registration. */
+/**
+ * Identifies whether a caller or server owns an environment registration.
+ *
+ * @internal
+ */
 export type EnvironmentOwnership = "caller" | "server";
 
-/** @internal Opaque identity of one current non-retired environment generation. */
+/**
+ * Represents one current, non-retired environment generation.
+ *
+ * @internal
+ */
 export interface EnvironmentGeneration {
+  /** Marks values that represent an environment generation. */
   readonly generation: true;
 }
 
-/** @internal Reserved registration identity used by later attachment lifecycle slices. */
+/**
+ * Represents one environment attachment reservation.
+ *
+ * @internal
+ */
 export interface EnvironmentRegistrationClaim {
+  /** Identifies the reservation within its generation. */
   readonly token: string;
+  /** Identifies the generation that owns the reservation. */
   readonly generation: EnvironmentGeneration;
 }
 
-/** @internal Input assembled by future server lifecycle integration from built contexts. */
+/**
+ * Defines the ownership and descriptors needed to attach an environment.
+ *
+ * @internal
+ */
 export interface EnvironmentAttachOptions {
+  /** Selects caller or server ownership. */
   readonly ownership: EnvironmentOwnership;
+  /** Lists context delivery descriptors to attach. */
   readonly descriptors: readonly ContextDeliveryDescriptor[];
 }
 
@@ -70,13 +91,32 @@ class AttachedEnvironmentRegistration implements EnvironmentRegistrationClaim {
   }
 }
 
-/** @internal Nominal successful attachment used by later detach/stop/server slices. */
+/**
+ * Identifies a successfully attached environment registration.
+ *
+ * @internal
+ */
 export type EnvironmentAttachmentHandle = AttachedEnvironmentRegistration;
 
-/** @internal Construction seams for deterministic package lifecycle tests. */
+/**
+ * Defines construction seams for deterministic lifecycle tests.
+ *
+ * @internal
+ */
 export interface EnvironmentAttachmentsOptions {
+  /**
+   * Creates a generation worker when an attachment opens a generation.
+   *
+   * @returns The worker for the new generation.
+   */
   readonly createWorker?: () => EnvironmentGenerationWorker;
+  /**
+   * Calls the retained lifecycle failure reporter.
+   *
+   * @param causes - Lists the failures to report.
+   */
   readonly report?: (causes: readonly unknown[]) => Promise<void>;
+  /** Injects transition faults used by lifecycle tests. */
   readonly transitionFaults?: {
     readonly onRoutePrepare?: (descriptor: ContextDeliveryDescriptor) => void;
     readonly onScopeTransfer?: (
@@ -86,21 +126,41 @@ export interface EnvironmentAttachmentsOptions {
   };
 }
 
-/** @internal Synchronous cardinality gate owned by one ServerEnvironment instance. */
+/**
+ * Tracks registration ownership and generations for one server environment.
+ *
+ * @internal
+ */
 export class EnvironmentRegistrations {
   readonly #claims = new Map<string, EnvironmentRegistrationClaim>();
   #generation: EnvironmentGeneration | undefined;
   #ownership: EnvironmentOwnership | undefined;
   #nextToken = 0;
 
+  /**
+   * Returns the number of active claims.
+   *
+   * @returns The active claim count.
+   */
   get count(): number {
     return this.#claims.size;
   }
 
+  /**
+   * Returns the active generation, if any.
+   *
+   * @returns The current generation or `undefined`.
+   */
   get generation(): EnvironmentGeneration | undefined {
     return this.#generation;
   }
 
+  /**
+   * Sets the current generation during a safe handoff.
+   *
+   * @param generation - Supplies the replacement generation.
+   * @returns The retired generation.
+   */
   replace(generation: EnvironmentGeneration): EnvironmentGeneration {
     if (this.#generation === undefined) {
       throw new Error("Environment generation is not current.");
@@ -110,6 +170,12 @@ export class EnvironmentRegistrations {
     return previous;
   }
 
+  /**
+   * Creates a registration claim in the current generation.
+   *
+   * @param ownership - Selects caller or server ownership.
+   * @returns The new opaque registration claim.
+   */
   claim(ownership: EnvironmentOwnership): EnvironmentRegistrationClaim {
     if (
       (ownership === "server" && this.#claims.size > 0) ||
@@ -129,7 +195,14 @@ export class EnvironmentRegistrations {
     return claim;
   }
 
-  /** @internal Remove one failed attachment without disturbing sibling claims. */
+  /**
+   * Removes one failed attachment without disturbing sibling claims.
+   *
+   * @internal
+   *
+   * @param token - Identifies the claim.
+   * @returns The remaining claim count.
+   */
   remove(token: string): number {
     if (!this.#claims.delete(token)) {
       throw new Error("Environment registration is not active.");
@@ -137,7 +210,13 @@ export class EnvironmentRegistrations {
     return this.#claims.size;
   }
 
-  /** @internal Release an empty generation only after its retirement is safe. */
+  /**
+   * Clears an empty generation after its retirement is safe.
+   *
+   * @internal
+   *
+   * @param generation - Identifies the generation to clear.
+   */
   clear(generation: EnvironmentGeneration): void {
     if (this.#claims.size > 0) {
       throw new Error("Environment generation still has live registrations.");
@@ -150,7 +229,11 @@ export class EnvironmentRegistrations {
   }
 }
 
-/** @internal One ServerEnvironment's serialized generation attachment owner. */
+/**
+ * Coordinates generation attachment, detachment, recovery, and retirement for one environment.
+ *
+ * @internal
+ */
 export class EnvironmentAttachments {
   readonly #registrations = new EnvironmentRegistrations();
   readonly #generations = new Map<EnvironmentGeneration, DeliveryGeneration>();
@@ -167,13 +250,20 @@ export class EnvironmentAttachments {
   #permanentCloseAdmission: Promise<void> | undefined;
   #permanentlyClosed = false;
 
+  /** Creates an attachment owner. @param options - Optionally supplies lifecycle test seams. */
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
     this.#report = options.report ?? (() => Promise.resolve());
     this.#transitionFaults = options.transitionFaults;
   }
 
-  /** @internal Bounded diagnostic cardinality for focused lifecycle verification. */
+  /**
+   * Returns the number of bounded unresolved diagnostics.
+   *
+   * @internal
+   *
+   * @returns The unresolved count.
+   */
   get unresolvedReportedDomainCount(): number {
     let count = 0;
     for (const generation of this.#generations.values()) {
@@ -182,12 +272,24 @@ export class EnvironmentAttachments {
     return count;
   }
 
-  /** @internal Exact live registration cardinality for lifecycle invariants. */
+  /**
+   * Returns the number of live registrations.
+   *
+   * @internal
+   *
+   * @returns The active registration count.
+   */
   get activeRegistrationCount(): number {
     return this.#registrations.count;
   }
 
-  /** @internal Current configured ephemeral owner cardinality across the live generation. */
+  /**
+   * Returns the number of configured delivery owners.
+   *
+   * @internal
+   *
+   * @returns The configured owner count.
+   */
   get configuredOwnerCount(): number {
     let count = 0;
     for (const generation of this.#generations.values()) {
@@ -196,7 +298,13 @@ export class EnvironmentAttachments {
     return count;
   }
 
-  /** @internal Current generation-local canonical scope cardinality. */
+  /**
+   * Returns the number of configured delivery scopes.
+   *
+   * @internal
+   *
+   * @returns The configured scope count.
+   */
   get configuredScopeCount(): number {
     let count = 0;
     for (const generation of this.#generations.values()) {
@@ -205,18 +313,38 @@ export class EnvironmentAttachments {
     return count;
   }
 
-  /** @internal Whether one failed attachment still owns an unfinished rollback. */
+  /**
+   * Checks whether a failed attachment owns unfinished rollback.
+   *
+   * @internal
+   *
+   * @returns Whether rollback remains.
+   */
   get failedStartPending(): boolean {
     return this.#failedRollback !== undefined;
   }
 
-  /** @internal Whether this exact attachment rejection owns failed-start rollback retry. */
+  /**
+   * Checks whether a rejection owns failed-start rollback retry.
+   *
+   * @internal
+   *
+   * @param error - Supplies the rejection.
+   * @returns Whether retry is required.
+   */
   failedStartRetryPending(error: unknown): boolean {
     const rollback = this.#failedRollback;
     return rollback?.rejection !== undefined && rollback.rejection === error;
   }
 
-  /** @internal Whether detach of this exact handle has established endpoint safety. */
+  /**
+   * Checks whether detachment made an endpoint safe.
+   *
+   * @internal
+   *
+   * @param attachment - Identifies the attachment.
+   * @returns Whether the endpoint is safe.
+   */
   endpointSafe(attachment: EnvironmentAttachmentHandle): boolean {
     const attached = this.#handles.get(attachment);
     if (attached === undefined) {
@@ -231,7 +359,14 @@ export class EnvironmentAttachments {
     return false;
   }
 
-  /** @internal Whether this exact handle owns a rejected detach operation. */
+  /**
+   * Checks whether an attachment owns rejected detach work.
+   *
+   * @internal
+   *
+   * @param attachment - Identifies the attachment.
+   * @returns Whether detach retry is pending.
+   */
   detachRetryPending(attachment: EnvironmentAttachmentHandle): boolean {
     const attached = this.#handles.get(attachment);
     if (attached === undefined) {
@@ -240,9 +375,15 @@ export class EnvironmentAttachments {
     return attached.operation?.status === "rejected";
   }
 
+  /**
+   * Attaches configured descriptors to an environment generation.
+   *
+   * @param options - Supplies ownership and descriptors.
+   * @returns The successful attachment handle.
+   */
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
     if (this.#permanentlyClosed) {
-      return Promise.reject(environmentClosedError());
+      return Promise.reject(EnvironmentAttachmentAssembly.environmentClosedError());
     }
     const gate = Promise.withResolvers<EnvironmentAttachmentHandle>();
     const stop = this.#stop;
@@ -271,7 +412,7 @@ export class EnvironmentAttachments {
     waiter.status = "queued";
     const attaching = this.#serial.then(async () => {
       if (this.#permanentlyClosed) {
-        throw environmentClosedError();
+        throw EnvironmentAttachmentAssembly.environmentClosedError();
       }
       const admittedOptions: EnvironmentAttachOptions = Object.freeze({
         ownership: waiter.options.ownership,
@@ -310,13 +451,13 @@ export class EnvironmentAttachments {
     options: EnvironmentAttachOptions,
   ): Promise<EnvironmentAttachmentHandle> {
     if (this.#permanentlyClosed) {
-      throw environmentClosedError();
+      throw EnvironmentAttachmentAssembly.environmentClosedError();
     }
     if (this.#failedRollback !== undefined) {
-      throw explicitRetryError();
+      throw EnvironmentAttachmentValues.explicitRetryError();
     }
     if (this.#failedLastDetach !== undefined) {
-      throw detachRetryRequiredError();
+      throw EnvironmentAttachmentValues.detachRetryRequiredError();
     }
     const claim = this.#registrations.claim(options.ownership);
     let generation = this.#generations.get(claim.generation);
@@ -356,14 +497,15 @@ export class EnvironmentAttachments {
     return attachment;
   }
 
+  /** Stops delivery work while preserving a retryable failed stop. */
   stopDelivery(): Promise<void> {
     if (this.#permanentlyClosed) {
-      return Promise.reject(environmentClosedError());
+      return Promise.reject(EnvironmentAttachmentAssembly.environmentClosedError());
     }
     const current = this.#stop;
     if (current !== undefined) {
       if (current.status === "rejected") {
-        return Promise.reject(deliveryStopRetryError());
+        return Promise.reject(EnvironmentAttachmentValues.deliveryStopRetryError());
       }
       return current.promise;
     }
@@ -438,9 +580,10 @@ export class EnvironmentAttachments {
     return stop.promise;
   }
 
+  /** Retries a previously rejected delivery stop. */
   retryDeliveryStop(): Promise<void> {
     if (this.#permanentlyClosed) {
-      return Promise.reject(environmentClosedError());
+      return Promise.reject(EnvironmentAttachmentAssembly.environmentClosedError());
     }
     const stop = this.#stop;
     if (stop?.status === "running" && stop.retrying) {
@@ -460,13 +603,13 @@ export class EnvironmentAttachments {
     }
     if (!stop.admitted) {
       if (this.#failedRollback !== undefined) {
-        await this.#refuseStop(stop, explicitRetryError());
+        await this.#refuseStop(stop, EnvironmentAttachmentValues.explicitRetryError());
       }
       if (this.#failedLastDetach !== undefined) {
-        await this.#refuseStop(stop, detachRetryRequiredError());
+        await this.#refuseStop(stop, EnvironmentAttachmentValues.detachRetryRequiredError());
       }
       if (this.#failedNonLastDetachOwnsRegistration()) {
-        await this.#refuseStop(stop, detachRetryRequiredError());
+        await this.#refuseStop(stop, EnvironmentAttachmentValues.detachRetryRequiredError());
       }
       const generation = this.#registrations.generation;
       if (generation === undefined) {
@@ -533,7 +676,7 @@ export class EnvironmentAttachments {
       if (stop.routeSnapshots === undefined) {
         const snapshots: DeliveryDescriptorSnapshot[] = [];
         for (const route of routeUnits) {
-          snapshots.push(await snapshotDescriptor(route.descriptor));
+          snapshots.push(await EnvironmentAttachmentAssembly.snapshotDescriptor(route.descriptor));
         }
         stop.routeSnapshots = Object.freeze(snapshots);
       }
@@ -590,7 +733,7 @@ export class EnvironmentAttachments {
         }
         if (failures.length > 0) {
           stop.scopes.reject(transfer);
-          throwCurrentAggregation(failures);
+          EnvironmentAttachmentValues.throwCurrentAggregation(failures);
         }
         stop.scopes.complete(transfer, version);
         transfer = stop.scopes.nextPending();
@@ -621,8 +764,14 @@ export class EnvironmentAttachments {
         stop.drained = true;
       }
     } catch (error) {
-      const failures = [...this.#takeOldRetirementCauses(stop), ...currentAggregationCauses(error)];
-      throwFailures(failures, "Environment delivery stop transition failed.");
+      const failures = [
+        ...this.#takeOldRetirementCauses(stop),
+        ...EnvironmentAttachmentValues.currentAggregationCauses(error),
+      ];
+      EnvironmentAttachmentValues.throwFailures(
+        failures,
+        "Environment delivery stop transition failed.",
+      );
     }
     stop.completed = true;
     await this.#releaseStopWaiters(stop);
@@ -648,7 +797,11 @@ export class EnvironmentAttachments {
     throw error;
   }
 
-  /** @internal Serialize one irreversible owner-free close admission. */
+  /**
+   * Accepts permanent close after all active registrations retire.
+   *
+   * @internal
+   */
   admitPermanentClose(): Promise<void> {
     if (this.#permanentlyClosed) {
       return Promise.resolve();
@@ -662,7 +815,7 @@ export class EnvironmentAttachments {
         throw new Error("ServerEnvironment cannot close while it is in use.");
       }
       if (this.#failedRollback !== undefined) {
-        throw explicitRetryError();
+        throw EnvironmentAttachmentValues.explicitRetryError();
       }
       this.#cancelProvisionalStop();
       if (this.#registrations.generation !== undefined || this.#generations.size !== 0) {
@@ -689,7 +842,7 @@ export class EnvironmentAttachments {
     if (stop === undefined || stop.admitted || stop.completed) {
       return;
     }
-    const error = environmentClosedError();
+    const error = EnvironmentAttachmentAssembly.environmentClosedError();
     stop.cancelledByClose = error;
     stop.waitersReleased = true;
     const waiters = [...stop.waiters];
@@ -706,6 +859,11 @@ export class EnvironmentAttachments {
     }
   }
 
+  /**
+   * Removes one attached registration.
+   *
+   * @param attachment - Identifies the attachment to detach.
+   */
   detach(attachment: EnvironmentAttachmentHandle): Promise<void> {
     const attached = this.#handles.get(attachment);
     if (attached === undefined) {
@@ -717,14 +875,19 @@ export class EnvironmentAttachments {
       return attached.operation.promise;
     }
     if (this.#rejectedStopOwns(attached)) {
-      return Promise.reject(deliveryStopRetryError());
+      return Promise.reject(EnvironmentAttachmentValues.deliveryStopRetryError());
     }
     if (this.#failedRollback !== undefined) {
-      return Promise.reject(explicitRetryError());
+      return Promise.reject(EnvironmentAttachmentValues.explicitRetryError());
     }
     return this.#queueDetach(attached);
   }
 
+  /**
+   * Retries rejected detachment for one attachment.
+   *
+   * @param attachment - Identifies the attachment to retry.
+   */
   retryDetach(attachment: EnvironmentAttachmentHandle): Promise<void> {
     const attached = this.#handles.get(attachment);
     if (attached === undefined) {
@@ -733,7 +896,7 @@ export class EnvironmentAttachments {
       );
     }
     if (this.#rejectedStopOwns(attached)) {
-      return Promise.reject(deliveryStopRetryError());
+      return Promise.reject(EnvironmentAttachmentValues.deliveryStopRetryError());
     }
     const operation = attached.operation;
     if (operation === undefined) {
@@ -750,7 +913,7 @@ export class EnvironmentAttachments {
       return Promise.resolve();
     }
     if (this.#failedRollback !== undefined) {
-      return Promise.reject(explicitRetryError());
+      return Promise.reject(EnvironmentAttachmentValues.explicitRetryError());
     }
     return this.#queueDetach(attached, operation);
   }
@@ -758,11 +921,11 @@ export class EnvironmentAttachments {
   #queueDetach(attached: AttachedHandle, previousOperation?: DetachHandleOperation): Promise<void> {
     const detaching = this.#serial.then(() => {
       if (this.#incompleteStopOwns(attached)) {
-        throw deliveryStopRetryError();
+        throw EnvironmentAttachmentValues.deliveryStopRetryError();
       }
       if (this.#failedRollback !== undefined) {
         attached.operation = previousOperation;
-        throw explicitRetryError();
+        throw EnvironmentAttachmentValues.explicitRetryError();
       }
       return this.#detachRegistration(attached);
     });
@@ -863,6 +1026,7 @@ export class EnvironmentAttachments {
     }
   }
 
+  /** Retries rollback following a rejected attachment start. */
   retryFailedStart(): Promise<void> {
     const rollback = this.#failedRollback;
     if (rollback === undefined) {
@@ -912,7 +1076,7 @@ export class EnvironmentAttachments {
       try {
         await this.#continueRollback(rollback);
       } catch (rollbackError) {
-        const rejection = failedStartError(startError, rollbackError);
+        const rejection = EnvironmentAttachmentValues.failedStartError(startError, rollbackError);
         rollback.rejection = rejection;
         throw rejection;
       }
@@ -1022,10 +1186,6 @@ interface GenerationStop {
   promise: Promise<void>;
   status: "running" | "rejected" | "complete";
   retrying: boolean;
-}
-
-function environmentClosedError(): Error {
-  return new Error("ServerEnvironment is closed.");
 }
 
 type OldRetirementResult =
@@ -1149,7 +1309,7 @@ class TransitionScopes {
       this.#registrations.get(token) ??
       new Map<ContextDeliveryDescriptor, Map<string, TransitionScopeUnit>>();
     const scopes = descriptors.get(descriptor) ?? new Map<string, TransitionScopeUnit>();
-    let unit = scopes.get(readyKey(ready));
+    let unit = scopes.get(EnvironmentAttachmentValues.readyKey(ready));
     if (unit === undefined) {
       unit = {
         token,
@@ -1163,7 +1323,7 @@ class TransitionScopes {
         queued: false,
         pendingNext: undefined,
       };
-      scopes.set(readyKey(ready), unit);
+      scopes.set(EnvironmentAttachmentValues.readyKey(ready), unit);
       descriptors.set(descriptor, scopes);
       this.#registrations.set(token, descriptors);
       this.#enqueue(unit);
@@ -1245,7 +1405,7 @@ class RegistrationOwnership {
   add(runtime: EnvironmentDeliveryRuntime): void {
     this.#ownerKeys.add(runtime.owner.key);
     for (const scope of runtime.scopes) {
-      this.#scopes.set(scopeKey(scope), scope);
+      this.#scopes.set(EnvironmentAttachmentValues.scopeKey(scope), scope);
     }
   }
 
@@ -1318,7 +1478,7 @@ class DeliveryGeneration {
     transferredReadiness?: RegistrationReadiness,
   ): Promise<EnvironmentAttachmentHandle> {
     this.#requireFresh(descriptors);
-    const registration = await assembleRegistration(
+    const registration = await EnvironmentAttachmentAssembly.assembleRegistration(
       descriptors,
       (descriptor, tenant, context, endpoints, storageFactory) =>
         this.#runtimeFromSnapshot(descriptor, tenant, context, endpoints, storageFactory),
@@ -1343,7 +1503,7 @@ class DeliveryGeneration {
       startupScopes: registration.scopes,
       ownership,
       descriptors,
-      scopeDescriptors: registrationScopeDescriptors(registration),
+      scopeDescriptors: EnvironmentAttachmentAssembly.registrationScopeDescriptors(registration),
     });
     if (!transferred) {
       await this.#transition(registration, readiness);
@@ -1362,7 +1522,7 @@ class DeliveryGeneration {
   ): Promise<readonly DeliveryRunScope[]> {
     const descriptor = snapshot.descriptor;
     this.#validateFreshDescriptors([descriptor]);
-    const registration = assembleRegistrationSnapshots(
+    const registration = EnvironmentAttachmentAssembly.assembleRegistrationSnapshots(
       [snapshot],
       (candidate, tenant, context, endpoints, storageFactory) =>
         this.#runtimeFromSnapshot(candidate, tenant, context, endpoints, storageFactory),
@@ -1384,9 +1544,12 @@ class DeliveryGeneration {
     }
     this.#deliveryRecords.register(claim.token, registration.scopes);
     for (const scope of registration.scopes) {
-      state.scopeDescriptors.set(scopeKey(scope), descriptor);
+      state.scopeDescriptors.set(EnvironmentAttachmentValues.scopeKey(scope), descriptor);
     }
-    state.startupScopes = appendScopes(state.startupScopes, registration.scopes);
+    state.startupScopes = EnvironmentAttachmentValues.appendScopes(
+      state.startupScopes,
+      registration.scopes,
+    );
     state.descriptors = Object.freeze([...state.descriptors, descriptor]);
     const ownership = state.ownership;
     readiness.rebindDescriptor(
@@ -1415,7 +1578,10 @@ class DeliveryGeneration {
     const settlement = await this.#start([scope]);
     this.#reportedFailures.resolve(this.#resolvedDomains([scope], settlement));
     const blocked = previouslyBlocked && this.#reportedFailures.overlaps(domains);
-    throwRejected(this.#deliveryRecords.registrationRecords(token), blocked);
+    EnvironmentAttachmentAssembly.throwRejected(
+      this.#deliveryRecords.registrationRecords(token),
+      blocked,
+    );
   }
 
   async rollbackRegistration(token: string): Promise<void> {
@@ -1460,7 +1626,10 @@ class DeliveryGeneration {
       this.#forgetScopes(scopes);
     }
     this.#registrations.delete(token);
-    throwFailures(failures, "Environment registration rollback failed.");
+    EnvironmentAttachmentValues.throwFailures(
+      failures,
+      "Environment registration rollback failed.",
+    );
   }
 
   async detachRegistration(token: string): Promise<void> {
@@ -1541,7 +1710,7 @@ class DeliveryGeneration {
       }
       this.#registrations.delete(token);
     }
-    throwFailures(failures, "Environment registration detach failed.");
+    EnvironmentAttachmentValues.throwFailures(failures, "Environment registration detach failed.");
   }
 
   async retireRegistration(token: string): Promise<void> {
@@ -1697,8 +1866,8 @@ class DeliveryGeneration {
     this.#reportedFailures.resolve(this.#resolvedDomains(startup, settlement));
     const blocked = previouslyBlocked && this.#reportedFailures.overlaps(domains);
     const startupRecords = this.#deliveryRecords.registrationRecords(claim.token);
-    throwRejected(startupRecords, blocked);
-    return handle(claim, binding, settlement, () => startupRecords);
+    EnvironmentAttachmentAssembly.throwRejected(startupRecords, blocked);
+    return EnvironmentAttachmentValues.handle(claim, binding, settlement, () => startupRecords);
   }
 
   async #consumeRegistration(token: string, consumeGeneration: boolean): Promise<void> {
@@ -1726,7 +1895,9 @@ class DeliveryGeneration {
       );
       this.#reportedFailures.record(
         state.startupScopes.flatMap((scope) =>
-          unresolved.has(scopeKey(scope)) ? [this.#overlapDomain(scope)] : [],
+          unresolved.has(EnvironmentAttachmentValues.scopeKey(scope))
+            ? [this.#overlapDomain(scope)]
+            : [],
         ),
       );
     }
@@ -1737,7 +1908,7 @@ class DeliveryGeneration {
 
   async #start(startup: readonly DeliveryRunScope[]): Promise<DeliveryRunSettlement> {
     return startup.length === 0 || this.#coordinator === undefined
-      ? emptySettlement()
+      ? EnvironmentAttachmentValues.emptySettlement()
       : await this.#coordinator.start(startup);
   }
 
@@ -1757,10 +1928,12 @@ class DeliveryGeneration {
     this.#deliveryRecords.register(token, runtime.scopes);
     const state = this.#registrations.get(token);
     for (const configured of runtime.scopes) {
-      state?.scopeDescriptors.set(scopeKey(configured), descriptor);
+      state?.scopeDescriptors.set(EnvironmentAttachmentValues.scopeKey(configured), descriptor);
     }
     const scope = runtime.scopes.find(
-      ({ ready: candidate }) => readyKey(candidate) === readyKey(ready),
+      ({ ready: candidate }) =>
+        EnvironmentAttachmentValues.readyKey(candidate) ===
+        EnvironmentAttachmentValues.readyKey(ready),
     );
     if (scope === undefined) {
       throw new Error("Environment readiness is outside the descriptor endpoint domain.");
@@ -1776,7 +1949,7 @@ class DeliveryGeneration {
     capture: TransitionScopes,
   ): void {
     for (const scope of scopes) {
-      const descriptor = state.scopeDescriptors.get(scopeKey(scope));
+      const descriptor = state.scopeDescriptors.get(EnvironmentAttachmentValues.scopeKey(scope));
       if (descriptor === undefined) {
         throw new Error("Environment transition scope has no descriptor route.");
       }
@@ -1840,11 +2013,15 @@ class DeliveryGeneration {
       storageFactory,
       tenant,
       context,
-      scopes: Object.freeze(endpoints.map((endpoint) => readyScope(owner, endpoint, tenant))),
+      scopes: Object.freeze(
+        endpoints.map((endpoint) =>
+          EnvironmentAttachmentValues.readyScope(owner, endpoint, tenant),
+        ),
+      ),
     });
     for (const scope of runtime.scopes) {
       this.#overlapDomains.set(
-        scopeKey(scope),
+        EnvironmentAttachmentValues.scopeKey(scope),
         this.#stableDomain(storageFactory, context, scope.ready),
       );
     }
@@ -1874,12 +2051,12 @@ class DeliveryGeneration {
       context.name,
       context.multitenant,
       context.tenantId ?? null,
-      readyKey(ready),
+      EnvironmentAttachmentValues.readyKey(ready),
     ]);
   }
 
   #overlapDomain(scope: DeliveryRunScope): string {
-    const domain = this.#overlapDomains.get(scopeKey(scope));
+    const domain = this.#overlapDomains.get(EnvironmentAttachmentValues.scopeKey(scope));
     if (domain === undefined) {
       throw new Error("Environment overlap domain is not configured.");
     }
@@ -1890,9 +2067,9 @@ class DeliveryGeneration {
     startup: readonly DeliveryRunScope[],
     settlement: DeliveryRunSettlement,
   ): readonly string[] {
-    const current = new Set(startup.map(scopeKey));
+    const current = new Set(startup.map((scope) => EnvironmentAttachmentValues.scopeKey(scope)));
     return settlement.scopes.flatMap(({ scope, disposition }) =>
-      current.has(scopeKey(scope)) && disposition !== "REJECTED"
+      current.has(EnvironmentAttachmentValues.scopeKey(scope)) && disposition !== "REJECTED"
         ? [this.#overlapDomain(scope)]
         : [],
     );
@@ -1900,7 +2077,7 @@ class DeliveryGeneration {
 
   #forgetScopes(scopes: readonly DeliveryRunScope[]): void {
     for (const scope of scopes) {
-      this.#overlapDomains.delete(scopeKey(scope));
+      this.#overlapDomains.delete(EnvironmentAttachmentValues.scopeKey(scope));
     }
   }
 
@@ -1934,7 +2111,11 @@ class DeliveryGeneration {
   }
 }
 
-/** @internal Finite attachment-local bridge from descriptor transition to one generation. */
+/**
+ * Buffers descriptor readiness while one attachment transitions between generations.
+ *
+ * @internal
+ */
 export class RegistrationReadiness {
   readonly #descriptors: readonly ContextDeliveryDescriptor[];
   readonly #canonical = new WeakMap<
@@ -1948,6 +2129,13 @@ export class RegistrationReadiness {
   #mode: "waiting" | "open" | "failed" = "waiting";
   #invalid = false;
 
+  /**
+   * Creates readiness buffering for configured descriptors.
+   *
+   * @param descriptors - Supplies descriptors and their initial scopes.
+   * @param onPrepare - Converts a readiness notification into a scope.
+   * @param onNotify - Delivers an opened scope to its generation.
+   */
   constructor(
     descriptors: readonly {
       readonly descriptor: ContextDeliveryDescriptor;
@@ -1960,12 +2148,18 @@ export class RegistrationReadiness {
     for (const { descriptor, scopes } of descriptors) {
       this.#canonical.set(
         descriptor,
-        new Map(scopes.map((scope) => [readyKey(scope.ready), scope])),
+        new Map(scopes.map((scope) => [EnvironmentAttachmentValues.readyKey(scope.ready), scope])),
       );
       this.#destinations.set(descriptor, { onPrepare, onNotify });
     }
   }
 
+  /**
+   * Records or forwards one endpoint readiness notification.
+   *
+   * @param descriptor - Identifies the reporting descriptor.
+   * @param ready - Supplies the ready endpoint.
+   */
   notify(descriptor: ContextDeliveryDescriptor, ready: DeliveryReady): void {
     if (this.#mode === "failed") {
       return;
@@ -1985,7 +2179,7 @@ export class RegistrationReadiness {
     }
     if (this.#onTransition !== undefined) {
       try {
-        const snapshot = cloneReady(ready);
+        const snapshot = EnvironmentAttachmentValues.cloneReady(ready);
         this.#onTransition(descriptor, snapshot);
         this.#buffer(descriptor, snapshot);
       } catch {
@@ -1993,20 +2187,26 @@ export class RegistrationReadiness {
       }
       return;
     }
-    const scope = this.#canonical.get(descriptor)?.get(readyKey(ready));
+    const scope = this.#canonical.get(descriptor)?.get(EnvironmentAttachmentValues.readyKey(ready));
     if (scope === undefined) {
       this.#invalid = true;
       return;
     }
-    this.#buffer(descriptor, cloneReady(scope.ready));
+    this.#buffer(descriptor, EnvironmentAttachmentValues.cloneReady(scope.ready));
   }
 
+  /** Clears readiness and discards buffered notifications. */
   fail(): void {
     this.#mode = "failed";
     this.#buffered.clear();
     this.#onTransition = undefined;
   }
 
+  /**
+   * Prepares notification buffering for a generation transition.
+   *
+   * @param onBuffered - Receives notifications buffered during the transition.
+   */
   prepareTransition(
     onBuffered: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => void,
   ): void {
@@ -2017,6 +2217,12 @@ export class RegistrationReadiness {
     this.#mode = "waiting";
   }
 
+  /**
+   * Updates every descriptor for a replacement generation.
+   *
+   * @param onPrepare - Converts readiness into replacement scopes.
+   * @param onNotify - Delivers opened replacement scopes.
+   */
   rebind(
     onPrepare: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => DeliveryRunScope,
     onNotify: (scope: DeliveryRunScope) => void,
@@ -2026,6 +2232,13 @@ export class RegistrationReadiness {
     }
   }
 
+  /**
+   * Updates one descriptor for a replacement generation.
+   *
+   * @param descriptor - Identifies the descriptor to rebind.
+   * @param onPrepare - Converts readiness into replacement scopes.
+   * @param onNotify - Delivers opened replacement scopes.
+   */
   rebindDescriptor(
     descriptor: ContextDeliveryDescriptor,
     onPrepare: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => DeliveryRunScope,
@@ -2037,6 +2250,12 @@ export class RegistrationReadiness {
     this.#destinations.set(descriptor, { onPrepare, onNotify });
   }
 
+  /**
+   * Opens readiness and returns initial plus buffered scopes.
+   *
+   * @param startup - Supplies scopes recovered during startup.
+   * @returns Immutable scopes to run or notify.
+   */
   open(startup: readonly DeliveryRunScope[]): readonly DeliveryRunScope[] {
     if (this.#mode !== "waiting") {
       throw new Error("Registration readiness can only open once.");
@@ -2048,7 +2267,7 @@ export class RegistrationReadiness {
     }
     const scopes = new Map<string, DeliveryRunScope>();
     for (const scope of startup) {
-      scopes.set(scopeKey(scope), scope);
+      scopes.set(EnvironmentAttachmentValues.scopeKey(scope), scope);
     }
     for (const [descriptor, readies] of this.#buffered) {
       const destination = this.#destinations.get(descriptor);
@@ -2057,7 +2276,7 @@ export class RegistrationReadiness {
       }
       for (const ready of readies.values()) {
         const scope = destination.onPrepare(descriptor, ready);
-        scopes.set(scopeKey(scope), scope);
+        scopes.set(EnvironmentAttachmentValues.scopeKey(scope), scope);
       }
     }
     this.#buffered.clear();
@@ -2068,7 +2287,7 @@ export class RegistrationReadiness {
 
   #buffer(descriptor: ContextDeliveryDescriptor, ready: DeliveryReady): void {
     const readies = this.#buffered.get(descriptor) ?? new Map<string, DeliveryReady>();
-    readies.set(readyKey(ready), ready);
+    readies.set(EnvironmentAttachmentValues.readyKey(ready), ready);
     this.#buffered.set(descriptor, readies);
   }
 }
@@ -2102,149 +2321,191 @@ interface DeliveryRuntimeSnapshot {
   readonly context: StorageContext;
 }
 
-async function assembleRegistration(
-  descriptors: readonly ContextDeliveryDescriptor[],
-  runtimeFor: (
-    descriptor: ContextDeliveryDescriptor,
-    tenant: DeliveryTenantScope,
-    context: StorageContext,
-    endpoints: readonly DeliveryEndpoint[],
-    storageFactory: StorageFactory,
-  ) => EnvironmentDeliveryRuntime,
-): Promise<AssembledRegistration> {
-  const snapshots: DeliveryDescriptorSnapshot[] = [];
-  for (const descriptor of descriptors) {
-    snapshots.push(await snapshotDescriptor(descriptor));
-  }
-  return assembleRegistrationSnapshots(snapshots, runtimeFor);
-}
+/** Groups immutable registration-assembly operations. @internal */
+const EnvironmentAttachmentAssembly = Object.freeze({
+  environmentClosedError(): Error {
+    return new Error("ServerEnvironment is closed.");
+  },
+  async assembleRegistration(
+    descriptors: readonly ContextDeliveryDescriptor[],
+    runtimeFor: (
+      descriptor: ContextDeliveryDescriptor,
+      tenant: DeliveryTenantScope,
+      context: StorageContext,
+      endpoints: readonly DeliveryEndpoint[],
+      storageFactory: StorageFactory,
+    ) => EnvironmentDeliveryRuntime,
+  ): Promise<AssembledRegistration> {
+    const snapshots: DeliveryDescriptorSnapshot[] = [];
+    for (const descriptor of descriptors) {
+      snapshots.push(await EnvironmentAttachmentAssembly.snapshotDescriptor(descriptor));
+    }
+    return EnvironmentAttachmentAssembly.assembleRegistrationSnapshots(snapshots, runtimeFor);
+  },
 
-async function snapshotDescriptor(
-  descriptor: ContextDeliveryDescriptor,
-): Promise<DeliveryDescriptorSnapshot> {
-  const storageFactory = descriptor.storageFactory;
-  const tenants = await descriptor.startupScopes();
-  const endpoints = Object.freeze(
-    descriptor.endpoints().map((endpoint) =>
-      Object.freeze({
-        label: endpoint.label,
-        targetTypeUrl: endpoint.targetTypeUrl,
-        shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
-      }),
-    ),
-  );
-  const startup = tenants.map((tenant) => {
-    const capturedTenant: DeliveryTenantScope = Object.freeze({
-      ...(tenant.tenantId === undefined ? {} : { tenantId: tenant.tenantId }),
+  async snapshotDescriptor(
+    descriptor: ContextDeliveryDescriptor,
+  ): Promise<DeliveryDescriptorSnapshot> {
+    const storageFactory = descriptor.storageFactory;
+    const tenants = await descriptor.startupScopes();
+    const endpoints = Object.freeze(
+      descriptor.endpoints().map((endpoint) =>
+        Object.freeze({
+          label: endpoint.label,
+          targetTypeUrl: endpoint.targetTypeUrl,
+          shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
+        }),
+      ),
+    );
+    const startup = tenants.map((tenant) => {
+      const capturedTenant: DeliveryTenantScope = Object.freeze({
+        ...(tenant.tenantId === undefined ? {} : { tenantId: tenant.tenantId }),
+      });
+      const context = descriptor.storageContext(capturedTenant);
+      return Object.freeze({
+        tenant: capturedTenant,
+        context: Object.freeze({
+          name: context.name,
+          multitenant: context.multitenant,
+          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+        }),
+      });
     });
-    const context = descriptor.storageContext(capturedTenant);
     return Object.freeze({
-      tenant: capturedTenant,
-      context: Object.freeze({
-        name: context.name,
-        multitenant: context.multitenant,
-        ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
-      }),
+      descriptor,
+      storageFactory,
+      startup: Object.freeze(startup),
+      endpoints,
     });
-  });
-  return Object.freeze({
-    descriptor,
-    storageFactory,
-    startup: Object.freeze(startup),
-    endpoints,
-  });
-}
+  },
 
-function assembleRegistrationSnapshots(
-  snapshots: readonly DeliveryDescriptorSnapshot[],
-  runtimeFor: (
-    descriptor: ContextDeliveryDescriptor,
-    tenant: DeliveryTenantScope,
-    context: StorageContext,
-    endpoints: readonly DeliveryEndpoint[],
-    storageFactory: StorageFactory,
-  ) => EnvironmentDeliveryRuntime,
-): AssembledRegistration {
-  const scopes = new Map<string, DeliveryRunScope>();
-  const runtimes: EnvironmentDeliveryRuntime[] = [];
-  const assembled: AssembledRegistration["descriptors"][number][] = [];
-  for (const { descriptor, storageFactory, startup, endpoints } of snapshots) {
-    const descriptorScopes: DeliveryRunScope[] = [];
-    for (const { tenant, context } of startup) {
-      const runtime = runtimeFor(descriptor, tenant, context, endpoints, storageFactory);
-      const runtimeScopes = runtime.scopes;
-      if (runtimeScopes.length > 0) {
-        runtimes.push(runtime);
+  assembleRegistrationSnapshots(
+    snapshots: readonly DeliveryDescriptorSnapshot[],
+    runtimeFor: (
+      descriptor: ContextDeliveryDescriptor,
+      tenant: DeliveryTenantScope,
+      context: StorageContext,
+      endpoints: readonly DeliveryEndpoint[],
+      storageFactory: StorageFactory,
+    ) => EnvironmentDeliveryRuntime,
+  ): AssembledRegistration {
+    const scopes = new Map<string, DeliveryRunScope>();
+    const runtimes: EnvironmentDeliveryRuntime[] = [];
+    const assembled: AssembledRegistration["descriptors"][number][] = [];
+    for (const { descriptor, storageFactory, startup, endpoints } of snapshots) {
+      const descriptorScopes: DeliveryRunScope[] = [];
+      for (const { tenant, context } of startup) {
+        const runtime = runtimeFor(descriptor, tenant, context, endpoints, storageFactory);
+        const runtimeScopes = runtime.scopes;
+        if (runtimeScopes.length > 0) {
+          runtimes.push(runtime);
+        }
+        for (const scope of runtimeScopes) {
+          scopes.set(EnvironmentAttachmentValues.scopeKey(scope), scope);
+          descriptorScopes.push(scope);
+        }
       }
-      for (const scope of runtimeScopes) {
-        scopes.set(scopeKey(scope), scope);
-        descriptorScopes.push(scope);
+      if (endpoints.length > 0) {
+        assembled.push({ descriptor, scopes: Object.freeze(descriptorScopes) });
       }
     }
-    if (endpoints.length > 0) {
-      assembled.push({ descriptor, scopes: Object.freeze(descriptorScopes) });
+    return {
+      scopes: Object.freeze([...scopes.values()]),
+      runtimes: Object.freeze(runtimes),
+      descriptors: Object.freeze(assembled),
+    };
+  },
+
+  registrationScopeDescriptors(
+    registration: AssembledRegistration,
+  ): Map<string, ContextDeliveryDescriptor> {
+    const descriptors = new Map<string, ContextDeliveryDescriptor>();
+    for (const { descriptor, scopes } of registration.descriptors) {
+      for (const scope of scopes) {
+        descriptors.set(EnvironmentAttachmentValues.scopeKey(scope), descriptor);
+      }
     }
-  }
-  return {
-    scopes: Object.freeze([...scopes.values()]),
-    runtimes: Object.freeze(runtimes),
-    descriptors: Object.freeze(assembled),
-  };
+    return descriptors;
+  },
+
+  /**
+   * Converts a finite startup settlement into registration-scoped parked evidence.
+   *
+   * @param token - Identifies the registration.
+   * @param scopes - Supplies configured startup scopes.
+   * @param settlement - Supplies the finite recovery settlement.
+   * @returns Parked-obligation evidence for the registration.
+   * @internal
+   */
+  startupObligations(
+    token: string,
+    scopes: readonly DeliveryRunScope[],
+    settlement: DeliveryRunSettlement,
+  ): ParkedDeliveryObligations {
+    const units = scopes.map((scope) => EnvironmentAttachmentValues.scopeKey(scope));
+    const obligations = new ParkedDeliveryObligations({
+      registrations: [{ token, obligations: [{ key: "startup", units }] }],
+      generation: [{ key: "generation", units }],
+    });
+    const configured = new Set(units);
+    for (const result of settlement.scopes) {
+      const unit = EnvironmentAttachmentValues.scopeKey(result.scope);
+      if (!configured.has(unit)) {
+        continue;
+      }
+      const owner = { kind: "registration" as const, token };
+      if (result.disposition === "REJECTED") {
+        obligations.park(owner, "startup", [unit], result.cause);
+      } else if (result.disposition === "PARKED") {
+        obligations.parkFulfilledFailed(owner, "startup", [unit]);
+      } else {
+        obligations.fulfilled(owner, "startup", [unit]);
+      }
+    }
+    return obligations;
+  },
+
+  throwRejected(records: readonly ParkedDeliveryObligationRecord[], blocked: boolean): void {
+    if (blocked) {
+      throw new Error("Startup recovery is blocked by an unresolved shared delivery obligation.");
+    }
+    const causes = records.flatMap((record) => (record.hasCause ? [record.cause] : []));
+    if (causes.length === 1) {
+      throw causes[0];
+    }
+    if (causes.length > 1) {
+      throw new AggregateError(causes, "Environment attachment startup recovery failed.");
+    }
+  },
+});
+
+/** Exposes the registration-assembly evidence seam used by direct server tests. @internal */
+export interface EnvironmentAttachmentAccess {
+  /**
+   * Converts a finite startup settlement into registration-scoped parked evidence.
+   *
+   * @param token Identifies the registration.
+   * @param scopes Supplies configured startup scopes.
+   * @param settlement Supplies the finite recovery settlement.
+   * @returns Parked-obligation evidence for the registration.
+   */
+  startupObligations(
+    token: string,
+    scopes: readonly DeliveryRunScope[],
+    settlement: DeliveryRunSettlement,
+  ): ParkedDeliveryObligations;
 }
 
-function registrationScopeDescriptors(
-  registration: AssembledRegistration,
-): Map<string, ContextDeliveryDescriptor> {
-  const descriptors = new Map<string, ContextDeliveryDescriptor>();
-  for (const { descriptor, scopes } of registration.descriptors) {
-    for (const scope of scopes) {
-      descriptors.set(scopeKey(scope), descriptor);
-    }
-  }
-  return descriptors;
-}
-
-/** @internal Converts one finite startup settlement into registration-scoped parked evidence. */
-export function startupObligations(
-  token: string,
-  scopes: readonly DeliveryRunScope[],
-  settlement: DeliveryRunSettlement,
-): ParkedDeliveryObligations {
-  const units = scopes.map(scopeKey);
-  const obligations = new ParkedDeliveryObligations({
-    registrations: [{ token, obligations: [{ key: "startup", units }] }],
-    generation: [{ key: "generation", units }],
-  });
-  const configured = new Set(units);
-  for (const result of settlement.scopes) {
-    const unit = scopeKey(result.scope);
-    if (!configured.has(unit)) {
-      continue;
-    }
-    const owner = { kind: "registration" as const, token };
-    if (result.disposition === "REJECTED") {
-      obligations.park(owner, "startup", [unit], result.cause);
-    } else if (result.disposition === "PARKED") {
-      obligations.parkFulfilledFailed(owner, "startup", [unit]);
-    } else {
-      obligations.fulfilled(owner, "startup", [unit]);
-    }
-  }
-  return obligations;
-}
-
-function throwRejected(records: readonly ParkedDeliveryObligationRecord[], blocked: boolean): void {
-  if (blocked) {
-    throw new Error("Startup recovery is blocked by an unresolved shared delivery obligation.");
-  }
-  const causes = records.flatMap((record) => (record.hasCause ? [record.cause] : []));
-  if (causes.length === 1) {
-    throw causes[0];
-  }
-  if (causes.length > 1) {
-    throw new AggregateError(causes, "Environment attachment startup recovery failed.");
-  }
-}
+/** Exposes owner-bound registration-assembly test operations. @internal */
+export const EnvironmentAttachmentAccess: Readonly<EnvironmentAttachmentAccess> = Object.freeze({
+  startupObligations(
+    token: string,
+    scopes: readonly DeliveryRunScope[],
+    settlement: DeliveryRunSettlement,
+  ): ParkedDeliveryObligations {
+    return EnvironmentAttachmentAssembly.startupObligations(token, scopes, settlement);
+  },
+});
 
 class ReportedFailures {
   readonly #domains = new Set<string>();
@@ -2274,38 +2535,6 @@ class ReportedFailures {
   }
 }
 
-function explicitRetryError(): Error {
-  return new Error("Environment generation rollback requires an explicit retry.");
-}
-
-function detachRetryRequiredError(): Error {
-  return new Error("Environment generation detach requires an explicit retry.");
-}
-
-function deliveryStopRetryError(): Error {
-  return new Error("Environment delivery stop requires an explicit retry.");
-}
-
-function failedStartError(startError: unknown, rollbackError: unknown): AggregateError {
-  const rollbackErrors: readonly unknown[] =
-    rollbackError instanceof AggregateError
-      ? (rollbackError.errors as readonly unknown[])
-      : [rollbackError];
-  return new AggregateError(
-    [asError(startError), ...rollbackErrors.map(asError)],
-    "Environment attachment failed and rollback also failed.",
-  );
-}
-
-function throwFailures(failures: readonly unknown[], message: string): void {
-  if (failures.length === 1) {
-    throw failures[0];
-  }
-  if (failures.length > 1) {
-    throw new AggregateError(failures, message);
-  }
-}
-
 const currentAggregationFailure = Symbol("currentAggregationFailure");
 
 interface CurrentAggregationFailure {
@@ -2313,103 +2542,143 @@ interface CurrentAggregationFailure {
   readonly causes: readonly unknown[];
 }
 
-function throwCurrentAggregation(failures: readonly unknown[]): never {
-  if (failures.length === 1) {
-    throw failures[0];
-  }
-  if (failures.length > 1) {
-    // Exact arbitrary failure identity is part of the internal retry contract.
-    // eslint-disable-next-line @typescript-eslint/only-throw-error
-    throw Object.freeze({
-      [currentAggregationFailure]: true,
-      causes: Object.freeze([...failures]),
+/** @internal Groups private attachment-state, scope, and failure operations. */
+const EnvironmentAttachmentValues = Object.freeze({
+  explicitRetryError(): Error {
+    return new Error("Environment generation rollback requires an explicit retry.");
+  },
+
+  detachRetryRequiredError(): Error {
+    return new Error("Environment generation detach requires an explicit retry.");
+  },
+
+  deliveryStopRetryError(): Error {
+    return new Error("Environment delivery stop requires an explicit retry.");
+  },
+
+  failedStartError(startError: unknown, rollbackError: unknown): AggregateError {
+    const rollbackErrors: readonly unknown[] =
+      rollbackError instanceof AggregateError
+        ? (rollbackError.errors as readonly unknown[])
+        : [rollbackError];
+    return new AggregateError(
+      [
+        EnvironmentAttachmentValues.asError(startError),
+        ...rollbackErrors.map((error) => EnvironmentAttachmentValues.asError(error)),
+      ],
+      "Environment attachment failed and rollback also failed.",
+    );
+  },
+
+  throwFailures(failures: readonly unknown[], message: string): void {
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      throw new AggregateError(failures, message);
+    }
+  },
+
+  throwCurrentAggregation(failures: readonly unknown[]): never {
+    if (failures.length === 1) {
+      throw failures[0];
+    }
+    if (failures.length > 1) {
+      // Exact arbitrary failure identity is part of the internal retry contract.
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw Object.freeze({
+        [currentAggregationFailure]: true,
+        causes: Object.freeze([...failures]),
+      });
+    }
+    throw new Error("Environment transition aggregation requires at least one failure.");
+  },
+
+  currentAggregationCauses(error: unknown): readonly unknown[] {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      currentAggregationFailure in error &&
+      (error as Partial<CurrentAggregationFailure>)[currentAggregationFailure] === true
+    ) {
+      return (error as CurrentAggregationFailure).causes;
+    }
+    return Object.freeze([error]);
+  },
+
+  handle(
+    claim: EnvironmentRegistrationClaim,
+    binding: RegistrationBinding,
+    startup: DeliveryRunSettlement,
+    records: () => readonly ParkedDeliveryObligationRecord[],
+  ): EnvironmentAttachmentHandle {
+    return new AttachedEnvironmentRegistration(claim, binding, startup, records);
+  },
+
+  readyScope(
+    owner: DeliveryRunOwner,
+    endpoint: DeliveryEndpoint,
+    tenant: DeliveryTenantScope,
+  ): DeliveryRunScope {
+    return Object.freeze({
+      owner,
+      ready: Object.freeze({
+        ...(tenant.tenantId === undefined ? {} : { tenantId: tenant.tenantId }),
+        label: endpoint.label,
+        targetTypeUrl: endpoint.targetTypeUrl,
+        shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
+      }),
     });
-  }
-  throw new Error("Environment transition aggregation requires at least one failure.");
-}
+  },
 
-function currentAggregationCauses(error: unknown): readonly unknown[] {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    currentAggregationFailure in error &&
-    (error as Partial<CurrentAggregationFailure>)[currentAggregationFailure] === true
-  ) {
-    return (error as CurrentAggregationFailure).causes;
-  }
-  return Object.freeze([error]);
-}
+  appendScopes(
+    existing: readonly DeliveryRunScope[],
+    added: readonly DeliveryRunScope[],
+  ): readonly DeliveryRunScope[] {
+    const scopes = new Map(
+      existing.map((scope) => [EnvironmentAttachmentValues.scopeKey(scope), scope]),
+    );
+    for (const scope of added) {
+      scopes.set(EnvironmentAttachmentValues.scopeKey(scope), scope);
+    }
+    return Object.freeze([...scopes.values()]);
+  },
 
-function handle(
-  claim: EnvironmentRegistrationClaim,
-  binding: RegistrationBinding,
-  startup: DeliveryRunSettlement,
-  records: () => readonly ParkedDeliveryObligationRecord[],
-): EnvironmentAttachmentHandle {
-  return new AttachedEnvironmentRegistration(claim, binding, startup, records);
-}
+  scopeKey(scope: DeliveryRunScope): string {
+    return JSON.stringify([
+      scope.owner.key,
+      scope.ready.tenantId ?? null,
+      scope.ready.label,
+      scope.ready.targetTypeUrl,
+      scope.ready.shard.index,
+      scope.ready.shard.ofTotal,
+    ]);
+  },
 
-function readyScope(
-  owner: DeliveryRunOwner,
-  endpoint: DeliveryEndpoint,
-  tenant: DeliveryTenantScope,
-): DeliveryRunScope {
-  return Object.freeze({
-    owner,
-    ready: Object.freeze({
-      ...(tenant.tenantId === undefined ? {} : { tenantId: tenant.tenantId }),
-      label: endpoint.label,
-      targetTypeUrl: endpoint.targetTypeUrl,
-      shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
-    }),
-  });
-}
+  readyKey(scope: DeliveryReady): string {
+    return JSON.stringify([
+      scope.tenantId ?? null,
+      scope.label,
+      scope.targetTypeUrl,
+      scope.shard.index,
+      scope.shard.ofTotal,
+    ]);
+  },
 
-function appendScopes(
-  existing: readonly DeliveryRunScope[],
-  added: readonly DeliveryRunScope[],
-): readonly DeliveryRunScope[] {
-  const scopes = new Map(existing.map((scope) => [scopeKey(scope), scope]));
-  for (const scope of added) {
-    scopes.set(scopeKey(scope), scope);
-  }
-  return Object.freeze([...scopes.values()]);
-}
+  cloneReady(ready: DeliveryReady): DeliveryReady {
+    return Object.freeze({
+      ...(ready.tenantId === undefined ? {} : { tenantId: ready.tenantId }),
+      label: ready.label,
+      targetTypeUrl: ready.targetTypeUrl,
+      shard: new ShardIndex(ready.shard.index, ready.shard.ofTotal),
+    });
+  },
 
-function scopeKey(scope: DeliveryRunScope): string {
-  return JSON.stringify([
-    scope.owner.key,
-    scope.ready.tenantId ?? null,
-    scope.ready.label,
-    scope.ready.targetTypeUrl,
-    scope.ready.shard.index,
-    scope.ready.shard.ofTotal,
-  ]);
-}
+  emptySettlement(): DeliveryRunSettlement {
+    return Object.freeze({ scopes: Object.freeze([]), pending: Object.freeze([]) });
+  },
 
-function readyKey(scope: DeliveryReady): string {
-  return JSON.stringify([
-    scope.tenantId ?? null,
-    scope.label,
-    scope.targetTypeUrl,
-    scope.shard.index,
-    scope.shard.ofTotal,
-  ]);
-}
-
-function cloneReady(ready: DeliveryReady): DeliveryReady {
-  return Object.freeze({
-    ...(ready.tenantId === undefined ? {} : { tenantId: ready.tenantId }),
-    label: ready.label,
-    targetTypeUrl: ready.targetTypeUrl,
-    shard: new ShardIndex(ready.shard.index, ready.shard.ofTotal),
-  });
-}
-
-function emptySettlement(): DeliveryRunSettlement {
-  return Object.freeze({ scopes: Object.freeze([]), pending: Object.freeze([]) });
-}
-
-function asError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
-}
+  asError(value: unknown): Error {
+    return value instanceof Error ? value : new Error(String(value));
+  },
+});

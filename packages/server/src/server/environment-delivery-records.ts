@@ -8,23 +8,37 @@ import {
   type ParkedDeliveryObligationSelection,
 } from "../delivery/parked-delivery-obligations.js";
 
-/** @internal Generation-local mapping from configured scopes to canonical parked delivery obligations. */
+/**
+ * Stores delivery scopes and parked obligations for one environment generation.
+ *
+ * @internal
+ */
 export class EnvironmentDeliveryRecords {
   readonly #registrations = new Map<string, Map<string, DeliveryRunScope>>();
   readonly #scopes = new Map<string, DeliveryRunScope>();
   readonly #generationScopes = new Map<string, DeliveryRunScope>();
   #obligations: ParkedDeliveryObligations | undefined;
 
+  /**
+   * Returns the number of distinct configured scopes.
+   *
+   * @returns The number of scopes retained by this generation.
+   */
   get configuredScopeCount(): number {
     return this.#scopes.size;
   }
 
-  /** @internal Register initial or dynamic scopes once, retaining their first configured order. */
+  /**
+   * Registers scopes once while retaining their first configured order.
+   *
+   * @param token - Identifies the owning environment attachment.
+   * @param scopes - Supplies the scopes to retain.
+   */
   register(token: string, scopes: readonly DeliveryRunScope[]): void {
     const registered = this.#registrations.get(token) ?? new Map<string, DeliveryRunScope>();
     const added: string[] = [];
     for (const scope of scopes) {
-      const key = scopeKey(scope);
+      const key = EnvironmentScopeValues.key(scope);
       if (!registered.has(key)) {
         registered.set(key, scope);
         this.#scopes.set(key, scope);
@@ -46,11 +60,15 @@ export class EnvironmentDeliveryRecords {
     this.#obligations.extendRegistration(token, "delivery", added);
   }
 
-  /** @internal Observe one recorded coordinator settlement against its exact configured owner. */
+  /**
+   * Records one coordinator settlement against its configured owner.
+   *
+   * @param settlement - Supplies the completed scope outcome.
+   */
   observe(settlement: DeliveryScopeSettlement): void {
     const tokens = this.#tokensFor(settlement.scope);
     const obligations = this.#requireObligations();
-    const unit = scopeKey(settlement.scope);
+    const unit = EnvironmentScopeValues.key(settlement.scope);
     for (const token of tokens) {
       const owner = { kind: "registration" as const, token };
       switch (settlement.disposition) {
@@ -69,27 +87,47 @@ export class EnvironmentDeliveryRecords {
     }
   }
 
+  /**
+   * Returns every retained parked-obligation record.
+   *
+   * @returns Immutable records in deterministic order.
+   */
   records(): readonly ParkedDeliveryObligationRecord[] {
     return this.#obligations?.records() ?? Object.freeze([]);
   }
 
-  /** @internal Current registration-owned records for one opaque attachment handle. */
+  /**
+   * Returns records owned by one attachment.
+   *
+   * @param token - Identifies the attachment.
+   * @returns Immutable records retained for the attachment.
+   */
   registrationRecords(token: string): readonly ParkedDeliveryObligationRecord[] {
     return Object.freeze(
       this.records().filter(({ owner }) => owner.kind === "registration" && owner.token === token),
     );
   }
 
-  /** @internal Stable configured scope order for a registration. */
+  /**
+   * Returns configured scopes for an attachment in stable order.
+   *
+   * @param token - Identifies the attachment.
+   * @returns Immutable configured scopes.
+   */
   configuredScopes(token: string): readonly DeliveryRunScope[] {
     return Object.freeze([...(this.#registrations.get(token)?.values() ?? [])]);
   }
 
-  /** @internal Stable per-registration scopes still pending or represented by parked records. */
+  /**
+   * Returns scopes still pending or represented by parked records for each attachment.
+   *
+   * @param pending - Supplies scopes still active in the coordinator.
+   * @returns A stable attachment-to-scope snapshot.
+   */
   retainedScopeSnapshot(
     pending: readonly DeliveryRunScope[],
   ): ReadonlyMap<string, readonly DeliveryRunScope[]> {
-    const retained = new Set(pending.map(scopeKey));
+    const retained = new Set(pending.map(EnvironmentScopeValues.key));
     for (const record of this.records()) {
       for (const unit of record.units) {
         retained.add(unit);
@@ -99,13 +137,22 @@ export class EnvironmentDeliveryRecords {
     for (const [token, configured] of this.#registrations) {
       snapshot.set(
         token,
-        Object.freeze([...configured.values()].filter((scope) => retained.has(scopeKey(scope)))),
+        Object.freeze(
+          [...configured.values()].filter((scope) =>
+            retained.has(EnvironmentScopeValues.key(scope)),
+          ),
+        ),
       );
     }
     return snapshot;
   }
 
-  /** @internal Atomically select, report, consume, and remove one registration's ownership. */
+  /**
+   * Records and removes one attachment's ownership atomically.
+   *
+   * @param token - Identifies the attachment to detach.
+   * @returns Reportable failures released by the detach.
+   */
   detach(token: string): readonly unknown[] {
     const registration = this.#registrations.get(token);
     if (registration === undefined) {
@@ -134,7 +181,12 @@ export class EnvironmentDeliveryRecords {
     return causes;
   }
 
-  /** @internal Remove failed-start ownership while retaining reported generation evidence. */
+  /**
+   * Removes failed-start ownership while retaining reported generation evidence.
+   *
+   * @param token - Identifies the failed attachment.
+   * @returns Reportable failures released by rollback.
+   */
   rollback(token: string): readonly unknown[] {
     const registration = this.#registrations.get(token);
     if (registration === undefined) {
@@ -154,7 +206,11 @@ export class EnvironmentDeliveryRecords {
     return causes;
   }
 
-  /** @internal Atomically select, report, and consume every generation record. */
+  /**
+   * Records and consumes every generation record atomically.
+   *
+   * @returns Reportable failures released by retirement.
+   */
   retire(): readonly unknown[] {
     if (this.#obligations === undefined) {
       this.#registrations.clear();
@@ -191,7 +247,7 @@ export class EnvironmentDeliveryRecords {
   }
 
   #tokensFor(scope: DeliveryRunScope): readonly string[] {
-    const key = scopeKey(scope);
+    const key = EnvironmentScopeValues.key(scope);
     const tokens: string[] = [];
     for (const [token, scopes] of this.#registrations) {
       if (scopes.has(key)) {
@@ -230,13 +286,16 @@ export class EnvironmentDeliveryRecords {
   }
 }
 
-function scopeKey(scope: DeliveryRunScope): string {
-  return JSON.stringify([
-    scope.owner.key,
-    scope.ready.tenantId ?? null,
-    scope.ready.label,
-    scope.ready.targetTypeUrl,
-    scope.ready.shard.index,
-    scope.ready.shard.ofTotal,
-  ]);
-}
+/** @internal Groups canonical delivery-scope identity encoding for one environment generation. */
+const EnvironmentScopeValues = Object.freeze({
+  key(scope: DeliveryRunScope): string {
+    return JSON.stringify([
+      scope.owner.key,
+      scope.ready.tenantId ?? null,
+      scope.ready.label,
+      scope.ready.targetTypeUrl,
+      scope.ready.shard.index,
+      scope.ready.shard.ofTotal,
+    ]);
+  },
+});

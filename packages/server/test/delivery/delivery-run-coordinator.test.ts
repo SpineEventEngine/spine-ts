@@ -5,7 +5,7 @@ import type { DeliveryLoopProgress, DeliveryLoopRun } from "../../src/delivery/d
 import {
   DeliveryRunCoordinator,
   DeliveryRunQuiescenceError,
-  deliveryRunWorker,
+  deliveryRunWorkers,
   type DeliveryRunObligation,
   type DeliveryRunScope,
   type DeliveryRunWorker,
@@ -972,7 +972,7 @@ describe("DeliveryRunCoordinator", () => {
       node: "worker-a",
       onMessage: () => undefined,
     });
-    const adapter = deliveryRunWorker(worker);
+    const adapter = deliveryRunWorkers.worker(worker);
     const obligation = Object.freeze({ scopes: Object.freeze([configured]) });
     const running = adapter.start(obligation, [configured.ready.shard]);
     let settled = false;
@@ -999,7 +999,7 @@ describe("DeliveryRunCoordinator", () => {
       node: "worker-a",
       onMessage: () => undefined,
     });
-    const adapter = deliveryRunWorker(worker);
+    const adapter = deliveryRunWorkers.worker(worker);
 
     adapter.stop();
     await adapter.awaitSettled();

@@ -20,30 +20,61 @@ const controlledDeliveryRunners = new WeakMap<
   (options: DeliveryControlledRun) => Promise<DeliveryResult>
 >();
 
-/** @internal Resolve controlled execution only for identities created by this module. */
-export function controlledDeliveryRunner(
-  delivery: Delivery,
-): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined {
-  return controlledDeliveryRunners.get(delivery);
+/** Provides package-local controls for builder-created deliveries. */
+export interface DeliveryControls {
+  /**
+   * Finds controlled execution for one builder-created delivery.
+   *
+   * @param delivery The builder-created delivery.
+   * @returns Its controlled runner, if present.
+   */
+  runner(
+    delivery: Delivery,
+  ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined;
 }
+
+/** Exposes package-local controls for builder-created deliveries. */
+export const deliveryControls: DeliveryControls = Object.freeze({
+  /** Finds controlled execution for a builder-created delivery. */
+  runner(
+    delivery: Delivery,
+  ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined {
+    return controlledDeliveryRunners.get(delivery);
+  },
+});
 
 /** Assigns inbox targets to durable delivery shards. */
 export interface DeliveryStrategy {
   /** Positive number of shards addressable by this strategy. */
   readonly shardCount: number;
-  /** Return the shard for one target identity and type. */
+  /**
+   * Returns the shard for one target identity and type.
+   *
+   * @param targetId The target identity.
+   * @param targetType The target type URL.
+   * @returns The durable shard for the target.
+   */
   shardFor(targetId: string, targetType: string): ShardIndex;
 }
 
 /** Places every target in one local shard. */
 export class UniformAcrossAllShards implements DeliveryStrategy {
   static readonly #single = new UniformAcrossAllShards(1);
-  /** Return a strategy that uses the requested positive number of shards. */
+  /**
+   * Returns a strategy with the requested positive number of shards.
+   *
+   * @param shards The number of addressable shards.
+   * @returns A uniform shard strategy.
+   */
   static forNumber(shards: number): UniformAcrossAllShards {
     return new UniformAcrossAllShards(shards);
   }
 
-  /** Return the shared single-shard strategy. */
+  /**
+   * Returns the shared single-shard strategy.
+   *
+   * @returns The shared single-shard strategy.
+   */
   static singleShard(): UniformAcrossAllShards {
     return this.#single;
   }
@@ -59,7 +90,13 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
     Object.freeze(this);
   }
 
-  /** Determine a stable shard from a target identity. */
+  /**
+   * Determines a stable shard from a target identity.
+   *
+   * @param targetId The target identity.
+   * @param targetType The target type URL.
+   * @returns The stable shard for the target.
+   */
   shardFor(targetId: string, targetType: string): ShardIndex {
     if (typeof targetId !== "string" || targetId.length === 0) {
       throw new Error("Delivery target ID must be a non-empty string.");
@@ -67,21 +104,45 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
     if (typeof targetType !== "string" || targetType.length === 0) {
       throw new Error("Delivery target type must be a non-empty string.");
     }
-    return new ShardIndex(hash(`${targetType}:${targetId}`) % this.shardCount, this.shardCount);
+    return new ShardIndex(
+      DeliveryValues.hash(`${targetType}:${targetId}`) % this.shardCount,
+      this.shardCount,
+    );
   }
 }
 
 /** Observes finite local delivery without owning scheduling or retry policy. */
 export interface DeliveryMonitor {
-  /** Called after exclusive pickup and before page work. Throwing aborts the run after release. */
+  /**
+   * Observes exclusive pickup before page work.
+   *
+   * @param shard The picked shard.
+   */
   onStarted?(shard: ShardIndex): void;
-  /** Called after every released page; return `false` to stop, or throw to reject the run. */
+  /**
+   * Observes a released page.
+   *
+   * @param page The completed page.
+   * @returns `false` to stop the run, otherwise `undefined`.
+   */
   onPage?(page: DeliveryPage): boolean | undefined;
-  /** Called when another node owns the shard. Throwing rejects without terminal notification. */
+  /**
+   * Observes a shard owned by another node.
+   *
+   * @param shard The unavailable shard.
+   */
   onSkipped?(shard: ShardIndex): void;
-  /** Called after a released failed page. Throwing rejects without terminal notification. */
+  /**
+   * Observes a released failed page.
+   *
+   * @param page The failed page.
+   */
   onFailure?(page: DeliveryPage): void;
-  /** Last hook for a fulfilled run; throwing rejects the returned promise after all release work. */
+  /**
+   * Observes a fulfilled run after all release work.
+   *
+   * @param result The terminal run result.
+   */
   onCompleted?(result: DeliveryResult): void;
 }
 
@@ -134,7 +195,12 @@ export interface Delivery {
   readonly batchSize: number;
   /** Durable inbox facade. */
   readonly inbox: DeliveryInbox;
-  /** Run one finite local shard delivery. */
+  /**
+   * Executes one finite local shard delivery.
+   *
+   * @param options The shard and endpoint callback.
+   * @returns The terminal finite-run result.
+   */
   run(options: DeliveryRunOptions): Promise<DeliveryResult>;
 }
 
@@ -150,55 +216,88 @@ export class DeliveryBuilder {
   #batchSize: number | undefined;
   #node: string | undefined;
 
-  /** Configure the storage namespace for inbox, attempts, and shard records. */
+  /**
+   * Sets the storage namespace for inbox, attempts, and shard records.
+   *
+   * @param context The delivery storage namespace.
+   * @returns This builder.
+   */
   withContext(context: StorageContext): this {
-    this.#context = snapshotContext(context);
+    this.#context = DeliveryValues.snapshotContext(context);
     return this;
   }
 
-  /** Configure the storage factory. */
+  /** Sets the storage factory.
+   * @param storageFactory The durable storage factory.
+   * @returns This builder.
+   */
   withStorageFactory(storageFactory: StorageFactory): this {
     this.#storageFactory = storageFactory;
     return this;
   }
 
-  /** Configure the registry used for exclusive shard pickup. */
+  /** Sets the registry used for exclusive shard pickup.
+   * @param workRegistry The shard work registry.
+   * @returns This builder.
+   */
   withWorkRegistry(workRegistry: DeliveryWorkRegistry): this {
     this.#workRegistry = workRegistry;
     return this;
   }
 
-  /** Configure an inbox port instead of the local durable inbox default. */
+  /** Sets an inbox port instead of the local durable inbox default.
+   * @param inbox The inbox port.
+   * @returns This builder.
+   */
   withInbox(inbox: DeliveryInbox): this {
     this.#inbox = inbox;
     return this;
   }
 
-  /** Configure the target-to-shard strategy. */
+  /** Sets the target-to-shard strategy.
+   * @param strategy The target strategy.
+   * @returns This builder.
+   */
   withStrategy(strategy: DeliveryStrategy): this {
-    this.#strategy = requireDeliveryStrategy(strategy);
+    this.#strategy = DeliveryValues.requireStrategy(strategy);
     return this;
   }
 
-  /** Configure finite-run observation and cancellation. */
+  /** Sets finite-run observation and cancellation.
+   * @param monitor The run monitor.
+   * @returns This builder.
+   */
   withMonitor(monitor: DeliveryMonitor): this {
     this.#monitor = monitor;
     return this;
   }
 
-  /** Configure the positive accepted-work bound for one page. */
+  /** Sets the positive accepted-work bound for one page.
+   * @param pageSize The positive page size.
+   * @returns This builder.
+   */
   withPageSize(pageSize: number): this {
-    this.#pageSize = requireBound("Delivery page size", pageSize, inboxStorageAccess.maxReadLimit);
+    this.#pageSize = DeliveryValues.requireBound(
+      "Delivery page size",
+      pageSize,
+      inboxStorageAccess.maxReadLimit,
+    );
     return this;
   }
 
-  /** Configure the positive number of pages admitted by one local run. */
+  /** Sets the positive number of pages admitted by one local run.
+   * @param batchSize The positive page count.
+   * @returns This builder.
+   */
   withBatchSize(batchSize: number): this {
-    this.#batchSize = requireBound("Delivery batch size", batchSize, maxBatchSize);
+    this.#batchSize = DeliveryValues.requireBound("Delivery batch size", batchSize, maxBatchSize);
     return this;
   }
 
-  /** Configure the node identity used for shard pickup. */
+  /** Sets the node identity used for shard pickup.
+   * @param node The non-empty node identity.
+   * @returns This builder.
+   */
   withNode(node: string): this {
     if (typeof node !== "string" || node.length === 0) {
       throw new Error("Delivery node must be a non-empty string.");
@@ -207,10 +306,14 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Resolve the current builder configuration into one immutable delivery. */
+  /**
+   * Creates one immutable delivery from the current builder configuration.
+   *
+   * @returns The configured delivery.
+   */
   build(): Delivery {
     const context = this.#context ?? defaultContext;
-    const strategy = snapshotDeliveryStrategy(
+    const strategy = DeliveryValues.snapshotStrategy(
       this.#strategy ?? UniformAcrossAllShards.singleShard(),
     );
     let storageFactory = this.#storageFactory;
@@ -273,48 +376,47 @@ class BuiltDelivery implements Delivery {
   }
 }
 
-function requireDeliveryStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
-  if (!Number.isSafeInteger(strategy.shardCount) || strategy.shardCount <= 0) {
-    throw new Error("Delivery strategy shard count must be a positive safe integer.");
-  }
-  return strategy;
-}
-
-function snapshotDeliveryStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
-  const shardCount = requireDeliveryStrategy(strategy).shardCount;
-  return Object.freeze({
-    shardCount,
-    shardFor(targetId: string, targetType: string): ShardIndex {
-      const shard = strategy.shardFor(targetId, targetType);
-      if (shard.ofTotal !== shardCount) {
-        throw new Error("Delivery strategy shard total must equal its resolved shard count.");
-      }
-      return shard;
-    },
-  });
-}
-
-function hash(value: string): number {
-  let result = 0;
-  for (const character of value) {
-    result = (result * 31 + character.charCodeAt(0)) >>> 0;
-  }
-  return result;
-}
-
-function requireBound(name: string, value: number, max: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(`${name} must be a positive safe integer.`);
-  }
-  if (value > max) {
-    throw new Error(`${name} must be at most ${String(max)}.`);
-  }
-  return value;
-}
-
-function snapshotContext(context: StorageContext): StorageContext {
-  if (typeof context.name !== "string" || context.name.length === 0) {
-    throw new Error("Delivery storage context name must be a non-empty string.");
-  }
-  return Object.freeze({ ...context });
-}
+/** Groups immutable delivery configuration operations. */
+const DeliveryValues = Object.freeze({
+  requireStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
+    if (!Number.isSafeInteger(strategy.shardCount) || strategy.shardCount <= 0) {
+      throw new Error("Delivery strategy shard count must be a positive safe integer.");
+    }
+    return strategy;
+  },
+  snapshotStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
+    const shardCount = this.requireStrategy(strategy).shardCount;
+    return Object.freeze({
+      shardCount,
+      shardFor(targetId: string, targetType: string): ShardIndex {
+        const shard = strategy.shardFor(targetId, targetType);
+        if (shard.ofTotal !== shardCount) {
+          throw new Error("Delivery strategy shard total must equal its resolved shard count.");
+        }
+        return shard;
+      },
+    });
+  },
+  hash(value: string): number {
+    let result = 0;
+    for (const character of value) {
+      result = (result * 31 + character.charCodeAt(0)) >>> 0;
+    }
+    return result;
+  },
+  requireBound(name: string, value: number, max: number): number {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new Error(`${name} must be a positive safe integer.`);
+    }
+    if (value > max) {
+      throw new Error(`${name} must be at most ${String(max)}.`);
+    }
+    return value;
+  },
+  snapshotContext(context: StorageContext): StorageContext {
+    if (typeof context.name !== "string" || context.name.length === 0) {
+      throw new Error("Delivery storage context name must be a non-empty string.");
+    }
+    return Object.freeze({ ...context });
+  },
+});

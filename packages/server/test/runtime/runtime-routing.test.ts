@@ -13,7 +13,7 @@ import {
   EventRegistrationReadiness,
   HandlerMetadataRegistry,
   createRoutingPlan,
-  defineEntityHandlers,
+  EntityHandlers,
   type CommandRuntimeRoutingPlan,
   type DeferredRoutingSeam,
   type EventRuntimeRoutingPlan,
@@ -145,7 +145,7 @@ function withPatchedPrototypeMethod<Result>(
 
 describe("server runtime routing", () => {
   it("plans deterministic command topics and one competing-consumer command worker id", () => {
-    const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
       builder.assign(AggregateStateSchema, "assignArchive"),
     ]);
@@ -212,7 +212,7 @@ describe("server runtime routing", () => {
   });
 
   it("plans event fan-out routes for subscribers, reactors, and applications while deferring other seams", () => {
-    const projectionHandlers = defineEntityHandlers(
+    const projectionHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [
@@ -221,7 +221,7 @@ describe("server runtime routing", () => {
         builder.apply(EventSchema, "applyCreated", { allowImport: true }),
       ],
     );
-    const aggregateHandlers = defineEntityHandlers(
+    const aggregateHandlers = EntityHandlers.define(
       TaskAggregate,
       AggregateStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
@@ -299,7 +299,7 @@ describe("server runtime routing", () => {
   });
 
   it("returns a frozen copy-safe plan without dispatch, socket, or endpoint APIs", () => {
-    const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
       builder.subscribe(EventSchema, "subscribeCreated"),
     ]);
@@ -374,7 +374,7 @@ describe("server runtime routing", () => {
   });
 
   it("rejects malformed context and non-authentic readiness inputs", () => {
-    const projectionHandlers = defineEntityHandlers(
+    const projectionHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
@@ -396,7 +396,7 @@ describe("server runtime routing", () => {
       createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         commands: {
-          registeredCommandMessageFullTypeNames: () => Object.freeze([CommandSchema.typeName]),
+          commandTypeNames: () => Object.freeze([CommandSchema.typeName]),
           findCommandAssignee: () => undefined,
         } as unknown as CommandRegistrationReadiness,
       }),
@@ -406,7 +406,7 @@ describe("server runtime routing", () => {
       createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         events: {
-          registeredEventMessageFullTypeNames: () => Object.freeze([EventSchema.typeName]),
+          eventTypeNames: () => Object.freeze([EventSchema.typeName]),
           findEventSubscribers: () =>
             Object.freeze([
               {
@@ -422,7 +422,7 @@ describe("server runtime routing", () => {
   });
 
   it("rejects prototype-forged command readiness before override methods run", () => {
-    const commandHandlers = defineEntityHandlers(
+    const commandHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.assign(CommandSchema, "assignCreate")],
@@ -431,7 +431,7 @@ describe("server runtime routing", () => {
     let overrideCalls = 0;
 
     const forgedCommandReadiness = overrideReadiness(commandReadiness, {
-      registeredCommandMessageFullTypeNames: () => {
+      commandTypeNames: () => {
         overrideCalls += 1;
         throw new Error("forged command readiness names override should not run");
       },
@@ -451,7 +451,7 @@ describe("server runtime routing", () => {
   });
 
   it("rejects prototype-forged event readiness before override methods run", () => {
-    const projectionHandlers = defineEntityHandlers(
+    const projectionHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
@@ -460,7 +460,7 @@ describe("server runtime routing", () => {
     let overrideCalls = 0;
 
     const forgedEventReadiness = overrideReadiness(eventReadiness, {
-      registeredEventMessageFullTypeNames: () => {
+      eventTypeNames: () => {
         overrideCalls += 1;
         throw new Error("forged event readiness names override should not run");
       },
@@ -488,7 +488,7 @@ describe("server runtime routing", () => {
   });
 
   it("rejects proxy-wrapped command readiness before proxy traps can run", () => {
-    const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
     const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
@@ -519,7 +519,7 @@ describe("server runtime routing", () => {
   });
 
   it("rejects proxy-wrapped event readiness before proxy traps can run", () => {
-    const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.subscribe(EventSchema, "subscribeCreated"),
     ]);
     const readiness = EventRegistrationReadiness.fromEntityHandlers([handlers]);
@@ -550,12 +550,12 @@ describe("server runtime routing", () => {
   });
 
   it("uses planner-local indexed event worker identities for authentic event fan-out", () => {
-    const projectionHandlers = defineEntityHandlers(
+    const projectionHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
     );
-    const aggregateHandlers = defineEntityHandlers(
+    const aggregateHandlers = EntityHandlers.define(
       TaskAggregate,
       AggregateStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
@@ -576,12 +576,12 @@ describe("server runtime routing", () => {
   });
 
   it("rejects prototype-forged readiness even when forged metadata looks malformed", () => {
-    const commandHandlers = defineEntityHandlers(
+    const commandHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.assign(CommandSchema, "assignCreate")],
     );
-    const projectionHandlers = defineEntityHandlers(
+    const projectionHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
@@ -613,7 +613,7 @@ describe("server runtime routing", () => {
   });
 
   it("rejects malformed authentic command readiness metadata deterministically", () => {
-    const commandHandlers = defineEntityHandlers(
+    const commandHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.assign(CommandSchema, "assignCreate")],
@@ -700,7 +700,7 @@ describe("server runtime routing", () => {
   });
 
   it("rejects malformed authentic event readiness metadata deterministically", () => {
-    const projectionHandlers = defineEntityHandlers(
+    const projectionHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],

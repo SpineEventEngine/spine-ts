@@ -21,7 +21,7 @@ import {
   type EntityTransactionMutator,
   type EntityTransactionVersionMetadata,
 } from "./entity-transaction.js";
-import type { EntityStateTransitionValidationResult } from "./entity-transition-validation.js";
+import type { StateTransitionResult } from "./entity-transition-validation.js";
 
 type RejectedCommitSnapshot = EntityTransactionRejectedCommit<
   DescriptorMessageSchema,
@@ -65,7 +65,11 @@ export class TransactionalEntityScopeError extends Error {
   /** Operation rejected by the current transaction scope. */
   readonly operation: TransactionalEntityScopeOperation;
 
-  /** Create a deterministic transaction-scope error. */
+  /** Creates a deterministic transaction-scope error.
+   *
+   * @param reason - Scope failure reason.
+   * @param operation - Operation rejected by the scope.
+   */
   constructor(reason: EntityScopeReason, operation: TransactionalEntityScopeOperation) {
     super(
       reason === "duplicate"
@@ -194,45 +198,66 @@ export abstract class Entity<
   #lifecycle: EntityLifecycleFlags;
   #lifecycleFlagsChanged = false;
 
-  /** Create an entity shell from caller-provided state and metadata inputs. */
+  /** Creates an entity shell from caller-provided state and metadata inputs.
+   *
+   * @param options - Identity, schema, state, version, and lifecycle inputs.
+   */
   constructor(options: EntityOptions<Id, Schema, Version>) {
     this.#id = options.id;
     this.#schema = options.schema;
     this.#metadata = describeEntityMetadata(options.schema);
-    this.#state = cloneState(options.schema, options.state);
-    this.#version = cloneVersionMetadata(options.version) as Version;
+    this.#state = EntitySnapshots.clone(options.schema, options.state);
+    this.#version = EntityVersions.clone(options.version) as Version;
     this.#lifecycle = {
       archived: options.lifecycle?.archived ?? false,
       deleted: options.lifecycle?.deleted ?? false,
     };
   }
 
-  /** Stable entity identifier. */
+  /** Gets the stable entity identifier.
+   *
+   * @returns The caller-owned entity identifier.
+   */
   get id(): Id {
     return this.#id;
   }
 
-  /** Generated Protobuf-ES schema describing this entity's state. */
+  /** Gets the generated Protobuf-ES schema describing this entity's state.
+   *
+   * @returns The generated state schema.
+   */
   get schema(): Schema {
     return this.#schema;
   }
 
-  /** Descriptor-derived metadata for this entity's state schema. */
+  /** Gets descriptor-derived metadata for this entity's state schema.
+   *
+   * @returns The frozen descriptor metadata.
+   */
   get metadata(): EntityMetadata<Schema> {
     return this.#metadata;
   }
 
-  /** Current entity state snapshot. */
+  /** Gets the current entity state snapshot.
+   *
+   * @returns A cloned state snapshot.
+   */
   get state(): MessageShape<Schema> {
-    return cloneState(this.#schema, this.#state);
+    return EntitySnapshots.clone(this.#schema, this.#state);
   }
 
-  /** Caller-owned plain version metadata snapshot. */
+  /** Gets the caller-owned plain version metadata snapshot.
+   *
+   * @returns A validated clone of the version metadata.
+   */
   get version(): Version {
-    return cloneVersionMetadata(this.#version);
+    return EntityVersions.clone(this.#version);
   }
 
-  /** Current lifecycle flag snapshot. */
+  /** Gets the current lifecycle flag snapshot.
+   *
+   * @returns The archived and deleted flags.
+   */
   get lifecycle(): EntityLifecycleFlags {
     return {
       archived: this.#lifecycle.archived,
@@ -240,37 +265,61 @@ export abstract class Entity<
     };
   }
 
-  /** Whether the entity is archived. */
+  /** Determines whether the entity is archived.
+   *
+   * @returns `true` when the entity is archived.
+   */
   get isArchived(): boolean {
     return this.#lifecycle.archived;
   }
 
-  /** Whether the entity is deleted. */
+  /** Determines whether the entity is deleted.
+   *
+   * @returns `true` when the entity is deleted.
+   */
   get isDeleted(): boolean {
     return this.#lifecycle.deleted;
   }
 
-  /** Whether neither lifecycle flag marks the entity inactive. */
+  /** Determines whether neither lifecycle flag marks the entity inactive.
+   *
+   * @returns `true` when the entity is active.
+   */
   get isActive(): boolean {
     return !this.isArchived && !this.isDeleted;
   }
 
-  /** Whether lifecycle flags changed after construction. */
+  /** Determines whether lifecycle flags changed after construction.
+   *
+   * @returns `true` when lifecycle flags changed.
+   */
   get lifecycleFlagsChanged(): boolean {
     return this.#lifecycleFlagsChanged;
   }
 
-  /** Replace stored state from framework-owned subclass/runtime code. */
+  /**
+   * Replaces stored state from framework-owned subclass or runtime code.
+   *
+   * @param state - Next entity state snapshot.
+   */
   protected replaceState(state: MessageShape<Schema>): void {
-    this.#state = cloneState(this.#schema, state);
+    this.#state = EntitySnapshots.clone(this.#schema, state);
   }
 
-  /** Replace caller-owned plain version metadata from framework-owned subclass/runtime code. */
+  /**
+   * Replaces caller-owned version metadata from framework-owned subclass or runtime code.
+   *
+   * @param version - Next caller-owned version metadata.
+   */
   protected replaceVersionMetadata(version: EntityVersionMetadataInput<Version>): void {
-    this.#version = cloneVersionMetadata(version) as Version;
+    this.#version = EntityVersions.clone(version) as Version;
   }
 
-  /** Replace lifecycle flags from framework-owned subclass/runtime code. */
+  /**
+   * Replaces lifecycle flags from framework-owned subclass or runtime code.
+   *
+   * @param lifecycle - Lifecycle flag changes to apply.
+   */
   protected replaceLifecycleFlags(lifecycle: Partial<EntityLifecycleFlags>): void {
     const next = {
       archived: lifecycle.archived ?? this.#lifecycle.archived,
@@ -287,6 +336,9 @@ export abstract class Entity<
    * Reads the newest retained state at or before `time`.
    *
    * This diagnostic facility is repository-bound and is not a remote API.
+   *
+   * @param time - Timestamp of the requested state snapshot.
+   * @returns The retained state snapshot, if one exists.
    */
   protected stateAt(time: Timestamp): Promise<Readonly<MessageShape<Schema>> | undefined> {
     return entityHistoryAccess.stateAt(this, time) as Promise<
@@ -294,7 +346,12 @@ export abstract class Entity<
     >;
   }
 
-  /** Reads retained states in descending version order. */
+  /**
+   * Reads retained states in descending version order.
+   *
+   * @param depth - Maximum number of retained states to read.
+   * @returns Retained state snapshots in descending version order.
+   */
   protected stateHistoryBackward(
     depth: number,
   ): Promise<readonly Readonly<MessageShape<Schema>>[]> {
@@ -303,7 +360,11 @@ export abstract class Entity<
     >;
   }
 
-  /** Application-managed state-history retention. */
+  /**
+   * Gets application-managed state-history retention.
+   *
+   * @returns State-history storage for this entity.
+   */
   protected stateHistoryStorage(): EntityStateHistoryStorage<Id, MessageShape<Schema>> {
     return entityHistoryAccess.stateMaintenance(this) as EntityStateHistoryStorage<
       Id,
@@ -331,41 +392,48 @@ interface EntityHistoryAccess {
   eventMaintenance(entity: object): EntityEventStorage<unknown>;
 }
 
-/** @internal Repository-only history binding. */
+/** Provides repository-only history binding.
+ *
+ * @internal
+ */
 export const entityHistoryAccess: EntityHistoryAccess = Object.freeze({
   bind(entity: object, binding: BoundEntityHistory): void {
     boundEntityHistories.set(entity, binding);
   },
   stateAt(entity: object, time: Timestamp): Promise<unknown> {
-    return requireEntityHistory(entity).stateAt(time);
+    return EntityHistory.require(entity).stateAt(time);
   },
   states(entity: object, depth: number): Promise<readonly unknown[]> {
-    return requireEntityHistory(entity).states(requireHistoryDepth(depth));
+    return EntityHistory.require(entity).states(EntityHistory.depth(depth));
   },
   events(entity: object, depth: number): Promise<readonly Readonly<Event>[]> {
-    return requireEntityHistory(entity).events(requireHistoryDepth(depth));
+    return EntityHistory.require(entity).events(EntityHistory.depth(depth));
   },
   stateMaintenance(entity: object): EntityStateHistoryStorage<unknown, Message> {
-    return requireEntityHistory(entity).stateMaintenance;
+    return EntityHistory.require(entity).stateMaintenance;
   },
   eventMaintenance(entity: object): EntityEventStorage<unknown> {
-    return requireEntityHistory(entity).eventMaintenance;
+    return EntityHistory.require(entity).eventMaintenance;
   },
 });
 
-function requireEntityHistory(entity: object): BoundEntityHistory {
-  const binding = boundEntityHistories.get(entity);
-  if (binding === undefined)
-    throw new Error("Entity history is available only from repository execution.");
-  return binding;
-}
+/** Owns repository-bound history lookups and their input validation. */
+const EntityHistory = Object.freeze({
+  require(entity: object): BoundEntityHistory {
+    const binding = boundEntityHistories.get(entity);
+    if (binding === undefined) {
+      throw new Error("Entity history is available only from repository execution.");
+    }
+    return binding;
+  },
 
-function requireHistoryDepth(depth: number): number {
-  if (!Number.isSafeInteger(depth) || depth <= 0) {
-    throw new RangeError("Entity history depth must be a positive safe integer.");
-  }
-  return depth;
-}
+  depth(depth: number): number {
+    if (!Number.isSafeInteger(depth) || depth <= 0) {
+      throw new RangeError("Entity history depth must be a positive safe integer.");
+    }
+    return depth;
+  },
+});
 
 /**
  * Common in-memory entity shell with a protected scoped transaction draft.
@@ -387,18 +455,25 @@ export abstract class TransactionalEntity<
   #transaction: EntityTransaction<Schema, Version> | undefined;
   #stateChanged = false;
 
-  /** Whether accepted transaction state changes or lifecycle flag changes are visible. */
+  /** Determines whether accepted transaction state or lifecycle changes are visible.
+   *
+   * @returns `true` when the entity differs from its initial state.
+   */
   get changed(): boolean {
     return this.#stateChanged || this.lifecycleFlagsChanged;
   }
 
-  /** Whether a protected transaction scope is currently active. */
+  /**
+   * Determines whether a protected transaction scope is currently active.
+   *
+   * @returns `true` when an active transaction scope exists.
+   */
   protected isTransactionInProgress(): boolean {
     return this.#transaction?.status === "active";
   }
 
   /**
-   * Start a protected draft transaction from the entity's current snapshots.
+   * Starts a protected draft transaction from the entity's current snapshots.
    *
    * @throws {@link TransactionalEntityScopeError} when another transaction is active.
    */
@@ -413,15 +488,16 @@ export abstract class TransactionalEntity<
       previous: this.state,
       version: {
         previous: previousVersion,
-        draft: cloneVersionMetadata(previousVersion),
+        draft: EntityVersions.clone(previousVersion),
       },
       lifecycle: this.lifecycle,
     });
   }
 
   /**
-   * Current draft state snapshot.
+   * Gets the current draft state snapshot.
    *
+   * @returns A cloned current draft state snapshot.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected currentDraft(): MessageShape<Schema> {
@@ -429,22 +505,24 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Current draft version metadata snapshot.
+   * Gets the current draft version metadata snapshot.
    *
+   * @returns Cloned previous and draft version metadata.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected draftVersionMetadata(): EntityTransactionVersionMetadata<Version> {
     const version = this.#requireTransaction("draftVersionMetadata").version;
 
     return {
-      previous: cloneVersionMetadata(version.previous),
-      draft: cloneVersionMetadata(version.draft),
+      previous: EntityVersions.clone(version.previous),
+      draft: EntityVersions.clone(version.draft),
     };
   }
 
   /**
-   * Current draft lifecycle flag snapshot.
+   * Gets the current draft lifecycle flag snapshot.
    *
+   * @returns Current archived and deleted draft flags.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected draftLifecycleFlags(): EntityTransactionLifecycleFlags {
@@ -452,8 +530,10 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Mutate the buffered draft state in place and return its resulting snapshot.
+   * Updates the buffered draft state in place.
    *
+   * @param mutator - Changes the active draft state.
+   * @returns A cloned snapshot of the updated draft state.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected update(mutator: EntityTransactionMutator<Schema>): MessageShape<Schema> {
@@ -461,11 +541,13 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Mutate and validate a scratch draft, applying it only when valid.
+   * Tries to update and validate a scratch draft, applying it only when valid.
    *
    * Validation failures return immutable constraint violations. Other errors
    * propagate and leave the active draft unchanged.
    *
+   * @param mutator - Changes the scratch draft state.
+   * @returns Immutable constraint violations, or an empty array when the update applies.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected tryUpdate(mutator: EntityTransactionMutator<Schema>): readonly ConstraintViolation[] {
@@ -473,23 +555,26 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Replace the buffered draft version metadata. No version increments are computed.
+   * Updates the buffered draft version metadata without computing version increments.
    *
+   * @param draft - Caller-owned version metadata for the active draft.
+   * @returns Cloned previous and draft version metadata.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected updateDraftVersionMetadata(
     draft: EntityVersionMetadataInput<Version>,
   ): EntityTransactionVersionMetadata<Version> {
     this.#requireTransaction("updateDraftVersionMetadata").updateVersionMetadata(
-      cloneVersionMetadata(draft) as Version,
+      EntityVersions.clone(draft) as Version,
     );
 
     return this.draftVersionMetadata();
   }
 
   /**
-   * Mark the buffered draft lifecycle as archived.
+   * Marks the buffered draft lifecycle as archived.
    *
+   * @returns The archived and deleted draft flags.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected archiveDraft(): EntityTransactionLifecycleFlags {
@@ -497,8 +582,9 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Mark the buffered draft lifecycle as not archived.
+   * Marks the buffered draft lifecycle as not archived.
    *
+   * @returns The archived and deleted draft flags.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected unarchiveDraft(): EntityTransactionLifecycleFlags {
@@ -506,8 +592,9 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Mark the buffered draft lifecycle as deleted.
+   * Marks the buffered draft lifecycle as deleted.
    *
+   * @returns The archived and deleted draft flags.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected markDraftDeleted(): EntityTransactionLifecycleFlags {
@@ -515,8 +602,9 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Mark the buffered draft lifecycle as not deleted.
+   * Marks the buffered draft lifecycle as not deleted.
    *
+   * @returns The archived and deleted draft flags.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected restoreDraft(): EntityTransactionLifecycleFlags {
@@ -524,12 +612,13 @@ export abstract class TransactionalEntity<
   }
 
   /**
-   * Commit the active draft transaction.
+   * Commits the active draft transaction.
    *
    * Accepted commits apply state, version metadata, and lifecycle flags to this
    * entity and close the transaction. Rejected commits do not apply anything and
    * keep the transaction active for correction or explicit rollback.
    *
+   * @returns A cloned accepted or rejected transaction result.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected commitTransaction(): EntityTransactionCommitResult<Schema, Version> {
@@ -539,7 +628,7 @@ export abstract class TransactionalEntity<
     if (result.status === "accepted") {
       if (
         result.previous === undefined ||
-        !statesAreEqual(this.schema, result.previous, result.next)
+        !EntitySnapshots.equal(this.schema, result.previous, result.next)
       ) {
         this.#stateChanged = true;
       }
@@ -549,15 +638,16 @@ export abstract class TransactionalEntity<
       this.#transaction = undefined;
       rejectedCommits.delete(this);
     } else {
-      rejectedCommits.set(this, cloneCommitResult(result) as RejectedCommitSnapshot);
+      rejectedCommits.set(this, EntityCommits.clone(result) as RejectedCommitSnapshot);
     }
 
-    return cloneCommitResult(result);
+    return EntityCommits.clone(result);
   }
 
   /**
-   * Roll back the active draft without applying state, version, or lifecycle changes.
+   * Rolls back the active draft without applying state, version, or lifecycle changes.
    *
+   * @returns A cloned rollback result containing the discarded draft snapshots.
    * @throws {@link TransactionalEntityScopeError} when no transaction is active.
    */
   protected rollbackTransaction(): EntityTransactionRollbackResult<Schema, Version> {
@@ -579,28 +669,45 @@ export abstract class TransactionalEntity<
   }
 }
 
-/** @internal Framework-only transactional entity inspection used by repository execution. */
+/** Framework-only transaction operations used by repository execution. */
 export interface TransactionalEntityAccess {
-  /** Start a framework-owned transaction scope for an entity. */
+  /** Starts a framework-owned transaction scope for an entity.
+   *
+   * @param entity - Transactional entity object to start.
+   */
   start(entity: object): void;
-  /** Commit a framework-owned transaction scope for an entity. */
+  /** Executes a framework-owned transaction commit for an entity.
+   *
+   * @param entity - Transactional entity object to commit.
+   * @returns The transaction commit result.
+   */
   commit(entity: object): EntityTransactionCommitResult<DescriptorMessageSchema>;
-  /** Roll back a framework-owned transaction scope for an entity, if possible. */
+  /** Executes a framework-owned transaction rollback for an entity, if possible.
+   *
+   * @param entity - Transactional entity object to roll back.
+   */
   rollback(entity: object): void;
-  /** Return the last rejected transaction commit for this entity, if any. */
+  /** Returns the last rejected transaction commit for this entity, if any.
+   *
+   * @param entity - Transactional entity object to inspect.
+   * @returns A cloned rejected result, if one exists.
+   */
   rejectedCommit(
     entity: object,
   ): EntityTransactionRejectedCommit<DescriptorMessageSchema> | undefined;
 }
 
-/** @internal Framework-only transactional entity inspection used by repository execution. */
+/** Exposes framework-only transaction operations for repository execution.
+ *
+ * @internal
+ */
 export const transactionalEntityAccess: TransactionalEntityAccess = Object.freeze({
   start(entity: object): void {
-    callTransactionMethod(entity, "startTransaction");
+    TransactionAccess.call(entity, "startTransaction");
   },
 
   commit(entity: object): EntityTransactionCommitResult<DescriptorMessageSchema> {
-    return callTransactionMethod(
+    return TransactionAccess.call(
       entity,
       "commitTransaction",
     ) as EntityTransactionCommitResult<DescriptorMessageSchema>;
@@ -608,9 +715,9 @@ export const transactionalEntityAccess: TransactionalEntityAccess = Object.freez
 
   rollback(entity: object): void {
     try {
-      callTransactionMethod(entity, "rollbackTransaction");
+      TransactionAccess.call(entity, "rollbackTransaction");
     } catch (error) {
-      if (!isMissingTransaction(error)) {
+      if (!TransactionAccess.isMissing(error)) {
         throw error;
       }
     }
@@ -622,23 +729,26 @@ export const transactionalEntityAccess: TransactionalEntityAccess = Object.freez
     const rejected = rejectedCommits.get(entity);
     return rejected === undefined
       ? undefined
-      : (cloneCommitResult(rejected) as EntityTransactionRejectedCommit<DescriptorMessageSchema>);
+      : (EntityCommits.clone(rejected) as EntityTransactionRejectedCommit<DescriptorMessageSchema>);
   },
 });
 
-function callTransactionMethod(entity: object, methodName: string): unknown {
-  const method = (entity as Record<string, unknown>)[methodName];
+/** Owns the repository-only bridge to protected transactional entity methods. */
+const TransactionAccess = Object.freeze({
+  call(entity: object, methodName: string): unknown {
+    const method = (entity as Record<string, unknown>)[methodName];
 
-  if (typeof method !== "function") {
-    throw new TypeError(`Transactional entity access requires "${methodName}".`);
-  }
+    if (typeof method !== "function") {
+      throw new TypeError(`Transactional entity access requires "${methodName}".`);
+    }
 
-  return Reflect.apply(method, entity, []);
-}
+    return Reflect.apply(method, entity, []);
+  },
 
-function isMissingTransaction(error: unknown): boolean {
-  return error instanceof TransactionalEntityScopeError && error.reason === "missing";
-}
+  isMissing(error: unknown): boolean {
+    return error instanceof TransactionalEntityScopeError && error.reason === "missing";
+  },
+});
 
 /**
  * Abstract aggregate family marker over the common transactional entity shell.
@@ -656,18 +766,32 @@ export abstract class Aggregate<
   /** Stable server entity family identity. */
   declare readonly entityFamily: "aggregate";
 
-  /** Create an aggregate family shell from caller-provided state and metadata inputs. */
+  /** Creates an aggregate family shell from caller-provided state and metadata inputs.
+   *
+   * @param options - Identity, schema, state, version, and lifecycle inputs.
+   */
   constructor(options: EntityOptions<Id, Schema, Version>) {
     super(options);
-    defineEntityFamilyMarker(this, "aggregate");
+    EntityFamilies.mark(this, "aggregate");
   }
 
-  /** Reads retained diagnostic events in descending producer-version order. */
+  /**
+   * Reads retained diagnostic events in descending producer-version order.
+   *
+   * @param depth - Maximum number of retained events to read.
+   * @returns Retained events in descending producer-version order.
+   */
   protected eventHistoryBackward(depth: number): Promise<readonly Readonly<Event>[]> {
     return entityHistoryAccess.events(this, depth);
   }
 
-  /** Tests retained diagnostic events in descending producer-version order. */
+  /**
+   * Tests retained diagnostic events in descending producer-version order.
+   *
+   * @param depth - Maximum number of retained events to inspect.
+   * @param predicate - Tests each retained event.
+   * @returns `true` when a retained event matches the predicate.
+   */
   protected async eventHistoryContains(
     depth: number,
     predicate: (event: Readonly<Event>) => boolean,
@@ -675,7 +799,11 @@ export abstract class Aggregate<
     return (await this.eventHistoryBackward(depth)).some(predicate);
   }
 
-  /** Application-managed diagnostic event-history retention. */
+  /**
+   * Gets application-managed diagnostic event-history retention.
+   *
+   * @returns Event-history storage for this entity.
+   */
   protected eventStorage(): EntityEventStorage<Id> {
     return entityHistoryAccess.eventMaintenance(this) as EntityEventStorage<Id>;
   }
@@ -696,10 +824,13 @@ export abstract class Projection<
   /** Stable server entity family identity. */
   declare readonly entityFamily: "projection";
 
-  /** Create a projection family shell from caller-provided state and metadata inputs. */
+  /** Creates a projection family shell from caller-provided state and metadata inputs.
+   *
+   * @param options - Identity, schema, state, version, and lifecycle inputs.
+   */
   constructor(options: EntityOptions<Id, Schema, Version>) {
     super(options);
-    defineEntityFamilyMarker(this, "projection");
+    EntityFamilies.mark(this, "projection");
   }
 }
 
@@ -718,18 +849,32 @@ export abstract class ProcessManager<
   /** Stable server entity family identity. */
   declare readonly entityFamily: "process-manager";
 
-  /** Create a process manager family shell from caller-provided state and metadata inputs. */
+  /** Creates a process manager family shell from caller-provided state and metadata inputs.
+   *
+   * @param options - Identity, schema, state, version, and lifecycle inputs.
+   */
   constructor(options: EntityOptions<Id, Schema, Version>) {
     super(options);
-    defineEntityFamilyMarker(this, "process-manager");
+    EntityFamilies.mark(this, "process-manager");
   }
 
-  /** Reads retained diagnostic events when this repository enabled Process Manager event history. */
+  /**
+   * Reads retained diagnostic events when this repository enabled Process Manager event history.
+   *
+   * @param depth - Maximum number of retained events to read.
+   * @returns Retained events in descending producer-version order.
+   */
   protected eventHistoryBackward(depth: number): Promise<readonly Readonly<Event>[]> {
     return entityHistoryAccess.events(this, depth);
   }
 
-  /** Tests retained diagnostic events when this repository enabled Process Manager event history. */
+  /**
+   * Tests retained diagnostic events when this repository enabled Process Manager event history.
+   *
+   * @param depth - Maximum number of retained events to inspect.
+   * @param predicate - Tests each retained event.
+   * @returns `true` when a retained event matches the predicate.
+   */
   protected async eventHistoryContains(
     depth: number,
     predicate: (event: Readonly<Event>) => boolean,
@@ -737,286 +882,240 @@ export abstract class ProcessManager<
     return (await this.eventHistoryBackward(depth)).some(predicate);
   }
 
-  /** Application-managed Process Manager diagnostic event-history retention. */
+  /**
+   * Gets application-managed Process Manager diagnostic event-history retention.
+   *
+   * @returns Event-history storage for this Process Manager.
+   */
   protected eventStorage(): EntityEventStorage<Id> {
     return entityHistoryAccess.eventMaintenance(this) as EntityEventStorage<Id>;
   }
 }
 
-function defineEntityFamilyMarker(entity: object, family: EntityFamily): void {
-  Object.defineProperty(entity, "entityFamily", {
-    configurable: false,
-    enumerable: false,
-    value: family,
-    writable: false,
-  });
-}
+/** Owns immutable entity family markers. */
+const EntityFamilies = Object.freeze({
+  mark(entity: object, family: EntityFamily): void {
+    Object.defineProperty(entity, "entityFamily", {
+      configurable: false,
+      enumerable: false,
+      value: family,
+      writable: false,
+    });
+  },
+});
 
-function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(
-  result: EntityTransactionCommitResult<Schema, Version>,
-): EntityTransactionCommitResult<Schema, Version> {
-  if (result.status === "accepted") {
+/** Owns entity-state snapshots and bytewise state comparisons. */
+const EntitySnapshots = Object.freeze({
+  clone<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+    state: MessageShape<Schema>,
+  ): MessageShape<Schema> {
+    return fromBinary(schema, toBinary(schema, state, { writeUnknownFields: false }));
+  },
+
+  equal<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+    previous: MessageShape<Schema>,
+    next: MessageShape<Schema>,
+  ): boolean {
+    const previousBinary = toBinary(schema, previous, { writeUnknownFields: false });
+    const nextBinary = toBinary(schema, next, { writeUnknownFields: false });
+    return (
+      previousBinary.byteLength === nextBinary.byteLength &&
+      previousBinary.every((byte, index) => byte === nextBinary[index])
+    );
+  },
+});
+
+/** Owns immutable transaction result snapshots. */
+const EntityCommits = Object.freeze({
+  clone<Schema extends DescriptorMessageSchema, Version>(
+    result: EntityTransactionCommitResult<Schema, Version>,
+  ): EntityTransactionCommitResult<Schema, Version> {
+    if (result.status === "accepted") {
+      return {
+        ...result,
+        version: {
+          previous: EntityVersions.clone(result.version.previous),
+          committed: EntityVersions.clone(result.version.committed),
+        },
+        lifecycle: { archived: result.lifecycle.archived, deleted: result.lifecycle.deleted },
+        validation: this.validation(result.validation) as typeof result.validation,
+      };
+    }
+
     return {
       ...result,
       version: {
-        previous: cloneVersionMetadata(result.version.previous),
-        committed: cloneVersionMetadata(result.version.committed),
+        previous: EntityVersions.clone(result.version.previous),
+        draft: EntityVersions.clone(result.version.draft),
       },
-      lifecycle: {
-        archived: result.lifecycle.archived,
-        deleted: result.lifecycle.deleted,
-      },
-      validation: cloneTransitionValidation(result.validation) as typeof result.validation,
+      lifecycle: { archived: result.lifecycle.archived, deleted: result.lifecycle.deleted },
+      validation: this.validation(result.validation) as typeof result.validation,
     };
-  }
+  },
 
-  return {
-    ...result,
-    version: {
-      previous: cloneVersionMetadata(result.version.previous),
-      draft: cloneVersionMetadata(result.version.draft),
-    },
-    lifecycle: {
-      archived: result.lifecycle.archived,
-      deleted: result.lifecycle.deleted,
-    },
-    validation: cloneTransitionValidation(result.validation) as typeof result.validation,
-  };
-}
-
-function cloneTransitionValidation(
-  validation: EntityStateTransitionValidationResult,
-): EntityStateTransitionValidationResult {
-  if (validation.valid) {
+  validation(validation: StateTransitionResult): StateTransitionResult {
+    if (validation.valid) {
+      return { valid: true, violations: [], error: undefined };
+    }
+    const error = clone(ValidationErrorSchema, validation.error);
     return {
-      valid: true,
-      violations: [],
-      error: undefined,
+      valid: false,
+      violations: error.constraintViolation as [ConstraintViolation, ...ConstraintViolation[]],
+      error,
     };
-  }
-  const error = clone(ValidationErrorSchema, validation.error);
-
-  return {
-    valid: false,
-    violations: error.constraintViolation as [ConstraintViolation, ...ConstraintViolation[]],
-    error,
-  };
-}
-
-function cloneState<Schema extends DescriptorMessageSchema>(
-  schema: Schema,
-  state: MessageShape<Schema>,
-): MessageShape<Schema> {
-  return fromBinary(schema, toBinary(schema, state, { writeUnknownFields: false }));
-}
-
-function statesAreEqual<Schema extends DescriptorMessageSchema>(
-  schema: Schema,
-  previous: MessageShape<Schema>,
-  next: MessageShape<Schema>,
-): boolean {
-  const previousBinary = toBinary(schema, previous, { writeUnknownFields: false });
-  const nextBinary = toBinary(schema, next, { writeUnknownFields: false });
-
-  if (previousBinary.byteLength !== nextBinary.byteLength) {
-    return false;
-  }
-
-  return previousBinary.every((byte, index) => byte === nextBinary[index]);
-}
+  },
+});
 
 const maxVersionMetadataDepth = 1_000;
 
-function cloneVersionMetadata<Version>(version: Version): Version {
-  return clonePlainVersionMetadata(version, "$", new WeakSet(), 0) as Version;
-}
+/** Owns validation and cloning of caller-provided plain version metadata. */
+const EntityVersions = Object.freeze({
+  clone<Version>(version: Version): Version {
+    return this.value(version, "$", new WeakSet(), 0) as Version;
+  },
 
-function clonePlainVersionMetadata(
-  value: unknown,
-  path: string,
-  stack: WeakSet<object>,
-  depth: number,
-): EntityVersionMetadata {
-  if (depth > maxVersionMetadataDepth) {
-    throw versionMetadataError(path, "excessive nesting depth");
-  }
-
-  if (value === null) {
-    return value;
-  }
-
-  switch (typeof value) {
-    case "string":
-    case "number":
-    case "boolean":
-    case "bigint":
-    case "symbol":
-    case "undefined":
+  value(
+    value: unknown,
+    path: string,
+    stack: WeakSet<object>,
+    depth: number,
+  ): EntityVersionMetadata {
+    if (depth > maxVersionMetadataDepth) {
+      throw this.error(path, "excessive nesting depth");
+    }
+    if (value === null) {
       return value;
-    case "function":
-      throw versionMetadataError(path, "function");
-    case "object":
-      return clonePlainVersionObject(value, path, stack, depth);
-  }
-}
-
-function clonePlainVersionObject(
-  value: object,
-  path: string,
-  stack: WeakSet<object>,
-  depth: number,
-): EntityVersionMetadata {
-  if (isProxy(value)) {
-    throw versionMetadataError(path, "Proxy");
-  }
-  if (ArrayBuffer.isView(value)) {
-    throw versionMetadataError(path, getObjectKind(value));
-  }
-  if (value instanceof ArrayBuffer || isSharedArrayBuffer(value)) {
-    throw versionMetadataError(path, getObjectKind(value));
-  }
-  if (stack.has(value)) {
-    throw versionMetadataError(path, "cyclic object");
-  }
-
-  stack.add(value);
-  try {
-    if (Array.isArray(value)) {
-      return clonePlainVersionArray(value, path, stack, depth);
     }
-
-    if (!isPlainObject(value)) {
-      throw versionMetadataError(path, getObjectKind(value));
+    switch (typeof value) {
+      case "string":
+      case "number":
+      case "boolean":
+      case "bigint":
+      case "symbol":
+      case "undefined":
+        return value;
+      case "function":
+        throw this.error(path, "function");
+      case "object":
+        return this.object(value, path, stack, depth);
     }
+  },
 
-    const clone = Object.create(getObjectPrototype(value)) as Record<string, EntityVersionMetadata>;
-    const descriptors = Object.getOwnPropertyDescriptors(value);
+  object(
+    value: object,
+    path: string,
+    stack: WeakSet<object>,
+    depth: number,
+  ): EntityVersionMetadata {
+    if (isProxy(value)) throw this.error(path, "Proxy");
+    if (ArrayBuffer.isView(value)) throw this.error(path, this.kind(value));
+    if (value instanceof ArrayBuffer || this.isSharedBuffer(value)) {
+      throw this.error(path, this.kind(value));
+    }
+    if (stack.has(value)) throw this.error(path, "cyclic object");
+
+    stack.add(value);
+    try {
+      if (Array.isArray(value)) return this.array(value, path, stack, depth);
+      if (!this.isPlainObject(value)) throw this.error(path, this.kind(value));
+
+      const clone = Object.create(this.prototype(value)) as Record<string, EntityVersionMetadata>;
+      const descriptors = Object.getOwnPropertyDescriptors(value);
+      const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
+      if (symbolKey !== undefined) {
+        throw this.error(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
+      }
+      for (const [key, descriptor] of Object.entries(descriptors)) {
+        const childPath = `${path}.${key}`;
+        if (!descriptor.enumerable) throw this.error(childPath, "non-enumerable property");
+        if (!("value" in descriptor)) throw this.error(childPath, "accessor property");
+        Object.defineProperty(clone, key, {
+          configurable: true,
+          enumerable: true,
+          value: this.value(descriptor.value, childPath, stack, depth + 1),
+          writable: true,
+        });
+      }
+      return clone;
+    } finally {
+      stack.delete(value);
+    }
+  },
+
+  array(
+    value: readonly unknown[],
+    path: string,
+    stack: WeakSet<object>,
+    depth: number,
+  ): readonly EntityVersionMetadata[] {
+    if (this.prototype(value) !== Array.prototype) throw this.error(path, "Array");
+    const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
     const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
     if (symbolKey !== undefined) {
-      throw versionMetadataError(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
+      throw this.error(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
     }
-
+    const lengthDescriptor = descriptors.length;
+    if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) {
+      throw this.error(path, "array without data length");
+    }
+    const length = lengthDescriptor.value as number;
+    const clone = new Array<EntityVersionMetadata>(length);
     for (const [key, descriptor] of Object.entries(descriptors)) {
-      const childPath = `${path}.${key}`;
-      if (!descriptor.enumerable) {
-        throw versionMetadataError(childPath, "non-enumerable property");
+      if (key === "length") continue;
+      if (!this.isArrayKey(key, length))
+        throw this.error(`${path}.${key}`, "custom array property");
+      if (!descriptor.enumerable) throw this.error(`${path}[${key}]`, "non-enumerable property");
+      if (!("value" in descriptor)) throw this.error(`${path}[${key}]`, "accessor property");
+    }
+    for (let index = 0; index < length; index += 1) {
+      const key = String(index);
+      const descriptor = descriptors[key];
+      if (descriptor === undefined || !("value" in descriptor)) {
+        throw this.error(`${path}[${key}]`, "sparse array element");
       }
-      if (!("value" in descriptor)) {
-        throw versionMetadataError(childPath, "accessor property");
-      }
-      Object.defineProperty(clone, key, {
+      Object.defineProperty(clone, index, {
         configurable: true,
         enumerable: true,
-        value: clonePlainVersionMetadata(descriptor.value, childPath, stack, depth + 1),
+        value: this.value(descriptor.value, `${path}[${key}]`, stack, depth + 1),
         writable: true,
       });
     }
-
     return clone;
-  } finally {
-    stack.delete(value);
-  }
-}
+  },
 
-function clonePlainVersionArray(
-  value: readonly unknown[],
-  path: string,
-  stack: WeakSet<object>,
-  depth: number,
-): readonly EntityVersionMetadata[] {
-  if (getObjectPrototype(value) !== Array.prototype) {
-    throw versionMetadataError(path, "Array");
-  }
+  isArrayKey(key: string, length: number): boolean {
+    const index = Number(key);
+    return Number.isInteger(index) && index >= 0 && index < length && String(index) === key;
+  },
 
-  const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
-  const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
-  if (symbolKey !== undefined) {
-    throw versionMetadataError(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
-  }
+  isPlainObject(value: object): boolean {
+    const prototype = this.prototype(value);
+    return prototype === Object.prototype || prototype === null;
+  },
 
-  const lengthDescriptor = descriptors.length;
-  if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) {
-    throw versionMetadataError(path, "array without data length");
-  }
+  prototype(value: object): object | null {
+    return Object.getPrototypeOf(value) as object | null;
+  },
 
-  const length = lengthDescriptor.value as number;
-  const clone = new Array<EntityVersionMetadata>(length);
-  for (const [key, descriptor] of Object.entries(descriptors)) {
-    if (key === "length") {
-      continue;
-    }
+  kind(value: object): string {
+    if (value instanceof Date) return "Date";
+    if (value instanceof Map) return "Map";
+    if (value instanceof Set) return "Set";
+    if (ArrayBuffer.isView(value)) return "typed array";
+    if (value instanceof ArrayBuffer) return "ArrayBuffer";
+    if (this.isSharedBuffer(value)) return "SharedArrayBuffer";
+    return "object";
+  },
 
-    if (!isArrayElementKey(key, length)) {
-      throw versionMetadataError(`${path}.${key}`, "custom array property");
-    }
-    if (!descriptor.enumerable) {
-      throw versionMetadataError(`${path}[${key}]`, "non-enumerable property");
-    }
-    if (!("value" in descriptor)) {
-      throw versionMetadataError(`${path}[${key}]`, "accessor property");
-    }
-  }
+  isSharedBuffer(value: object): boolean {
+    return typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer;
+  },
 
-  for (let index = 0; index < length; index += 1) {
-    const key = String(index);
-    const descriptor = descriptors[key];
-    if (descriptor === undefined || !("value" in descriptor)) {
-      throw versionMetadataError(`${path}[${key}]`, "sparse array element");
-    }
-
-    Object.defineProperty(clone, index, {
-      configurable: true,
-      enumerable: true,
-      value: clonePlainVersionMetadata(descriptor.value, `${path}[${key}]`, stack, depth + 1),
-      writable: true,
-    });
-  }
-
-  return clone;
-}
-
-function isArrayElementKey(key: string, length: number): boolean {
-  const index = Number(key);
-  return Number.isInteger(index) && index >= 0 && index < length && String(index) === key;
-}
-
-function isPlainObject(value: object): boolean {
-  const prototype = getObjectPrototype(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function getObjectPrototype(value: object): object | null {
-  return Object.getPrototypeOf(value) as object | null;
-}
-
-function getObjectKind(value: object): string {
-  if (value instanceof Date) {
-    return "Date";
-  }
-  if (value instanceof Map) {
-    return "Map";
-  }
-  if (value instanceof Set) {
-    return "Set";
-  }
-  if (ArrayBuffer.isView(value)) {
-    return "typed array";
-  }
-  if (value instanceof ArrayBuffer) {
-    return "ArrayBuffer";
-  }
-  if (isSharedArrayBuffer(value)) {
-    return "SharedArrayBuffer";
-  }
-  return "object";
-}
-
-function isSharedArrayBuffer(value: object): boolean {
-  return typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer;
-}
-
-function versionMetadataError(path: string, kind: string): TypeError {
-  return new TypeError(
-    `Entity version metadata must be plain snapshot data; ${path} contains ${kind}.`,
-  );
-}
+  error(path: string, kind: string): TypeError {
+    return new TypeError(
+      `Entity version metadata must be plain snapshot data; ${path} contains ${kind}.`,
+    );
+  },
+});

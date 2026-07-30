@@ -24,12 +24,7 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import {
-  Aggregate,
-  Projection,
-  Repository,
-  defineEntityHandlers,
-} from "@spine-event-engine/server";
+import { Aggregate, EntityHandlers, Projection, Repository } from "@spine-event-engine/server";
 import { readFileSync } from "node:fs";
 
 const testingDescriptorSetBase64 = [
@@ -517,7 +512,7 @@ function taskContext() {
       new Repository({
         entityType: TaskAggregate,
         schema: AggregateStateSchema,
-        handlers: defineEntityHandlers(TaskAggregate, AggregateStateSchema, (builder) => [
+        handlers: EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
           builder.assign(AggregateStateSchema, "assignTask"),
           builder.apply(ProjectionStateSchema, "applyTask"),
         ]),
@@ -527,7 +522,7 @@ function taskContext() {
       new Repository({
         entityType: TaskProjection,
         schema: ProjectionStateSchema,
-        handlers: defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+        handlers: EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
           builder.subscribe(ProjectionStateSchema, "subscribeTask"),
         ]),
       }),

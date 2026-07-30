@@ -158,3 +158,14 @@ but not runtime behavior or a public package contract.
 - Child runtime self-introspection was unavailable. Every implementation and
   review dispatch explicitly used its immutable configured existing
   role/profile; no visible mismatch or fallback appeared.
+
+## Constructor Return Correction
+
+- T-0080F deterministic reconciliation exposed that constructors were
+  incorrectly classified as requiring `@returns`, contrary to the accepted
+  human requirement that constructor parameters are documented while return
+  tags apply to functions and methods.
+- The checker now accepts a documented constructor with no return tag and emits
+  `constructor-returns` when one is present. The focused checker suite passes
+  35/35; deterministic debt regeneration, direct TSDoc enforcement, and diff
+  integrity pass.

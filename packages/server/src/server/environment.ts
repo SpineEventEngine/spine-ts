@@ -1,6 +1,8 @@
 /** The Node deployment profile selected for this module graph. */
 export enum EnvironmentType {
+  /** Selects the local development and test profile. */
   Local = "local",
+  /** Selects the production deployment profile. */
   Production = "production",
 }
 
@@ -29,7 +31,11 @@ export class Environment {
     };
   }
 
-  /** Return this module graph's canonical Node environment. */
+  /**
+   * Returns this module graph's canonical Node environment.
+   *
+   * @returns The resolved process environment.
+   */
   static instance(): Environment {
     return (resolvedEnvironment ??= new Environment(
       process.env.NODE_ENV === "production" ? EnvironmentType.Production : EnvironmentType.Local,
@@ -37,7 +43,13 @@ export class Environment {
   }
 }
 
-/** @internal Restore the deterministic local environment lifecycle used by package tests. */
-export function resetEnvironmentForTest(): void {
-  resetLocalTest?.();
-}
+/** Provides deterministic environment controls for package tests.
+ *
+ * @internal
+ */
+export const EnvironmentTests: { readonly reset: () => void } = Object.freeze({
+  /** Restores local environment state before the next singleton lookup. */
+  reset(): void {
+    resetLocalTest();
+  },
+});

@@ -3,19 +3,15 @@ import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
 import {
-  configuredDeliveryEndpoint,
-  coordinateLocalInboxHandoff,
-  deliveryEndpoint,
-  deliveryReady,
   type DeliveryEndpoint,
   DeliveryReadiness,
-  drainLocalInboxMessage,
-  localInboxHandoffKey,
+  InboxHandoff,
   type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
 
 const projectionLabels = ["UPDATE_SUBSCRIBER"] as const;
 
+/** Persists and replays delivery rows for projection subscribers. */
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProjectionInboxTarget>();
@@ -25,6 +21,11 @@ export class LocalProjectionInbox implements ProjectionInbox {
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
 
+  /** Creates a local projection inbox.
+   * @param contextName Names the bounded context that owns this inbox.
+   * @param readiness Coordinates delivery readiness after persistence.
+   * @param keepTenant Records a tenant before its message is persisted.
+   */
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
@@ -36,12 +37,15 @@ export class LocalProjectionInbox implements ProjectionInbox {
     this.#keepTenant = keepTenant;
   }
 
+  /** Registers a target that replays projection messages.
+   * @param target Handles messages for one projection type.
+   */
   register(target: ProjectionInboxTarget): void {
     this.#targets.set(target.targetTypeUrl, target);
     this.#endpoints.set(
       target.targetTypeUrl,
       Object.freeze([
-        deliveryEndpoint({
+        InboxHandoff.endpoint({
           label: projectionLabels[0],
           inboxId: { targetTypeUrl: target.targetTypeUrl },
           shard: ShardIndex.single(),
@@ -50,23 +54,35 @@ export class LocalProjectionInbox implements ProjectionInbox {
     );
   }
 
+  /** Lists endpoints registered for projection delivery.
+   * @returns Returns immutable endpoint descriptions.
+   */
   endpoints(): readonly DeliveryEndpoint[] {
     return Object.freeze([...this.#endpoints.values()].flat());
   }
 
-  /** Replay one already-durable inbox row through registered projection targets. */
+  /** Dispatches a durable inbox row through its projection target.
+   * @param message Contains the persisted inbox row to replay.
+   * @param deliveryTenantId Identifies the tenant that owns the row when present.
+   */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
     return this.#replay(message, deliveryTenantId);
   }
 
+  /** Persists and drains one projection inbox message.
+   * @param delivery Stores and drains the inbox row.
+   * @param input Describes the message to persist.
+   * @param deliveryTenantId Identifies the tenant that owns the message when present.
+   * @returns Resolves to the persisted inbox row.
+   */
   async receive(
     delivery: Delivery,
     input: ProjectionInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    return await coordinateLocalInboxHandoff({
+    return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
-      key: localInboxHandoffKey(input, deliveryTenantId),
+      key: InboxHandoff.key(input, deliveryTenantId),
       onHandoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
     });
   }
@@ -93,16 +109,16 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
     const endpoint =
       written.outcome === "WRITTEN"
-        ? configuredDeliveryEndpoint(
+        ? InboxHandoff.configuredEndpoint(
             written.message,
             this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
           )
         : undefined;
 
     await this.#readiness
-      .claim(endpoint === undefined ? undefined : deliveryReady(endpoint, deliveryTenantId))
+      .claim(endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId))
       .complete(() =>
-        drainLocalInboxMessage({
+        InboxHandoff.drain({
           delivery,
           received: written.message,
           node: this.#contextName,
@@ -123,7 +139,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    assertProjectionMessage(message);
+    LocalProjectionInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
 
@@ -135,18 +151,18 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
     await target.replay(message, deliveryTenantId);
   }
+
+  static #assert(message: InboxMessage): asserts message is ProjectionMessage {
+    if (message.label !== "UPDATE_SUBSCRIBER") {
+      throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
+    }
+    if (message.status !== "TO_DELIVER") {
+      throw new Error(
+        `BoundedContext delivery cannot replay projection inbox message with status "${message.status}".`,
+      );
+    }
+  }
 }
 
 type ProjectionInput = Parameters<ProjectionInbox["receive"]>[1];
 type ProjectionMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
-
-function assertProjectionMessage(message: InboxMessage): asserts message is ProjectionMessage {
-  if (message.label !== "UPDATE_SUBSCRIBER") {
-    throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
-  }
-  if (message.status !== "TO_DELIVER") {
-    throw new Error(
-      `BoundedContext delivery cannot replay projection inbox message with status "${message.status}".`,
-    );
-  }
-}

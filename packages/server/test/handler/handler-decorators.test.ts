@@ -32,7 +32,7 @@ import {
   HandlerMetadataRegistryError,
   React,
   Subscribe,
-  defineEntityHandlers,
+  EntityHandlers,
   materializeDecoratedEntityHandlers,
 } from "../../src/index.js";
 
@@ -405,7 +405,7 @@ describe("handler decorators", () => {
       materializeDecoratedEntityHandlers(BareDecoratedProjection, ProjectionStateSchema),
     ).toThrow(
       'Decorated handler "assignCreate" was declared without a schema; use generated registry ' +
-        "metadata or explicit defineEntityHandlers() registration.",
+        "metadata or explicit EntityHandlers.define() registration.",
     );
   });
 
@@ -504,7 +504,7 @@ describe("handler decorators", () => {
       FirstDecoratedProjection,
       ProjectionStateSchema,
     );
-    const explicit = defineEntityHandlers(ExplicitProjection, AggregateStateSchema, (builder) => [
+    const explicit = EntityHandlers.define(ExplicitProjection, AggregateStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
 
@@ -532,7 +532,7 @@ describe("handler decorators", () => {
       DecoratedFallbackProjection,
       ProjectionStateSchema,
     );
-    const explicit = defineEntityHandlers(ExplicitProjection, ProjectionStateSchema, (builder) => [
+    const explicit = EntityHandlers.define(ExplicitProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
       builder.apply(EventSchema, "applyCreated", { allowImport: true }),
     ]);

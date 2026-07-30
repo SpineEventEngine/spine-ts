@@ -143,6 +143,27 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("void-returns");
   });
 
+  it("rejects adjacent declaration TSDoc blocks", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Describes one item. */",
+        "/** @returns The item name. */",
+        "export function describesItem(): string { return 'item'; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("adjacent-tsdoc");
+    expect(result.stderr).toContain("packages/demo/src/index.ts :: describesItem");
+  });
+
   it("covers constructors, accessors, overloads, and arrow exports", () => {
     const repoRoot = createFixture();
     writeSource(
@@ -172,6 +193,46 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("Demo.label");
     expect(result.stderr).toContain("finds");
     expect(result.stderr).toContain("maps");
+  });
+
+  it("documents constructor parameters without a return tag", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Represents a named demo. */",
+        "export class Demo {",
+        "  /** Initializes the demo name.",
+        "   * @param value The name stored by the demo.",
+        "   */",
+        "  constructor(readonly value: string) {}",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Represents a named demo. */",
+        "export class Demo {",
+        "  /** Initializes the demo name.",
+        "   * @param value The name stored by the demo.",
+        "   * @returns A demo instance.",
+        "   */",
+        "  constructor(readonly value: string) {}",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    expect(runChecker(repoRoot).stderr).toContain("constructor-returns");
   });
 
   it("allows only exact observed debt and rejects stale debt", () => {
@@ -787,5 +848,104 @@ describe("check-tsdoc", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).not.toContain("Maximum call stack size exceeded");
     expect(result.stderr).toContain("api.a");
+  });
+
+  it("checks documented internal object methods without treating data or callbacks as methods", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/server/src/index.ts",
+      [
+        "const internalOwner = {",
+        "  /** Open an internal value. */",
+        "  open(value: string): string { return value; },",
+        "  /** Describes an ordinary label. */",
+        "  label: 'demo',",
+        "  /** Describes an on-change callback slot. */",
+        "  onChange: (value: string): string => value,",
+        "};",
+        "/** Provides the documented public owner. */",
+        "export const publicOwner = {",
+        "  /** Opens a public value.\n   * @param value The source value.\n   * @returns The opened value.\n   */",
+        "  open(value: string): string { return value; },",
+        "};",
+        "export const owner = internalOwner;",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("callable-summary");
+    expect(result.stderr).toContain(":: open");
+    expect(result.stderr).not.toContain("label(");
+    expect(result.stderr).not.toContain("onChange(");
+  });
+
+  it("checks protected methods of exported classes without exposing private members", () => {
+    const repoRoot = createFixture();
+    const path = "packages/server/src/index.ts";
+    writeSource(
+      repoRoot,
+      path,
+      [
+        "/** Represents an exported transaction owner. */",
+        "export class TransactionOwner {",
+        "  protected startTransaction(): void {}",
+        "  protected update(value: string): string { return value; }",
+        "  protected tryUpdate(value: string): readonly string[] { return [value]; }",
+        "  protected updateDraftVersionMetadata(value: string): string { return value; }",
+        "  protected commitTransaction(): string { return 'committed'; }",
+        "  protected rollbackTransaction(): string { return 'rolled-back'; }",
+        "  private internal(value: string): string { return value; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const invalid = runChecker(repoRoot);
+
+    expect(invalid.status).toBe(1);
+    expect(invalid.stderr).toContain("TransactionOwner.startTransaction()");
+    expect(invalid.stderr).toContain("TransactionOwner.update(value)");
+    expect(invalid.stderr).toContain("TransactionOwner.tryUpdate(value)");
+    expect(invalid.stderr).toContain("TransactionOwner.updateDraftVersionMetadata(value)");
+    expect(invalid.stderr).toContain("TransactionOwner.commitTransaction()");
+    expect(invalid.stderr).toContain("TransactionOwner.rollbackTransaction()");
+    expect(invalid.stderr).toContain("missing-param");
+    expect(invalid.stderr).toContain("missing-returns");
+    expect(invalid.stderr).not.toContain("TransactionOwner.internal(value)");
+
+    writeSource(
+      repoRoot,
+      path,
+      [
+        "/** Represents an exported transaction owner. */",
+        "export class TransactionOwner {",
+        "  /** Starts a transaction. */",
+        "  protected startTransaction(): void {}",
+        "  /** Updates a transaction value.\n   * @param value - Source value.\n   * @returns Updated value.\n   */",
+        "  protected update(value: string): string { return value; }",
+        "  /** Tries to update a transaction value.\n   * @param value - Source value.\n   * @returns Validation results.\n   */",
+        "  protected tryUpdate(value: string): readonly string[] { return [value]; }",
+        "  /** Updates draft metadata.\n   * @param value - Source metadata.\n   * @returns Updated metadata.\n   */",
+        "  protected updateDraftVersionMetadata(value: string): string { return value; }",
+        "  /** Commits a transaction.\n   * @returns Commit result.\n   */",
+        "  protected commitTransaction(): string { return 'committed'; }",
+        "  /** Rolls back a transaction.\n   * @returns Rollback result.\n   */",
+        "  protected rollbackTransaction(): string { return 'rolled-back'; }",
+        "  private internal(value: string): string { return value; }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const valid = runChecker(repoRoot);
+
+    expect(valid.status, valid.stderr).toBe(0);
   });
 });

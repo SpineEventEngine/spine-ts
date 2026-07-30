@@ -62,7 +62,7 @@ import {
   GeneratedRegistryDiscovery,
   GeneratedRegistryDiscoveryError,
   type RegistryDiscoveryErrorCode,
-  defineEntityHandlers,
+  EntityHandlers,
   type HandlerParameterCount,
   type RegistryIngestionErrorCode,
   type RuntimeStateErrorCode,
@@ -269,7 +269,7 @@ describe("@spine-event-engine/server", () => {
         "Subscribe",
         "acceptSignalIntake",
         "createRoutingPlan",
-        "defineEntityHandlers",
+        "EntityHandlers",
         "describeEntityMetadata",
         "createEntityTransaction",
         "failSignalIntake",
@@ -414,29 +414,29 @@ describe("@spine-event-engine/server", () => {
     }>();
     expectTypeOf<EventRegistrationApplicationMetadata>().toExtend<{
       readonly eventFullTypeName: string;
-      readonly entityStateFullTypeName: string;
+      readonly stateTypeName: string;
     }>();
     expect(
       CommandRegistrationReadiness.fromRegistry({
         listEntityHandlers: () => [],
         listHandlers: () => [],
-        findEntityHandlersByState: () => [],
+        findByState: () => [],
         findHandlersByKind: () => [],
-        findHandlersByMessageFullTypeName: () => [],
+        findByMessage: () => [],
         findCommandAssignment: () => undefined,
         findEventApplication: () => undefined,
-      }).registeredCommandMessageFullTypeNames(),
+      }).commandTypeNames(),
     ).toEqual([]);
     expect(
       EventRegistrationReadiness.fromRegistry({
         listEntityHandlers: () => [],
         listHandlers: () => [],
-        findEntityHandlersByState: () => [],
+        findByState: () => [],
         findHandlersByKind: () => [],
-        findHandlersByMessageFullTypeName: () => [],
+        findByMessage: () => [],
         findCommandAssignment: () => undefined,
         findEventApplication: () => undefined,
-      }).registeredEventMessageFullTypeNames(),
+      }).eventTypeNames(),
     ).toEqual([]);
     expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
       ServerRuntimeStateError,
@@ -451,12 +451,22 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("assembles a bounded-context metadata and routing smoke slice from public APIs", () => {
+    expectTypeOf<EntityHandlers>().toHaveProperty("define");
+    expectTypeOf<EntityHandlers>().not.toHaveProperty("isAuthentic");
+    expectTypeOf<EntityHandlers>().not.toHaveProperty("emittedSchemas");
+    expectTypeOf<EntityHandlers>().not.toHaveProperty("copyEmittedSchemas");
+    expectTypeOf<EntityHandlers>().not.toHaveProperty("defineArity");
+    expect("isAuthentic" in EntityHandlers).toBe(false);
+    expect("emittedSchemas" in EntityHandlers).toBe(false);
+    expect("copyEmittedSchemas" in EntityHandlers).toBe(false);
+    expect("defineArity" in EntityHandlers).toBe(false);
+
     const repository = new Repository({
       entityType: PublicRuntimeSmokeAggregate,
       schema: AggregateStateSchema,
     });
     const context = BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
-    const handlers = defineEntityHandlers(
+    const handlers = EntityHandlers.define(
       PublicRuntimeSmokeAggregate,
       AggregateStateSchema,
       (builder) => [
@@ -478,12 +488,8 @@ describe("@spine-event-engine/server", () => {
     expect(typeof context.eventBus().post).toBe("function");
     expect("register" in context.commandBus()).toBe(false);
     expect("register" in context.eventBus()).toBe(false);
-    expect(commandReadiness.registeredCommandMessageFullTypeNames()).toEqual([
-      CommandSchema.typeName,
-    ]);
-    expect(eventReadiness.registeredEventMessageFullTypeNames()).toEqual([
-      AggregateStateSchema.typeName,
-    ]);
+    expect(commandReadiness.commandTypeNames()).toEqual([CommandSchema.typeName]);
+    expect(eventReadiness.eventTypeNames()).toEqual([AggregateStateSchema.typeName]);
     expect(routingPlan.commands.topics.map(({ messageTypeUrl }) => messageTypeUrl)).toEqual([
       "type.spine.io/spine.core.Command",
     ]);

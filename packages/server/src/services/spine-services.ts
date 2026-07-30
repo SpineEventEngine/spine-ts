@@ -48,7 +48,7 @@ import {
   Filter_Operator,
 } from "@spine-event-engine/proto/client";
 import {
-  EntityStateWithVersionSchema,
+  EntityStateWithVersionSchema as EntityStateVersionSchema,
   OrderBy_Direction,
   QueryResponseSchema,
   type Query,
@@ -144,13 +144,20 @@ export class SpineServices {
   readonly #queueLimit: number;
   readonly #subscriptionLimit: number;
 
-  /** Create service adapters over the passed built bounded contexts. */
+  /** Creates service adapters over built bounded contexts.
+   *
+   * @param options Configures contexts and subscription bounds.
+   */
   constructor(options: SpineServicesOptions) {
     this.#contexts = Object.freeze([...options.contexts]);
-    this.#inactiveTtlMs = inactiveTtl(options.inactiveTtlMs ?? DEFAULT_INACTIVE_TTL_MS);
-    this.#queueLimit = positiveInteger(options.queueLimit ?? DEFAULT_QUEUE_LIMIT);
-    this.#subscriptionLimit = subscriptionLimit(
-      options.subscriptionLimit ?? DEFAULT_SUBSCRIPTION_LIMIT,
+    this.#inactiveTtlMs = ServiceValues.inactiveTtl(
+      options.inactiveTtlMs ?? ServiceValues.defaultInactiveTtlMs,
+    );
+    this.#queueLimit = ServiceValues.positiveInteger(
+      options.queueLimit ?? ServiceValues.defaultQueueLimit,
+    );
+    this.#subscriptionLimit = ServiceValues.subscriptionLimit(
+      options.subscriptionLimit ?? ServiceValues.defaultSubscriptionLimit,
     );
 
     for (const context of this.#contexts) {
@@ -175,7 +182,7 @@ export class SpineServices {
           ),
           context,
           entityFamily: repository.entityFamily,
-          idField: stateRouteIdField(schema, repository.idField),
+          idField: ServiceValues.stateRouteIdField(schema, repository.idField),
           kind: "state",
           schema,
           typeUrl,
@@ -189,15 +196,19 @@ export class SpineServices {
       }
     }
     this.#subscriptionStores = Object.freeze(
-      uniqueContexts(this.#contexts).flatMap((context) => {
-        const store = subscriptionStore(context);
+      ServiceValues.uniqueContexts(this.#contexts).flatMap((context) => {
+        const store = ServiceValues.subscriptionStore(context);
 
         return store === undefined ? [] : [store];
       }),
     );
   }
 
-  /** Register CommandService, QueryService, and SubscriptionService routes. */
+  /** Registers CommandService, QueryService, and SubscriptionService routes.
+   *
+   * @param router Receives the Connect service procedures.
+   * @returns Returns the registered router.
+   */
   register(router: ConnectRouter): ConnectRouter {
     router.service(CommandService, {
       post: (command) => this.#post(command),
@@ -221,7 +232,7 @@ export class SpineServices {
     if (typeUrl === undefined || typeUrl.length === 0) {
       return create(AckSchema, {
         messageId,
-        status: errorStatus("INVALID_COMMAND", "Command message type is required."),
+        status: ServiceValues.errorStatus("INVALID_COMMAND", "Command message type is required."),
       });
     }
 
@@ -229,19 +240,22 @@ export class SpineServices {
     if (route === undefined) {
       return create(AckSchema, {
         messageId,
-        status: errorStatus("UNSUPPORTED_COMMAND", "No bounded context accepted the command."),
+        status: ServiceValues.errorStatus(
+          "UNSUPPORTED_COMMAND",
+          "No bounded context accepted the command.",
+        ),
       });
     }
 
-    const tenantError = tenantMismatch(
+    const tenantError = ServiceValues.tenantMismatch(
       route.context.isMultitenant,
-      commandTenant(command),
+      ServiceValues.commandTenant(command),
       "command",
     );
     if (tenantError !== undefined) {
       return create(AckSchema, {
         messageId,
-        status: errorStatus(tenantError.type, tenantError.message),
+        status: ServiceValues.errorStatus(tenantError.type, tenantError.message),
       });
     }
 
@@ -249,14 +263,14 @@ export class SpineServices {
       await route.context.commandBus().post(command);
       return create(AckSchema, {
         messageId,
-        status: okStatus(),
+        status: ServiceValues.okStatus(),
       });
     } catch (error) {
-      const postError = commandPostError(error);
+      const postError = ServiceValues.commandPostError(error);
 
       return create(AckSchema, {
         messageId,
-        status: errorStatus(postError.type, postError.message, postError.details),
+        status: ServiceValues.errorStatus(postError.type, postError.message, postError.details),
       });
     }
   }
@@ -266,27 +280,31 @@ export class SpineServices {
     const route = this.#readRoute(target);
 
     if (target === undefined || route === undefined) {
-      return queryErrorResponse(
+      return ServiceValues.queryErrorResponse(
         "UNSUPPORTED_QUERY_TARGET",
         "No bounded context owns query target.",
       );
     }
 
-    const queryError = validateReadQuery(query, target, route);
+    const queryError = ServiceValues.validateReadQuery(query, target, route);
     if (queryError !== undefined) {
-      return queryErrorResponse(queryError.type, queryError.message);
+      return ServiceValues.queryErrorResponse(queryError.type, queryError.message);
     }
 
-    const tenantId = tenantValue(query.context?.tenantId);
-    const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "query");
+    const tenantId = ServiceValues.tenantValue(query.context?.tenantId);
+    const tenantError = ServiceValues.tenantMismatch(
+      route.context.isMultitenant,
+      tenantId,
+      "query",
+    );
     if (tenantError !== undefined) {
-      return queryErrorResponse(tenantError.type, tenantError.message);
+      return ServiceValues.queryErrorResponse(tenantError.type, tenantError.message);
     }
 
     try {
-      return await this.#query(route, createReadPlan(target, query, route), tenantId);
+      return await this.#query(route, ServiceValues.createReadPlan(target, query, route), tenantId);
     } catch {
-      return queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
+      return ServiceValues.queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
     }
   }
 
@@ -301,24 +319,28 @@ export class SpineServices {
   ): Promise<QueryResponse> {
     const boundedPlan: NormalizedQueryPlan<unknown> = {
       ...plan,
-      candidateLimit: MAX_QUERY_LIMIT,
+      candidateLimit: ServiceValues.queryResultLimit,
     };
     const results = await route.context
       .stand()
-      .queryPlanVersioned(route.schema, boundedPlan, tenantOptions(tenantId));
+      .queryPlanVersioned(route.schema, boundedPlan, ServiceValues.tenantOptions(tenantId));
 
     return create(QueryResponseSchema, {
-      response: okResponse(),
-      message: results.map((result) => packVersionedState(route.schema, result)),
+      response: ServiceValues.okResponse(),
+      message: results.map((result) => ServiceValues.packVersionedState(route.schema, result)),
     });
   }
 
   #subscribe(topic: Topic): Subscription | Promise<Subscription> {
     const route = this.#subscriptionRoute(topic);
-    validateTopic(topic);
-    const shape = createSubscriptionShape(topic, route);
-    const tenantId = topicTenant(topic);
-    const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "subscription");
+    ServiceValues.validateTopic(topic);
+    const shape = ServiceValues.createSubscriptionShape(topic, route);
+    const tenantId = ServiceValues.topicTenant(topic);
+    const tenantError = ServiceValues.tenantMismatch(
+      route.context.isMultitenant,
+      tenantId,
+      "subscription",
+    );
 
     if (tenantError !== undefined) {
       throw new ConnectError(tenantError.message, Code.InvalidArgument);
@@ -334,7 +356,7 @@ export class SpineServices {
       throw new ConnectError("Subscription ID is required.", Code.InvalidArgument);
     }
 
-    const record = createSubscriptionRecord({
+    const record = ServiceValues.createSubscriptionRecord({
       id,
       subscription,
       shape,
@@ -470,10 +492,10 @@ export class SpineServices {
     const id = subscription.id?.value;
 
     if (id === undefined) {
-      return okResponse();
+      return ServiceValues.okResponse();
     }
 
-    return this.#removeSubscription(id).then(() => okResponse());
+    return this.#removeSubscription(id).then(() => ServiceValues.okResponse());
   }
 
   #subscriptionRoute(topic: Topic): SubscriptionRoute {
@@ -491,17 +513,17 @@ export class SpineServices {
   }
 
   #activateRecord(record: SubscriptionRecord): void {
-    clearInactiveTimer(record);
+    ServiceValues.clearInactiveTimer(record);
     if (record.kind === "event") {
       const eventSubscription = boundedContextAccess.subscribeToEvent(
         record.route.context,
         record.route.typeUrl,
         {
           onEvent: (event) => {
-            if (!eventTenantMatches(record, event)) {
+            if (!ServiceValues.eventTenantMatches(record, event)) {
               return;
             }
-            record.delivery.push(createEventUpdate(record, event));
+            record.delivery.push(ServiceValues.createEventUpdate(record, event));
             if (record.delivery.closed) {
               void this.#removeSubscription(record.id).catch(() => undefined);
             }
@@ -516,7 +538,7 @@ export class SpineServices {
     const standSubscription = stateRecord.route.context.stand().subscribe(
       stateRecord.route.schema,
       (update) => {
-        const subscriptionUpdate = createEntityUpdate(stateRecord, update);
+        const subscriptionUpdate = ServiceValues.createEntityUpdate(stateRecord, update);
         if (subscriptionUpdate !== undefined) {
           stateRecord.delivery.push(subscriptionUpdate);
         }
@@ -524,7 +546,7 @@ export class SpineServices {
           void this.#removeSubscription(stateRecord.id).catch(() => undefined);
         }
       },
-      tenantOptions(stateRecord.tenantId),
+      ServiceValues.tenantOptions(stateRecord.tenantId),
     );
     stateRecord.delivery.attach(standSubscription);
   }
@@ -553,12 +575,12 @@ export class SpineServices {
       if (claim !== undefined) {
         claim.canceled = true;
       }
-      clearInactiveTimer(local);
+      ServiceValues.clearInactiveTimer(local);
       local.delivery.close();
       this.#subscriptions.delete(id);
     }
 
-    const removal = createSubscriptionRemoval();
+    const removal = ServiceValues.createSubscriptionRemoval();
     this.#removals.set(id, removal);
     void this.#runRemoval(id, removal, local, claim, unknown);
     return removal.settled;
@@ -614,7 +636,7 @@ export class SpineServices {
     for (const store of this.#subscriptionStores) {
       const removal = this.#removals.get(id);
       if (removal !== undefined) {
-        await observeRemoval(removal);
+        await ServiceValues.observeRemoval(removal);
         return undefined;
       }
       const outcome = await this.#recoverFromStore(id, store);
@@ -630,12 +652,12 @@ export class SpineServices {
     id: string,
     store: SubscriptionStore,
   ): Promise<SubscriptionRecoveryOutcome> {
-    const storage = createSubscriptionStorage(store);
+    const storage = ServiceValues.createSubscriptionStorage(store);
     try {
       const durable = await storage.read(id);
       const removal = this.#removals.get(id);
       if (removal !== undefined) {
-        await observeRemoval(removal);
+        await ServiceValues.observeRemoval(removal);
         return { status: "complete", record: undefined };
       }
       if (durable === undefined) {
@@ -711,7 +733,7 @@ export class SpineServices {
       return undefined;
     }
     record.reservation = reservation;
-    const claim = createSubscriptionClaim(record);
+    const claim = ServiceValues.createSubscriptionClaim(record);
     this.#claims.set(record.id, claim);
     return claim;
   }
@@ -794,10 +816,10 @@ export class SpineServices {
       claim.unknown = true;
       throw error;
     }
-    if (sameAny(current, claim.state)) {
+    if (ServiceValues.sameAny(current, claim.state)) {
       return "claimed";
     }
-    if (sameAny(current, record.durableState)) {
+    if (ServiceValues.sameAny(current, record.durableState)) {
       throw error;
     }
     if (current === undefined) {
@@ -829,12 +851,12 @@ export class SpineServices {
       route === undefined ||
       topic === undefined ||
       target?.type !== stored.targetType ||
-      topicTenant(topic) !== stored.tenantId
+      ServiceValues.topicTenant(topic) !== stored.tenantId
     ) {
       return undefined;
     }
 
-    const tenantError = tenantMismatch(
+    const tenantError = ServiceValues.tenantMismatch(
       route.context.isMultitenant,
       stored.tenantId,
       "subscription",
@@ -843,10 +865,10 @@ export class SpineServices {
       return undefined;
     }
 
-    return createSubscriptionRecord({
+    return ServiceValues.createSubscriptionRecord({
       id: stored.id,
       subscription: stored.subscription,
-      shape: createSubscriptionShape(topic, route),
+      shape: ServiceValues.createSubscriptionShape(topic, route),
       tenantId: stored.tenantId,
       expiresAtMs: stored.expiresAtMs,
       queueLimit: this.#queueLimit,
@@ -864,7 +886,7 @@ export class SpineServices {
         : this.#subscriptionStores.filter((store) => store.context === context);
 
     for (const store of stores) {
-      const storage = createSubscriptionStorage(store);
+      const storage = ServiceValues.createSubscriptionStorage(store);
       try {
         await this.#cancelStored(storage, id, owner);
       } finally {
@@ -881,10 +903,10 @@ export class SpineServices {
     try {
       await this.#settleCancellation(storage, id, owner);
     } catch (error) {
-      if (isCancellationConflict(error)) {
+      if (ServiceValues.isCancellationConflict(error)) {
         throw error;
       }
-      throw cancellationFailedError();
+      throw ServiceValues.cancellationFailedError();
     }
   }
 
@@ -893,14 +915,14 @@ export class SpineServices {
     id: string,
     owner: string | undefined,
   ): Promise<void> {
-    for (let attempt = 0; attempt < MAX_CANCEL_RETRIES; attempt += 1) {
+    for (let attempt = 0; attempt < ServiceValues.cancelRetryLimit; attempt += 1) {
       const current = await storage.read(id);
       if (current === undefined) {
         return;
       }
       const state = DurableSubscriptionRecords.readState(current, id);
       if (state.type === "claim" && state.owner !== owner) {
-        throw foreignSubscriptionError();
+        throw ServiceValues.foreignSubscriptionError();
       }
       const marker = state.type === "cancel" ? current : DurableSubscriptionRecords.cancel(id);
       if (state.type !== "cancel" && !(await storage.compareAndSet(id, current, marker))) {
@@ -913,7 +935,7 @@ export class SpineServices {
         return;
       }
     }
-    throw concurrentCancellationError();
+    throw ServiceValues.concurrentCancellationError();
   }
 
   async #clearMarker(storage: RecordStorage<string, Any>, id: string, marker: Any): Promise<void> {
@@ -940,7 +962,7 @@ export class SpineServices {
   }
 
   #forgetSubscription(record: SubscriptionRecord): void {
-    clearInactiveTimer(record);
+    ServiceValues.clearInactiveTimer(record);
     record.delivery.close();
     this.#subscriptions.delete(record.id);
     this.#releaseRecord(record);
@@ -975,7 +997,7 @@ export class SpineServices {
       return undefined;
     }
 
-    return createSubscriptionStorage(store);
+    return ServiceValues.createSubscriptionStorage(store);
   }
 
   #reserveSubscription(id: string): SubscriptionReservation | undefined {
@@ -1048,6 +1070,12 @@ interface StateRoute {
   readonly kind: "state";
   readonly schema: MessageSchema;
   readonly typeUrl: string;
+}
+
+interface MessageFieldInfo {
+  readonly name: string;
+  readonly localName: string;
+  readonly message?: MessageSchema;
 }
 
 interface EventRoute {
@@ -1209,1412 +1237,1471 @@ interface SubscriptionStore {
   readonly storageFactory: StorageFactory;
 }
 
-function okStatus(): Status {
-  return create(StatusSchema, {
-    status: {
-      case: "ok",
-      value: create(EmptySchema),
-    },
-  });
-}
-
-function errorStatus(type: string, message: string, details?: Any): Status {
-  return create(StatusSchema, {
-    status: {
-      case: "error",
-      value: create(ErrorSchema, {
-        type,
-        message,
-        ...(details === undefined ? {} : { details }),
-      }),
-    },
-  });
-}
-
-function okResponse(): Response {
-  return create(ResponseSchema, { status: okStatus() });
-}
-
-function errorResponse(type: string, message: string): Response {
-  return create(ResponseSchema, { status: errorStatus(type, message) });
-}
-
-function queryErrorResponse(type: string, message: string): QueryResponse {
-  return create(QueryResponseSchema, {
-    response: errorResponse(type, message),
-  });
-}
-
-function validateReadQuery(
-  query: Query,
-  target: Target,
-  route: StateRoute,
-): ContractError | undefined {
-  const formatError = formatReadError(query.format, route);
-  if (formatError !== undefined) {
-    return formatError;
+/** Groups non-public service contract, query, and subscription operations. */
+const ServiceValues = (() => {
+  function okStatus(): Status {
+    return create(StatusSchema, {
+      status: {
+        case: "ok",
+        value: create(EmptySchema),
+      },
+    });
   }
 
-  switch (target.criterion.case) {
-    case "includeAll":
-      if (!target.criterion.value) {
+  function errorStatus(type: string, message: string, details?: Any): Status {
+    return create(StatusSchema, {
+      status: {
+        case: "error",
+        value: create(ErrorSchema, {
+          type,
+          message,
+          ...(details === undefined ? {} : { details }),
+        }),
+      },
+    });
+  }
+
+  function okResponse(): Response {
+    return create(ResponseSchema, { status: okStatus() });
+  }
+
+  function errorResponse(type: string, message: string): Response {
+    return create(ResponseSchema, { status: errorStatus(type, message) });
+  }
+
+  function queryErrorResponse(type: string, message: string): QueryResponse {
+    return create(QueryResponseSchema, {
+      response: errorResponse(type, message),
+    });
+  }
+
+  function validateReadQuery(
+    query: Query,
+    target: Target,
+    route: StateRoute,
+  ): ContractError | undefined {
+    const formatError = formatReadError(query.format, route);
+    if (formatError !== undefined) {
+      return formatError;
+    }
+
+    switch (target.criterion.case) {
+      case "includeAll":
+        if (!target.criterion.value) {
+          return invalidCriterionError();
+        }
+        return undefined;
+      case "filters":
+        return validateFilters(target.criterion.value, route);
+      default:
         return invalidCriterionError();
+    }
+  }
+
+  function validateFilters(filters: TargetFilters, route: StateRoute): ContractError | undefined {
+    const idCount = filters.idFilter?.id.length ?? 0;
+    if (idCount > QueryLimits.idCount) {
+      return invalidQueryError("QueryService.Read id_filter may contain at most 100 IDs.");
+    }
+    const idEntries = filters.idFilter?.id as readonly (Any | undefined)[] | undefined;
+    if (idEntries?.some((id) => id === undefined) === true) {
+      return invalidQueryError("QueryService.Read id_filter entries are required.");
+    }
+    const idError = validateQueryIds(idEntries, route);
+    if (idError !== undefined) {
+      return idError;
+    }
+    if (filters.filter.length > QueryLimits.compositeCount) {
+      return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
+    }
+
+    const filterError = validateCompositeFilters(filters.filter, route);
+    if (filterError !== undefined) {
+      return filterError;
+    }
+
+    return idCount === 0 && countSimpleFilters(filters.filter) === 0
+      ? {
+          type: "INVALID_QUERY",
+          message: "QueryService.Read requires an ID filter or column filter.",
+        }
+      : undefined;
+  }
+
+  function validateCompositeFilters(
+    filters: readonly CompositeFilter[],
+    route: StateRoute,
+  ): ContractError | undefined {
+    const pending = filters.map((filter) => ({ filter, depth: 0 }));
+    const seen = new WeakSet<object>();
+    let compositeCount = 0;
+    let simpleCount = 0;
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (current === undefined) break;
+      const filter = current.filter;
+      if (seen.has(filter))
+        return unsupportedFilterError("QueryService.Read filters must not contain cycles.");
+      seen.add(filter);
+      compositeCount += 1;
+      simpleCount += filter.filter.length;
+      if (filter.filter.length === 0 && filter.compositeFilter.length === 0) {
+        return invalidQueryError("QueryService.Read composite filter must not be empty.");
       }
-      return undefined;
-    case "filters":
-      return validateFilters(target.criterion.value, route);
-    default:
-      return invalidCriterionError();
-  }
-}
-
-function validateFilters(filters: TargetFilters, route: StateRoute): ContractError | undefined {
-  const idCount = filters.idFilter?.id.length ?? 0;
-  if (idCount > MAX_QUERY_ID_FILTER_IDS) {
-    return invalidQueryError("QueryService.Read id_filter may contain at most 100 IDs.");
-  }
-  const idEntries = filters.idFilter?.id as readonly (Any | undefined)[] | undefined;
-  if (idEntries?.some((id) => id === undefined) === true) {
-    return invalidQueryError("QueryService.Read id_filter entries are required.");
-  }
-  const idError = validateQueryIds(idEntries, route);
-  if (idError !== undefined) {
-    return idError;
-  }
-  if (filters.filter.length > MAX_QUERY_COMPOSITE_FILTERS) {
-    return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
-  }
-
-  const filterError = validateCompositeFilters(filters.filter, route);
-  if (filterError !== undefined) {
-    return filterError;
-  }
-
-  return idCount === 0 && countSimpleFilters(filters.filter) === 0
-    ? {
-        type: "INVALID_QUERY",
-        message: "QueryService.Read requires an ID filter or column filter.",
+      if (compositeCount > QueryLimits.compositeCount || current.depth > 8) {
+        return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
       }
-    : undefined;
-}
+      if (simpleCount > QueryLimits.filterCount) {
+        return invalidQueryError("QueryService.Read may contain at most 16 simple column filters.");
+      }
+      if (
+        compositeCount + pending.length + filter.compositeFilter.length >
+        QueryLimits.compositeCount
+      ) {
+        return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
+      }
+      if (current.depth >= 8 && filter.compositeFilter.length > 0) {
+        return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
+      }
+      const operator = filter.operator;
+      if (
+        operator !== CompositeFilter_CompositeOperator.ALL &&
+        operator !== CompositeFilter_CompositeOperator.EITHER
+      ) {
+        return unsupportedFilterError(
+          "QueryService.Read composite operator must be ALL or EITHER.",
+        );
+      }
+      const simpleError = validateSimpleFilters(filter.filter, route);
+      if (simpleError !== undefined) {
+        return simpleError;
+      }
+      for (const child of filter.compositeFilter) {
+        pending.push({ filter: child, depth: current.depth + 1 });
+      }
+    }
 
-function validateCompositeFilters(
-  filters: readonly CompositeFilter[],
-  route: StateRoute,
-): ContractError | undefined {
-  const pending = filters.map((filter) => ({ filter, depth: 0 }));
-  const seen = new WeakSet<object>();
-  let compositeCount = 0;
-  let simpleCount = 0;
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined) break;
-    const filter = current.filter;
-    if (seen.has(filter))
-      return unsupportedFilterError("QueryService.Read filters must not contain cycles.");
-    seen.add(filter);
-    compositeCount += 1;
-    simpleCount += filter.filter.length;
-    if (filter.filter.length === 0 && filter.compositeFilter.length === 0) {
-      return invalidQueryError("QueryService.Read composite filter must not be empty.");
-    }
-    if (compositeCount > MAX_QUERY_COMPOSITE_FILTERS || current.depth > 8) {
-      return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
-    }
-    if (simpleCount > MAX_QUERY_SIMPLE_FILTERS) {
-      return invalidQueryError("QueryService.Read may contain at most 16 simple column filters.");
-    }
-    if (
-      compositeCount + pending.length + filter.compositeFilter.length >
-      MAX_QUERY_COMPOSITE_FILTERS
-    ) {
-      return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
-    }
-    if (current.depth >= 8 && filter.compositeFilter.length > 0) {
-      return invalidQueryError("QueryService.Read may contain at most 8 composite filters.");
-    }
-    const operator = filter.operator;
-    if (
-      operator !== CompositeFilter_CompositeOperator.ALL &&
-      operator !== CompositeFilter_CompositeOperator.EITHER
-    ) {
-      return unsupportedFilterError("QueryService.Read composite operator must be ALL or EITHER.");
-    }
-    const simpleError = validateSimpleFilters(filter.filter, route);
-    if (simpleError !== undefined) {
-      return simpleError;
-    }
-    for (const child of filter.compositeFilter) {
-      pending.push({ filter: child, depth: current.depth + 1 });
-    }
-  }
-
-  return undefined;
-}
-
-function validateQueryIds(
-  ids: readonly (Any | undefined)[] | undefined,
-  route: StateRoute,
-): ContractError | undefined {
-  const schema = route.idField.message;
-  if (schema === undefined || ids === undefined) {
     return undefined;
   }
 
-  if (ids.some((id) => id === undefined || AnyMessages.unpack(id, schema) === undefined)) {
-    return invalidQueryError(`QueryService.Read id_filter values must pack ${schema.typeName}.`);
+  function validateQueryIds(
+    ids: readonly (Any | undefined)[] | undefined,
+    route: StateRoute,
+  ): ContractError | undefined {
+    const schema = route.idField.message;
+    if (schema === undefined || ids === undefined) {
+      return undefined;
+    }
+
+    if (ids.some((id) => id === undefined || AnyMessages.unpack(id, schema) === undefined)) {
+      return invalidQueryError(`QueryService.Read id_filter values must pack ${schema.typeName}.`);
+    }
+
+    return undefined;
   }
 
-  return undefined;
-}
-
-function countSimpleFilters(filters: readonly CompositeFilter[]): number {
-  const pending = [...filters];
-  let count = 0;
-  while (pending.length > 0) {
-    const filter = pending.pop();
-    if (filter === undefined) break;
-    count += filter.filter.length;
-    pending.push(...filter.compositeFilter);
+  function countSimpleFilters(filters: readonly CompositeFilter[]): number {
+    const pending = [...filters];
+    let count = 0;
+    while (pending.length > 0) {
+      const filter = pending.pop();
+      if (filter === undefined) break;
+      count += filter.filter.length;
+      pending.push(...filter.compositeFilter);
+    }
+    return count;
   }
-  return count;
-}
 
-function validateSimpleFilters(
-  filters: readonly Filter[],
-  route: StateRoute,
-): ContractError | undefined {
-  for (const filter of filters) {
-    if (wireComparison(filter.operator) === undefined) {
-      return unsupportedFilterError("QueryService.Read comparison operator is not supported.");
+  function validateSimpleFilters(
+    filters: readonly Filter[],
+    route: StateRoute,
+  ): ContractError | undefined {
+    for (const filter of filters) {
+      if (wireComparison(filter.operator) === undefined) {
+        return unsupportedFilterError("QueryService.Read comparison operator is not supported.");
+      }
+      const column = filter.fieldPath?.fieldName[0];
+      if (column === undefined || column.trim().length === 0) {
+        return unsupportedFilterError("QueryService.Read column filter field is required.");
+      }
+      if (filter.fieldPath?.fieldName.length !== 1) {
+        return unsupportedFilterError("QueryService.Read supports only top-level column filters.");
+      }
+      if (!route.allowedColumnNames.has(column)) {
+        return unsupportedFilterError(
+          `QueryService.Read column filter "${column}" is not a declared column.`,
+        );
+      }
+      if (filter.value === undefined) {
+        return unsupportedFilterError("QueryService.Read column filter value is required.");
+      }
+      const field = route.columnFields.get(column);
+      if (
+        field === undefined
+          ? !systemValueMatches(column, filter.value)
+          : !filterValueMatches(field, filter.value)
+      ) {
+        return unsupportedFilterError(
+          `QueryService.Read column filter "${column}" has the wrong value type.`,
+        );
+      }
+      if (
+        filter.operator !== Filter_Operator.EQUAL &&
+        (field === undefined ? column !== "version" : !supportsRange(field))
+      ) {
+        return unsupportedFilterError(
+          `QueryService.Read column filter "${column}" does not support range comparison.`,
+        );
+      }
     }
-    const column = filter.fieldPath?.fieldName[0];
-    if (column === undefined || column.trim().length === 0) {
-      return unsupportedFilterError("QueryService.Read column filter field is required.");
+
+    return undefined;
+  }
+
+  function formatReadError(format: Query["format"], route: StateRoute): ContractError | undefined {
+    if (format === undefined) {
+      return undefined;
     }
-    if (filter.fieldPath?.fieldName.length !== 1) {
-      return unsupportedFilterError("QueryService.Read supports only top-level column filters.");
+    if (format.orderBy.length > QueryLimits.orderCount) {
+      return unsupportedFormatError("QueryService.Read order_by may contain at most 8 entries.");
     }
-    if (!route.allowedColumnNames.has(column)) {
-      return unsupportedFilterError(
-        `QueryService.Read column filter "${column}" is not a declared column.`,
+    if ((format.fieldMask?.paths.length ?? 0) > QueryLimits.maskPathCount) {
+      return unsupportedFormatError("QueryService.Read field_mask may contain at most 32 paths.");
+    }
+    if (format.fieldMask?.paths.some((path) => path.length > QueryLimits.maskPathLength) ?? false) {
+      return unsupportedFormatError(
+        "QueryService.Read field_mask paths may contain at most 128 characters.",
       );
     }
-    if (filter.value === undefined) {
-      return unsupportedFilterError("QueryService.Read column filter value is required.");
+    for (const path of format.fieldMask?.paths ?? []) {
+      if (resolveQueryMask(route.schema, path) === undefined) {
+        return unsupportedFormatError(
+          `QueryService.Read field_mask path "${path}" is not a state field.`,
+        );
+      }
+    }
+    if (format.limit > QueryLimits.resultCount) {
+      return {
+        type: "INVALID_QUERY",
+        message: "QueryService.Read limit may be at most 1000.",
+      };
+    }
+    if (format.limit > 0 && format.orderBy.length === 0) {
+      return {
+        type: "INVALID_QUERY",
+        message: "QueryService.Read limit requires ordering.",
+      };
+    }
+    for (const order of format.orderBy) {
+      if (order.column.trim().length === 0) {
+        return unsupportedFormatError("QueryService.Read order_by column is required.");
+      }
+      if (!route.allowedColumnNames.has(order.column)) {
+        return unsupportedFormatError(
+          `QueryService.Read order_by column "${order.column}" is not a declared column.`,
+        );
+      }
+      const field = route.columnFields.get(order.column);
+      if (field === undefined ? order.column !== "version" : !supportsRange(field)) {
+        return unsupportedFormatError(
+          `QueryService.Read order_by column "${order.column}" is not orderable.`,
+        );
+      }
+      if (
+        order.direction !== OrderBy_Direction.ASCENDING &&
+        order.direction !== OrderBy_Direction.DESCENDING
+      ) {
+        return unsupportedFormatError(
+          "QueryService.Read order_by direction must be ASCENDING or DESCENDING.",
+        );
+      }
+    }
+
+    return undefined;
+  }
+
+  function createReadPlan(
+    target: Target,
+    query: Query,
+    route: StateRoute,
+  ): NormalizedQueryPlan<unknown> {
+    const predicate =
+      target.criterion.case === "filters"
+        ? normalizedFilters(target.criterion.value, route)
+        : undefined;
+    const format = query.format;
+    return Object.freeze({
+      ...(predicate === undefined ? {} : { predicate }),
+      ...(format?.fieldMask === undefined
+        ? {}
+        : {
+            mask: {
+              paths: format.fieldMask.paths.map((path) => requiredQueryMask(route.schema, path)),
+            },
+          }),
+      ...(format === undefined || format.orderBy.length === 0
+        ? {}
+        : {
+            order: format.orderBy.map((order) => ({
+              column: order.column,
+              direction:
+                order.direction === OrderBy_Direction.DESCENDING
+                  ? ("desc" as const)
+                  : ("asc" as const),
+            })),
+          }),
+      ...(format === undefined || format.limit === 0 ? {} : { limit: format.limit }),
+    });
+  }
+
+  function normalizedFilters(
+    filters: TargetFilters,
+    route: StateRoute,
+  ): NormalizedQueryPredicate<unknown> {
+    const predicates: NormalizedQueryPredicate<unknown>[] = [];
+    if (filters.idFilter !== undefined) {
+      predicates.push({
+        kind: "ids",
+        ids: filters.idFilter.id.map((id) => decodeQueryIdValue(id, route)),
+      });
+    }
+    predicates.push(...filters.filter.map((filter) => normalizedComposite(filter, route)));
+    const onlyPredicate = predicates[0];
+    return predicates.length === 1 && onlyPredicate !== undefined
+      ? onlyPredicate
+      : { kind: "all", predicates };
+  }
+
+  function decodeQueryIdValue(value: Any, route: StateRoute): unknown {
+    const schema = route.idField.message;
+    return schema === undefined ? decodeAnyValue(value) : AnyMessages.unpack(value, schema);
+  }
+
+  function normalizedComposite(
+    filter: CompositeFilter,
+    route: StateRoute,
+  ): NormalizedQueryPredicate<unknown> {
+    const predicates: NormalizedQueryPredicate<unknown>[] = [
+      ...filter.filter.map((child) => ({
+        kind: "comparison" as const,
+        column: requiredFilterColumn(child),
+        operator: requiredComparison(child),
+        value: decodeColumnValue(child, route),
+      })),
+      ...filter.compositeFilter.map((child) => normalizedComposite(child, route)),
+    ];
+    return {
+      kind: filter.operator === CompositeFilter_CompositeOperator.EITHER ? "either" : "all",
+      predicates,
+    };
+  }
+
+  function requiredFilterColumn(filter: Filter): string {
+    const column = filter.fieldPath?.fieldName[0];
+    if (column !== undefined) return column;
+    throw new TypeError("Validated query filter has no column.");
+  }
+
+  function requiredComparison(filter: Filter): NormalizedComparisonOperator {
+    const operator = wireComparison(filter.operator);
+    if (operator !== undefined) return operator;
+    throw new TypeError("Validated query filter has no supported comparison operator.");
+  }
+
+  function decodeColumnValue(filter: Filter, route: StateRoute): unknown {
+    const column = filter.fieldPath?.fieldName[0] ?? "";
+    if (column === "version" && filter.value !== undefined) {
+      const value = AnyMessages.unpack(filter.value, VersionSchema);
+      if (value !== undefined) return value;
+      throw new TypeError('Validated query column "version" has an invalid value.');
+    }
+    if ((column === "archived" || column === "deleted") && filter.value !== undefined) {
+      const value = AnyMessages.unpack(filter.value, BoolValueSchema);
+      if (value !== undefined) return value.value;
+      throw new TypeError(`Validated query column "${column}" has an invalid value.`);
     }
     const field = route.columnFields.get(column);
-    if (
-      field === undefined
-        ? !systemValueMatches(column, filter.value)
-        : !filterValueMatches(field, filter.value)
-    ) {
-      return unsupportedFilterError(
-        `QueryService.Read column filter "${column}" has the wrong value type.`,
-      );
-    }
-    if (
-      filter.operator !== Filter_Operator.EQUAL &&
-      (field === undefined ? column !== "version" : !supportsRange(field))
-    ) {
-      return unsupportedFilterError(
-        `QueryService.Read column filter "${column}" does not support range comparison.`,
-      );
-    }
+    return decodeAnyValue(
+      filter.value,
+      field?.fieldKind === "message" ? (field.message as MessageSchema) : undefined,
+    );
   }
 
-  return undefined;
-}
+  function filterValueMatches(field: DescField, value: Any): boolean {
+    const schema = filterValueSchema(field);
+    if (schema === undefined || value.typeUrl !== TypeUrls.derive(schema)) return false;
+    const decoded =
+      field.fieldKind === "message" ? decodeAnyValue(value, schema) : decodeAnyValue(value);
+    if (field.fieldKind === "message") {
+      return isMessage(decoded) && decoded.$typeName === field.message.typeName;
+    }
+    if (field.fieldKind === "enum") return typeof decoded === "number" && Number.isInteger(decoded);
+    if (field.fieldKind !== "scalar") return false;
+    if (field.scalar === ScalarType.BOOL) return typeof decoded === "boolean";
+    if (field.scalar === ScalarType.BYTES) return decoded instanceof Uint8Array;
+    if (field.scalar === ScalarType.STRING) return typeof decoded === "string";
+    if (
+      field.scalar === ScalarType.INT64 ||
+      field.scalar === ScalarType.UINT64 ||
+      field.scalar === ScalarType.SFIXED64 ||
+      field.scalar === ScalarType.FIXED64 ||
+      field.scalar === ScalarType.SINT64
+    ) {
+      return typeof decoded === "bigint";
+    }
+    return typeof decoded === "number" && Number.isFinite(decoded);
+  }
 
-function formatReadError(format: Query["format"], route: StateRoute): ContractError | undefined {
-  if (format === undefined) {
+  function filterValueSchema(field: DescField): MessageSchema | undefined {
+    if (field.fieldKind === "message") return field.message as MessageSchema;
+    if (field.fieldKind === "enum") return Int32ValueSchema;
+    if (field.fieldKind !== "scalar") return undefined;
+    if (field.scalar === ScalarType.BOOL) return BoolValueSchema;
+    if (field.scalar === ScalarType.BYTES) return BytesValueSchema;
+    if (field.scalar === ScalarType.DOUBLE) return DoubleValueSchema;
+    if (field.scalar === ScalarType.FLOAT) return FloatValueSchema;
+    if (
+      field.scalar === ScalarType.INT64 ||
+      field.scalar === ScalarType.SFIXED64 ||
+      field.scalar === ScalarType.SINT64
+    ) {
+      return Int64ValueSchema;
+    }
+    if (field.scalar === ScalarType.UINT64 || field.scalar === ScalarType.FIXED64) {
+      return UInt64ValueSchema;
+    }
+    if (field.scalar === ScalarType.UINT32 || field.scalar === ScalarType.FIXED32) {
+      return UInt32ValueSchema;
+    }
+    if (field.scalar === ScalarType.STRING) return StringValueSchema;
+    return Int32ValueSchema;
+  }
+
+  function systemValueMatches(column: string, value: Any): boolean {
+    if (column === "version") {
+      return (
+        value.typeUrl === TypeUrls.derive(VersionSchema) &&
+        AnyMessages.unpack(value, VersionSchema) !== undefined
+      );
+    }
+    if (column === "archived" || column === "deleted") {
+      return (
+        value.typeUrl === TypeUrls.derive(BoolValueSchema) &&
+        AnyMessages.unpack(value, BoolValueSchema) !== undefined
+      );
+    }
+    return false;
+  }
+
+  function supportsRange(field: DescField): boolean {
+    if (field.fieldKind === "message") {
+      return (
+        field.message.typeName === "google.protobuf.Timestamp" ||
+        field.message.typeName === "spine.core.Version"
+      );
+    }
+    return (
+      field.fieldKind === "scalar" &&
+      field.scalar !== ScalarType.BOOL &&
+      field.scalar !== ScalarType.BYTES
+    );
+  }
+
+  function wireComparison(operator: Filter_Operator): NormalizedComparisonOperator | undefined {
+    if (operator === Filter_Operator.EQUAL) return "equal";
+    if (operator === Filter_Operator.GREATER_THAN) return "greaterThan";
+    if (operator === Filter_Operator.LESS_THAN) return "lessThan";
+    if (operator === Filter_Operator.GREATER_OR_EQUAL) return "greaterOrEqual";
+    if (operator === Filter_Operator.LESS_OR_EQUAL) return "lessOrEqual";
     return undefined;
   }
-  if (format.orderBy.length > MAX_QUERY_ORDER_BY) {
-    return unsupportedFormatError("QueryService.Read order_by may contain at most 8 entries.");
+
+  function resolveQueryMask(schema: MessageSchema, path: string): string | undefined {
+    let current: MessageSchema | undefined = schema;
+    const local: string[] = [];
+    for (const segment of path.split(".")) {
+      const field = findMessageField(current, segment);
+      if (field === undefined) return undefined;
+      local.push(field.localName);
+      current = field.message;
+    }
+    return local.join(".");
   }
-  if ((format.fieldMask?.paths.length ?? 0) > MAX_QUERY_FIELD_MASK_PATHS) {
-    return unsupportedFormatError("QueryService.Read field_mask may contain at most 32 paths.");
+
+  function requiredQueryMask(schema: MessageSchema, path: string): string {
+    const resolved = resolveQueryMask(schema, path);
+    if (resolved !== undefined) return resolved;
+    throw new TypeError(`Validated query mask path "${path}" is invalid.`);
   }
-  if (
-    format.fieldMask?.paths.some((path) => path.length > MAX_QUERY_FIELD_MASK_PATH_LENGTH) ??
-    false
-  ) {
-    return unsupportedFormatError(
-      "QueryService.Read field_mask paths may contain at most 128 characters.",
+
+  function unsupportedFilterError(message: string): ContractError {
+    return invalidQueryError(message);
+  }
+
+  function unsupportedFormatError(message: string): ContractError {
+    return invalidQueryError(message);
+  }
+
+  function invalidQueryError(message: string): ContractError {
+    return {
+      type: "INVALID_QUERY",
+      message,
+    };
+  }
+
+  function invalidCriterionError(): ContractError {
+    return {
+      type: "INVALID_QUERY",
+      message: "QueryService.Read requires filters or include_all = true.",
+    };
+  }
+
+  const DEFAULT_INACTIVE_TTL_MS = 30_000;
+  const MAX_INACTIVE_TTL_MS = 2_147_483_647;
+  const DEFAULT_QUEUE_LIMIT = 100;
+  const DEFAULT_SUBSCRIPTION_LIMIT = 100;
+  const MAX_CANCEL_RETRIES = 3;
+  const FOREIGN_SUBSCRIPTION_MESSAGE = "Subscription is active in another service instance.";
+  const CONCURRENT_CANCELLATION_MESSAGE =
+    "Subscription cancellation could not settle concurrent storage changes.";
+  /** Holds bounded request limits for QueryService. */
+  const QueryLimits = Object.freeze({
+    idCount: 100,
+    filterCount: 16,
+    compositeCount: 8,
+    orderCount: 8,
+    maskPathCount: 32,
+    maskPathLength: 128,
+    resultCount: 1_000,
+  });
+
+  /** Holds bounded request limits for SubscriptionService. */
+  const SubscriptionLimits = Object.freeze({
+    idCount: QueryLimits.idCount,
+    compositeCount: 8,
+    filterCount: 16,
+    compositeDepth: 8,
+    maskPathCount: 32,
+    maskPathLength: 128,
+    pathComponentCount: 16,
+    pathSegmentLength: 128,
+  });
+
+  function positiveInteger(value: number): number {
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+  }
+
+  function inactiveTtl(value: number): number {
+    const normalized = positiveInteger(value);
+    if (normalized > MAX_INACTIVE_TTL_MS) {
+      throw new TypeError("SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds.");
+    }
+    return normalized;
+  }
+
+  function subscriptionLimit(value: number): number {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new TypeError("SpineServices subscriptionLimit must be a positive safe integer.");
+    }
+
+    return value;
+  }
+
+  function clearInactiveTimer(record: SubscriptionRecord): void {
+    if (record.inactiveTimer !== undefined) {
+      clearTimeout(record.inactiveTimer);
+      record.inactiveTimer = undefined;
+    }
+  }
+
+  function createSubscriptionRecord(input: {
+    readonly id: string;
+    readonly subscription: Subscription;
+    readonly shape: SubscriptionShape;
+    readonly tenantId: string | undefined;
+    readonly expiresAtMs: number;
+    readonly queueLimit: number;
+  }): SubscriptionRecord {
+    return {
+      id: input.id,
+      subscription: clone(SubscriptionSchema, input.subscription),
+      tenantId: input.tenantId,
+      expiresAtMs: input.expiresAtMs,
+      delivery: new SubscriptionDelivery(input.queueLimit),
+      durableState: undefined,
+      inactiveTimer: undefined,
+      reservation: undefined,
+      ...input.shape,
+    };
+  }
+
+  function createSubscriptionClaim(record: SubscriptionRecord): SubscriptionClaim {
+    const owner = randomUUID();
+    return {
+      canceled: false,
+      claimed: false,
+      unknown: false,
+      owner,
+      record,
+      state: DurableSubscriptionRecords.claim(record.id, owner),
+    };
+  }
+
+  function sameAny(left: Any | undefined, right: Any | undefined): boolean {
+    return (
+      left?.typeUrl === right?.typeUrl &&
+      Buffer.from(left?.value ?? []).equals(Buffer.from(right?.value ?? []))
     );
   }
-  for (const path of format.fieldMask?.paths ?? []) {
-    if (resolveQueryMask(route.schema, path) === undefined) {
-      return unsupportedFormatError(
-        `QueryService.Read field_mask path "${path}" is not a state field.`,
-      );
-    }
-  }
-  if (format.limit > MAX_QUERY_LIMIT) {
-    return {
-      type: "INVALID_QUERY",
-      message: "QueryService.Read limit may be at most 1000.",
-    };
-  }
-  if (format.limit > 0 && format.orderBy.length === 0) {
-    return {
-      type: "INVALID_QUERY",
-      message: "QueryService.Read limit requires ordering.",
-    };
-  }
-  for (const order of format.orderBy) {
-    if (order.column.trim().length === 0) {
-      return unsupportedFormatError("QueryService.Read order_by column is required.");
-    }
-    if (!route.allowedColumnNames.has(order.column)) {
-      return unsupportedFormatError(
-        `QueryService.Read order_by column "${order.column}" is not a declared column.`,
-      );
-    }
-    const field = route.columnFields.get(order.column);
-    if (field === undefined ? order.column !== "version" : !supportsRange(field)) {
-      return unsupportedFormatError(
-        `QueryService.Read order_by column "${order.column}" is not orderable.`,
-      );
-    }
-    if (
-      order.direction !== OrderBy_Direction.ASCENDING &&
-      order.direction !== OrderBy_Direction.DESCENDING
-    ) {
-      return unsupportedFormatError(
-        "QueryService.Read order_by direction must be ASCENDING or DESCENDING.",
-      );
-    }
+
+  function foreignSubscriptionError(): ConnectError {
+    return new ConnectError(FOREIGN_SUBSCRIPTION_MESSAGE, Code.Aborted);
   }
 
-  return undefined;
-}
+  function cancellationFailedError(): ConnectError {
+    return new ConnectError("Subscription cancellation failed.", Code.Internal);
+  }
 
-function createReadPlan(
-  target: Target,
-  query: Query,
-  route: StateRoute,
-): NormalizedQueryPlan<unknown> {
-  const predicate =
-    target.criterion.case === "filters"
-      ? normalizedFilters(target.criterion.value, route)
-      : undefined;
-  const format = query.format;
-  return Object.freeze({
-    ...(predicate === undefined ? {} : { predicate }),
-    ...(format?.fieldMask === undefined
-      ? {}
-      : {
-          mask: {
-            paths: format.fieldMask.paths.map((path) => requiredQueryMask(route.schema, path)),
-          },
-        }),
-    ...(format === undefined || format.orderBy.length === 0
-      ? {}
-      : {
-          order: format.orderBy.map((order) => ({
-            column: order.column,
-            direction:
-              order.direction === OrderBy_Direction.DESCENDING
-                ? ("desc" as const)
-                : ("asc" as const),
-          })),
-        }),
-    ...(format === undefined || format.limit === 0 ? {} : { limit: format.limit }),
-  });
-}
+  function concurrentCancellationError(): ConnectError {
+    return new ConnectError(CONCURRENT_CANCELLATION_MESSAGE, Code.Aborted);
+  }
 
-function normalizedFilters(
-  filters: TargetFilters,
-  route: StateRoute,
-): NormalizedQueryPredicate<unknown> {
-  const predicates: NormalizedQueryPredicate<unknown>[] = [];
-  if (filters.idFilter !== undefined) {
-    predicates.push({
-      kind: "ids",
-      ids: filters.idFilter.id.map((id) => decodeQueryIdValue(id, route)),
+  function isCancellationConflict(error: unknown): error is ConnectError {
+    return (
+      error instanceof ConnectError &&
+      error.code === Code.Aborted &&
+      (error.rawMessage === FOREIGN_SUBSCRIPTION_MESSAGE ||
+        error.rawMessage === CONCURRENT_CANCELLATION_MESSAGE)
+    );
+  }
+
+  function createSubscriptionRemoval(): SubscriptionRemoval {
+    let reject!: (reason?: unknown) => void;
+    let resolve!: () => void;
+    const settled = new Promise<void>((settle, fail) => {
+      reject = fail;
+      resolve = () => {
+        settle();
+      };
     });
-  }
-  predicates.push(...filters.filter.map((filter) => normalizedComposite(filter, route)));
-  const onlyPredicate = predicates[0];
-  return predicates.length === 1 && onlyPredicate !== undefined
-    ? onlyPredicate
-    : { kind: "all", predicates };
-}
-
-function decodeQueryIdValue(value: Any, route: StateRoute): unknown {
-  const schema = route.idField.message;
-  return schema === undefined ? decodeAnyValue(value) : AnyMessages.unpack(value, schema);
-}
-
-function normalizedComposite(
-  filter: CompositeFilter,
-  route: StateRoute,
-): NormalizedQueryPredicate<unknown> {
-  const predicates: NormalizedQueryPredicate<unknown>[] = [
-    ...filter.filter.map((child) => ({
-      kind: "comparison" as const,
-      column: requiredFilterColumn(child),
-      operator: requiredComparison(child),
-      value: decodeColumnValue(child, route),
-    })),
-    ...filter.compositeFilter.map((child) => normalizedComposite(child, route)),
-  ];
-  return {
-    kind: filter.operator === CompositeFilter_CompositeOperator.EITHER ? "either" : "all",
-    predicates,
-  };
-}
-
-function requiredFilterColumn(filter: Filter): string {
-  const column = filter.fieldPath?.fieldName[0];
-  if (column !== undefined) return column;
-  throw new TypeError("Validated query filter has no column.");
-}
-
-function requiredComparison(filter: Filter): NormalizedComparisonOperator {
-  const operator = wireComparison(filter.operator);
-  if (operator !== undefined) return operator;
-  throw new TypeError("Validated query filter has no supported comparison operator.");
-}
-
-function decodeColumnValue(filter: Filter, route: StateRoute): unknown {
-  const column = filter.fieldPath?.fieldName[0] ?? "";
-  if (column === "version" && filter.value !== undefined) {
-    const value = AnyMessages.unpack(filter.value, VersionSchema);
-    if (value !== undefined) return value;
-    throw new TypeError('Validated query column "version" has an invalid value.');
-  }
-  if ((column === "archived" || column === "deleted") && filter.value !== undefined) {
-    const value = AnyMessages.unpack(filter.value, BoolValueSchema);
-    if (value !== undefined) return value.value;
-    throw new TypeError(`Validated query column "${column}" has an invalid value.`);
-  }
-  const field = route.columnFields.get(column);
-  return decodeAnyValue(
-    filter.value,
-    field?.fieldKind === "message" ? (field.message as MessageSchema) : undefined,
-  );
-}
-
-function filterValueMatches(field: DescField, value: Any): boolean {
-  const schema = filterValueSchema(field);
-  if (schema === undefined || value.typeUrl !== TypeUrls.derive(schema)) return false;
-  const decoded =
-    field.fieldKind === "message" ? decodeAnyValue(value, schema) : decodeAnyValue(value);
-  if (field.fieldKind === "message") {
-    return isMessage(decoded) && decoded.$typeName === field.message.typeName;
-  }
-  if (field.fieldKind === "enum") return typeof decoded === "number" && Number.isInteger(decoded);
-  if (field.fieldKind !== "scalar") return false;
-  if (field.scalar === ScalarType.BOOL) return typeof decoded === "boolean";
-  if (field.scalar === ScalarType.BYTES) return decoded instanceof Uint8Array;
-  if (field.scalar === ScalarType.STRING) return typeof decoded === "string";
-  if (
-    field.scalar === ScalarType.INT64 ||
-    field.scalar === ScalarType.UINT64 ||
-    field.scalar === ScalarType.SFIXED64 ||
-    field.scalar === ScalarType.FIXED64 ||
-    field.scalar === ScalarType.SINT64
-  ) {
-    return typeof decoded === "bigint";
-  }
-  return typeof decoded === "number" && Number.isFinite(decoded);
-}
-
-function filterValueSchema(field: DescField): MessageSchema | undefined {
-  if (field.fieldKind === "message") return field.message as MessageSchema;
-  if (field.fieldKind === "enum") return Int32ValueSchema;
-  if (field.fieldKind !== "scalar") return undefined;
-  if (field.scalar === ScalarType.BOOL) return BoolValueSchema;
-  if (field.scalar === ScalarType.BYTES) return BytesValueSchema;
-  if (field.scalar === ScalarType.DOUBLE) return DoubleValueSchema;
-  if (field.scalar === ScalarType.FLOAT) return FloatValueSchema;
-  if (
-    field.scalar === ScalarType.INT64 ||
-    field.scalar === ScalarType.SFIXED64 ||
-    field.scalar === ScalarType.SINT64
-  ) {
-    return Int64ValueSchema;
-  }
-  if (field.scalar === ScalarType.UINT64 || field.scalar === ScalarType.FIXED64) {
-    return UInt64ValueSchema;
-  }
-  if (field.scalar === ScalarType.UINT32 || field.scalar === ScalarType.FIXED32) {
-    return UInt32ValueSchema;
-  }
-  if (field.scalar === ScalarType.STRING) return StringValueSchema;
-  return Int32ValueSchema;
-}
-
-function systemValueMatches(column: string, value: Any): boolean {
-  if (column === "version") {
-    return (
-      value.typeUrl === TypeUrls.derive(VersionSchema) &&
-      AnyMessages.unpack(value, VersionSchema) !== undefined
-    );
-  }
-  if (column === "archived" || column === "deleted") {
-    return (
-      value.typeUrl === TypeUrls.derive(BoolValueSchema) &&
-      AnyMessages.unpack(value, BoolValueSchema) !== undefined
-    );
-  }
-  return false;
-}
-
-function supportsRange(field: DescField): boolean {
-  if (field.fieldKind === "message") {
-    return (
-      field.message.typeName === "google.protobuf.Timestamp" ||
-      field.message.typeName === "spine.core.Version"
-    );
-  }
-  return (
-    field.fieldKind === "scalar" &&
-    field.scalar !== ScalarType.BOOL &&
-    field.scalar !== ScalarType.BYTES
-  );
-}
-
-function wireComparison(operator: Filter_Operator): NormalizedComparisonOperator | undefined {
-  if (operator === Filter_Operator.EQUAL) return "equal";
-  if (operator === Filter_Operator.GREATER_THAN) return "greaterThan";
-  if (operator === Filter_Operator.LESS_THAN) return "lessThan";
-  if (operator === Filter_Operator.GREATER_OR_EQUAL) return "greaterOrEqual";
-  if (operator === Filter_Operator.LESS_OR_EQUAL) return "lessOrEqual";
-  return undefined;
-}
-
-function resolveQueryMask(schema: MessageSchema, path: string): string | undefined {
-  let current: MessageSchema | undefined = schema;
-  const local: string[] = [];
-  for (const segment of path.split(".")) {
-    const field = findMessageField(current, segment);
-    if (field === undefined) return undefined;
-    local.push(field.localName);
-    current = field.message;
-  }
-  return local.join(".");
-}
-
-function requiredQueryMask(schema: MessageSchema, path: string): string {
-  const resolved = resolveQueryMask(schema, path);
-  if (resolved !== undefined) return resolved;
-  throw new TypeError(`Validated query mask path "${path}" is invalid.`);
-}
-
-function unsupportedFilterError(message: string): ContractError {
-  return invalidQueryError(message);
-}
-
-function unsupportedFormatError(message: string): ContractError {
-  return invalidQueryError(message);
-}
-
-function invalidQueryError(message: string): ContractError {
-  return {
-    type: "INVALID_QUERY",
-    message,
-  };
-}
-
-function invalidCriterionError(): ContractError {
-  return {
-    type: "INVALID_QUERY",
-    message: "QueryService.Read requires filters or include_all = true.",
-  };
-}
-
-const DEFAULT_INACTIVE_TTL_MS = 30_000;
-const MAX_INACTIVE_TTL_MS = 2_147_483_647;
-const DEFAULT_QUEUE_LIMIT = 100;
-const DEFAULT_SUBSCRIPTION_LIMIT = 100;
-const MAX_CANCEL_RETRIES = 3;
-const FOREIGN_SUBSCRIPTION_MESSAGE = "Subscription is active in another service instance.";
-const CONCURRENT_CANCELLATION_MESSAGE =
-  "Subscription cancellation could not settle concurrent storage changes.";
-const MAX_QUERY_ID_FILTER_IDS = 100;
-const MAX_QUERY_SIMPLE_FILTERS = 16;
-const MAX_QUERY_COMPOSITE_FILTERS = 8;
-const MAX_QUERY_ORDER_BY = 8;
-const MAX_QUERY_FIELD_MASK_PATHS = 32;
-const MAX_QUERY_FIELD_MASK_PATH_LENGTH = 128;
-const MAX_QUERY_LIMIT = 1_000;
-const MAX_SUBSCRIPTION_ID_FILTER_IDS = MAX_QUERY_ID_FILTER_IDS;
-const MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS = 8;
-const MAX_SUBSCRIPTION_SIMPLE_FILTERS = 16;
-const MAX_SUBSCRIPTION_COMPOSITE_DEPTH = 8;
-const MAX_SUBSCRIPTION_FIELD_MASK_PATHS = 32;
-const MAX_SUBSCRIPTION_FIELD_MASK_PATH_LENGTH = 128;
-const MAX_SUBSCRIPTION_FIELD_PATH_COMPONENTS = 16;
-const MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH = 128;
-
-function positiveInteger(value: number): number {
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
-}
-
-function inactiveTtl(value: number): number {
-  const normalized = positiveInteger(value);
-  if (normalized > MAX_INACTIVE_TTL_MS) {
-    throw new TypeError("SpineServices inactiveTtlMs must not exceed 2147483647 milliseconds.");
-  }
-  return normalized;
-}
-
-function subscriptionLimit(value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new TypeError("SpineServices subscriptionLimit must be a positive safe integer.");
+    return { reject, resolve, settled };
   }
 
-  return value;
-}
-
-function clearInactiveTimer(record: SubscriptionRecord): void {
-  if (record.inactiveTimer !== undefined) {
-    clearTimeout(record.inactiveTimer);
-    record.inactiveTimer = undefined;
+  async function observeRemoval(removal: SubscriptionRemoval): Promise<void> {
+    try {
+      await removal.settled;
+    } catch {
+      // The cancellation caller observes deletion failure; recovery remains inert.
+    }
   }
-}
 
-function createSubscriptionRecord(input: {
-  readonly id: string;
-  readonly subscription: Subscription;
-  readonly shape: SubscriptionShape;
-  readonly tenantId: string | undefined;
-  readonly expiresAtMs: number;
-  readonly queueLimit: number;
-}): SubscriptionRecord {
-  return {
-    id: input.id,
-    subscription: clone(SubscriptionSchema, input.subscription),
-    tenantId: input.tenantId,
-    expiresAtMs: input.expiresAtMs,
-    delivery: new SubscriptionDelivery(input.queueLimit),
-    durableState: undefined,
-    inactiveTimer: undefined,
-    reservation: undefined,
-    ...input.shape,
-  };
-}
-
-function createSubscriptionClaim(record: SubscriptionRecord): SubscriptionClaim {
-  const owner = randomUUID();
-  return {
-    canceled: false,
-    claimed: false,
-    unknown: false,
-    owner,
-    record,
-    state: DurableSubscriptionRecords.claim(record.id, owner),
-  };
-}
-
-function sameAny(left: Any | undefined, right: Any | undefined): boolean {
-  return (
-    left?.typeUrl === right?.typeUrl &&
-    Buffer.from(left?.value ?? []).equals(Buffer.from(right?.value ?? []))
-  );
-}
-
-function foreignSubscriptionError(): ConnectError {
-  return new ConnectError(FOREIGN_SUBSCRIPTION_MESSAGE, Code.Aborted);
-}
-
-function cancellationFailedError(): ConnectError {
-  return new ConnectError("Subscription cancellation failed.", Code.Internal);
-}
-
-function concurrentCancellationError(): ConnectError {
-  return new ConnectError(CONCURRENT_CANCELLATION_MESSAGE, Code.Aborted);
-}
-
-function isCancellationConflict(error: unknown): error is ConnectError {
-  return (
-    error instanceof ConnectError &&
-    error.code === Code.Aborted &&
-    (error.rawMessage === FOREIGN_SUBSCRIPTION_MESSAGE ||
-      error.rawMessage === CONCURRENT_CANCELLATION_MESSAGE)
-  );
-}
-
-function createSubscriptionRemoval(): SubscriptionRemoval {
-  let reject!: (reason?: unknown) => void;
-  let resolve!: () => void;
-  const settled = new Promise<void>((settle, fail) => {
-    reject = fail;
-    resolve = () => {
-      settle();
-    };
-  });
-  return { reject, resolve, settled };
-}
-
-async function observeRemoval(removal: SubscriptionRemoval): Promise<void> {
-  try {
-    await removal.settled;
-  } catch {
-    // The cancellation caller observes deletion failure; recovery remains inert.
+  function uniqueContexts(contexts: readonly BoundedContext[]): readonly BoundedContext[] {
+    return [...new Set(contexts)];
   }
-}
 
-function uniqueContexts(contexts: readonly BoundedContext[]): readonly BoundedContext[] {
-  return [...new Set(contexts)];
-}
-
-function subscriptionStorageContext(context: BoundedContext): StorageContext {
-  return Object.freeze({
-    name: `${context.snapshot.name.value}:subscriptions`,
-    multitenant: false,
-  });
-}
-
-function subscriptionStore(context: BoundedContext): SubscriptionStore | undefined {
-  try {
+  function subscriptionStorageContext(context: BoundedContext): StorageContext {
     return Object.freeze({
-      context,
-      storageContext: subscriptionStorageContext(context),
-      storageFactory: boundedContextAccess.storageFactory(context),
+      name: `${context.snapshot.name.value}:subscriptions`,
+      multitenant: false,
     });
-  } catch {
-    return undefined;
-  }
-}
-
-function createSubscriptionStorage(store: SubscriptionStore): RecordStorage<string, Any> {
-  return store.storageFactory.createRecordStorage(
-    store.storageContext,
-    durableSubscriptionRecordSpec,
-  );
-}
-
-function validateTopic(topic: Topic): void {
-  if (topic.id?.value === undefined || topic.id.value.trim().length === 0) {
-    throw new ConnectError("Subscription topic ID is required.", Code.InvalidArgument);
-  }
-  if (topic.context === undefined) {
-    throw new ConnectError("Subscription topic context is required.", Code.InvalidArgument);
-  }
-  if (topic.target?.criterion.case === undefined) {
-    throw new ConnectError("Subscription topic criterion is required.", Code.InvalidArgument);
-  }
-}
-
-function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): SubscriptionShape {
-  const target = topic.target;
-  if (target === undefined) {
-    throw new ConnectError("Subscription topic target is required.", Code.InvalidArgument);
-  }
-  if (route.kind === "event") {
-    validateEventSubscriptionTopic(topic, target);
-    return { kind: "event", route };
   }
 
-  const fieldMask = subscriptionFieldMask(topic, route);
-
-  switch (target.criterion.case) {
-    case "includeAll":
-      if (!target.criterion.value) {
-        throw new ConnectError(
-          "SubscriptionService.Subscribe requires filters or include_all = true.",
-          Code.InvalidArgument,
-        );
-      }
-      return {
-        kind: "state",
-        route,
-        matcher: {
-          fieldMask,
-          match: () => "state",
-        },
-      };
-    case "filters":
-      return {
-        kind: "state",
-        route,
-        matcher: createFilteredSubscriptionMatcher(target.criterion.value, route, fieldMask),
-      };
-    default:
-      throw new ConnectError(
-        "SubscriptionService.Subscribe requires filters or include_all = true.",
-        Code.InvalidArgument,
-      );
-  }
-}
-
-function validateEventSubscriptionTopic(topic: Topic, target: Target): void {
-  if ((topic.fieldMask?.paths.length ?? 0) > 0) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe event topics do not support field_mask.",
-      Code.InvalidArgument,
-    );
-  }
-
-  switch (target.criterion.case) {
-    case "includeAll":
-      if (!target.criterion.value) {
-        throw new ConnectError(
-          "SubscriptionService.Subscribe requires filters or include_all = true.",
-          Code.InvalidArgument,
-        );
-      }
-      return;
-    case "filters":
-      throw new ConnectError(
-        "SubscriptionService.Subscribe event topics support only include_all in this runtime slice.",
-        Code.InvalidArgument,
-      );
-    default:
-      throw new ConnectError(
-        "SubscriptionService.Subscribe requires filters or include_all = true.",
-        Code.InvalidArgument,
-      );
-  }
-}
-
-function createFilteredSubscriptionMatcher(
-  filters: TargetFilters,
-  route: StateRoute,
-  fieldMask: readonly string[] | undefined,
-): SubscriptionMatcher {
-  if (filters.idFilter?.id.length === 0) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe id_filter requires at least one ID.",
-      Code.InvalidArgument,
-    );
-  }
-  if (
-    filters.idFilter !== undefined &&
-    filters.idFilter.id.length > MAX_SUBSCRIPTION_ID_FILTER_IDS
-  ) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe id_filter may contain at most 100 IDs.",
-      Code.InvalidArgument,
-    );
-  }
-  if (filters.idFilter === undefined && filters.filter.length === 0) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe requires an ID filter or field filter.",
-      Code.InvalidArgument,
-    );
-  }
-
-  validateSubscriptionFilterTree(filters.filter);
-  const idValues = filters.idFilter?.id.map((id) => decodeSubscriptionIdValue(id, route));
-  const statePredicate = createSubscriptionPredicate(filters.filter, route);
-
-  return {
-    fieldMask,
-    match(update) {
-      if (
-        idValues !== undefined &&
-        !idValues.some((id) => valuesEqual(update.id, id, route.idField.message))
-      ) {
-        return undefined;
-      }
-      if (statePredicate(update.state)) {
-        return "state";
-      }
-      if (update.previousState !== undefined && statePredicate(update.previousState)) {
-        return "noLongerMatching";
-      }
-
+  function subscriptionStore(context: BoundedContext): SubscriptionStore | undefined {
+    try {
+      return Object.freeze({
+        context,
+        storageContext: subscriptionStorageContext(context),
+        storageFactory: boundedContextAccess.storageFactory(context),
+      });
+    } catch {
       return undefined;
-    },
-  };
-}
+    }
+  }
 
-function createSubscriptionPredicate(
-  filters: readonly CompositeFilter[],
-  route: StateRoute,
-): (state: Message) => boolean {
-  const predicates = filters.map((filter) => createCompositePredicate(filter, route));
-  return (state) => predicates.every((predicate) => predicate(state));
-}
-
-function validateSubscriptionFilterTree(filters: readonly CompositeFilter[]): void {
-  if (filters.length > MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe may contain at most 8 composite filters.",
-      Code.InvalidArgument,
+  function createSubscriptionStorage(store: SubscriptionStore): RecordStorage<string, Any> {
+    return store.storageFactory.createRecordStorage(
+      store.storageContext,
+      durableSubscriptionRecordSpec,
     );
   }
 
-  const stack: SubscriptionFilterFrame[] = [];
-  for (const filter of filters) {
-    stack.push({ filter, depth: 0 });
+  function validateTopic(topic: Topic): void {
+    if (topic.id?.value === undefined || topic.id.value.trim().length === 0) {
+      throw new ConnectError("Subscription topic ID is required.", Code.InvalidArgument);
+    }
+    if (topic.context === undefined) {
+      throw new ConnectError("Subscription topic context is required.", Code.InvalidArgument);
+    }
+    if (topic.target?.criterion.case === undefined) {
+      throw new ConnectError("Subscription topic criterion is required.", Code.InvalidArgument);
+    }
   }
-  const counts = {
-    compositeCount: 0,
-    simpleCount: 0,
-  };
 
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current === undefined) {
-      continue;
+  function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): SubscriptionShape {
+    const target = topic.target;
+    if (target === undefined) {
+      throw new ConnectError("Subscription topic target is required.", Code.InvalidArgument);
+    }
+    if (route.kind === "event") {
+      validateEventSubscriptionTopic(topic, target);
+      return { kind: "event", route };
     }
 
-    validateSubscriptionFilterNode(current.filter, current.depth, counts);
-    enqueueSubscriptionFilterChildren(current.filter, current.depth, stack);
-  }
-}
+    const fieldMask = subscriptionFieldMask(topic, route);
 
-function validateSubscriptionFilterNode(
-  filter: CompositeFilter,
-  depth: number,
-  counts: SubscriptionFilterCounts,
-): void {
-  if (depth > MAX_SUBSCRIPTION_COMPOSITE_DEPTH) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
-      Code.InvalidArgument,
-    );
+    switch (target.criterion.case) {
+      case "includeAll":
+        if (!target.criterion.value) {
+          throw new ConnectError(
+            "SubscriptionService.Subscribe requires filters or include_all = true.",
+            Code.InvalidArgument,
+          );
+        }
+        return {
+          kind: "state",
+          route,
+          matcher: {
+            fieldMask,
+            match: () => "state",
+          },
+        };
+      case "filters":
+        return {
+          kind: "state",
+          route,
+          matcher: createFilteredSubscriptionMatcher(target.criterion.value, route, fieldMask),
+        };
+      default:
+        throw new ConnectError(
+          "SubscriptionService.Subscribe requires filters or include_all = true.",
+          Code.InvalidArgument,
+        );
+    }
   }
-  switch (filter.operator) {
-    case CompositeFilter_CompositeOperator.ALL:
-    case CompositeFilter_CompositeOperator.EITHER:
-      break;
-    default:
+
+  function validateEventSubscriptionTopic(topic: Topic, target: Target): void {
+    if ((topic.fieldMask?.paths.length ?? 0) > 0) {
       throw new ConnectError(
-        "SubscriptionService.Subscribe supports only ALL or EITHER composite filters.",
+        "SubscriptionService.Subscribe event topics do not support field_mask.",
         Code.InvalidArgument,
       );
-  }
-  if (depth === MAX_SUBSCRIPTION_COMPOSITE_DEPTH && filter.compositeFilter.length > 0) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
-      Code.InvalidArgument,
-    );
+    }
+
+    switch (target.criterion.case) {
+      case "includeAll":
+        if (!target.criterion.value) {
+          throw new ConnectError(
+            "SubscriptionService.Subscribe requires filters or include_all = true.",
+            Code.InvalidArgument,
+          );
+        }
+        return;
+      case "filters":
+        throw new ConnectError(
+          "SubscriptionService.Subscribe event topics support only include_all in this runtime slice.",
+          Code.InvalidArgument,
+        );
+      default:
+        throw new ConnectError(
+          "SubscriptionService.Subscribe requires filters or include_all = true.",
+          Code.InvalidArgument,
+        );
+    }
   }
 
-  counts.compositeCount += 1;
-  if (counts.compositeCount > MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe may contain at most 8 composite filters.",
-      Code.InvalidArgument,
-    );
+  function createFilteredSubscriptionMatcher(
+    filters: TargetFilters,
+    route: StateRoute,
+    fieldMask: readonly string[] | undefined,
+  ): SubscriptionMatcher {
+    if (filters.idFilter?.id.length === 0) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe id_filter requires at least one ID.",
+        Code.InvalidArgument,
+      );
+    }
+    if (filters.idFilter !== undefined && filters.idFilter.id.length > SubscriptionLimits.idCount) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe id_filter may contain at most 100 IDs.",
+        Code.InvalidArgument,
+      );
+    }
+    if (filters.idFilter === undefined && filters.filter.length === 0) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe requires an ID filter or field filter.",
+        Code.InvalidArgument,
+      );
+    }
+
+    validateSubscriptionFilterTree(filters.filter);
+    const idValues = filters.idFilter?.id.map((id) => decodeSubscriptionIdValue(id, route));
+    const statePredicate = createSubscriptionPredicate(filters.filter, route);
+
+    return {
+      fieldMask,
+      match(update) {
+        if (
+          idValues !== undefined &&
+          !idValues.some((id) => valuesEqual(update.id, id, route.idField.message))
+        ) {
+          return undefined;
+        }
+        if (statePredicate(update.state)) {
+          return "state";
+        }
+        if (update.previousState !== undefined && statePredicate(update.previousState)) {
+          return "noLongerMatching";
+        }
+
+        return undefined;
+      },
+    };
   }
 
-  counts.simpleCount += filter.filter.length;
-  if (counts.simpleCount > MAX_SUBSCRIPTION_SIMPLE_FILTERS) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe may contain at most 16 simple field filters.",
-      Code.InvalidArgument,
-    );
+  function createSubscriptionPredicate(
+    filters: readonly CompositeFilter[],
+    route: StateRoute,
+  ): (state: Message) => boolean {
+    const predicates = filters.map((filter) => createCompositePredicate(filter, route));
+    return (state) => predicates.every((predicate) => predicate(state));
   }
-  if (
-    (filter.compositeFilter.length > 1 || depth + 1 < MAX_SUBSCRIPTION_COMPOSITE_DEPTH) &&
-    counts.compositeCount + filter.compositeFilter.length > MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS
-  ) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe may contain at most 8 composite filters.",
-      Code.InvalidArgument,
-    );
-  }
-}
 
-function enqueueSubscriptionFilterChildren(
-  filter: CompositeFilter,
-  depth: number,
-  stack: SubscriptionFilterFrame[],
-): void {
-  for (const nested of filter.compositeFilter) {
-    if (depth + 1 > MAX_SUBSCRIPTION_COMPOSITE_DEPTH) {
+  function validateSubscriptionFilterTree(filters: readonly CompositeFilter[]): void {
+    if (filters.length > SubscriptionLimits.compositeCount) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe may contain at most 8 composite filters.",
+        Code.InvalidArgument,
+      );
+    }
+
+    const stack: SubscriptionFilterFrame[] = [];
+    for (const filter of filters) {
+      stack.push({ filter, depth: 0 });
+    }
+    const counts = {
+      compositeCount: 0,
+      simpleCount: 0,
+    };
+
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (current === undefined) {
+        continue;
+      }
+
+      validateSubscriptionFilterNode(current.filter, current.depth, counts);
+      enqueueSubscriptionFilterChildren(current.filter, current.depth, stack);
+    }
+  }
+
+  function validateSubscriptionFilterNode(
+    filter: CompositeFilter,
+    depth: number,
+    counts: SubscriptionFilterCounts,
+  ): void {
+    if (depth > SubscriptionLimits.compositeDepth) {
       throw new ConnectError(
         "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
         Code.InvalidArgument,
       );
     }
-    stack.push({ filter: nested, depth: depth + 1 });
+    switch (filter.operator) {
+      case CompositeFilter_CompositeOperator.ALL:
+      case CompositeFilter_CompositeOperator.EITHER:
+        break;
+      default:
+        throw new ConnectError(
+          "SubscriptionService.Subscribe supports only ALL or EITHER composite filters.",
+          Code.InvalidArgument,
+        );
+    }
+    if (depth === SubscriptionLimits.compositeDepth && filter.compositeFilter.length > 0) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
+        Code.InvalidArgument,
+      );
+    }
+
+    counts.compositeCount += 1;
+    if (counts.compositeCount > SubscriptionLimits.compositeCount) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe may contain at most 8 composite filters.",
+        Code.InvalidArgument,
+      );
+    }
+
+    counts.simpleCount += filter.filter.length;
+    if (counts.simpleCount > SubscriptionLimits.filterCount) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe may contain at most 16 simple field filters.",
+        Code.InvalidArgument,
+      );
+    }
+    if (
+      (filter.compositeFilter.length > 1 || depth + 1 < SubscriptionLimits.compositeDepth) &&
+      counts.compositeCount + filter.compositeFilter.length > SubscriptionLimits.compositeCount
+    ) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe may contain at most 8 composite filters.",
+        Code.InvalidArgument,
+      );
+    }
   }
-}
 
-interface SubscriptionFilterFrame {
-  readonly filter: CompositeFilter;
-  readonly depth: number;
-}
-
-interface SubscriptionFilterCounts {
-  compositeCount: number;
-  simpleCount: number;
-}
-
-function createCompositePredicate(
-  filter: CompositeFilter,
-  route: StateRoute,
-): (state: Message) => boolean {
-  const children = [
-    ...filter.filter.map((simple) => createSimplePredicate(simple, route)),
-    ...filter.compositeFilter.map((nested) => createCompositePredicate(nested, route)),
-  ];
-  if (children.length === 0) {
-    return () => true;
+  function enqueueSubscriptionFilterChildren(
+    filter: CompositeFilter,
+    depth: number,
+    stack: SubscriptionFilterFrame[],
+  ): void {
+    for (const nested of filter.compositeFilter) {
+      if (depth + 1 > SubscriptionLimits.compositeDepth) {
+        throw new ConnectError(
+          "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
+          Code.InvalidArgument,
+        );
+      }
+      stack.push({ filter: nested, depth: depth + 1 });
+    }
   }
 
-  return filter.operator === CompositeFilter_CompositeOperator.ALL
-    ? (state) => children.every((predicate) => predicate(state))
-    : (state) => children.some((predicate) => predicate(state));
-}
+  interface SubscriptionFilterFrame {
+    readonly filter: CompositeFilter;
+    readonly depth: number;
+  }
 
-function createSimplePredicate(filter: Filter, route: StateRoute): (state: Message) => boolean {
-  if (filter.operator !== Filter_Operator.EQUAL) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe supports only EQUAL field filters.",
-      Code.InvalidArgument,
+  interface SubscriptionFilterCounts {
+    compositeCount: number;
+    simpleCount: number;
+  }
+
+  function createCompositePredicate(
+    filter: CompositeFilter,
+    route: StateRoute,
+  ): (state: Message) => boolean {
+    const children = [
+      ...filter.filter.map((simple) => createSimplePredicate(simple, route)),
+      ...filter.compositeFilter.map((nested) => createCompositePredicate(nested, route)),
+    ];
+    if (children.length === 0) {
+      return () => true;
+    }
+
+    return filter.operator === CompositeFilter_CompositeOperator.ALL
+      ? (state) => children.every((predicate) => predicate(state))
+      : (state) => children.some((predicate) => predicate(state));
+  }
+
+  function createSimplePredicate(filter: Filter, route: StateRoute): (state: Message) => boolean {
+    if (filter.operator !== Filter_Operator.EQUAL) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe supports only EQUAL field filters.",
+        Code.InvalidArgument,
+      );
+    }
+    if (filter.value === undefined) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe field filter value is required.",
+        Code.InvalidArgument,
+      );
+    }
+
+    validateSubscriptionPath(filter.fieldPath?.fieldName ?? [], "field filter");
+    const resolved = resolveMessagePath(
+      route.schema,
+      filter.fieldPath?.fieldName ?? [],
+      "field filter",
     );
-  }
-  if (filter.value === undefined) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe field filter value is required.",
-      Code.InvalidArgument,
-    );
+    const expected = decodeFieldFilterValue(filter.value, resolved.leafSchema);
+
+    return (state) =>
+      valuesEqual(readPathValue(state, resolved.localPath), expected, resolved.leafSchema);
   }
 
-  validateSubscriptionPath(filter.fieldPath?.fieldName ?? [], "field filter");
-  const resolved = resolveMessagePath(
-    route.schema,
-    filter.fieldPath?.fieldName ?? [],
-    "field filter",
-  );
-  const expected = decodeFieldFilterValue(filter.value, resolved.leafSchema);
+  function subscriptionFieldMask(topic: Topic, route: StateRoute): readonly string[] | undefined {
+    const paths = topic.fieldMask?.paths ?? [];
+    if (paths.length === 0) {
+      return undefined;
+    }
+    if (paths.length > SubscriptionLimits.maskPathCount) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe field_mask may contain at most 32 paths.",
+        Code.InvalidArgument,
+      );
+    }
+    if (paths.some((path) => path.length > SubscriptionLimits.maskPathLength)) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe field_mask paths may contain at most 128 characters.",
+        Code.InvalidArgument,
+      );
+    }
 
-  return (state) =>
-    valuesEqual(readPathValue(state, resolved.localPath), expected, resolved.leafSchema);
-}
+    return paths.map((path) => {
+      const segments = path.split(".");
+      validateSubscriptionPath(segments, "field_mask");
 
-function subscriptionFieldMask(topic: Topic, route: StateRoute): readonly string[] | undefined {
-  const paths = topic.fieldMask?.paths ?? [];
-  if (paths.length === 0) {
-    return undefined;
-  }
-  if (paths.length > MAX_SUBSCRIPTION_FIELD_MASK_PATHS) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe field_mask may contain at most 32 paths.",
-      Code.InvalidArgument,
-    );
-  }
-  if (paths.some((path) => path.length > MAX_SUBSCRIPTION_FIELD_MASK_PATH_LENGTH)) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe field_mask paths may contain at most 128 characters.",
-      Code.InvalidArgument,
-    );
+      return resolveMessagePath(route.schema, segments, "field_mask").localPath.join(".");
+    });
   }
 
-  return paths.map((path) => {
-    const segments = path.split(".");
-    validateSubscriptionPath(segments, "field_mask");
-
-    return resolveMessagePath(route.schema, segments, "field_mask").localPath.join(".");
-  });
-}
-
-function validateSubscriptionPath(
-  fieldPath: readonly string[],
-  label: "field filter" | "field_mask",
-): void {
-  if (fieldPath.length === 0 || fieldPath.some((field) => field.trim().length === 0)) {
-    throw new ConnectError(
-      `SubscriptionService.Subscribe ${label} path is required.`,
-      Code.InvalidArgument,
-    );
-  }
-  if (fieldPath.length > MAX_SUBSCRIPTION_FIELD_PATH_COMPONENTS) {
-    throw new ConnectError(
-      `SubscriptionService.Subscribe ${label} path may contain at most 16 components.`,
-      Code.InvalidArgument,
-    );
-  }
-  if (fieldPath.some((field) => field.length > MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH)) {
-    throw new ConnectError(
-      `SubscriptionService.Subscribe ${label} path components may contain at most 128 characters.`,
-      Code.InvalidArgument,
-    );
-  }
-}
-
-function decodeSubscriptionIdValue(value: Any, route: StateRoute): unknown {
-  if (!isAny(value)) {
-    throw new ConnectError(
-      "SubscriptionService.Subscribe id_filter values must be packed Any messages.",
-      Code.InvalidArgument,
-    );
-  }
-  if (route.idField.message === undefined) {
-    return decodeAnyValue(value);
+  function validateSubscriptionPath(
+    fieldPath: readonly string[],
+    label: "field filter" | "field_mask",
+  ): void {
+    if (fieldPath.length === 0 || fieldPath.some((field) => field.trim().length === 0)) {
+      throw new ConnectError(
+        `SubscriptionService.Subscribe ${label} path is required.`,
+        Code.InvalidArgument,
+      );
+    }
+    if (fieldPath.length > SubscriptionLimits.pathComponentCount) {
+      throw new ConnectError(
+        `SubscriptionService.Subscribe ${label} path may contain at most 16 components.`,
+        Code.InvalidArgument,
+      );
+    }
+    if (fieldPath.some((field) => field.length > SubscriptionLimits.pathSegmentLength)) {
+      throw new ConnectError(
+        `SubscriptionService.Subscribe ${label} path components may contain at most 128 characters.`,
+        Code.InvalidArgument,
+      );
+    }
   }
 
-  const decoded = AnyMessages.unpack(value, route.idField.message);
-  if (decoded === undefined) {
-    throw new ConnectError(
-      `SubscriptionService.Subscribe id_filter values must pack ${route.idField.message.typeName}.`,
-      Code.InvalidArgument,
-    );
+  function decodeSubscriptionIdValue(value: Any, route: StateRoute): unknown {
+    if (!isAny(value)) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe id_filter values must be packed Any messages.",
+        Code.InvalidArgument,
+      );
+    }
+    if (route.idField.message === undefined) {
+      return decodeAnyValue(value);
+    }
+
+    const decoded = AnyMessages.unpack(value, route.idField.message);
+    if (decoded === undefined) {
+      throw new ConnectError(
+        `SubscriptionService.Subscribe id_filter values must pack ${route.idField.message.typeName}.`,
+        Code.InvalidArgument,
+      );
+    }
+
+    return decoded;
   }
 
-  return decoded;
-}
+  function decodeFieldFilterValue(value: Any | undefined, schema: MessageSchema | undefined) {
+    if (value === undefined || schema === undefined) {
+      return decodeAnyValue(value);
+    }
 
-function decodeFieldFilterValue(value: Any | undefined, schema: MessageSchema | undefined) {
-  if (value === undefined || schema === undefined) {
-    return decodeAnyValue(value);
-  }
-
-  const decoded = AnyMessages.unpack(value, schema);
-  if (decoded === undefined) {
-    throw new ConnectError(
-      `SubscriptionService.Subscribe field filter value must pack ${schema.typeName}.`,
-      Code.InvalidArgument,
-    );
-  }
-
-  return decoded;
-}
-
-function decodeAnyValue(value: Any | undefined, schema?: MessageSchema): unknown {
-  if (value === undefined) {
-    return undefined;
-  }
-
-  if (schema !== undefined) {
     const decoded = AnyMessages.unpack(value, schema);
-    if (decoded !== undefined) {
-      return decoded;
+    if (decoded === undefined) {
+      throw new ConnectError(
+        `SubscriptionService.Subscribe field filter value must pack ${schema.typeName}.`,
+        Code.InvalidArgument,
+      );
+    }
+
+    return decoded;
+  }
+
+  function decodeAnyValue(value: Any | undefined, schema?: MessageSchema): unknown {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (schema !== undefined) {
+      const decoded = AnyMessages.unpack(value, schema);
+      if (decoded !== undefined) {
+        return decoded;
+      }
+    }
+
+    for (const decoder of VALUE_DECODERS) {
+      const decoded = decoder(value);
+      if (decoded !== undefined) {
+        return decoded;
+      }
+    }
+
+    return value;
+  }
+
+  interface ResolvedMessagePath {
+    readonly localPath: readonly string[];
+    readonly leafSchema?: MessageSchema;
+  }
+
+  interface MessageFieldInfo {
+    readonly name: string;
+    readonly localName: string;
+    readonly message?: MessageSchema;
+  }
+
+  function resolveMessagePath(
+    schema: MessageSchema,
+    fieldPath: readonly string[],
+    label: "field filter" | "field_mask",
+  ): ResolvedMessagePath {
+    const localPath: string[] = [];
+    let currentSchema: MessageSchema | undefined = schema;
+    let leafSchema: MessageSchema | undefined;
+
+    for (const [index, name] of fieldPath.entries()) {
+      const field = findMessageField(currentSchema, name);
+      if (field === undefined) {
+        throw new ConnectError(
+          `SubscriptionService.Subscribe ${label} "${fieldPath.join(".")}" is not a state field.`,
+          Code.InvalidArgument,
+        );
+      }
+
+      localPath.push(field.localName);
+      leafSchema = field.message;
+      currentSchema = index === fieldPath.length - 1 ? undefined : field.message;
+      if (currentSchema === undefined && index < fieldPath.length - 1) {
+        throw new ConnectError(
+          `SubscriptionService.Subscribe ${label} "${fieldPath.join(".")}" is not a message path.`,
+          Code.InvalidArgument,
+        );
+      }
+    }
+
+    return Object.freeze({
+      localPath,
+      ...(leafSchema === undefined ? {} : { leafSchema }),
+    });
+  }
+
+  function findMessageField(
+    schema: MessageSchema | undefined,
+    name: string,
+  ): MessageFieldInfo | undefined {
+    const fields = (schema?.fields ?? []) as unknown as readonly MessageFieldInfo[];
+
+    return fields.find((field) => field.name === name || field.localName === name);
+  }
+
+  function readPathValue(value: unknown, path: readonly string[]): unknown {
+    let current = value;
+
+    for (const segment of path) {
+      if (typeof current !== "object" || current === null) {
+        return undefined;
+      }
+      current = Reflect.get(current, segment);
+    }
+
+    return current;
+  }
+
+  function valuesEqual(actual: unknown, expected: unknown, schema?: MessageSchema): boolean {
+    if (schema !== undefined && isMessage(actual) && isMessage(expected)) {
+      return bytesEqual(toBinary(schema, actual), toBinary(schema, expected));
+    }
+    if (isAny(actual) && isAny(expected)) {
+      return bytesEqual(toBinary(AnySchema, actual), toBinary(AnySchema, expected));
+    }
+    if (actual instanceof Uint8Array && expected instanceof Uint8Array) {
+      return bytesEqual(actual, expected);
+    }
+
+    return Object.is(actual, expected);
+  }
+
+  function isMessage(value: unknown): value is Message {
+    return typeof value === "object" && value !== null && "$typeName" in value;
+  }
+
+  function isAny(value: unknown): value is Any {
+    return isMessage(value) && value.$typeName === "google.protobuf.Any";
+  }
+
+  function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+    return left.length === right.length && left.every((byte, index) => byte === right[index]);
+  }
+
+  function packVersionedState<Schema extends MessageSchema>(
+    schema: Schema,
+    result: StandReadResult<Schema>,
+  ) {
+    return create(EntityStateVersionSchema, {
+      state: AnyMessages.pack(schema, result.state, { validate: false }),
+      version: result.version ?? create(VersionSchema),
+    });
+  }
+
+  function commandTenant(command: Command): string | undefined {
+    return tenantValue(command.context?.actorContext?.tenantId);
+  }
+
+  function topicTenant(topic: Topic | undefined): string | undefined {
+    return tenantValue(topic?.context?.tenantId);
+  }
+
+  function eventTenant(event: Event): string | undefined {
+    switch (event.context?.origin.case) {
+      case "importContext":
+        return tenantValue(event.context.origin.value.tenantId);
+      case "pastMessage":
+        return tenantValue(event.context.origin.value.actorContext?.tenantId);
+      default:
+        return undefined;
     }
   }
 
-  for (const decoder of VALUE_DECODERS) {
-    const decoded = decoder(value);
-    if (decoded !== undefined) {
-      return decoded;
+  function eventTenantMatches(record: SubscriptionRecord, event: Event): boolean {
+    return record.tenantId === undefined || eventTenant(event) === record.tenantId;
+  }
+
+  function tenantValue(tenantId: TenantId | undefined): string | undefined {
+    switch (tenantId?.kind.case) {
+      case "value":
+        return tenantId.kind.value;
+      case "domain":
+        return `domain:${tenantId.kind.value.value}`;
+      case "email":
+        return `email:${tenantId.kind.value.value}`;
+      default:
+        return undefined;
     }
   }
 
-  return value;
-}
+  function stateRouteIdField(
+    schema: MessageSchema,
+    idField: { readonly name?: string; readonly localName?: string } | undefined,
+  ): MessageFieldInfo {
+    const field =
+      findMessageField(schema, idField?.name ?? "") ??
+      findMessageField(schema, idField?.localName ?? "") ??
+      (schema.fields[0] as unknown as MessageFieldInfo | undefined) ??
+      undefined;
 
-interface ResolvedMessagePath {
-  readonly localPath: readonly string[];
-  readonly leafSchema?: MessageSchema;
-}
-
-interface MessageFieldInfo {
-  readonly name: string;
-  readonly localName: string;
-  readonly message?: MessageSchema;
-}
-
-function resolveMessagePath(
-  schema: MessageSchema,
-  fieldPath: readonly string[],
-  label: "field filter" | "field_mask",
-): ResolvedMessagePath {
-  const localPath: string[] = [];
-  let currentSchema: MessageSchema | undefined = schema;
-  let leafSchema: MessageSchema | undefined;
-
-  for (const [index, name] of fieldPath.entries()) {
-    const field = findMessageField(currentSchema, name);
     if (field === undefined) {
       throw new ConnectError(
-        `SubscriptionService.Subscribe ${label} "${fieldPath.join(".")}" is not a state field.`,
+        "Subscription target ID field is not available.",
         Code.InvalidArgument,
       );
     }
 
-    localPath.push(field.localName);
-    leafSchema = field.message;
-    currentSchema = index === fieldPath.length - 1 ? undefined : field.message;
-    if (currentSchema === undefined && index < fieldPath.length - 1) {
-      throw new ConnectError(
-        `SubscriptionService.Subscribe ${label} "${fieldPath.join(".")}" is not a message path.`,
-        Code.InvalidArgument,
-      );
+    return field;
+  }
+
+  function tenantMismatch(
+    multitenant: boolean,
+    tenantId: string | undefined,
+    subject: "command" | "query" | "subscription",
+  ): ContractError | undefined {
+    if (multitenant) {
+      return tenantId === undefined || tenantId.trim().length === 0
+        ? {
+            type: "TENANT_REQUIRED",
+            message: `Tenant is required for this ${subject}.`,
+          }
+        : undefined;
+    }
+
+    return tenantId === undefined
+      ? undefined
+      : {
+          type: "TENANT_INAPPLICABLE",
+          message: `Tenant is not applicable for this ${subject}.`,
+        };
+  }
+
+  interface ContractError {
+    readonly type: string;
+    readonly message: string;
+    readonly details?: Any;
+  }
+
+  function commandPostError(error: unknown): ContractError {
+    if (error instanceof TransitionValidationError) {
+      return {
+        type: error.type,
+        message: error.clientMessage,
+        details: AnyMessages.pack(ValidationErrorSchema, error.validationError, {
+          validate: false,
+        }),
+      };
+    }
+
+    if (error instanceof CommandValidationError) {
+      return {
+        type: "COMMAND_VALIDATION_ERROR",
+        message: "Command payload validation failed.",
+        details: AnyMessages.pack(ValidationErrorSchema, error.validationError, {
+          validate: false,
+        }),
+      };
+    }
+
+    return {
+      type: "COMMAND_POST_ERROR",
+      message: "Command post failed.",
+    };
+  }
+
+  function tenantOptions(tenantId: string | undefined): { readonly tenantId?: string } {
+    return tenantId === undefined ? {} : { tenantId };
+  }
+
+  const VALUE_DECODERS = Object.freeze([
+    (value: Any) => AnyMessages.unpack(value, StringValueSchema)?.value,
+    (value: Any) => AnyMessages.unpack(value, BoolValueSchema)?.value,
+    (value: Any) => AnyMessages.unpack(value, Int32ValueSchema)?.value,
+    (value: Any) => AnyMessages.unpack(value, UInt32ValueSchema)?.value,
+    (value: Any) => AnyMessages.unpack(value, Int64ValueSchema)?.value,
+    (value: Any) => AnyMessages.unpack(value, UInt64ValueSchema)?.value,
+    (value: Any) => AnyMessages.unpack(value, FloatValueSchema)?.value,
+    (value: Any) => AnyMessages.unpack(value, DoubleValueSchema)?.value,
+    (value: Any) => AnyMessages.unpack(value, BytesValueSchema)?.value,
+  ]);
+
+  function createEntityUpdate(
+    record: StateSubscriptionRecord,
+    update: StandUpdate,
+  ): SubscriptionUpdate | undefined {
+    const match = record.matcher.match(update);
+    if (match === undefined) {
+      return undefined;
+    }
+
+    return create(SubscriptionUpdateSchema, {
+      subscription: clone(SubscriptionSchema, record.subscription),
+      response: okResponse(),
+      update: {
+        case: "entityUpdates",
+        value: create(EntityUpdatesSchema, {
+          update: [
+            create(EntityStateUpdateSchema, {
+              id: packEntityId(record.route, update.id),
+              kind:
+                match === "state"
+                  ? {
+                      case: "state",
+                      value: AnyMessages.pack(
+                        record.route.schema,
+                        maskedState(record, update.state),
+                        {
+                          validate: false,
+                        },
+                      ),
+                    }
+                  : {
+                      case: "noLongerMatching",
+                      value: true,
+                    },
+            }),
+          ],
+        }),
+      },
+    });
+  }
+
+  function createEventUpdate(record: SubscriptionRecord, event: Event): SubscriptionUpdate {
+    return create(SubscriptionUpdateSchema, {
+      subscription: clone(SubscriptionSchema, record.subscription),
+      response: okResponse(),
+      update: {
+        case: "eventUpdates",
+        value: create(EventUpdatesSchema, {
+          event: [cloneClientEvent(event)],
+        }),
+      },
+    });
+  }
+
+  function cloneClientEvent(event: Event): Event {
+    const clientEvent = clone(EventSchema, event);
+    const rejection = clientEvent.context?.rejection;
+
+    if (rejection !== undefined) {
+      rejection.command = undefined;
+      // Clear the legacy wire payload as part of client-side security redaction.
+      // eslint-disable-next-line @typescript-eslint/no-deprecated
+      rejection.commandMessage = undefined;
+      rejection.stacktrace = "";
+    }
+    return clientEvent;
+  }
+
+  function maskedState(
+    record: StateSubscriptionRecord,
+    state: MessageShape<MessageSchema>,
+  ): Message {
+    return RecordMask.apply(clone(record.route.schema, state), record.matcher.fieldMask);
+  }
+
+  function packString(value: string): Any {
+    return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }));
+  }
+
+  function packEntityId(route: StateRoute, id: unknown): Any | undefined {
+    if (isAny(id)) {
+      return clone(AnySchema, id);
+    }
+    if (route.idField.message !== undefined && isMessage(id)) {
+      return AnyMessages.pack(route.idField.message, id, { validate: false });
+    }
+    if (id instanceof Uint8Array) {
+      return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value: id }));
+    }
+
+    switch (typeof id) {
+      case "string":
+        return packString(id);
+      case "boolean":
+        return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
+      case "number":
+        return AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
+      case "bigint":
+        return AnyMessages.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
+      default:
+        return undefined;
     }
   }
 
   return Object.freeze({
-    localPath,
-    ...(leafSchema === undefined ? {} : { leafSchema }),
+    cancellationFailedError,
+    cancelRetryLimit: MAX_CANCEL_RETRIES,
+    clearInactiveTimer,
+    commandPostError,
+    commandTenant,
+    concurrentCancellationError,
+    createEntityUpdate,
+    createEventUpdate,
+    createReadPlan,
+    createSubscriptionClaim,
+    createSubscriptionRecord,
+    createSubscriptionRemoval,
+    createSubscriptionShape,
+    createSubscriptionStorage,
+    defaultInactiveTtlMs: DEFAULT_INACTIVE_TTL_MS,
+    defaultQueueLimit: DEFAULT_QUEUE_LIMIT,
+    defaultSubscriptionLimit: DEFAULT_SUBSCRIPTION_LIMIT,
+    errorStatus,
+    eventTenantMatches,
+    foreignSubscriptionError,
+    inactiveTtl,
+    isCancellationConflict,
+    observeRemoval,
+    okResponse,
+    okStatus,
+    positiveInteger,
+    packVersionedState,
+    queryErrorResponse,
+    queryResultLimit: QueryLimits.resultCount,
+    sameAny,
+    stateRouteIdField,
+    subscriptionLimit,
+    subscriptionStore,
+    tenantMismatch,
+    tenantOptions,
+    tenantValue,
+    topicTenant,
+    uniqueContexts,
+    validateReadQuery,
+    validateTopic,
   });
-}
-
-function findMessageField(
-  schema: MessageSchema | undefined,
-  name: string,
-): MessageFieldInfo | undefined {
-  const fields = (schema?.fields ?? []) as unknown as readonly MessageFieldInfo[];
-
-  return fields.find((field) => field.name === name || field.localName === name);
-}
-
-function readPathValue(value: unknown, path: readonly string[]): unknown {
-  let current = value;
-
-  for (const segment of path) {
-    if (typeof current !== "object" || current === null) {
-      return undefined;
-    }
-    current = Reflect.get(current, segment);
-  }
-
-  return current;
-}
-
-function valuesEqual(actual: unknown, expected: unknown, schema?: MessageSchema): boolean {
-  if (schema !== undefined && isMessage(actual) && isMessage(expected)) {
-    return bytesEqual(toBinary(schema, actual), toBinary(schema, expected));
-  }
-  if (isAny(actual) && isAny(expected)) {
-    return bytesEqual(toBinary(AnySchema, actual), toBinary(AnySchema, expected));
-  }
-  if (actual instanceof Uint8Array && expected instanceof Uint8Array) {
-    return bytesEqual(actual, expected);
-  }
-
-  return Object.is(actual, expected);
-}
-
-function isMessage(value: unknown): value is Message {
-  return typeof value === "object" && value !== null && "$typeName" in value;
-}
-
-function isAny(value: unknown): value is Any {
-  return isMessage(value) && value.$typeName === "google.protobuf.Any";
-}
-
-function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
-}
-
-function packVersionedState<Schema extends MessageSchema>(
-  schema: Schema,
-  result: StandReadResult<Schema>,
-) {
-  return create(EntityStateWithVersionSchema, {
-    state: AnyMessages.pack(schema, result.state, { validate: false }),
-    version: result.version ?? create(VersionSchema),
-  });
-}
-
-function commandTenant(command: Command): string | undefined {
-  return tenantValue(command.context?.actorContext?.tenantId);
-}
-
-function topicTenant(topic: Topic | undefined): string | undefined {
-  return tenantValue(topic?.context?.tenantId);
-}
-
-function eventTenant(event: Event): string | undefined {
-  switch (event.context?.origin.case) {
-    case "importContext":
-      return tenantValue(event.context.origin.value.tenantId);
-    case "pastMessage":
-      return tenantValue(event.context.origin.value.actorContext?.tenantId);
-    default:
-      return undefined;
-  }
-}
-
-function eventTenantMatches(record: SubscriptionRecord, event: Event): boolean {
-  return record.tenantId === undefined || eventTenant(event) === record.tenantId;
-}
-
-function tenantValue(tenantId: TenantId | undefined): string | undefined {
-  switch (tenantId?.kind.case) {
-    case "value":
-      return tenantId.kind.value;
-    case "domain":
-      return `domain:${tenantId.kind.value.value}`;
-    case "email":
-      return `email:${tenantId.kind.value.value}`;
-    default:
-      return undefined;
-  }
-}
-
-function stateRouteIdField(
-  schema: MessageSchema,
-  idField: { readonly name?: string; readonly localName?: string } | undefined,
-): MessageFieldInfo {
-  const field =
-    findMessageField(schema, idField?.name ?? "") ??
-    findMessageField(schema, idField?.localName ?? "") ??
-    (schema.fields[0] as unknown as MessageFieldInfo | undefined) ??
-    undefined;
-
-  if (field === undefined) {
-    throw new ConnectError("Subscription target ID field is not available.", Code.InvalidArgument);
-  }
-
-  return field;
-}
-
-function tenantMismatch(
-  multitenant: boolean,
-  tenantId: string | undefined,
-  subject: "command" | "query" | "subscription",
-): ContractError | undefined {
-  if (multitenant) {
-    return tenantId === undefined || tenantId.trim().length === 0
-      ? {
-          type: "TENANT_REQUIRED",
-          message: `Tenant is required for this ${subject}.`,
-        }
-      : undefined;
-  }
-
-  return tenantId === undefined
-    ? undefined
-    : {
-        type: "TENANT_INAPPLICABLE",
-        message: `Tenant is not applicable for this ${subject}.`,
-      };
-}
-
-interface ContractError {
-  readonly type: string;
-  readonly message: string;
-  readonly details?: Any;
-}
-
-function commandPostError(error: unknown): ContractError {
-  if (error instanceof TransitionValidationError) {
-    return {
-      type: error.type,
-      message: error.clientMessage,
-      details: AnyMessages.pack(ValidationErrorSchema, error.validationError, { validate: false }),
-    };
-  }
-
-  if (error instanceof CommandValidationError) {
-    return {
-      type: "COMMAND_VALIDATION_ERROR",
-      message: "Command payload validation failed.",
-      details: AnyMessages.pack(ValidationErrorSchema, error.validationError, { validate: false }),
-    };
-  }
-
-  return {
-    type: "COMMAND_POST_ERROR",
-    message: "Command post failed.",
-  };
-}
-
-function tenantOptions(tenantId: string | undefined): { readonly tenantId?: string } {
-  return tenantId === undefined ? {} : { tenantId };
-}
-
-const VALUE_DECODERS = Object.freeze([
-  (value: Any) => AnyMessages.unpack(value, StringValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, BoolValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, Int32ValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, UInt32ValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, Int64ValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, UInt64ValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, FloatValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, DoubleValueSchema)?.value,
-  (value: Any) => AnyMessages.unpack(value, BytesValueSchema)?.value,
-]);
-
-function createEntityUpdate(
-  record: StateSubscriptionRecord,
-  update: StandUpdate,
-): SubscriptionUpdate | undefined {
-  const match = record.matcher.match(update);
-  if (match === undefined) {
-    return undefined;
-  }
-
-  return create(SubscriptionUpdateSchema, {
-    subscription: clone(SubscriptionSchema, record.subscription),
-    response: okResponse(),
-    update: {
-      case: "entityUpdates",
-      value: create(EntityUpdatesSchema, {
-        update: [
-          create(EntityStateUpdateSchema, {
-            id: packEntityId(record.route, update.id),
-            kind:
-              match === "state"
-                ? {
-                    case: "state",
-                    value: AnyMessages.pack(
-                      record.route.schema,
-                      maskedState(record, update.state),
-                      {
-                        validate: false,
-                      },
-                    ),
-                  }
-                : {
-                    case: "noLongerMatching",
-                    value: true,
-                  },
-          }),
-        ],
-      }),
-    },
-  });
-}
-
-function createEventUpdate(record: SubscriptionRecord, event: Event): SubscriptionUpdate {
-  return create(SubscriptionUpdateSchema, {
-    subscription: clone(SubscriptionSchema, record.subscription),
-    response: okResponse(),
-    update: {
-      case: "eventUpdates",
-      value: create(EventUpdatesSchema, {
-        event: [cloneClientEvent(event)],
-      }),
-    },
-  });
-}
-
-function cloneClientEvent(event: Event): Event {
-  const clientEvent = clone(EventSchema, event);
-  const rejection = clientEvent.context?.rejection;
-
-  if (rejection !== undefined) {
-    rejection.command = undefined;
-    // Clear the legacy wire payload as part of client-side security redaction.
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    rejection.commandMessage = undefined;
-    rejection.stacktrace = "";
-  }
-  return clientEvent;
-}
-
-function maskedState(record: StateSubscriptionRecord, state: MessageShape<MessageSchema>): Message {
-  return RecordMask.apply(clone(record.route.schema, state), record.matcher.fieldMask);
-}
-
-function packString(value: string): Any {
-  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }));
-}
-
-function packEntityId(route: StateRoute, id: unknown): Any | undefined {
-  if (isAny(id)) {
-    return clone(AnySchema, id);
-  }
-  if (route.idField.message !== undefined && isMessage(id)) {
-    return AnyMessages.pack(route.idField.message, id, { validate: false });
-  }
-  if (id instanceof Uint8Array) {
-    return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value: id }));
-  }
-
-  switch (typeof id) {
-    case "string":
-      return packString(id);
-    case "boolean":
-      return AnyMessages.pack(BoolValueSchema, create(BoolValueSchema, { value: id }));
-    case "number":
-      return AnyMessages.pack(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
-    case "bigint":
-      return AnyMessages.pack(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
-    default:
-      return undefined;
-  }
-}
+})();

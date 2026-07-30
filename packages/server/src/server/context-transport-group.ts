@@ -5,16 +5,30 @@ import { ContextTransport, contextTransportAccess } from "../runtime/context-tra
 import type { RuntimeTransportBindingHandle } from "../runtime/runtime-transport.js";
 import { RetryableCloseGroup } from "./retryable-close.js";
 
-/** @internal Retryable registrations owned by one server assembly. */
+/**
+ * Groups the transport bindings opened for one server assembly.
+ *
+ * @internal
+ */
 export class ContextTransportGroup {
   readonly #transport: SignalTransport;
   readonly #handles: RuntimeTransportBindingHandle[] = [];
   #closeGroup: RetryableCloseGroup | undefined;
 
+  /**
+   * Creates a group for one signal transport.
+   *
+   * @param transport - Carries signals for every context in the assembly.
+   */
   constructor(transport: SignalTransport) {
     this.#transport = transport;
   }
 
+  /**
+   * Opens transport bindings for contexts in their supplied order.
+   *
+   * @param contexts - Supplies the contexts whose intake must be opened.
+   */
   async open(contexts: readonly BoundedContext[]): Promise<void> {
     for (const context of contexts) {
       try {
@@ -29,6 +43,7 @@ export class ContextTransportGroup {
     }
   }
 
+  /** Closes opened bindings, retaining unsuccessful closes for a later retry. */
   close(): Promise<void> {
     this.#closeGroup ??= new RetryableCloseGroup(
       this.#handles,

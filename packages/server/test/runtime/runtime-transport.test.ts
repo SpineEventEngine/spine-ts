@@ -36,7 +36,7 @@ import {
   RuntimeTransportBinding,
   RuntimeTransportEnvelopeError,
   SingleProcessServerRuntime,
-  defineEntityHandlers,
+  EntityHandlers,
   type CommandRuntimeTransportHandler,
   type EventRuntimeTransportHandler,
   type RuntimeTransportBindingHandle,
@@ -696,7 +696,7 @@ describe("RuntimeTransportBinding", () => {
 });
 
 function createRuntimePlan() {
-  const handlers = defineEntityHandlers(RuntimeProjection, ProjectionStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(RuntimeProjection, ProjectionStateSchema, (builder) => [
     builder.assign(CommandSchema, "assignCommand"),
     builder.subscribe(EventSchema, "subscribeEvent"),
   ]);

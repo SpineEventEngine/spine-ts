@@ -2,7 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
-import { createHistoryCache } from "../../src/repository/repository.js";
+import { RepositoryHistory } from "../../src/repository/repository.js";
 
 const record = (version: bigint) =>
   Object.freeze({
@@ -19,7 +19,7 @@ describe("repository state-history cache", () => {
     const first = Object.freeze({ id: "first", version: 5n });
     const second = Object.freeze({ id: "second", version: 5n });
     const older = Object.freeze({ id: "older", version: 4n });
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       (depth, startingFromVersion) => {
         calls.push({ depth, startingFromVersion });
         return Promise.resolve(
@@ -40,7 +40,7 @@ describe("repository state-history cache", () => {
 
   it("continues exclusively from the oldest complete version", async () => {
     const calls: (bigint | undefined)[] = [];
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       (_depth, startingFromVersion) => {
         calls.push(startingFromVersion);
         return Promise.resolve(
@@ -58,7 +58,7 @@ describe("repository state-history cache", () => {
 
   it("does not reread after a short provider result", async () => {
     let calls = 0;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () => {
         calls += 1;
         return Promise.resolve([record(5n)]);
@@ -73,7 +73,7 @@ describe("repository state-history cache", () => {
   });
 
   it("clears cached records on a discontinuous continuation", async () => {
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       (_depth, startingFromVersion) =>
         Promise.resolve(
           startingFromVersion === undefined ? [record(5n), record(4n)] : [record(2n)],
@@ -88,7 +88,7 @@ describe("repository state-history cache", () => {
 
   it("does not let a stale deferred read repopulate an invalidated cache", async () => {
     let resolve: ((records: readonly ReturnType<typeof record>[]) => void) | undefined;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () =>
         new Promise<readonly ReturnType<typeof record>[]>((complete) => {
           resolve = complete;
@@ -107,7 +107,7 @@ describe("repository state-history cache", () => {
 
   it("uses the default policy and caches an exhausted empty result", async () => {
     let calls = 0;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () => {
         calls += 1;
         return Promise.resolve([]);
@@ -123,7 +123,7 @@ describe("repository state-history cache", () => {
   it("serializes concurrent reads behind the first cache fill", async () => {
     let calls = 0;
     let resolve: ((records: readonly ReturnType<typeof record>[]) => void) | undefined;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () => {
         calls += 1;
         return new Promise<readonly ReturnType<typeof record>[]>((complete) => {
@@ -146,7 +146,7 @@ describe("repository state-history cache", () => {
 
   it("retries after a rejected provider read", async () => {
     let calls = 0;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () => {
         calls += 1;
         return calls === 1 ? Promise.reject(new Error("history unavailable")) : Promise.resolve([]);
@@ -161,7 +161,7 @@ describe("repository state-history cache", () => {
 
   it("refreshes from the newest page when continuation observes a newer version", async () => {
     const calls: (bigint | undefined)[] = [];
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       (depth, startingFromVersion) => {
         calls.push(startingFromVersion);
         if (calls.length === 1) return Promise.resolve([record(5n), record(4n)]);
@@ -179,7 +179,7 @@ describe("repository state-history cache", () => {
   it("does not retain a refreshed page invalidated while it is loading", async () => {
     let calls = 0;
     let resolveRefresh: ((records: readonly ReturnType<typeof record>[]) => void) | undefined;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       (_depth, startingFromVersion) => {
         calls += 1;
         if (calls === 1) return Promise.resolve([record(5n), record(4n)]);
@@ -205,7 +205,7 @@ describe("repository state-history cache", () => {
     const first = Object.freeze({ id: "first" });
     const second = Object.freeze({ id: "second" });
     let calls = 0;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () => {
         calls += 1;
         return Promise.resolve([first, second]);
@@ -221,7 +221,7 @@ describe("repository state-history cache", () => {
 
   it("excludes only the incomplete terminal version group from the cache", async () => {
     const calls: (bigint | undefined)[] = [];
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       (_depth, startingFromVersion) => {
         calls.push(startingFromVersion);
         return Promise.resolve(
@@ -242,7 +242,7 @@ describe("repository state-history cache", () => {
   it("serializes queued cache extensions without a redundant provider read", async () => {
     let calls = 0;
     let resolveFirst: ((records: readonly ReturnType<typeof record>[]) => void) | undefined;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () => {
         calls += 1;
         if (calls === 1)
@@ -269,7 +269,7 @@ describe("repository state-history cache", () => {
 
   it("drops a complete-group page invalidated while it is loading", async () => {
     let resolve: ((records: readonly ReturnType<typeof record>[]) => void) | undefined;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () =>
         new Promise<readonly ReturnType<typeof record>[]>((complete) => {
           resolve = complete;
@@ -289,7 +289,7 @@ describe("repository state-history cache", () => {
 
   it("treats an empty complete-group page as exhausted history", async () => {
     let calls = 0;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       () => {
         calls += 1;
         return Promise.resolve([]);
@@ -305,7 +305,7 @@ describe("repository state-history cache", () => {
 
   it("accepts an empty newest-page refresh", async () => {
     let calls = 0;
-    const cache = createHistoryCache(
+    const cache = RepositoryHistory.createCache(
       (_depth, startingFromVersion) => {
         calls += 1;
         if (calls === 1) return Promise.resolve([record(5n), record(4n)]);

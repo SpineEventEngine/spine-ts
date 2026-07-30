@@ -61,6 +61,11 @@ export class EventBus {
   #acceptedWorkCount = 0;
   #closed: Promise<void> | undefined;
 
+  /** Creates a bus backed by an event store and initial dispatchers.
+   *
+   * @param eventStore the store that persists accepted events.
+   * @param dispatchers the dispatchers to register.
+   */
   constructor(eventStore: EventStore, dispatchers: Iterable<EventDispatcher> = []) {
     this.#eventStore = eventStore;
     this.#started = this.#runtime.start();
@@ -82,11 +87,20 @@ export class EventBus {
     }
   }
 
+  /** Registers an event dispatcher.
+   *
+   * @param dispatcher the dispatcher to register.
+   * @returns the registered dispatcher.
+   */
   register<Dispatcher extends EventDispatcher>(dispatcher: Dispatcher): Dispatcher {
     this.#registry.register(dispatcher);
     return dispatcher;
   }
 
+  /** Posts an event for persistence and asynchronous dispatch.
+   *
+   * @param event the event envelope to post.
+   */
   post(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
@@ -98,11 +112,12 @@ export class EventBus {
   }
 
   /**
-   * Stop accepting new event work, drain accepted work, and close the event store.
+   * Stops accepting new event work, drains accepted work, and closes the event store.
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
    * Runtime and event-store close hooks are both attempted; failures reject as
    * an `AggregateError`.
+   *
    */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce();
@@ -113,10 +128,10 @@ export class EventBus {
     const errors: unknown[] = [];
 
     this.#beginClose();
-    await closePart(() => this.#started.then(() => this.#runtime.close()), errors);
+    await EventBus.#closePart(() => this.#started.then(() => this.#runtime.close()), errors);
     this.#intakeState = "closed";
     this.#clearSubscribers();
-    await closePart(() => {
+    await EventBus.#closePart(() => {
       this.#eventStore.close();
     }, errors);
 
@@ -297,16 +312,36 @@ export class EventBus {
     this.#closed ??= this.#closeOnce();
     return this.#closed;
   }
+
+  static async #closePart(close: () => unknown, errors: unknown[]): Promise<void> {
+    try {
+      await close();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
 }
 
-/** @internal Direct event subscriber used by framework service adapters. */
+/** Accepts events for framework service adapters.
+ *
+ * @internal
+ */
 export interface EventSubscriber {
+  /** Accepts a cloned stored event.
+   *
+   * @param event the event received by the subscription.
+   */
   onEvent(event: Event): void;
 }
 
-/** @internal Explicit cleanup handle for framework event subscriptions. */
+/** Represents an explicit cleanup handle for framework event subscriptions.
+ *
+ * @internal
+ */
 export interface EventSubscription {
+  /** Indicates whether the subscription no longer receives events. */
   readonly closed: boolean;
+  /** Stops this subscription from receiving events. */
   unsubscribe(): void;
 }
 
@@ -316,7 +351,10 @@ interface EventSubscriberRecord {
   readonly typeUrl: string;
 }
 
-/** @internal Event-bus access used when events are already stored. */
+/** Provides event-bus access for events that are already stored.
+ *
+ * @internal
+ */
 export const eventBusAccess: EventBusAccess = Object.freeze({
   postStored(eventBus: EventBus, event: Event): Promise<void> {
     const postStored = storedDispatchers.get(eventBus);
@@ -369,7 +407,13 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
   },
 
   eventSchemas(eventBus: EventBus): readonly MessageSchema[] {
-    return eventBusSchemas(eventBus);
+    const eventSchemas = eventSchemaLists.get(eventBus);
+
+    if (eventSchemas === undefined) {
+      throw new TypeError("Event schema listing requires an EventBus instance.");
+    }
+
+    return eventSchemas();
   },
 
   beginClose(eventBus: EventBus): void {
@@ -412,21 +456,3 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return acceptedWorkCount();
   },
 });
-
-function eventBusSchemas(eventBus: EventBus): readonly MessageSchema[] {
-  const eventSchemas = eventSchemaLists.get(eventBus);
-
-  if (eventSchemas === undefined) {
-    throw new TypeError("Event schema listing requires an EventBus instance.");
-  }
-
-  return eventSchemas();
-}
-
-async function closePart(close: () => unknown, errors: unknown[]): Promise<void> {
-  try {
-    await close();
-  } catch (error) {
-    errors.push(error);
-  }
-}

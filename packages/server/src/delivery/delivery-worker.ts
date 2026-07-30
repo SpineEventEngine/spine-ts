@@ -23,9 +23,13 @@ export class DeliveryWorker {
   #stopped = false;
   #retired = false;
 
-  /** Configure worker loops for one node over known delivery shards. */
+  /**
+   * Creates worker loops for one node over known delivery shards.
+   *
+   * @param options The worker configuration.
+   */
   constructor(options: DeliveryWorkerOptions) {
-    const shards = requireShards(options.shards);
+    const shards = DeliveryWorkerValues.requireShards(options.shards);
     this.#shards = shards;
 
     this.#loops = Object.freeze(
@@ -50,7 +54,11 @@ export class DeliveryWorker {
     Object.freeze(this);
   }
 
-  /** Start all configured loops and resolve when they stop. */
+  /**
+   * Starts all configured loops and resolves when they stop.
+   *
+   * @returns The aggregate worker result.
+   */
   start(): Promise<DeliveryWorkerRun> {
     this.#requireNotRetired();
     if (this.#running !== undefined) {
@@ -60,16 +68,16 @@ export class DeliveryWorker {
     const obligation = Object.freeze({});
     this.#obligation = obligation;
     this.#states.fill("READY");
-    const running = compatibilityWorkerRun(this.#settle(this.#allEntries(), obligation)).finally(
-      () => {
-        this.#running = undefined;
-      },
-    );
+    const running = DeliveryWorkerValues.compatibilityRun(
+      this.#settle(this.#allEntries(), obligation),
+    ).finally(() => {
+      this.#running = undefined;
+    });
     this.#running = running;
     return running;
   }
 
-  /** Prevent future drain starts without interrupting current drains. */
+  /** Stops future drain starts without interrupting current drains. */
   stop(): void {
     this.#stopped = true;
     for (const loop of this.#loops) {
@@ -77,7 +85,7 @@ export class DeliveryWorker {
     }
   }
 
-  /** Call `stop()` and wait for active loops, if any, to finish. */
+  /** Closes active loops after they finish. */
   async close(): Promise<void> {
     this.stop();
     await this.#running;
@@ -146,11 +154,11 @@ export class DeliveryWorker {
       const progress = deliveryLoopAccess.progress(entry.loop);
       if (result.status === "rejected") {
         this.#states[entry.index] = "REJECTED";
-        return rejectedShard(entry.shard, obligation, result.reason, progress);
+        return DeliveryWorkerValues.rejected(entry.shard, obligation, result.reason, progress);
       }
 
-      this.#states[entry.index] = shardState(result.value.status);
-      return fulfilledShard(entry.shard, obligation, result.value, progress);
+      this.#states[entry.index] = DeliveryWorkerValues.state(result.value.status);
+      return DeliveryWorkerValues.fulfilled(entry.shard, obligation, result.value, progress);
     });
 
     return Object.freeze({ obligation, shards: Object.freeze(shards) });
@@ -196,49 +204,81 @@ export interface DeliveryWorkerRun {
   readonly loops: readonly DeliveryLoopRun[];
 }
 
-/** @internal Identity of one package-owned request to run configured delivery shards. */
+/** Identifies one package-owned request to run configured delivery shards. */
 export type DeliveryWorkerObligation = object;
 
-/** @internal Ordered fulfilled and rejected evidence for one internal worker invocation. */
+/** Describes ordered fulfilled and rejected evidence for one worker invocation. */
 export interface DeliveryWorkerEvidence {
+  /** Holds the exact worker obligation. */
   readonly obligation: DeliveryWorkerObligation;
+  /** Lists per-shard evidence in configured order. */
   readonly shards: readonly DeliveryShardEvidence[];
 }
 
-/** @internal Evidence for one configured shard in configured order. */
+/** Names evidence for one configured shard. */
 export type DeliveryShardEvidence = FulfilledDeliveryShard | RejectedDeliveryShard;
 
-/** @internal Fulfilled loop evidence associated with its shard and obligation. */
+/** Describes fulfilled loop evidence for a shard and obligation. */
 export interface FulfilledDeliveryShard {
+  /** States that the loop fulfilled. */
   readonly status: "fulfilled";
+  /** Identifies the shard. */
   readonly shard: ShardIndex;
+  /** Holds the worker obligation. */
   readonly obligation: DeliveryWorkerObligation;
+  /** Holds the loop result. */
   readonly run: DeliveryLoopRun;
+  /** Holds the final safe progress. */
   readonly progress: DeliveryLoopProgress;
 }
 
-/** @internal Rejected loop evidence preserving its original cause and last safe progress. */
+/** Describes rejected loop evidence and its last safe progress. */
 export interface RejectedDeliveryShard {
+  /** States that the loop rejected. */
   readonly status: "rejected";
+  /** Identifies the shard. */
   readonly shard: ShardIndex;
+  /** Holds the worker obligation. */
   readonly obligation: DeliveryWorkerObligation;
+  /** Holds the rejection cause. */
   readonly cause: unknown;
+  /** Holds the final safe progress. */
   readonly progress: DeliveryLoopProgress;
 }
 
-/** @internal Package-internal worker coordination and lifecycle access. */
+/** Provides package-internal worker coordination and lifecycle access. */
 export interface DeliveryWorkerAccess {
-  /** Computes aggregate compatibility status from fulfilled loop results. */
+  /**
+   * Determines aggregate compatibility status from fulfilled loop results.
+   *
+   * @param loops The fulfilled loop results.
+   * @returns The aggregate loop status.
+   */
   status(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus;
-  /** Starts the eligible configured shards for one finite package-owned obligation. */
+  /**
+   * Starts eligible configured shards for one finite obligation.
+   *
+   * @param worker The worker to start.
+   * @param obligation The worker obligation.
+   * @param shards Optional shard subset.
+   * @returns The worker evidence.
+   */
   start(
     worker: DeliveryWorker,
     obligation: DeliveryWorkerObligation,
     shards?: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence>;
-  /** Observes the current active start through settlement without interrupting it. */
+  /**
+   * Awaits the current active start without interrupting it.
+   *
+   * @param worker The worker to inspect.
+   */
   awaitSettled(worker: DeliveryWorker): Promise<void>;
   /**
+   * Closes a stopped worker permanently after active work settles.
+   *
+   * @param worker The worker to retire.
+   *
    * Requires a successful prior `stop()`, then permanently closes public and
    * internal starts and awaits active settlement. Prior active rejection is
    * treated as settled; no fallible resource cleanup follows closure.
@@ -265,119 +305,88 @@ type DeliveryShardState = "READY" | "PAUSED" | "REJECTED" | "PARKED" | "COMPLETE
 
 const deliveryWorkerInternals = new WeakMap<DeliveryWorker, DeliveryWorkerInternals>();
 
-function requireShards(shards: readonly ShardIndex[]): readonly ShardIndex[] {
-  if (!Array.isArray(shards) || shards.length === 0) {
-    throw new Error("DeliveryWorker shards must be a non-empty array.");
-  }
-
-  return Object.freeze(Array.from<ShardIndex>(shards));
-}
-
-function workerRun(loops: readonly DeliveryLoopRun[]): DeliveryWorkerRun {
-  return Object.freeze({
-    status: workerStatus(loops),
-    loops: Object.freeze([...loops]),
-  });
-}
-
-/** @internal Package-internal worker coordination and lifecycle access. */
+/** Provides package-internal worker coordination and lifecycle access. */
 export const deliveryWorkerAccess: DeliveryWorkerAccess = Object.freeze({
   status(loops: readonly DeliveryLoopRun[]) {
-    return workerStatus(loops);
+    return DeliveryWorkerValues.status(loops);
   },
   start(
     worker: DeliveryWorker,
     obligation: DeliveryWorkerObligation,
     shards?: readonly ShardIndex[],
   ) {
-    return requireWorkerInternals(worker).start(obligation, shards);
+    return DeliveryWorkerValues.requireInternals(worker).start(obligation, shards);
   },
   awaitSettled(worker: DeliveryWorker) {
-    return requireWorkerInternals(worker).awaitSettled();
+    return DeliveryWorkerValues.requireInternals(worker).awaitSettled();
   },
   retire(worker: DeliveryWorker) {
-    return requireWorkerInternals(worker).retire();
+    return DeliveryWorkerValues.requireInternals(worker).retire();
   },
 });
 
-function requireWorkerInternals(worker: DeliveryWorker): DeliveryWorkerInternals {
-  const internals = deliveryWorkerInternals.get(worker);
-  if (internals === undefined) {
-    throw new Error("Delivery worker access requires a DeliveryWorker instance.");
-  }
-  return internals;
-}
-
-async function compatibilityWorkerRun(
-  evidence: Promise<DeliveryWorkerEvidence>,
-): Promise<DeliveryWorkerRun> {
-  const settled = (await evidence).shards;
-  const loops: DeliveryLoopRun[] = [];
-  const failures: unknown[] = [];
-
-  for (const result of settled) {
-    if (result.status === "fulfilled") {
-      loops.push(result.run);
-    } else {
-      failures.push(result.cause);
+/** Groups internal worker validation, evidence, and compatibility operations. */
+const DeliveryWorkerValues = Object.freeze({
+  requireShards(shards: readonly ShardIndex[]): readonly ShardIndex[] {
+    if (!Array.isArray(shards) || shards.length === 0) {
+      throw new Error("DeliveryWorker shards must be a non-empty array.");
     }
-  }
-
-  if (failures.length === 1) {
-    throw failures[0];
-  }
-  if (failures.length > 1) {
-    throw new AggregateError(failures, "DeliveryWorker loops failed.");
-  }
-
-  return workerRun(loops);
-}
-
-function fulfilledShard(
-  shard: ShardIndex,
-  obligation: DeliveryWorkerObligation,
-  run: DeliveryLoopRun,
-  progress: DeliveryLoopProgress,
-): FulfilledDeliveryShard {
-  return Object.freeze({ status: "fulfilled", shard, obligation, run, progress });
-}
-
-function rejectedShard(
-  shard: ShardIndex,
-  obligation: DeliveryWorkerObligation,
-  cause: unknown,
-  progress: DeliveryLoopProgress,
-): RejectedDeliveryShard {
-  return Object.freeze({ status: "rejected", shard, obligation, cause, progress });
-}
-
-function shardState(status: DeliveryLoopStatus): DeliveryShardState {
-  switch (status) {
-    case "PAUSED":
-      return "PAUSED";
-    case "IDLE":
-      return "COMPLETE";
-    case "STOPPED":
-      return "STOPPED";
-    case "FAILED":
-    case "SKIPPED":
-      return "PARKED";
-  }
-}
-
-function workerStatus(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus {
-  if (loops.some(({ status }) => status === "FAILED")) {
-    return "FAILED";
-  }
-  if (loops.some(({ status }) => status === "STOPPED")) {
-    return "STOPPED";
-  }
-  if (loops.some(({ status }) => status === "PAUSED")) {
-    return "PAUSED";
-  }
-  if (loops.some(({ status }) => status === "SKIPPED")) {
-    return "SKIPPED";
-  }
-
-  return "IDLE";
-}
+    return Object.freeze(Array.from<ShardIndex>(shards));
+  },
+  run(loops: readonly DeliveryLoopRun[]): DeliveryWorkerRun {
+    return Object.freeze({ status: this.status(loops), loops: Object.freeze([...loops]) });
+  },
+  requireInternals(worker: DeliveryWorker): DeliveryWorkerInternals {
+    const internals = deliveryWorkerInternals.get(worker);
+    if (internals === undefined)
+      throw new Error("Delivery worker access requires a DeliveryWorker instance.");
+    return internals;
+  },
+  async compatibilityRun(evidence: Promise<DeliveryWorkerEvidence>): Promise<DeliveryWorkerRun> {
+    const loops: DeliveryLoopRun[] = [];
+    const failures: unknown[] = [];
+    for (const result of (await evidence).shards) {
+      if (result.status === "fulfilled") loops.push(result.run);
+      else failures.push(result.cause);
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, "DeliveryWorker loops failed.");
+    return this.run(loops);
+  },
+  fulfilled(
+    shard: ShardIndex,
+    obligation: DeliveryWorkerObligation,
+    run: DeliveryLoopRun,
+    progress: DeliveryLoopProgress,
+  ): FulfilledDeliveryShard {
+    return Object.freeze({ status: "fulfilled", shard, obligation, run, progress });
+  },
+  rejected(
+    shard: ShardIndex,
+    obligation: DeliveryWorkerObligation,
+    cause: unknown,
+    progress: DeliveryLoopProgress,
+  ): RejectedDeliveryShard {
+    return Object.freeze({ status: "rejected", shard, obligation, cause, progress });
+  },
+  state(status: DeliveryLoopStatus): DeliveryShardState {
+    switch (status) {
+      case "PAUSED":
+        return "PAUSED";
+      case "IDLE":
+        return "COMPLETE";
+      case "STOPPED":
+        return "STOPPED";
+      case "FAILED":
+      case "SKIPPED":
+        return "PARKED";
+    }
+  },
+  status(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus {
+    if (loops.some(({ status }) => status === "FAILED")) return "FAILED";
+    if (loops.some(({ status }) => status === "STOPPED")) return "STOPPED";
+    if (loops.some(({ status }) => status === "PAUSED")) return "PAUSED";
+    if (loops.some(({ status }) => status === "SKIPPED")) return "SKIPPED";
+    return "IDLE";
+  },
+});

@@ -319,7 +319,7 @@ not a production scheduler, retry policy, catch-up API, or remote topology.
 - `EntityTransaction` and `createEntityTransaction()` for a framework-owned,
   in-memory draft/commit/rollback boundary over one entity state, with draft
   lifecycle and explicit version metadata helpers; and
-- `defineEntityHandlers(EntityClass, StateSchema, builder => [...])` for
+- `EntityHandlers.define(EntityClass, StateSchema, builder => [...])` for
   explicit, frozen handler metadata that binds generated Protobuf-ES schemas to
   entity method names in framework tests, generated-registry ingestion, and
   legacy non-decorator migration tooling. Ordinary applications should use bare
@@ -442,7 +442,7 @@ the conventional generated registry module under an explicit trusted root.
 Generated registry discovery and ingestion stay inside the framework-owned
 assembly path; application code adds entity classes, not
 `HandlerMetadataRegistry` values. The low-level explicit registration API,
-including `defineEntityHandlers()`, remains public only for framework tests,
+including `EntityHandlers.define()`, remains public only for framework tests,
 generated-registry ingestion, and legacy non-decorator migration tooling. It
 records command assignments, command reactions, event subscriptions, event
 reactions, and legacy event applications in declaration order. Handler names
@@ -477,7 +477,7 @@ Both `handler(signal)` and `handler(signal, context)` are part of the public
 signature contract. `HandlerRegistryIngestor` validates version `1`, rejects
 new generated `@Apply`/event-application records, checks generated arity and
 emitted-schema/schema-shape rules, and then routes records through
-`defineEntityHandlers()`. Canonical handler metadata records `parameterCount`;
+`EntityHandlers.define()`. Canonical handler metadata records `parameterCount`;
 explicit internal metadata registrations default to one-argument invocation,
 while generated records preserve their declared arity. Built repository execution
 calls generated two-argument command assignees with the generated
@@ -736,7 +736,7 @@ import {
   RuntimeTransportBinding,
   SingleProcessServerRuntime,
   createRoutingPlan,
-  defineEntityHandlers,
+  EntityHandlers,
 } from "@spine-event-engine/server";
 import { CreateTaskSchema, TaskCreatedSchema, TaskStateSchema } from "@example/tasks-proto";
 
@@ -750,7 +750,7 @@ const taskRepository = new Repository({
   schema: TaskStateSchema,
 });
 const tasks = BoundedContext.singleTenant("Tasks").add(taskRepository).build();
-const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
+const handlers = EntityHandlers.define(TaskAggregate, TaskStateSchema, (builder) => [
   builder.assign(CreateTaskSchema, "create"),
   builder.subscribe(TaskCreatedSchema, "onCreated"),
 ]);
@@ -761,8 +761,8 @@ const routingPlan = createRoutingPlan({
   events: EventRegistrationReadiness.fromRegistry(registry),
 });
 
-CommandRegistrationReadiness.fromRegistry(registry).registeredCommandMessageFullTypeNames();
-EventRegistrationReadiness.fromRegistry(registry).registeredEventMessageFullTypeNames();
+CommandRegistrationReadiness.fromRegistry(registry).commandTypeNames();
+EventRegistrationReadiness.fromRegistry(registry).eventTypeNames();
 routingPlan.commands.topics;
 ```
 

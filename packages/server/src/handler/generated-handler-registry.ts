@@ -1,6 +1,6 @@
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import {
-  handlerMetadataAccess,
+  HandlerMetadataValues,
   HandlerMetadataRegistry,
   type EntityClass,
   type EntityHandlersMetadata,
@@ -9,7 +9,10 @@ import {
   type HandlerRegistrationBuilder,
 } from "./handler-metadata.js";
 
-/** @internal Generated handler registry module shape accepted by the framework ingestor. */
+/** Describes the generated handler registry module shape accepted by the framework ingestor.
+ *
+ * @internal
+ */
 export interface GeneratedHandlerRegistry {
   /** Generated registry contract version. */
   readonly version: 1;
@@ -19,22 +22,29 @@ export interface GeneratedHandlerRegistry {
 
 /** Framework-owned ingestion adapter for generated handler registries. */
 export class HandlerRegistryIngestor {
-  /** Convert generated registry records into canonical entity handler metadata. */
+  /** Converts generated registry records into canonical entity handler metadata.
+   *
+   * @param registry - Generated registry metadata to validate and materialize.
+   * @returns Frozen canonical entity-handler metadata.
+   */
   ingest(registry: unknown): readonly EntityHandlersMetadata[] {
-    assertGeneratedHandlerRegistry(registry);
-    validateRegistryVersion(registry);
+    GeneratedRegistry.assert(registry);
+    GeneratedRegistry.validateVersion(registry);
 
-    return Object.freeze(
-      registry.entities.map((entity) => materializeGeneratedEntityHandlers(entity)),
-    );
+    return Object.freeze(registry.entities.map((entity) => GeneratedRegistry.materialize(entity)));
   }
 
-  /** Ingest generated registry records and register them in a caller-owned metadata registry. */
+  /** Registers generated registry records in a caller-owned metadata registry.
+   *
+   * @param generated - Generated registry metadata to validate and register.
+   * @param registry - Metadata registry to update.
+   * @returns The updated metadata registry.
+   */
   register(
     generated: unknown,
     registry: HandlerMetadataRegistry = new HandlerMetadataRegistry(),
   ): HandlerMetadataRegistry {
-    assertGeneratedHandlerRegistry(generated);
+    GeneratedRegistry.assert(generated);
     const entityHandlers = this.ingest(generated);
     new HandlerMetadataRegistry([...registry.listEntityHandlers(), ...entityHandlers]);
 
@@ -60,6 +70,12 @@ export class HandlerRegistryIngestionError extends Error {
   /** Stable code for callers/tests that need structured failure handling. */
   readonly code: RegistryIngestionErrorCode;
 
+  /**
+   * Creates an ingestion error.
+   *
+   * @param code - Stable code that identifies the failed validation.
+   * @param message - Human-readable failure description.
+   */
   constructor(code: RegistryIngestionErrorCode, message: string) {
     super(message);
     this.name = "HandlerRegistryIngestionError";
@@ -68,14 +84,23 @@ export class HandlerRegistryIngestionError extends Error {
   }
 }
 
-/** @internal Handler categories supported by generated registry ingestion. */
+/** Describes handler categories supported by generated registry ingestion.
+ *
+ * @internal
+ */
 export type GeneratedHandlerKind =
   "command-assignment" | "command-reaction" | "event-subscription" | "event-reaction";
 
-/** @internal Public handler arity recorded by generated registry tooling. */
+/** Describes public handler arity recorded by generated registry tooling.
+ *
+ * @internal
+ */
 export type GeneratedHandlerParameterCount = 1 | 2;
 
-/** @internal Type-erased generated entity group accepted by a top-level generated registry. */
+/** Describes a type-erased generated entity group accepted by a top-level registry.
+ *
+ * @internal
+ */
 export interface GeneratedEntityHandlerGroup {
   /** Entity class whose prototype owns the generated handler methods. */
   readonly entityType: EntityClass;
@@ -85,7 +110,10 @@ export interface GeneratedEntityHandlerGroup {
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
 
-/** @internal Generated handler records for one entity class. */
+/** Describes generated handler records for one entity class.
+ *
+ * @internal
+ */
 export interface GeneratedEntityHandlers<
   Instance extends object = object,
   StateSchema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -98,7 +126,10 @@ export interface GeneratedEntityHandlers<
   readonly handlers: readonly GeneratedHandlerRecord<Instance>[];
 }
 
-/** @internal Type-erased generated metadata for one decorated handler method. */
+/** Describes type-erased generated metadata for one decorated handler method.
+ *
+ * @internal
+ */
 export interface GeneratedHandlerRecordInput {
   /** Handler role inferred from the bare decorator. */
   readonly kind: GeneratedHandlerKind;
@@ -112,7 +143,10 @@ export interface GeneratedHandlerRecordInput {
   readonly parameterCount: GeneratedHandlerParameterCount;
 }
 
-/** @internal Generated metadata for one decorated handler method on a concrete entity class. */
+/** Describes generated metadata for one decorated handler method on a concrete entity class.
+ *
+ * @internal
+ */
 export interface GeneratedHandlerRecord<
   Instance extends object = object,
 > extends GeneratedHandlerRecordInput {
@@ -122,171 +156,187 @@ export interface GeneratedHandlerRecord<
 
 const registryVersion = 1;
 
-function assertGeneratedHandlerRegistry(
-  registry: unknown,
-): asserts registry is GeneratedHandlerRegistry {
-  if (registry === null || typeof registry !== "object") {
+interface GeneratedRegistryOperations {
+  assert(registry: unknown): asserts registry is GeneratedHandlerRegistry;
+  validateVersion(registry: GeneratedHandlerRegistry): void;
+  materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata;
+  build<Instance extends object>(
+    builder: HandlerRegistrationBuilder<Instance>,
+    handler: GeneratedHandlerRecordInput,
+  ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>;
+  validateHandler(handler: GeneratedHandlerRecordInput): void;
+  validateSchema(schema: DescriptorMessageSchema, label: string): void;
+  validateEmits(handler: GeneratedHandlerRecordInput): void;
+  validateSubscription(handler: GeneratedHandlerRecordInput): void;
+  isKind(kind: string): kind is GeneratedHandlerKind;
+}
+
+const GeneratedRegistry: GeneratedRegistryOperations = Object.freeze({
+  assert(registry: unknown): asserts registry is GeneratedHandlerRegistry {
+    if (registry === null || typeof registry !== "object") {
+      throw new HandlerRegistryIngestionError(
+        "UNSUPPORTED_REGISTRY_VERSION",
+        "Generated handler registry must be an object.",
+      );
+    }
+  },
+
+  validateVersion(registry: GeneratedHandlerRegistry): void {
+    const version: number = registry.version;
+
+    if (version === registryVersion) {
+      return;
+    }
+
     throw new HandlerRegistryIngestionError(
       "UNSUPPORTED_REGISTRY_VERSION",
-      "Generated handler registry must be an object.",
+      `Generated handler registry version ${String(version)} is not supported.`,
     );
-  }
-}
+  },
 
-function validateRegistryVersion(registry: GeneratedHandlerRegistry): void {
-  const version: number = registry.version;
+  materialize(entity: GeneratedEntityHandlerGroup): EntityHandlersMetadata {
+    GeneratedRegistry.validateSchema(entity.stateSchema, "entity state schema");
+    entity.handlers.forEach((handler) => {
+      GeneratedRegistry.validateHandler(handler);
+    });
 
-  if (version === registryVersion) {
-    return;
-  }
+    return HandlerMetadataValues.defineArity(
+      entity.entityType,
+      entity.stateSchema,
+      (builder) => entity.handlers.map((handler) => GeneratedRegistry.build(builder, handler)),
+      entity.handlers.map((handler) => ({
+        kind: handler.kind,
+        methodName: handler.methodName,
+        ...(handler.kind === "event-subscription"
+          ? {}
+          : { emittedSchemas: Object.freeze([...handler.emittedSchemas]) }),
+        parameterCount: handler.parameterCount,
+      })),
+    );
+  },
 
-  throw new HandlerRegistryIngestionError(
-    "UNSUPPORTED_REGISTRY_VERSION",
-    `Generated handler registry version ${String(version)} is not supported.`,
-  );
-}
+  build<Instance extends object>(
+    builder: HandlerRegistrationBuilder<Instance>,
+    handler: GeneratedHandlerRecordInput,
+  ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>> {
+    switch (handler.kind) {
+      case "command-assignment":
+        return builder.assign(
+          handler.signalSchema,
+          handler.methodName as HandlerMethodName<Instance>,
+        );
+      case "command-reaction":
+        return builder.command(
+          handler.signalSchema,
+          handler.methodName as HandlerMethodName<Instance>,
+        );
+      case "event-subscription":
+        return builder.subscribe(
+          handler.signalSchema,
+          handler.methodName as HandlerMethodName<Instance>,
+        );
+      case "event-reaction":
+        return builder.react(
+          handler.signalSchema,
+          handler.methodName as HandlerMethodName<Instance>,
+        );
+      default:
+        throw new HandlerRegistryIngestionError(
+          "UNSUPPORTED_HANDLER_KIND",
+          `Generated handler kind "${String(handler.kind)}" is not supported.`,
+        );
+    }
+  },
 
-function materializeGeneratedEntityHandlers(
-  entity: GeneratedEntityHandlerGroup,
-): EntityHandlersMetadata {
-  validateSchema(entity.stateSchema, "entity state schema");
-  entity.handlers.forEach((handler) => {
-    validateGeneratedHandler(handler);
-  });
-
-  return handlerMetadataAccess.defineArity(
-    entity.entityType,
-    entity.stateSchema,
-    (builder) => entity.handlers.map((handler) => buildGeneratedHandler(builder, handler)),
-    entity.handlers.map((handler) => ({
-      kind: handler.kind,
-      methodName: handler.methodName,
-      ...(handler.kind === "event-subscription"
-        ? {}
-        : { emittedSchemas: Object.freeze([...handler.emittedSchemas]) }),
-      parameterCount: handler.parameterCount,
-    })),
-  );
-}
-
-function buildGeneratedHandler<Instance extends object>(
-  builder: HandlerRegistrationBuilder<Instance>,
-  handler: GeneratedHandlerRecordInput,
-): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>> {
-  switch (handler.kind) {
-    case "command-assignment":
-      return builder.assign(
-        handler.signalSchema,
-        handler.methodName as HandlerMethodName<Instance>,
-      );
-    case "command-reaction":
-      return builder.command(
-        handler.signalSchema,
-        handler.methodName as HandlerMethodName<Instance>,
-      );
-    case "event-subscription":
-      return builder.subscribe(
-        handler.signalSchema,
-        handler.methodName as HandlerMethodName<Instance>,
-      );
-    case "event-reaction":
-      return builder.react(handler.signalSchema, handler.methodName as HandlerMethodName<Instance>);
-    default:
+  validateHandler(handler: GeneratedHandlerRecordInput): void {
+    if (!GeneratedRegistry.isKind(handler.kind)) {
       throw new HandlerRegistryIngestionError(
         "UNSUPPORTED_HANDLER_KIND",
         `Generated handler kind "${String(handler.kind)}" is not supported.`,
       );
-  }
-}
+    }
 
-function validateGeneratedHandler(handler: GeneratedHandlerRecordInput): void {
-  if (!isGeneratedHandlerKind(handler.kind)) {
-    throw new HandlerRegistryIngestionError(
-      "UNSUPPORTED_HANDLER_KIND",
-      `Generated handler kind "${String(handler.kind)}" is not supported.`,
+    const parameterCount: number = handler.parameterCount;
+
+    if (parameterCount !== 1 && parameterCount !== 2) {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_PARAMETER_COUNT",
+        `Generated handler "${handler.methodName}" declares unsupported parameter count ` +
+          `${String(parameterCount)}.`,
+      );
+    }
+
+    GeneratedRegistry.validateSchema(
+      handler.signalSchema,
+      `signal schema for generated handler "${handler.methodName}"`,
     );
-  }
+    handler.emittedSchemas.forEach((schema, index) => {
+      GeneratedRegistry.validateSchema(
+        schema,
+        `emitted schema ${String(index)} for generated handler "${handler.methodName}"`,
+      );
+    });
 
-  const parameterCount: number = handler.parameterCount;
+    if (handler.kind === "event-subscription") {
+      GeneratedRegistry.validateSubscription(handler);
+      return;
+    }
 
-  if (parameterCount !== 1 && parameterCount !== 2) {
-    throw new HandlerRegistryIngestionError(
-      "INVALID_PARAMETER_COUNT",
-      `Generated handler "${handler.methodName}" declares unsupported parameter count ` +
-        `${String(parameterCount)}.`,
-    );
-  }
+    if (handler.kind === "command-assignment" || handler.kind === "command-reaction") {
+      GeneratedRegistry.validateEmits(handler);
+    }
+  },
 
-  validateSchema(
-    handler.signalSchema,
-    `signal schema for generated handler "${handler.methodName}"`,
-  );
-  handler.emittedSchemas.forEach((schema, index) => {
-    validateSchema(
-      schema,
-      `emitted schema ${String(index)} for generated handler "${handler.methodName}"`,
-    );
-  });
+  validateSchema(schema: DescriptorMessageSchema, label: string): void {
+    const value: unknown = schema;
 
-  if (handler.kind === "event-subscription") {
-    validateSubscriptionEmitsNothing(handler);
-    return;
-  }
+    if (value === null || typeof value !== "object") {
+      throw new HandlerRegistryIngestionError(
+        "INVALID_SCHEMA",
+        `Generated handler registry ${label} must be an object with a non-empty typeName.`,
+      );
+    }
 
-  if (handler.kind === "command-assignment" || handler.kind === "command-reaction") {
-    validateEmitsSomething(handler);
-  }
-}
+    const typeName = (value as { readonly typeName?: unknown }).typeName;
 
-function validateSchema(schema: DescriptorMessageSchema, label: string): void {
-  const value: unknown = schema;
+    if (typeof typeName === "string" && typeName.trim().length > 0) {
+      return;
+    }
 
-  if (value === null || typeof value !== "object") {
     throw new HandlerRegistryIngestionError(
       "INVALID_SCHEMA",
       `Generated handler registry ${label} must be an object with a non-empty typeName.`,
     );
-  }
+  },
 
-  const typeName = (value as { readonly typeName?: unknown }).typeName;
+  validateEmits(handler: GeneratedHandlerRecordInput): void {
+    if (handler.emittedSchemas.length > 0) {
+      return;
+    }
 
-  if (typeof typeName === "string" && typeName.trim().length > 0) {
-    return;
-  }
+    throw new HandlerRegistryIngestionError(
+      "MISSING_EMITTED_SCHEMAS",
+      `Generated handler "${handler.methodName}" must declare at least one emitted schema.`,
+    );
+  },
 
-  throw new HandlerRegistryIngestionError(
-    "INVALID_SCHEMA",
-    `Generated handler registry ${label} must be an object with a non-empty typeName.`,
-  );
-}
+  validateSubscription(handler: GeneratedHandlerRecordInput): void {
+    if (handler.emittedSchemas.length === 0) {
+      return;
+    }
 
-function validateEmitsSomething(handler: GeneratedHandlerRecordInput): void {
-  if (handler.emittedSchemas.length > 0) {
-    return;
-  }
+    throw new HandlerRegistryIngestionError(
+      "UNEXPECTED_EMITTED_SCHEMAS",
+      `Generated event subscription handler "${handler.methodName}" must not declare emitted schemas.`,
+    );
+  },
 
-  throw new HandlerRegistryIngestionError(
-    "MISSING_EMITTED_SCHEMAS",
-    `Generated handler "${handler.methodName}" must declare at least one emitted schema.`,
-  );
-}
-
-function validateSubscriptionEmitsNothing(handler: GeneratedHandlerRecordInput): void {
-  if (handler.emittedSchemas.length === 0) {
-    return;
-  }
-
-  throw new HandlerRegistryIngestionError(
-    "UNEXPECTED_EMITTED_SCHEMAS",
-    `Generated event subscription handler "${handler.methodName}" must not declare emitted schemas.`,
-  );
-}
-
-function isGeneratedHandlerKind(kind: string): kind is GeneratedHandlerKind {
-  return (
-    kind === "command-assignment" ||
-    kind === "command-reaction" ||
-    kind === "event-subscription" ||
-    kind === "event-reaction"
-  );
-}
+  isKind(kind: string): kind is GeneratedHandlerKind {
+    return (
+      kind === "command-assignment" ||
+      kind === "command-reaction" ||
+      kind === "event-subscription" ||
+      kind === "event-reaction"
+    );
+  },
+});

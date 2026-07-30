@@ -21,7 +21,7 @@ import type {
   GeneratedHandlerRecord,
   GeneratedHandlerRegistry,
 } from "../../src/handler/generated-handler-registry.js";
-import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
+import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -147,10 +147,10 @@ describe("generated handler registry ingestion", () => {
     ) {
       throw new Error("Expected generated handler metadata for every handler kind.");
     }
-    expect(handlerMetadataAccess.emittedSchemas(assignment)).toEqual([EventSchema]);
-    expect(handlerMetadataAccess.emittedSchemas(commandReaction)).toEqual([CommandSchema]);
-    expect(handlerMetadataAccess.emittedSchemas(subscription)).toEqual([]);
-    expect(handlerMetadataAccess.emittedSchemas(eventReaction)).toEqual([EventSchema]);
+    expect(HandlerMetadataValues.emittedSchemas(assignment)).toEqual([EventSchema]);
+    expect(HandlerMetadataValues.emittedSchemas(commandReaction)).toEqual([CommandSchema]);
+    expect(HandlerMetadataValues.emittedSchemas(subscription)).toEqual([]);
+    expect(HandlerMetadataValues.emittedSchemas(eventReaction)).toEqual([EventSchema]);
     expectTypeOf<CommandAssignmentHandlerMetadata>().not.toHaveProperty("emittedSchemas");
     expectTypeOf<CommandReactionHandlerMetadata>().not.toHaveProperty("emittedSchemas");
     expectTypeOf<EventReactionHandlerMetadata>().not.toHaveProperty("emittedSchemas");
@@ -182,7 +182,7 @@ describe("generated handler registry ingestion", () => {
       throw new Error("Expected no-emission event reaction metadata.");
     }
     expect(eventReaction.methodName).toBe("reactToCreated");
-    expect(handlerMetadataAccess.emittedSchemas(eventReaction)).toEqual([]);
+    expect(HandlerMetadataValues.emittedSchemas(eventReaction)).toEqual([]);
   });
 
   it("accepts concrete entity handler groups in top-level generated registries", () => {
@@ -414,7 +414,7 @@ describe("generated handler registry ingestion", () => {
     ).toThrow(/must not declare emitted schemas/);
   });
 
-  it("keeps method validation in defineEntityHandlers", () => {
+  it("keeps method validation in EntityHandlers.define", () => {
     expect(() =>
       new HandlerRegistryIngestor().ingest({
         version: 1,

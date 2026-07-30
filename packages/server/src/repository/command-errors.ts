@@ -11,7 +11,10 @@ export class TransitionValidationError extends Error {
   /** Structured transition validation details from the entity transaction boundary. */
   readonly validationError: ValidationError;
 
-  /** Create an aggregate transition validation error. */
+  /** Creates an aggregate transition validation error.
+   *
+   * @param validationError - Structured details explaining the rejected transition.
+   */
   constructor(validationError: ValidationError) {
     super("Command state transition validation failed.");
     this.name = "TransitionValidationError";

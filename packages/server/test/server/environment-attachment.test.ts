@@ -15,9 +15,9 @@ import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { deliveryStorageFaults, onInboxQuery } from "../delivery/delivery-storage-fault-fixture.js";
 import {
   EnvironmentAttachments,
+  EnvironmentAttachmentAccess,
   EnvironmentRegistrations,
   RegistrationReadiness,
-  startupObligations,
   type EnvironmentGenerationWorker,
 } from "../../src/server/environment-attachment.js";
 import {
@@ -159,13 +159,17 @@ describe("startup obligations", () => {
       shard: ShardIndex.single(),
     });
 
-    const records = startupObligations("registration-status", [paused, skipped], {
-      scopes: [
-        { scope: paused, disposition: "PARKED" },
-        { scope: skipped, disposition: "PARKED" },
-      ],
-      pending: [],
-    }).records();
+    const records = EnvironmentAttachmentAccess.startupObligations(
+      "registration-status",
+      [paused, skipped],
+      {
+        scopes: [
+          { scope: paused, disposition: "PARKED" },
+          { scope: skipped, disposition: "PARKED" },
+        ],
+        pending: [],
+      },
+    ).records();
 
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({ hasCause: false, occurrences: 0 });

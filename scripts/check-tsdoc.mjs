@@ -22,6 +22,7 @@ const callableVerbs = new Set([
   "gets",
   "loads",
   "maps",
+  "marks",
   "reads",
   "returns",
   "sets",
@@ -40,6 +41,7 @@ const callableVerbs = new Set([
   "clears",
   "collects",
   "compares",
+  "commits",
   "completes",
   "composes",
   "connects",
@@ -74,16 +76,20 @@ const callableVerbs = new Set([
   "rejects",
   "removes",
   "renders",
+  "replaces",
   "restores",
   "retries",
+  "rolls",
   "routes",
   "schedules",
   "serializes",
   "snapshots",
   "stores",
   "streams",
+  "tests",
   "transforms",
   "translates",
+  "tries",
   "verifies",
   "waits",
   "watches",
@@ -380,6 +386,54 @@ function visitSource(source, file, checker, failures) {
     inspectDeclaration(declaration, file, undefined, checker, failures, suffix);
     inspected.add(declaration);
   }
+  if (debtPartition(file) === "T-0080F")
+    inspectInternalObjectMembers(source, file, checker, failures, inspected);
+}
+
+function inspectInternalObjectMembers(source, file, checker, failures, inspected) {
+  const visit = (node) => {
+    if (ts.isObjectLiteralExpression(node) && !belongsToInspectedDeclaration(node, inspected)) {
+      inspectDocumentedObjectMembers(node, file, checker, failures);
+    }
+    ts.forEachChild(node, visit);
+  };
+  ts.forEachChild(source, visit);
+}
+
+function belongsToInspectedDeclaration(node, inspected) {
+  for (let current = node; current !== undefined; current = current.parent) {
+    if (inspected.has(current)) return true;
+  }
+  return false;
+}
+
+function inspectDocumentedObjectMembers(object, file, checker, failures) {
+  for (const member of object.properties) {
+    if (ts.isObjectLiteralExpression(member)) {
+      inspectDocumentedObjectMembers(member, file, checker, failures);
+      continue;
+    }
+    if (!hasTsdoc(member)) continue;
+    const name = propertyName(member.name);
+    if (name === undefined) continue;
+    if (
+      ts.isMethodDeclaration(member) ||
+      ts.isGetAccessorDeclaration(member) ||
+      ts.isSetAccessorDeclaration(member)
+    ) {
+      inspectObjectCallableSummary(member, file, name, failures);
+    }
+  }
+}
+
+function hasTsdoc(node) {
+  return ts.getJSDocCommentsAndTags(node).some(ts.isJSDoc);
+}
+
+function inspectObjectCallableSummary(node, file, name, failures) {
+  const documentation = documentationFor(node);
+  if (documentation.summary === undefined || !startsWithCallableVerb(documentation.summary))
+    failures.push({ rule: "callable-summary", file, name });
 }
 
 function inspectDeclaration(node, file, owner, checker, failures, suffix = "") {
@@ -391,7 +445,8 @@ function inspectDeclaration(node, file, owner, checker, failures, suffix = "") {
 
   if (ts.isClassDeclaration(node) || ts.isInterfaceDeclaration(node)) {
     for (const [member, suffix] of memberSuffixes(node.members)) {
-      if (isPublicMember(member)) inspectDeclaration(member, file, name, checker, failures, suffix);
+      if (isDocumentedClassMember(node, member))
+        inspectDeclaration(member, file, name, checker, failures, suffix);
     }
   }
 
@@ -705,6 +760,7 @@ function variableStatementFor(node) {
 
 function inspectDocumentation(node, file, name, checker, failures, documentationNode = node) {
   const documentation = documentationFor(documentationNode);
+  if (documentation.adjacent) failures.push({ rule: "adjacent-tsdoc", file, name });
   if (documentation.inherited) {
     if (hasDocumentedInheritedMember(node, checker)) return;
     failures.push({ rule: "invalid-inheritdoc", file, name });
@@ -774,6 +830,7 @@ function hasCompleteCallableDocumentation(node, checker) {
   const returns = documentation.tags.filter(
     (tag) => tag.name === "returns" || tag.name === "return",
   );
+  if (ts.isConstructorDeclaration(node)) return returns.length === 0;
   return isVoidResult(node, checker)
     ? returns.length === 0
     : returns.length === 1 && !isPlaceholder(returns[0].description);
@@ -783,6 +840,7 @@ function inspectCallable(node, file, name, checker, failures, documentationNode 
   if (name === undefined) return;
   const identity = `${name}(${node.parameters.map((parameter) => parameter.name.getText()).join(",")})`;
   const documentation = documentationFor(documentationNode);
+  if (documentation.adjacent) failures.push({ rule: "adjacent-tsdoc", file, name: identity });
   if (documentation.inherited && hasDocumentedInheritedMember(node, checker)) return;
   if (documentation.inherited) failures.push({ rule: "invalid-inheritdoc", file, name: identity });
   if (documentation.summary === undefined) {
@@ -819,7 +877,9 @@ function inspectCallable(node, file, name, checker, failures, documentationNode 
   const returns = documentation.tags.filter(
     (tag) => tag.name === "returns" || tag.name === "return",
   );
-  if (isVoidResult(node, checker)) {
+  if (ts.isConstructorDeclaration(node)) {
+    if (returns.length > 0) failures.push({ rule: "constructor-returns", file, name: identity });
+  } else if (isVoidResult(node, checker)) {
     if (returns.length > 0) failures.push({ rule: "void-returns", file, name: identity });
   } else if (returns.length !== 1) {
     failures.push({
@@ -834,6 +894,10 @@ function inspectCallable(node, file, name, checker, failures, documentationNode 
 }
 
 function documentationFor(node) {
+  const source = node.getSourceFile();
+  const comments = (ts.getLeadingCommentRanges(source.text, node.getFullStart()) ?? []).filter(
+    (range) => source.text.startsWith("/**", range.pos),
+  );
   const jsdoc = ts.getJSDocCommentsAndTags(node).find(ts.isJSDoc);
   const tags = ts.getJSDocTags(node).map((tag) => ({
     name: tag.tagName.text.toLowerCase(),
@@ -848,10 +912,20 @@ function documentationFor(node) {
   const duplicateParameters = parameterNames.filter(
     (name, index) => parameterNames.indexOf(name) !== index,
   );
-  const summary = jsdoc?.comment === undefined ? undefined : String(jsdoc.comment).trim();
+  const summary =
+    jsdoc?.comment === undefined ? undefined : ts.getTextOfJSDocComment(jsdoc.comment).trim();
   const inherited =
     tags.some((tag) => tag.name === "inheritdoc") || /@inheritDoc\b/u.test(jsdoc?.getText() ?? "");
-  return { summary: summary === "" ? undefined : summary, tags, duplicateParameters, inherited };
+  return {
+    summary: summary === "" ? undefined : summary,
+    tags,
+    duplicateParameters,
+    inherited,
+    adjacent: comments.some(
+      (comment, index) =>
+        index > 0 && source.text.slice(comments[index - 1].end, comment.pos).trim().length === 0,
+    ),
+  };
 }
 
 function parameterNames(parameter) {
@@ -885,6 +959,22 @@ function isPublicMember(node) {
   return (
     (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Private) === 0 &&
     (ts.getCombinedModifierFlags(node) & ts.ModifierFlags.Protected) === 0
+  );
+}
+
+function isDocumentedClassMember(owner, member) {
+  if (isPublicMember(member)) return true;
+  return (
+    ts.isClassDeclaration(owner) &&
+    isExported(owner) &&
+    (ts.getCombinedModifierFlags(member) & ts.ModifierFlags.Protected) !== 0 &&
+    !isInternalDocumentation(member)
+  );
+}
+
+function isInternalDocumentation(node) {
+  return documentationFor(node).tags.some(
+    (tag) => tag.name === "hidden" || tag.name === "internal",
   );
 }
 

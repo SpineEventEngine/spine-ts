@@ -8,7 +8,7 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 
 import {
   Aggregate,
-  defineEntityHandlers,
+  EntityHandlers,
   describeEntityMetadata,
   ProcessManager,
   Projection,
@@ -653,22 +653,22 @@ describe("repository identity", () => {
         entityType: TaskAggregate,
         schema: AggregateStateSchema,
       });
-      const numberAggregateHandlers = defineEntityHandlers(
+      const numberAggregateHandlers = EntityHandlers.define(
         HandlerBackedNumberAggregate,
         AggregateStateSchema,
         (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
       );
-      const bigintAggregateHandlers = defineEntityHandlers(
+      const bigintAggregateHandlers = EntityHandlers.define(
         HandlerBackedBigintAggregate,
         AggregateStateSchema,
         (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
       );
-      const numberProjectionHandlers = defineEntityHandlers(
+      const numberProjectionHandlers = EntityHandlers.define(
         HandlerBackedNumberProjection,
         ProjectionStateSchema,
         (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
       );
-      const bigintProjectionHandlers = defineEntityHandlers(
+      const bigintProjectionHandlers = EntityHandlers.define(
         HandlerBackedBigintProjection,
         ProjectionStateSchema,
         (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],

@@ -9,12 +9,21 @@ import type { MessageSchema } from "@spine-event-engine/core";
  * subscriber invocation; the bus validates, stores, and routes event envelopes.
  */
 export interface EventDispatcher {
-  /** Generated event message schemas accepted by this dispatcher. */
+  /** Lists generated event message schemas accepted by this dispatcher.
+   *
+   * @returns the accepted message schemas.
+   */
   messageSchemas(): readonly MessageSchema[];
 
-  /** Validate one generated Spine event before the bus stores it. */
+  /** Validates one generated Spine event before the bus stores it.
+   *
+   * @param event the event envelope to validate.
+   */
   accept?(event: Event): Promise<void>;
 
-  /** Dispatch one generated Spine event envelope. */
+  /** Dispatches one generated Spine event envelope.
+   *
+   * @param event the event envelope to dispatch.
+   */
   dispatch(event: Event): Promise<void>;
 }

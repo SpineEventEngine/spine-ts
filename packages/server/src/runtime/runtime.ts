@@ -45,15 +45,15 @@ export interface ServerRuntimeLifecycle {
 }
 
 /**
- * Work accepted by the single-process runtime queue.
+ * Executes one trusted runtime work item accepted by the single-process queue.
  *
- * Callbacks are trusted server-owned runtime work only. This queue does not
- * provide timeout, cancellation, fairness, queue-bound, or hostile-callback
- * protection; non-settling work can keep `close()` pending. Same-runtime
- * reentrant enqueue during active work is rejected to avoid queue self-deadlocks.
- * This is the first server runtime intake boundary only. It is not a durable
- * job, transport message, command, event, dispatch outcome, or repository
- * operation.
+ * The queue provides no timeout, cancellation, fairness, queue bound, or
+ * hostile-callback protection; non-settling work can keep `close()` pending.
+ * Same-runtime enqueue during active work is rejected to avoid self-deadlock.
+ * This is the first server intake boundary, not a durable job, transport
+ * message, command, event, dispatch outcome, or repository operation.
+ *
+ * @returns nothing or a promise fulfilled after the work completes.
  */
 export type ServerRuntimeWork = () => void | Promise<void>;
 
@@ -89,8 +89,13 @@ export class ServerRuntimeStateError extends Error {
    */
   readonly state: ServerRuntimeRejectedState;
 
+  /** Creates an error for a rejected runtime operation.
+   *
+   * @param operation the rejected operation.
+   * @param state the state that rejected it.
+   */
   constructor(operation: ServerRuntimeStateOperation, state: ServerRuntimeRejectedState) {
-    super(formatStateError(operation, state));
+    super(RuntimeValues.formatStateError(operation, state));
     this.name = "ServerRuntimeStateError";
     this.operation = operation;
     this.state = state;
@@ -115,15 +120,23 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
   #tail: Promise<void> = Promise.resolve();
   #closePromise: Promise<void> | undefined;
 
+  /** Creates an idle single-process runtime.
+   *
+   */
   constructor() {
     followUpEnqueuers.set(this, (work) => this.#enqueueFollowUp(work));
     runtimeDrainers.set(this, () => this.#drain());
   }
 
+  /** Returns the current lifecycle state.
+   *
+   * @returns the lifecycle state.
+   */
   get state(): ServerRuntimeState {
     return this.#state;
   }
 
+  /** Starts accepting runtime work. */
   start(): Promise<void> {
     if (this.#state === "running") {
       return Promise.resolve();
@@ -144,6 +157,8 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
    * timeout, cancellation, fairness, queue bound, or protection from hostile or
    * non-settling work; such work can keep `close()` pending. Same-runtime
    * reentrant enqueue during active work is rejected to avoid queue self-deadlocks.
+   *
+   * @param work the trusted work to enqueue.
    */
   enqueue(work: ServerRuntimeWork): Promise<void> {
     return this.#enqueue(work, false);
@@ -154,7 +169,7 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
   }
 
   #enqueue(work: ServerRuntimeWork, allowRunningWork: boolean): Promise<void> {
-    const runningWork = isRunningWork(this);
+    const runningWork = RuntimeValues.isRunningWork(this);
     const acceptsDrainFollowUp = allowRunningWork && runningWork && this.#state === "closing";
 
     if (this.#state !== "running" && !acceptsDrainFollowUp) {
@@ -176,8 +191,9 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     return completion;
   }
 
+  /** Closes the runtime after accepted work drains. */
   close(): Promise<void> {
-    if (isRunningWork(this)) {
+    if (RuntimeValues.isRunningWork(this)) {
       return Promise.reject(new ServerRuntimeStateError("close", "running-work"));
     }
 
@@ -227,7 +243,10 @@ const followUpEnqueuers = new WeakMap<
 >();
 const runtimeDrainers = new WeakMap<SingleProcessServerRuntime, () => Promise<void>>();
 
-/** @internal Package-owned authority for framework follow-up work. */
+/** Provides package-owned authority for framework follow-up work.
+ *
+ * @internal
+ */
 export const runtimeAccess: RuntimeAccess = Object.freeze({
   enqueueFollowUp(runtime: SingleProcessServerRuntime, work: ServerRuntimeWork): Promise<void> {
     const enqueueFollowUp = followUpEnqueuers.get(runtime);
@@ -250,25 +269,6 @@ export const runtimeAccess: RuntimeAccess = Object.freeze({
   },
 });
 
-function formatStateError(
-  operation: ServerRuntimeStateOperation,
-  state: ServerRuntimeRejectedState,
-): string {
-  if (operation === "start") {
-    return `Cannot start server runtime while it is ${state}.`;
-  }
-
-  if (state === "running-work" && operation === "close") {
-    return "Cannot close server runtime from an active runtime work item.";
-  }
-
-  if (state === "running-work") {
-    return "Cannot enqueue runtime work from an active runtime work item.";
-  }
-
-  return `Cannot enqueue runtime work while server runtime is ${state}.`;
-}
-
 interface RuntimeWorkFrame {
   readonly runtime: SingleProcessServerRuntime;
   active: boolean;
@@ -276,7 +276,29 @@ interface RuntimeWorkFrame {
 
 const runtimeWork = new AsyncLocalStorage<RuntimeWorkFrame>();
 
-function isRunningWork(runtime: SingleProcessServerRuntime): boolean {
-  const frame = runtimeWork.getStore();
-  return frame?.runtime === runtime && frame.active;
-}
+/** Private runtime state and execution helpers. */
+const RuntimeValues = Object.freeze({
+  formatStateError(
+    operation: ServerRuntimeStateOperation,
+    state: ServerRuntimeRejectedState,
+  ): string {
+    if (operation === "start") {
+      return `Cannot start server runtime while it is ${state}.`;
+    }
+
+    if (state === "running-work" && operation === "close") {
+      return "Cannot close server runtime from an active runtime work item.";
+    }
+
+    if (state === "running-work") {
+      return "Cannot enqueue runtime work from an active runtime work item.";
+    }
+
+    return `Cannot enqueue runtime work while server runtime is ${state}.`;
+  },
+
+  isRunningWork(runtime: SingleProcessServerRuntime): boolean {
+    const frame = runtimeWork.getStore();
+    return frame?.runtime === runtime && frame.active;
+  },
+});

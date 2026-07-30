@@ -60,14 +60,14 @@ import {
   Repository,
   RepositoryIdentityError,
   ShardIndex,
-  defineEntityHandlers,
+  EntityHandlers,
   HandlerRegistryIngestor,
   type EntityHandlersMetadata,
   type EventDispatcher,
   type InboxMessage,
 } from "../../src/index.js";
+import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
-import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import { entityStorageDescriptor } from "../../src/entity/entity-storage-descriptor.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
@@ -5992,7 +5992,7 @@ describe("repository signal routing", () => {
   });
 
   it("rejects structurally fabricated handler metadata", () => {
-    const handlers = defineEntityHandlers(TaskAggregate, AggregateStateSchema, (builder) => [
+    const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
       builder.assign(AggregateStateSchema, "assignTask"),
     ]);
     const fabricated = { ...handlers } as unknown as EntityHandlersMetadata<
@@ -6038,7 +6038,7 @@ describe("repository signal routing", () => {
 });
 
 function createRoutingRepository(): Repository<typeof TaskAggregate> {
-  const handlers = defineEntityHandlers(TaskAggregate, AggregateStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
     builder.react(ProjectionStateSchema, "reactToProjection"),
   ]);
@@ -6051,7 +6051,7 @@ function createRoutingRepository(): Repository<typeof TaskAggregate> {
 }
 
 function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskProjection> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     ExecutingTaskProjection,
     ProjectionStateSchema,
     (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
@@ -6065,9 +6065,11 @@ function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskP
 }
 
 function createManagedProjection(): Repository<typeof ManagedTaskProjection> {
-  const handlers = defineEntityHandlers(ManagedTaskProjection, ProjectionStateSchema, (builder) => [
-    builder.subscribe(ProjectionStateSchema, "subscribeTask"),
-  ]);
+  const handlers = EntityHandlers.define(
+    ManagedTaskProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+  );
 
   return new Repository({
     entityType: ManagedTaskProjection,
@@ -6079,7 +6081,7 @@ function createManagedProjection(): Repository<typeof ManagedTaskProjection> {
 function createAlternateCatchUpProjectionRepository(): Repository<
   typeof AlternateCatchUpProjection
 > {
-  const handlers = defineEntityHandlers(AlternateCatchUpProjection, TaskListSchema, (builder) => [
+  const handlers = EntityHandlers.define(AlternateCatchUpProjection, TaskListSchema, (builder) => [
     builder.subscribe(AggregateStateSchema, "subscribeAggregate"),
   ]);
 
@@ -6091,7 +6093,7 @@ function createAlternateCatchUpProjectionRepository(): Repository<
 }
 
 function createBlockingCatchUpProjectionRepository(): Repository<typeof BlockingCatchUpProjection> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     BlockingCatchUpProjection,
     ProjectionStateSchema,
     (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
@@ -6202,7 +6204,7 @@ function createContextMutatingGeneratedProjectionRepository(): Repository<
 }
 
 function createUserIdProjectionRepository(): Repository<typeof UserIdProjection> {
-  const handlers = defineEntityHandlers(UserIdProjection, ProjectionStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(UserIdProjection, ProjectionStateSchema, (builder) => [
     builder.subscribe(UserIdSchema, "subscribeUser"),
   ]);
 
@@ -6214,7 +6216,7 @@ function createUserIdProjectionRepository(): Repository<typeof UserIdProjection>
 }
 
 function createNonFiniteRouteRepository(): Repository<typeof NonFiniteRouteProjection> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     NonFiniteRouteProjection,
     ProjectionStateSchema,
     (builder) => [builder.subscribe(NumberRouteEventSchema, "subscribeNumber")],
@@ -6228,7 +6230,7 @@ function createNonFiniteRouteRepository(): Repository<typeof NonFiniteRouteProje
 }
 
 function createMessageIdTaskRepository(): Repository<typeof MessageIdTaskAggregate> {
-  const handlers = defineEntityHandlers(MessageIdTaskAggregate, TaskSchema, (builder) => [
+  const handlers = EntityHandlers.define(MessageIdTaskAggregate, TaskSchema, (builder) => [
     builder.apply(TaskCreatedSchema, "applyTaskCreated"),
     builder.apply(WrongIdRouteEventSchema, "applyWrongId"),
   ]);
@@ -6241,9 +6243,11 @@ function createMessageIdTaskRepository(): Repository<typeof MessageIdTaskAggrega
 }
 
 function createPassiveProjectionRepository(): Repository<typeof PassiveTaskProjection> {
-  const handlers = defineEntityHandlers(PassiveTaskProjection, ProjectionStateSchema, (builder) => [
-    builder.subscribe(ProjectionStateSchema, "subscribeTask"),
-  ]);
+  const handlers = EntityHandlers.define(
+    PassiveTaskProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+  );
 
   return new Repository({
     entityType: PassiveTaskProjection,
@@ -6253,7 +6257,7 @@ function createPassiveProjectionRepository(): Repository<typeof PassiveTaskProje
 }
 
 function createAccumulatingProjectionRepository(): Repository<typeof AccumulatingTaskProjection> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     AccumulatingTaskProjection,
     ProjectionStateSchema,
     (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
@@ -6267,7 +6271,7 @@ function createAccumulatingProjectionRepository(): Repository<typeof Accumulatin
 }
 
 function createReactingProjectionRepository(): Repository<typeof ReactingTaskProjection> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     ReactingTaskProjection,
     ProjectionStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
@@ -6281,9 +6285,11 @@ function createReactingProjectionRepository(): Repository<typeof ReactingTaskPro
 }
 
 function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> {
-  const handlers = defineEntityHandlers(ExecutingTaskAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
-  ]);
+  const handlers = EntityHandlers.define(
+    ExecutingTaskAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+  );
 
   return new Repository({
     entityType: ExecutingTaskAggregate,
@@ -6293,7 +6299,7 @@ function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> 
 }
 
 function createManagedRepository(): Repository<typeof ManagedTaskAggregate> {
-  const handlers = defineEntityHandlers(ManagedTaskAggregate, AggregateStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(ManagedTaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
   ]);
 
@@ -6306,7 +6312,7 @@ function createManagedRepository(): Repository<typeof ManagedTaskAggregate> {
 }
 
 function createMessageIdRejectingRepository(): Repository<typeof MessageIdRejectingAggregate> {
-  const handlers = defineEntityHandlers(MessageIdRejectingAggregate, TaskSchema, (builder) => [
+  const handlers = EntityHandlers.define(MessageIdRejectingAggregate, TaskSchema, (builder) => [
     builder.assign(TaskSchema, "assignTask"),
   ]);
 
@@ -6377,7 +6383,7 @@ function createGeneratedReactorRepository(
 }
 
 function createGuardedAggregateRepository(): Repository<typeof GuardedAggregate> {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     GuardedAggregate,
     AggregateStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactProjection")],
@@ -6400,7 +6406,7 @@ function createGuardedAggregateRepository(): Repository<typeof GuardedAggregate>
 }
 
 function createProducingGuardedAggregateRepository(): Repository<typeof ProducingGuardedAggregate> {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     ProducingGuardedAggregate,
     AggregateStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactProjection")],
@@ -6463,7 +6469,7 @@ function createGeneratedCommandingRepository(): Repository<typeof GeneratedComma
 }
 
 function createMultiManagedRepository(): Repository<typeof MultiManagedAggregate> {
-  const handlers = defineEntityHandlers(MultiManagedAggregate, AggregateStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(MultiManagedAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
   ]);
 
@@ -6476,7 +6482,7 @@ function createMultiManagedRepository(): Repository<typeof MultiManagedAggregate
 }
 
 function createEmptyManagedRepository(): Repository<typeof EmptyManagedAggregate> {
-  const handlers = defineEntityHandlers(EmptyManagedAggregate, AggregateStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(EmptyManagedAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
   ]);
 
@@ -6489,7 +6495,7 @@ function createEmptyManagedRepository(): Repository<typeof EmptyManagedAggregate
 }
 
 function createEnvelopeManagedRepository(): Repository<typeof EnvelopeManagedAggregate> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     EnvelopeManagedAggregate,
     AggregateStateSchema,
     (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
@@ -6504,7 +6510,7 @@ function createEnvelopeManagedRepository(): Repository<typeof EnvelopeManagedAgg
 }
 
 function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     ValidatingTaskAggregate,
     ValidatedAggregateStateSchema,
     (builder) => [
@@ -6521,7 +6527,7 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
 }
 
 function createValidatingProcessManagerRepository(): Repository<typeof ValidatingProcessManager> {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     ValidatingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
@@ -6543,7 +6549,7 @@ function createValidatingProcessManagerRepository(): Repository<typeof Validatin
 }
 
 function createTransitionViolatingRepository(): Repository<typeof TransitionViolatingAggregate> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     TransitionViolatingAggregate,
     AggregateStateSchema,
     (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
@@ -6557,7 +6563,7 @@ function createTransitionViolatingRepository(): Repository<typeof TransitionViol
 }
 
 function createRecoveringTransitionRepository(): Repository<typeof RecoveringTransitionAggregate> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     RecoveringTransitionAggregate,
     AggregateStateSchema,
     (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
@@ -6571,9 +6577,11 @@ function createRecoveringTransitionRepository(): Repository<typeof RecoveringTra
 }
 
 function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggregate> {
-  const handlers = defineEntityHandlers(AsyncAssigneeAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
-  ]);
+  const handlers = EntityHandlers.define(
+    AsyncAssigneeAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+  );
 
   return new Repository({
     entityType: AsyncAssigneeAggregate,
@@ -6583,10 +6591,14 @@ function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggrega
 }
 
 function createBigintVersionRepository(): Repository<typeof BigintVersionAggregate> {
-  const handlers = defineEntityHandlers(BigintVersionAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
-    builder.apply(AggregateStateSchema, "applyTask"),
-  ]);
+  const handlers = EntityHandlers.define(
+    BigintVersionAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
 
   return new Repository({
     entityType: BigintVersionAggregate,
@@ -6596,7 +6608,7 @@ function createBigintVersionRepository(): Repository<typeof BigintVersionAggrega
 }
 
 function createProjectionProducingRepository(): Repository<typeof ProjectionProducingAggregate> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     ProjectionProducingAggregate,
     AggregateStateSchema,
     (builder) => [
@@ -6615,7 +6627,7 @@ function createProjectionProducingRepository(): Repository<typeof ProjectionProd
 function createTenantProjectionRepo(): Repository<
   typeof CommandTenantProjectionProducingAggregate
 > {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     CommandTenantProjectionProducingAggregate,
     AggregateStateSchema,
     (builder) => [
@@ -6632,7 +6644,7 @@ function createTenantProjectionRepo(): Repository<
 }
 
 function createProcessManagerAssignRepository(): Repository<typeof RoutingProcessManager> {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
@@ -6654,7 +6666,7 @@ function createProcessManagerAssignRepository(): Repository<typeof RoutingProces
 }
 
 function createProcessManagerReactRepository(): Repository<typeof RoutingProcessManager> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
@@ -6670,7 +6682,7 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
 function createGuardedProcessManagerReactRepository(
   depth = 100,
 ): Repository<typeof RoutingProcessManager> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
@@ -6686,7 +6698,7 @@ function createGuardedProcessManagerReactRepository(
 }
 
 function createInboxCheckRepo(): Repository<typeof InboxCheckingProcessManager> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     InboxCheckingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
@@ -6700,7 +6712,7 @@ function createInboxCheckRepo(): Repository<typeof InboxCheckingProcessManager> 
 }
 
 function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     BlockingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
@@ -6714,7 +6726,7 @@ function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
 }
 
 function createGuardedBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     BlockingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
@@ -6730,7 +6742,7 @@ function createGuardedBlockingPmRepo(): Repository<typeof BlockingProcessManager
 }
 
 function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     SplitRouteProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
@@ -6744,7 +6756,7 @@ function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
 }
 
 function createGuardedSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     SplitRouteProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
@@ -6759,7 +6771,7 @@ function createGuardedSplitPmRepo(): Repository<typeof SplitRouteProcessManager>
 }
 
 function createProcessManagerEventRepository(): Repository<typeof RoutingProcessManager> {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [
@@ -6789,7 +6801,7 @@ function createProcessManagerEventRepository(): Repository<typeof RoutingProcess
 }
 
 function createProcessManagerEventProducingRepository(): Repository<typeof RoutingProcessManager> {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTaskWithEvent")],
@@ -6811,7 +6823,7 @@ function createProcessManagerEventProducingRepository(): Repository<typeof Routi
 }
 
 function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingProcessManager> {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.command(ProjectionStateSchema, "commandTask")],
@@ -6835,7 +6847,7 @@ function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingP
 function createGuardedProcessManagerCommandOnlyRepository(): Repository<
   typeof RoutingProcessManager
 > {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.command(ProjectionStateSchema, "commandTask")],
@@ -6859,7 +6871,7 @@ function createGuardedProcessManagerCommandOnlyRepository(): Repository<
 }
 
 function createProcessManagerMixedEventRepository(): Repository<typeof RoutingProcessManager> {
-  const handlers = handlerMetadataAccess.defineArity(
+  const handlers = HandlerMetadataValues.defineArity(
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [
@@ -6890,7 +6902,7 @@ function createProcessManagerMixedEventRepository(): Repository<typeof RoutingPr
 }
 
 function createMissingSubscriberRepo(): Repository<typeof MissingSubscriberMethodProjection> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     MissingSubscriberMethodProjection,
     ProjectionStateSchema,
     (builder) => [builder.subscribe(ProjectionStateSchema, "missingSubscriber")],
@@ -6904,7 +6916,7 @@ function createMissingSubscriberRepo(): Repository<typeof MissingSubscriberMetho
 }
 
 function createThrowingProjectionRepository(): Repository<typeof ThrowingTaskProjection> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     ThrowingTaskProjection,
     ProjectionStateSchema,
     (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
@@ -6918,7 +6930,7 @@ function createThrowingProjectionRepository(): Repository<typeof ThrowingTaskPro
 }
 
 function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
-  const handlers = defineEntityHandlers(NoApplierAggregate, AggregateStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(NoApplierAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
     builder.react(AggregateStateSchema, "reactTask"),
   ]);
@@ -6932,7 +6944,7 @@ function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
 }
 
 function createMalformedEventRepository(): Repository<typeof MalformedEventAggregate> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     MalformedEventAggregate,
     AggregateStateSchema,
     (builder) => [

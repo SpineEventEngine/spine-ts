@@ -41,6 +41,10 @@ export class CommandBus {
   #acceptedWorkCount = 0;
   #closed: Promise<void> | undefined;
 
+  /** Creates a bus and registers its initial dispatchers.
+   *
+   * @param dispatchers the dispatchers to register.
+   */
   constructor(dispatchers: Iterable<CommandDispatcher> = []) {
     this.#started = this.#runtime.start();
     internalCommandPosters.set(this, (command) => this.#postInternal(command));
@@ -56,15 +60,28 @@ export class CommandBus {
     }
   }
 
+  /** Registers a dispatcher.
+   *
+   * @param dispatcher the dispatcher to register.
+   * @returns the registered dispatcher.
+   */
   register<Dispatcher extends CommandDispatcher>(dispatcher: Dispatcher): Dispatcher {
     this.#registry.register(dispatcher);
     return dispatcher;
   }
 
+  /** Lists command type URLs accepted by registered dispatchers.
+   *
+   * @returns the accepted command type URLs.
+   */
   acceptedCommandTypes(): readonly string[] {
     return this.#registry.acceptedTypeUrls();
   }
 
+  /** Posts a command for asynchronous dispatch.
+   *
+   * @param command the command envelope to post.
+   */
   post(command: Command): Promise<void> {
     const accepted = clone(CommandSchema, command);
 
@@ -76,10 +93,11 @@ export class CommandBus {
   }
 
   /**
-   * Stop accepting new command work and wait for accepted work to settle.
+   * Stops accepting new command work and waits for accepted work to settle.
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
    * Runtime close failures reject the returned promise.
+   *
    */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce();
@@ -156,7 +174,10 @@ export class CommandBus {
   }
 }
 
-/** @internal Command-bus access for framework-owned produced commands and coordinated close. */
+/** Provides framework-owned command posting and coordinated close access.
+ *
+ * @internal
+ */
 export const commandBusAccess: CommandBusAccess = Object.freeze({
   postInternal(commandBus: CommandBus, command: Command): Promise<void> {
     const postInternal = internalCommandPosters.get(commandBus);

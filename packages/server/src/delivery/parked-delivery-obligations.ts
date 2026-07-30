@@ -1,15 +1,23 @@
-/** @internal Finite package-owned table for unresolved delivery obligations. */
+/** Tracks finite unresolved delivery obligations for one package. @internal */
 export class ParkedDeliveryObligations {
   readonly #configured = new Map<string, ConfiguredObligation>();
   readonly #records = new Map<string, MutableRecord>();
   #shared: ConfiguredObligation;
 
+  /**
+   * Creates a table from the bounded generation and registration obligations.
+   *
+   * @param options - Supplies the configured obligation domains.
+   */
   constructor(options: ParkedDeliveryObligationOptions) {
     for (const registration of options.registrations) {
       for (const obligation of registration.obligations) {
         this.#addConfigured({
-          key: recordKey(registrationOwner(registration.token), obligation.key),
-          owner: registrationOwner(registration.token),
+          key: ParkedObligationValues.recordKey(
+            ParkedObligationValues.registrationOwner(registration.token),
+            obligation.key,
+          ),
+          owner: ParkedObligationValues.registrationOwner(registration.token),
           obligation: obligation.key,
           units: obligation.units,
         });
@@ -17,7 +25,7 @@ export class ParkedDeliveryObligations {
     }
     for (const obligation of options.generation) {
       this.#addConfigured({
-        key: recordKey(generationOwner, obligation.key),
+        key: ParkedObligationValues.recordKey(generationOwner, obligation.key),
         owner: generationOwner,
         obligation: obligation.key,
         units: obligation.units,
@@ -28,13 +36,22 @@ export class ParkedDeliveryObligations {
       throw new Error("Parked delivery obligations require a generation obligation.");
     }
     this.#shared = Object.freeze({
-      key: recordKey(sharedOwner, "shared"),
+      key: ParkedObligationValues.recordKey(sharedOwner, "shared"),
       owner: sharedOwner,
       obligation: "shared",
       units: Object.freeze(units),
     });
   }
 
+  /**
+   * Records one unresolved obligation with its current failure cause.
+   *
+   * @param owner - Identifies the obligation owner.
+   * @param obligation - Names the configured obligation.
+   * @param units - Selects the unresolved units.
+   * @param cause - Captures the representative failure.
+   * @param occurrences - Adds the number of observed failures.
+   */
   park(
     owner: ParkedOwner,
     obligation: string,
@@ -42,37 +59,63 @@ export class ParkedDeliveryObligations {
     cause: unknown,
     occurrences = 1,
   ): void {
-    requireOccurrences(occurrences);
+    ParkedObligationValues.requireOccurrences(occurrences);
     const configured = this.#configuredObligation(owner, obligation, units);
     const record = this.#record(configured, units);
-    record.occurrences = saturatingAdd(record.occurrences, occurrences);
-    recordCauses(record, cause, units, configured.units);
+    record.occurrences = ParkedObligationValues.saturatingAdd(record.occurrences, occurrences);
+    ParkedObligationValues.recordCauses(record, cause, units, configured.units);
   }
 
+  /**
+   * Records a failed fulfillment after resolving the selected units.
+   *
+   * @param owner - Identifies the obligation owner.
+   * @param obligation - Names the configured obligation.
+   * @param units - Selects the resolved units.
+   */
   parkFulfilledFailed(owner: ParkedOwner, obligation: string, units: readonly string[]): void {
     const configured = this.#configuredObligation(owner, obligation, units);
     this.#fulfill(configured, units);
     this.#record(configured, units);
   }
 
+  /**
+   * Records a shared unresolved obligation.
+   *
+   * @param units - Selects the unresolved units.
+   * @param cause - Captures the representative failure.
+   * @param occurrences - Adds the number of observed failures.
+   */
   parkShared(units: readonly string[], cause: unknown, occurrences = 1): void {
-    requireOccurrences(occurrences);
+    ParkedObligationValues.requireOccurrences(occurrences);
     const configured = this.#configuredObligation(sharedOwner, "shared", units);
     const record = this.#record(configured, units);
-    record.occurrences = saturatingAdd(record.occurrences, occurrences);
-    recordCauses(record, cause, units, configured.units);
+    record.occurrences = ParkedObligationValues.saturatingAdd(record.occurrences, occurrences);
+    ParkedObligationValues.recordCauses(record, cause, units, configured.units);
   }
 
-  /** @internal Extend one live registration's exact configured unit domain in stable order. */
+  /**
+   * Updates one live registration's configured unit domain in stable order. @internal
+   *
+   * @param token - Identifies the registration to extend.
+   * @param obligation - Names the configured obligation.
+   * @param units - Supplies the new units.
+   */
   extendRegistration(token: string, obligation: string, units: readonly string[]): void {
-    this.#extendConfigured(registrationOwner(token), obligation, units);
+    this.#extendConfigured(ParkedObligationValues.registrationOwner(token), obligation, units);
     this.#extendConfigured(generationOwner, "generation", units);
     this.#shared = Object.freeze({
       ...this.#shared,
-      units: Object.freeze(appendUnits(this.#shared.units, units)),
+      units: Object.freeze(ParkedObligationValues.appendUnits(this.#shared.units, units)),
     });
   }
 
+  /**
+   * Returns one unreported representative cause for each selected obligation.
+   *
+   * @param selections - Select the obligation units to report.
+   * @returns The representative causes that were newly reported.
+   */
   report(selections: readonly ParkedDeliveryObligationSelection[]): readonly unknown[] {
     const selected = this.#selectedUnits(selections);
     const causes: unknown[] = [];
@@ -83,11 +126,23 @@ export class ParkedDeliveryObligations {
     return Object.freeze(causes);
   }
 
+  /**
+   * Updates selected obligation units as fulfilled.
+   *
+   * @param owner - Identifies the obligation owner.
+   * @param obligation - Names the configured obligation.
+   * @param units - Selects the fulfilled units.
+   */
   fulfilled(owner: ParkedOwner, obligation: string, units: readonly string[]): void {
     const configured = this.#configuredObligation(owner, obligation, units);
     this.#fulfill(configured, units);
   }
 
+  /**
+   * Removes a registration and reclassifies its parked obligations.
+   *
+   * @param token - Identifies the removed registration.
+   */
   removeRegistration(token: string): void {
     const plan = this.#reclassificationPlan(token);
     for (const { sourceKey } of plan) {
@@ -105,8 +160,13 @@ export class ParkedDeliveryObligations {
     }
   }
 
+  /**
+   * Returns immutable snapshots of all parked obligations.
+   *
+   * @returns The current parked obligation records.
+   */
   records(): readonly ParkedDeliveryObligationRecord[] {
-    return Object.freeze(Array.from(this.#records.values(), snapshot));
+    return Object.freeze(Array.from(this.#records.values(), ParkedObligationValues.snapshot));
   }
 
   #addConfigured(configured: ConfiguredObligation): void {
@@ -126,7 +186,7 @@ export class ParkedDeliveryObligations {
     if (units.length === 0) {
       return;
     }
-    const key = recordKey(owner, obligation);
+    const key = ParkedObligationValues.recordKey(owner, obligation);
     const existing = this.#configured.get(key);
     if (existing === undefined) {
       this.#addConfigured({ key, owner, obligation, units });
@@ -136,7 +196,7 @@ export class ParkedDeliveryObligations {
       key,
       Object.freeze({
         ...existing,
-        units: Object.freeze(appendUnits(existing.units, units)),
+        units: Object.freeze(ParkedObligationValues.appendUnits(existing.units, units)),
       }),
     );
   }
@@ -149,12 +209,15 @@ export class ParkedDeliveryObligations {
     if (
       owner.kind === "shared" &&
       obligation === "shared" &&
-      isConfiguredSubset(units, this.#shared.units)
+      ParkedObligationValues.isConfiguredSubset(units, this.#shared.units)
     ) {
       return this.#shared;
     }
-    const configured = this.#configured.get(recordKey(owner, obligation));
-    if (configured === undefined || !isConfiguredSubset(units, configured.units)) {
+    const configured = this.#configured.get(ParkedObligationValues.recordKey(owner, obligation));
+    if (
+      configured === undefined ||
+      !ParkedObligationValues.isConfiguredSubset(units, configured.units)
+    ) {
       throw new Error("Parked delivery obligation is not configured.");
     }
     return configured;
@@ -163,14 +226,17 @@ export class ParkedDeliveryObligations {
   #record(configured: ConfiguredObligation, units: readonly string[]): MutableRecord {
     const existing = this.#records.get(configured.key);
     if (existing !== undefined) {
-      existing.units = orderUnits([...existing.units, ...units], configured.units);
+      existing.units = ParkedObligationValues.orderUnits(
+        [...existing.units, ...units],
+        configured.units,
+      );
       return existing;
     }
     const record: MutableRecord = {
       key: configured.key,
       owner: configured.owner,
       obligation: configured.obligation,
-      units: orderUnits(units, configured.units),
+      units: ParkedObligationValues.orderUnits(units, configured.units),
       occurrences: 0,
       causes: new Map(),
       reportedSinceResolution: false,
@@ -222,7 +288,11 @@ export class ParkedDeliveryObligations {
     if (record === undefined || selected === undefined) {
       return;
     }
-    const representative = reportableCause(record, configured.units, selected);
+    const representative = ParkedObligationValues.reportableCause(
+      record,
+      configured.units,
+      selected,
+    );
     if (representative === undefined) {
       return;
     }
@@ -260,13 +330,18 @@ export class ParkedDeliveryObligations {
     }
     return generation.flatMap((configured) => {
       const units = grouped.get(configured.key);
-      return units === undefined ? [] : [{ configured, source: reclassifiedSource(source, units) }];
+      return units === undefined
+        ? []
+        : [{ configured, source: ParkedObligationValues.reclassifiedSource(source, units) }];
     });
   }
 
   #coalesce(destination: ConfiguredObligation, source: MutableRecord): void {
     const target = this.#record(destination, source.units);
-    target.occurrences = saturatingAdd(target.occurrences, source.occurrences);
+    target.occurrences = ParkedObligationValues.saturatingAdd(
+      target.occurrences,
+      source.occurrences,
+    );
     target.reportedSinceResolution ||= source.reportedSinceResolution;
     for (const [unit, evidence] of source.causes) {
       const existing = target.causes.get(unit);
@@ -277,42 +352,67 @@ export class ParkedDeliveryObligations {
   }
 }
 
-/** @internal Truthful owner for a canonical parked delivery obligation. */
+/** Identifies the owner of a canonical parked delivery obligation. @internal */
 export type ParkedOwner =
-  | { readonly kind: "generation" }
-  | { readonly kind: "registration"; readonly token: string }
-  | { readonly kind: "shared" };
+  | {
+      /** Identifies generation-owned obligations. */
+      readonly kind: "generation";
+    }
+  | {
+      /** Identifies registration-owned obligations. */
+      readonly kind: "registration";
+      /** Identifies the owning registration. */
+      readonly token: string;
+    }
+  | {
+      /** Identifies obligations shared by all registrations. */
+      readonly kind: "shared";
+    };
 
-/** @internal One configured canonical obligation. */
+/** Describes one configured canonical obligation. @internal */
 export interface ParkedConfiguredObligation {
+  /** Identifies the configured obligation. */
   readonly key: string;
+  /** Lists its bounded eligible units. */
   readonly units: readonly string[];
 }
 
-/** @internal Configuration used to bound parked delivery records. */
+/** Defines configuration that bounds parked delivery records. @internal */
 export interface ParkedDeliveryObligationOptions {
+  /** Supplies live registration obligation domains. */
   readonly registrations: readonly {
     readonly token: string;
     readonly obligations: readonly ParkedConfiguredObligation[];
   }[];
+  /** Supplies the generation obligation domain. */
   readonly generation: readonly ParkedConfiguredObligation[];
 }
 
-/** @internal Exact package-local record units eligible for reporting. */
+/** Selects package-local record units eligible for reporting. @internal */
 export interface ParkedDeliveryObligationSelection {
+  /** Identifies the selected owner. */
   readonly owner: ParkedOwner;
+  /** Names the selected obligation. */
   readonly obligation: string;
+  /** Selects reportable units. */
   readonly units: readonly string[];
 }
 
-/** @internal Immutable inspection result for package-local lifecycle consumers. */
+/** Describes an immutable inspection result for lifecycle consumers. @internal */
 export interface ParkedDeliveryObligationRecord {
+  /** Identifies the record owner. */
   readonly owner: ParkedOwner;
+  /** Names the unresolved obligation. */
   readonly obligation: string;
+  /** Lists its unresolved units. */
   readonly units: readonly string[];
+  /** Holds one representative failure cause. */
   readonly cause: unknown;
+  /** States whether a representative cause is present. */
   readonly hasCause: boolean;
+  /** Counts observed failures without overflow. */
   readonly occurrences: number;
+  /** States whether a cause was reported since its latest resolution. */
   readonly reportedSinceResolution: boolean;
 }
 
@@ -348,114 +448,116 @@ interface ReclassificationDestination {
 const generationOwner = Object.freeze({ kind: "generation" } as const);
 const sharedOwner = Object.freeze({ kind: "shared" } as const);
 
-function registrationOwner(token: string): ParkedOwner {
-  return Object.freeze({ kind: "registration", token });
-}
+const ParkedObligationValues = Object.freeze({
+  registrationOwner(token: string): ParkedOwner {
+    return Object.freeze({ kind: "registration", token });
+  },
 
-function recordKey(owner: ParkedOwner, obligation: string): string {
-  return JSON.stringify([
-    owner.kind,
-    owner.kind === "registration" ? owner.token : null,
-    obligation,
-  ]);
-}
+  recordKey(owner: ParkedOwner, obligation: string): string {
+    return JSON.stringify([
+      owner.kind,
+      owner.kind === "registration" ? owner.token : null,
+      obligation,
+    ]);
+  },
 
-function isConfiguredSubset(units: readonly string[], configured: readonly string[]): boolean {
-  return units.length > 0 && units.every((unit) => configured.includes(unit));
-}
+  isConfiguredSubset(units: readonly string[], configured: readonly string[]): boolean {
+    return units.length > 0 && units.every((unit) => configured.includes(unit));
+  },
 
-function orderUnits(units: readonly string[], configured: readonly string[]): string[] {
-  const selected = new Set(units);
-  return configured.filter((unit) => selected.has(unit));
-}
+  orderUnits(units: readonly string[], configured: readonly string[]): string[] {
+    const selected = new Set(units);
+    return configured.filter((unit) => selected.has(unit));
+  },
 
-function appendUnits(existing: readonly string[], added: readonly string[]): string[] {
-  return Array.from(new Set([...existing, ...added]));
-}
+  appendUnits(existing: readonly string[], added: readonly string[]): string[] {
+    return Array.from(new Set([...existing, ...added]));
+  },
 
-function recordCauses(
-  record: MutableRecord,
-  cause: unknown,
-  units: readonly string[],
-  configured: readonly string[],
-): void {
-  for (const unit of orderUnits(units, configured)) {
-    const existing = record.causes.get(unit);
-    if (existing === undefined || existing.reported) {
-      record.causes.set(unit, { cause, reported: false });
+  recordCauses(
+    record: MutableRecord,
+    cause: unknown,
+    units: readonly string[],
+    configured: readonly string[],
+  ): void {
+    for (const unit of ParkedObligationValues.orderUnits(units, configured)) {
+      const existing = record.causes.get(unit);
+      if (existing === undefined || existing.reported) {
+        record.causes.set(unit, { cause, reported: false });
+      }
     }
-  }
-}
+  },
 
-function representativeCause(
-  record: MutableRecord,
-  configured: readonly string[],
-): { readonly unit: string; readonly evidence: MutableCause } | undefined {
-  for (const unit of configured) {
-    if (!record.units.includes(unit)) {
-      continue;
+  representativeCause(
+    record: MutableRecord,
+    configured: readonly string[],
+  ): { readonly unit: string; readonly evidence: MutableCause } | undefined {
+    for (const unit of configured) {
+      if (!record.units.includes(unit)) {
+        continue;
+      }
+      const evidence = record.causes.get(unit);
+      if (evidence !== undefined) {
+        return { unit, evidence };
+      }
     }
-    const evidence = record.causes.get(unit);
-    if (evidence !== undefined) {
-      return { unit, evidence };
+    return undefined;
+  },
+
+  reportableCause(
+    record: MutableRecord,
+    configured: readonly string[],
+    selected: ReadonlySet<string>,
+  ): { readonly unit: string; readonly evidence: MutableCause } | undefined {
+    for (const unit of configured) {
+      const evidence = record.causes.get(unit);
+      if (
+        record.units.includes(unit) &&
+        selected.has(unit) &&
+        evidence !== undefined &&
+        !evidence.reported
+      ) {
+        return { unit, evidence };
+      }
     }
-  }
-  return undefined;
-}
+    return undefined;
+  },
 
-function reportableCause(
-  record: MutableRecord,
-  configured: readonly string[],
-  selected: ReadonlySet<string>,
-): { readonly unit: string; readonly evidence: MutableCause } | undefined {
-  for (const unit of configured) {
-    const evidence = record.causes.get(unit);
-    if (
-      record.units.includes(unit) &&
-      selected.has(unit) &&
-      evidence !== undefined &&
-      !evidence.reported
-    ) {
-      return { unit, evidence };
+  reclassifiedSource(source: MutableRecord, units: readonly string[]): MutableRecord {
+    const selected = new Set(units);
+    return {
+      ...source,
+      units: [...units],
+      causes: new Map(
+        Array.from(source.causes)
+          .filter(([unit]) => selected.has(unit))
+          .map(([unit, evidence]) => [unit, { ...evidence }] as const),
+      ),
+    };
+  },
+
+  requireOccurrences(increment: number): void {
+    if (!Number.isSafeInteger(increment) || increment <= 0) {
+      throw new Error("Parked delivery occurrence increment must be a positive safe integer.");
     }
-  }
-  return undefined;
-}
+  },
 
-function reclassifiedSource(source: MutableRecord, units: readonly string[]): MutableRecord {
-  const selected = new Set(units);
-  return {
-    ...source,
-    units: [...units],
-    causes: new Map(
-      Array.from(source.causes)
-        .filter(([unit]) => selected.has(unit))
-        .map(([unit, evidence]) => [unit, { ...evidence }] as const),
-    ),
-  };
-}
+  saturatingAdd(current: number, increment: number): number {
+    return current >= Number.MAX_SAFE_INTEGER - increment
+      ? Number.MAX_SAFE_INTEGER
+      : current + increment;
+  },
 
-function requireOccurrences(increment: number): void {
-  if (!Number.isSafeInteger(increment) || increment <= 0) {
-    throw new Error("Parked delivery occurrence increment must be a positive safe integer.");
-  }
-}
-
-function saturatingAdd(current: number, increment: number): number {
-  return current >= Number.MAX_SAFE_INTEGER - increment
-    ? Number.MAX_SAFE_INTEGER
-    : current + increment;
-}
-
-function snapshot(record: MutableRecord): ParkedDeliveryObligationRecord {
-  const representative = representativeCause(record, record.units);
-  return Object.freeze({
-    owner: record.owner,
-    obligation: record.obligation,
-    units: Object.freeze([...record.units]),
-    cause: representative?.evidence.cause,
-    hasCause: representative !== undefined,
-    occurrences: record.occurrences,
-    reportedSinceResolution: record.reportedSinceResolution,
-  });
-}
+  snapshot(record: MutableRecord): ParkedDeliveryObligationRecord {
+    const representative = ParkedObligationValues.representativeCause(record, record.units);
+    return Object.freeze({
+      owner: record.owner,
+      obligation: record.obligation,
+      units: Object.freeze([...record.units]),
+      cause: representative?.evidence.cause,
+      hasCause: representative !== undefined,
+      occurrences: record.occurrences,
+      reportedSinceResolution: record.reportedSinceResolution,
+    });
+  },
+});

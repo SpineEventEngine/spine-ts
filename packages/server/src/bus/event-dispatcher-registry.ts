@@ -8,12 +8,16 @@ export class EventDispatcherRegistry {
   readonly #byTypeUrl = new Map<string, EventDispatcher[]>();
   readonly #schemasByTypeUrl = new Map<string, MessageSchema>();
 
+  /** Registers a dispatcher and all of its distinct event schemas.
+   *
+   * @param dispatcher the dispatcher to register.
+   */
   register(dispatcher: EventDispatcher): void {
     if (this.#dispatchers.has(dispatcher)) {
       return;
     }
 
-    const registrations = collectRegistrations(dispatcher);
+    const registrations = EventDispatcherRegistry.#registrations(dispatcher);
 
     if (this.#dispatchers.has(dispatcher)) {
       return;
@@ -34,29 +38,37 @@ export class EventDispatcherRegistry {
     }
   }
 
+  /** Finds dispatchers registered for a canonical event type URL.
+   *
+   * @param typeUrl the canonical event type URL.
+   * @returns a frozen dispatcher snapshot.
+   */
   find(typeUrl: string): readonly EventDispatcher[] {
     return Object.freeze([...(this.#byTypeUrl.get(typeUrl) ?? [])]);
   }
 
+  /** Lists event schemas represented by registered dispatchers.
+   *
+   * @returns the registered schemas.
+   */
   schemas(): readonly MessageSchema[] {
     return Object.freeze([...this.#schemasByTypeUrl.values()]);
   }
-}
+  static #registrations(dispatcher: EventDispatcher): readonly EventDispatcherRegistration[] {
+    const registrations: EventDispatcherRegistration[] = [];
+    const seen = new Set<string>();
 
-function collectRegistrations(dispatcher: EventDispatcher): readonly EventDispatcherRegistration[] {
-  const registrations: EventDispatcherRegistration[] = [];
-  const seen = new Set<string>();
+    for (const schema of dispatcher.messageSchemas()) {
+      const typeUrl = TypeUrls.derive(schema);
 
-  for (const schema of dispatcher.messageSchemas()) {
-    const typeUrl = TypeUrls.derive(schema);
-
-    if (!seen.has(typeUrl)) {
-      seen.add(typeUrl);
-      registrations.push({ schema, typeUrl });
+      if (!seen.has(typeUrl)) {
+        seen.add(typeUrl);
+        registrations.push({ schema, typeUrl });
+      }
     }
-  }
 
-  return Object.freeze(registrations);
+    return Object.freeze(registrations);
+  }
 }
 
 interface EventDispatcherRegistration {

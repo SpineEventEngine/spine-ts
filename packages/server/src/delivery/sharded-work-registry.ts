@@ -10,7 +10,7 @@ import {
 } from "@spine-event-engine/storage";
 
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
-import { requireDeliveryLeaseMs } from "./delivery-lease.js";
+import { DeliveryLeases } from "./delivery-lease.js";
 import { ShardIndex } from "./shard-index.js";
 
 const casRetryLimit = 8;
@@ -31,11 +31,15 @@ export class ShardedWorkRegistry {
   readonly #now: () => Date;
   readonly #storageFactory: StorageFactory;
 
-  /** Open a shard registry over one storage context. */
+  /**
+   * Opens a shard registry over one storage context.
+   *
+   * @param options - Supplies durable storage, lease bounds, and an optional clock.
+   */
   constructor(options: ShardedWorkRegistryOptions) {
-    this.#context = copyStorageContext(options.context);
+    this.#context = ShardRegistryValues.copyStorageContext(options.context);
     this.#storageFactory = options.storageFactory;
-    this.#leaseMs = requireDeliveryLeaseMs(
+    this.#leaseMs = DeliveryLeases.requireMs(
       "ShardedWorkRegistry",
       options.leaseMs ?? defaultShardLeaseMs,
     );
@@ -48,22 +52,28 @@ export class ShardedWorkRegistry {
   }
 
   /**
-   * Pick up one shard if it is free or expired.
+   * Acquires one shard if it is free or expired.
    *
    * Invalid caller shard, node, and clock values throw before storage access.
+   *
+   * @param shard - Selects the shard to acquire.
+   * @param node - Identifies the worker acquiring the shard.
+   * @returns The leased session, when the shard is available.
    */
   async pickUp(shard: ShardIndex, node: string): Promise<ShardSession | undefined> {
-    const nextShard = requireInputShard(shard, "Shard index");
-    const nextNode = requireInputText(node, "Shard node", maxSessionTextBytes);
-    let now = requireInputTime(this.#now(), "Shard pickup time");
+    const nextShard = ShardRegistryValues.requireInputShard(shard, "Shard index");
+    const nextNode = ShardRegistryValues.requireInputText(node, "Shard node", maxSessionTextBytes);
+    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard pickup time");
     const storage = this.#storage();
 
     try {
       for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await readShardRecord(storage, nextShard.key());
+        const currentRecord = await ShardRegistryValues.readShardRecord(storage, nextShard.key());
         const current =
-          currentRecord === undefined ? undefined : readSession(currentRecord, nextShard.key());
-        now = requireInputTime(this.#now(), "Shard pickup time");
+          currentRecord === undefined
+            ? undefined
+            : ShardRegistryValues.readSession(currentRecord, nextShard.key());
+        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard pickup time");
         if (current !== undefined && current.expiresAt.getTime() > now) {
           return undefined;
         }
@@ -75,35 +85,45 @@ export class ShardedWorkRegistry {
           new Date(now),
           new Date(now + this.#leaseMs),
         );
-        const nextRecord = writeSession(next);
-        const claimed = await casShardRecord(storage, nextShard.key(), currentRecord, nextRecord);
+        const nextRecord = ShardRegistryValues.writeSession(next);
+        const claimed = await ShardRegistryValues.casShardRecord(
+          storage,
+          nextShard.key(),
+          currentRecord,
+          nextRecord,
+        );
 
         if (claimed) {
           return next;
         }
       }
 
-      throw casRetriesExhausted("Shard pickup");
+      throw ShardRegistryValues.casRetriesExhausted("Shard pickup");
     } finally {
       storage.close();
     }
   }
 
-  /** Renew one shard session if it is still current. */
+  /**
+   * Updates one shard session when it remains current.
+   *
+   * @param session - Supplies the current shard session.
+   * @returns The renewed session, when the lease fence remains valid.
+   */
   async renew(session: ShardSession): Promise<ShardSession | undefined> {
-    const expected = snapshotSessionClaim(session);
-    let now = requireInputTime(this.#now(), "Shard renewal time");
+    const expected = ShardRegistryValues.snapshotSessionClaim(session);
+    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard renewal time");
     const storage = this.#storage();
 
     try {
       for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await readShardRecord(storage, expected.key);
+        const currentRecord = await ShardRegistryValues.readShardRecord(storage, expected.key);
         if (currentRecord === undefined) {
           return undefined;
         }
 
-        const current = readSession(currentRecord, expected.key);
-        now = requireInputTime(this.#now(), "Shard renewal time");
+        const current = ShardRegistryValues.readSession(currentRecord, expected.key);
+        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard renewal time");
         if (current.id !== expected.id || current.node !== expected.node) {
           return undefined;
         }
@@ -118,32 +138,44 @@ export class ShardedWorkRegistry {
           current.pickedUpAt,
           new Date(now + this.#leaseMs),
         );
-        if (await casShardRecord(storage, expected.key, currentRecord, writeSession(next))) {
+        if (
+          await ShardRegistryValues.casShardRecord(
+            storage,
+            expected.key,
+            currentRecord,
+            ShardRegistryValues.writeSession(next),
+          )
+        ) {
           return next;
         }
       }
 
-      throw casRetriesExhausted("Shard renewal");
+      throw ShardRegistryValues.casRetriesExhausted("Shard renewal");
     } finally {
       storage.close();
     }
   }
 
-  /** Release one shard session if it is still current. */
+  /**
+   * Removes one shard session when it remains current.
+   *
+   * @param session - Supplies the current shard session.
+   * @returns Whether the session was released.
+   */
   async release(session: ShardSession): Promise<boolean> {
-    const expected = snapshotSessionClaim(session);
-    let now = requireInputTime(this.#now(), "Shard release time");
+    const expected = ShardRegistryValues.snapshotSessionClaim(session);
+    let now = ShardRegistryValues.requireInputTime(this.#now(), "Shard release time");
     const storage = this.#storage();
 
     try {
       for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
-        const currentRecord = await readShardRecord(storage, expected.key);
+        const currentRecord = await ShardRegistryValues.readShardRecord(storage, expected.key);
         if (currentRecord === undefined) {
           return false;
         }
 
-        const current = readSession(currentRecord, expected.key);
-        now = requireInputTime(this.#now(), "Shard release time");
+        const current = ShardRegistryValues.readSession(currentRecord, expected.key);
+        now = ShardRegistryValues.requireInputTime(this.#now(), "Shard release time");
         if (current.id !== expected.id || current.node !== expected.node) {
           return false;
         }
@@ -151,12 +183,14 @@ export class ShardedWorkRegistry {
           return false;
         }
 
-        if (await casShardRecord(storage, expected.key, currentRecord, undefined)) {
+        if (
+          await ShardRegistryValues.casShardRecord(storage, expected.key, currentRecord, undefined)
+        ) {
           return true;
         }
       }
 
-      throw casRetriesExhausted("Shard release");
+      throw ShardRegistryValues.casRetriesExhausted("Shard release");
     } finally {
       storage.close();
     }
@@ -164,7 +198,7 @@ export class ShardedWorkRegistry {
 
   #storage(): RecordStorage<string, Any> {
     return this.#storageFactory.createRecordStorage(
-      shardRegistryContext(this.#context),
+      ShardRegistryValues.shardRegistryContext(this.#context),
       shardSessionRecordSpec,
     );
   }
@@ -174,7 +208,15 @@ export class ShardedWorkRegistry {
 export class ShardSession {
   /** This local session carries a renewable lease. */
   readonly kind = "LEASED" as const;
-  /** Create a shard session snapshot. */
+  /**
+   * Creates a shard session snapshot.
+   *
+   * @param id - Identifies this pickup session.
+   * @param shard - Identifies the held shard.
+   * @param node - Identifies the owning worker node.
+   * @param pickedUpAt - Records when the shard was acquired.
+   * @param expiresAt - Records when the lease expires.
+   */
   constructor(
     /** Unique pickup session identifier. */
     readonly id: string,
@@ -199,7 +241,11 @@ export interface ShardedWorkRegistryOptions {
   readonly storageFactory: StorageFactory;
   /** Session lease duration in milliseconds, from 1000 to 2147483647 inclusive. */
   readonly leaseMs?: number;
-  /** Optional clock used for lease expiry decisions. */
+  /**
+   * Returns the optional clock used for lease expiry decisions.
+   *
+   * @returns The current registry time.
+   */
   readonly now?: () => Date;
 }
 
@@ -218,7 +264,7 @@ interface ShardedWorkRegistryAccess {
   ): boolean;
 }
 
-/** @internal Builder-only registry storage-alignment checks. */
+/** Checks registry storage alignment for the delivery builder. @internal */
 export const shardedWorkRegistryAccess: ShardedWorkRegistryAccess = Object.freeze({
   matches(
     registry: ShardedWorkRegistry,
@@ -227,7 +273,8 @@ export const shardedWorkRegistryAccess: ShardedWorkRegistryAccess = Object.freez
   ): boolean {
     const configured = registryConfigs.get(registry);
     return (
-      configured?.storageFactory === storageFactory && sameContext(configured.context, context)
+      configured?.storageFactory === storageFactory &&
+      ShardRegistryValues.sameContext(configured.context, context)
     );
   },
 });
@@ -255,371 +302,399 @@ const shardSessionRecordSpec = new RecordSpec<string, Any>({
   schema: AnySchema,
   storageKey: "spine.delivery.ShardSession:current",
   idKind: "string",
-  extractId: (record) => readStoredSession(record).key,
+  extractId: (record) => ShardRegistryValues.readStoredSession(record).key,
 });
 
-function readSession(record: Any, expectedKey?: string): ShardSession {
-  const stored = readStoredSession(record, expectedKey);
+const ShardRegistryValues = Object.freeze({
+  readSession(record: Any, expectedKey?: string): ShardSession {
+    const stored = ShardRegistryValues.readStoredSession(record, expectedKey);
 
-  return new ShardSession(
-    stored.id,
-    new ShardIndex(stored.shardIndex, stored.shardTotal),
-    stored.node,
-    storedDate(stored.pickedUpAtMs, "Shard pickup time"),
-    storedDate(stored.expiresAtMs, "Shard expiry time"),
-  );
-}
-
-function copyStorageContext(context: StorageContext): StorageContext {
-  const tenantId = context.tenantId;
-  return Object.freeze({
-    name: context.name,
-    multitenant: context.multitenant,
-    ...(tenantId === undefined ? {} : { tenantId }),
-  });
-}
-
-function sameContext(first: StorageContext, second: StorageContext): boolean {
-  return (
-    first.name === second.name &&
-    first.multitenant === second.multitenant &&
-    first.tenantId === second.tenantId
-  );
-}
-
-function casRetriesExhausted(label: string): Error {
-  return new Error(`${label} could not be completed due to concurrent changes.`);
-}
-
-function readStoredSession(record: Any, expectedKey?: string): StoredShardSession {
-  const decoded = readSessionRecord(record);
-  const shard = readSessionShard(decoded);
-  const key = readSessionKey(decoded, shard, expectedKey);
-
-  return buildStoredSession(decoded, shard, key);
-}
-
-function readSessionRecord(record: Any): Record<string, unknown> {
-  const typeUrl = readRecordTypeUrl(record);
-  if (typeUrl !== shardSessionTypeUrl) {
-    throw new DeliveryStorageCorruptionError(
-      `Shard session record type URL "${typeUrl}" is invalid.`,
+    return new ShardSession(
+      stored.id,
+      new ShardIndex(stored.shardIndex, stored.shardTotal),
+      stored.node,
+      ShardRegistryValues.storedDate(stored.pickedUpAtMs, "Shard pickup time"),
+      ShardRegistryValues.storedDate(stored.expiresAtMs, "Shard expiry time"),
     );
-  }
+  },
 
-  const value = readStoredBytes(record);
-  if (value.byteLength > maxSessionRecordBytes) {
-    throw new DeliveryStorageCorruptionError(
-      `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be read.`,
-    );
-  }
-
-  try {
-    const decoded = JSON.parse(decodeStoredUtf8(value)) as unknown;
-    if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
-      throw new DeliveryStorageCorruptionError("Shard session record is not a JSON object.");
-    }
-
-    return decoded as Record<string, unknown>;
-  } catch (error) {
-    if (error instanceof DeliveryStorageCorruptionError) {
-      throw error;
-    }
-
-    throw new DeliveryStorageCorruptionError("Shard session record contains malformed JSON.", {
-      cause: error,
-    });
-  }
-}
-
-function readRecordTypeUrl(record: Any): string {
-  try {
-    return requireStoredText(Reflect.get(record, "typeUrl"), "Shard session record type URL");
-  } catch (error) {
-    if (error instanceof DeliveryStorageCorruptionError) {
-      throw error;
-    }
-
-    throw new DeliveryStorageCorruptionError("Shard session record type URL is invalid.", {
-      cause: error,
-    });
-  }
-}
-
-function readSessionShard(decoded: Record<string, unknown>): ShardIndex {
-  return storedShardIndex(
-    requireNumber(Reflect.get(decoded, "shardIndex"), "Shard session index"),
-    requireNumber(Reflect.get(decoded, "shardTotal"), "Shard session total"),
-    "Shard session",
-  );
-}
-
-function readSessionKey(
-  decoded: Record<string, unknown>,
-  shard: ShardIndex,
-  expectedKey?: string,
-): string {
-  const key = requireStoredText(
-    Reflect.get(decoded, "key"),
-    "Shard session key",
-    maxSessionKeyBytes,
-  );
-  if (key !== shard.key()) {
-    throw new DeliveryStorageCorruptionError("Shard session key does not match shard.");
-  }
-  if (expectedKey !== undefined && key !== expectedKey) {
-    throw new DeliveryStorageCorruptionError(
-      `Shard session "${key}" does not match storage key "${expectedKey}".`,
-    );
-  }
-
-  return key;
-}
-
-function buildStoredSession(
-  decoded: Record<string, unknown>,
-  shard: ShardIndex,
-  key: string,
-): StoredShardSession {
-  return Object.freeze({
-    key,
-    id: requireStoredText(Reflect.get(decoded, "id"), "Shard session ID", maxSessionTextBytes),
-    node: requireStoredText(
-      Reflect.get(decoded, "node"),
-      "Shard session node",
-      maxSessionTextBytes,
-    ),
-    shardIndex: shard.index,
-    shardTotal: shard.ofTotal,
-    pickedUpAtMs: requireNumber(Reflect.get(decoded, "pickedUpAtMs"), "Shard pickup time"),
-    expiresAtMs: requireNumber(Reflect.get(decoded, "expiresAtMs"), "Shard expiry time"),
-  });
-}
-
-function decodeStoredUtf8(value: Uint8Array): string {
-  try {
-    return utf8Decoder.decode(value);
-  } catch (error) {
-    throw new DeliveryStorageCorruptionError("Shard session record contains invalid UTF-8.", {
-      cause: error,
-    });
-  }
-}
-
-async function readShardRecord(
-  storage: RecordStorage<string, Any>,
-  key: string,
-): Promise<Any | undefined> {
-  try {
-    return await storage.read(key);
-  } catch (error) {
-    throw shardStorageError(error);
-  }
-}
-
-async function casShardRecord(
-  storage: RecordStorage<string, Any>,
-  key: string,
-  expected: Any | undefined,
-  next: Any | undefined,
-): Promise<boolean> {
-  try {
-    return await storage.compareAndSet(key, expected, next);
-  } catch (error) {
-    throw shardStorageError(error);
-  }
-}
-
-function shardStorageError(error: unknown): Error {
-  if (
-    error instanceof Error &&
-    (error.message === "Storage record could not be cloned." ||
-      error.message === "Storage value could not be cloned.")
-  ) {
-    return new DeliveryStorageCorruptionError("Shard session record is invalid.", {
-      cause: error,
-    });
-  }
-
-  return error instanceof Error ? error : new Error(String(error));
-}
-
-function readStoredBytes(record: Any): Uint8Array {
-  try {
-    const value = Reflect.get(record, "value") as unknown;
-    if (!(value instanceof Uint8Array)) {
-      throw new DeliveryStorageCorruptionError("Shard session record value must be a Uint8Array.");
-    }
-
-    return value;
-  } catch (error) {
-    if (error instanceof DeliveryStorageCorruptionError) {
-      throw error;
-    }
-
-    throw new DeliveryStorageCorruptionError("Shard session record value is invalid.", {
-      cause: error,
-    });
-  }
-}
-
-function storedShardIndex(index: number, total: number, label: string): ShardIndex {
-  try {
-    return new ShardIndex(index, total);
-  } catch (error) {
-    throw new DeliveryStorageCorruptionError(`${label} is invalid.`, { cause: error });
-  }
-}
-
-function shardRegistryContext(context: StorageContext): StorageContext {
-  return context.multitenant
-    ? {
-        name: `${context.name}.delivery.shards`,
-        multitenant: true,
-        ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
-      }
-    : {
-        name: `${context.name}.delivery.shards`,
-        multitenant: false,
-      };
-}
-
-function writeSession(session: ShardSession): Any {
-  const stored: StoredShardSession = {
-    key: session.shard.key(),
-    id: requireInputText(session.id, "Shard session ID", maxSessionTextBytes),
-    node: requireInputText(session.node, "Shard session node", maxSessionTextBytes),
-    shardIndex: session.shard.index,
-    shardTotal: session.shard.ofTotal,
-    pickedUpAtMs: requireInputTime(session.pickedUpAt, "Shard pickup time"),
-    expiresAtMs: requireInputTime(session.expiresAt, "Shard expiry time"),
-  };
-  const value = Buffer.from(JSON.stringify(stored), "utf8");
-
-  if (value.byteLength > maxSessionRecordBytes) {
-    throw new Error(
-      `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be stored.`,
-    );
-  }
-
-  return create(AnySchema, {
-    typeUrl: shardSessionTypeUrl,
-    value,
-  });
-}
-
-function snapshotSessionClaim(session: unknown): SessionClaim {
-  if (typeof session !== "object" || session === null) {
-    throw new Error("Shard session is invalid.");
-  }
-
-  try {
-    const shard = requireInputShard(Reflect.get(session, "shard"), "Shard session shard");
-
+  copyStorageContext(context: StorageContext): StorageContext {
+    const tenantId = context.tenantId;
     return Object.freeze({
-      key: shard.key(),
-      id: requireInputText(Reflect.get(session, "id"), "Shard session ID", maxSessionTextBytes),
-      node: requireInputText(
-        Reflect.get(session, "node"),
+      name: context.name,
+      multitenant: context.multitenant,
+      ...(tenantId === undefined ? {} : { tenantId }),
+    });
+  },
+
+  sameContext(first: StorageContext, second: StorageContext): boolean {
+    return (
+      first.name === second.name &&
+      first.multitenant === second.multitenant &&
+      first.tenantId === second.tenantId
+    );
+  },
+
+  casRetriesExhausted(label: string): Error {
+    return new Error(`${label} could not be completed due to concurrent changes.`);
+  },
+
+  readStoredSession(record: Any, expectedKey?: string): StoredShardSession {
+    const decoded = ShardRegistryValues.readSessionRecord(record);
+    const shard = ShardRegistryValues.readSessionShard(decoded);
+    const key = ShardRegistryValues.readSessionKey(decoded, shard, expectedKey);
+
+    return ShardRegistryValues.buildStoredSession(decoded, shard, key);
+  },
+
+  readSessionRecord(record: Any): Record<string, unknown> {
+    const typeUrl = ShardRegistryValues.readRecordTypeUrl(record);
+    if (typeUrl !== shardSessionTypeUrl) {
+      throw new DeliveryStorageCorruptionError(
+        `Shard session record type URL "${typeUrl}" is invalid.`,
+      );
+    }
+
+    const value = ShardRegistryValues.readStoredBytes(record);
+    if (value.byteLength > maxSessionRecordBytes) {
+      throw new DeliveryStorageCorruptionError(
+        `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be read.`,
+      );
+    }
+
+    try {
+      const decoded = JSON.parse(ShardRegistryValues.decodeStoredUtf8(value)) as unknown;
+      if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+        throw new DeliveryStorageCorruptionError("Shard session record is not a JSON object.");
+      }
+
+      return decoded as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof DeliveryStorageCorruptionError) {
+        throw error;
+      }
+
+      throw new DeliveryStorageCorruptionError("Shard session record contains malformed JSON.", {
+        cause: error,
+      });
+    }
+  },
+
+  readRecordTypeUrl(record: Any): string {
+    try {
+      return ShardRegistryValues.requireStoredText(
+        Reflect.get(record, "typeUrl"),
+        "Shard session record type URL",
+      );
+    } catch (error) {
+      if (error instanceof DeliveryStorageCorruptionError) {
+        throw error;
+      }
+
+      throw new DeliveryStorageCorruptionError("Shard session record type URL is invalid.", {
+        cause: error,
+      });
+    }
+  },
+
+  readSessionShard(decoded: Record<string, unknown>): ShardIndex {
+    return ShardRegistryValues.storedShardIndex(
+      ShardRegistryValues.requireNumber(Reflect.get(decoded, "shardIndex"), "Shard session index"),
+      ShardRegistryValues.requireNumber(Reflect.get(decoded, "shardTotal"), "Shard session total"),
+      "Shard session",
+    );
+  },
+
+  readSessionKey(
+    decoded: Record<string, unknown>,
+    shard: ShardIndex,
+    expectedKey?: string,
+  ): string {
+    const key = ShardRegistryValues.requireStoredText(
+      Reflect.get(decoded, "key"),
+      "Shard session key",
+      maxSessionKeyBytes,
+    );
+    if (key !== shard.key()) {
+      throw new DeliveryStorageCorruptionError("Shard session key does not match shard.");
+    }
+    if (expectedKey !== undefined && key !== expectedKey) {
+      throw new DeliveryStorageCorruptionError(
+        `Shard session "${key}" does not match storage key "${expectedKey}".`,
+      );
+    }
+
+    return key;
+  },
+
+  buildStoredSession(
+    decoded: Record<string, unknown>,
+    shard: ShardIndex,
+    key: string,
+  ): StoredShardSession {
+    return Object.freeze({
+      key,
+      id: ShardRegistryValues.requireStoredText(
+        Reflect.get(decoded, "id"),
+        "Shard session ID",
+        maxSessionTextBytes,
+      ),
+      node: ShardRegistryValues.requireStoredText(
+        Reflect.get(decoded, "node"),
         "Shard session node",
         maxSessionTextBytes,
       ),
+      shardIndex: shard.index,
+      shardTotal: shard.ofTotal,
+      pickedUpAtMs: ShardRegistryValues.requireNumber(
+        Reflect.get(decoded, "pickedUpAtMs"),
+        "Shard pickup time",
+      ),
+      expiresAtMs: ShardRegistryValues.requireNumber(
+        Reflect.get(decoded, "expiresAtMs"),
+        "Shard expiry time",
+      ),
     });
-  } catch (error) {
-    throw new Error("Shard session is invalid.", { cause: error });
-  }
-}
+  },
 
-function requireNumber(value: unknown, label: string): number {
-  if (!Number.isInteger(value) || !Number.isFinite(value)) {
-    throw new DeliveryStorageCorruptionError(`${label} must be a finite integer.`);
-  }
+  decodeStoredUtf8(value: Uint8Array): string {
+    try {
+      return utf8Decoder.decode(value);
+    } catch (error) {
+      throw new DeliveryStorageCorruptionError("Shard session record contains invalid UTF-8.", {
+        cause: error,
+      });
+    }
+  },
 
-  return value as number;
-}
+  async readShardRecord(
+    storage: RecordStorage<string, Any>,
+    key: string,
+  ): Promise<Any | undefined> {
+    try {
+      return await storage.read(key);
+    } catch (error) {
+      throw ShardRegistryValues.shardStorageError(error);
+    }
+  },
 
-function requireStoredText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
-  }
-  if (Buffer.byteLength(value, "utf8") > maxBytes) {
-    throw new DeliveryStorageCorruptionError(
-      `${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`,
-    );
-  }
+  async casShardRecord(
+    storage: RecordStorage<string, Any>,
+    key: string,
+    expected: Any | undefined,
+    next: Any | undefined,
+  ): Promise<boolean> {
+    try {
+      return await storage.compareAndSet(key, expected, next);
+    } catch (error) {
+      throw ShardRegistryValues.shardStorageError(error);
+    }
+  },
 
-  return value;
-}
+  shardStorageError(error: unknown): Error {
+    if (
+      error instanceof Error &&
+      (error.message === "Storage record could not be cloned." ||
+        error.message === "Storage value could not be cloned.")
+    ) {
+      return new DeliveryStorageCorruptionError("Shard session record is invalid.", {
+        cause: error,
+      });
+    }
 
-function requireInputText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${label} must be a non-empty string.`);
-  }
-  if (Buffer.byteLength(value, "utf8") > maxBytes) {
-    throw new Error(`${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`);
-  }
+    return error instanceof Error ? error : new Error(String(error));
+  },
 
-  return value;
-}
+  readStoredBytes(record: Any): Uint8Array {
+    try {
+      const value = Reflect.get(record, "value") as unknown;
+      if (!(value instanceof Uint8Array)) {
+        throw new DeliveryStorageCorruptionError(
+          "Shard session record value must be a Uint8Array.",
+        );
+      }
 
-function requireInputShard(value: unknown, label: string): ShardIndex {
-  if (typeof value !== "object" || value === null) {
-    throw new Error(`${label} is invalid.`);
-  }
+      return value;
+    } catch (error) {
+      if (error instanceof DeliveryStorageCorruptionError) {
+        throw error;
+      }
 
-  let indexValue: unknown;
-  let totalValue: unknown;
-  try {
-    indexValue = Reflect.get(value, "index");
-    totalValue = Reflect.get(value, "ofTotal");
-  } catch {
-    throw new Error(`${label} is invalid.`);
-  }
+      throw new DeliveryStorageCorruptionError("Shard session record value is invalid.", {
+        cause: error,
+      });
+    }
+  },
 
-  const index = requireInputInteger(indexValue, `${label} index`);
-  const total = requireInputInteger(totalValue, `${label} total`);
+  storedShardIndex(index: number, total: number, label: string): ShardIndex {
+    try {
+      return new ShardIndex(index, total);
+    } catch (error) {
+      throw new DeliveryStorageCorruptionError(`${label} is invalid.`, { cause: error });
+    }
+  },
 
-  try {
-    return new ShardIndex(index, total);
-  } catch (error) {
-    throw new Error(`${label} is invalid.`, { cause: error });
-  }
-}
+  shardRegistryContext(context: StorageContext): StorageContext {
+    return context.multitenant
+      ? {
+          name: `${context.name}.delivery.shards`,
+          multitenant: true,
+          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+        }
+      : {
+          name: `${context.name}.delivery.shards`,
+          multitenant: false,
+        };
+  },
 
-function requireInputInteger(value: unknown, label: string): number {
-  if (!Number.isInteger(value) || !Number.isFinite(value)) {
-    throw new Error(`${label} must be a finite integer.`);
-  }
+  writeSession(session: ShardSession): Any {
+    const stored: StoredShardSession = {
+      key: session.shard.key(),
+      id: ShardRegistryValues.requireInputText(session.id, "Shard session ID", maxSessionTextBytes),
+      node: ShardRegistryValues.requireInputText(
+        session.node,
+        "Shard session node",
+        maxSessionTextBytes,
+      ),
+      shardIndex: session.shard.index,
+      shardTotal: session.shard.ofTotal,
+      pickedUpAtMs: ShardRegistryValues.requireInputTime(session.pickedUpAt, "Shard pickup time"),
+      expiresAtMs: ShardRegistryValues.requireInputTime(session.expiresAt, "Shard expiry time"),
+    };
+    const value = Buffer.from(JSON.stringify(stored), "utf8");
 
-  return value as number;
-}
+    if (value.byteLength > maxSessionRecordBytes) {
+      throw new Error(
+        `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be stored.`,
+      );
+    }
 
-function requireInputTime(value: Date, label: string): number {
-  if (!(value instanceof Date)) {
-    throw new Error(`${label} is invalid.`);
-  }
+    return create(AnySchema, {
+      typeUrl: shardSessionTypeUrl,
+      value,
+    });
+  },
 
-  let time: number;
-  try {
-    time = value.getTime();
-  } catch (error) {
-    throw new Error(`${label} is invalid.`, { cause: error });
-  }
-  if (!Number.isFinite(time)) {
-    throw new Error(`${label} is invalid.`);
-  }
+  snapshotSessionClaim(session: unknown): SessionClaim {
+    if (typeof session !== "object" || session === null) {
+      throw new Error("Shard session is invalid.");
+    }
 
-  return time;
-}
+    try {
+      const shard = ShardRegistryValues.requireInputShard(
+        Reflect.get(session, "shard"),
+        "Shard session shard",
+      );
 
-function storedDate(value: number, label: string): Date {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
-  }
+      return Object.freeze({
+        key: shard.key(),
+        id: ShardRegistryValues.requireInputText(
+          Reflect.get(session, "id"),
+          "Shard session ID",
+          maxSessionTextBytes,
+        ),
+        node: ShardRegistryValues.requireInputText(
+          Reflect.get(session, "node"),
+          "Shard session node",
+          maxSessionTextBytes,
+        ),
+      });
+    } catch (error) {
+      throw new Error("Shard session is invalid.", { cause: error });
+    }
+  },
 
-  return date;
-}
+  requireNumber(value: unknown, label: string): number {
+    if (!Number.isInteger(value) || !Number.isFinite(value)) {
+      throw new DeliveryStorageCorruptionError(`${label} must be a finite integer.`);
+    }
+
+    return value as number;
+  },
+
+  requireStoredText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
+    }
+    if (Buffer.byteLength(value, "utf8") > maxBytes) {
+      throw new DeliveryStorageCorruptionError(
+        `${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`,
+      );
+    }
+
+    return value;
+  },
+
+  requireInputText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new Error(`${label} must be a non-empty string.`);
+    }
+    if (Buffer.byteLength(value, "utf8") > maxBytes) {
+      throw new Error(`${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`);
+    }
+
+    return value;
+  },
+
+  requireInputShard(value: unknown, label: string): ShardIndex {
+    if (typeof value !== "object" || value === null) {
+      throw new Error(`${label} is invalid.`);
+    }
+
+    let indexValue: unknown;
+    let totalValue: unknown;
+    try {
+      indexValue = Reflect.get(value, "index");
+      totalValue = Reflect.get(value, "ofTotal");
+    } catch {
+      throw new Error(`${label} is invalid.`);
+    }
+
+    const index = ShardRegistryValues.requireInputInteger(indexValue, `${label} index`);
+    const total = ShardRegistryValues.requireInputInteger(totalValue, `${label} total`);
+
+    try {
+      return new ShardIndex(index, total);
+    } catch (error) {
+      throw new Error(`${label} is invalid.`, { cause: error });
+    }
+  },
+
+  requireInputInteger(value: unknown, label: string): number {
+    if (!Number.isInteger(value) || !Number.isFinite(value)) {
+      throw new Error(`${label} must be a finite integer.`);
+    }
+
+    return value as number;
+  },
+
+  requireInputTime(value: Date, label: string): number {
+    if (!(value instanceof Date)) {
+      throw new Error(`${label} is invalid.`);
+    }
+
+    let time: number;
+    try {
+      time = value.getTime();
+    } catch (error) {
+      throw new Error(`${label} is invalid.`, { cause: error });
+    }
+    if (!Number.isFinite(time)) {
+      throw new Error(`${label} is invalid.`);
+    }
+
+    return time;
+  },
+
+  storedDate(value: number, label: string): Date {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) {
+      throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
+    }
+
+    return date;
+  },
+});
 
 const shardSessionTypeUrl = "type.spine-ts.dev/internal/ShardSessionRecord";
 const maxSessionRecordBytes = 512 * 1024;

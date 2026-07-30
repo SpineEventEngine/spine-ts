@@ -159,7 +159,7 @@ map-valued, and explicit optional `(set_once)` fields are intentionally
 unsupported in this slice, matching the JVM generation boundary; they fail
 closed with field-specific violations and no raw previous/next value leakage.
 
-`defineEntityHandlers()` is the low-level explicit metadata constructor that
+`EntityHandlers.define()` is the low-level explicit metadata constructor that
 remains public for framework tests, generated-registry ingestion, and legacy
 non-decorator migration tooling. Ordinary application code should use bare
 decorators plus generated registry assembly instead. The explicit constructor
@@ -199,7 +199,7 @@ and framework materialization state, not an application decorator form.
 `@Apply` and `materializeDecoratedEntityHandlers()` remain framework-only
 compatibility. Generated registry tooling owns ordinary schema inference from
 handler parameter and return types, keeps decorated classes compatible with
-`HandlerMetadataRegistry`, and leaves `defineEntityHandlers()` available only
+`HandlerMetadataRegistry`, and leaves `EntityHandlers.define()` available only
 for framework tests, generated-registry ingestion, and legacy non-decorator
 migration tooling. The adapter does not use legacy `emitDecoratorMetadata`,
 `reflect-metadata`, parameter decorators, or a process-wide handler registry.

@@ -9,7 +9,10 @@ import {
 import { SingleProcessServerRuntime } from "./runtime.js";
 import { createContextRoutingPlan } from "./runtime-routing.js";
 
-/** @internal Framework-owned transport intake for one built bounded context. */
+/** Opens framework-owned transport intake for one built bounded context.
+ *
+ * @internal
+ */
 export const ContextTransport: Readonly<{
   open(input: ContextTransportInput): Promise<RuntimeTransportBindingHandle>;
 }> = Object.freeze({
@@ -24,7 +27,10 @@ export const ContextTransport: Readonly<{
   },
 });
 
-/** @internal Package access to cleanup retained after a failed context transport open. */
+/** Provides access to cleanup retained after a failed context transport open.
+ *
+ * @internal
+ */
 export const contextTransportAccess: Readonly<{
   failedOpenCleanup(error: unknown): RuntimeTransportBindingHandle | undefined;
 }> = Object.freeze({
@@ -32,8 +38,13 @@ export const contextTransportAccess: Readonly<{
     runtimeTransportBindingAccess.failedOpenCleanup(error),
 });
 
-/** @internal Input for framework-owned bounded-context transport intake. */
+/** Defines input for framework-owned bounded-context transport intake.
+ *
+ * @internal
+ */
 export interface ContextTransportInput {
+  /** The built context receiving accepted envelopes. */
   readonly context: BoundedContext;
+  /** The local signal transport that delivers envelopes. */
   readonly transport: SignalTransport;
 }

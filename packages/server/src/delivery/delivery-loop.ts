@@ -1,7 +1,7 @@
 import { inboxStorageAccess } from "./inbox-storage.js";
 import {
   deliveryAccess,
-  deliveryOperationFence,
+  deliveryOperations,
   type Delivery,
   type DeliveryDrainOutcome,
   type DeliveryEpochSlice,
@@ -27,19 +27,25 @@ export class DeliveryLoop {
   readonly #completeAdmittedEmptyEpoch: boolean;
   readonly #admission = new DeliveryAdmissionSweep();
   #epoch: DeliveryEpoch | undefined;
-  #progress = loopProgress();
+  #progress = DeliveryLoopValues.progress();
   #resume: DeliveryResumeCursor | undefined;
   #stopped = false;
   #running: Promise<DeliveryLoopRun> | undefined;
 
-  /** Configure a loop for one shard and node. */
+  /**
+   * Creates a loop for one shard and node.
+   *
+   * @param options The loop configuration.
+   */
   constructor(options: DeliveryLoopOptions) {
     this.#delivery = options.delivery;
     this.#shard = options.shard;
     this.#node = options.node;
     this.#limit =
-      options.limit === undefined ? undefined : requirePositiveSafeInteger("limit", options.limit);
-    this.#maxFailures = requireBoundedInteger(
+      options.limit === undefined
+        ? undefined
+        : DeliveryLoopValues.requirePositiveInteger("limit", options.limit);
+    this.#maxFailures = DeliveryLoopValues.requireBoundedInteger(
       "maxFailures",
       options.maxFailures ?? 1,
       maxDeliveryLoopFailures,
@@ -53,15 +59,17 @@ export class DeliveryLoop {
   }
 
   /**
-   * Run one bounded step through an immutable admitted epoch until idle, skipped,
+   * Executes one bounded step through an immutable admitted epoch until idle, skipped,
    * stopped, paused, or the failure bound is reached.
+   *
+   * @returns The aggregate result for the step.
    */
   run(): Promise<DeliveryLoopRun> {
     if (this.#running !== undefined) {
       throw new Error("DeliveryLoop is already running.");
     }
     if (this.#isStopped()) {
-      return Promise.resolve(loopRun("STOPPED"));
+      return Promise.resolve(DeliveryLoopValues.run("STOPPED"));
     }
 
     const running = this.#runLoop().finally(() => {
@@ -71,12 +79,12 @@ export class DeliveryLoop {
     return running;
   }
 
-  /** Prevent future drain starts without interrupting a current `Delivery.drain()`. */
+  /** Stops future drain starts without interrupting a current `Delivery.drain()`. */
   stop(): void {
     this.#stopped = true;
   }
 
-  /** Call `stop()` and wait for the current drain, if any, to finish. */
+  /** Closes the loop after its current drain, if any, finishes. */
   async close(): Promise<void> {
     this.stop();
     await this.#running;
@@ -85,7 +93,7 @@ export class DeliveryLoop {
   async #runLoop(): Promise<DeliveryLoopRun> {
     this.#requireStorageBoundedLimit();
     const summary = new DeliveryLoopSummary();
-    const operationFence = deliveryOperationFence(this.#operation);
+    const operationFence = deliveryOperations.fence(this.#operation);
     const admission = await this.#admitEpoch(summary, operationFence);
     if (admission !== undefined) {
       return admission;
@@ -106,10 +114,10 @@ export class DeliveryLoop {
 
   async #admitEpoch(
     summary: DeliveryLoopSummary,
-    operationFence: ReturnType<typeof deliveryOperationFence>,
+    operationFence: ReturnType<typeof deliveryOperations.fence>,
   ): Promise<DeliveryLoopRun | undefined> {
     if (this.#epoch === undefined) {
-      this.#progress = loopProgress();
+      this.#progress = DeliveryLoopValues.progress();
       this.#epoch = await DeliveryEpoch.admit(
         this.#delivery,
         this.#shard,
@@ -117,10 +125,10 @@ export class DeliveryLoop {
         this.#operation,
       );
     }
-    if (this.#isStopped()) return this.#finish(summary, terminalTransition("STOPPED"));
+    if (this.#isStopped()) return this.#finish(summary, DeliveryLoopValues.terminal("STOPPED"));
     if (this.#completeAdmittedEmptyEpoch && this.#epoch.empty) {
       operationFence.requireActive();
-      return this.#finish(summary, terminalTransition("IDLE", true));
+      return this.#finish(summary, DeliveryLoopValues.terminal("IDLE", true));
     }
     return undefined;
   }
@@ -128,7 +136,7 @@ export class DeliveryLoop {
   #recordOutcome(summary: DeliveryLoopSummary, outcome: DeliveryDrainOutcome): void {
     this.#resume = outcome.resumeCursor;
     summary.add(outcome.run);
-    this.#progress = addLoopProgress(this.#progress, outcome.run);
+    this.#progress = DeliveryLoopValues.addProgress(this.#progress, outcome.run);
   }
 
   #outcomeTransition(
@@ -137,13 +145,13 @@ export class DeliveryLoop {
     resumableScanRuns: number,
   ): LoopTransition {
     if (this.#isStopped()) {
-      return terminalTransition("STOPPED");
+      return DeliveryLoopValues.terminal("STOPPED");
     }
     if (outcome.run.status === "SKIPPED") {
-      return terminalTransition("SKIPPED");
+      return DeliveryLoopValues.terminal("SKIPPED");
     }
     if (summary.failed >= this.#maxFailures && outcome.run.failed > 0) {
-      return terminalTransition("FAILED");
+      return DeliveryLoopValues.terminal("FAILED");
     }
     return outcome.epochProgress === undefined
       ? this.#availableTransition(outcome, resumableScanRuns)
@@ -158,27 +166,27 @@ export class DeliveryLoop {
     this.#epoch.advance(progress.next);
     const nextRuns = resumableScanRuns + 1;
     if (progress.complete) {
-      return terminalTransition("IDLE", true);
+      return DeliveryLoopValues.terminal("IDLE", true);
     }
     if (nextRuns >= maxResumableScanRuns) {
       this.#resume = undefined;
-      return terminalTransition("PAUSED");
+      return DeliveryLoopValues.terminal("PAUSED");
     }
-    return continueTransition(nextRuns);
+    return DeliveryLoopValues.continue(nextRuns);
   }
 
   #availableTransition(outcome: DeliveryDrainOutcome, resumableScanRuns: number): LoopTransition {
     const { run } = outcome;
     if (run.accepted !== 0 || run.delivered !== 0 || run.failed !== 0) {
-      return continueTransition(0);
+      return DeliveryLoopValues.continue(0);
     }
     if (!outcome.exhaustedSkippedScan) {
-      return terminalTransition("IDLE");
+      return DeliveryLoopValues.terminal("IDLE");
     }
     const nextRuns = resumableScanRuns + 1;
     return nextRuns >= maxResumableScanRuns
-      ? terminalTransition("PAUSED")
-      : continueTransition(nextRuns);
+      ? DeliveryLoopValues.terminal("PAUSED")
+      : DeliveryLoopValues.continue(nextRuns);
   }
 
   #finish(summary: DeliveryLoopSummary, transition: TerminalTransition): DeliveryLoopRun {
@@ -270,9 +278,9 @@ export interface DeliveryLoopOptions {
   readonly onMessage: OnDeliveryMessage;
   /** Optional operation cancellation/deadline propagated to every drain port call. */
   readonly operation?: DeliveryOperationOptions;
-  /** Optional package-owned observation after successful shard pickup. */
+  /** Observes successful shard pickup for package-owned work. */
   readonly onStarted?: () => void;
-  /** @internal Complete an admitted empty epoch without acquiring shard ownership. */
+  /** Completes an admitted empty epoch without acquiring shard ownership. */
   readonly completeAdmittedEmptyEpoch?: boolean;
 }
 
@@ -300,18 +308,30 @@ export interface DeliveryLoopRun {
   readonly failures: readonly DeliveryFailure[];
 }
 
-/** @internal Last safely completed drain evidence for the current admitted epoch. */
+/** Describes the last safely completed drain for the admitted epoch. */
 export interface DeliveryLoopProgress {
+  /** Counts completed drains. */
   readonly runs: number;
+  /** Counts examined inbox rows. */
   readonly processed: number;
+  /** Counts callback-accepted rows. */
   readonly accepted: number;
+  /** Counts durably delivered rows. */
   readonly delivered: number;
+  /** Counts failed observations. */
   readonly failed: number;
+  /** Lists retained failure facts. */
   readonly failures: readonly DeliveryFailure[];
 }
 
-/** @internal Loop evidence helpers for package-local worker coordination. */
+/** Provides package-local loop evidence access. */
 export interface DeliveryLoopAccess {
+  /**
+   * Reads the latest safe progress from a loop.
+   *
+   * @param loop The loop to inspect.
+   * @returns Its immutable progress facts.
+   */
   progress(loop: DeliveryLoop): DeliveryLoopProgress;
 }
 
@@ -321,8 +341,9 @@ interface DeliveryLoopInternals {
 
 const deliveryLoopInternals = new WeakMap<DeliveryLoop, DeliveryLoopInternals>();
 
-/** @internal Loop evidence helpers for package-local worker coordination. */
+/** Provides package-local loop evidence access. */
 export const deliveryLoopAccess: DeliveryLoopAccess = Object.freeze({
+  /** Reads the latest safe progress from a loop. */
   progress(loop: DeliveryLoop) {
     const internals = deliveryLoopInternals.get(loop);
     if (internals === undefined) {
@@ -354,7 +375,7 @@ class DeliveryLoopSummary {
   }
 
   result(status: DeliveryLoopStatus): DeliveryLoopRun {
-    return loopRun(
+    return DeliveryLoopValues.run(
       status,
       this.#runs,
       this.#processed,
@@ -375,7 +396,7 @@ class DeliveryEpoch {
     messages: readonly InboxMessage[],
     nextAdmissionAfter: InboxReadContinuation | undefined,
   ) {
-    this.#messages = Object.freeze(messages.map(epochMessageSnapshot));
+    this.#messages = Object.freeze(messages.map(DeliveryLoopValues.epochMessage));
     this.#nextAdmissionAfter = nextAdmissionAfter;
   }
 
@@ -394,7 +415,7 @@ class DeliveryEpoch {
     const last = messages.at(-1);
     const nextAdmissionAfter =
       messages.length === inboxStorageAccess.maxReadLimit && last !== undefined
-        ? epochContinuation(last)
+        ? DeliveryLoopValues.epochContinuation(last)
         : undefined;
 
     return new DeliveryEpoch(messages, nextAdmissionAfter);
@@ -453,89 +474,83 @@ class DeliveryAdmissionSweep {
   }
 }
 
-function continueTransition(resumableScanRuns: number): ContinueTransition {
-  return Object.freeze({ kind: "CONTINUE", resumableScanRuns });
-}
-
-function terminalTransition(
-  status: DeliveryLoopStatus,
-  completedEpoch = false,
-): TerminalTransition {
-  return Object.freeze({ kind: "TERMINAL", status, completedEpoch });
-}
-
-function loopRun(
-  status: DeliveryLoopStatus,
-  runs = 0,
-  processed = 0,
-  accepted = 0,
-  delivered = 0,
-  failed = 0,
-  failures: readonly DeliveryFailure[] = [],
-): DeliveryLoopRun {
-  return Object.freeze({
-    status,
-    runs,
-    processed,
-    accepted,
-    delivered,
-    failed,
-    failures: Object.freeze([...failures]),
-  });
-}
-
-function loopProgress(
-  runs = 0,
-  processed = 0,
-  accepted = 0,
-  delivered = 0,
-  failed = 0,
-  failures: readonly DeliveryFailure[] = [],
-): DeliveryLoopProgress {
-  return Object.freeze({
-    runs,
-    processed,
-    accepted,
-    delivered,
-    failed,
-    failures: Object.freeze([...failures]),
-  });
-}
-
-function addLoopProgress(progress: DeliveryLoopProgress, run: DeliveryRun): DeliveryLoopProgress {
-  return loopProgress(
-    progress.runs + 1,
-    progress.processed + run.processed,
-    progress.accepted + run.accepted,
-    progress.delivered + run.delivered,
-    progress.failed + run.failed,
-    [...progress.failures, ...run.failures],
-  );
-}
-
-function epochMessageSnapshot(message: InboxMessage): InboxMessage {
-  return InboxRecords.read(InboxRecords.write(message));
-}
-
-function epochContinuation(message: InboxMessage): InboxReadContinuation {
-  return Object.freeze({
-    messageId: message.id.value,
-    whenReceived: new Date(message.whenReceived.getTime()),
-    version: message.version,
-  });
-}
-
-function requirePositiveSafeInteger(name: "limit" | "maxFailures", value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(`DeliveryLoop ${name} must be a positive safe integer.`);
-  }
-  return value;
-}
-
-function requireBoundedInteger(name: "limit" | "maxFailures", value: number, max: number): number {
-  requirePositiveSafeInteger(name, value);
-  if (value > max) {
-    throw new Error(`DeliveryLoop ${name} must be a positive safe integer at most ${String(max)}.`);
-  }
-  return value;
-}
+/** Groups immutable loop result, snapshot, and validation operations. */
+const DeliveryLoopValues = Object.freeze({
+  continue(resumableScanRuns: number): ContinueTransition {
+    return Object.freeze({ kind: "CONTINUE", resumableScanRuns });
+  },
+  terminal(status: DeliveryLoopStatus, completedEpoch = false): TerminalTransition {
+    return Object.freeze({ kind: "TERMINAL", status, completedEpoch });
+  },
+  run(
+    status: DeliveryLoopStatus,
+    runs = 0,
+    processed = 0,
+    accepted = 0,
+    delivered = 0,
+    failed = 0,
+    failures: readonly DeliveryFailure[] = [],
+  ): DeliveryLoopRun {
+    return Object.freeze({
+      status,
+      runs,
+      processed,
+      accepted,
+      delivered,
+      failed,
+      failures: Object.freeze([...failures]),
+    });
+  },
+  progress(
+    runs = 0,
+    processed = 0,
+    accepted = 0,
+    delivered = 0,
+    failed = 0,
+    failures: readonly DeliveryFailure[] = [],
+  ): DeliveryLoopProgress {
+    return Object.freeze({
+      runs,
+      processed,
+      accepted,
+      delivered,
+      failed,
+      failures: Object.freeze([...failures]),
+    });
+  },
+  addProgress(progress: DeliveryLoopProgress, run: DeliveryRun): DeliveryLoopProgress {
+    return this.progress(
+      progress.runs + 1,
+      progress.processed + run.processed,
+      progress.accepted + run.accepted,
+      progress.delivered + run.delivered,
+      progress.failed + run.failed,
+      [...progress.failures, ...run.failures],
+    );
+  },
+  epochMessage(message: InboxMessage): InboxMessage {
+    return InboxRecords.read(InboxRecords.write(message));
+  },
+  epochContinuation(message: InboxMessage): InboxReadContinuation {
+    return Object.freeze({
+      messageId: message.id.value,
+      whenReceived: new Date(message.whenReceived.getTime()),
+      version: message.version,
+    });
+  },
+  requirePositiveInteger(name: "limit" | "maxFailures", value: number): number {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new Error(`DeliveryLoop ${name} must be a positive safe integer.`);
+    }
+    return value;
+  },
+  requireBoundedInteger(name: "limit" | "maxFailures", value: number, max: number): number {
+    this.requirePositiveInteger(name, value);
+    if (value > max) {
+      throw new Error(
+        `DeliveryLoop ${name} must be a positive safe integer at most ${String(max)}.`,
+      );
+    }
+    return value;
+  },
+});

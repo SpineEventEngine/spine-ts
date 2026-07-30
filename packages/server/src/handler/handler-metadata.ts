@@ -48,6 +48,12 @@ export class HandlerMetadataError extends Error {
   /** Stable code for callers/tests that need structured failure handling. */
   readonly code: HandlerMetadataErrorCode;
 
+  /**
+   * Creates a registration error.
+   *
+   * @param code Stable failure code.
+   * @param message Human-readable failure detail.
+   */
   constructor(code: HandlerMetadataErrorCode, message: string) {
     super(message);
     this.name = "HandlerMetadataError";
@@ -127,37 +133,68 @@ export type HandlerMetadata<
   | EventApplicationHandlerMetadata<Schema, MethodName>;
 
 /**
- * Builder passed to `defineEntityHandlers()` for typed method-name registration.
+ * Builder passed to `EntityHandlers.define()` for typed method-name registration.
  *
  * Builder methods accept the compile-time callable-name approximation, then
  * validate that the selected name is an own prototype data method.
  */
 export interface HandlerRegistrationBuilder<Instance extends object> {
-  /** Register a command assignee method. */
+  /**
+   * Registers a command assignee method.
+   *
+   * @param schema Command schema accepted by the method.
+   * @param methodName Entity method name.
+   * @returns The registered command-assignment metadata.
+   */
   assign<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
   ): CommandAssignmentHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
-  /** Register a command reactor method. */
+  /**
+   * Registers a command reactor method.
+   *
+   * @param schema Command schema accepted by the method.
+   * @param methodName Entity method name.
+   * @returns The registered command-reaction metadata.
+   */
   command<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
   ): CommandReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
-  /** Register an event subscriber method. */
+  /**
+   * Registers an event subscriber method.
+   *
+   * @param schema Event schema accepted by the method.
+   * @param methodName Entity method name.
+   * @returns The registered event-subscription metadata.
+   */
   subscribe<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
   ): EventSubscriptionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
-  /** Register an event reactor method. */
+  /**
+   * Registers an event reactor method.
+   *
+   * @param schema Event schema accepted by the method.
+   * @param methodName Entity method name.
+   * @returns The registered event-reaction metadata.
+   */
   react<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
   ): EventReactionHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 
-  /** Register an event applier method. */
+  /**
+   * Registers an event applier method.
+   *
+   * @param schema Event schema accepted by the method.
+   * @param methodName Entity method name.
+   * @param options Legacy event-application options.
+   * @returns The registered event-application metadata.
+   */
   apply<Schema extends DescriptorMessageSchema>(
     schema: Schema,
     methodName: HandlerMethodName<Instance>,
@@ -189,15 +226,21 @@ export interface EntityHandlersMetadata<
 }
 
 /** Error code for handler metadata registry validation failures. */
-export type HandlerMetadataRegistryErrorCode =
+export type HandlerRegistryErrorCode =
   "DUPLICATE_COMMAND_ASSIGNMENT" | "DUPLICATE_EVENT_APPLICATION";
 
 /** Error thrown when a caller-owned handler metadata registry rejects metadata. */
 export class HandlerMetadataRegistryError extends Error {
   /** Stable code for callers/tests that need structured failure handling. */
-  readonly code: HandlerMetadataRegistryErrorCode;
+  readonly code: HandlerRegistryErrorCode;
 
-  constructor(code: HandlerMetadataRegistryErrorCode, message: string) {
+  /**
+   * Creates a registry validation error.
+   *
+   * @param code Stable failure code.
+   * @param message Human-readable failure detail.
+   */
+  constructor(code: HandlerRegistryErrorCode, message: string) {
     super(message);
     this.name = "HandlerMetadataRegistryError";
     this.code = code;
@@ -219,28 +262,60 @@ export interface RegisteredHandlerMetadata<Handler extends HandlerMetadata = Han
 
 /** Read-only lookup surface for already registered handler metadata. */
 export interface HandlerMetadataRegistryLookup {
-  /** Return registered entity handler metadata in registration order. */
+  /**
+   * Returns registered entity handler metadata in registration order.
+   *
+   * @returns A fresh frozen metadata list.
+   */
   listEntityHandlers(): readonly EntityHandlersMetadata[];
-  /** Return all registered handler entries in registration and declaration order. */
+  /**
+   * Returns registered handler entries in registration and declaration order.
+   *
+   * @returns A fresh frozen registered-handler list.
+   */
   listHandlers(): readonly RegisteredHandlerMetadata[];
-  /** Find entity handler metadata by entity state full type name. */
-  findEntityHandlersByState(entityStateFullTypeName: string): readonly EntityHandlersMetadata[];
-  /** Find handler entries by handler role. */
+  /**
+   * Finds entity handler metadata by state type name.
+   *
+   * @param stateTypeName Fully qualified entity state type name.
+   * @returns Matching metadata in registration order.
+   */
+  findByState(stateTypeName: string): readonly EntityHandlersMetadata[];
+  /**
+   * Finds handler entries by handler role.
+   *
+   * @param kind Handler role.
+   * @returns Matching entries in registration and declaration order.
+   */
   findHandlersByKind<Kind extends HandlerKind>(
     kind: Kind,
   ): readonly RegisteredHandlerMetadata<Extract<HandlerMetadata, { readonly kind: Kind }>>[];
-  /** Find handler entries by command/event message full type name. */
-  findHandlersByMessageFullTypeName(
-    messageFullTypeName: string,
-  ): readonly RegisteredHandlerMetadata[];
-  /** Find the unique command assignment for a command message full type name. */
+  /**
+   * Finds handler entries by message type name.
+   *
+   * @param messageTypeName Fully qualified command or event type name.
+   * @returns Matching entries in registration and declaration order.
+   */
+  findByMessage(messageTypeName: string): readonly RegisteredHandlerMetadata[];
+  /**
+   * Finds the unique command assignment for a command type.
+   *
+   * @param commandTypeName Fully qualified command type name.
+   * @returns The assignment when registered.
+   */
   findCommandAssignment(
-    commandFullTypeName: string,
+    commandTypeName: string,
   ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined;
-  /** Find the unique event applier for an entity state and event message full type name. */
+  /**
+   * Finds the unique event applier for a state and event type.
+   *
+   * @param stateTypeName Fully qualified entity state type name.
+   * @param eventTypeName Fully qualified event type name.
+   * @returns The applier when registered.
+   */
   findEventApplication(
-    entityStateFullTypeName: string,
-    eventFullTypeName: string,
+    stateTypeName: string,
+    eventTypeName: string,
   ): RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined;
 }
 
@@ -260,16 +335,25 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     RegisteredHandlerMetadata<EventApplicationHandlerMetadata>
   >();
 
-  /** Create a caller-owned registry and optionally register metadata immediately. */
+  /**
+   * Creates a caller-owned registry and optionally registers metadata.
+   *
+   * @param entityHandlers Entity metadata to register in iteration order.
+   */
   constructor(entityHandlers: Iterable<EntityHandlersMetadata> = []) {
     for (const metadata of entityHandlers) {
       this.register(metadata);
     }
   }
 
-  /** Register one entity handler metadata object and return it unchanged. */
+  /**
+   * Registers one entity handler metadata object.
+   *
+   * @param metadata Entity handler metadata to register.
+   * @returns The registered metadata unchanged.
+   */
   register<Metadata extends EntityHandlersMetadata>(metadata: Metadata): Metadata {
-    const entries = metadata.handlers.map((handler) => createRegisteredHandler(metadata, handler));
+    const entries = metadata.handlers.map((handler) => this.#entry(metadata, handler));
     const commandAssignments = new Map<
       string,
       RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
@@ -282,7 +366,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     for (const entry of entries) {
       if (entry.handler.kind === "command-assignment") {
         const commandEntry = entry as RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>;
-        validateCommandAssignment(
+        this.#validateAssignment(
           commandEntry,
           this.#commandAssignments.get(entry.handler.messageFullTypeName) ??
             commandAssignments.get(entry.handler.messageFullTypeName),
@@ -292,12 +376,12 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
 
       if (entry.handler.kind === "event-application") {
         const eventEntry = entry as RegisteredHandlerMetadata<EventApplicationHandlerMetadata>;
-        const key = eventApplicationKey(
+        const key = this.#applicationKey(
           entry.entity.fullTypeName,
           entry.handler.messageFullTypeName,
         );
 
-        validateEventApplication(
+        this.#validateApplication(
           eventEntry,
           this.#eventApplications.get(key) ?? eventApplications.get(key),
         );
@@ -306,12 +390,12 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     }
 
     this.#entityHandlers.push(metadata);
-    pushMapValue(this.#byEntityState, metadata.entity.fullTypeName, metadata);
+    this.#push(this.#byEntityState, metadata.entity.fullTypeName, metadata);
 
     for (const entry of entries) {
       this.#handlerEntries.push(entry);
-      pushMapValue(this.#byKind, entry.handler.kind, entry);
-      pushMapValue(this.#byMessage, entry.handler.messageFullTypeName, entry);
+      this.#push(this.#byKind, entry.handler.kind, entry);
+      this.#push(this.#byMessage, entry.handler.messageFullTypeName, entry);
     }
 
     for (const [messageFullTypeName, entry] of commandAssignments) {
@@ -325,22 +409,40 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     return metadata;
   }
 
-  /** Return registered entity handler metadata in registration order. */
+  /**
+   * Returns registered entity handler metadata in registration order.
+   *
+   * @returns A fresh frozen metadata list.
+   */
   listEntityHandlers(): readonly EntityHandlersMetadata[] {
     return Object.freeze([...this.#entityHandlers]);
   }
 
-  /** Return all registered handler entries in registration and declaration order. */
+  /**
+   * Returns registered handler entries in registration and declaration order.
+   *
+   * @returns A fresh frozen registered-handler list.
+   */
   listHandlers(): readonly RegisteredHandlerMetadata[] {
     return Object.freeze([...this.#handlerEntries]);
   }
 
-  /** Find entity handler metadata by entity state full type name. */
-  findEntityHandlersByState(entityStateFullTypeName: string): readonly EntityHandlersMetadata[] {
-    return Object.freeze([...(this.#byEntityState.get(entityStateFullTypeName) ?? [])]);
+  /**
+   * Finds entity handler metadata by state type name.
+   *
+   * @param stateTypeName Fully qualified entity state type name.
+   * @returns Matching metadata in registration order.
+   */
+  findByState(stateTypeName: string): readonly EntityHandlersMetadata[] {
+    return Object.freeze([...(this.#byEntityState.get(stateTypeName) ?? [])]);
   }
 
-  /** Find handler entries by handler role. */
+  /**
+   * Finds handler entries by handler role.
+   *
+   * @param kind Handler role.
+   * @returns Matching entries in registration and declaration order.
+   */
   findHandlersByKind<Kind extends HandlerKind>(
     kind: Kind,
   ): readonly RegisteredHandlerMetadata<Extract<HandlerMetadata, { readonly kind: Kind }>>[] {
@@ -351,35 +453,97 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
     ]);
   }
 
-  /** Find handler entries by command/event message full type name. */
-  findHandlersByMessageFullTypeName(
-    messageFullTypeName: string,
-  ): readonly RegisteredHandlerMetadata[] {
-    return Object.freeze([...(this.#byMessage.get(messageFullTypeName) ?? [])]);
+  /**
+   * Finds handler entries by message type name.
+   *
+   * @param messageTypeName Fully qualified command or event type name.
+   * @returns Matching entries in registration and declaration order.
+   */
+  findByMessage(messageTypeName: string): readonly RegisteredHandlerMetadata[] {
+    return Object.freeze([...(this.#byMessage.get(messageTypeName) ?? [])]);
   }
 
-  /** Find the unique command assignment for a command message full type name. */
+  /**
+   * Finds the unique command assignment for a command type.
+   *
+   * @param commandTypeName Fully qualified command type name.
+   * @returns The assignment when registered.
+   */
   findCommandAssignment(
-    commandFullTypeName: string,
+    commandTypeName: string,
   ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined {
-    return this.#commandAssignments.get(commandFullTypeName);
+    return this.#commandAssignments.get(commandTypeName);
   }
 
-  /** Find the unique event applier for an entity state and event message full type name. */
+  /**
+   * Finds the unique event applier for a state and event type.
+   *
+   * @param stateTypeName Fully qualified entity state type name.
+   * @param eventTypeName Fully qualified event type name.
+   * @returns The applier when registered.
+   */
   findEventApplication(
-    entityStateFullTypeName: string,
-    eventFullTypeName: string,
+    stateTypeName: string,
+    eventTypeName: string,
   ): RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined {
-    return this.#eventApplications.get(
-      eventApplicationKey(entityStateFullTypeName, eventFullTypeName),
-    );
+    return this.#eventApplications.get(this.#applicationKey(stateTypeName, eventTypeName));
+  }
+
+  #entry(
+    entityHandlers: EntityHandlersMetadata,
+    handler: HandlerMetadata,
+  ): RegisteredHandlerMetadata {
+    return Object.freeze({
+      entityHandlers,
+      entityType: entityHandlers.entityType,
+      entity: entityHandlers.entity,
+      handler,
+    });
+  }
+
+  #validateAssignment(
+    entry: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
+    duplicate: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined,
+  ): void {
+    if (duplicate !== undefined) {
+      throw new HandlerMetadataRegistryError(
+        "DUPLICATE_COMMAND_ASSIGNMENT",
+        `Duplicate command assignment for "${entry.handler.messageFullTypeName}" declared by entity ` +
+          `"${entry.entity.fullTypeName}"; already declared by entity ` +
+          `"${duplicate.entity.fullTypeName}".`,
+      );
+    }
+  }
+
+  #validateApplication(
+    entry: RegisteredHandlerMetadata<EventApplicationHandlerMetadata>,
+    duplicate: RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined,
+  ): void {
+    if (duplicate !== undefined) {
+      throw new HandlerMetadataRegistryError(
+        "DUPLICATE_EVENT_APPLICATION",
+        `Duplicate event application for entity "${entry.entity.fullTypeName}" and event ` +
+          `"${entry.handler.messageFullTypeName}"; already declared by method ` +
+          `"${duplicate.handler.methodName}".`,
+      );
+    }
+  }
+
+  #applicationKey(stateTypeName: string, eventTypeName: string): string {
+    return `${stateTypeName}\u0000${eventTypeName}`;
+  }
+
+  #push<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
+    const values = map.get(key);
+    if (values === undefined) {
+      map.set(key, [value]);
+    } else {
+      values.push(value);
+    }
   }
 }
 
-const authenticEntityHandlers = new WeakSet<EntityHandlersMetadata>();
-const emittedSchemasByHandler = new WeakMap<HandlerMetadata, readonly DescriptorMessageSchema[]>();
-
-/** @internal Framework-owned arity override for generated handler metadata ingestion. */
+/** Framework-owned arity override for generated handler metadata ingestion. @internal */
 export interface HandlerArity {
   /** Handler role whose public arity is being preserved. */
   readonly kind: Exclude<HandlerKind, "event-application">;
@@ -391,97 +555,75 @@ export interface HandlerArity {
   readonly emittedSchemas?: readonly DescriptorMessageSchema[];
 }
 
-/**
- * Explicitly bind schemas to entity class method names without invoking handlers.
- *
- * This low-level API remains public for framework tests, generated-registry
- * ingestion, and legacy non-decorator migration tooling. Ordinary application
- * code should use bare decorators plus generated registry assembly instead.
- *
- * Handler names must identify own prototype data methods declared with normal
- * class method syntax. Registration rejects accessors, `constructor`, inherited
- * methods, and instance fields without invoking user code.
- */
-export function defineEntityHandlers<
-  Instance extends object,
-  StateSchema extends DescriptorMessageSchema,
->(
-  entityType: EntityClass<Instance>,
-  stateSchema: StateSchema,
-  define: (
-    builder: HandlerRegistrationBuilder<Instance>,
-  ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
-): EntityHandlersMetadata<Instance, StateSchema> {
-  return defineEntityHandlersCore(entityType, stateSchema, define, []);
-}
+/** Builds and validates metadata for one entity class. */
+class EntityHandlersOwner {
+  readonly #authentic = new WeakSet<EntityHandlersMetadata>();
+  readonly #emittedSchemas = new WeakMap<HandlerMetadata, readonly DescriptorMessageSchema[]>();
 
-function defineEntityHandlersCore<
-  Instance extends object,
-  StateSchema extends DescriptorMessageSchema,
->(
-  entityType: EntityClass<Instance>,
-  stateSchema: StateSchema,
-  define: (
-    builder: HandlerRegistrationBuilder<Instance>,
-  ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
-  arities: Iterable<HandlerArity>,
-): EntityHandlersMetadata<Instance, StateSchema> {
-  const builtHandlers = new WeakSet<HandlerMetadata>();
-  const builder = createHandlerRegistrationBuilder(
-    entityType,
-    builtHandlers,
-    createHandlerArityMap(arities),
-  );
-  const handlers = Object.freeze([...define(builder)]);
-  validateBuiltHandlers(handlers, builtHandlers);
-  const metadata: EntityHandlersMetadata<Instance, StateSchema> = {
-    entityType,
-    entity: describeEntityMetadata(stateSchema),
-    handlers,
-    commandAssignments: filterHandlers(handlers, "command-assignment"),
-    commandReactions: filterHandlers(handlers, "command-reaction"),
-    eventSubscriptions: filterHandlers(handlers, "event-subscription"),
-    eventReactions: filterHandlers(handlers, "event-reaction"),
-    eventApplications: filterHandlers(handlers, "event-application"),
-  };
-
-  authenticEntityHandlers.add(metadata);
-  return Object.freeze(metadata);
-}
-
-/** @internal Framework-only handler metadata authority contract. */
-export interface HandlerMetadataAccess {
-  isAuthentic(metadata: EntityHandlersMetadata): metadata is EntityHandlersMetadata;
-  emittedSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[];
-  copyEmittedSchemas(source: HandlerMetadata, target: HandlerMetadata): void;
-  defineArity<Instance extends object, StateSchema extends DescriptorMessageSchema>(
+  /**
+   * Creates handler metadata without invoking entity methods.
+   *
+   * @param entityType Entity class whose prototype owns the methods.
+   * @param stateSchema Generated schema for the entity state.
+   * @param define Callback that registers handlers with the builder.
+   * @returns Frozen metadata for the entity class.
+   */
+  define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,
     define: (
       builder: HandlerRegistrationBuilder<Instance>,
     ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
-    arities: Iterable<HandlerArity>,
-  ): EntityHandlersMetadata<Instance, StateSchema>;
-}
+  ): EntityHandlersMetadata<Instance, StateSchema> {
+    return this.#define(entityType, stateSchema, define, []);
+  }
 
-/** @internal Framework-only handler metadata authority. */
-export const handlerMetadataAccess: HandlerMetadataAccess = Object.freeze({
+  /**
+   * Checks that metadata was created by this package.
+   *
+   * @param metadata Metadata to inspect.
+   * @returns Whether the metadata is package-authentic.
+   * @internal
+   */
   isAuthentic(metadata: EntityHandlersMetadata): metadata is EntityHandlersMetadata {
-    return authenticEntityHandlers.has(metadata);
-  },
+    return this.#authentic.has(metadata);
+  }
 
+  /**
+   * Returns schemas emitted by generated handler metadata.
+   *
+   * @param handler Handler metadata to inspect.
+   * @returns Frozen emitted schemas.
+   * @internal
+   */
   emittedSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[] {
-    return Object.freeze([...(emittedSchemasByHandler.get(handler) ?? [])]);
-  },
+    return Object.freeze([...(this.#emittedSchemas.get(handler) ?? [])]);
+  }
 
+  /**
+   * Copies generated emitted-schema metadata between cloned handlers.
+   *
+   * @param source Source handler metadata.
+   * @param target Cloned target handler metadata.
+   * @internal
+   */
   copyEmittedSchemas(source: HandlerMetadata, target: HandlerMetadata): void {
-    const emittedSchemas = emittedSchemasByHandler.get(source);
-
-    if (emittedSchemas !== undefined) {
-      emittedSchemasByHandler.set(target, Object.freeze([...emittedSchemas]));
+    const schemas = this.#emittedSchemas.get(source);
+    if (schemas !== undefined) {
+      this.#emittedSchemas.set(target, Object.freeze([...schemas]));
     }
-  },
+  }
 
+  /**
+   * Creates handler metadata using generated arity metadata.
+   *
+   * @param entityType Entity class whose prototype owns the methods.
+   * @param stateSchema Generated schema for the entity state.
+   * @param define Callback that registers handlers with the builder.
+   * @param arities Generated arity metadata.
+   * @returns Frozen metadata for the entity class.
+   * @internal
+   */
   defineArity<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,
@@ -490,223 +632,214 @@ export const handlerMetadataAccess: HandlerMetadataAccess = Object.freeze({
     ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
     arities: Iterable<HandlerArity>,
   ): EntityHandlersMetadata<Instance, StateSchema> {
-    return defineEntityHandlersCore(entityType, stateSchema, define, arities);
-  },
-});
-
-function createHandlerRegistrationBuilder<Instance extends object>(
-  entityType: EntityClass<Instance>,
-  builtHandlers: WeakSet<HandlerMetadata>,
-  arities: ReadonlyMap<string, HandlerGeneratedData>,
-): HandlerRegistrationBuilder<Instance> {
-  return Object.freeze({
-    assign: <Schema extends DescriptorMessageSchema>(
-      schema: Schema,
-      methodName: HandlerMethodName<Instance>,
-    ) =>
-      createHandler(entityType, "command-assignment", schema, methodName, builtHandlers, arities),
-    command: <Schema extends DescriptorMessageSchema>(
-      schema: Schema,
-      methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "command-reaction", schema, methodName, builtHandlers, arities),
-    subscribe: <Schema extends DescriptorMessageSchema>(
-      schema: Schema,
-      methodName: HandlerMethodName<Instance>,
-    ) =>
-      createHandler(entityType, "event-subscription", schema, methodName, builtHandlers, arities),
-    react: <Schema extends DescriptorMessageSchema>(
-      schema: Schema,
-      methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "event-reaction", schema, methodName, builtHandlers, arities),
-    apply: <Schema extends DescriptorMessageSchema>(
-      schema: Schema,
-      methodName: HandlerMethodName<Instance>,
-      options: EventApplicationOptions = {},
-    ) => {
-      const handler: EventApplicationHandlerMetadata<
-        Schema,
-        HandlerMethodName<Instance>
-      > = Object.freeze({
-        ...createHandler(entityType, "event-application", schema, methodName, builtHandlers),
-        allowImport: options.allowImport ?? false,
-      });
-      builtHandlers.add(handler);
-      return handler;
-    },
-  });
-}
-
-function createHandler<
-  Instance extends object,
-  Kind extends Exclude<HandlerKind, "event-application"> | "event-application",
-  Schema extends DescriptorMessageSchema,
->(
-  entityType: EntityClass<Instance>,
-  kind: Kind,
-  schema: Schema,
-  methodName: HandlerMethodName<Instance>,
-  builtHandlers: WeakSet<HandlerMetadata>,
-  arities: ReadonlyMap<string, HandlerGeneratedData> = new Map(),
-): BaseHandlerMetadata<Kind, Schema, HandlerMethodName<Instance>> {
-  validateHandlerMethod(entityType, methodName);
-  const generated = arities.get(handlerArityKey(kind, methodName));
-  const parameterCount = generated?.parameterCount ?? 1;
-  const emittedSchemas = generated?.emittedSchemas;
-
-  const handler = Object.freeze({
-    kind,
-    schema,
-    descriptor: schema,
-    messageFullTypeName: schema.typeName,
-    methodName,
-    parameterCount,
-  });
-  if (emittedSchemas !== undefined) {
-    emittedSchemasByHandler.set(handler as HandlerMetadata, emittedSchemas);
+    return this.#define(entityType, stateSchema, define, arities);
   }
-  builtHandlers.add(handler as HandlerMetadata);
-  return handler;
-}
 
-function createHandlerArityMap(
-  arities: Iterable<HandlerArity>,
-): ReadonlyMap<string, HandlerGeneratedData> {
-  const byHandler = new Map<string, HandlerGeneratedData>();
+  #define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
+    entityType: EntityClass<Instance>,
+    stateSchema: StateSchema,
+    define: (
+      builder: HandlerRegistrationBuilder<Instance>,
+    ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
+    arities: Iterable<HandlerArity>,
+  ): EntityHandlersMetadata<Instance, StateSchema> {
+    const built = new WeakSet<HandlerMetadata>();
+    const builder = this.#builder(entityType, built, this.#arityMap(arities));
+    const handlers = Object.freeze([...define(builder)]);
+    this.#validateBuilt(handlers, built);
+    const metadata: EntityHandlersMetadata<Instance, StateSchema> = {
+      entityType,
+      entity: describeEntityMetadata(stateSchema),
+      handlers,
+      commandAssignments: this.#ofKind(handlers, "command-assignment"),
+      commandReactions: this.#ofKind(handlers, "command-reaction"),
+      eventSubscriptions: this.#ofKind(handlers, "event-subscription"),
+      eventReactions: this.#ofKind(handlers, "event-reaction"),
+      eventApplications: this.#ofKind(handlers, "event-application"),
+    };
+    this.#authentic.add(metadata);
+    return Object.freeze(metadata);
+  }
 
-  for (const arity of arities) {
-    byHandler.set(
-      handlerArityKey(arity.kind, arity.methodName),
-      Object.freeze({
-        parameterCount: readParameterCount(arity.parameterCount),
-        ...(arity.emittedSchemas === undefined
-          ? {}
-          : { emittedSchemas: Object.freeze([...arity.emittedSchemas]) }),
-      }),
+  #builder<Instance extends object>(
+    entityType: EntityClass<Instance>,
+    built: WeakSet<HandlerMetadata>,
+    arities: ReadonlyMap<string, HandlerGeneratedData>,
+  ): HandlerRegistrationBuilder<Instance> {
+    return Object.freeze({
+      assign: <Schema extends DescriptorMessageSchema>(
+        schema: Schema,
+        methodName: HandlerMethodName<Instance>,
+      ) => this.#handler(entityType, "command-assignment", schema, methodName, built, arities),
+      command: <Schema extends DescriptorMessageSchema>(
+        schema: Schema,
+        methodName: HandlerMethodName<Instance>,
+      ) => this.#handler(entityType, "command-reaction", schema, methodName, built, arities),
+      subscribe: <Schema extends DescriptorMessageSchema>(
+        schema: Schema,
+        methodName: HandlerMethodName<Instance>,
+      ) => this.#handler(entityType, "event-subscription", schema, methodName, built, arities),
+      react: <Schema extends DescriptorMessageSchema>(
+        schema: Schema,
+        methodName: HandlerMethodName<Instance>,
+      ) => this.#handler(entityType, "event-reaction", schema, methodName, built, arities),
+      apply: <Schema extends DescriptorMessageSchema>(
+        schema: Schema,
+        methodName: HandlerMethodName<Instance>,
+        options: EventApplicationOptions = {},
+      ) => {
+        const handler: EventApplicationHandlerMetadata<
+          Schema,
+          HandlerMethodName<Instance>
+        > = Object.freeze({
+          ...this.#handler(entityType, "event-application", schema, methodName, built),
+          allowImport: options.allowImport ?? false,
+        });
+        built.add(handler);
+        return handler;
+      },
+    });
+  }
+
+  #handler<
+    Instance extends object,
+    Kind extends HandlerKind,
+    Schema extends DescriptorMessageSchema,
+  >(
+    entityType: EntityClass<Instance>,
+    kind: Kind,
+    schema: Schema,
+    methodName: HandlerMethodName<Instance>,
+    built: WeakSet<HandlerMetadata>,
+    arities: ReadonlyMap<string, HandlerGeneratedData> = new Map(),
+  ): BaseHandlerMetadata<Kind, Schema, HandlerMethodName<Instance>> {
+    this.#validateMethod(entityType, methodName);
+    const generated = arities.get(this.#arityKey(kind, methodName));
+    const handler = Object.freeze({
+      kind,
+      schema,
+      descriptor: schema,
+      messageFullTypeName: schema.typeName,
+      methodName,
+      parameterCount: generated?.parameterCount ?? 1,
+    });
+    if (generated?.emittedSchemas !== undefined) {
+      this.#emittedSchemas.set(handler as HandlerMetadata, generated.emittedSchemas);
+    }
+    built.add(handler as HandlerMetadata);
+    return handler;
+  }
+
+  #arityMap(arities: Iterable<HandlerArity>): ReadonlyMap<string, HandlerGeneratedData> {
+    const result = new Map<string, HandlerGeneratedData>();
+    for (const arity of arities) {
+      result.set(
+        this.#arityKey(arity.kind, arity.methodName),
+        Object.freeze({
+          parameterCount: this.#parameterCount(arity.parameterCount),
+          ...(arity.emittedSchemas === undefined
+            ? {}
+            : { emittedSchemas: Object.freeze([...arity.emittedSchemas]) }),
+        }),
+      );
+    }
+    return result;
+  }
+
+  #parameterCount(value: unknown): HandlerParameterCount {
+    if (value === 1 || value === 2) {
+      return value;
+    }
+    throw new HandlerMetadataError(
+      "INVALID_PARAMETER_COUNT",
+      `Handler metadata declares unsupported parameter count ${String(value)}.`,
     );
   }
 
-  return byHandler;
+  #arityKey(kind: HandlerKind, methodName: string): string {
+    return `${kind}\u0000${methodName}`;
+  }
+
+  #validateBuilt(handlers: readonly HandlerMetadata[], built: WeakSet<HandlerMetadata>): void {
+    for (const handler of handlers) {
+      if (!built.has(handler)) {
+        throw new HandlerMetadataError(
+          "UNKNOWN_HANDLER_METHOD",
+          "Handler metadata must be created by the registration builder.",
+        );
+      }
+    }
+  }
+
+  #validateMethod<Instance extends object>(
+    entityType: EntityClass<Instance>,
+    methodName: HandlerMethodName<Instance>,
+  ): void {
+    const descriptor = Object.getOwnPropertyDescriptor(entityType.prototype, methodName);
+    if (
+      methodName === "constructor" ||
+      descriptor === undefined ||
+      typeof descriptor.value !== "function"
+    ) {
+      throw new HandlerMetadataError(
+        "UNKNOWN_HANDLER_METHOD",
+        `Handler method "${methodName}" must be an own prototype data method declared with ` +
+          "normal class method syntax on the registered entity prototype.",
+      );
+    }
+  }
+
+  #ofKind<Kind extends HandlerKind>(
+    handlers: readonly HandlerMetadata[],
+    kind: Kind,
+  ): readonly Extract<HandlerMetadata, { readonly kind: Kind }>[] {
+    return Object.freeze(
+      handlers.filter(
+        (handler): handler is Extract<HandlerMetadata, { readonly kind: Kind }> =>
+          handler.kind === kind,
+      ),
+    );
+  }
 }
+
+/** Internal metadata authority for handler registration, generated metadata, and cloning. @internal */
+export const HandlerMetadataValues: Readonly<EntityHandlersOwner> = Object.freeze(
+  new EntityHandlersOwner(),
+);
+
+/** Defines explicit handler metadata for one entity class. */
+interface EntityHandlerDefinitions {
+  /**
+   * Creates handler metadata without invoking entity methods.
+   *
+   * @param entityType Entity class whose prototype owns the methods.
+   * @param stateSchema Generated schema for the entity state.
+   * @param define Callback that registers handlers with the builder.
+   * @returns Frozen metadata for the entity class.
+   */
+  define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
+    entityType: EntityClass<Instance>,
+    stateSchema: StateSchema,
+    define: (
+      builder: HandlerRegistrationBuilder<Instance>,
+    ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
+  ): EntityHandlersMetadata<Instance, StateSchema>;
+}
+
+/** Defines metadata for explicitly registered entity handlers. */
+export const EntityHandlers: Readonly<EntityHandlerDefinitions> = Object.freeze({
+  define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
+    entityType: EntityClass<Instance>,
+    stateSchema: StateSchema,
+    define: (
+      builder: HandlerRegistrationBuilder<Instance>,
+    ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
+  ): EntityHandlersMetadata<Instance, StateSchema> {
+    return HandlerMetadataValues.define(entityType, stateSchema, define);
+  },
+});
 
 interface HandlerGeneratedData {
   readonly parameterCount: HandlerParameterCount;
   readonly emittedSchemas?: readonly DescriptorMessageSchema[];
-}
-
-function readParameterCount(parameterCount: unknown): HandlerParameterCount {
-  if (parameterCount === 1 || parameterCount === 2) {
-    return parameterCount;
-  }
-
-  throw new HandlerMetadataError(
-    "INVALID_PARAMETER_COUNT",
-    `Handler metadata declares unsupported parameter count ${String(parameterCount)}.`,
-  );
-}
-
-function handlerArityKey(kind: HandlerKind, methodName: string): string {
-  return `${kind}\u0000${methodName}`;
-}
-
-function validateBuiltHandlers(
-  handlers: readonly HandlerMetadata[],
-  builtHandlers: WeakSet<HandlerMetadata>,
-): void {
-  for (const handler of handlers) {
-    if (!builtHandlers.has(handler)) {
-      throw new HandlerMetadataError(
-        "UNKNOWN_HANDLER_METHOD",
-        "Handler metadata must be created by the registration builder.",
-      );
-    }
-  }
-}
-
-function validateHandlerMethod<Instance extends object>(
-  entityType: EntityClass<Instance>,
-  methodName: HandlerMethodName<Instance>,
-): void {
-  const descriptor = Object.getOwnPropertyDescriptor(entityType.prototype, methodName);
-
-  if (
-    methodName === "constructor" ||
-    descriptor === undefined ||
-    typeof descriptor.value !== "function"
-  ) {
-    throw new HandlerMetadataError(
-      "UNKNOWN_HANDLER_METHOD",
-      `Handler method "${methodName}" must be an own prototype data method declared with ` +
-        "normal class method syntax on the registered entity prototype.",
-    );
-  }
-}
-
-function filterHandlers<Kind extends HandlerKind>(
-  handlers: readonly HandlerMetadata[],
-  kind: Kind,
-): readonly Extract<HandlerMetadata, { readonly kind: Kind }>[] {
-  return Object.freeze(
-    handlers.filter((handler): handler is Extract<HandlerMetadata, { readonly kind: Kind }> => {
-      return handler.kind === kind;
-    }),
-  );
-}
-
-function createRegisteredHandler(
-  entityHandlers: EntityHandlersMetadata,
-  handler: HandlerMetadata,
-): RegisteredHandlerMetadata {
-  return Object.freeze({
-    entityHandlers,
-    entityType: entityHandlers.entityType,
-    entity: entityHandlers.entity,
-    handler,
-  });
-}
-
-function validateCommandAssignment(
-  entry: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
-  duplicate: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined,
-): void {
-  if (duplicate === undefined) {
-    return;
-  }
-
-  throw new HandlerMetadataRegistryError(
-    "DUPLICATE_COMMAND_ASSIGNMENT",
-    `Duplicate command assignment for "${entry.handler.messageFullTypeName}" declared by entity ` +
-      `"${entry.entity.fullTypeName}"; already declared by entity ` +
-      `"${duplicate.entity.fullTypeName}".`,
-  );
-}
-
-function validateEventApplication(
-  entry: RegisteredHandlerMetadata<EventApplicationHandlerMetadata>,
-  duplicate: RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined,
-): void {
-  if (duplicate === undefined) {
-    return;
-  }
-
-  throw new HandlerMetadataRegistryError(
-    "DUPLICATE_EVENT_APPLICATION",
-    `Duplicate event application for entity "${entry.entity.fullTypeName}" and event ` +
-      `"${entry.handler.messageFullTypeName}"; already declared by method ` +
-      `"${duplicate.handler.methodName}".`,
-  );
-}
-
-function eventApplicationKey(entityStateName: string, eventFullTypeName: string): string {
-  return `${entityStateName}\u0000${eventFullTypeName}`;
-}
-
-function pushMapValue<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
-  const values = map.get(key);
-
-  if (values === undefined) {
-    map.set(key, [value]);
-    return;
-  }
-
-  values.push(value);
 }

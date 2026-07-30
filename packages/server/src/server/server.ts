@@ -12,7 +12,7 @@ import {
 import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
 import { ContextTransportGroup } from "./context-transport-group.js";
 import type { EnvironmentAttachmentHandle } from "./environment-attachment.js";
-import { collectCloseError, RetryableCloseGroup } from "./retryable-close.js";
+import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
 
 const defaultHost = "127.0.0.1";
@@ -43,15 +43,19 @@ export class Server {
   #failedStartCleanup: FailedStartCleanup | undefined;
   #failedStartConsumed = false;
 
-  /** Create a server builder. Prefer {@link Server.atPort} for the common case. */
+  /**
+   * Creates a server builder.
+   *
+   * @param options - Configures local network, contexts, resources, and services.
+   */
   constructor(options: ServerOptions = {}) {
-    this.#host = normalizeHost(options.host);
+    this.#host = ServerValues.normalizeHost(options.host);
     this.#port = options.port ?? defaultPort;
-    this.#readMaxBytes = normalizeMessageMaxBytes(
+    this.#readMaxBytes = ServerValues.normalizeMessageMaxBytes(
       options.readMaxBytes ?? defaultMessageMaxBytes,
       "readMaxBytes",
     );
-    this.#writeMaxBytes = normalizeMessageMaxBytes(
+    this.#writeMaxBytes = ServerValues.normalizeMessageMaxBytes(
       options.writeMaxBytes ?? defaultMessageMaxBytes,
       "writeMaxBytes",
     );
@@ -61,65 +65,56 @@ export class Server {
     this.#environment = ServerEnvironment.instance();
   }
 
-  /** Create a server builder for the passed port on local-only `127.0.0.1`. */
+  /**
+   * Creates a local-only server builder for one port.
+   *
+   * @param port - Selects the listener port, or zero for an ephemeral port.
+   * @param options - Supplies all server options except the port.
+   * @returns A configured server builder.
+   */
   static atPort(port: number, options: Omit<ServerOptions, "port"> = {}): Server {
     return new Server({ ...options, port });
   }
 
   /**
-   * Add one bounded context or builder to expose through the Spine services.
+   * Adds one bounded context or builder to the assembly.
    *
-   * Builders added here are assembled during {@link start} before startup
-   * recovery and listener open. They use
-   * {@link ServerEnvironment.storageFactory} unless
-   * `withStorageFactory(...)` already selected a more specific local factory.
+   * Builders assemble during {@link start} before recovery and listener open.
+   * They use {@link ServerEnvironment.storageFactory} unless a more specific
+   * `withStorageFactory(...)` factory is selected. The running server owns and
+   * closes added contexts only after intake, sessions, and active work stop.
    *
-   * The server owns added contexts for this assembly. When the returned
-   * {@link RunningServer} closes, it closes every added context after network
-   * intake and active HTTP/2 sessions stop and active work can no longer use
-   * the context.
+   * @param context - Supplies the context or builder to expose.
+   * @returns This server builder.
    */
   add(context: BoundedContext | BoundedContextBuilder): this {
     this.#contexts.push(context);
     return this;
   }
 
-  /** Add a framework closeable owned by this server assembly. */
+  /**
+   * Adds a framework closeable owned by this server assembly.
+   *
+   * @param resource - Supplies the resource to close after contexts.
+   * @returns This server builder.
+   */
   addResource(resource: { close(): unknown }): this {
     this.#resources.push(resource);
     return this;
   }
 
   /**
-   * Assemble contexts, complete finite startup recovery, and open the listener.
+   * Starts the server after completing assembly and delivery recovery.
    *
-   * After recovery succeeds, the built contexts open their transport
-   * registrations sequentially in deterministic input order. Every context
-   * must register successfully before the HTTP server is created or its
-   * listener is opened; a registration failure opens no listener.
+   * Built contexts open their transport registrations in deterministic input
+   * order before the listener opens. A failed assembly, registration, or
+   * listener open leaves no listener and closes acquired resources. Network
+   * and transport cleanup are hard gates before delivery or dependencies close.
+   * A later call after incomplete cleanup retries only that cleanup and leaves
+   * this server terminal. A fresh server may reuse the singleton environment.
+   * Concurrent callers share one start or cleanup attempt.
    *
-   * Context assembly failure opens no listener and closes contexts assembled
-   * by that attempt. If environment startup, context transport registration, or
-   * listener open fails, the server first closes acquired network resources and
-   * context transport intake, waits until active work can no longer use its
-   * dependencies, then closes contexts and explicit resources. Process-wide
-   * facilities remain open until explicit {@link ServerEnvironment.close}
-   * shutdown. Network and context transport cleanup are hard gates: a
-   * cleanup-only `start()` retry must complete them before delivery detaches or
-   * dependencies close. An initial rejection
-   * combines the original startup failure first with reached cleanup failures
-   * in stable phase order.
-   *
-   * If that cleanup cannot yet complete safely, a later call on this same
-   * instance is cleanup-only: it does not assemble contexts or open a listener.
-   * The retry reports only current cleanup failures, without repeating the
-   * original startup failure or failures already reported. After cleanup
-   * completes, the attempt rejects instead of returning a {@link RunningServer},
-   * and this `Server` instance remains terminal.
-   *
-   * A newly assembled `Server` with fresh contexts may reuse the singleton
-   * environment after cleanup. Concurrent calls share the same in-flight start
-   * or cleanup attempt.
+   * @returns The running server once its listener accepts requests.
    */
   start(): Promise<RunningServer> {
     const current = this.#starting;
@@ -147,7 +142,10 @@ export class Server {
   }
 
   async #startOnce(): Promise<RunningServer> {
-    const contexts = await buildContexts(this.#contexts, this.#environment.storageFactory);
+    const contexts = await ServerValues.buildContexts(
+      this.#contexts,
+      this.#environment.storageFactory,
+    );
     let attachment: EnvironmentAttachmentHandle;
     try {
       attachment = await serverEnvironmentAccess.attach(this.#environment, {
@@ -169,7 +167,7 @@ export class Server {
           await closeGroup.close();
         } catch (cleanupError) {
           this.#failedStartCleanup = { closeGroup, failedStartRollback: undefined };
-          throw attachmentCleanupError(error, cleanupError);
+          throw ServerValues.attachmentCleanupError(error, cleanupError);
         }
         this.#failedStartConsumed = true;
       }
@@ -197,13 +195,13 @@ export class Server {
       ...this.#services,
     });
     const sessions = new Set<http2.ServerHttp2Session>();
-    const httpServer = createHttpServer(
+    const httpServer = ServerValues.createHttpServer(
       services,
       sessions,
       this.#readMaxBytes,
       this.#writeMaxBytes,
     );
-    const address = await listen(httpServer, this.#host, this.#port).catch(
+    const address = await ServerValues.listen(httpServer, this.#host, this.#port).catch(
       async (error: unknown) => {
         const cleanup: FailedStartCleanup = {
           closeGroup: new RetryableCloseGroup(
@@ -237,11 +235,11 @@ export class Server {
     const errors: unknown[] = [];
 
     if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
-      throwCleanupErrors(errors);
+      ServerValues.throwCleanupErrors(errors);
     }
     await this.#advanceFailedStartCleanup(cleanup, errors);
     if (errors.length > 0) {
-      throwCleanupErrors(errors);
+      ServerValues.throwCleanupErrors(errors);
     }
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
@@ -253,7 +251,7 @@ export class Server {
     const errors: unknown[] = [];
 
     await this.#advanceFailedStartCleanup(cleanup, errors);
-    throwContextStartError(startError, errors);
+    return ServerValues.throwContextStartError(startError, errors);
   }
 
   async #cleanupFailedListenerStart(
@@ -263,10 +261,10 @@ export class Server {
     const errors: unknown[] = [];
 
     if (!(await this.#closeFailedStartNetwork(cleanup, errors))) {
-      throwListenerStartError(startError, errors);
+      return ServerValues.throwListenerStartError(startError, errors);
     }
     await this.#advanceFailedStartCleanup(cleanup, errors);
-    throwListenerStartError(startError, errors);
+    return ServerValues.throwListenerStartError(startError, errors);
   }
 
   async #advanceFailedStartCleanup(cleanup: FailedStartCleanup, errors: unknown[]): Promise<void> {
@@ -296,7 +294,7 @@ export class Server {
         ) {
           throw error;
         }
-        collectCloseError(error, errors);
+        CloseErrors.collect(error, errors);
       }
     }
 
@@ -305,7 +303,7 @@ export class Server {
       await cleanup.closeGroup.close();
     } catch (error) {
       closeFailed = true;
-      collectCloseError(error, errors);
+      CloseErrors.collect(error, errors);
     }
     if (
       !closeFailed &&
@@ -324,11 +322,11 @@ export class Server {
       return true;
     }
     try {
-      await closeNetwork(network.server, network.sessions);
+      await ServerValues.closeNetwork(network.server, network.sessions);
       delete cleanup.network;
       return true;
     } catch (error) {
-      collectCloseError(error, errors);
+      CloseErrors.collect(error, errors);
       return false;
     }
   }
@@ -346,7 +344,7 @@ export class Server {
       delete cleanup.contextTransports;
       return true;
     } catch (error) {
-      collectCloseError(error, errors);
+      CloseErrors.collect(error, errors);
       return false;
     }
   }
@@ -368,14 +366,14 @@ export class Server {
       delete cleanup.attachment;
       return true;
     } catch (error) {
-      collectCloseError(error, errors);
+      CloseErrors.collect(error, errors);
     }
     try {
       if (serverEnvironmentAccess.endpointSafe(this.#environment, attachment)) {
         return true;
       }
     } catch (error) {
-      collectCloseError(error, errors);
+      CloseErrors.collect(error, errors);
     }
     return false;
   }
@@ -450,23 +448,13 @@ export interface RunningServer {
   /** Base URL for Connect gRPC-compatible clients. */
   readonly baseUrl: string;
   /**
-   * Stop network intake and sessions, close context transport registrations and
-   * drain accepted work, then detach delivery before closing contexts and
-   * explicit resources. Process-wide facilities remain open until explicit
-   * {@link ServerEnvironment.close} shutdown.
+   * Closes intake, delivery, contexts, and owned resources.
    *
-   * A failure while closing the network or context transport intake prevents
-   * detach and dependency cleanup until a later retry completes that phase.
-   * Closing one server does not interrupt sibling servers. The singleton
-   * environment and its facilities remain open until explicit process
-   * shutdown.
-   *
-   * Concurrent calls share one in-flight close. Repeated calls after a
-   * successful close are idempotent. After a failed close, a later call retries
-   * only unfinished cleanup. Failures may be arbitrary values. When multiple
-   * failures are combined, their observable phase order is stable and nested
-   * aggregates are flattened; an aggregate with no nested failures still
-   * remains a failure.
+   * It stops network intake and sessions, closes context transport and drains
+   * accepted work before detaching delivery. A failed intake close blocks later
+   * phases until a retry. Sibling servers and process-wide facilities remain
+   * available. Concurrent calls share one attempt; later calls retry only
+   * unfinished cleanup, preserving stable flattened failure order.
    */
   close(): Promise<void>;
 }
@@ -495,7 +483,7 @@ class RunningHttp2Server implements RunningServer {
     this.#contextTransports = options.contextTransports;
     this.host = options.host;
     this.port = options.port;
-    this.baseUrl = `http://${formatHostForUrl(options.host)}:${options.port.toString()}`;
+    this.baseUrl = `http://${ServerValues.formatHostForUrl(options.host)}:${options.port.toString()}`;
     this.#closeGroup = new RetryableCloseGroup(
       this.#closeables,
       "Server close failed while closing owned contexts/resources.",
@@ -512,7 +500,7 @@ class RunningHttp2Server implements RunningServer {
 
   async #closeOnce(): Promise<void> {
     if (!this.#networkClosed) {
-      await closeNetwork(this.#server, this.#sessions);
+      await ServerValues.closeNetwork(this.#server, this.#sessions);
       this.#networkClosed = true;
     }
     await this.#contextTransports.close();
@@ -528,17 +516,17 @@ class RunningHttp2Server implements RunningServer {
         this.#attachmentDetached = true;
       } catch (error) {
         detachRejected = true;
-        collectCloseError(error, detachErrors);
+        CloseErrors.collect(error, detachErrors);
       }
       if (detachRejected) {
         let endpointSafe = false;
         try {
           endpointSafe = serverEnvironmentAccess.endpointSafe(this.#environment, this.#attachment);
         } catch (error) {
-          collectCloseError(error, detachErrors);
+          CloseErrors.collect(error, detachErrors);
         }
         if (!endpointSafe) {
-          throwRunningDetachErrors(detachErrors);
+          ServerValues.throwRunningDetachErrors(detachErrors);
         }
       }
     }
@@ -548,14 +536,14 @@ class RunningHttp2Server implements RunningServer {
       if (!detachRejected) {
         throw error;
       }
-      collectCloseError(error, detachErrors);
+      CloseErrors.collect(error, detachErrors);
       throw new AggregateError(
         detachErrors,
         "Server close failed while detaching delivery and closing owned contexts/resources.",
       );
     }
     if (detachRejected) {
-      throwRunningDetachErrors(detachErrors);
+      ServerValues.throwRunningDetachErrors(detachErrors);
     }
   }
 }
@@ -571,215 +559,218 @@ interface RunningHttp2ServerOptions {
   readonly port: number;
 }
 
-async function buildContexts(
-  entries: readonly ServerContext[],
-  defaultStorageFactory: StorageFactory,
-): Promise<readonly BoundedContext[]> {
-  const contexts: BoundedContext[] = [];
+/** @internal Groups private server assembly, network, and shutdown operations. */
+const ServerValues = Object.freeze({
+  async buildContexts(
+    entries: readonly ServerContext[],
+    defaultStorageFactory: StorageFactory,
+  ): Promise<readonly BoundedContext[]> {
+    const contexts: BoundedContext[] = [];
 
-  try {
-    for (const entry of entries) {
-      contexts.push(
-        boundedContextAccess.isBuilder(entry)
-          ? await boundedContextAccess.build(entry, defaultStorageFactory)
-          : entry,
+    try {
+      for (const entry of entries) {
+        contexts.push(
+          boundedContextAccess.isBuilder(entry)
+            ? await boundedContextAccess.build(entry, defaultStorageFactory)
+            : entry,
+        );
+      }
+      return contexts;
+    } catch (error) {
+      await ServerValues.cleanupBuiltContexts(contexts, error);
+      throw error;
+    }
+  },
+
+  createHttpServer(
+    services: SpineServices,
+    sessions: Set<http2.ServerHttp2Session>,
+    readMaxBytes: number,
+    writeMaxBytes: number,
+  ): http2.Http2Server {
+    const server = http2.createServer(
+      connectNodeAdapter({
+        routes: (router) => {
+          services.register(router);
+        },
+        readMaxBytes,
+        writeMaxBytes,
+      }),
+    );
+    server.on("session", (session) => {
+      sessions.add(session);
+      session.on("close", () => sessions.delete(session));
+    });
+    return server;
+  },
+
+  listen(server: http2.Http2Server, host: string, port: number): Promise<AddressInfo> {
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        server.off("error", onError);
+        server.off("listening", onListening);
+      };
+      const onError = (error: Error) => {
+        cleanup();
+        reject(error);
+      };
+      const onListening = () => {
+        cleanup();
+        resolve(server.address() as AddressInfo);
+      };
+
+      server.once("error", onError);
+      server.once("listening", onListening);
+      server.listen(port, host);
+    });
+  },
+
+  async cleanupBuiltContexts(
+    contexts: readonly BoundedContext[],
+    startError: unknown,
+  ): Promise<void> {
+    try {
+      await new RetryableCloseGroup(
+        contexts,
+        "Server start cleanup failed while closing owned contexts/resources.",
+      ).close();
+    } catch (error) {
+      throw new AggregateError(
+        [startError, ...ServerValues.toCleanupErrors(error)],
+        "Server start failed while building bounded contexts.",
       );
     }
-    return contexts;
-  } catch (error) {
-    await cleanupBuiltContexts(contexts, error);
-    throw error;
-  }
-}
+  },
 
-function createHttpServer(
-  services: SpineServices,
-  sessions: Set<http2.ServerHttp2Session>,
-  readMaxBytes: number,
-  writeMaxBytes: number,
-): http2.Http2Server {
-  const server = http2.createServer(
-    connectNodeAdapter({
-      routes: (router) => {
-        services.register(router);
-      },
-      readMaxBytes,
-      writeMaxBytes,
-    }),
-  );
-  server.on("session", (session) => {
-    sessions.add(session);
-    session.on("close", () => sessions.delete(session));
-  });
-  return server;
-}
-
-function listen(server: http2.Http2Server, host: string, port: number): Promise<AddressInfo> {
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      server.off("error", onError);
-      server.off("listening", onListening);
-    };
-    const onError = (error: Error) => {
-      cleanup();
-      reject(error);
-    };
-    const onListening = () => {
-      cleanup();
-      resolve(server.address() as AddressInfo);
-    };
-
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen(port, host);
-  });
-}
-
-async function cleanupBuiltContexts(
-  contexts: readonly BoundedContext[],
-  startError: unknown,
-): Promise<void> {
-  try {
-    await new RetryableCloseGroup(
-      contexts,
-      "Server start cleanup failed while closing owned contexts/resources.",
-    ).close();
-  } catch (error) {
-    throw new AggregateError(
-      [startError, ...toCleanupErrors(error)],
-      "Server start failed while building bounded contexts.",
-    );
-  }
-}
-
-function toCleanupErrors(error: unknown): readonly unknown[] {
-  if (error instanceof AggregateError) {
-    return error.errors;
-  }
-  return [error];
-}
-
-function attachmentCleanupError(startError: unknown, cleanupError: unknown): AggregateError {
-  const errors: unknown[] = [];
-  collectCloseError(startError, errors);
-  collectCloseError(cleanupError, errors);
-  return new AggregateError(
-    errors,
-    "Server attachment failed and immediate dependency cleanup also failed.",
-  );
-}
-
-function throwCleanupErrors(errors: readonly unknown[]): never {
-  if (errors.length === 1) {
-    throw errors[0];
-  }
-  throw new AggregateError(errors, "Server deferred failed-start cleanup failed.");
-}
-
-function throwListenerStartError(startError: unknown, cleanupErrors: readonly unknown[]): never {
-  if (cleanupErrors.length === 0) {
-    throw startError;
-  }
-  const errors: unknown[] = [];
-  collectCloseError(startError, errors);
-  for (const error of cleanupErrors) {
-    collectCloseError(error, errors);
-  }
-  throw new AggregateError(
-    errors,
-    "Server start failed while opening listener and cleanup also failed.",
-  );
-}
-
-function throwContextStartError(startError: unknown, cleanupErrors: readonly unknown[]): never {
-  if (cleanupErrors.length === 0) {
-    throw startError;
-  }
-  const errors: unknown[] = [];
-  collectCloseError(startError, errors);
-  for (const error of cleanupErrors) {
-    collectCloseError(error, errors);
-  }
-  throw new AggregateError(
-    errors,
-    "Server start failed while opening context transport and cleanup also failed.",
-  );
-}
-
-function throwRunningDetachErrors(errors: readonly unknown[]): never {
-  if (errors.length === 1) {
-    throw errors[0];
-  }
-  throw new AggregateError(errors, "Server close failed while detaching delivery.");
-}
-
-async function closeNetwork(
-  server: http2.Http2Server,
-  sessions: Set<http2.ServerHttp2Session>,
-): Promise<void> {
-  const closed = closeHttpServer(server);
-  await closeSessions(sessions);
-  await closed;
-  await nextTurn();
-}
-
-function closeHttpServer(server: http2.Http2Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!server.listening) {
-      resolve();
-      return;
+  toCleanupErrors(error: unknown): readonly unknown[] {
+    if (error instanceof AggregateError) {
+      return error.errors;
     }
-    server.close((error) => {
-      if (error) {
-        reject(error);
-      } else {
+    return [error];
+  },
+
+  attachmentCleanupError(startError: unknown, cleanupError: unknown): AggregateError {
+    const errors: unknown[] = [];
+    CloseErrors.collect(startError, errors);
+    CloseErrors.collect(cleanupError, errors);
+    return new AggregateError(
+      errors,
+      "Server attachment failed and immediate dependency cleanup also failed.",
+    );
+  },
+
+  throwCleanupErrors(errors: readonly unknown[]): never {
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    throw new AggregateError(errors, "Server deferred failed-start cleanup failed.");
+  },
+
+  throwListenerStartError(startError: unknown, cleanupErrors: readonly unknown[]): never {
+    if (cleanupErrors.length === 0) {
+      throw startError;
+    }
+    const errors: unknown[] = [];
+    CloseErrors.collect(startError, errors);
+    for (const error of cleanupErrors) {
+      CloseErrors.collect(error, errors);
+    }
+    throw new AggregateError(
+      errors,
+      "Server start failed while opening listener and cleanup also failed.",
+    );
+  },
+
+  throwContextStartError(startError: unknown, cleanupErrors: readonly unknown[]): never {
+    if (cleanupErrors.length === 0) {
+      throw startError;
+    }
+    const errors: unknown[] = [];
+    CloseErrors.collect(startError, errors);
+    for (const error of cleanupErrors) {
+      CloseErrors.collect(error, errors);
+    }
+    throw new AggregateError(
+      errors,
+      "Server start failed while opening context transport and cleanup also failed.",
+    );
+  },
+
+  throwRunningDetachErrors(errors: readonly unknown[]): never {
+    if (errors.length === 1) {
+      throw errors[0];
+    }
+    throw new AggregateError(errors, "Server close failed while detaching delivery.");
+  },
+
+  async closeNetwork(
+    server: http2.Http2Server,
+    sessions: Set<http2.ServerHttp2Session>,
+  ): Promise<void> {
+    const closed = ServerValues.closeHttpServer(server);
+    await ServerValues.closeSessions(sessions);
+    await closed;
+    await ServerValues.nextTurn();
+  },
+
+  closeHttpServer(server: http2.Http2Server): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!server.listening) {
         resolve();
+        return;
       }
+      server.close((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
     });
-  });
-}
+  },
 
-async function closeSessions(sessions: Set<http2.ServerHttp2Session>): Promise<void> {
-  await Promise.all([...sessions].map(closeSession));
-}
+  async closeSessions(sessions: Set<http2.ServerHttp2Session>): Promise<void> {
+    await Promise.all([...sessions].map((session) => ServerValues.closeSession(session)));
+  },
 
-function closeSession(session: http2.ServerHttp2Session): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      session.destroy();
-      resolve();
-    }, gracefulSessionDrainMs);
-    const finishGracefulClose = () => {
-      clearTimeout(timer);
-      resolve();
-    };
-    timer.unref();
-    session.once("close", finishGracefulClose);
-    session.close();
-  });
-}
+  closeSession(session: http2.ServerHttp2Session): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        session.destroy();
+        resolve();
+      }, gracefulSessionDrainMs);
+      const finishGracefulClose = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      timer.unref();
+      session.once("close", finishGracefulClose);
+      session.close();
+    });
+  },
 
-function nextTurn(): Promise<void> {
-  return new Promise((resolve) => {
-    setImmediate(resolve);
-  });
-}
+  nextTurn(): Promise<void> {
+    return new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+  },
 
-function formatHostForUrl(host: string): string {
-  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-}
+  formatHostForUrl(host: string): string {
+    return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  },
 
-function normalizeHost(host: string | undefined): string {
-  const normalized = host?.trim() ?? defaultHost;
-  if (normalized.length === 0) {
-    throw new Error("Server host must not be blank.");
-  }
-  return normalized;
-}
+  normalizeHost(host: string | undefined): string {
+    const normalized = host?.trim() ?? defaultHost;
+    if (normalized.length === 0) {
+      throw new Error("Server host must not be blank.");
+    }
+    return normalized;
+  },
 
-function normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {
-  if (!Number.isInteger(value) || value < 1 || value > maximumMessageMaxBytes) {
-    throw new Error(`Server ${name} must be an integer from 1 through 4294967295.`);
-  }
-  return value;
-}
+  normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {
+    if (!Number.isInteger(value) || value < 1 || value > maximumMessageMaxBytes) {
+      throw new Error(`Server ${name} must be an integer from 1 through 4294967295.`);
+    }
+    return value;
+  },
+});

@@ -41,6 +41,14 @@ export class GeneratedRegistryDiscoveryError extends Error {
   /** Optional underlying import or ingestion error. */
   override readonly cause: unknown;
 
+  /**
+   * Creates a registry discovery error.
+   *
+   * @param code - Stable code that identifies the failed operation.
+   * @param message - Human-readable failure description.
+   * @param moduleId - Normalized identifier of the affected module.
+   * @param cause - Underlying import or ingestion failure.
+   */
   constructor(
     code: RegistryDiscoveryErrorCode,
     message: string,
@@ -60,21 +68,37 @@ export class GeneratedRegistryDiscoveryError extends Error {
 export class GeneratedRegistryDiscovery {
   readonly #ingestor: HandlerRegistryIngestor;
 
+  /** Creates a generated-registry loader.
+   *
+   * @param ingestor - Adapter that validates and registers loaded metadata.
+   */
   constructor(ingestor: HandlerRegistryIngestor = new HandlerRegistryIngestor()) {
     this.#ingestor = ingestor;
   }
 
-  /** Build the conventional generated registry module path for one package or app root. */
+  /** Builds the conventional generated registry module path for one package or app root.
+   *
+   * @param root - Package or application root directory.
+   * @returns Absolute path to the conventional registry module.
+   */
   static conventionalModulePath(root: string): string {
     return resolve(root, generatedRegistryFile);
   }
 
-  /** Build the conventional generated registry module URL for one package or app root. */
+  /** Builds the conventional generated registry module URL for one package or app root.
+   *
+   * @param root - Package or application root directory.
+   * @returns File URL for the conventional registry module.
+   */
   static conventionalModuleUrl(root: string): URL {
     return pathToFileURL(GeneratedRegistryDiscovery.conventionalModulePath(root));
   }
 
-  /** Load generated handler registries from explicit filesystem paths or file: URLs. */
+  /** Loads generated handler registries from explicit filesystem paths or file URLs.
+   *
+   * @param options - Module references and optional load configuration.
+   * @returns Frozen loaded registry values in module order.
+   */
   async load(options: GeneratedRegistryDiscoveryOptions): Promise<readonly unknown[]> {
     const loaded = await this.loadModules(options);
 
@@ -82,9 +106,13 @@ export class GeneratedRegistryDiscovery {
   }
 
   /**
-   * Load generated handler registries and ingest them into a caller-owned metadata registry.
+   * Loads generated handler registries and ingests them into a caller-owned metadata registry.
    *
    * Registration stages all new metadata before mutating the caller-owned registry.
+   *
+   * @param options - Module references and optional load configuration.
+   * @param registry - Metadata registry to update, if one already exists.
+   * @returns Registry containing the loaded generated metadata.
    */
   async register(
     options: GeneratedRegistryDiscoveryOptions,
@@ -124,17 +152,17 @@ export class GeneratedRegistryDiscovery {
   ): Promise<readonly LoadedGeneratedRegistry[]> {
     const exportName = options.exportName ?? defaultExportName;
     const moduleRefs = [...options.modules];
-    const moduleIds = moduleRefs.map((moduleRef) => normalizeModuleId(moduleRef));
+    const moduleIds = moduleRefs.map((moduleRef) => RegistryModules.normalize(moduleRef));
     const loaded: LoadedGeneratedRegistry[] = [];
 
-    assertNoDuplicateModules(moduleIds);
+    RegistryModules.assertUnique(moduleIds);
 
     for (const moduleId of moduleIds) {
-      const exports = await importGeneratedRegistryModule(cacheableModuleId(moduleId, options));
+      const exports = await RegistryModules.import(RegistryModules.cacheable(moduleId, options));
 
       loaded.push({
         moduleId,
-        registry: readGeneratedRegistryExport(exports, moduleId, exportName),
+        registry: RegistryModules.registry(exports, moduleId, exportName),
       });
     }
 
@@ -147,145 +175,143 @@ interface LoadedGeneratedRegistry {
   readonly registry: GeneratedHandlerRegistry;
 }
 
-async function importGeneratedRegistryModule(moduleId: string): Promise<unknown> {
-  try {
-    return await import(moduleId);
-  } catch (error) {
-    throw new GeneratedRegistryDiscoveryError(
-      "MODULE_IMPORT_FAILED",
-      `Could not import generated handler registry module "${moduleId}".`,
-      moduleId,
-      error,
-    );
-  }
-}
-
-function cacheableModuleId(moduleId: string, options: GeneratedRegistryDiscoveryOptions): string {
-  if (options.cacheBust === undefined || options.cacheBust.length === 0) {
-    return moduleId;
-  }
-
-  const moduleUrl = new URL(moduleId);
-
-  moduleUrl.searchParams.set("spine-registry-cache", options.cacheBust);
-  return moduleUrl.href;
-}
-
-function readGeneratedRegistryExport(
-  exports: unknown,
-  moduleId: string,
-  exportName: string,
-): GeneratedHandlerRegistry {
-  const value = readModuleExport(exports, exportName);
-
-  if (value === undefined) {
-    throw new GeneratedRegistryDiscoveryError(
-      "MISSING_REGISTRY_EXPORT",
-      `Generated handler registry module "${moduleId}" does not export "${exportName}".`,
-      moduleId,
-    );
-  }
-
-  if (isGeneratedHandlerRegistry(value)) {
-    return value;
-  }
-
-  throw new GeneratedRegistryDiscoveryError(
-    "INVALID_REGISTRY_MODULE",
-    `Generated handler registry module "${moduleId}" exports invalid "${exportName}" metadata.`,
-    moduleId,
-  );
-}
-
-function readModuleExport(exports: unknown, exportName: string): unknown {
-  if (exports === null || typeof exports !== "object") {
-    return undefined;
-  }
-
-  return (exports as Record<string, unknown>)[exportName];
-}
-
-function isGeneratedHandlerRegistry(value: unknown): value is GeneratedHandlerRegistry {
-  if (value === null || typeof value !== "object") {
-    return false;
-  }
-
-  const version = (value as { readonly version?: unknown }).version;
-  const entities = (value as { readonly entities?: unknown }).entities;
-
-  return version === registryVersion && Array.isArray(entities);
-}
-
-function normalizeModuleId(moduleRef: string | URL): string {
-  if (moduleRef instanceof URL) {
-    return normalizeModuleUrl(moduleRef);
-  }
-
-  if (isUrlLike(moduleRef)) {
-    return normalizeModuleUrl(parseModuleUrl(moduleRef));
-  }
-
-  return pathToFileURL(resolve(moduleRef)).href;
-}
-
-function normalizeModuleUrl(moduleUrl: URL): string {
-  if (moduleUrl.protocol !== "file:") {
-    throw new GeneratedRegistryDiscoveryError(
-      "UNSUPPORTED_MODULE_SCHEME",
-      `Generated handler registry module "${moduleUrl.href}" must use the file: URL scheme.`,
-      moduleUrl.href,
-    );
-  }
-
-  if (moduleUrl.search.length > 0 || moduleUrl.hash.length > 0) {
-    throw new GeneratedRegistryDiscoveryError(
-      "INVALID_MODULE_REF",
-      `Generated handler registry module "${moduleUrl.href}" must not include a query or hash.`,
-      moduleUrl.href,
-    );
-  }
-
-  try {
-    return pathToFileURL(resolve(fileURLToPath(moduleUrl))).href;
-  } catch (error) {
-    throw new GeneratedRegistryDiscoveryError(
-      "INVALID_MODULE_REF",
-      `Generated handler registry module "${moduleUrl.href}" is not a valid file URL.`,
-      moduleUrl.href,
-      error,
-    );
-  }
-}
-
-function isUrlLike(moduleRef: string): boolean {
-  return moduleSchemeRe.test(moduleRef) && !/^[A-Za-z]:[\\/]/.test(moduleRef);
-}
-
-function parseModuleUrl(moduleRef: string): URL {
-  try {
-    return new URL(moduleRef);
-  } catch (error) {
-    throw new GeneratedRegistryDiscoveryError(
-      "INVALID_MODULE_REF",
-      `Generated handler registry module "${moduleRef}" is not a valid URL.`,
-      moduleRef,
-      error,
-    );
-  }
-}
-
-function assertNoDuplicateModules(moduleIds: readonly string[]): void {
-  const seen = new Set<string>();
-
-  for (const moduleId of moduleIds) {
-    if (seen.has(moduleId)) {
+const RegistryModules = Object.freeze({
+  async import(moduleId: string): Promise<unknown> {
+    try {
+      return await import(moduleId);
+    } catch (error) {
       throw new GeneratedRegistryDiscoveryError(
-        "DUPLICATE_REGISTRY_MODULE",
-        `Generated handler registry module "${moduleId}" was listed more than once.`,
+        "MODULE_IMPORT_FAILED",
+        `Could not import generated handler registry module "${moduleId}".`,
+        moduleId,
+        error,
+      );
+    }
+  },
+
+  cacheable(moduleId: string, options: GeneratedRegistryDiscoveryOptions): string {
+    if (options.cacheBust === undefined || options.cacheBust.length === 0) {
+      return moduleId;
+    }
+
+    const moduleUrl = new URL(moduleId);
+
+    moduleUrl.searchParams.set("spine-registry-cache", options.cacheBust);
+    return moduleUrl.href;
+  },
+
+  registry(exports: unknown, moduleId: string, exportName: string): GeneratedHandlerRegistry {
+    const value = RegistryModules.export(exports, exportName);
+
+    if (value === undefined) {
+      throw new GeneratedRegistryDiscoveryError(
+        "MISSING_REGISTRY_EXPORT",
+        `Generated handler registry module "${moduleId}" does not export "${exportName}".`,
         moduleId,
       );
     }
 
-    seen.add(moduleId);
-  }
-}
+    if (RegistryModules.isRegistry(value)) {
+      return value;
+    }
+
+    throw new GeneratedRegistryDiscoveryError(
+      "INVALID_REGISTRY_MODULE",
+      `Generated handler registry module "${moduleId}" exports invalid "${exportName}" metadata.`,
+      moduleId,
+    );
+  },
+
+  export(exports: unknown, exportName: string): unknown {
+    if (exports === null || typeof exports !== "object") {
+      return undefined;
+    }
+
+    return (exports as Record<string, unknown>)[exportName];
+  },
+
+  isRegistry(value: unknown): value is GeneratedHandlerRegistry {
+    if (value === null || typeof value !== "object") {
+      return false;
+    }
+
+    const version = (value as { readonly version?: unknown }).version;
+    const entities = (value as { readonly entities?: unknown }).entities;
+
+    return version === registryVersion && Array.isArray(entities);
+  },
+
+  normalize(moduleRef: string | URL): string {
+    if (moduleRef instanceof URL) {
+      return RegistryModules.url(moduleRef);
+    }
+
+    if (RegistryModules.isUrl(moduleRef)) {
+      return RegistryModules.url(RegistryModules.parse(moduleRef));
+    }
+
+    return pathToFileURL(resolve(moduleRef)).href;
+  },
+
+  url(moduleUrl: URL): string {
+    if (moduleUrl.protocol !== "file:") {
+      throw new GeneratedRegistryDiscoveryError(
+        "UNSUPPORTED_MODULE_SCHEME",
+        `Generated handler registry module "${moduleUrl.href}" must use the file: URL scheme.`,
+        moduleUrl.href,
+      );
+    }
+
+    if (moduleUrl.search.length > 0 || moduleUrl.hash.length > 0) {
+      throw new GeneratedRegistryDiscoveryError(
+        "INVALID_MODULE_REF",
+        `Generated handler registry module "${moduleUrl.href}" must not include a query or hash.`,
+        moduleUrl.href,
+      );
+    }
+
+    try {
+      return pathToFileURL(resolve(fileURLToPath(moduleUrl))).href;
+    } catch (error) {
+      throw new GeneratedRegistryDiscoveryError(
+        "INVALID_MODULE_REF",
+        `Generated handler registry module "${moduleUrl.href}" is not a valid file URL.`,
+        moduleUrl.href,
+        error,
+      );
+    }
+  },
+
+  isUrl(moduleRef: string): boolean {
+    return moduleSchemeRe.test(moduleRef) && !/^[A-Za-z]:[\\/]/.test(moduleRef);
+  },
+
+  parse(moduleRef: string): URL {
+    try {
+      return new URL(moduleRef);
+    } catch (error) {
+      throw new GeneratedRegistryDiscoveryError(
+        "INVALID_MODULE_REF",
+        `Generated handler registry module "${moduleRef}" is not a valid URL.`,
+        moduleRef,
+        error,
+      );
+    }
+  },
+
+  assertUnique(moduleIds: readonly string[]): void {
+    const seen = new Set<string>();
+
+    for (const moduleId of moduleIds) {
+      if (seen.has(moduleId)) {
+        throw new GeneratedRegistryDiscoveryError(
+          "DUPLICATE_REGISTRY_MODULE",
+          `Generated handler registry module "${moduleId}" was listed more than once.`,
+          moduleId,
+        );
+      }
+
+      seen.add(moduleId);
+    }
+  },
+});

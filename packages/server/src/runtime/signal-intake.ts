@@ -64,7 +64,11 @@ const allowedDiagnosticKeys = new Set([
   "runtimeState",
 ]);
 
-/** Create an immutable accepted-for-async-work signal intake result. */
+/** Creates an immutable accepted-for-async-work signal intake result.
+ *
+ * @param signalKind the kind of accepted signal.
+ * @returns the accepted intake result.
+ */
 export function acceptSignalIntake<Kind extends SignalKind>(
   signalKind: Kind,
 ): SignalIntakeAccepted<Kind> {
@@ -75,7 +79,13 @@ export function acceptSignalIntake<Kind extends SignalKind>(
   });
 }
 
-/** Create an immutable immediate signal intake failure result. */
+/** Creates an immutable immediate signal intake failure result.
+ *
+ * @param signalKind the kind of rejected signal.
+ * @param code the stable intake failure code.
+ * @param diagnostics scalar diagnostic details to retain.
+ * @returns the failed intake result.
+ */
 export function failSignalIntake<Kind extends SignalKind>(
   signalKind: Kind,
   code: SignalIntakeFailureCode,
@@ -86,54 +96,57 @@ export function failSignalIntake<Kind extends SignalKind>(
     signalKind,
     failure: Object.freeze({
       code,
-      diagnostics: sanitizeDiagnostics(diagnostics),
+      diagnostics: SignalIntakeValues.sanitizeDiagnostics(diagnostics),
     }),
   });
 }
 
-function sanitizeDiagnostics(
-  diagnostics: Readonly<Record<string, unknown>>,
-): SignalIntakeFailureDiagnostics {
-  const sanitized: Record<string, string | number | boolean | null> = {};
-  const descriptors = getOwnDiagnosticDescriptors(diagnostics);
+/** Private signal-intake diagnostic helpers. */
+const SignalIntakeValues = Object.freeze({
+  sanitizeDiagnostics(
+    diagnostics: Readonly<Record<string, unknown>>,
+  ): SignalIntakeFailureDiagnostics {
+    const sanitized: Record<string, string | number | boolean | null> = {};
+    const descriptors = SignalIntakeValues.getOwnDiagnosticDescriptors(diagnostics);
 
-  if (descriptors === undefined) {
+    if (descriptors === undefined) {
+      return Object.freeze(sanitized);
+    }
+
+    for (const key of allowedDiagnosticKeys) {
+      const descriptor = descriptors[key];
+      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
+        continue;
+      }
+      const value: unknown = descriptor.value;
+      if (SignalIntakeValues.isDiagnosticScalar(value)) {
+        sanitized[key] = value;
+      }
+    }
+
     return Object.freeze(sanitized);
-  }
+  },
 
-  for (const key of allowedDiagnosticKeys) {
-    const descriptor = descriptors[key];
-    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
-      continue;
+  getOwnDiagnosticDescriptors(
+    diagnostics: Readonly<Record<string, unknown>>,
+  ): PropertyDescriptorMap | undefined {
+    if (isProxy(diagnostics)) {
+      return undefined;
     }
-    const value: unknown = descriptor.value;
-    if (isDiagnosticScalar(value)) {
-      sanitized[key] = value;
+
+    try {
+      return Object.getOwnPropertyDescriptors(diagnostics);
+    } catch {
+      return undefined;
     }
-  }
+  },
 
-  return Object.freeze(sanitized);
-}
-
-function getOwnDiagnosticDescriptors(
-  diagnostics: Readonly<Record<string, unknown>>,
-): PropertyDescriptorMap | undefined {
-  if (isProxy(diagnostics)) {
-    return undefined;
-  }
-
-  try {
-    return Object.getOwnPropertyDescriptors(diagnostics);
-  } catch {
-    return undefined;
-  }
-}
-
-function isDiagnosticScalar(value: unknown): value is string | number | boolean | null {
-  return (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  );
-}
+  isDiagnosticScalar(value: unknown): value is string | number | boolean | null {
+    return (
+      value === null ||
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    );
+  },
+});

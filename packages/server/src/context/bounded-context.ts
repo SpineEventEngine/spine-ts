@@ -34,7 +34,7 @@ import {
 } from "./local-inbox-handoff.js";
 import { LocalProcessManagerInbox } from "./process-manager-handoff.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
-import { createTenantIndex, type TenantIndex } from "./tenant-index.js";
+import { TenantIndexes, type TenantIndex } from "./tenant-index.js";
 import {
   Repository,
   repositoryAccess,
@@ -142,19 +142,44 @@ interface PrjInbox extends ProjectionInbox {
   endpoints(): readonly DeliveryEndpoint[];
 }
 
-/** @internal One context tenant scope eligible for delivery startup. */
+/** Selects a tenant-specific delivery startup scope. */
 export interface DeliveryTenantScope {
+  /** Identifies the tenant, or is absent for the single-tenant scope. */
   readonly tenantId?: string;
 }
 
-/** @internal Built-context delivery facts and readiness route. */
+/** Gives delivery infrastructure access to one built bounded context. */
 export interface ContextDeliveryDescriptor {
+  /** Creates storage used by the context's delivery routes. */
   readonly storageFactory: StorageFactory;
+  /** Lists tenant scopes that existing delivery work may require at startup.
+   * @returns Resolves to immutable tenant delivery scopes.
+   */
   startupScopes(): Promise<readonly DeliveryTenantScope[]>;
+  /** Creates the storage context for a delivery scope.
+   * @param scope Selects the tenant scope to represent.
+   * @returns Returns the matching storage context.
+   */
   storageContext(scope: DeliveryTenantScope): StorageContext;
+  /** Lists delivery endpoints registered by the context's local inboxes.
+   * @returns Returns immutable endpoint descriptions.
+   */
   endpoints(): readonly DeliveryEndpoint[];
+  /** Dispatches a durable inbox message through its registered target.
+   * @param message Contains the delivery message to replay.
+   * @param tenantId Identifies the delivery tenant when the context is multitenant.
+   */
   replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void>;
+  /** Sets the observer for newly ready delivery routes.
+   * @param onReady Observes each route made ready by persistence.
+   * @returns Returns a function that removes the observer.
+   */
   onReady(onReady: OnDeliveryReady): () => void;
+  /** Updates readiness ownership to use configured delivery routes.
+   * @param scopes Lists routes that may receive buffered readiness.
+   * @param onReady Observes readiness after routed ownership begins.
+   * @param options Allows an empty route set when `allowEmpty` is true.
+   */
   transition(
     scopes: readonly DeliveryReady[],
     onReady: OnDeliveryReady,
@@ -174,19 +199,27 @@ interface RegistrationSnapshot {
 
 /** Post-only command endpoint exposed by a built bounded context. */
 export interface CommandEndpoint {
-  /** Canonical command message type URLs accepted by this endpoint. */
+  /** Lists canonical command message type URLs accepted by this endpoint.
+   * @returns Returns immutable command type URLs.
+   */
   acceptedCommandTypes(): readonly string[];
 
-  /** Posts a command into the context-owned command bus. */
+  /** Posts a command into the context-owned command bus.
+   * @param command Contains the command to dispatch.
+   */
   post(command: Command): Promise<void>;
 }
 
 /** Event endpoint exposed by a built bounded context for accepted-type listing and posting. */
 export interface EventEndpoint {
-  /** Canonical public event message type URLs accepted by this endpoint. */
+  /** Lists canonical public event message type URLs accepted by this endpoint.
+   * @returns Returns immutable event type URLs.
+   */
   acceptedEventTypes(): readonly string[];
 
-  /** Posts an event into the context-owned event bus. */
+  /** Posts an event into the context-owned event bus.
+   * @param event Contains the event to dispatch.
+   */
   post(event: Event): Promise<void>;
 }
 
@@ -247,7 +280,9 @@ export class BoundedContextNameError extends Error {
   /** Rejected raw value. */
   readonly value: unknown;
 
-  /** Create a deterministic bounded-context name validation error. */
+  /** Creates a deterministic bounded-context name validation error.
+   * @param value Contains the rejected name value.
+   */
   constructor(value: unknown) {
     super('A Bounded Context name cannot be empty, blank, or start with "__spine/".');
     this.name = "BoundedContextNameError";
@@ -316,7 +351,7 @@ let constructBoundedContextBuilder:
 let constructContextSpec:
   ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => ContextSpec) | undefined;
 
-/** Built bounded context that owns the write-side and event-side buses. */
+/** Represents a built bounded context and its command, event, repository, and read-side resources. */
 export class BoundedContext {
   readonly #snapshot: BoundedContextSnapshot;
   readonly #commandBus: CommandBus;
@@ -333,6 +368,7 @@ export class BoundedContext {
   readonly #stand: Stand;
   #closed: Promise<void> | undefined;
 
+  /** Registers the framework-only construction hook for this module. */
   static {
     constructBoundedContext = (
       snapshot,
@@ -354,7 +390,15 @@ export class BoundedContext {
       );
   }
 
-  /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
+  /** Creates a framework-owned bounded context.
+   * @param snapshot Contains the immutable context metadata.
+   * @param commandBus Dispatches commands accepted by this context.
+   * @param eventBus Dispatches events accepted by this context.
+   * @param stand Stores read-side state for this context.
+   * @param storageFactory Creates context storage.
+   * @param repositories Lists repositories to register.
+   * @param token Proves framework-controlled construction.
+   */
   protected constructor(
     snapshot: BoundedContextSnapshot,
     commandBus: CommandBus,
@@ -364,8 +408,11 @@ export class BoundedContext {
     repositories: readonly RepositoryView[],
     token: FrameworkConstructionToken,
   ) {
-    requireFrameworkConstructionToken(token, "BoundedContext instances are framework-owned.");
-    this.#snapshot = cloneContextSnapshot(snapshot);
+    ContextParts.requireFrameworkConstructionToken(
+      token,
+      "BoundedContext instances are framework-owned.",
+    );
+    this.#snapshot = ContextParts.cloneContextSnapshot(snapshot);
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
     this.#stand = stand;
@@ -375,11 +422,11 @@ export class BoundedContext {
       post: (command: Command) => this.#commandBus.post(command),
     });
     this.#eventEndpoint = Object.freeze({
-      acceptedEventTypes: () => exposedEventTypeUrls(this.#eventBus),
+      acceptedEventTypes: () => ContextParts.exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => this.#eventBus.post(event),
     });
     const deliveryReadiness = new DeliveryReadiness();
-    const tenantIndex = createTenantIndex({
+    const tenantIndex = TenantIndexes.create({
       contextName: this.#snapshot.name.value,
       tenantMode: this.#snapshot.tenantMode,
       storageFactory,
@@ -398,12 +445,12 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
-    contextSystemPairings.set(this, createSystemPairing(this.#snapshot));
+    contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
     contextDeliveryDescriptors.set(
       this,
-      createDeliveryDescriptor(
+      ContextParts.createDeliveryDescriptor(
         this.#snapshot,
         storageFactory,
         tenantIndex,
@@ -416,7 +463,7 @@ export class BoundedContext {
       this.#registerRepositories(repositories);
     } catch (error) {
       try {
-        cleanupFailedContext(this, tenantIndex);
+        ContextParts.cleanupFailedContext(this, tenantIndex);
       } catch (cleanupError) {
         throw new AggregateError(
           [error, cleanupError],
@@ -433,12 +480,12 @@ export class BoundedContext {
 
     try {
       for (const preparedRepository of preparedRepositories) {
-        rejectRegisteredRepository(preparedRepository.repository);
+        ContextParts.rejectRegisteredRepository(preparedRepository.repository);
       }
       for (const preparedRepository of preparedRepositories) {
         this.#stand.register(preparedRepository.snapshot.stateSchema, {
           idField: preparedRepository.snapshot.idField.localName,
-          columns: repositoryColumns(preparedRepository.snapshot),
+          columns: ContextParts.repositoryColumns(preparedRepository.snapshot),
         });
         preparedRepository.commit();
         this.#registeredRepositories.push(preparedRepository.snapshot);
@@ -458,8 +505,8 @@ export class BoundedContext {
 
   #prepareRepositories(repositories: readonly RepositoryView[]): PreparedRepository[] {
     const registration: RepositoryRegistration = {
-      name: cloneName(this.#snapshot.name),
-      storageContext: createStorageContext(this.#snapshot.spec),
+      name: ContextParts.cloneName(this.#snapshot.name),
+      storageContext: ContextParts.createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
       stand: this.#stand,
       processManagerInbox: this.#processManagerInbox,
@@ -475,7 +522,9 @@ export class BoundedContext {
     const preparedRepositories: PreparedRepository[] = [];
     try {
       for (const repository of repositories) {
-        preparedRepositories.push(prepareRepositoryForContext(repository, registration));
+        preparedRepositories.push(
+          ContextParts.prepareRepositoryForContext(repository, registration),
+        );
       }
     } catch (error) {
       this.#failRegistration(error, preparedRepositories);
@@ -484,7 +533,7 @@ export class BoundedContext {
   }
 
   #failRegistration(error: unknown, preparedRepositories: readonly PreparedRepository[]): never {
-    const closeErrors = closePreparedRepositories(preparedRepositories);
+    const closeErrors = ContextParts.closePreparedRepositories(preparedRepositories);
     if (closeErrors.length > 0) {
       throw new AggregateError(
         [error, ...closeErrors],
@@ -494,73 +543,100 @@ export class BoundedContext {
     throw error;
   }
 
-  /** Creates a builder for a single-tenant bounded context. */
+  /** Creates a builder for a context without tenant isolation.
+   * @param name Names the bounded context.
+   * @returns Returns a builder initialized with the supplied name.
+   */
   static singleTenant(name: string): BoundedContextBuilder {
-    return createBoundedContextBuilder(createSpecSnapshot(name, false));
+    return ContextParts.createBoundedContextBuilder(ContextParts.createSpecSnapshot(name, false));
   }
 
-  /** Creates a builder for a multitenant bounded context. */
+  /** Creates a builder for a tenant-isolated context.
+   * @param name Names the bounded context.
+   * @returns Returns a builder initialized with the supplied name.
+   */
   static multitenant(name: string): BoundedContextBuilder {
-    return createBoundedContextBuilder(createSpecSnapshot(name, true));
+    return ContextParts.createBoundedContextBuilder(ContextParts.createSpecSnapshot(name, true));
   }
 
-  /** Bounded context name. */
+  /** Returns the bounded context name.
+   * @returns Returns the immutable context name.
+   */
   get name(): BoundedContextName {
     return this.#snapshot.name;
   }
 
-  /** Tenant mode declared for this context. */
+  /** Returns the context's tenant isolation mode.
+   * @returns Returns the configured tenant mode.
+   */
   get tenantMode(): TenantMode {
     return this.#snapshot.tenantMode;
   }
 
-  /** Whether this context is multitenant. */
+  /** Returns whether this context isolates data by tenant.
+   * @returns Returns true when the context is multitenant.
+   */
   get isMultitenant(): boolean {
     return this.#snapshot.tenantMode === "multitenant";
   }
 
-  /** Context spec used to build this context. */
+  /** Returns a copy-safe specification used to build this context.
+   * @returns Returns the context specification.
+   */
   get spec(): ContextSpec {
-    return createContextSpec(this.#snapshot.spec);
+    return ContextParts.createContextSpec(this.#snapshot.spec);
   }
 
-  /** Copy-safe immutable metadata snapshot of this context. */
+  /** Returns a copy-safe immutable metadata snapshot.
+   * @returns Returns the context metadata snapshot.
+   */
   get snapshot(): BoundedContextSnapshot {
-    return cloneContextSnapshot(this.#snapshot);
+    return ContextParts.cloneContextSnapshot(this.#snapshot);
   }
 
-  /** Post-only command endpoint owned by this context. */
+  /** Returns the command endpoint owned by this context.
+   * @returns Returns the context command endpoint.
+   */
   commandBus(): CommandEndpoint {
     return this.#commandEndpoint;
   }
 
-  /** Event endpoint owned by this context for accepted-type listing and posting. */
+  /** Returns the event endpoint owned by this context.
+   * @returns Returns the context event endpoint.
+   */
   eventBus(): EventEndpoint {
     return this.#eventEndpoint;
   }
 
-  /** Context-owned read-side Stand for direct entity state access and in-process updates. */
+  /** Returns the context-owned read-side Stand.
+   * @returns Returns the read-side state store.
+   */
   stand(): Stand {
     return this.#stand;
   }
 
-  /** Copy-safe list of frozen snapshot-backed repository views registered with this context. */
+  /** Lists copy-safe views of repositories registered with this context.
+   * @returns Returns immutable repository views.
+   */
   registeredRepositories(): readonly RepositoryView[] {
-    return this.#registeredRepositories.map((snapshot) => createRepositoryView(snapshot));
+    return this.#registeredRepositories.map((snapshot) =>
+      ContextParts.createRepositoryView(snapshot),
+    );
   }
 
   /**
-   * Copy-safe diagnostics for asynchronous event follow-up failures.
+   * Returns copy-safe diagnostics for asynchronous event follow-up failures.
    *
    * Entries can describe already-stored event dispatch or an independent
    * follow-up post that failed before storage.
+   * @returns Returns immutable failure diagnostics.
    */
   storedEventDispatchFailures(): readonly StoredEventDispatchFailure[] {
-    return this.#storedEventDispatchFailures.map(cloneDispatchFailure);
+    return this.#storedEventDispatchFailures.map(ContextParts.cloneDispatchFailure);
   }
 
   /**
-   * Rebuild registered projection subscribers from already-stored events.
+   * Builds registered projection state again from already-stored events.
    *
    * Supported boundary:
    * - projection subscribers only;
@@ -575,16 +651,18 @@ export class BoundedContext {
    * - Delivery jobs, schedulers, inbox lifecycle, retries, and transport
    *   topology;
    * - durable live-traffic catch-up orchestration across processes.
+   * @param options Selects the tenant slice to rebuild.
+   * @returns Resolves to replay and clear counts for the selected slice.
    */
   async catchUpReadSide(options: ReadCatchUpOptions = {}): Promise<ReadCatchUpResult> {
     return eventBusAccess.runExclusive(this.#eventBus, () => this.#catchUpReadSideOnce(options));
   }
 
   async #catchUpReadSideOnce(options: ReadCatchUpOptions): Promise<ReadCatchUpResult> {
-    const storageContext = catchUpStorageContext(this.#snapshot.spec, options);
-    const tenantOptions = catchUpStandOptions(storageContext);
-    const projections = projectionDispatchers(this.#repositoryViews);
-    const clearTargets = projectionStateClearTargets(projections);
+    const storageContext = ContextParts.catchUpStorageContext(this.#snapshot.spec, options);
+    const tenantOptions = ContextParts.catchUpStandOptions(storageContext);
+    const projections = ContextParts.projectionDispatchers(this.#repositoryViews);
+    const clearTargets = ContextParts.projectionStateClearTargets(projections);
     const clearedStateTypes: string[] = [];
     let clearedEntityCount = 0;
     let replayedEventCount = 0;
@@ -594,14 +672,14 @@ export class BoundedContext {
       clearedStateTypes.push(target.typeUrl);
     }
 
-    const events = await readStoredEvents(storageContext, this.#storageFactory);
+    const events = await ContextParts.readStoredEvents(storageContext, this.#storageFactory);
 
     for (const event of events) {
       try {
-        validateReplayTenant(storageContext, event);
-        replayedEventCount += await dispatchStoredProjectionEvent(projections, event);
+        ContextParts.validateReplayTenant(storageContext, event);
+        replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(projections, event);
       } catch (error) {
-        throw catchUpReplayError(event, error);
+        throw ContextParts.catchUpReplayError(event, error);
       }
     }
 
@@ -613,7 +691,7 @@ export class BoundedContext {
   }
 
   /**
-   * Close context-owned buses, stand, and repository storage/runtime bindings.
+   * Closes context-owned buses, Stand, and repository storage/runtime bindings.
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
    * The context attempts every owned close hook; when any hook fails, the
@@ -630,22 +708,28 @@ export class BoundedContext {
 
     commandBusAccess.beginClose(this.#commandBus);
     eventBusAccess.beginClose(this.#eventBus);
-    await closeContextPart(() => drainContextBuses(this.#commandBus, this.#eventBus), errors);
-    await closeContextPart(() => commandBusAccess.finishClose(this.#commandBus), errors);
-    await closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
-    await closeContextPart(() => this.#stand.close(), errors);
-    await closeContextPart(() => {
-      requireTenantIndex(this).close();
+    await ContextParts.closeContextPart(
+      () => ContextParts.drainContextBuses(this.#commandBus, this.#eventBus),
+      errors,
+    );
+    await ContextParts.closeContextPart(
+      () => commandBusAccess.finishClose(this.#commandBus),
+      errors,
+    );
+    await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
+    await ContextParts.closeContextPart(() => this.#stand.close(), errors);
+    await ContextParts.closeContextPart(() => {
+      ContextParts.requireTenantIndex(this).close();
     }, errors);
 
     for (const repository of this.#repositoryViews) {
-      await closeContextPart(() => {
+      await ContextParts.closeContextPart(() => {
         repositoryAccess.clearRuntime(repository);
         registeredRepositories.delete(repository);
       }, errors);
     }
     for (const storage of this.#repositoryStorages) {
-      await closeContextPart(() => {
+      await ContextParts.closeContextPart(() => {
         storage.close();
       }, errors);
     }
@@ -659,7 +743,7 @@ export class BoundedContext {
     this.#storedEventDispatchFailures.push(
       Object.freeze({
         event: clone(EventSchema, event),
-        error: snapshotDispatchError(error),
+        error: ContextParts.snapshotDispatchError(error),
       }),
     );
     if (this.#storedEventDispatchFailures.length > dispatchFailureLimit) {
@@ -671,7 +755,7 @@ export class BoundedContext {
   }
 }
 
-/** @internal Package-local context access used by framework service adapters. */
+/** Exposes framework-only operations for built contexts and their builders. */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   isBuilder(value: unknown): value is BoundedContextBuilder {
     return (
@@ -709,11 +793,11 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 
   systemPairing(context: BoundedContext): SystemPairingSnapshot {
-    return cloneSystemPairing(requireSystemPairing(context));
+    return ContextParts.cloneSystemPairing(ContextParts.requireSystemPairing(context));
   },
 
   tenantIndex(context: BoundedContext): TenantIndex {
-    return requireTenantIndex(context);
+    return ContextParts.requireTenantIndex(context);
   },
 
   storageFactory(context: BoundedContext): StorageFactory {
@@ -737,7 +821,7 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 });
 
-/** Builder for assembling a JVM-familiar {@link BoundedContext}. */
+/** Assembles a {@link BoundedContext} from repositories and dispatchers. */
 export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
   readonly #commandDispatchers = new Set<CommandDispatcher>();
@@ -747,48 +831,57 @@ export class BoundedContextBuilder {
   #storageFactory: StorageFactory | undefined;
   #generatedRegistryRoot: string | URL | undefined;
 
+  /** Registers the framework-only construction hook for this module. */
   static {
     constructBoundedContextBuilder = (snapshot, token): BoundedContextBuilder =>
       new BoundedContextBuilder(snapshot, token);
   }
 
-  /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
+  /** Creates a framework-owned context builder.
+   * @param specSnapshot Contains the initial context specification.
+   * @param token Proves framework-controlled construction.
+   */
   protected constructor(specSnapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) {
-    requireFrameworkConstructionToken(
+    ContextParts.requireFrameworkConstructionToken(
       token,
       "BoundedContextBuilder instances are framework-owned.",
     );
-    this.#specSnapshot = cloneSpecSnapshot(specSnapshot);
+    this.#specSnapshot = ContextParts.cloneSpecSnapshot(specSnapshot);
     builderBuilds.set(this, (defaultStorageFactory) => this.#buildAsyncWith(defaultStorageFactory));
     Object.freeze(this);
   }
 
-  /** Bounded context name configured for the context to build. */
+  /** Returns the name configured for the context to build.
+   * @returns Returns the immutable context name.
+   */
   get name(): BoundedContextName {
     return this.#specSnapshot.name;
   }
 
-  /** Context spec configured for the context to build. */
+  /** Returns a copy-safe specification configured for the context.
+   * @returns Returns the context specification.
+   */
   get spec(): ContextSpec {
-    return createContextSpec(this.#specSnapshot);
+    return ContextParts.createContextSpec(this.#specSnapshot);
   }
 
-  /** Tenant mode configured for the context to build. */
+  /** Returns the tenant isolation mode configured for the context.
+   * @returns Returns the configured tenant mode.
+   */
   get tenantMode(): TenantMode {
-    return toTenantMode(this.#specSnapshot.multitenant);
+    return ContextParts.toTenantMode(this.#specSnapshot.multitenant);
   }
 
-  /** Whether this builder will create a multitenant context. */
+  /** Returns whether this builder will create a tenant-isolated context.
+   * @returns Returns true when the built context will be multitenant.
+   */
   isMultitenant(): boolean {
     return this.#specSnapshot.multitenant;
   }
 
-  /**
-   * Adds a repository or an entity class to the context registration list.
-   *
-   * Entity-class assembly loads generated handler metadata, so callers must use
-   * {@link buildAsync}. Use `add(repository).build()` for explicit synchronous
-   * assembly.
+  /** Adds an entry to the context registration list.
+   * @param entry Registers a repository or entity class.
+   * @returns Returns this builder for further configuration.
    */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     entry: Repository<EntityType> | EntityType,
@@ -798,66 +891,91 @@ export class BoundedContextBuilder {
       return this;
     }
 
-    requireEntityClass(entry, "BoundedContextBuilder.add(repository)");
+    ContextParts.requireEntityClass(entry, "BoundedContextBuilder.add(repository)");
     this.#entityTypes.add(entry);
     return this;
   }
 
-  /** Removes a repository from the context registration list. */
+  /** Removes a repository from the context registration list.
+   * @param repository Identifies the repository to remove.
+   * @returns Returns this builder for further configuration.
+   */
   remove<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    requireRepositoryInstance(repository, "BoundedContextBuilder.remove(repository)");
+    ContextParts.requireRepositoryInstance(repository, "BoundedContextBuilder.remove(repository)");
     this.#repositories.delete(repository);
     return this;
   }
 
-  /** Adds a command dispatcher to the context being built. */
+  /** Adds a command dispatcher to the context being built.
+   * @param dispatcher Dispatches commands accepted by this context.
+   * @returns Returns this builder for further configuration.
+   */
   addCommandDispatcher(dispatcher: CommandDispatcher): this {
     this.#commandDispatchers.add(dispatcher);
     return this;
   }
 
-  /** Removes a command dispatcher from the context being built. */
+  /** Removes a command dispatcher from the context being built.
+   * @param dispatcher Identifies the dispatcher to remove.
+   * @returns Returns this builder for further configuration.
+   */
   removeCommandDispatcher(dispatcher: CommandDispatcher): this {
     this.#commandDispatchers.delete(dispatcher);
     return this;
   }
 
-  /** Adds an event dispatcher to the context being built. */
+  /** Adds an event dispatcher to the context being built.
+   * @param dispatcher Dispatches events accepted by this context.
+   * @returns Returns this builder for further configuration.
+   */
   addEventDispatcher(dispatcher: EventDispatcher): this {
     this.#eventDispatchers.add(dispatcher);
     return this;
   }
 
-  /** Removes an event dispatcher from the context being built. */
+  /** Removes an event dispatcher from the context being built.
+   * @param dispatcher Identifies the dispatcher to remove.
+   * @returns Returns this builder for further configuration.
+   */
   removeEventDispatcher(dispatcher: EventDispatcher): this {
     this.#eventDispatchers.delete(dispatcher);
     return this;
   }
 
-  /** Uses the passed storage factory for context event, repository state, and Stand storage. */
+  /** Sets a storage factory for event, repository-state, and Stand storage.
+   * @param storageFactory Creates the context's persistent storage.
+   * @returns Returns this builder for further configuration.
+   */
   withStorageFactory(storageFactory: StorageFactory): this {
     this.#storageFactory = storageFactory;
     return this;
   }
 
-  /** Uses a trusted compiled package/app root for the conventional generated handler registry module. */
+  /** Sets a trusted compiled application root for generated handler metadata.
+   * @param root Names the compiled package or application root.
+   * @returns Returns this builder for further configuration.
+   */
   withGeneratedRegistryRoot(root: string | URL): this {
     this.#generatedRegistryRoot = root;
     return this;
   }
 
-  /** Builds a bounded context that owns configured command and event buses. */
+  /** Builds a context from explicitly added repositories and dispatchers.
+   * @returns Returns the built context.
+   */
   build(): BoundedContext {
-    rejectSyncEntityAssembly(this.#entityTypes);
+    ContextParts.rejectSyncEntityAssembly(this.#entityTypes);
     return this.#buildWith(
       [...this.#repositories],
       this.#storageFactory ?? new InMemoryStorageFactory(),
     );
   }
 
-  /** Builds a bounded context, loading generated metadata for entity classes added to the builder. */
+  /** Builds a context after loading generated metadata for added entity classes.
+   * @returns Resolves to the built context.
+   */
   async buildAsync(): Promise<BoundedContext> {
     return this.#buildAsyncWith();
   }
@@ -879,23 +997,23 @@ export class BoundedContextBuilder {
     storageFactory: StorageFactory,
   ): BoundedContext {
     const registeredRepositories = [...repositories];
-    preflightRepositories(registeredRepositories);
+    ContextParts.preflightRepositories(registeredRepositories);
     const commandBus = new CommandBus([
       ...this.#commandDispatchers,
-      ...repositoryCommandDispatchers(registeredRepositories),
+      ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
     ]);
     const eventStore = this.createEventStore(storageFactory);
 
     try {
       const eventBus = new EventBus(eventStore, [
-        ...repositoryEventDispatchers(registeredRepositories),
+        ...ContextParts.repositoryEventDispatchers(registeredRepositories),
         ...this.#eventDispatchers,
       ]);
       const stand = new Stand({
-        context: createStorageContext(this.#specSnapshot),
+        context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
-      return createBoundedContext(
+      return ContextParts.createBoundedContext(
         this.#specSnapshot,
         commandBus,
         eventBus,
@@ -904,7 +1022,7 @@ export class BoundedContextBuilder {
         registeredRepositories,
       );
     } catch (error) {
-      closeEventStore(eventStore, error);
+      ContextParts.closeEventStore(eventStore, error);
       throw error;
     }
   }
@@ -916,693 +1034,89 @@ export class BoundedContextBuilder {
       return Object.freeze([]);
     }
 
-    const root = requireGeneratedRegistryRoot(this.#generatedRegistryRoot);
+    const root = ContextParts.requireGeneratedRegistryRoot(this.#generatedRegistryRoot);
     const discovery = new GeneratedRegistryDiscovery();
-    const registryModule = await trustedGeneratedRegistryModule(root);
+    const registryModule = await ContextParts.trustedGeneratedRegistryModule(root);
     const registryKey = registryModule.href;
     const registries = (await discovery
       .load({
         modules: [registryModule],
-        ...generatedRegistryCacheBust(registryKey),
+        ...ContextParts.generatedRegistryCacheBust(registryKey),
       })
       .catch((error: unknown) => {
-        recordGeneratedRegistryFailure(registryKey);
+        ContextParts.recordGeneratedRegistryFailure(registryKey);
         throw error;
       })) as readonly GeneratedHandlerRegistry[];
-    const metadata = ingestGeneratedRegistries(registries);
+    const metadata = ContextParts.ingestGeneratedRegistries(registries);
 
     return Object.freeze(
-      entityTypes.map((entityType) => createGeneratedRepository(entityType, registries, metadata)),
+      entityTypes.map((entityType) =>
+        ContextParts.createGeneratedRepository(entityType, registries, metadata),
+      ),
     );
   }
 
   private createEventStore(storageFactory: StorageFactory): EventStore {
-    return new EventStore(createStorageContext(this.#specSnapshot), storageFactory);
+    return new EventStore(ContextParts.createStorageContext(this.#specSnapshot), storageFactory);
   }
 }
 
-/** Immutable context spec used by the bounded-context builder. */
+/** Represents the immutable specification used by a context builder. */
 export class ContextSpec {
   readonly #snapshot: ContextSpecSnapshot;
 
+  /** Registers the framework-only construction hook for this module. */
   static {
     constructContextSpec = (snapshot, token): ContextSpec => new ContextSpec(snapshot, token);
   }
 
-  /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
+  /** Creates a framework-owned context specification.
+   * @param snapshot Contains immutable specification values.
+   * @param token Proves framework-controlled construction.
+   */
   protected constructor(snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) {
-    requireFrameworkConstructionToken(token, "ContextSpec instances are framework-owned.");
-    this.#snapshot = cloneSpecSnapshot(snapshot);
+    ContextParts.requireFrameworkConstructionToken(
+      token,
+      "ContextSpec instances are framework-owned.",
+    );
+    this.#snapshot = ContextParts.cloneSpecSnapshot(snapshot);
     Object.freeze(this);
   }
 
-  /** Bounded context name. */
+  /** Returns the bounded context name.
+   * @returns Returns the immutable context name.
+   */
   get name(): BoundedContextName {
     return this.#snapshot.name;
   }
 
-  /** Whether the context requires tenant isolation. */
+  /** Returns whether the context requires tenant isolation.
+   * @returns Returns true when tenant isolation is required.
+   */
   get multitenant(): boolean {
     return this.#snapshot.multitenant;
   }
 
-  /** Tenant mode derived from {@link multitenant}. */
+  /** Returns the tenant mode derived from the multitenant setting.
+   * @returns Returns the derived tenant mode.
+   */
   get tenantMode(): TenantMode {
-    return toTenantMode(this.#snapshot.multitenant);
+    return ContextParts.toTenantMode(this.#snapshot.multitenant);
   }
 
-  /** Whether this spec stores its event log. Domain context specs do. */
+  /** Returns whether the context specification stores its domain event log.
+   * @returns Returns true when the context stores events.
+   */
   get storesEvents(): boolean {
     return this.#snapshot.storesEvents;
   }
 
-  /** Copy-safe immutable snapshot of this spec. */
+  /** Returns a copy-safe immutable snapshot of this specification.
+   * @returns Returns the specification snapshot.
+   */
   get snapshot(): ContextSpecSnapshot {
-    return cloneSpecSnapshot(this.#snapshot);
+    return ContextParts.cloneSpecSnapshot(this.#snapshot);
   }
-}
-
-function requireFrameworkConstructionToken(token: unknown, message: string): void {
-  if (token !== frameworkConstructionToken) {
-    throw new TypeError(message);
-  }
-}
-
-function createContextSpec(specSnapshot: ContextSpecSnapshot): ContextSpec {
-  if (constructContextSpec === undefined) {
-    throw new TypeError("ContextSpec factory is unavailable.");
-  }
-
-  return constructContextSpec(specSnapshot, frameworkConstructionToken);
-}
-
-function createBoundedContextBuilder(specSnapshot: ContextSpecSnapshot): BoundedContextBuilder {
-  if (constructBoundedContextBuilder === undefined) {
-    throw new TypeError("BoundedContextBuilder factory is unavailable.");
-  }
-
-  return constructBoundedContextBuilder(specSnapshot, frameworkConstructionToken);
-}
-
-function createBoundedContext(
-  specSnapshot: ContextSpecSnapshot,
-  commandBus: CommandBus,
-  eventBus: EventBus,
-  stand: Stand,
-  storageFactory: StorageFactory,
-  repositories: readonly RepositoryView[],
-): BoundedContext {
-  if (constructBoundedContext === undefined) {
-    throw new TypeError("BoundedContext factory is unavailable.");
-  }
-
-  return constructBoundedContext(
-    {
-      name: specSnapshot.name,
-      tenantMode: toTenantMode(specSnapshot.multitenant),
-      spec: specSnapshot,
-    },
-    commandBus,
-    eventBus,
-    stand,
-    storageFactory,
-    repositories,
-    frameworkConstructionToken,
-  );
-}
-
-function createStorageContext(specSnapshot: ContextSpecSnapshot): StorageContext {
-  return Object.freeze({
-    name: specSnapshot.name.value,
-    multitenant: specSnapshot.multitenant,
-  });
-}
-
-function catchUpStorageContext(
-  specSnapshot: ContextSpecSnapshot,
-  options: ReadCatchUpOptions,
-): StorageContext {
-  if (!specSnapshot.multitenant) {
-    if (options.tenantId !== undefined) {
-      throw new Error(
-        `Single-tenant read-side catch-up for "${specSnapshot.name.value}" does not accept tenantId.`,
-      );
-    }
-    return createStorageContext(specSnapshot);
-  }
-
-  const tenantId = options.tenantId;
-  if (tenantId === undefined || tenantId.trim().length === 0) {
-    throw new Error(
-      `Multitenant read-side catch-up for "${specSnapshot.name.value}" requires tenantId.`,
-    );
-  }
-
-  return Object.freeze({
-    name: specSnapshot.name.value,
-    multitenant: true,
-    tenantId,
-  });
-}
-
-function createBoundedContextName(value: string): BoundedContextName {
-  if (
-    typeof value !== "string" ||
-    value.trim().length === 0 ||
-    value.startsWith(internalStoragePrefix)
-  ) {
-    throw new BoundedContextNameError(value);
-  }
-  return Object.freeze({ value });
-}
-
-function createSpecSnapshot(name: string, multitenant: boolean): ContextSpecSnapshot {
-  return Object.freeze({
-    name: createBoundedContextName(name),
-    multitenant,
-    storesEvents: true,
-  });
-}
-
-function cloneName(name: BoundedContextName): BoundedContextName {
-  return createBoundedContextName(name.value);
-}
-
-function cloneSpecSnapshot(spec: ContextSpecSnapshot): ContextSpecSnapshot {
-  return Object.freeze({
-    name: cloneName(spec.name),
-    multitenant: spec.multitenant,
-    storesEvents: spec.storesEvents,
-  });
-}
-
-function cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextSnapshot {
-  return Object.freeze({
-    name: cloneName(snapshot.name),
-    tenantMode: snapshot.tenantMode,
-    spec: cloneSpecSnapshot(snapshot.spec),
-  });
-}
-
-function createSystemPairing(snapshot: BoundedContextSnapshot): SystemPairingSnapshot {
-  return Object.freeze({
-    domain: cloneContextSnapshot(snapshot),
-    system: Object.freeze({
-      name: createBoundedContextName(`${snapshot.name.value}_System`),
-      multitenant: snapshot.spec.multitenant,
-      storesEvents: false,
-    }),
-  });
-}
-
-function cloneSystemPairing(pairing: SystemPairingSnapshot): SystemPairingSnapshot {
-  return Object.freeze({
-    domain: cloneContextSnapshot(pairing.domain),
-    system: cloneSpecSnapshot(pairing.system),
-  });
-}
-
-function exposedEventTypeUrls(eventBus: EventBus): readonly string[] {
-  return Object.freeze(
-    eventBusAccess
-      .eventSchemas(eventBus)
-      .filter((schema) => !isInternalEventSchema(schema))
-      .map((schema) => TypeUrls.derive(schema)),
-  );
-}
-
-function isInternalEventSchema(schema: DescriptorMessageSchema): boolean {
-  return (
-    (hasOption(schema, internal_type) && getOption(schema, internal_type)) ||
-    (hasOption(schema, SPI_type) && getOption(schema, SPI_type)) ||
-    (hasOption(schema.file, internal_all) && getOption(schema.file, internal_all))
-  );
-}
-
-function toTenantMode(multitenant: boolean): TenantMode {
-  return multitenant ? "multitenant" : "single-tenant";
-}
-
-function requireSystemPairing(context: BoundedContext): SystemPairingSnapshot {
-  const pairing = contextSystemPairings.get(context);
-
-  if (pairing === undefined) {
-    throw new TypeError("System pairing requires a built BoundedContext instance.");
-  }
-
-  return pairing;
-}
-
-function requireTenantIndex(context: BoundedContext): TenantIndex {
-  const tenantIndex = contextTenantIndexes.get(context);
-
-  if (tenantIndex === undefined) {
-    throw new TypeError("Tenant index requires a built BoundedContext instance.");
-  }
-
-  return tenantIndex;
-}
-
-function requireRepositoryInstance(repository: unknown, operation: string): void {
-  if (!repositoryAccess.hasInstance(repository)) {
-    throw new TypeError(`${operation} requires a Repository instance.`);
-  }
-}
-
-function requireEntityClass(entityType: unknown, operation: string): void {
-  if (typeof entityType !== "function") {
-    throw new TypeError(
-      `${operation} requires a Repository instance. Use an entity class only with buildAsync().`,
-    );
-  }
-}
-
-function rejectSyncEntityAssembly(entityTypes: ReadonlySet<RepositoryEntityType>): void {
-  if (entityTypes.size === 0) {
-    return;
-  }
-
-  throw new Error(
-    "BoundedContextBuilder.build() cannot assemble entity classes from generated metadata. " +
-      "Use buildAsync().",
-  );
-}
-
-function requireGeneratedRegistryRoot(root: string | URL | undefined): string | URL {
-  if (root !== undefined) {
-    return root;
-  }
-
-  throw new Error(
-    "BoundedContextBuilder.buildAsync() requires withGeneratedRegistryRoot(root) " +
-      "when assembling entity classes from generated metadata.",
-  );
-}
-
-async function trustedGeneratedRegistryModule(root: string | URL): Promise<URL> {
-  const trustedRoot = await canonicalGeneratedRegistryRoot(root);
-  const registryPath = resolve(trustedRoot, generatedRegistryFile);
-  const canonicalRegistryPath = await canonicalReadableRegistryPath(registryPath);
-
-  if (resolvesOutsideRoot(trustedRoot, canonicalRegistryPath)) {
-    throw new Error(
-      `Generated handler registry module "${canonicalRegistryPath}" must resolve within ` +
-        `the configured generated registry root "${trustedRoot}".`,
-    );
-  }
-
-  return pathToFileURL(canonicalRegistryPath);
-}
-
-async function canonicalGeneratedRegistryRoot(root: string | URL): Promise<string> {
-  const rootPath = generatedRegistryRootPath(root);
-
-  try {
-    return await realpath(rootPath);
-  } catch (error) {
-    throw new Error(
-      `Generated registry root "${rootPath}" must be an existing readable directory.`,
-      { cause: error },
-    );
-  }
-}
-
-function generatedRegistryRootPath(root: string | URL): string {
-  if (root instanceof URL) {
-    return fileUrlPath(root, "Generated registry root");
-  }
-
-  if (isUrlLike(root)) {
-    return fileUrlPath(parseRootUrl(root), "Generated registry root");
-  }
-
-  return resolve(root);
-}
-
-function fileUrlPath(url: URL, label: string): string {
-  if (url.protocol !== "file:") {
-    throw new Error(`${label} "${url.href}" must use the file: URL scheme.`);
-  }
-
-  if (url.search.length > 0 || url.hash.length > 0) {
-    throw new Error(`${label} "${url.href}" must not include a query or hash.`);
-  }
-
-  return resolve(fileURLToPath(url));
-}
-
-function parseRootUrl(root: string): URL {
-  try {
-    return new URL(root);
-  } catch (error) {
-    throw new Error(`Generated registry root "${root}" is not a valid URL.`, { cause: error });
-  }
-}
-
-function isUrlLike(value: string): boolean {
-  return moduleSchemeRe.test(value) && !/^[A-Za-z]:[\\/]/.test(value);
-}
-
-async function canonicalReadableRegistryPath(registryPath: string): Promise<string> {
-  try {
-    await access(registryPath, fsConstants.R_OK);
-    return await realpath(registryPath);
-  } catch (error) {
-    throw new Error(
-      `Generated handler registry module "${registryPath}" must exist and be readable.`,
-      { cause: error },
-    );
-  }
-}
-
-function resolvesOutsideRoot(canonicalRoot: string, canonicalPath: string): boolean {
-  const relativePath = relative(canonicalRoot, canonicalPath);
-
-  return (
-    relativePath.startsWith("..") ||
-    relativePath === ".." ||
-    relativePath.split(sep).includes("..") ||
-    isAbsolute(relativePath)
-  );
-}
-
-function generatedRegistryCacheBust(
-  registryKey: string,
-): { readonly cacheBust: string } | Record<string, never> {
-  const attempt = generatedRegistryLoadAttempts.get(registryKey) ?? 0;
-
-  return attempt === 0 ? {} : { cacheBust: `retry-${attempt.toString()}` };
-}
-
-function recordGeneratedRegistryFailure(registryKey: string): void {
-  generatedRegistryLoadAttempts.set(
-    registryKey,
-    (generatedRegistryLoadAttempts.get(registryKey) ?? 0) + 1,
-  );
-}
-
-function ingestGeneratedRegistries(
-  registries: readonly GeneratedHandlerRegistry[],
-): HandlerMetadataRegistry {
-  const registry = new HandlerMetadataRegistry();
-  const ingestor = new HandlerRegistryIngestor();
-
-  for (const generated of registries) {
-    ingestor.register(generated, registry);
-  }
-
-  return registry;
-}
-
-function createGeneratedRepository(
-  entityType: RepositoryEntityType,
-  registries: readonly GeneratedHandlerRegistry[],
-  metadata: HandlerMetadataRegistry,
-): RepositoryView {
-  const generated = findGeneratedEntity(entityType, registries);
-  const handlers = findGeneratedHandlers(entityType, generated, metadata);
-
-  return new Repository({
-    entityType: entityType as never,
-    schema: generated.stateSchema,
-    handlers: handlers as never,
-    events: aggregateAssignedEvents(generated),
-  });
-}
-
-function findGeneratedEntity(
-  entityType: RepositoryEntityType,
-  registries: readonly GeneratedHandlerRegistry[],
-): GeneratedEntityHandlerGroup {
-  for (const registry of registries) {
-    const generated = registry.entities.find((entity) => entity.entityType === entityType);
-    if (generated !== undefined) {
-      return generated;
-    }
-  }
-
-  throw new Error(`Generated handler registry is missing metadata for ${entityType.name}.`);
-}
-
-function findGeneratedHandlers(
-  entityType: RepositoryEntityType,
-  generated: GeneratedEntityHandlerGroup,
-  metadata: HandlerMetadataRegistry,
-): EntityHandlersMetadata {
-  const matches = metadata.findEntityHandlersByState(generated.stateSchema.typeName);
-  const handlers = matches.find((candidate) => candidate.entityType === entityType);
-
-  if (handlers === undefined) {
-    throw new Error(`Generated handler registry is missing metadata for ${entityType.name}.`);
-  }
-
-  return handlers;
-}
-
-function aggregateAssignedEvents(
-  generated: GeneratedEntityHandlerGroup,
-): readonly DescriptorMessageSchema[] {
-  return uniqueSchemas(
-    generated.handlers.flatMap((handler) =>
-      handler.kind === "command-assignment" || handler.kind === "event-reaction"
-        ? handler.emittedSchemas
-        : [],
-    ),
-  );
-}
-
-function uniqueSchemas<Schema extends DescriptorMessageSchema>(
-  schemas: readonly Schema[],
-): readonly Schema[] {
-  const byTypeName = new Map<string, Schema>();
-
-  for (const schema of schemas) {
-    byTypeName.set(schema.typeName, schema);
-  }
-
-  return Object.freeze([...byTypeName.values()]);
-}
-
-function preflightRepositories(repositories: readonly RepositoryView[]): void {
-  const entityTypes = new Set<RepositoryEntityType>();
-  const stateTypeNames = new Set<string>();
-
-  for (const repository of repositories) {
-    requireRepositoryInstance(repository, "BoundedContextBuilder.add(repository)");
-    const snapshot = repositorySnapshot(repository);
-    const registration = registeredRepositories.get(repository);
-    if (registration !== undefined) {
-      throw new Error(
-        `Repository for "${snapshot.stateFullTypeName}" is already registered with Bounded Context ` +
-          `"${registration.name.value}".`,
-      );
-    }
-
-    if (entityTypes.has(snapshot.entityType)) {
-      throw new Error(
-        `Repository entity type "${snapshot.entityType.name}" is already registered.`,
-      );
-    }
-    entityTypes.add(snapshot.entityType);
-
-    if (stateTypeNames.has(snapshot.stateFullTypeName)) {
-      throw new Error(
-        `Repository state type "${snapshot.stateFullTypeName}" is already registered.`,
-      );
-    }
-    stateTypeNames.add(snapshot.stateFullTypeName);
-  }
-}
-
-function repositoryCommandDispatchers(
-  repositories: readonly RepositoryView[],
-): readonly CommandDispatcher[] {
-  return repositories.flatMap((repository) => {
-    const dispatcher = repositoryAccess.commandDispatcher(repository);
-    return dispatcher === undefined ? [] : [dispatcher];
-  });
-}
-
-function repositoryEventDispatchers(
-  repositories: readonly RepositoryView[],
-): readonly EventDispatcher[] {
-  return repositories.flatMap((repository) => {
-    const dispatcher = repositoryAccess.eventDispatcher(repository);
-    return dispatcher === undefined ? [] : [dispatcher];
-  });
-}
-
-function closeEventStore(eventStore: EventStore, buildError: unknown): void {
-  try {
-    eventStore.close();
-  } catch (closeError) {
-    throw new AggregateError(
-      [buildError, closeError],
-      "Bounded Context build failed, and event store cleanup also failed.",
-    );
-  }
-}
-
-function cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {
-  contextSystemPairings.delete(context);
-  contextTenantIndexes.delete(context);
-  contextStorageFactories.delete(context);
-  contextDeliveryDescriptors.delete(context);
-  eventSubscribers.delete(context);
-  tenantIndex.close();
-}
-
-function createDeliveryDescriptor(
-  context: BoundedContextSnapshot,
-  storageFactory: StorageFactory,
-  tenantIndex: TenantIndex,
-  processManagers: PmInbox,
-  projections: PrjInbox,
-  readiness: DeliveryReadiness,
-): ContextDeliveryDescriptor {
-  return Object.freeze({
-    storageFactory,
-    async startupScopes(): Promise<readonly DeliveryTenantScope[]> {
-      if (tenantIndex.tenantMode === "single-tenant") {
-        return Object.freeze([Object.freeze({})]);
-      }
-
-      return Object.freeze(
-        (await tenantIndex.all()).map((tenantId) => Object.freeze({ tenantId })),
-      );
-    },
-    storageContext(scope: DeliveryTenantScope): StorageContext {
-      if (context.tenantMode === "single-tenant") {
-        if (scope.tenantId !== undefined) {
-          throw new Error(
-            `Single-tenant context "${context.name.value}" does not accept tenantId.`,
-          );
-        }
-        return Object.freeze({ name: context.name.value, multitenant: false });
-      }
-      const tenantId = scope.tenantId;
-      if (tenantId === undefined || tenantId.trim().length === 0) {
-        throw new Error(`Multitenant context "${context.name.value}" requires tenantId.`);
-      }
-      return Object.freeze({ name: context.name.value, multitenant: true, tenantId });
-    },
-    endpoints(): readonly DeliveryEndpoint[] {
-      return Object.freeze([...processManagers.endpoints(), ...projections.endpoints()]);
-    },
-    replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void> {
-      return message.label === "UPDATE_SUBSCRIBER"
-        ? projections.replay(message, tenantId)
-        : processManagers.replay(message, tenantId);
-    },
-    onReady(onReady: (ready: DeliveryReady) => void): () => void {
-      return readiness.onReady(onReady);
-    },
-    transition(
-      scopes: readonly DeliveryReady[],
-      onReady: OnDeliveryReady,
-      options?: { readonly allowEmpty?: boolean },
-    ): Promise<void> {
-      return readiness.transition(scopes, onReady, options);
-    },
-  });
-}
-
-function closePreparedRepositories(
-  preparedRepositories: readonly PreparedRepository[],
-): readonly unknown[] {
-  const errors: unknown[] = [];
-  for (const preparedRepository of preparedRepositories) {
-    try {
-      preparedRepository.close();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-
-  return errors;
-}
-
-async function closeContextPart(close: () => unknown, errors: unknown[]): Promise<void> {
-  try {
-    await close();
-  } catch (error) {
-    collectCloseError(error, errors);
-  }
-}
-
-async function drainContextBuses(commandBus: CommandBus, eventBus: EventBus): Promise<void> {
-  let observedCommandWork = -1;
-  let observedEventWork = -1;
-
-  do {
-    observedCommandWork = commandBusAccess.acceptedWorkCount(commandBus);
-    observedEventWork = eventBusAccess.acceptedWorkCount(eventBus);
-    await commandBusAccess.drain(commandBus);
-    await eventBusAccess.drain(eventBus);
-  } while (
-    commandBusAccess.acceptedWorkCount(commandBus) !== observedCommandWork ||
-    eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork
-  );
-}
-
-function collectCloseError(error: unknown, errors: unknown[]): void {
-  if (error instanceof AggregateError) {
-    const causes = error.errors as readonly unknown[];
-    for (const cause of causes) {
-      errors.push(cause);
-    }
-    return;
-  }
-  errors.push(error);
-}
-
-function prepareRepositoryForContext(
-  repository: RepositoryView,
-  registration: RepositoryRegistration,
-): PreparedRepository {
-  requireRepositoryInstance(repository, "BoundedContext repository registration");
-  const snapshot = repositorySnapshot(repository);
-  const storage = registration.storageFactory.createRecordStorage(
-    registration.storageContext,
-    createRepositoryRecordSpec(snapshot),
-  );
-  try {
-    rejectRegisteredRepository(repository);
-  } catch (error) {
-    storage.close();
-    throw error;
-  }
-  repositoryAccess.bindRuntime(repository, {
-    context: registration.storageContext,
-    storageFactory: registration.storageFactory,
-    stand: registration.stand,
-    signalMetadata: new SignalMetadata(),
-    processManagerInbox: registration.processManagerInbox,
-    projectionInbox: registration.projectionInbox,
-    dispatchStored: registration.dispatchStored,
-    dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
-    postEventFollowUp: registration.postEventFollowUp,
-    onPostCommand: registration.onPostCommand,
-    recordDispatchFailure: registration.recordDispatchFailure,
-  });
-
-  const processManagerInboxTarget = repositoryAccess.processManagerInboxTarget(repository);
-  const projectionInboxTarget = repositoryAccess.projectionInboxTarget(repository);
-
-  return {
-    repository,
-    snapshot,
-    storage,
-    ...(processManagerInboxTarget === undefined ? {} : { processManagerInboxTarget }),
-    ...(projectionInboxTarget === undefined ? {} : { projectionInboxTarget }),
-    commit: () => {
-      registeredRepositories.set(repository, { name: registration.name });
-    },
-    close: () => {
-      repositoryAccess.clearRuntime(repository);
-      storage.close();
-    },
-  };
 }
 
 interface PreparedRepository {
@@ -1649,285 +1163,895 @@ class CatchUpReplayError extends Error {
   }
 }
 
-function repositorySnapshot(repository: RepositoryView): RegistrationSnapshot {
-  const snapshot = repositoryAccess.snapshot(repository);
+/** Owns private bounded-context assembly, lifecycle, and replay details. */
+const ContextParts = Object.freeze({
+  requireFrameworkConstructionToken(token: unknown, message: string): void {
+    if (token !== frameworkConstructionToken) {
+      throw new TypeError(message);
+    }
+  },
 
-  return Object.freeze({
-    entityType: snapshot.entityType,
-    entityFamily: snapshot.entityFamily,
-    stateSchema: snapshot.stateSchema,
-    metadata: snapshot.metadata,
-    stateFullTypeName: snapshot.stateFullTypeName,
-    idField: snapshot.idField,
-    snapshot,
-  });
-}
+  createContextSpec(specSnapshot: ContextSpecSnapshot): ContextSpec {
+    return constructContextSpec(specSnapshot, frameworkConstructionToken);
+  },
 
-function rejectRegisteredRepository(repository: RepositoryView): void {
-  const snapshot = repositorySnapshot(repository);
-  const registration = registeredRepositories.get(repository);
+  createBoundedContextBuilder(specSnapshot: ContextSpecSnapshot): BoundedContextBuilder {
+    return constructBoundedContextBuilder(specSnapshot, frameworkConstructionToken);
+  },
 
-  if (registration !== undefined) {
-    throw new Error(
-      `Repository for "${snapshot.stateFullTypeName}" is already registered with Bounded Context ` +
-        `"${registration.name.value}".`,
+  createBoundedContext(
+    specSnapshot: ContextSpecSnapshot,
+    commandBus: CommandBus,
+    eventBus: EventBus,
+    stand: Stand,
+    storageFactory: StorageFactory,
+    repositories: readonly RepositoryView[],
+  ): BoundedContext {
+    return constructBoundedContext(
+      {
+        name: specSnapshot.name,
+        tenantMode: ContextParts.toTenantMode(specSnapshot.multitenant),
+        spec: specSnapshot,
+      },
+      commandBus,
+      eventBus,
+      stand,
+      storageFactory,
+      repositories,
+      frameworkConstructionToken,
     );
-  }
-}
+  },
 
-function createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<unknown, Message> {
-  return new RecordSpec<unknown, Message>({
-    schema: snapshot.stateSchema,
-    storageKey: `${snapshot.stateSchema.typeName}:current`,
-    idKind: "string",
-    extractId: (record) => readRecordId(record, snapshot),
-    columns: repositoryColumns(snapshot),
-  });
-}
+  createStorageContext(specSnapshot: ContextSpecSnapshot): StorageContext {
+    return Object.freeze({
+      name: specSnapshot.name.value,
+      multitenant: specSnapshot.multitenant,
+    });
+  },
 
-function repositoryColumns(snapshot: RegistrationSnapshot): readonly RecordColumn<Message>[] {
-  return snapshot.metadata.columns.map(
-    (field) =>
-      new RecordColumn(
-        field.name,
-        (record) => readRecordField(record, field.localName),
-        "protobuf",
-      ),
-  );
-}
-
-function createRepositoryView(snapshot: RegistrationSnapshot): RepositoryView {
-  return Object.freeze({
-    entityType: snapshot.entityType,
-    entityFamily: snapshot.entityFamily,
-    stateSchema: snapshot.stateSchema,
-    metadata: snapshot.metadata,
-    stateFullTypeName: snapshot.stateFullTypeName,
-    idField: snapshot.idField,
-    snapshot: snapshot.snapshot,
-  });
-}
-
-function cloneDispatchFailure(failure: StoredEventDispatchFailure): StoredEventDispatchFailure {
-  return Object.freeze({
-    event: clone(EventSchema, failure.event),
-    error: cloneDispatchError(failure.error),
-  });
-}
-
-function snapshotDispatchError(error: unknown): DispatchErrorSnapshot {
-  if (error instanceof Error) {
-    const snapshot: DispatchErrorSnapshot = {
-      name: boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
-      message: boundedErrorString(error.message, dispatchErrorMessageLimit),
-      ...(typeof error.stack === "string"
-        ? { stack: boundedErrorString(error.stack, dispatchErrorStackLimit) }
-        : {}),
-    };
-    return Object.freeze(snapshot);
-  }
-
-  return Object.freeze({
-    name: "NonErrorThrow",
-    message: boundedErrorString(String(error), dispatchErrorMessageLimit),
-  });
-}
-
-function cloneDispatchError(error: DispatchErrorSnapshot): DispatchErrorSnapshot {
-  return Object.freeze({
-    name: error.name,
-    message: error.message,
-    ...(error.stack === undefined ? {} : { stack: error.stack }),
-  });
-}
-
-function projectionDispatchers(
-  repositories: Iterable<RepositoryView>,
-): readonly ProjectionDispatch[] {
-  const projections: ProjectionDispatch[] = [];
-
-  for (const repository of repositories) {
-    const snapshot = repositoryAccess.snapshot(repository);
-    const dispatcher = repositoryAccess.eventDispatcher(repository);
-
-    if (snapshot.entityFamily !== "projection" || dispatcher === undefined) {
-      continue;
+  catchUpStorageContext(
+    specSnapshot: ContextSpecSnapshot,
+    options: ReadCatchUpOptions,
+  ): StorageContext {
+    if (!specSnapshot.multitenant) {
+      if (options.tenantId !== undefined) {
+        throw new Error(
+          `Single-tenant read-side catch-up for "${specSnapshot.name.value}" does not accept tenantId.`,
+        );
+      }
+      return ContextParts.createStorageContext(specSnapshot);
     }
 
-    projections.push(
-      Object.freeze({
-        repository,
-        dispatcher,
-        eventTypeUrls: new Set(
-          dispatcher.messageSchemas().map((schema) => TypeUrls.derive(schema)),
-        ),
-        schema: snapshot.stateSchema,
-        typeUrl: TypeUrls.derive(snapshot.stateSchema),
+    const tenantId = options.tenantId;
+    if (tenantId === undefined || tenantId.trim().length === 0) {
+      throw new Error(
+        `Multitenant read-side catch-up for "${specSnapshot.name.value}" requires tenantId.`,
+      );
+    }
+
+    return Object.freeze({
+      name: specSnapshot.name.value,
+      multitenant: true,
+      tenantId,
+    });
+  },
+
+  createBoundedContextName(value: string): BoundedContextName {
+    if (
+      typeof value !== "string" ||
+      value.trim().length === 0 ||
+      value.startsWith(internalStoragePrefix)
+    ) {
+      throw new BoundedContextNameError(value);
+    }
+    return Object.freeze({ value });
+  },
+
+  createSpecSnapshot(name: string, multitenant: boolean): ContextSpecSnapshot {
+    return Object.freeze({
+      name: ContextParts.createBoundedContextName(name),
+      multitenant,
+      storesEvents: true,
+    });
+  },
+
+  cloneName(name: BoundedContextName): BoundedContextName {
+    return ContextParts.createBoundedContextName(name.value);
+  },
+
+  cloneSpecSnapshot(spec: ContextSpecSnapshot): ContextSpecSnapshot {
+    return Object.freeze({
+      name: ContextParts.cloneName(spec.name),
+      multitenant: spec.multitenant,
+      storesEvents: spec.storesEvents,
+    });
+  },
+
+  cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextSnapshot {
+    return Object.freeze({
+      name: ContextParts.cloneName(snapshot.name),
+      tenantMode: snapshot.tenantMode,
+      spec: ContextParts.cloneSpecSnapshot(snapshot.spec),
+    });
+  },
+
+  createSystemPairing(snapshot: BoundedContextSnapshot): SystemPairingSnapshot {
+    return Object.freeze({
+      domain: ContextParts.cloneContextSnapshot(snapshot),
+      system: Object.freeze({
+        name: ContextParts.createBoundedContextName(`${snapshot.name.value}_System`),
+        multitenant: snapshot.spec.multitenant,
+        storesEvents: false,
       }),
+    });
+  },
+
+  cloneSystemPairing(pairing: SystemPairingSnapshot): SystemPairingSnapshot {
+    return Object.freeze({
+      domain: ContextParts.cloneContextSnapshot(pairing.domain),
+      system: ContextParts.cloneSpecSnapshot(pairing.system),
+    });
+  },
+
+  exposedEventTypeUrls(eventBus: EventBus): readonly string[] {
+    return Object.freeze(
+      eventBusAccess
+        .eventSchemas(eventBus)
+        .filter((schema) => !ContextParts.isInternalEventSchema(schema))
+        .map((schema) => TypeUrls.derive(schema)),
     );
-  }
+  },
 
-  return Object.freeze(projections);
-}
+  isInternalEventSchema(schema: DescriptorMessageSchema): boolean {
+    return (
+      (hasOption(schema, internal_type) && getOption(schema, internal_type)) ||
+      (hasOption(schema, SPI_type) && getOption(schema, SPI_type)) ||
+      (hasOption(schema.file, internal_all) && getOption(schema.file, internal_all))
+    );
+  },
 
-function projectionStateClearTargets(
-  projections: readonly ProjectionDispatch[],
-): readonly ProjectionStateClearTarget[] {
-  const unique = new Map<string, ProjectionStateClearTarget>();
+  toTenantMode(multitenant: boolean): TenantMode {
+    return multitenant ? "multitenant" : "single-tenant";
+  },
 
-  for (const projection of projections) {
-    if (!unique.has(projection.typeUrl)) {
-      unique.set(
-        projection.typeUrl,
+  requireSystemPairing(context: BoundedContext): SystemPairingSnapshot {
+    const pairing = contextSystemPairings.get(context);
+
+    if (pairing === undefined) {
+      throw new TypeError("System pairing requires a built BoundedContext instance.");
+    }
+
+    return pairing;
+  },
+
+  requireTenantIndex(context: BoundedContext): TenantIndex {
+    const tenantIndex = contextTenantIndexes.get(context);
+
+    if (tenantIndex === undefined) {
+      throw new TypeError("Tenant index requires a built BoundedContext instance.");
+    }
+
+    return tenantIndex;
+  },
+
+  requireRepositoryInstance(repository: unknown, operation: string): void {
+    if (!repositoryAccess.hasInstance(repository)) {
+      throw new TypeError(`${operation} requires a Repository instance.`);
+    }
+  },
+
+  requireEntityClass(entityType: unknown, operation: string): void {
+    if (typeof entityType !== "function") {
+      throw new TypeError(
+        `${operation} requires a Repository instance. Use an entity class only with buildAsync().`,
+      );
+    }
+  },
+
+  rejectSyncEntityAssembly(entityTypes: ReadonlySet<RepositoryEntityType>): void {
+    if (entityTypes.size === 0) {
+      return;
+    }
+
+    throw new Error(
+      "BoundedContextBuilder.build() cannot assemble entity classes from generated metadata. " +
+        "Use buildAsync().",
+    );
+  },
+
+  requireGeneratedRegistryRoot(root: string | URL | undefined): string | URL {
+    if (root !== undefined) {
+      return root;
+    }
+
+    throw new Error(
+      "BoundedContextBuilder.buildAsync() requires withGeneratedRegistryRoot(root) " +
+        "when assembling entity classes from generated metadata.",
+    );
+  },
+
+  async trustedGeneratedRegistryModule(root: string | URL): Promise<URL> {
+    const trustedRoot = await ContextParts.canonicalGeneratedRegistryRoot(root);
+    const registryPath = resolve(trustedRoot, generatedRegistryFile);
+    const canonicalRegistryPath = await ContextParts.canonicalReadableRegistryPath(registryPath);
+
+    if (ContextParts.resolvesOutsideRoot(trustedRoot, canonicalRegistryPath)) {
+      throw new Error(
+        `Generated handler registry module "${canonicalRegistryPath}" must resolve within ` +
+          `the configured generated registry root "${trustedRoot}".`,
+      );
+    }
+
+    return pathToFileURL(canonicalRegistryPath);
+  },
+
+  async canonicalGeneratedRegistryRoot(root: string | URL): Promise<string> {
+    const rootPath = ContextParts.generatedRegistryRootPath(root);
+
+    try {
+      return await realpath(rootPath);
+    } catch (error) {
+      throw new Error(
+        `Generated registry root "${rootPath}" must be an existing readable directory.`,
+        { cause: error },
+      );
+    }
+  },
+
+  generatedRegistryRootPath(root: string | URL): string {
+    if (root instanceof URL) {
+      return ContextParts.fileUrlPath(root, "Generated registry root");
+    }
+
+    if (ContextParts.isUrlLike(root)) {
+      return ContextParts.fileUrlPath(ContextParts.parseRootUrl(root), "Generated registry root");
+    }
+
+    return resolve(root);
+  },
+
+  fileUrlPath(url: URL, label: string): string {
+    if (url.protocol !== "file:") {
+      throw new Error(`${label} "${url.href}" must use the file: URL scheme.`);
+    }
+
+    if (url.search.length > 0 || url.hash.length > 0) {
+      throw new Error(`${label} "${url.href}" must not include a query or hash.`);
+    }
+
+    return resolve(fileURLToPath(url));
+  },
+
+  parseRootUrl(root: string): URL {
+    try {
+      return new URL(root);
+    } catch (error) {
+      throw new Error(`Generated registry root "${root}" is not a valid URL.`, { cause: error });
+    }
+  },
+
+  isUrlLike(value: string): boolean {
+    return moduleSchemeRe.test(value) && !/^[A-Za-z]:[\\/]/.test(value);
+  },
+
+  async canonicalReadableRegistryPath(registryPath: string): Promise<string> {
+    try {
+      await access(registryPath, fsConstants.R_OK);
+      return await realpath(registryPath);
+    } catch (error) {
+      throw new Error(
+        `Generated handler registry module "${registryPath}" must exist and be readable.`,
+        { cause: error },
+      );
+    }
+  },
+
+  resolvesOutsideRoot(canonicalRoot: string, canonicalPath: string): boolean {
+    const relativePath = relative(canonicalRoot, canonicalPath);
+
+    return (
+      relativePath.startsWith("..") ||
+      relativePath === ".." ||
+      relativePath.split(sep).includes("..") ||
+      isAbsolute(relativePath)
+    );
+  },
+
+  generatedRegistryCacheBust(
+    registryKey: string,
+  ): { readonly cacheBust: string } | Record<string, never> {
+    const attempt = generatedRegistryLoadAttempts.get(registryKey) ?? 0;
+
+    return attempt === 0 ? {} : { cacheBust: `retry-${attempt.toString()}` };
+  },
+
+  recordGeneratedRegistryFailure(registryKey: string): void {
+    generatedRegistryLoadAttempts.set(
+      registryKey,
+      (generatedRegistryLoadAttempts.get(registryKey) ?? 0) + 1,
+    );
+  },
+
+  ingestGeneratedRegistries(
+    registries: readonly GeneratedHandlerRegistry[],
+  ): HandlerMetadataRegistry {
+    const registry = new HandlerMetadataRegistry();
+    const ingestor = new HandlerRegistryIngestor();
+
+    for (const generated of registries) {
+      ingestor.register(generated, registry);
+    }
+
+    return registry;
+  },
+
+  createGeneratedRepository(
+    entityType: RepositoryEntityType,
+    registries: readonly GeneratedHandlerRegistry[],
+    metadata: HandlerMetadataRegistry,
+  ): RepositoryView {
+    const generated = ContextParts.findGeneratedEntity(entityType, registries);
+    const handlers = ContextParts.findGeneratedHandlers(entityType, generated, metadata);
+
+    return new Repository({
+      entityType: entityType as never,
+      schema: generated.stateSchema,
+      handlers: handlers as never,
+      events: ContextParts.aggregateAssignedEvents(generated),
+    });
+  },
+
+  findGeneratedEntity(
+    entityType: RepositoryEntityType,
+    registries: readonly GeneratedHandlerRegistry[],
+  ): GeneratedEntityHandlerGroup {
+    for (const registry of registries) {
+      const generated = registry.entities.find((entity) => entity.entityType === entityType);
+      if (generated !== undefined) {
+        return generated;
+      }
+    }
+
+    throw new Error(`Generated handler registry is missing metadata for ${entityType.name}.`);
+  },
+
+  findGeneratedHandlers(
+    entityType: RepositoryEntityType,
+    generated: GeneratedEntityHandlerGroup,
+    metadata: HandlerMetadataRegistry,
+  ): EntityHandlersMetadata {
+    const matches = metadata.findByState(generated.stateSchema.typeName);
+    const handlers = matches.find((candidate) => candidate.entityType === entityType);
+
+    if (handlers === undefined) {
+      throw new Error(`Generated handler registry is missing metadata for ${entityType.name}.`);
+    }
+
+    return handlers;
+  },
+
+  aggregateAssignedEvents(
+    generated: GeneratedEntityHandlerGroup,
+  ): readonly DescriptorMessageSchema[] {
+    return ContextParts.uniqueSchemas(
+      generated.handlers.flatMap((handler) =>
+        handler.kind === "command-assignment" || handler.kind === "event-reaction"
+          ? handler.emittedSchemas
+          : [],
+      ),
+    );
+  },
+
+  uniqueSchemas<Schema extends DescriptorMessageSchema>(
+    schemas: readonly Schema[],
+  ): readonly Schema[] {
+    const byTypeName = new Map<string, Schema>();
+
+    for (const schema of schemas) {
+      byTypeName.set(schema.typeName, schema);
+    }
+
+    return Object.freeze([...byTypeName.values()]);
+  },
+
+  preflightRepositories(repositories: readonly RepositoryView[]): void {
+    const entityTypes = new Set<RepositoryEntityType>();
+    const stateTypeNames = new Set<string>();
+
+    for (const repository of repositories) {
+      ContextParts.requireRepositoryInstance(repository, "BoundedContextBuilder.add(repository)");
+      const snapshot = ContextParts.repositorySnapshot(repository);
+      const registration = registeredRepositories.get(repository);
+      if (registration !== undefined) {
+        throw new Error(
+          `Repository for "${snapshot.stateFullTypeName}" is already registered with Bounded Context ` +
+            `"${registration.name.value}".`,
+        );
+      }
+
+      if (entityTypes.has(snapshot.entityType)) {
+        throw new Error(
+          `Repository entity type "${snapshot.entityType.name}" is already registered.`,
+        );
+      }
+      entityTypes.add(snapshot.entityType);
+
+      if (stateTypeNames.has(snapshot.stateFullTypeName)) {
+        throw new Error(
+          `Repository state type "${snapshot.stateFullTypeName}" is already registered.`,
+        );
+      }
+      stateTypeNames.add(snapshot.stateFullTypeName);
+    }
+  },
+
+  repositoryCommandDispatchers(
+    repositories: readonly RepositoryView[],
+  ): readonly CommandDispatcher[] {
+    return repositories.flatMap((repository) => {
+      const dispatcher = repositoryAccess.commandDispatcher(repository);
+      return dispatcher === undefined ? [] : [dispatcher];
+    });
+  },
+
+  repositoryEventDispatchers(repositories: readonly RepositoryView[]): readonly EventDispatcher[] {
+    return repositories.flatMap((repository) => {
+      const dispatcher = repositoryAccess.eventDispatcher(repository);
+      return dispatcher === undefined ? [] : [dispatcher];
+    });
+  },
+
+  closeEventStore(eventStore: EventStore, buildError: unknown): void {
+    try {
+      eventStore.close();
+    } catch (closeError) {
+      throw new AggregateError(
+        [buildError, closeError],
+        "Bounded Context build failed, and event store cleanup also failed.",
+      );
+    }
+  },
+
+  cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {
+    contextSystemPairings.delete(context);
+    contextTenantIndexes.delete(context);
+    contextStorageFactories.delete(context);
+    contextDeliveryDescriptors.delete(context);
+    eventSubscribers.delete(context);
+    tenantIndex.close();
+  },
+
+  createDeliveryDescriptor(
+    context: BoundedContextSnapshot,
+    storageFactory: StorageFactory,
+    tenantIndex: TenantIndex,
+    processManagers: PmInbox,
+    projections: PrjInbox,
+    readiness: DeliveryReadiness,
+  ): ContextDeliveryDescriptor {
+    return Object.freeze({
+      storageFactory,
+      async startupScopes(): Promise<readonly DeliveryTenantScope[]> {
+        if (tenantIndex.tenantMode === "single-tenant") {
+          return Object.freeze([Object.freeze({})]);
+        }
+
+        return Object.freeze(
+          (await tenantIndex.all()).map((tenantId) => Object.freeze({ tenantId })),
+        );
+      },
+      storageContext(scope: DeliveryTenantScope): StorageContext {
+        if (context.tenantMode === "single-tenant") {
+          if (scope.tenantId !== undefined) {
+            throw new Error(
+              `Single-tenant context "${context.name.value}" does not accept tenantId.`,
+            );
+          }
+          return Object.freeze({ name: context.name.value, multitenant: false });
+        }
+        const tenantId = scope.tenantId;
+        if (tenantId === undefined || tenantId.trim().length === 0) {
+          throw new Error(`Multitenant context "${context.name.value}" requires tenantId.`);
+        }
+        return Object.freeze({ name: context.name.value, multitenant: true, tenantId });
+      },
+      endpoints(): readonly DeliveryEndpoint[] {
+        return Object.freeze([...processManagers.endpoints(), ...projections.endpoints()]);
+      },
+      replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void> {
+        return message.label === "UPDATE_SUBSCRIBER"
+          ? projections.replay(message, tenantId)
+          : processManagers.replay(message, tenantId);
+      },
+      onReady(onReady: (ready: DeliveryReady) => void): () => void {
+        return readiness.onReady(onReady);
+      },
+      transition(
+        scopes: readonly DeliveryReady[],
+        onReady: OnDeliveryReady,
+        options?: { readonly allowEmpty?: boolean },
+      ): Promise<void> {
+        return readiness.transition(scopes, onReady, options);
+      },
+    });
+  },
+
+  closePreparedRepositories(
+    preparedRepositories: readonly PreparedRepository[],
+  ): readonly unknown[] {
+    const errors: unknown[] = [];
+    for (const preparedRepository of preparedRepositories) {
+      try {
+        preparedRepository.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+
+    return errors;
+  },
+
+  async closeContextPart(close: () => unknown, errors: unknown[]): Promise<void> {
+    try {
+      await close();
+    } catch (error) {
+      ContextParts.collectCloseError(error, errors);
+    }
+  },
+
+  async drainContextBuses(commandBus: CommandBus, eventBus: EventBus): Promise<void> {
+    let observedCommandWork = -1;
+    let observedEventWork = -1;
+
+    do {
+      observedCommandWork = commandBusAccess.acceptedWorkCount(commandBus);
+      observedEventWork = eventBusAccess.acceptedWorkCount(eventBus);
+      await commandBusAccess.drain(commandBus);
+      await eventBusAccess.drain(eventBus);
+    } while (
+      commandBusAccess.acceptedWorkCount(commandBus) !== observedCommandWork ||
+      eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork
+    );
+  },
+
+  collectCloseError(error: unknown, errors: unknown[]): void {
+    if (error instanceof AggregateError) {
+      const causes = error.errors as readonly unknown[];
+      for (const cause of causes) {
+        errors.push(cause);
+      }
+      return;
+    }
+    errors.push(error);
+  },
+
+  prepareRepositoryForContext(
+    repository: RepositoryView,
+    registration: RepositoryRegistration,
+  ): PreparedRepository {
+    ContextParts.requireRepositoryInstance(repository, "BoundedContext repository registration");
+    const snapshot = ContextParts.repositorySnapshot(repository);
+    const storage = registration.storageFactory.createRecordStorage(
+      registration.storageContext,
+      ContextParts.createRepositoryRecordSpec(snapshot),
+    );
+    try {
+      ContextParts.rejectRegisteredRepository(repository);
+    } catch (error) {
+      storage.close();
+      throw error;
+    }
+    repositoryAccess.bindRuntime(repository, {
+      context: registration.storageContext,
+      storageFactory: registration.storageFactory,
+      stand: registration.stand,
+      signalMetadata: new SignalMetadata(),
+      processManagerInbox: registration.processManagerInbox,
+      projectionInbox: registration.projectionInbox,
+      dispatchStored: registration.dispatchStored,
+      dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
+      postEventFollowUp: registration.postEventFollowUp,
+      onPostCommand: registration.onPostCommand,
+      recordDispatchFailure: registration.recordDispatchFailure,
+    });
+
+    const processManagerInboxTarget = repositoryAccess.processManagerInboxTarget(repository);
+    const projectionInboxTarget = repositoryAccess.projectionInboxTarget(repository);
+
+    return {
+      repository,
+      snapshot,
+      storage,
+      ...(processManagerInboxTarget === undefined ? {} : { processManagerInboxTarget }),
+      ...(projectionInboxTarget === undefined ? {} : { projectionInboxTarget }),
+      commit: () => {
+        registeredRepositories.set(repository, { name: registration.name });
+      },
+      close: () => {
+        repositoryAccess.clearRuntime(repository);
+        storage.close();
+      },
+    };
+  },
+
+  repositorySnapshot(repository: RepositoryView): RegistrationSnapshot {
+    const snapshot = repositoryAccess.snapshot(repository);
+
+    return Object.freeze({
+      entityType: snapshot.entityType,
+      entityFamily: snapshot.entityFamily,
+      stateSchema: snapshot.stateSchema,
+      metadata: snapshot.metadata,
+      stateFullTypeName: snapshot.stateFullTypeName,
+      idField: snapshot.idField,
+      snapshot,
+    });
+  },
+
+  rejectRegisteredRepository(repository: RepositoryView): void {
+    const snapshot = ContextParts.repositorySnapshot(repository);
+    const registration = registeredRepositories.get(repository);
+
+    if (registration !== undefined) {
+      throw new Error(
+        `Repository for "${snapshot.stateFullTypeName}" is already registered with Bounded Context ` +
+          `"${registration.name.value}".`,
+      );
+    }
+  },
+
+  createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<unknown, Message> {
+    return new RecordSpec<unknown, Message>({
+      schema: snapshot.stateSchema,
+      storageKey: `${snapshot.stateSchema.typeName}:current`,
+      idKind: "string",
+      extractId: (record) => ContextParts.readRecordId(record, snapshot),
+      columns: ContextParts.repositoryColumns(snapshot),
+    });
+  },
+
+  repositoryColumns(snapshot: RegistrationSnapshot): readonly RecordColumn<Message>[] {
+    return snapshot.metadata.columns.map(
+      (field) =>
+        new RecordColumn(
+          field.name,
+          (record) => ContextParts.readRecordField(record, field.localName),
+          "protobuf",
+        ),
+    );
+  },
+
+  createRepositoryView(snapshot: RegistrationSnapshot): RepositoryView {
+    return Object.freeze({
+      entityType: snapshot.entityType,
+      entityFamily: snapshot.entityFamily,
+      stateSchema: snapshot.stateSchema,
+      metadata: snapshot.metadata,
+      stateFullTypeName: snapshot.stateFullTypeName,
+      idField: snapshot.idField,
+      snapshot: snapshot.snapshot,
+    });
+  },
+
+  cloneDispatchFailure(failure: StoredEventDispatchFailure): StoredEventDispatchFailure {
+    return Object.freeze({
+      event: clone(EventSchema, failure.event),
+      error: ContextParts.cloneDispatchError(failure.error),
+    });
+  },
+
+  snapshotDispatchError(error: unknown): DispatchErrorSnapshot {
+    if (error instanceof Error) {
+      const snapshot: DispatchErrorSnapshot = {
+        name: ContextParts.boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
+        message: ContextParts.boundedErrorString(error.message, dispatchErrorMessageLimit),
+        ...(typeof error.stack === "string"
+          ? { stack: ContextParts.boundedErrorString(error.stack, dispatchErrorStackLimit) }
+          : {}),
+      };
+      return Object.freeze(snapshot);
+    }
+
+    return Object.freeze({
+      name: "NonErrorThrow",
+      message: ContextParts.boundedErrorString(String(error), dispatchErrorMessageLimit),
+    });
+  },
+
+  cloneDispatchError(error: DispatchErrorSnapshot): DispatchErrorSnapshot {
+    return Object.freeze({
+      name: error.name,
+      message: error.message,
+      ...(error.stack === undefined ? {} : { stack: error.stack }),
+    });
+  },
+
+  projectionDispatchers(repositories: Iterable<RepositoryView>): readonly ProjectionDispatch[] {
+    const projections: ProjectionDispatch[] = [];
+
+    for (const repository of repositories) {
+      const snapshot = repositoryAccess.snapshot(repository);
+      const dispatcher = repositoryAccess.eventDispatcher(repository);
+
+      if (snapshot.entityFamily !== "projection" || dispatcher === undefined) {
+        continue;
+      }
+
+      projections.push(
         Object.freeze({
-          schema: projection.schema,
-          typeUrl: projection.typeUrl,
+          repository,
+          dispatcher,
+          eventTypeUrls: new Set(
+            dispatcher.messageSchemas().map((schema) => TypeUrls.derive(schema)),
+          ),
+          schema: snapshot.stateSchema,
+          typeUrl: TypeUrls.derive(snapshot.stateSchema),
         }),
       );
     }
-  }
 
-  return Object.freeze([...unique.values()]);
-}
+    return Object.freeze(projections);
+  },
 
-async function readStoredEvents(
-  context: StorageContext,
-  storageFactory: StorageFactory,
-): Promise<readonly Event[]> {
-  const eventStore = new EventStore(context, storageFactory);
+  projectionStateClearTargets(
+    projections: readonly ProjectionDispatch[],
+  ): readonly ProjectionStateClearTarget[] {
+    const unique = new Map<string, ProjectionStateClearTarget>();
 
-  try {
-    return await eventStore.read({
-      sort: [
-        { field: "timestamp", direction: "asc" },
-        { field: "context.producerId.value", direction: "asc" },
-        { field: "context.version.number", direction: "asc" },
-        { field: "id.value", direction: "asc" },
-      ],
-    });
-  } finally {
-    eventStore.close();
-  }
-}
+    for (const projection of projections) {
+      if (!unique.has(projection.typeUrl)) {
+        unique.set(
+          projection.typeUrl,
+          Object.freeze({
+            schema: projection.schema,
+            typeUrl: projection.typeUrl,
+          }),
+        );
+      }
+    }
 
-function catchUpStandOptions(context: StorageContext): { readonly tenantId?: string } {
-  if (!context.multitenant) {
-    return {};
-  }
+    return Object.freeze([...unique.values()]);
+  },
 
-  const { tenantId } = context;
-  if (tenantId === undefined) {
-    throw new Error(`Multitenant read-side catch-up for "${context.name}" requires tenantId.`);
-  }
+  async readStoredEvents(
+    context: StorageContext,
+    storageFactory: StorageFactory,
+  ): Promise<readonly Event[]> {
+    const eventStore = new EventStore(context, storageFactory);
 
-  return Object.freeze({ tenantId });
-}
+    try {
+      return await eventStore.read({
+        sort: [
+          { field: "timestamp", direction: "asc" },
+          { field: "context.producerId.value", direction: "asc" },
+          { field: "context.version.number", direction: "asc" },
+          { field: "id.value", direction: "asc" },
+        ],
+      });
+    } finally {
+      eventStore.close();
+    }
+  },
 
-function validateReplayTenant(context: StorageContext, event: Event): void {
-  if (!context.multitenant) {
-    return;
-  }
+  catchUpStandOptions(context: StorageContext): { readonly tenantId?: string } {
+    if (!context.multitenant) {
+      return {};
+    }
 
-  const expectedTenantId = context.tenantId;
-  if (expectedTenantId === undefined) {
-    throw new Error(`Multitenant read-side catch-up for "${context.name}" requires tenantId.`);
-  }
+    const { tenantId } = context;
+    if (tenantId === undefined) {
+      throw new Error(`Multitenant read-side catch-up for "${context.name}" requires tenantId.`);
+    }
 
-  const envelopeTenantId = readReplayTenant(event);
-  if (envelopeTenantId === undefined) {
-    throw new Error("Read-side catch-up requires stored event envelope tenant.");
-  }
-  if (envelopeTenantId !== expectedTenantId) {
-    throw new Error("Read-side catch-up stored event envelope tenant does not match.");
-  }
-}
+    return Object.freeze({ tenantId });
+  },
 
-function readReplayTenant(event: Event): string | undefined {
-  switch (event.context?.origin.case) {
-    case "importContext":
-      return tenantIdValue(event.context.origin.value.tenantId);
-    case "pastMessage":
-      return tenantIdValue(event.context.origin.value.actorContext?.tenantId);
-    default:
-      return undefined;
-  }
-}
+  validateReplayTenant(context: StorageContext, event: Event): void {
+    if (!context.multitenant) {
+      return;
+    }
 
-function tenantIdValue(tenantId: TenantId | undefined): string | undefined {
-  switch (tenantId?.kind.case) {
-    case "value":
-      return tenantId.kind.value;
-    case "domain":
-      return `domain:${tenantId.kind.value.value}`;
-    case "email":
-      return `email:${tenantId.kind.value.value}`;
-    default:
-      return undefined;
-  }
-}
+    const expectedTenantId = context.tenantId;
+    if (expectedTenantId === undefined) {
+      throw new Error(`Multitenant read-side catch-up for "${context.name}" requires tenantId.`);
+    }
 
-async function dispatchStoredProjectionEvent(
-  projections: readonly ProjectionDispatch[],
-  event: Event,
-): Promise<number> {
-  const typeUrl = event.message?.typeUrl;
+    const envelopeTenantId = ContextParts.readReplayTenant(event);
+    if (envelopeTenantId === undefined) {
+      throw new Error("Read-side catch-up requires stored event envelope tenant.");
+    }
+    if (envelopeTenantId !== expectedTenantId) {
+      throw new Error("Read-side catch-up stored event envelope tenant does not match.");
+    }
+  },
 
-  if (typeUrl === undefined || typeUrl === "") {
-    throw new Error("Read-side catch-up requires stored event.message.typeUrl.");
-  }
+  readReplayTenant(event: Event): string | undefined {
+    switch (event.context?.origin.case) {
+      case "importContext":
+        return ContextParts.tenantIdValue(event.context.origin.value.tenantId);
+      case "pastMessage":
+        return ContextParts.tenantIdValue(event.context.origin.value.actorContext?.tenantId);
+      default:
+        return undefined;
+    }
+  },
 
-  const matching = projections.filter((projection) => projection.eventTypeUrls.has(typeUrl));
+  tenantIdValue(tenantId: TenantId | undefined): string | undefined {
+    switch (tenantId?.kind.case) {
+      case "value":
+        return tenantId.kind.value;
+      case "domain":
+        return `domain:${tenantId.kind.value.value}`;
+      case "email":
+        return `email:${tenantId.kind.value.value}`;
+      default:
+        return undefined;
+    }
+  },
 
-  for (const projection of matching) {
-    await projection.dispatcher.accept?.(clone(EventSchema, event));
-  }
-  for (const projection of matching) {
-    await repositoryAccess.dispatchProjectionDirect(
-      projection.repository,
-      clone(EventSchema, event),
+  async dispatchStoredProjectionEvent(
+    projections: readonly ProjectionDispatch[],
+    event: Event,
+  ): Promise<number> {
+    const typeUrl = event.message?.typeUrl;
+
+    if (typeUrl === undefined || typeUrl === "") {
+      throw new Error("Read-side catch-up requires stored event.message.typeUrl.");
+    }
+
+    const matching = projections.filter((projection) => projection.eventTypeUrls.has(typeUrl));
+
+    for (const projection of matching) {
+      await projection.dispatcher.accept?.(clone(EventSchema, event));
+    }
+    for (const projection of matching) {
+      await repositoryAccess.dispatchProjectionDirect(
+        projection.repository,
+        clone(EventSchema, event),
+      );
+    }
+
+    return matching.length > 0 ? 1 : 0;
+  },
+
+  catchUpReplayError(event: Event, cause: unknown): Error {
+    return new CatchUpReplayError(
+      event.id?.value ?? "(missing)",
+      ContextParts.catchUpReplayDetail(cause),
     );
-  }
+  },
 
-  return matching.length > 0 ? 1 : 0;
-}
+  boundedErrorString(value: string, limit: number): string {
+    return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
+  },
 
-function catchUpReplayError(event: Event, cause: unknown): Error {
-  return new CatchUpReplayError(event.id?.value ?? "(missing)", catchUpReplayDetail(cause));
-}
+  catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
+    if (error instanceof Error) {
+      return Object.freeze({
+        name: ContextParts.boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
+        message: ContextParts.boundedErrorString(error.message, dispatchErrorMessageLimit),
+      });
+    }
 
-function boundedErrorString(value: string, limit: number): string {
-  return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
-}
-
-function catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
-  if (error instanceof Error) {
     return Object.freeze({
-      name: boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
-      message: boundedErrorString(error.message, dispatchErrorMessageLimit),
+      name: "NonErrorThrow",
+      message: ContextParts.boundedErrorString(String(error), dispatchErrorMessageLimit),
     });
-  }
+  },
 
-  return Object.freeze({
-    name: "NonErrorThrow",
-    message: boundedErrorString(String(error), dispatchErrorMessageLimit),
-  });
-}
+  readRecordId(record: Message, snapshot: RegistrationSnapshot): unknown {
+    const value = ContextParts.readRecordField(record, snapshot.idField.localName);
 
-function readRecordId(record: Message, snapshot: RegistrationSnapshot): unknown {
-  const value = readRecordField(record, snapshot.idField.localName);
+    if (value === undefined || value === null) {
+      throw new Error(
+        `Repository state "${snapshot.stateFullTypeName}" requires ID field "${snapshot.idField.name}".`,
+      );
+    }
 
-  if (value === undefined || value === null) {
-    throw new Error(
-      `Repository state "${snapshot.stateFullTypeName}" requires ID field "${snapshot.idField.name}".`,
-    );
-  }
+    return value;
+  },
 
-  return value;
-}
-
-function readRecordField(
-  record: Message,
-  localName: DescriptorFieldMetadata["localName"],
-): unknown {
-  return (record as Record<string, unknown>)[localName];
-}
+  readRecordField(record: Message, localName: DescriptorFieldMetadata["localName"]): unknown {
+    return (record as Record<string, unknown>)[localName];
+  },
+});

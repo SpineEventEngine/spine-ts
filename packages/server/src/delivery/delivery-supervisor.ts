@@ -17,18 +17,28 @@ export interface DeliveryShardUpdate {
 /** Structural remote source required by {@link DeliverySupervisor}. */
 export interface DeliverySource {
   /**
-   * Read one detached shard snapshot for startup or recovery.
+   * Reads one detached shard snapshot for startup or recovery.
    * The optional signal/deadline controls this read only; cancellation is cooperative.
+   *
+   * @param options Optional cancellation and deadline controls.
+   * @returns The detached shard updates.
    */
   shardSnapshot(options?: DeliveryOperationOptions): Promise<readonly DeliveryShardUpdate[]>;
   /**
-   * Observe detached Admin shard updates until completion, cancellation, or failure.
+   * Observes detached Admin shard updates until completion, cancellation, or failure.
    * The supervisor owns bounded reconnect and passes its lifecycle signal.
+   *
+   * @param options Optional cancellation and deadline controls.
+   * @returns The stream of detached shard updates.
    */
   observeShardUpdates(options?: DeliveryOperationOptions): AsyncIterable<DeliveryShardUpdate>;
   /**
-   * Release sessions older than `inactivityMs` as one non-retried mutation.
+   * Deletes sessions older than `inactivityMs` as one non-retried mutation.
    * Rejection or timeout is never treated as successful release.
+   *
+   * @param inactivityMs The stale-session age in milliseconds.
+   * @param options Optional cancellation and deadline controls.
+   * @returns Facts about the released sessions.
    */
   releaseExpired(
     inactivityMs: number,
@@ -40,6 +50,7 @@ export type { DeliveryOperationOptions } from "./delivery-ports.js";
 
 /** Raised when active delivery or release cleanup exceeds its bounded close phase. */
 export class DeliveryShutdownTimeoutError extends Error {
+  /** Creates the bounded-shutdown timeout error. */
   constructor() {
     super("Delivery supervisor shutdown timed out.");
     this.name = "DeliveryShutdownTimeoutError";
@@ -81,28 +92,36 @@ export class DeliverySupervisor {
   #releaseAttempt: Promise<void> | undefined;
   #closeAttempt: Promise<void> | undefined;
 
+  /**
+   * Creates a bounded delivery supervisor.
+   *
+   * @param options The source, delivery, endpoint, and bounds.
+   */
   constructor(options: DeliverySupervisorOptions) {
     this.#source = options.source;
     this.#runs = new DeliveryRunControl(options.delivery);
     this.#onMessage = options.onMessage;
-    this.#concurrency = requireBound("Delivery supervisor concurrency", options.concurrency ?? 1);
-    this.#pendingLimit = requireBound(
+    this.#concurrency = DeliverySupervisor.#requireBound(
+      "Delivery supervisor concurrency",
+      options.concurrency ?? 1,
+    );
+    this.#pendingLimit = DeliverySupervisor.#requireBound(
       "Delivery supervisor pending limit",
       options.pendingLimit ?? 100,
     );
-    this.#recoveryMs = requireBound(
+    this.#recoveryMs = DeliverySupervisor.#requireBound(
       "Delivery supervisor recovery interval",
       options.recoveryMs ?? 30_000,
     );
-    this.#staleMs = requireBound(
+    this.#staleMs = DeliverySupervisor.#requireBound(
       "Delivery supervisor stale session interval",
       options.staleMs ?? 60_000,
     );
-    this.#watchInitialBackoffMs = requireBound(
+    this.#watchInitialBackoffMs = DeliverySupervisor.#requireBound(
       "Delivery supervisor watch initial backoff",
       options.watchInitialBackoffMs ?? 100,
     );
-    this.#watchMaxBackoffMs = requireBound(
+    this.#watchMaxBackoffMs = DeliverySupervisor.#requireBound(
       "Delivery supervisor watch maximum backoff",
       options.watchMaxBackoffMs ?? 30_000,
     );
@@ -115,7 +134,7 @@ export class DeliverySupervisor {
   }
 
   /**
-   * Run initial stale release and snapshot recovery, then accept notifications and observation.
+   * Starts initial stale release and snapshot recovery, then accepts notifications and observation.
    * Repeated successful calls are idempotent; starting after close is rejected.
    */
   async start(): Promise<void> {
@@ -128,12 +147,14 @@ export class DeliverySupervisor {
   }
 
   /**
-   * Coalesce one local or remote notification for a shard.
+   * Queues one local or remote notification for a shard.
    * Calls before start or after close are ignored; capacity overflow requests one rescan.
+   *
+   * @param shard The shard whose work may be scheduled.
    */
   notify(shard: ShardIndex): void {
     if (!this.#started || this.#closing || this.#closed) return;
-    const key = shardKey(shard);
+    const key = DeliverySupervisor.#shardKey(shard);
     if (this.#active.has(key) || this.#active.size >= this.#concurrency) {
       this.#queue(key, shard);
       return;
@@ -142,7 +163,10 @@ export class DeliverySupervisor {
     void this.#run(shard, key).catch(() => undefined);
   }
 
-  /** Resolve when no active or retained pending shard work remains. */
+  /**
+   * Resolves when no active or retained pending shard work remains.
+   *
+   */
   whenIdle(): Promise<void> {
     if (this.#active.size === 0 && this.#pending.size === 0) return Promise.resolve();
     const gate = Promise.withResolvers<undefined>();
@@ -154,14 +178,16 @@ export class DeliverySupervisor {
   }
 
   /**
-   * Stop admission and source activity, wait one bounded active-work grace phase, then fence runs.
+   * Stops admission and source activity, waits one bounded active-work grace phase, then fences runs.
    * A separate release-cleanup phase uses the same bound. Cleanup failure takes precedence over
    * an active-work timeout; incomplete cleanup is retained for a later close retry.
+   *
+   * @param options The bounded close controls.
    */
   close(options: DeliverySupervisorCloseOptions = {}): Promise<void> {
     if (this.#closed) return Promise.resolve();
     if (this.#closeAttempt !== undefined) return this.#closeAttempt;
-    requireGrace(options.graceMs ?? 30_000);
+    DeliverySupervisor.#requireGrace(options.graceMs ?? 30_000);
     this.#closing = true;
     this.#pending.clear();
     this.#cancelTimers();
@@ -177,7 +203,7 @@ export class DeliverySupervisor {
     let timedOut = false;
     if (this.#active.size > 0) {
       try {
-        await waitForIdle(this.whenIdle(), graceMs);
+        await DeliverySupervisor.#waitForIdle(this.whenIdle(), graceMs);
       } catch {
         timedOut = true;
       }
@@ -191,7 +217,7 @@ export class DeliverySupervisor {
     } catch (error) {
       releaseError = error;
     }
-    if (releaseError !== undefined) throw toError(releaseError);
+    if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
     this.#closed = true;
     if (timedOut) throw new DeliveryShutdownTimeoutError();
   }
@@ -203,7 +229,7 @@ export class DeliverySupervisor {
       this.#releaseConfirmed = true;
     });
     try {
-      await waitForIdle(attempt, timeoutMs);
+      await DeliverySupervisor.#waitForIdle(attempt, timeoutMs);
     } catch (error) {
       controller.abort(new Error("Delivery supervisor release cleanup timed out."));
       void attempt.catch(() => undefined);
@@ -344,6 +370,40 @@ export class DeliverySupervisor {
       void this.#recover();
     }
   }
+
+  static #shardKey(shard: ShardIndex): string {
+    return `${String(shard.index)}/${String(shard.ofTotal)}`;
+  }
+
+  static #requireBound(name: string, value: number): number {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new Error(`${name} must be a positive safe integer.`);
+    }
+    return value;
+  }
+
+  static #requireGrace(value: number): void {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error("Delivery close grace must be a safe integer.");
+    }
+  }
+
+  static #waitForIdle(idle: Promise<void>, graceMs: number): Promise<void> {
+    if (graceMs === 0) return Promise.reject(new DeliveryShutdownTimeoutError());
+    const timeout = Promise.withResolvers<undefined>();
+    const timer = setTimeout(() => {
+      timeout.reject(new DeliveryShutdownTimeoutError());
+    }, graceMs);
+    timer.unref();
+    return Promise.race([idle, timeout.promise]).finally(() => {
+      clearTimeout(timer);
+    });
+  }
+
+  static #releaseError(error: unknown): Error {
+    if (error instanceof DeliveryShutdownTimeoutError) return error;
+    return new Error("Delivery supervisor release cleanup failed.");
+  }
 }
 
 /** Construction options for {@link DeliverySupervisor}. */
@@ -378,36 +438,4 @@ export interface DeliverySupervisorCloseOptions {
    * Defaults to `30000` milliseconds. A zero value fences without waiting.
    */
   readonly graceMs?: number;
-}
-
-function shardKey(shard: ShardIndex): string {
-  return `${String(shard.index)}/${String(shard.ofTotal)}`;
-}
-
-function requireBound(name: string, value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0)
-    throw new Error(`${name} must be a positive safe integer.`);
-  return value;
-}
-
-function requireGrace(value: number): void {
-  if (!Number.isSafeInteger(value) || value < 0)
-    throw new Error("Delivery close grace must be a safe integer.");
-}
-
-function waitForIdle(idle: Promise<void>, graceMs: number): Promise<void> {
-  if (graceMs === 0) return Promise.reject(new DeliveryShutdownTimeoutError());
-  const timeout = Promise.withResolvers<undefined>();
-  const timer = setTimeout(() => {
-    timeout.reject(new DeliveryShutdownTimeoutError());
-  }, graceMs);
-  timer.unref();
-  return Promise.race([idle, timeout.promise]).finally(() => {
-    clearTimeout(timer);
-  });
-}
-
-function toError(error: unknown): Error {
-  if (error instanceof DeliveryShutdownTimeoutError) return error;
-  return new Error("Delivery supervisor release cleanup failed.");
 }

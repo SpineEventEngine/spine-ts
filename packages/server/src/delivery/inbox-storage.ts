@@ -39,7 +39,11 @@ export class InboxStorage {
   readonly #storageFactory: StorageFactory;
   readonly #now: () => Date;
 
-  /** Open an inbox storage from one storage context and storage factory. */
+  /**
+   * Opens inbox storage from one storage context and factory.
+   *
+   * @param options - Supplies durable storage and an optional retention clock.
+   */
   constructor(options: InboxStorageOptions) {
     this.#context = options.context;
     this.#storageFactory = options.storageFactory;
@@ -53,14 +57,24 @@ export class InboxStorage {
     Object.freeze(this);
   }
 
-  /** Read ordered inbox messages for one shard. */
+  /**
+   * Reads ordered inbox messages for one shard.
+   *
+   * @param shard - Selects the shard to inspect.
+   * @param options - Filters and bounds the ordered page.
+   * @returns The matching message snapshots.
+   */
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
-    const nextShard = requireReadShard(shard);
-    const limit = requireInboxReadLimit(options.limit ?? defaultReadLimit);
+    const nextShard = InboxStorageValues.requireReadShard(shard);
+    const limit = InboxStorageValues.requireInboxReadLimit(options.limit ?? defaultReadLimit);
     const offset =
-      options.offset === undefined ? undefined : requireInboxReadOffset(options.offset);
+      options.offset === undefined
+        ? undefined
+        : InboxStorageValues.requireInboxReadOffset(options.offset);
     const after =
-      options.after === undefined ? undefined : inboxContinuation(nextShard, options.after);
+      options.after === undefined
+        ? undefined
+        : InboxStorageValues.inboxContinuation(nextShard, options.after);
     const storage = this.#inboxStorage();
 
     try {
@@ -68,7 +82,7 @@ export class InboxStorage {
         storage.queryEntries({
           filters: [
             { column: "shard", value: nextShard.key() },
-            ...statusFilters(options.statuses),
+            ...InboxReadValues.statusFilters(options.statuses),
           ],
           sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
           limit,
@@ -78,31 +92,47 @@ export class InboxStorage {
       );
 
       return Object.freeze(
-        records.map((entry) => publicMessage(InboxRecords.read(entry.record, entry.id))),
+        records.map((entry) =>
+          InboxStorageValues.publicMessage(InboxRecords.read(entry.record, entry.id)),
+        ),
       );
     } finally {
       storage.close();
     }
   }
 
-  /** Read one exact durable inbox message by ID. */
+  /**
+   * Reads one exact durable inbox message by ID.
+   *
+   * @param id - Identifies the durable message.
+   * @returns The message when it remains durable.
+   */
   async readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
     const key = this.#messageKey(id);
     const storage = this.#inboxStorage();
 
     try {
       const record = await this.#durableRead("Inbox record", () => storage.read(key));
-      return record === undefined ? undefined : publicMessage(InboxRecords.read(record, key));
+      return record === undefined
+        ? undefined
+        : InboxStorageValues.publicMessage(InboxRecords.read(record, key));
     } finally {
       storage.close();
     }
   }
 
-  /** Write one inbox message unless a live dedup key already exists. */
+  /**
+   * Writes one inbox message unless a live dedup key already exists.
+   *
+   * @param message - Supplies the message snapshot to write.
+   * @returns The write or deduplication outcome.
+   */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
     // Serialize the inbox row once so validation and all later CAS keys use
     // one immutable caller-input snapshot.
-    const snapshot = InboxRecords.read(InboxRecords.write(requirePublicMessage(message)));
+    const snapshot = InboxRecords.read(
+      InboxRecords.write(InboxStorageValues.requirePublicMessage(message)),
+    );
     DedupRecords.writeClaim(snapshot);
 
     const inboxStorage = this.#inboxStorage();
@@ -117,15 +147,18 @@ export class InboxStorage {
   }
 
   /**
-   * Mark one exact `TO_DELIVER` inbox message as `DELIVERED`.
+   * Updates one exact `TO_DELIVER` inbox message to `DELIVERED`.
    *
    * Returns `undefined` when the row is missing, is not pending, or does not
    * match the caller-provided message snapshot. Already-delivered rows are
    * returned idempotently only when they match the same message apart from the
    * status transition.
+   *
+   * @param message - Supplies the pending message snapshot.
+   * @returns The delivered message when the transition succeeds.
    */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
-    return this.#markDelivered(requirePublicMessage(message));
+    return this.#markDelivered(InboxStorageValues.requirePublicMessage(message));
   }
 
   async #markDelivered(message: InboxRecordMessage): Promise<InboxMessage | undefined> {
@@ -135,7 +168,7 @@ export class InboxStorage {
 
     try {
       const delivered = await this.#markDeliveredWithDedup(inboxStorage, dedupStorage, snapshot);
-      return delivered === undefined ? undefined : publicMessage(delivered);
+      return delivered === undefined ? undefined : InboxStorageValues.publicMessage(delivered);
     } finally {
       inboxStorage.close();
       dedupStorage.close();
@@ -150,7 +183,11 @@ export class InboxStorage {
     const inboxStorage = this.#inboxStorage();
 
     try {
-      return await this.#claimMessage(inboxStorage, snapshot, claimFromSession(session));
+      return await this.#claimMessage(
+        inboxStorage,
+        snapshot,
+        InboxStorageValues.claimFromSession(session),
+      );
     } finally {
       inboxStorage.close();
     }
@@ -160,11 +197,17 @@ export class InboxStorage {
     message: ClaimedInboxMessage,
     session: ShardSession,
   ): Promise<ClaimedInboxMessage | undefined> {
-    const snapshot = requireClaimed(InboxRecords.read(InboxRecords.write(message)));
+    const snapshot = InboxStorageValues.requireClaimed(
+      InboxRecords.read(InboxRecords.write(message)),
+    );
     const inboxStorage = this.#inboxStorage();
 
     try {
-      return await this.#renewClaim(inboxStorage, snapshot, claimFromSession(session));
+      return await this.#renewClaim(
+        inboxStorage,
+        snapshot,
+        InboxStorageValues.claimFromSession(session),
+      );
     } finally {
       inboxStorage.close();
     }
@@ -176,7 +219,7 @@ export class InboxStorage {
 
     try {
       const unclaimed = await this.#unclaimMessage(inboxStorage, snapshot);
-      return unclaimed === undefined ? undefined : publicMessage(unclaimed);
+      return unclaimed === undefined ? undefined : InboxStorageValues.publicMessage(unclaimed);
     } finally {
       inboxStorage.close();
     }
@@ -220,11 +263,11 @@ export class InboxStorage {
         nextRecord,
       );
       if (updated) {
-        return requireClaimed(InboxRecords.read(nextRecord, key));
+        return InboxStorageValues.requireClaimed(InboxRecords.read(nextRecord, key));
       }
     }
 
-    throw casRetriesExhausted("Inbox claim");
+    throw InboxStorageValues.casRetriesExhausted("Inbox claim");
   }
 
   #hasLiveClaim(message: InboxRecordMessage): boolean {
@@ -266,11 +309,11 @@ export class InboxStorage {
         nextRecord,
       );
       if (updated) {
-        return requireClaimed(InboxRecords.read(nextRecord, key));
+        return InboxStorageValues.requireClaimed(InboxRecords.read(nextRecord, key));
       }
     }
 
-    throw casRetriesExhausted("Inbox claim renewal");
+    throw InboxStorageValues.casRetriesExhausted("Inbox claim renewal");
   }
 
   async #unclaimMessage(
@@ -305,7 +348,7 @@ export class InboxStorage {
       }
     }
 
-    throw casRetriesExhausted("Inbox claim release");
+    throw InboxStorageValues.casRetriesExhausted("Inbox claim release");
   }
 
   async #markDeliveredWithDedup(
@@ -357,7 +400,7 @@ export class InboxStorage {
       return delivered;
     }
 
-    throw casRetriesExhausted("Inbox delivery status");
+    throw InboxStorageValues.casRetriesExhausted("Inbox delivery status");
   }
 
   async #syncDeliveredDedupGuard(
@@ -402,7 +445,7 @@ export class InboxStorage {
       }
     }
 
-    throw casRetriesExhausted("Inbox dedup guard");
+    throw InboxStorageValues.casRetriesExhausted("Inbox dedup guard");
   }
 
   #dedupGuardMatches(record: Any, dedupKey: string, message: InboxMessage): boolean {
@@ -457,7 +500,7 @@ export class InboxStorage {
       }
     }
 
-    throw casRetriesExhausted("Inbox dedup guard");
+    throw InboxStorageValues.casRetriesExhausted("Inbox dedup guard");
   }
 
   async #readWriteStep(
@@ -704,7 +747,7 @@ export class InboxStorage {
       throw new InboxMessageError(`Inbox message "${key}" already exists.`);
     }
 
-    throw casRetriesExhausted("Inbox record");
+    throw InboxStorageValues.casRetriesExhausted("Inbox record");
   }
 
   async #readGuardMessage(
@@ -835,7 +878,7 @@ export class InboxStorage {
   }
 
   #withoutClaim(message: InboxRecordMessage): InboxMessage {
-    return publicMessage(message);
+    return InboxStorageValues.publicMessage(message);
   }
 
   async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {
@@ -879,7 +922,7 @@ export class InboxStorage {
       kind: "RETURN",
       result: Object.freeze({
         outcome: "WRITTEN" as const,
-        message: publicMessage(message),
+        message: InboxStorageValues.publicMessage(message),
       }),
     };
   }
@@ -889,71 +932,108 @@ export class InboxStorage {
       kind: "RETURN",
       result: Object.freeze({
         outcome: "DUPLICATE" as const,
-        message: publicMessage(message),
+        message: InboxStorageValues.publicMessage(message),
       }),
     };
   }
 
   #messageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
-    return inboxMessageKey(id);
+    return InboxStorageValues.inboxMessageKey(id);
   }
 
   #inboxStorage(): RecordStorage<string, Any> {
     return this.#storageFactory.createRecordStorage(
-      inboxStorageContext(this.#context),
+      InboxStorageValues.inboxStorageContext(this.#context),
       inboxRecordSpec,
     );
   }
 
   #dedupStorage(): RecordStorage<string, Any> {
     return this.#storageFactory.createRecordStorage(
-      dedupStorageContext(this.#context),
+      InboxStorageValues.dedupStorageContext(this.#context),
       dedupRecordSpec,
     );
   }
 }
 
-/** @internal Internal claim-bearing access for delivery workers. */
+/** Defines claim-bearing access for delivery workers. @internal */
 export interface InboxStorageAccess {
+  /** Limits one internal ordered inbox read. */
   readonly maxReadLimit: number;
+  /**
+   * Validates one internal inbox read limit.
+   *
+   * @param value - Supplies the requested read limit.
+   * @returns The validated bounded limit.
+   */
   readonly readLimit: (value: unknown) => number;
+  /**
+   * Returns one pending message claimed under a shard session.
+   *
+   * @param storage - Supplies the owning inbox storage.
+   * @param message - Identifies the pending message.
+   * @param session - Supplies the shard fence.
+   * @returns The claimed message when the claim succeeds.
+   */
   readonly claim: (
     storage: InboxStorage,
     message: InboxMessage,
     session: ShardSession,
   ) => Promise<ClaimedInboxMessage | undefined>;
+  /**
+   * Returns one claimed message renewed under a shard session.
+   *
+   * @param storage - Supplies the owning inbox storage.
+   * @param message - Identifies the claimed message.
+   * @param session - Supplies the renewed shard fence.
+   * @returns The renewed claim when it remains current.
+   */
   readonly renew: (
     storage: InboxStorage,
     message: ClaimedInboxMessage,
     session: ShardSession,
   ) => Promise<ClaimedInboxMessage | undefined>;
+  /**
+   * Returns one claimed message updated to delivered.
+   *
+   * @param storage - Supplies the owning inbox storage.
+   * @param message - Identifies the claimed message.
+   * @returns The delivered message when the transition succeeds.
+   */
   readonly markDelivered: (
     storage: InboxStorage,
     message: ClaimedInboxMessage,
   ) => Promise<InboxMessage | undefined>;
+  /**
+   * Clears one claimed message without completing it.
+   *
+   * @param storage - Supplies the owning inbox storage.
+   * @param message - Identifies the claimed message.
+   * @returns The pending message when the claim is cleared.
+   */
   readonly clear: (
     storage: InboxStorage,
     message: ClaimedInboxMessage,
   ) => Promise<InboxMessage | undefined>;
 }
 
-/** @internal Internal claim-bearing access for delivery workers. */
+/** Exposes the claim-bearing operations used by delivery workers. @internal */
 export const inboxStorageAccess: InboxStorageAccess = Object.freeze({
   maxReadLimit,
   readLimit(value: unknown = defaultReadLimit) {
-    return requireInboxReadLimit(value);
+    return InboxStorageValues.requireInboxReadLimit(value);
   },
   claim(storage: InboxStorage, message: InboxMessage, session: ShardSession) {
-    return requireInternals(storage).claim(message, session);
+    return InboxStorageValues.requireInternals(storage).claim(message, session);
   },
   renew(storage: InboxStorage, message: ClaimedInboxMessage, session: ShardSession) {
-    return requireInternals(storage).renew(message, session);
+    return InboxStorageValues.requireInternals(storage).renew(message, session);
   },
   markDelivered(storage: InboxStorage, message: ClaimedInboxMessage) {
-    return requireInternals(storage).markDelivered(message);
+    return InboxStorageValues.requireInternals(storage).markDelivered(message);
   },
   clear(storage: InboxStorage, message: ClaimedInboxMessage) {
-    return requireInternals(storage).unclaim(message);
+    return InboxStorageValues.requireInternals(storage).unclaim(message);
   },
 });
 
@@ -963,15 +1043,22 @@ export interface InboxStorageOptions {
   readonly context: StorageContext;
   /** Storage factory used for durable records. */
   readonly storageFactory: StorageFactory;
-  /** Optional clock used for deduplication retention decisions. */
+  /**
+   * Returns the optional clock used for deduplication retention decisions.
+   *
+   * @returns The current storage time.
+   */
   readonly now?: () => Date;
 }
 
-function statusFilters(statuses: readonly DeliveryStatus[] | undefined) {
-  return statuses === undefined || statuses.length === 0
-    ? []
-    : [{ column: "status", value: [...statuses] as readonly DeliveryStatus[] }];
-}
+/** Builds storage filters for one optional set of delivery statuses. */
+const InboxReadValues = Object.freeze({
+  statusFilters(statuses: readonly DeliveryStatus[] | undefined) {
+    return statuses === undefined || statuses.length === 0
+      ? []
+      : [{ column: "status", value: [...statuses] as readonly DeliveryStatus[] }];
+  },
+});
 
 interface WriteClaim {
   readonly kind: "CLAIM";
@@ -1008,269 +1095,276 @@ interface InboxStorageInternal {
 
 const inboxStorageInternals = new WeakMap<InboxStorage, InboxStorageInternal>();
 
-function requireInternals(storage: InboxStorage): InboxStorageInternal {
-  const internals = inboxStorageInternals.get(storage);
-  if (internals === undefined) {
-    throw new Error("Inbox storage internals are unavailable.");
-  }
-
-  return internals;
-}
-
-function claimFromSession(session: ShardSession): InboxClaim {
-  return InboxClaimRecords.snapshot({
-    id: session.id,
-    node: session.node,
-    expiresAt: session.expiresAt,
-  });
-}
-
-function requireClaimed(message: InboxRecordMessage): ClaimedInboxMessage {
-  if (message.claim === undefined) {
-    throw new DeliveryStorageCorruptionError("Inbox claim is missing from claimed row.");
-  }
-
-  return message as ClaimedInboxMessage;
-}
-
-function requirePublicMessage(message: InboxMessage): InboxMessage {
-  if (Reflect.has(message, "claim")) {
-    throw new InboxMessageError("Inbox message claim is internal.");
-  }
-
-  const id = readPublicMessageProperty(message, "id", "Inbox message ID") as InboxMessage["id"];
-  const inboxId = readPublicMessageProperty(
-    message,
-    "inboxId",
-    "Inbox target identity",
-  ) as InboxMessage["inboxId"];
-  const signalId = readPublicMessageProperty(
-    message,
-    "signalId",
-    "Inbox signal ID",
-  ) as InboxMessage["signalId"];
-  const label = readPublicMessageProperty(
-    message,
-    "label",
-    "Inbox delivery label",
-  ) as InboxMessage["label"];
-  const status = readPublicMessageProperty(
-    message,
-    "status",
-    "Inbox delivery status",
-  ) as InboxMessage["status"];
-  const shard = readPublicMessageProperty(
-    message,
-    "shard",
-    "Inbox message shard",
-  ) as InboxMessage["shard"];
-  const whenReceived = readPublicMessageProperty(
-    message,
-    "whenReceived",
-    "Inbox receive time",
-  ) as InboxMessage["whenReceived"];
-  const version = readPublicMessageProperty(
-    message,
-    "version",
-    "Inbox version",
-  ) as InboxMessage["version"];
-  const signal = readPublicMessageProperty(
-    message,
-    "signal",
-    "Inbox signal",
-  ) as InboxMessage["signal"];
-  const keepUntil = readPublicMessageProperty(
-    message,
-    "keepUntil",
-    "Inbox keep-until time",
-  ) as InboxMessage["keepUntil"];
-
-  return Object.freeze({
-    id,
-    inboxId,
-    signalId,
-    ...(signal === undefined ? {} : { signal }),
-    label,
-    status,
-    shard,
-    whenReceived,
-    version,
-    ...(keepUntil === undefined ? {} : { keepUntil }),
-  });
-}
-
-function readPublicMessageProperty(
-  message: InboxMessage,
-  property: keyof InboxMessage,
-  label: string,
-): unknown {
-  try {
-    return Reflect.get(message, property);
-  } catch (error) {
-    throw new InboxMessageError(`${label} is invalid.`, { cause: error });
-  }
-}
-
-function publicMessage(message: InboxRecordMessage): InboxMessage {
-  if (message.claim === undefined) {
-    return message;
-  }
-
-  return Object.freeze({
-    id: Object.freeze({
-      value: message.id.value,
-      shard: message.id.shard,
-    }),
-    inboxId: Object.freeze({ ...message.inboxId }),
-    label: message.label,
-    status: message.status,
-    signalId: message.signalId,
-    shard: message.shard,
-    whenReceived: message.whenReceived,
-    version: message.version,
-    ...(message.signal === undefined ? {} : { signal: message.signal }),
-    ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
-  });
-}
-
-function dedupStorageContext(context: StorageContext): StorageContext {
-  return deliveryStorageContext(context, "inbox-dedup");
-}
-
-function inboxStorageContext(context: StorageContext): StorageContext {
-  return deliveryStorageContext(context, "inbox");
-}
-
-function deliveryStorageContext(context: StorageContext, name: string): StorageContext {
-  return context.multitenant
-    ? {
-        name: `${context.name}.delivery.${name}`,
-        multitenant: true,
-        ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
-      }
-    : {
-        name: `${context.name}.delivery.${name}`,
-        multitenant: false,
-      };
-}
-
-function casRetriesExhausted(label: string): Error {
-  return new Error(`${label} could not be completed due to concurrent changes.`);
-}
-
-function requireReadShard(value: unknown): ShardIndex {
-  if (typeof value !== "object" || value === null) {
-    throw new InboxMessageError("Inbox shard is invalid.");
-  }
-
-  try {
-    return new ShardIndex(
-      requireReadInteger(Reflect.get(value, "index"), "Inbox shard index"),
-      requireReadInteger(Reflect.get(value, "ofTotal"), "Inbox shard total"),
-    );
-  } catch (error) {
-    if (error instanceof InboxMessageError) {
-      throw error;
+const InboxStorageValues = Object.freeze({
+  requireInternals(storage: InboxStorage): InboxStorageInternal {
+    const internals = inboxStorageInternals.get(storage);
+    if (internals === undefined) {
+      throw new Error("Inbox storage internals are unavailable.");
     }
 
-    throw new InboxMessageError("Inbox shard is invalid.", { cause: error });
-  }
-}
+    return internals;
+  },
 
-function requireReadInteger(value: unknown, label: string): number {
-  if (!Number.isInteger(value) || !Number.isFinite(value)) {
-    throw new InboxMessageError(`${label} must be a finite integer.`);
-  }
+  claimFromSession(session: ShardSession): InboxClaim {
+    return InboxClaimRecords.snapshot({
+      id: session.id,
+      node: session.node,
+      expiresAt: session.expiresAt,
+    });
+  },
 
-  return value as number;
-}
+  requireClaimed(message: InboxRecordMessage): ClaimedInboxMessage {
+    if (message.claim === undefined) {
+      throw new DeliveryStorageCorruptionError("Inbox claim is missing from claimed row.");
+    }
 
-function requireInboxReadLimit(value: unknown): number {
-  if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > maxReadLimit) {
-    throw new InboxMessageError(
-      `Inbox read limit must be a positive safe integer at most ${String(maxReadLimit)}.`,
+    return message as ClaimedInboxMessage;
+  },
+
+  requirePublicMessage(message: InboxMessage): InboxMessage {
+    if (Reflect.has(message, "claim")) {
+      throw new InboxMessageError("Inbox message claim is internal.");
+    }
+
+    const id = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "id",
+      "Inbox message ID",
+    ) as InboxMessage["id"];
+    const inboxId = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "inboxId",
+      "Inbox target identity",
+    ) as InboxMessage["inboxId"];
+    const signalId = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "signalId",
+      "Inbox signal ID",
+    ) as InboxMessage["signalId"];
+    const label = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "label",
+      "Inbox delivery label",
+    ) as InboxMessage["label"];
+    const status = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "status",
+      "Inbox delivery status",
+    ) as InboxMessage["status"];
+    const shard = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "shard",
+      "Inbox message shard",
+    ) as InboxMessage["shard"];
+    const whenReceived = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "whenReceived",
+      "Inbox receive time",
+    ) as InboxMessage["whenReceived"];
+    const version = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "version",
+      "Inbox version",
+    ) as InboxMessage["version"];
+    const signal = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "signal",
+      "Inbox signal",
+    ) as InboxMessage["signal"];
+    const keepUntil = InboxStorageValues.readPublicMessageProperty(
+      message,
+      "keepUntil",
+      "Inbox keep-until time",
+    ) as InboxMessage["keepUntil"];
+
+    return Object.freeze({
+      id,
+      inboxId,
+      signalId,
+      ...(signal === undefined ? {} : { signal }),
+      label,
+      status,
+      shard,
+      whenReceived,
+      version,
+      ...(keepUntil === undefined ? {} : { keepUntil }),
+    });
+  },
+
+  readPublicMessageProperty(
+    message: InboxMessage,
+    property: keyof InboxMessage,
+    label: string,
+  ): unknown {
+    try {
+      return Reflect.get(message, property);
+    } catch (error) {
+      throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+    }
+  },
+
+  publicMessage(message: InboxRecordMessage): InboxMessage {
+    if (message.claim === undefined) {
+      return message;
+    }
+
+    return Object.freeze({
+      id: Object.freeze({
+        value: message.id.value,
+        shard: message.id.shard,
+      }),
+      inboxId: Object.freeze({ ...message.inboxId }),
+      label: message.label,
+      status: message.status,
+      signalId: message.signalId,
+      shard: message.shard,
+      whenReceived: message.whenReceived,
+      version: message.version,
+      ...(message.signal === undefined ? {} : { signal: message.signal }),
+      ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
+    });
+  },
+
+  dedupStorageContext(context: StorageContext): StorageContext {
+    return InboxStorageValues.deliveryStorageContext(context, "inbox-dedup");
+  },
+
+  inboxStorageContext(context: StorageContext): StorageContext {
+    return InboxStorageValues.deliveryStorageContext(context, "inbox");
+  },
+
+  deliveryStorageContext(context: StorageContext, name: string): StorageContext {
+    return context.multitenant
+      ? {
+          name: `${context.name}.delivery.${name}`,
+          multitenant: true,
+          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+        }
+      : {
+          name: `${context.name}.delivery.${name}`,
+          multitenant: false,
+        };
+  },
+
+  casRetriesExhausted(label: string): Error {
+    return new Error(`${label} could not be completed due to concurrent changes.`);
+  },
+
+  requireReadShard(value: unknown): ShardIndex {
+    if (typeof value !== "object" || value === null) {
+      throw new InboxMessageError("Inbox shard is invalid.");
+    }
+
+    try {
+      return new ShardIndex(
+        InboxStorageValues.requireReadInteger(Reflect.get(value, "index"), "Inbox shard index"),
+        InboxStorageValues.requireReadInteger(Reflect.get(value, "ofTotal"), "Inbox shard total"),
+      );
+    } catch (error) {
+      if (error instanceof InboxMessageError) {
+        throw error;
+      }
+
+      throw new InboxMessageError("Inbox shard is invalid.", { cause: error });
+    }
+  },
+
+  requireReadInteger(value: unknown, label: string): number {
+    if (!Number.isInteger(value) || !Number.isFinite(value)) {
+      throw new InboxMessageError(`${label} must be a finite integer.`);
+    }
+
+    return value as number;
+  },
+
+  requireInboxReadLimit(value: unknown): number {
+    if (
+      !Number.isSafeInteger(value) ||
+      (value as number) <= 0 ||
+      (value as number) > maxReadLimit
+    ) {
+      throw new InboxMessageError(
+        `Inbox read limit must be a positive safe integer at most ${String(maxReadLimit)}.`,
+      );
+    }
+
+    return value as number;
+  },
+
+  requireInboxReadOffset(value: unknown): number {
+    if (!Number.isSafeInteger(value) || (value as number) < 0) {
+      throw new InboxMessageError("Inbox read offset must be a non-negative safe integer.");
+    }
+
+    return value as number;
+  },
+
+  inboxContinuation(shard: ShardIndex, value: InboxReadContinuation): RecordContinuation<string> {
+    const input = InboxStorageValues.requireContinuationObject(value);
+    const messageId = InboxStorageValues.requireContinuationText(
+      Reflect.get(input, "messageId"),
+      "Inbox read continuation message ID",
     );
-  }
-
-  return value as number;
-}
-
-function requireInboxReadOffset(value: unknown): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) {
-    throw new InboxMessageError("Inbox read offset must be a non-negative safe integer.");
-  }
-
-  return value as number;
-}
-
-function inboxContinuation(
-  shard: ShardIndex,
-  value: InboxReadContinuation,
-): RecordContinuation<string> {
-  const input = requireContinuationObject(value);
-  const messageId = requireContinuationText(
-    Reflect.get(input, "messageId"),
-    "Inbox read continuation message ID",
-  );
-  const whenReceived = requireContinuationDate(
-    Reflect.get(input, "whenReceived"),
-    "Inbox read continuation receive time",
-  );
-  const version = requireContinuationVersion(Reflect.get(input, "version"));
-
-  return Object.freeze({
-    id: inboxMessageKey({ value: messageId, shard }),
-    values: Object.freeze([
-      Object.freeze({ field: "receivedAt", value: whenReceived.getTime() }),
-      Object.freeze({ field: "version", value: version }),
-      Object.freeze({ field: "messageId", value: messageId }),
-    ]),
-  });
-}
-
-function requireContinuationObject(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new InboxMessageError("Inbox read continuation is invalid.");
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function requireContinuationText(value: unknown, label: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new InboxMessageError(`${label} must be a non-empty string.`);
-  }
-  if (Buffer.byteLength(value, "utf8") > maxContinuationTextBytes) {
-    throw new InboxMessageError(
-      `${label} exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+    const whenReceived = InboxStorageValues.requireContinuationDate(
+      Reflect.get(input, "whenReceived"),
+      "Inbox read continuation receive time",
     );
-  }
+    const version = InboxStorageValues.requireContinuationVersion(Reflect.get(input, "version"));
 
-  return value;
-}
+    return Object.freeze({
+      id: InboxStorageValues.inboxMessageKey({ value: messageId, shard }),
+      values: Object.freeze([
+        Object.freeze({ field: "receivedAt", value: whenReceived.getTime() }),
+        Object.freeze({ field: "version", value: version }),
+        Object.freeze({ field: "messageId", value: messageId }),
+      ]),
+    });
+  },
 
-function requireContinuationDate(value: unknown, label: string): Date {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-    throw new InboxMessageError(`${label} must be a valid Date.`);
-  }
+  requireContinuationObject(value: unknown): Record<string, unknown> {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new InboxMessageError("Inbox read continuation is invalid.");
+    }
 
-  return new Date(value.getTime());
-}
+    return value as Record<string, unknown>;
+  },
 
-function requireContinuationVersion(value: unknown): bigint {
-  if (typeof value !== "bigint") {
-    throw new InboxMessageError("Inbox read continuation version must be a bigint.");
-  }
-  const encoded = value.toString();
-  if (Buffer.byteLength(encoded, "utf8") > maxContinuationTextBytes) {
-    throw new InboxMessageError(
-      `Inbox read continuation version exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
-    );
-  }
+  requireContinuationText(value: unknown, label: string): string {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new InboxMessageError(`${label} must be a non-empty string.`);
+    }
+    if (Buffer.byteLength(value, "utf8") > maxContinuationTextBytes) {
+      throw new InboxMessageError(
+        `${label} exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+      );
+    }
 
-  return value;
-}
+    return value;
+  },
 
-function inboxMessageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
-  return `${id.shard.key()}:${id.value}`;
-}
+  requireContinuationDate(value: unknown, label: string): Date {
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+      throw new InboxMessageError(`${label} must be a valid Date.`);
+    }
+
+    return new Date(value.getTime());
+  },
+
+  requireContinuationVersion(value: unknown): bigint {
+    if (typeof value !== "bigint") {
+      throw new InboxMessageError("Inbox read continuation version must be a bigint.");
+    }
+    const encoded = value.toString();
+    if (Buffer.byteLength(encoded, "utf8") > maxContinuationTextBytes) {
+      throw new InboxMessageError(
+        `Inbox read continuation version exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+      );
+    }
+
+    return value;
+  },
+
+  inboxMessageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
+    return `${id.shard.key()}:${id.value}`;
+  },
+});

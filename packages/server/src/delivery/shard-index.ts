@@ -1,6 +1,11 @@
 /** Zero-based shard index with a stable shard count. */
 export class ShardIndex {
-  /** Create a shard index. */
+  /**
+   * Creates a shard index.
+   *
+   * @param index - Identifies the zero-based shard position.
+   * @param ofTotal - States the total shards in the shard set.
+   */
   constructor(
     /** Zero-based position of this shard. */
     readonly index: number,
@@ -19,12 +24,20 @@ export class ShardIndex {
     Object.freeze(this);
   }
 
-  /** Single local shard. */
+  /**
+   * Creates the single local shard.
+   *
+   * @returns The only shard in a one-shard set.
+   */
   static single(): ShardIndex {
     return new ShardIndex(0, 1);
   }
 
-  /** Deterministic storage key for this shard. */
+  /**
+   * Returns the deterministic storage key for this shard.
+   *
+   * @returns The shard position and total encoded as a storage key.
+   */
   key(): string {
     return `${String(this.index)}/${String(this.ofTotal)}`;
   }

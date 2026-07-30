@@ -7,7 +7,15 @@ import type { RecordColumn, StorageContext } from "@spine-event-engine/storage";
 
 import type { DescriptorMessageSchema } from "./entity-metadata.js";
 
-/** One current-record descriptor shared by repositories and Stand. */
+/**
+ * Creates the current-record descriptor shared by repositories and Stand.
+ *
+ * @param context - Identifies the storage namespace for entity records.
+ * @param schema - Describes the entity state message.
+ * @param idField - Names the state field that contains the entity identifier.
+ * @param columns - Lists indexed state columns.
+ * @returns The storage input for current entity records.
+ */
 export function entityStorageDescriptor(
   context: StorageContext,
   schema: DescriptorMessageSchema,

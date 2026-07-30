@@ -17,11 +17,15 @@ import {
   type EnvironmentAttachmentHandle,
   type EnvironmentGenerationWorker,
 } from "./environment-attachment.js";
-import { Environment, EnvironmentType, resetEnvironmentForTest } from "./environment.js";
+import { Environment, EnvironmentTests, EnvironmentType } from "./environment.js";
 
 /** Common closeable facility owned by a server environment. */
 export interface ServerEnvironmentCloseable {
-  /** Close the facility. May be synchronous or asynchronous. */
+  /**
+   * Closes the facility.
+   *
+   * @returns An optional asynchronous close operation.
+   */
   close(): unknown;
 }
 
@@ -37,6 +41,11 @@ export interface ServerEnvironmentSettings {
   readonly tracerFactory?: ServerEnvironmentCloseable;
 }
 
+/**
+ * Creates facilities for the selected server environment.
+ *
+ * @returns The facilities selected for the environment.
+ */
 export type ServerEnvironmentSettingsFactory = () => ServerEnvironmentSettings;
 type SettingsInput = ServerEnvironmentSettings | ServerEnvironmentSettingsFactory;
 const configuredSettings = new Map<EnvironmentType, SettingsInput>();
@@ -71,7 +80,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.transport = settings.transport;
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
-    this.#ownedCloseables = facilitiesToClose(settings);
+    this.#ownedCloseables = ServerEnvironmentValues.facilitiesToClose(settings);
     this.#closeGroup = new RetryableCloseGroup(
       this.#ownedCloseables,
       "ServerEnvironment close failed.",
@@ -81,7 +90,12 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     Object.freeze(this);
   }
 
-  /** Select facilities for one environment type before first resolution. */
+  /**
+   * Sets facilities for an environment type before first resolution.
+   *
+   * @param type - Identifies the environment to configure.
+   * @returns A one-use configuration entry point.
+   */
   static when(type: EnvironmentType): { use(settings: SettingsInput): void } {
     return Object.freeze({
       use(settings: SettingsInput) {
@@ -96,7 +110,11 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     });
   }
 
-  /** Resolve this module graph's configured server facilities exactly once. */
+  /**
+   * Resolves this module graph's configured server facilities exactly once.
+   *
+   * @returns The process-wide server environment.
+   */
   static instance(): ServerEnvironment {
     if (resetInProgress !== undefined) {
       throw new Error("ServerEnvironment reset is in progress.");
@@ -108,18 +126,17 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     const environment = Environment.instance();
     const configured = configuredSettings.get(environment.type);
     const settings = typeof configured === "function" ? configured() : configured;
-    const facilities = resolveFacilities(environment.type, settings ?? {});
+    const facilities = ServerEnvironmentValues.resolveFacilities(environment.type, settings ?? {});
     return new ServerEnvironment(environment, facilities);
   }
 
   /**
-   * Permanently close this environment after it is no longer in use.
+   * Closes this environment after all attached servers retire.
    *
-   * After admission the environment is permanently closed and cannot be reused.
+   * Admission permanently closes the environment and prevents reuse. If it is
+   * in use, closure rejects without owned-facility teardown. Failed facility
+   * closes are retryable and already closed facilities are not closed again.
    *
-   * If the environment is in use, close rejects non-destructively and performs no owned-facility
-   * teardown. Failed facility-close attempts may be retried; facilities that already closed
-   * successfully are not closed again.
    */
   close(): Promise<void> {
     testAttachmentsInstallable.delete(this);
@@ -149,26 +166,33 @@ interface RequiredFacilities {
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 }
 
-/** @internal Test-only singleton reset behind the package testing subpath. */
-export function resetServerEnvironmentForTest(): Promise<void> {
-  const current = resetInProgress;
-  if (current !== undefined) {
-    return current;
-  }
-  const resolved = resolvedEnvironment;
-  const reset = Promise.resolve()
-    .then(() => resolved?.close())
-    .then(() => {
-      resolvedEnvironment = undefined;
-      configuredSettings.clear();
-      resetEnvironmentForTest();
-    })
-    .finally(() => {
-      resetInProgress = undefined;
-    });
-  resetInProgress = reset;
-  return reset;
-}
+/** Provides controlled server-environment lifecycle operations for package owners.
+ *
+ * @internal
+ */
+export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<void> } =
+  Object.freeze({
+    /** Resets singleton facilities to deterministic local defaults for the next package test. */
+    resetForTest(): Promise<void> {
+      const current = resetInProgress;
+      if (current !== undefined) {
+        return current;
+      }
+      const resolved = resolvedEnvironment;
+      const reset = Promise.resolve()
+        .then(() => resolved?.close())
+        .then(() => {
+          resolvedEnvironment = undefined;
+          configuredSettings.clear();
+          EnvironmentTests.reset();
+        })
+        .finally(() => {
+          resetInProgress = undefined;
+        });
+      resetInProgress = reset;
+      return reset;
+    },
+  });
 
 interface ServerEnvironmentAccess {
   attach(
@@ -199,7 +223,11 @@ interface ServerEnvironmentAccess {
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
 const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
 
-/** @internal Package-only environment delivery attachment access for later server lifecycle use. */
+/**
+ * Provides package-only environment delivery attachment access for server lifecycle owners.
+ *
+ * @internal
+ */
 export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   attach(environment: ServerEnvironment, options: EnvironmentAttachOptions) {
     testAttachmentsInstallable.delete(environment);
@@ -293,40 +321,42 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   },
 });
 
-function facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
-  return Object.freeze([
-    ...(options.delivery === undefined ? [] : [options.delivery]),
-    ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
-    options.transport,
-    options.storageFactory,
-  ]);
-}
-
-function resolveFacilities(
-  type: EnvironmentType,
-  settings: ServerEnvironmentSettings,
-): RequiredFacilities {
-  if (type === EnvironmentType.Production) {
-    if (settings.storageFactory === undefined) {
-      throw new Error("Production ServerEnvironment requires storageFactory.");
-    }
-    if (settings.transport === undefined) {
-      throw new Error("Production ServerEnvironment requires transport.");
+/** @internal Groups private facility-assembly operations for the environment singleton. */
+const ServerEnvironmentValues = Object.freeze({
+  facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
+    return Object.freeze([
+      ...(options.delivery === undefined ? [] : [options.delivery]),
+      ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
+      options.transport,
+      options.storageFactory,
+    ]);
+  },
+  resolveFacilities(
+    type: EnvironmentType,
+    settings: ServerEnvironmentSettings,
+  ): RequiredFacilities {
+    if (type === EnvironmentType.Production) {
+      if (settings.storageFactory === undefined) {
+        throw new Error("Production ServerEnvironment requires storageFactory.");
+      }
+      if (settings.transport === undefined) {
+        throw new Error("Production ServerEnvironment requires transport.");
+      }
+      return {
+        storageFactory: settings.storageFactory,
+        transport: settings.transport,
+        delivery: settings.delivery,
+        tracerFactory: settings.tracerFactory,
+      };
     }
     return {
-      storageFactory: settings.storageFactory,
-      transport: settings.transport,
+      storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
+      transport: settings.transport ?? new LocalSignalTransport(),
       delivery: settings.delivery,
       tracerFactory: settings.tracerFactory,
     };
-  }
-  return {
-    storageFactory: settings.storageFactory ?? new InMemoryStorageFactory(),
-    transport: settings.transport ?? new LocalSignalTransport(),
-    delivery: settings.delivery,
-    tracerFactory: settings.tracerFactory,
-  };
-}
+  },
+});
 
 class LocalSignalTransport implements SignalTransport {
   readonly #publishHandlers = new Map<string, Set<PublishTransportHandler>>();

@@ -14,13 +14,22 @@ export class Inbox {
   /** Intentional low-level escape hatch for storage-focused tests and integrations. */
   readonly storage: InboxStorage;
 
-  /** Open an inbox over one durable inbox storage. */
+  /**
+   * Opens an inbox over durable inbox storage.
+   *
+   * @param storage - Stores the inbox rows and deduplication guards.
+   */
   constructor(storage: InboxStorage) {
     this.storage = storage;
     Object.freeze(this);
   }
 
-  /** Receive one message into durable inbox storage. */
+  /**
+   * Stores one message in durable inbox storage.
+   *
+   * @param input - Describes the message to make durable.
+   * @returns The write or deduplication outcome.
+   */
   async receive(input: InboxMessageInput): Promise<InboxWriteResult> {
     const messageInput = this.#inputObject(input, "Inbox message input");
     const shard = this.#readInput(messageInput, "shard", "Inbox message shard") as ShardIndex;
@@ -45,29 +54,46 @@ export class Inbox {
     });
   }
 
-  /** Read ordered messages for one shard. */
+  /**
+   * Reads ordered messages for one shard.
+   *
+   * @param shard - Selects the shard to inspect.
+   * @param options - Filters and bounds the ordered page.
+   * @returns The matching durable messages.
+   */
   read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
     return this.storage.read(shard, options);
   }
 
-  /** Read one exact durable inbox message by ID. */
+  /**
+   * Reads one exact durable inbox message by ID.
+   *
+   * @param id - Identifies the durable message.
+   * @returns The message when it remains durable.
+   */
   readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
     return this.storage.readMessage(id);
   }
 
   /**
-   * Mark one exact pending inbox message delivered.
+   * Updates one pending message to delivered when its snapshot still matches.
    *
-   * Returns `undefined` when the durable row is missing, is not pending, or no
-   * longer matches the caller-provided message snapshot. Already-delivered
-   * matching rows are returned idempotently so concurrent worker races can
-   * converge without re-dispatching.
+   * @param message - Supplies the pending message snapshot.
+   * @returns The delivered message, or `undefined` when the durable row is missing,
+   * not pending, or no longer matches the snapshot. Matching delivered rows return
+   * idempotently so concurrent workers converge without re-dispatching.
    */
   markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);
   }
 
-  /** Begin exact-row work, retaining local claim fencing behind the port. */
+  /**
+   * Returns exact-row work behind local claim fencing.
+   *
+   * @param message - Identifies the pending message.
+   * @param session - Supplies the leased shard fence.
+   * @returns The admitted work, when the claim succeeds.
+   */
   async begin(
     message: InboxMessage,
     session: DeliveryWorkSession,
@@ -173,6 +199,12 @@ export interface InboxMessageId {
  * `DeliveryStorageCorruptionError`.
  */
 export class InboxMessageError extends Error {
+  /**
+   * Creates an error for invalid public inbox input.
+   *
+   * @param message - Describes the invalid input.
+   * @param options - Optionally preserves the originating failure.
+   */
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "InboxMessageError";

@@ -11,7 +11,10 @@ export class CommandValidationError extends Error {
   /** Structured payload validation details from the command-bus boundary. */
   readonly validationError: ValidationError;
 
-  /** Create a command-bus validation error with structured details. */
+  /** Creates a command-bus validation error with structured details.
+   *
+   * @param validationError the structured payload validation details.
+   */
   constructor(validationError: ValidationError) {
     super("Command payload validation failed.");
     this.name = "CommandValidationError";
@@ -19,7 +22,10 @@ export class CommandValidationError extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
-  /** Create a validation error for payloads that cannot be unpacked as the registered type. */
+  /** Creates a validation error for payloads that cannot be unpacked as the registered type.
+   *
+   * @returns the invalid-payload error.
+   */
   static invalidPayload(): CommandValidationError {
     return new CommandValidationError(
       Validate.createError([

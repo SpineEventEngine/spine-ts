@@ -20,13 +20,23 @@ import {
 } from "./runtime-routing.js";
 import { ServerRuntimeStateError, SingleProcessServerRuntime } from "./runtime.js";
 
-/** Command callback invoked from accepted transport-backed runtime work. */
+/** Handles a command accepted from transport-backed runtime work.
+ *
+ * @param command the accepted command envelope.
+ * @param route the route that received the command.
+ * @returns a completion value or promise.
+ */
 export type CommandRuntimeTransportHandler = (
   command: Command,
   route: CommandRuntimeRoutingRoute,
 ) => void | Promise<void>;
 
-/** Event callback invoked from accepted transport-backed runtime work. */
+/** Handles an event accepted from transport-backed runtime work.
+ *
+ * @param event the accepted event envelope.
+ * @param route the route that received the event.
+ * @returns a completion value or promise.
+ */
 export type EventRuntimeTransportHandler = (
   event: Event,
   route: EventRuntimeRoutingRoute,
@@ -49,8 +59,9 @@ export interface RuntimeTransportBindingInput {
 /** Idempotent close handle returned by a runtime transport binding. */
 export interface RuntimeTransportBindingHandle {
   /**
-   * Stop transport intake, close transport registrations, then close the bound
+   * Stops transport intake, closes transport registrations, then closes the bound
    * runtime.
+   *
    */
   close(): Promise<void>;
 }
@@ -60,8 +71,12 @@ export class RuntimeTransportEnvelopeError extends Error {
   /** Structured refusal result with sanitized diagnostics only. */
   readonly result: SignalIntakeFailure;
 
+  /** Creates an error for a refused transport envelope.
+   *
+   * @param result the sanitized refusal result.
+   */
   constructor(result: SignalIntakeFailure) {
-    super(formatEnvelopeError(result));
+    super(RuntimeTransportValues.formatEnvelopeError(result));
     this.name = "RuntimeTransportEnvelopeError";
     this.result = result;
     Object.setPrototypeOf(this, new.target.prototype);
@@ -82,10 +97,10 @@ export class RuntimeTransportEnvelopeError extends Error {
  * drains.
  */
 export const RuntimeTransportBinding: Readonly<{
-  /** Create the immutable runtime routing plan used by this binding. */
+  /** Creates the immutable runtime routing plan used by this binding. */
   plan(input: RoutingPlanInput): ServerRuntimeRoutingPlan;
   /**
-   * Register command and event routes with a same-host/local-only supplied
+   * Registers command and event routes with a same-host/local-only supplied
    * transport.
    *
    * The binding does not own endpoint names, filesystem placement, or remote
@@ -110,12 +125,15 @@ export const RuntimeTransportBinding: Readonly<{
 
 const failedOpenCleanups = new WeakMap<object, RuntimeTransportBindingHandle>();
 
-/** @internal Package access to cleanup retained after a failed binding open. */
+/** Provides access to cleanup retained after a failed binding open.
+ *
+ * @internal
+ */
 export const runtimeTransportBindingAccess: Readonly<{
   failedOpenCleanup(error: unknown): RuntimeTransportBindingHandle | undefined;
 }> = Object.freeze({
   failedOpenCleanup(error: unknown): RuntimeTransportBindingHandle | undefined {
-    return isObject(error) ? failedOpenCleanups.get(error) : undefined;
+    return RuntimeTransportValues.isObject(error) ? failedOpenCleanups.get(error) : undefined;
   },
 });
 
@@ -141,7 +159,7 @@ class RuntimeTransportBinder {
       try {
         await cleanup.close();
       } catch (cleanupError) {
-        const failure = failedOpenFailure(error, cleanupError);
+        const failure = RuntimeTransportValues.failedOpenFailure(error, cleanupError);
         failedOpenCleanups.set(failure, cleanup);
         throw failure;
       }
@@ -151,10 +169,15 @@ class RuntimeTransportBinder {
   }
 
   async #registerCommands(): Promise<void> {
-    const subscriptions = subscriptionMap(this.#input.plan.commands.subscriptions);
+    const subscriptions = RuntimeTransportValues.subscriptionMap(
+      this.#input.plan.commands.subscriptions,
+    );
 
     for (const route of this.#input.plan.commands.routes) {
-      const subscription = requireSubscription(subscriptions, route.subscriptionDescriptorKey);
+      const subscription = RuntimeTransportValues.requireSubscription(
+        subscriptions,
+        route.subscriptionDescriptorKey,
+      );
       const handle = await this.#input.transport.respond(subscription, (operation) =>
         this.#acceptCommand(route, operation.envelope),
       );
@@ -163,7 +186,9 @@ class RuntimeTransportBinder {
   }
 
   async #registerEvents(): Promise<void> {
-    const subscriptions = subscriptionMap(this.#input.plan.events.subscriptions);
+    const subscriptions = RuntimeTransportValues.subscriptionMap(
+      this.#input.plan.events.subscriptions,
+    );
     const routes = [
       ...this.#input.plan.events.subscriberRoutes,
       ...this.#input.plan.events.reactorRoutes,
@@ -171,7 +196,10 @@ class RuntimeTransportBinder {
     ];
 
     for (const route of routes) {
-      const subscription = requireSubscription(subscriptions, route.subscriptionDescriptorKey);
+      const subscription = RuntimeTransportValues.requireSubscription(
+        subscriptions,
+        route.subscriptionDescriptorKey,
+      );
       const handle = await this.#input.transport.subscribe(subscription, (operation) => {
         this.#acceptEvent(route, operation.envelope);
       });
@@ -181,10 +209,14 @@ class RuntimeTransportBinder {
 
   #acceptCommand(route: CommandRuntimeRoutingRoute, envelope: unknown): SignalIntakeResult {
     if (!this.#gate.isAccepting) {
-      return runtimeFailure("command", this.#input);
+      return RuntimeTransportValues.runtimeFailure("command", this.#input);
     }
 
-    const command = validateCommandEnvelope(envelope, route.message.typeUrl, this.#input);
+    const command = RuntimeTransportValues.validateCommandEnvelope(
+      envelope,
+      route.message.typeUrl,
+      this.#input,
+    );
 
     if (command.status === "failed") {
       return command;
@@ -196,7 +228,7 @@ class RuntimeTransportBinder {
         .catch(() => undefined);
     } catch (error) {
       if (error instanceof ServerRuntimeStateError) {
-        return runtimeFailure("command", this.#input);
+        return RuntimeTransportValues.runtimeFailure("command", this.#input);
       }
       throw error;
     }
@@ -206,10 +238,16 @@ class RuntimeTransportBinder {
 
   #acceptEvent(route: EventRuntimeRoutingRoute, envelope: unknown): void {
     if (!this.#gate.isAccepting) {
-      throw new RuntimeTransportEnvelopeError(runtimeFailure("event", this.#input));
+      throw new RuntimeTransportEnvelopeError(
+        RuntimeTransportValues.runtimeFailure("event", this.#input),
+      );
     }
 
-    const event = validateEventEnvelope(envelope, route.message.typeUrl, this.#input);
+    const event = RuntimeTransportValues.validateEventEnvelope(
+      envelope,
+      route.message.typeUrl,
+      this.#input,
+    );
 
     if (event.status === "failed") {
       throw new RuntimeTransportEnvelopeError(event);
@@ -221,7 +259,9 @@ class RuntimeTransportBinder {
         .catch(() => undefined);
     } catch (error) {
       if (error instanceof ServerRuntimeStateError) {
-        throw new RuntimeTransportEnvelopeError(runtimeFailure("event", this.#input));
+        throw new RuntimeTransportEnvelopeError(
+          RuntimeTransportValues.runtimeFailure("event", this.#input),
+        );
       }
       throw error;
     }
@@ -287,7 +327,7 @@ class RuntimeTransportHandle implements RuntimeTransportBindingHandle {
         await handle.close();
         this.#closedHandles.add(handle);
       } catch (error) {
-        failures.push(toError(error));
+        failures.push(RuntimeTransportValues.toError(error));
       }
     }
 
@@ -295,11 +335,11 @@ class RuntimeTransportHandle implements RuntimeTransportBindingHandle {
       await this.#runtime.close();
       this.#gate.finishClose();
     } catch (error) {
-      failures.push(toError(error));
+      failures.push(RuntimeTransportValues.toError(error));
     }
 
     if (failures.length > 0) {
-      throw closeFailure(failures);
+      throw RuntimeTransportValues.closeFailure(failures);
     }
   }
 }
@@ -307,208 +347,229 @@ class RuntimeTransportHandle implements RuntimeTransportBindingHandle {
 type EnvelopeResult<Kind extends "command" | "event", Envelope> =
   { readonly status: "accepted"; readonly envelope: Envelope } | SignalIntakeFailure<Kind>;
 
-function validateCommandEnvelope(
-  envelope: unknown,
-  expectedTypeUrl: string,
-  input: RuntimeTransportBindingInput,
-): EnvelopeResult<"command", Command> {
-  return validateEnvelope(
-    "command",
-    CommandSchema.typeName,
-    envelope,
-    expectedTypeUrl,
-    input,
-    (record) => parseCommandEnvelope(record),
-  );
-}
-
-function validateEventEnvelope(
-  envelope: unknown,
-  expectedTypeUrl: string,
-  input: RuntimeTransportBindingInput,
-): EnvelopeResult<"event", Event> {
-  return validateEnvelope(
-    "event",
-    EventSchema.typeName,
-    envelope,
-    expectedTypeUrl,
-    input,
-    (record) => parseEventEnvelope(record),
-  );
-}
-
-function validateEnvelope<Kind extends "command" | "event", Envelope>(
-  signalKind: Kind,
-  envelopeTypeName: string,
-  envelope: unknown,
-  expectedTypeUrl: string,
-  input: RuntimeTransportBindingInput,
-  parse: (envelope: Record<string, unknown>) => Envelope | undefined,
-): EnvelopeResult<Kind, Envelope> {
-  if (!isRecord(envelope)) {
-    return envelopeFailure(signalKind, input, "envelope must be an object");
-  }
-
-  const typeName = readOwnValue(envelope, "$typeName");
-  const message = readOwnValue(envelope, "message");
-
-  if (typeName !== envelopeTypeName) {
-    return envelopeFailure(signalKind, input, "unexpected envelope type", readTypeUrl(message));
-  }
-  if (!isRecord(message)) {
-    return envelopeFailure(signalKind, input, "missing message");
-  }
-
-  const messageType = readOwnValue(message, "typeUrl");
-
-  if (typeof messageType !== "string" || messageType.length === 0) {
-    return envelopeFailure(signalKind, input, "missing message type URL");
-  }
-  if (messageType !== expectedTypeUrl) {
-    return envelopeFailure(signalKind, input, "unexpected message type URL", messageType);
-  }
-
-  const parsed = parse(envelope);
-
-  if (parsed === undefined) {
-    return envelopeFailure(signalKind, input, "malformed generated envelope", messageType);
-  }
-
-  return {
-    status: "accepted",
-    envelope: parsed,
-  };
-}
-
-function parseCommandEnvelope(envelope: Record<string, unknown>): Command | undefined {
-  try {
-    return fromBinary(
-      CommandSchema,
-      toBinary(CommandSchema, envelope as Command, { writeUnknownFields: false }),
-      { readUnknownFields: false },
+const RuntimeTransportValues = Object.freeze({
+  validateCommandEnvelope(
+    envelope: unknown,
+    expectedTypeUrl: string,
+    input: RuntimeTransportBindingInput,
+  ): EnvelopeResult<"command", Command> {
+    return RuntimeTransportValues.validateEnvelope(
+      "command",
+      CommandSchema.typeName,
+      envelope,
+      expectedTypeUrl,
+      input,
+      (record) => RuntimeTransportValues.parseCommandEnvelope(record),
     );
-  } catch {
-    return undefined;
-  }
-}
+  },
 
-function parseEventEnvelope(envelope: Record<string, unknown>): Event | undefined {
-  try {
-    return fromBinary(
-      EventSchema,
-      toBinary(EventSchema, envelope as Event, { writeUnknownFields: false }),
-      { readUnknownFields: false },
+  validateEventEnvelope(
+    envelope: unknown,
+    expectedTypeUrl: string,
+    input: RuntimeTransportBindingInput,
+  ): EnvelopeResult<"event", Event> {
+    return RuntimeTransportValues.validateEnvelope(
+      "event",
+      EventSchema.typeName,
+      envelope,
+      expectedTypeUrl,
+      input,
+      (record) => RuntimeTransportValues.parseEventEnvelope(record),
     );
-  } catch {
-    return undefined;
-  }
-}
+  },
 
-function subscriptionMap<Kind extends "command" | "event">(
-  subscriptions: readonly TransportSubscription<Kind>[],
-): ReadonlyMap<string, TransportSubscription<Kind>> {
-  return new Map(subscriptions.map((subscription) => [subscription.descriptorKey, subscription]));
-}
+  validateEnvelope<Kind extends "command" | "event", Envelope>(
+    signalKind: Kind,
+    envelopeTypeName: string,
+    envelope: unknown,
+    expectedTypeUrl: string,
+    input: RuntimeTransportBindingInput,
+    parse: (envelope: Record<string, unknown>) => Envelope | undefined,
+  ): EnvelopeResult<Kind, Envelope> {
+    if (!RuntimeTransportValues.isRecord(envelope)) {
+      return RuntimeTransportValues.envelopeFailure(
+        signalKind,
+        input,
+        "envelope must be an object",
+      );
+    }
 
-function requireSubscription<Kind extends "command" | "event">(
-  subscriptions: ReadonlyMap<string, TransportSubscription<Kind>>,
-  descriptorKey: string,
-): TransportSubscription<Kind> {
-  const subscription = subscriptions.get(descriptorKey);
+    const typeName = RuntimeTransportValues.readOwnValue(envelope, "$typeName");
+    const message = RuntimeTransportValues.readOwnValue(envelope, "message");
 
-  if (subscription === undefined) {
-    throw new Error(`Runtime transport route is missing subscription "${descriptorKey}".`);
-  }
+    if (typeName !== envelopeTypeName) {
+      return RuntimeTransportValues.envelopeFailure(
+        signalKind,
+        input,
+        "unexpected envelope type",
+        RuntimeTransportValues.readTypeUrl(message),
+      );
+    }
+    if (!RuntimeTransportValues.isRecord(message)) {
+      return RuntimeTransportValues.envelopeFailure(signalKind, input, "missing message");
+    }
 
-  return subscription;
-}
+    const messageType = RuntimeTransportValues.readOwnValue(message, "typeUrl");
 
-function envelopeFailure<Kind extends "command" | "event">(
-  signalKind: Kind,
-  input: RuntimeTransportBindingInput,
-  reason: string,
-  messageType?: string,
-): SignalIntakeFailure<Kind> {
-  return failSignalIntake(signalKind, "MALFORMED_ENVELOPE", {
-    boundedContext: input.plan.context.name.value,
-    runtimeState: input.runtime.state,
-    reason,
-    ...(messageType === undefined ? {} : { messageType }),
-  });
-}
+    if (typeof messageType !== "string" || messageType.length === 0) {
+      return RuntimeTransportValues.envelopeFailure(signalKind, input, "missing message type URL");
+    }
+    if (messageType !== expectedTypeUrl) {
+      return RuntimeTransportValues.envelopeFailure(
+        signalKind,
+        input,
+        "unexpected message type URL",
+        messageType,
+      );
+    }
 
-function runtimeFailure<Kind extends "command" | "event">(
-  signalKind: Kind,
-  input: RuntimeTransportBindingInput,
-): SignalIntakeFailure<Kind> {
-  return failSignalIntake(signalKind, "RUNTIME_NOT_ACCEPTING", {
-    boundedContext: input.plan.context.name.value,
-    runtimeState: input.runtime.state,
-    reason: "runtime is not accepting work",
-  });
-}
+    const parsed = parse(envelope);
 
-function formatEnvelopeError(result: SignalIntakeFailure): string {
-  const reason = result.failure.diagnostics.reason;
+    if (parsed === undefined) {
+      return RuntimeTransportValues.envelopeFailure(
+        signalKind,
+        input,
+        "malformed generated envelope",
+        messageType,
+      );
+    }
 
-  if (typeof reason === "string" && reason.length > 0) {
-    return `Runtime transport ${result.signalKind} envelope refused: ${reason}.`;
-  }
+    return {
+      status: "accepted",
+      envelope: parsed,
+    };
+  },
 
-  return `Runtime transport ${result.signalKind} envelope refused.`;
-}
+  parseCommandEnvelope(envelope: Record<string, unknown>): Command | undefined {
+    try {
+      return fromBinary(
+        CommandSchema,
+        toBinary(CommandSchema, envelope as Command, { writeUnknownFields: false }),
+        { readUnknownFields: false },
+      );
+    } catch {
+      return undefined;
+    }
+  },
 
-function toError(error: unknown): Error {
-  if (error instanceof Error) {
-    return error;
-  }
+  parseEventEnvelope(envelope: Record<string, unknown>): Event | undefined {
+    try {
+      return fromBinary(
+        EventSchema,
+        toBinary(EventSchema, envelope as Event, { writeUnknownFields: false }),
+        { readUnknownFields: false },
+      );
+    } catch {
+      return undefined;
+    }
+  },
 
-  return new Error(String(error));
-}
+  subscriptionMap<Kind extends "command" | "event">(
+    subscriptions: readonly TransportSubscription<Kind>[],
+  ): ReadonlyMap<string, TransportSubscription<Kind>> {
+    return new Map(subscriptions.map((subscription) => [subscription.descriptorKey, subscription]));
+  },
 
-function closeFailure(failures: readonly Error[]): Error {
-  const [failure] = failures;
+  requireSubscription<Kind extends "command" | "event">(
+    subscriptions: ReadonlyMap<string, TransportSubscription<Kind>>,
+    descriptorKey: string,
+  ): TransportSubscription<Kind> {
+    const subscription = subscriptions.get(descriptorKey);
 
-  if (failures.length === 1 && failure !== undefined) {
-    return failure;
-  }
+    if (subscription === undefined) {
+      throw new Error(`Runtime transport route is missing subscription "${descriptorKey}".`);
+    }
 
-  return new Error(`Runtime transport close failed in ${String(failures.length)} operations.`);
-}
+    return subscription;
+  },
 
-function failedOpenFailure(primary: unknown, cleanup: unknown): AggregateError {
-  const primaryError = toError(primary);
-  const cleanupError = toError(cleanup);
+  envelopeFailure<Kind extends "command" | "event">(
+    signalKind: Kind,
+    input: RuntimeTransportBindingInput,
+    reason: string,
+    messageType?: string,
+  ): SignalIntakeFailure<Kind> {
+    return failSignalIntake(signalKind, "MALFORMED_ENVELOPE", {
+      boundedContext: input.plan.context.name.value,
+      runtimeState: input.runtime.state,
+      reason,
+      ...(messageType === undefined ? {} : { messageType }),
+    });
+  },
 
-  return new AggregateError(
-    [primaryError, cleanupError],
-    `Runtime transport binding open failed: ${primaryError.message}; cleanup also failed: ${cleanupError.message}.`,
-  );
-}
+  runtimeFailure<Kind extends "command" | "event">(
+    signalKind: Kind,
+    input: RuntimeTransportBindingInput,
+  ): SignalIntakeFailure<Kind> {
+    return failSignalIntake(signalKind, "RUNTIME_NOT_ACCEPTING", {
+      boundedContext: input.plan.context.name.value,
+      runtimeState: input.runtime.state,
+      reason: "runtime is not accepting work",
+    });
+  },
 
-function isObject(value: unknown): value is object {
-  return (typeof value === "object" && value !== null) || typeof value === "function";
-}
+  formatEnvelopeError(result: SignalIntakeFailure): string {
+    const reason = result.failure.diagnostics.reason;
 
-function readTypeUrl(message: unknown): string | undefined {
-  if (!isRecord(message)) {
-    return undefined;
-  }
+    if (typeof reason === "string" && reason.length > 0) {
+      return `Runtime transport ${result.signalKind} envelope refused: ${reason}.`;
+    }
 
-  const value = readOwnValue(message, "typeUrl");
-  return typeof value === "string" ? value : undefined;
-}
+    return `Runtime transport ${result.signalKind} envelope refused.`;
+  },
 
-function readOwnValue(record: Record<string, unknown>, key: string): unknown {
-  const descriptor = Object.getOwnPropertyDescriptor(record, key);
+  toError(error: unknown): Error {
+    if (error instanceof Error) {
+      return error;
+    }
 
-  if (descriptor === undefined || !("value" in descriptor)) {
-    return undefined;
-  }
+    return new Error(String(error));
+  },
 
-  return descriptor.value;
-}
+  closeFailure(failures: readonly Error[]): Error {
+    const [failure] = failures;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+    if (failures.length === 1 && failure !== undefined) {
+      return failure;
+    }
+
+    return new Error(`Runtime transport close failed in ${String(failures.length)} operations.`);
+  },
+
+  failedOpenFailure(primary: unknown, cleanup: unknown): AggregateError {
+    const primaryError = RuntimeTransportValues.toError(primary);
+    const cleanupError = RuntimeTransportValues.toError(cleanup);
+
+    return new AggregateError(
+      [primaryError, cleanupError],
+      `Runtime transport binding open failed: ${primaryError.message}; cleanup also failed: ${cleanupError.message}.`,
+    );
+  },
+
+  isObject(value: unknown): value is object {
+    return (typeof value === "object" && value !== null) || typeof value === "function";
+  },
+
+  readTypeUrl(message: unknown): string | undefined {
+    if (!RuntimeTransportValues.isRecord(message)) {
+      return undefined;
+    }
+
+    const value = RuntimeTransportValues.readOwnValue(message, "typeUrl");
+    return typeof value === "string" ? value : undefined;
+  },
+
+  readOwnValue(record: Record<string, unknown>, key: string): unknown {
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+
+    if (descriptor === undefined || !("value" in descriptor)) {
+      return undefined;
+    }
+
+    return descriptor.value;
+  },
+
+  isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  },
+});

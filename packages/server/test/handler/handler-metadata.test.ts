@@ -7,7 +7,7 @@ import { CommandSchema, EventSchema, file_spine_options } from "@spine-event-eng
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
-  defineEntityHandlers,
+  EntityHandlers,
   type DescriptorMessageSchema,
   describeEntityMetadata,
   HandlerMetadataError,
@@ -147,7 +147,7 @@ describe("handler metadata", () => {
   it("defines frozen explicit handler metadata in declaration order", () => {
     const entity = describeEntityMetadata(ProjectionStateSchema);
 
-    const metadata = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    const metadata = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
       builder.command(CommandSchema, "commandFromCommand"),
       builder.subscribe(EventSchema, "subscribeCreated"),
@@ -215,12 +215,12 @@ describe("handler metadata", () => {
 
   it("rejects method names that do not exist on the entity prototype", () => {
     expect(() =>
-      defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "missingMethod" as never),
       ]),
     ).toThrow(HandlerMetadataError);
     expect(() =>
-      defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "missingMethod" as never),
       ]),
     ).toThrow(/normal class method syntax/);
@@ -229,12 +229,12 @@ describe("handler metadata", () => {
   it("documents that callable-name typing is narrower at runtime than TypeScript can express", () => {
     expectTypeOf<"accessorHandler">().toExtend<HandlerMethodName<AccessorProjection>>();
     expect(() =>
-      defineEntityHandlers(AccessorProjection, ProjectionStateSchema, (builder) => [
+      EntityHandlers.define(AccessorProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "accessorHandler"),
       ]),
     ).toThrow(HandlerMetadataError);
     expect(() =>
-      defineEntityHandlers(AccessorProjection, ProjectionStateSchema, (builder) => [
+      EntityHandlers.define(AccessorProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "accessorHandler"),
       ]),
     ).toThrow(/normal class method/);
@@ -243,7 +243,7 @@ describe("handler metadata", () => {
 
   it("rejects inherited built-ins as handler method names", () => {
     expect(() =>
-      defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "toString" as never),
       ]),
     ).toThrow(HandlerMetadataError);
@@ -251,7 +251,7 @@ describe("handler metadata", () => {
 
   it("rejects constructor as a handler method name", () => {
     expect(() =>
-      defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "constructor" as never),
       ]),
     ).toThrow(HandlerMetadataError);
@@ -259,7 +259,7 @@ describe("handler metadata", () => {
 
   it("rejects handler records not created by the registration builder", () => {
     expect(() =>
-      defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
         {
           ...builder.assign(CommandSchema, "assignCreate"),
         },
@@ -268,7 +268,7 @@ describe("handler metadata", () => {
   });
 
   it("rejects handler records created by another registration builder", () => {
-    const foreignHandlers = defineEntityHandlers(
+    const foreignHandlers = EntityHandlers.define(
       ForeignProjection,
       ProjectionStateSchema,
       (builder) => [builder.assign(CommandSchema, "foreignOnly")],
@@ -276,14 +276,14 @@ describe("handler metadata", () => {
     const foreignHandler = foreignHandlers.handlers[0];
 
     expect(() =>
-      defineEntityHandlers(TaskProjection, ProjectionStateSchema, () => [foreignHandler as never]),
+      EntityHandlers.define(TaskProjection, ProjectionStateSchema, () => [foreignHandler as never]),
     ).toThrow(/registration builder/);
   });
 });
 
 describe("handler metadata registry", () => {
   it("registers entity handler metadata and exposes frozen deterministic lookup views", () => {
-    const projectionHandlers = defineEntityHandlers(
+    const projectionHandlers = EntityHandlers.define(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [
@@ -291,7 +291,7 @@ describe("handler metadata registry", () => {
         builder.apply(EventSchema, "applyCreated"),
       ],
     );
-    const aggregateHandlers = defineEntityHandlers(
+    const aggregateHandlers = EntityHandlers.define(
       TaskProjection,
       AggregateStateSchema,
       (builder) => [
@@ -305,15 +305,15 @@ describe("handler metadata registry", () => {
     const registry = new HandlerMetadataRegistry([projectionHandlers, aggregateHandlers]);
 
     expect(registry.listEntityHandlers()).toEqual([projectionHandlers, aggregateHandlers]);
-    expect(registry.findEntityHandlersByState("ProjectionState")).toEqual([projectionHandlers]);
-    expect(registry.findEntityHandlersByState("AggregateState")).toEqual([aggregateHandlers]);
+    expect(registry.findByState("ProjectionState")).toEqual([projectionHandlers]);
+    expect(registry.findByState("AggregateState")).toEqual([aggregateHandlers]);
     expect(registry.findHandlersByKind("event-application").map((entry) => entry.handler)).toEqual([
       projectionHandlers.eventApplications[0],
       aggregateHandlers.eventApplications[0],
     ]);
     expect(
       registry
-        .findHandlersByMessageFullTypeName("spine.core.Event")
+        .findByMessage("spine.core.Event")
         .map((entry) => [entry.entity.fullTypeName, entry.handler.kind, entry.handler.methodName]),
     ).toEqual([
       ["ProjectionState", "event-application", "applyCreated"],
@@ -331,16 +331,14 @@ describe("handler metadata registry", () => {
     expect(Object.isFrozen(registry.listEntityHandlers())).toBe(true);
     expect(Object.isFrozen(registry.listHandlers())).toBe(true);
     expect(Object.isFrozen(registry.findHandlersByKind("event-application"))).toBe(true);
-    expect(Object.isFrozen(registry.findHandlersByMessageFullTypeName("spine.core.Event"))).toBe(
-      true,
-    );
+    expect(Object.isFrozen(registry.findByMessage("spine.core.Event"))).toBe(true);
   });
 
   it("rejects duplicate command assignments in one caller-owned registry", () => {
-    const first = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
-    const second = defineEntityHandlers(OtherProjection, AggregateStateSchema, (builder) => [
+    const second = EntityHandlers.define(OtherProjection, AggregateStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
 
@@ -353,10 +351,10 @@ describe("handler metadata registry", () => {
   });
 
   it("rejects duplicate event applications for the same entity state and event type", () => {
-    const first = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.apply(EventSchema, "applyCreated"),
     ]);
-    const second = defineEntityHandlers(OtherProjection, ProjectionStateSchema, (builder) => [
+    const second = EntityHandlers.define(OtherProjection, ProjectionStateSchema, (builder) => [
       builder.apply(EventSchema, "applyCreated"),
     ]);
 
@@ -369,12 +367,12 @@ describe("handler metadata registry", () => {
   });
 
   it("allows fan-out metadata for command reactions and event subscribers/reactors", () => {
-    const first = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    const first = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.command(CommandSchema, "commandFromCommand"),
       builder.subscribe(EventSchema, "subscribeCreated"),
       builder.react(EventSchema, "reactToCreated"),
     ]);
-    const second = defineEntityHandlers(TaskProjection, AggregateStateSchema, (builder) => [
+    const second = EntityHandlers.define(TaskProjection, AggregateStateSchema, (builder) => [
       builder.command(CommandSchema, "commandFromArchive"),
       builder.subscribe(EventSchema, "subscribeArchived"),
       builder.react(EventSchema, "reactToArchived"),
@@ -385,17 +383,17 @@ describe("handler metadata registry", () => {
     expect(registry.findHandlersByKind("command-reaction")).toHaveLength(2);
     expect(registry.findHandlersByKind("event-subscription")).toHaveLength(2);
     expect(registry.findHandlersByKind("event-reaction")).toHaveLength(2);
-    expect(registry.findHandlersByMessageFullTypeName("spine.core.Command")).toHaveLength(2);
-    expect(registry.findHandlersByMessageFullTypeName("spine.core.Event")).toHaveLength(4);
+    expect(registry.findByMessage("spine.core.Command")).toHaveLength(2);
+    expect(registry.findByMessage("spine.core.Event")).toHaveLength(4);
   });
 
   it("keeps registries caller-owned and does not instantiate or invoke handlers", () => {
     PassiveProjection.constructorCount = 0;
     PassiveProjection.invocationCount = 0;
-    const first = defineEntityHandlers(PassiveProjection, ProjectionStateSchema, (builder) => [
+    const first = EntityHandlers.define(PassiveProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
-    const second = defineEntityHandlers(OtherProjection, AggregateStateSchema, (builder) => [
+    const second = EntityHandlers.define(OtherProjection, AggregateStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
     ]);
 

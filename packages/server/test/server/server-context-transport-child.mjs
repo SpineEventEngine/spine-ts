@@ -13,8 +13,8 @@ import {
   Repository,
   Server,
   EnvironmentType,
+  EntityHandlers,
   ServerEnvironment,
-  defineEntityHandlers,
 } from "@spine-event-engine/server";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
@@ -122,7 +122,7 @@ process.once("SIGTERM", () => {
 });
 
 try {
-  const handlers = defineEntityHandlers(TaskAggregate, AggregateStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(TaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
     builder.apply(ProjectionStateSchema, "applyTask"),
   ]);
@@ -131,7 +131,7 @@ try {
     schema: AggregateStateSchema,
     handlers,
   });
-  const projectionHandlers = defineEntityHandlers(
+  const projectionHandlers = EntityHandlers.define(
     TaskProjection,
     ProjectionStateSchema,
     (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
@@ -141,7 +141,7 @@ try {
     schema: ProjectionStateSchema,
     handlers: projectionHandlers,
   });
-  const auditHandlers = defineEntityHandlers(
+  const auditHandlers = EntityHandlers.define(
     AuditProjection,
     SingularSetOnceStateSchema,
     (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],

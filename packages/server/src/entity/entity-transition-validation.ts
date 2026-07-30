@@ -25,7 +25,7 @@ import {
  * establish supported set-once values; unsupported repeated, map-valued, and
  * explicit optional set-once declarations fail closed even on creation.
  */
-export interface EntityStateTransitionValidationRequest<
+export interface StateTransitionRequest<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
 > {
   /** Generated Protobuf-ES schema describing the entity state. */
@@ -37,7 +37,7 @@ export interface EntityStateTransitionValidationRequest<
 }
 
 /** Structured, sanitized result returned by {@link validateEntityStateTransition}. */
-export type EntityStateTransitionValidationResult = TransitionValidationResult;
+export type StateTransitionResult = TransitionValidationResult;
 
 const transitionRulesBySchema = new WeakMap<
   DescriptorMessageSchema,
@@ -45,21 +45,23 @@ const transitionRulesBySchema = new WeakMap<
 >();
 
 /**
- * Validate a proposed entity state transition with built-in, side-effect-free
- * server rules.
+ * Returns the built-in validation result for a proposed entity state transition.
  *
  * The validator currently enforces descriptor-derived `(set_once)` fields,
  * delegates result shaping to `@spine-event-engine/core` `Validate.transition()`, and does
  * not instantiate entities, dispatch handlers, touch repositories, or perform
  * runtime I/O. Repeated, map-valued, and explicit optional `(set_once)` fields
  * are unsupported in this slice and fail closed with field-specific violations.
- * Non-entity schemas still fail through {@link DescriptorMetadataError} from
+ * Non-entity schemas still fail through `DescriptorMetadataError` from
  * `describeEntityMetadata()`.
+ *
+ * @param request - Schema and previous/next state values to validate.
+ * @returns Sanitized validation result with any set-once violations.
  */
 export function validateEntityStateTransition<Schema extends DescriptorMessageSchema>(
-  request: EntityStateTransitionValidationRequest<Schema>,
-): EntityStateTransitionValidationResult {
-  return Validate.transition(request, getTransitionValidationRules(request.schema));
+  request: StateTransitionRequest<Schema>,
+): StateTransitionResult {
+  return Validate.transition(request, StateTransitions.rules(request.schema));
 }
 
 const MAX_EQUALITY_DEPTH = 64;
@@ -75,380 +77,384 @@ interface FieldPropertyReadResult {
   readonly value?: unknown;
 }
 
-function getTransitionValidationRules<Schema extends DescriptorMessageSchema>(
-  schema: Schema,
-): readonly TransitionValidationRule<Schema>[] {
-  const cachedRules = transitionRulesBySchema.get(schema) as
-    readonly TransitionValidationRule<Schema>[] | undefined;
+/** Owns descriptor-backed, fail-closed state transition validation. */
+const StateTransitions = Object.freeze({
+  rules<Schema extends DescriptorMessageSchema>(
+    schema: Schema,
+  ): readonly TransitionValidationRule<Schema>[] {
+    const cachedRules = transitionRulesBySchema.get(schema) as
+      readonly TransitionValidationRule<Schema>[] | undefined;
 
-  if (cachedRules !== undefined) {
-    return cachedRules;
-  }
+    if (cachedRules !== undefined) {
+      return cachedRules;
+    }
 
-  const metadata = describeEntityMetadata(schema);
-  const rules = Object.freeze([createSetOnceTransitionRule<Schema>(metadata.setOnceFields)]);
+    const metadata = describeEntityMetadata(schema);
+    const rules = Object.freeze([StateTransitions.setOnceRule<Schema>(metadata.setOnceFields)]);
 
-  transitionRulesBySchema.set(schema, rules);
+    transitionRulesBySchema.set(schema, rules);
 
-  return rules;
-}
+    return rules;
+  },
 
-function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
-  setOnceFields: readonly DescriptorFieldMetadata[],
-): TransitionValidationRule<Schema> {
-  return {
-    validateTransition(request) {
-      if (setOnceFields.length === 0) {
-        return [];
-      }
-
-      return setOnceFields.flatMap((field) => {
-        if (isUnsupportedSetOnceField(field)) {
-          return [createSetOnceViolation(request.schema.typeName, field)];
-        }
-
-        if (request.previous === undefined) {
+  setOnceRule<Schema extends DescriptorMessageSchema>(
+    setOnceFields: readonly DescriptorFieldMetadata[],
+  ): TransitionValidationRule<Schema> {
+    return {
+      validateTransition(request) {
+        if (setOnceFields.length === 0) {
           return [];
         }
 
-        const previousValue = readFieldValue(request.schema, request.previous, field);
-        const nextValue = readFieldValue(request.schema, request.next, field);
+        return setOnceFields.flatMap((field) => {
+          if (StateTransitions.unsupported(field)) {
+            return [StateTransitions.violation(request.schema.typeName, field)];
+          }
 
-        return previousValue.safe &&
-          nextValue.safe &&
-          previousValue.present === nextValue.present &&
-          (!previousValue.present || valuesAreEqual(previousValue.value, nextValue.value))
-          ? []
-          : [createSetOnceViolation(request.schema.typeName, field)];
-      });
-    },
-  };
-}
+          if (request.previous === undefined) {
+            return [];
+          }
 
-function readFieldValue(
-  schema: DescriptorMessageSchema,
-  message: Record<string, unknown>,
-  field: DescriptorFieldMetadata,
-): FieldReadResult {
-  let descriptor: PropertyDescriptor | undefined;
+          const previousValue = StateTransitions.field(request.schema, request.previous, field);
+          const nextValue = StateTransitions.field(request.schema, request.next, field);
 
-  try {
-    descriptor = Object.getOwnPropertyDescriptor(message, field.localName);
-  } catch {
-    return { safe: false, present: false };
-  }
+          return previousValue.safe &&
+            nextValue.safe &&
+            previousValue.present === nextValue.present &&
+            (!previousValue.present || StateTransitions.same(previousValue.value, nextValue.value))
+            ? []
+            : [StateTransitions.violation(request.schema.typeName, field)];
+        });
+      },
+    };
+  },
 
-  if (descriptor === undefined) {
-    const property = readFieldProperty(message, field);
+  field(
+    schema: DescriptorMessageSchema,
+    message: Record<string, unknown>,
+    field: DescriptorFieldMetadata,
+  ): FieldReadResult {
+    let descriptor: PropertyDescriptor | undefined;
 
-    return property.safe && property.value === undefined
-      ? { safe: true, present: false }
-      : { safe: false, present: false };
-  }
-
-  if (!isSafeDataDescriptor(descriptor)) {
-    return { safe: false, present: false };
-  }
-
-  const property = readFieldProperty(message, field);
-
-  if (
-    !property.safe ||
-    property.value === undefined ||
-    !fieldValueShapeIsSafe(field, property.value)
-  ) {
-    return { safe: false, present: false };
-  }
-
-  const canonicalValue = canonicalizeFieldValue(schema, field, property.value);
-
-  return canonicalValue.safe
-    ? { safe: true, present: true, value: canonicalValue.value }
-    : { safe: false, present: false };
-}
-
-function readFieldProperty(
-  message: Record<string, unknown>,
-  field: DescriptorFieldMetadata,
-): FieldPropertyReadResult {
-  try {
-    return { safe: true, value: message[field.localName] };
-  } catch {
-    return { safe: false };
-  }
-}
-
-function canonicalizeFieldValue(
-  schema: DescriptorMessageSchema,
-  field: DescriptorFieldMetadata,
-  value: unknown,
-): FieldPropertyReadResult {
-  try {
-    const initialized = create(schema, {
-      [field.localName]: value,
-    });
-    const canonical = fromBinary(
-      schema,
-      toBinary(schema, initialized, { writeUnknownFields: false }),
-    ) as Record<string, unknown>;
-    const descriptor = Object.getOwnPropertyDescriptor(canonical, field.localName);
-
-    return isSafeDataDescriptor(descriptor)
-      ? { safe: true, value: descriptor.value }
-      : { safe: false };
-  } catch {
-    return { safe: false };
-  }
-}
-
-function fieldValueShapeIsSafe(field: DescriptorFieldMetadata, value: unknown): boolean {
-  try {
-    return fieldValueShapeIsSafeUnchecked(field, value);
-  } catch {
-    return false;
-  }
-}
-
-function fieldValueShapeIsSafeUnchecked(field: DescriptorFieldMetadata, value: unknown): boolean {
-  const descriptor = field.descriptor;
-
-  switch (descriptor.fieldKind) {
-    case "scalar":
-      if (descriptor.scalar === ScalarType.BYTES) {
-        return value instanceof Uint8Array && readSafeUint8ArrayBytes(value) !== undefined;
-      }
-
-      return descriptor.scalar !== ScalarType.STRING || typeof value === "string";
-    case "enum":
-      return Number.isInteger(value);
-    case "message":
-      return isRecord(value);
-    case "list":
-    case "map":
-      return false;
-  }
-}
-
-function valuesAreEqual(previousValue: unknown, nextValue: unknown, depth = 0): boolean {
-  try {
-    if (primitiveValuesAreIdentical(previousValue, nextValue)) {
-      return true;
+    try {
+      descriptor = Object.getOwnPropertyDescriptor(message, field.localName);
+    } catch {
+      return { safe: false, present: false };
     }
 
-    if (depth > MAX_EQUALITY_DEPTH) {
-      return false;
+    if (descriptor === undefined) {
+      const property = StateTransitions.property(message, field);
+
+      return property.safe && property.value === undefined
+        ? { safe: true, present: false }
+        : { safe: false, present: false };
     }
 
-    if (previousValue instanceof Uint8Array && nextValue instanceof Uint8Array) {
-      return bytesAreEqual(previousValue, nextValue);
+    if (!StateTransitions.dataDescriptor(descriptor)) {
+      return { safe: false, present: false };
     }
 
-    if (Array.isArray(previousValue) && Array.isArray(nextValue)) {
-      return arraysAreEqual(previousValue, nextValue, depth);
-    }
-
-    if (isRecord(previousValue) && isRecord(nextValue)) {
-      return recordsAreEqual(previousValue, nextValue, depth);
-    }
-
-    return false;
-  } catch {
-    return false;
-  }
-}
-
-function bytesAreEqual(previousValue: Uint8Array, nextValue: Uint8Array): boolean {
-  const previousBytes = readSafeUint8ArrayBytes(previousValue);
-  const nextBytes = readSafeUint8ArrayBytes(nextValue);
-
-  if (previousBytes === undefined || nextBytes === undefined) {
-    return false;
-  }
-
-  if (previousBytes.length !== nextBytes.length) {
-    return false;
-  }
-
-  for (let index = 0; index < previousBytes.length; index += 1) {
-    if (previousBytes[index] !== nextBytes[index]) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function arraysAreEqual(
-  previousValue: readonly unknown[],
-  nextValue: readonly unknown[],
-  depth: number,
-): boolean {
-  if (previousValue.length !== nextValue.length) {
-    return false;
-  }
-
-  for (let index = 0; index < previousValue.length; index += 1) {
-    if (!valuesAreEqual(previousValue[index], nextValue[index], depth + 1)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function recordsAreEqual(
-  previousValue: Record<string, unknown>,
-  nextValue: Record<string, unknown>,
-  depth: number,
-): boolean {
-  if (Object.getPrototypeOf(previousValue) !== Object.getPrototypeOf(nextValue)) {
-    return false;
-  }
-
-  const previousKeys = Object.keys(previousValue).sort();
-  const nextKeys = Object.keys(nextValue).sort();
-
-  if (!arraysAreEqual(previousKeys, nextKeys, depth)) {
-    return false;
-  }
-
-  for (const key of previousKeys) {
-    const previousDescriptor = Object.getOwnPropertyDescriptor(previousValue, key);
-    const nextDescriptor = Object.getOwnPropertyDescriptor(nextValue, key);
+    const property = StateTransitions.property(message, field);
 
     if (
-      !isSafeDataDescriptor(previousDescriptor) ||
-      !isSafeDataDescriptor(nextDescriptor) ||
-      !valuesAreEqual(previousDescriptor.value, nextDescriptor.value, depth + 1)
+      !property.safe ||
+      property.value === undefined ||
+      !StateTransitions.safeShape(field, property.value)
     ) {
+      return { safe: false, present: false };
+    }
+
+    const canonicalValue = StateTransitions.canonical(schema, field, property.value);
+
+    return canonicalValue.safe
+      ? { safe: true, present: true, value: canonicalValue.value }
+      : { safe: false, present: false };
+  },
+
+  property(
+    message: Record<string, unknown>,
+    field: DescriptorFieldMetadata,
+  ): FieldPropertyReadResult {
+    try {
+      return { safe: true, value: message[field.localName] };
+    } catch {
+      return { safe: false };
+    }
+  },
+
+  canonical(
+    schema: DescriptorMessageSchema,
+    field: DescriptorFieldMetadata,
+    value: unknown,
+  ): FieldPropertyReadResult {
+    try {
+      const initialized = create(schema, {
+        [field.localName]: value,
+      });
+      const canonical = fromBinary(
+        schema,
+        toBinary(schema, initialized, { writeUnknownFields: false }),
+      ) as Record<string, unknown>;
+      const descriptor = Object.getOwnPropertyDescriptor(canonical, field.localName);
+
+      return StateTransitions.dataDescriptor(descriptor)
+        ? { safe: true, value: descriptor.value }
+        : { safe: false };
+    } catch {
+      return { safe: false };
+    }
+  },
+
+  safeShape(field: DescriptorFieldMetadata, value: unknown): boolean {
+    try {
+      return StateTransitions.uncheckedShape(field, value);
+    } catch {
       return false;
     }
-  }
+  },
 
-  return true;
-}
+  uncheckedShape(field: DescriptorFieldMetadata, value: unknown): boolean {
+    const descriptor = field.descriptor;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
+    switch (descriptor.fieldKind) {
+      case "scalar":
+        if (descriptor.scalar === ScalarType.BYTES) {
+          return value instanceof Uint8Array && StateTransitions.bytes(value) !== undefined;
+        }
 
-  let prototype: unknown;
+        return descriptor.scalar !== ScalarType.STRING || typeof value === "string";
+      case "enum":
+        return Number.isInteger(value);
+      case "message":
+        return StateTransitions.record(value);
+      case "list":
+      case "map":
+        return false;
+    }
+  },
 
-  try {
-    prototype = Object.getPrototypeOf(value);
-  } catch {
-    return false;
-  }
+  same(previousValue: unknown, nextValue: unknown, depth = 0): boolean {
+    try {
+      if (StateTransitions.samePrimitive(previousValue, nextValue)) {
+        return true;
+      }
 
-  return prototype === Object.prototype || prototype === null;
-}
+      if (depth > MAX_EQUALITY_DEPTH) {
+        return false;
+      }
 
-function isSafeDataDescriptor(
-  descriptor: PropertyDescriptor | undefined,
-): descriptor is PropertyDescriptor & { value: unknown } {
-  return descriptor?.enumerable === true && Object.hasOwn(descriptor, "value");
-}
+      if (previousValue instanceof Uint8Array && nextValue instanceof Uint8Array) {
+        return StateTransitions.sameBytes(previousValue, nextValue);
+      }
 
-function primitiveValuesAreIdentical(previousValue: unknown, nextValue: unknown): boolean {
-  return (
-    Object.is(previousValue, nextValue) &&
-    (previousValue === null ||
-      (typeof previousValue !== "object" && typeof previousValue !== "function"))
-  );
-}
+      if (Array.isArray(previousValue) && Array.isArray(nextValue)) {
+        return StateTransitions.sameArray(previousValue, nextValue, depth);
+      }
 
-function readSafeUint8ArrayBytes(value: Uint8Array): Uint8Array | undefined {
-  try {
-    if (Object.getPrototypeOf(value) !== Uint8Array.prototype) {
-      return undefined;
+      if (StateTransitions.record(previousValue) && StateTransitions.record(nextValue)) {
+        return StateTransitions.sameRecord(previousValue, nextValue, depth);
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
+  sameBytes(previousValue: Uint8Array, nextValue: Uint8Array): boolean {
+    const previousBytes = StateTransitions.bytes(previousValue);
+    const nextBytes = StateTransitions.bytes(nextValue);
+
+    if (previousBytes === undefined || nextBytes === undefined) {
+      return false;
     }
 
-    const copy = Uint8Array.prototype.slice.call(value);
-
-    if (!hasOnlyDenseIndexedDataProperties(value, copy.length)) {
-      return undefined;
+    if (previousBytes.length !== nextBytes.length) {
+      return false;
     }
 
-    for (let index = 0; index < copy.length; index += 1) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-      const byte = copy[index];
-
-      if (byte === undefined || !isSafeDataDescriptor(descriptor) || descriptor.value !== byte) {
-        return undefined;
+    for (let index = 0; index < previousBytes.length; index += 1) {
+      if (previousBytes[index] !== nextBytes[index]) {
+        return false;
       }
     }
 
-    return copy;
-  } catch {
-    return undefined;
-  }
-}
+    return true;
+  },
 
-function hasOnlyDenseIndexedDataProperties(value: object, length: number): boolean {
-  const seenIndexes = new Set<number>();
-
-  for (const key of Reflect.ownKeys(value)) {
-    if (typeof key !== "string") {
+  sameArray(
+    previousValue: readonly unknown[],
+    nextValue: readonly unknown[],
+    depth: number,
+  ): boolean {
+    if (previousValue.length !== nextValue.length) {
       return false;
     }
 
-    const index = parseDenseIndexKey(key, length);
+    for (let index = 0; index < previousValue.length; index += 1) {
+      if (!StateTransitions.same(previousValue[index], nextValue[index], depth + 1)) {
+        return false;
+      }
+    }
 
-    if (index === undefined) {
+    return true;
+  },
+
+  sameRecord(
+    previousValue: Record<string, unknown>,
+    nextValue: Record<string, unknown>,
+    depth: number,
+  ): boolean {
+    if (Object.getPrototypeOf(previousValue) !== Object.getPrototypeOf(nextValue)) {
       return false;
     }
 
-    seenIndexes.add(index);
-  }
+    const previousKeys = Object.keys(previousValue).sort();
+    const nextKeys = Object.keys(nextValue).sort();
 
-  return seenIndexes.size === length;
-}
+    if (!StateTransitions.sameArray(previousKeys, nextKeys, depth)) {
+      return false;
+    }
 
-function parseDenseIndexKey(key: string, length: number): number | undefined {
-  const index = Number(key);
+    for (const key of previousKeys) {
+      const previousDescriptor = Object.getOwnPropertyDescriptor(previousValue, key);
+      const nextDescriptor = Object.getOwnPropertyDescriptor(nextValue, key);
 
-  if (!Number.isSafeInteger(index) || index < 0 || index >= length) {
-    return undefined;
-  }
+      if (
+        !StateTransitions.dataDescriptor(previousDescriptor) ||
+        !StateTransitions.dataDescriptor(nextDescriptor) ||
+        !StateTransitions.same(previousDescriptor.value, nextDescriptor.value, depth + 1)
+      ) {
+        return false;
+      }
+    }
 
-  return String(index) === key ? index : undefined;
-}
+    return true;
+  },
 
-function createSetOnceViolation(
-  typeName: string,
-  field: DescriptorFieldMetadata,
-): ConstraintViolation {
-  return create(ConstraintViolationSchema, {
-    typeName,
-    fieldPath: create(FieldPathSchema, { fieldName: [field.name] }),
-    message: create(TemplateStringSchema, {
-      withPlaceholders: setOnceViolationMessage(field),
-    }),
-  });
-}
+  record(value: unknown): value is Record<string, unknown> {
+    if (typeof value !== "object" || value === null) {
+      return false;
+    }
 
-function isUnsupportedSetOnceField(field: DescriptorFieldMetadata): boolean {
-  return (
-    field.descriptor.fieldKind === "list" ||
-    field.descriptor.fieldKind === "map" ||
-    field.descriptor.proto.proto3Optional
-  );
-}
+    let prototype: unknown;
 
-function setOnceViolationMessage(field: DescriptorFieldMetadata): string {
-  if (field.descriptor.proto.proto3Optional) {
-    return "Explicit optional set-once fields are not supported by entity state transition validation.";
-  }
+    try {
+      prototype = Object.getPrototypeOf(value);
+    } catch {
+      return false;
+    }
 
-  switch (field.descriptor.fieldKind) {
-    case "list":
-      return "Repeated set-once fields are not supported by entity state transition validation.";
-    case "map":
-      return "Map-valued set-once fields are not supported by entity state transition validation.";
-    case "scalar":
-    case "enum":
-    case "message":
-      return "Set-once fields cannot change after entity state creation.";
-  }
-}
+    return prototype === Object.prototype || prototype === null;
+  },
+
+  dataDescriptor(
+    descriptor: PropertyDescriptor | undefined,
+  ): descriptor is PropertyDescriptor & { value: unknown } {
+    return descriptor?.enumerable === true && Object.hasOwn(descriptor, "value");
+  },
+
+  samePrimitive(previousValue: unknown, nextValue: unknown): boolean {
+    return (
+      Object.is(previousValue, nextValue) &&
+      (previousValue === null ||
+        (typeof previousValue !== "object" && typeof previousValue !== "function"))
+    );
+  },
+
+  bytes(value: Uint8Array): Uint8Array | undefined {
+    try {
+      if (Object.getPrototypeOf(value) !== Uint8Array.prototype) {
+        return undefined;
+      }
+
+      const copy = Uint8Array.prototype.slice.call(value);
+
+      if (!StateTransitions.denseIndexes(value, copy.length)) {
+        return undefined;
+      }
+
+      for (let index = 0; index < copy.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        const byte = copy[index];
+
+        if (
+          byte === undefined ||
+          !StateTransitions.dataDescriptor(descriptor) ||
+          descriptor.value !== byte
+        ) {
+          return undefined;
+        }
+      }
+
+      return copy;
+    } catch {
+      return undefined;
+    }
+  },
+
+  denseIndexes(value: object, length: number): boolean {
+    const seenIndexes = new Set<number>();
+
+    for (const key of Reflect.ownKeys(value)) {
+      if (typeof key !== "string") {
+        return false;
+      }
+
+      const index = StateTransitions.denseIndex(key, length);
+
+      if (index === undefined) {
+        return false;
+      }
+
+      seenIndexes.add(index);
+    }
+
+    return seenIndexes.size === length;
+  },
+
+  denseIndex(key: string, length: number): number | undefined {
+    const index = Number(key);
+
+    if (!Number.isSafeInteger(index) || index < 0 || index >= length) {
+      return undefined;
+    }
+
+    return String(index) === key ? index : undefined;
+  },
+
+  violation(typeName: string, field: DescriptorFieldMetadata): ConstraintViolation {
+    return create(ConstraintViolationSchema, {
+      typeName,
+      fieldPath: create(FieldPathSchema, { fieldName: [field.name] }),
+      message: create(TemplateStringSchema, {
+        withPlaceholders: StateTransitions.violationMessage(field),
+      }),
+    });
+  },
+
+  unsupported(field: DescriptorFieldMetadata): boolean {
+    return (
+      field.descriptor.fieldKind === "list" ||
+      field.descriptor.fieldKind === "map" ||
+      field.descriptor.proto.proto3Optional
+    );
+  },
+
+  violationMessage(field: DescriptorFieldMetadata): string {
+    if (field.descriptor.proto.proto3Optional) {
+      return "Explicit optional set-once fields are not supported by entity state transition validation.";
+    }
+
+    switch (field.descriptor.fieldKind) {
+      case "list":
+        return "Repeated set-once fields are not supported by entity state transition validation.";
+      case "map":
+        return "Map-valued set-once fields are not supported by entity state transition validation.";
+      case "scalar":
+      case "enum":
+      case "message":
+        return "Set-once fields cannot change after entity state creation.";
+    }
+  },
+});

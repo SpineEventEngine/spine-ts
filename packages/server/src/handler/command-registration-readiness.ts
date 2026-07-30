@@ -7,11 +7,7 @@ import {
   type RegisteredHandlerMetadata,
 } from "./handler-metadata.js";
 import type { EntityMetadata } from "../entity/entity-metadata.js";
-import {
-  compareFullTypeNames,
-  copyReadinessMetadataFields,
-  createReadinessMetadataFields,
-} from "./registration-readiness-metadata.js";
+import { ReadinessMetadata } from "./registration-readiness-metadata.js";
 
 const commandRegistrationReadinessToken = Symbol("commandRegistrationReadinessToken");
 const authenticCommandRegistrationReadiness = new WeakSet<object>();
@@ -34,10 +30,19 @@ export interface CommandRegistrationAssigneeMetadata {
 
 /** Read-only command registration readiness lookup surface. */
 export interface CommandRegistrationReadinessLookup {
-  /** Return registered command message full type names in deterministic order. */
-  registeredCommandMessageFullTypeNames(): readonly string[];
-  /** Return the unique command assignee metadata for a command message type. */
-  findCommandAssignee(commandFullTypeName: string): CommandRegistrationAssigneeMetadata | undefined;
+  /**
+   * Returns registered command message type names in deterministic order.
+   *
+   * @returns A fresh frozen list of command message type names.
+   */
+  commandTypeNames(): readonly string[];
+  /**
+   * Finds unique assignee metadata for a command message type.
+   *
+   * @param commandTypeName - Fully qualified command message type name.
+   * @returns The assignee metadata, or `undefined` when no assignee is registered.
+   */
+  findCommandAssignee(commandTypeName: string): CommandRegistrationAssigneeMetadata | undefined;
 }
 
 /**
@@ -50,15 +55,12 @@ export interface CommandRegistrationReadinessLookup {
  */
 export class CommandRegistrationReadiness implements CommandRegistrationReadinessLookup {
   readonly #commandFullTypeNames: readonly string[];
-  readonly #assigneesByCommandFullTypeName: ReadonlyMap<
-    string,
-    CommandRegistrationAssigneeMetadata
-  >;
+  readonly #assigneesByTypeName: ReadonlyMap<string, CommandRegistrationAssigneeMetadata>;
 
   private constructor(
     authenticityToken: typeof commandRegistrationReadinessToken,
     commandFullTypeNames: readonly string[],
-    assigneesByCommandFullTypeName: ReadonlyMap<string, CommandRegistrationAssigneeMetadata>,
+    assigneesByTypeName: ReadonlyMap<string, CommandRegistrationAssigneeMetadata>,
   ) {
     if (authenticityToken !== commandRegistrationReadinessToken) {
       throw new TypeError(
@@ -67,12 +69,17 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
     }
 
     this.#commandFullTypeNames = Object.freeze([...commandFullTypeNames]);
-    this.#assigneesByCommandFullTypeName = new Map(assigneesByCommandFullTypeName);
+    this.#assigneesByTypeName = new Map(assigneesByTypeName);
     authenticCommandRegistrationReadiness.add(this);
     Object.freeze(this);
   }
 
-  /** Build readiness from a handler metadata registry lookup. */
+  /**
+   * Builds readiness from a handler metadata registry lookup.
+   *
+   * @param registry - Source of entity handler metadata.
+   * @returns Frozen command registration readiness.
+   */
   static fromRegistry(registry: HandlerMetadataRegistryLookup): CommandRegistrationReadiness {
     const validatedRegistry = new HandlerMetadataRegistry(registry.listEntityHandlers());
     const commandFullTypeNames = [
@@ -81,32 +88,37 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
           .findHandlersByKind("command-assignment")
           .map((entry) => entry.handler.messageFullTypeName),
       ),
-    ].sort(compareFullTypeNames);
-    const assigneesByCommandFullTypeName = new Map<string, CommandRegistrationAssigneeMetadata>();
+    ].sort((left, right) => ReadinessMetadata.compareTypeNames(left, right));
+    const assigneesByTypeName = new Map<string, CommandRegistrationAssigneeMetadata>();
 
     for (const commandFullTypeName of commandFullTypeNames) {
       const assignment = validatedRegistry.findCommandAssignment(commandFullTypeName);
 
       if (assignment !== undefined) {
-        assigneesByCommandFullTypeName.set(
+        assigneesByTypeName.set(
           commandFullTypeName,
-          createAssigneeMetadata(commandFullTypeName, assignment),
+          CommandRegistrationReadiness.#createAssignee(commandFullTypeName, assignment),
         );
       }
     }
 
     return new CommandRegistrationReadiness(
       commandRegistrationReadinessToken,
-      [...assigneesByCommandFullTypeName.keys()].sort(compareFullTypeNames),
-      assigneesByCommandFullTypeName,
+      [...assigneesByTypeName.keys()].sort((left, right) =>
+        ReadinessMetadata.compareTypeNames(left, right),
+      ),
+      assigneesByTypeName,
     );
   }
 
   /**
-   * Build readiness from entity handler metadata.
+   * Builds readiness from entity handler metadata.
    *
    * Duplicate command assignment validation is intentionally delegated to
    * `HandlerMetadataRegistry`.
+   *
+   * @param entityHandlers - Entity handler metadata to validate and index.
+   * @returns Frozen command registration readiness.
    */
   static fromEntityHandlers(
     entityHandlers: Iterable<EntityHandlersMetadata>,
@@ -114,48 +126,63 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
     return CommandRegistrationReadiness.fromRegistry(new HandlerMetadataRegistry(entityHandlers));
   }
 
-  /** Return registered command message full type names in deterministic order. */
-  registeredCommandMessageFullTypeNames(): readonly string[] {
+  /**
+   * Returns registered command message type names in deterministic order.
+   *
+   * @returns A fresh frozen list of command message type names.
+   */
+  commandTypeNames(): readonly string[] {
     return Object.freeze([...this.#commandFullTypeNames]);
   }
 
-  /** Return the unique command assignee metadata for a command message type. */
-  findCommandAssignee(
-    commandFullTypeName: string,
-  ): CommandRegistrationAssigneeMetadata | undefined {
-    const assignee = this.#assigneesByCommandFullTypeName.get(commandFullTypeName);
+  /**
+   * Finds unique assignee metadata for a command message type.
+   *
+   * @param commandTypeName - Fully qualified command message type name.
+   * @returns The assignee metadata, or `undefined` when no assignee is registered.
+   */
+  findCommandAssignee(commandTypeName: string): CommandRegistrationAssigneeMetadata | undefined {
+    const assignee = this.#assigneesByTypeName.get(commandTypeName);
 
-    return assignee === undefined ? undefined : copyAssigneeMetadata(assignee);
+    return assignee === undefined
+      ? undefined
+      : CommandRegistrationReadiness.#copyAssignee(assignee);
   }
-}
 
-export function isAuthenticCommandRegistrationReadiness(
-  value: unknown,
-): value is CommandRegistrationReadiness {
-  return (
-    value !== null && typeof value === "object" && authenticCommandRegistrationReadiness.has(value)
-  );
-}
+  /**
+   * Checks whether a value was created by this module's readiness factories.
+   *
+   * @param value - Value to test for readiness authenticity.
+   * @returns `true` when the value is an authentic command registration readiness instance.
+   */
+  static isAuthentic(value: unknown): value is CommandRegistrationReadiness {
+    return (
+      value !== null &&
+      typeof value === "object" &&
+      authenticCommandRegistrationReadiness.has(value)
+    );
+  }
 
-function createAssigneeMetadata(
-  commandFullTypeName: string,
-  registeredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
-): CommandRegistrationAssigneeMetadata {
-  const fields = createReadinessMetadataFields(registeredHandler);
+  static #createAssignee(
+    commandFullTypeName: string,
+    registeredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
+  ): CommandRegistrationAssigneeMetadata {
+    const fields = ReadinessMetadata.create(registeredHandler);
 
-  return Object.freeze({
-    commandFullTypeName,
-    ...fields,
-  });
-}
+    return Object.freeze({
+      commandFullTypeName,
+      ...fields,
+    });
+  }
 
-function copyAssigneeMetadata(
-  assignee: CommandRegistrationAssigneeMetadata,
-): CommandRegistrationAssigneeMetadata {
-  const fields = copyReadinessMetadataFields(assignee.registeredHandler);
+  static #copyAssignee(
+    assignee: CommandRegistrationAssigneeMetadata,
+  ): CommandRegistrationAssigneeMetadata {
+    const fields = ReadinessMetadata.copy(assignee.registeredHandler);
 
-  return Object.freeze({
-    commandFullTypeName: assignee.commandFullTypeName,
-    ...fields,
-  });
+    return Object.freeze({
+      commandFullTypeName: assignee.commandFullTypeName,
+      ...fields,
+    });
+  }
 }

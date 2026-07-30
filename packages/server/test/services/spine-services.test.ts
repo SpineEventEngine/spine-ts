@@ -98,7 +98,7 @@ import {
   Repository,
   Server,
   SpineServices,
-  defineEntityHandlers,
+  EntityHandlers,
   type CommandDispatcher,
   type EventDispatcher,
   type RunningServer,
@@ -6153,7 +6153,7 @@ function createFailingCommandDispatcher(): CommandDispatcher {
 }
 
 function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProjection> {
-  const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+  const handlers = EntityHandlers.define(TaskProjection, ProjectionStateSchema, (builder) => [
     builder.subscribe(ProjectionStateSchema, "subscribeTask"),
   ]);
 
@@ -6165,9 +6165,11 @@ function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProject
 }
 
 function createRejectingRepository(): Repository<typeof RejectingTaskAggregate> {
-  const handlers = defineEntityHandlers(RejectingTaskAggregate, AggregateStateSchema, (builder) => [
-    builder.assign(AggregateStateSchema, "assignTask"),
-  ]);
+  const handlers = EntityHandlers.define(
+    RejectingTaskAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+  );
 
   return new Repository({
     entityType: RejectingTaskAggregate,
@@ -6177,7 +6179,7 @@ function createRejectingRepository(): Repository<typeof RejectingTaskAggregate> 
 }
 
 function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate> {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     ValidatingTaskAggregate,
     ValidatedAggregateStateSchema,
     (builder) => [
@@ -6196,7 +6198,7 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
 function createTransitionViolatingRepository(): Repository<
   typeof TransitionViolatingTaskAggregate
 > {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     TransitionViolatingTaskAggregate,
     AggregateStateSchema,
     (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
@@ -6212,7 +6214,7 @@ function createTransitionViolatingRepository(): Repository<
 function createRollingBackTransitionRepository(): Repository<
   typeof RollingBackTransitionTaskAggregate
 > {
-  const handlers = defineEntityHandlers(
+  const handlers = EntityHandlers.define(
     RollingBackTransitionTaskAggregate,
     AggregateStateSchema,
     (builder) => [builder.assign(AggregateStateSchema, "assignTask")],

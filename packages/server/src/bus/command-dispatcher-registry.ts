@@ -12,12 +12,16 @@ export class CommandDispatcherRegistry {
   readonly #dispatchers = new Set<CommandDispatcher>();
   readonly #byTypeUrl = new Map<string, RegisteredCommandDispatcher>();
 
+  /** Registers a dispatcher and all of its distinct command schemas.
+   *
+   * @param dispatcher the dispatcher to register.
+   */
   register(dispatcher: CommandDispatcher): void {
     if (this.#dispatchers.has(dispatcher)) {
       return;
     }
 
-    const registrations = collectRegistrations(dispatcher);
+    const registrations = CommandDispatcherRegistry.#registrations(dispatcher);
 
     for (const registration of registrations) {
       const registered = this.#byTypeUrl.get(registration.typeUrl);
@@ -37,29 +41,37 @@ export class CommandDispatcherRegistry {
     }
   }
 
+  /** Finds the dispatcher registered for a canonical command type URL.
+   *
+   * @param typeUrl the canonical command type URL.
+   * @returns the registration, when one exists.
+   */
   find(typeUrl: string): RegisteredCommandDispatcher | undefined {
     return this.#byTypeUrl.get(typeUrl);
   }
 
+  /** Lists the canonical command type URLs accepted by this registry.
+   *
+   * @returns the registered type URLs.
+   */
   acceptedTypeUrls(): readonly string[] {
     return Object.freeze([...this.#byTypeUrl.keys()]);
   }
-}
+  static #registrations(
+    dispatcher: CommandDispatcher,
+  ): readonly { readonly typeUrl: string; readonly schema: MessageSchema }[] {
+    const registrations: { typeUrl: string; schema: MessageSchema }[] = [];
+    const seen = new Set<string>();
 
-function collectRegistrations(
-  dispatcher: CommandDispatcher,
-): readonly { readonly typeUrl: string; readonly schema: MessageSchema }[] {
-  const registrations: { typeUrl: string; schema: MessageSchema }[] = [];
-  const seen = new Set<string>();
+    for (const schema of dispatcher.messageSchemas()) {
+      const typeUrl = TypeUrls.derive(schema);
 
-  for (const schema of dispatcher.messageSchemas()) {
-    const typeUrl = TypeUrls.derive(schema);
-
-    if (!seen.has(typeUrl)) {
-      seen.add(typeUrl);
-      registrations.push({ typeUrl, schema });
+      if (!seen.has(typeUrl)) {
+        seen.add(typeUrl);
+        registrations.push({ typeUrl, schema });
+      }
     }
-  }
 
-  return Object.freeze(registrations);
+    return Object.freeze(registrations);
+  }
 }

@@ -16,6 +16,7 @@ import { ShardIndex } from "./shard-index.js";
 const attemptTypeUrl = "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord";
 const casRetryLimit = 8;
 const defaultReadLimit = 1_000;
+/** Limits the retained delivery-failure attempts for one inbox message. */
 export const deliveryAttemptCapacity = 100;
 const maxStoredRecordBytes = 512 * 1024;
 const maxTextBytes = 16 * 1024;
@@ -26,14 +27,23 @@ export class DeliveryAttempts {
   readonly #context: StorageContext;
   readonly #storageFactory: StorageFactory;
 
-  /** Open attempt storage from one delivery storage context and factory. */
+  /**
+   * Opens attempt storage from one delivery storage context and factory.
+   *
+   * @param options - Supplies the owning context and durable storage factory.
+   */
   constructor(options: DeliveryAttemptsOptions) {
-    this.#context = storageContextSnapshot(options.context);
+    this.#context = DeliveryAttemptValues.storageContextSnapshot(options.context);
     this.#storageFactory = options.storageFactory;
     Object.freeze(this);
   }
 
-  /** Read retained attempts in deterministic storage order. */
+  /**
+   * Reads retained attempts in deterministic storage order.
+   *
+   * @param options - Limits the read to an optional shard and bounded page size.
+   * @returns The retained attempts in storage order.
+   */
   async read(options: DeliveryAttemptReadOptions = {}): Promise<readonly DeliveryAttempt[]> {
     const storage = this.#storage();
 
@@ -42,36 +52,51 @@ export class DeliveryAttempts {
         filters: [
           ...(options.shard === undefined
             ? []
-            : [{ column: "shard", value: requireShard(options.shard).key() }]),
+            : [
+                { column: "shard", value: DeliveryAttemptValues.requireShard(options.shard).key() },
+              ]),
         ],
         sort: [{ field: "attemptedAt" }, { field: "sequence" }, { field: "messageKey" }],
-        limit: requireLimit(options.limit ?? defaultReadLimit),
+        limit: DeliveryAttemptValues.requireLimit(options.limit ?? defaultReadLimit),
       });
 
       return Object.freeze(
-        records.map((entry) => attemptFromStored(readStoredAttempt(entry.record, entry.id))),
+        records.map((entry) =>
+          DeliveryAttemptValues.attemptFromStored(
+            DeliveryAttemptValues.readStoredAttempt(entry.record, entry.id),
+          ),
+        ),
       );
     } finally {
       storage.close();
     }
   }
 
-  /** Summarize retained attempts for one exact inbox message. */
+  /**
+   * Returns retained attempts for one exact inbox message.
+   *
+   * @param messageId - Identifies the message whose attempts are summarized.
+   * @returns The ordered attempt history and its latest state.
+   */
   async summarize(messageId: InboxMessageId): Promise<DeliveryAttemptSummary> {
     const storage = this.#storage();
 
     try {
-      const attempts = await readMessageAttempts(storage, messageId);
+      const attempts = await DeliveryAttemptValues.readMessageAttempts(storage, messageId);
 
-      return attemptSummary(attempts);
+      return DeliveryAttemptValues.attemptSummary(attempts);
     } finally {
       storage.close();
     }
   }
 
-  /** Record one supported endpoint failure attempt. */
+  /**
+   * Records one supported endpoint failure attempt.
+   *
+   * @param input - Supplies the sanitized failed-delivery details.
+   */
   async recordFailure(input: DeliveryAttemptInput): Promise<void> {
-    const attempt = attemptFromInput(input);
+    const attempt = DeliveryAttemptValues.attemptFromInput(input);
     const storage = this.#storage();
 
     try {
@@ -83,10 +108,14 @@ export class DeliveryAttempts {
 
   async #writeAttempt(storage: RecordStorage<string, Any>, attempt: AttemptInput): Promise<void> {
     for (let index = 0; index < casRetryLimit; index += 1) {
-      const sequence = await nextSequence(storage, attempt.messageKey);
-      const stored = storedAttempt(attempt, sequence);
+      const sequence = await DeliveryAttemptValues.nextSequence(storage, attempt.messageKey);
+      const stored = DeliveryAttemptValues.storedAttempt(attempt, sequence);
       const previous = await storage.read(stored.key);
-      const written = await storage.compareAndSet(stored.key, previous, packAttempt(stored));
+      const written = await storage.compareAndSet(
+        stored.key,
+        previous,
+        DeliveryAttemptValues.packAttempt(stored),
+      );
       if (written) {
         return;
       }
@@ -96,7 +125,10 @@ export class DeliveryAttempts {
   }
 
   #storage(): RecordStorage<string, Any> {
-    return this.#storageFactory.createRecordStorage(attemptStorageContext(this.#context), spec);
+    return this.#storageFactory.createRecordStorage(
+      DeliveryAttemptValues.attemptStorageContext(this.#context),
+      spec,
+    );
   }
 }
 
@@ -211,492 +243,563 @@ const spec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
   storageKey: "spine.delivery.Attempt:current",
   idKind: "string",
-  extractId: (record) => readStoredAttempt(record).key,
+  extractId: (record) => DeliveryAttemptValues.readStoredAttempt(record).key,
   columns: [
-    new RecordColumn("messageKey", (record) => readStoredAttempt(record).messageKey, "string"),
-    new RecordColumn("shard", (record) => readStoredAttempt(record).shard, "string"),
-    new RecordColumn("attemptedAt", (record) => readStoredAttempt(record).attemptedAtMs, "number"),
-    new RecordColumn("sequence", (record) => readStoredAttempt(record).sequence, "int64"),
+    new RecordColumn(
+      "messageKey",
+      (record) => DeliveryAttemptValues.readStoredAttempt(record).messageKey,
+      "string",
+    ),
+    new RecordColumn(
+      "shard",
+      (record) => DeliveryAttemptValues.readStoredAttempt(record).shard,
+      "string",
+    ),
+    new RecordColumn(
+      "attemptedAt",
+      (record) => DeliveryAttemptValues.readStoredAttempt(record).attemptedAtMs,
+      "number",
+    ),
+    new RecordColumn(
+      "sequence",
+      (record) => DeliveryAttemptValues.readStoredAttempt(record).sequence,
+      "int64",
+    ),
   ],
 });
 
-async function nextSequence(
-  storage: RecordStorage<string, Any>,
-  messageKey: string,
-): Promise<number> {
-  let sequence = 0;
+const DeliveryAttemptValues = Object.freeze({
+  async nextSequence(storage: RecordStorage<string, Any>, messageKey: string): Promise<number> {
+    let sequence = 0;
 
-  for (let slot = 1; slot <= deliveryAttemptCapacity; slot += 1) {
-    const key = attemptKey(messageKey, slot);
-    const record = await storage.read(key);
-    if (record === undefined) {
-      continue;
+    for (let slot = 1; slot <= deliveryAttemptCapacity; slot += 1) {
+      const key = DeliveryAttemptValues.attemptKey(messageKey, slot);
+      const record = await storage.read(key);
+      if (record === undefined) {
+        continue;
+      }
+
+      sequence = Math.max(sequence, DeliveryAttemptValues.readStoredAttempt(record, key).sequence);
     }
 
-    sequence = Math.max(sequence, readStoredAttempt(record, key).sequence);
-  }
+    if (sequence >= Number.MAX_SAFE_INTEGER) {
+      throw new DeliveryStorageCorruptionError(
+        "Delivery attempt sequence cannot be incremented safely.",
+      );
+    }
 
-  if (sequence >= Number.MAX_SAFE_INTEGER) {
-    throw new DeliveryStorageCorruptionError(
-      "Delivery attempt sequence cannot be incremented safely.",
+    return sequence + 1;
+  },
+
+  async readMessageAttempts(
+    storage: RecordStorage<string, Any>,
+    messageId: InboxMessageId,
+  ): Promise<readonly StoredAttempt[]> {
+    const messageKey = DeliveryAttemptValues.attemptMessageKey(messageId);
+    const attempts: StoredAttempt[] = [];
+
+    for (let slot = 1; slot <= deliveryAttemptCapacity; slot += 1) {
+      const key = DeliveryAttemptValues.attemptKey(messageKey, slot);
+      const record = await storage.read(key);
+      if (record !== undefined) {
+        attempts.push(DeliveryAttemptValues.readStoredAttempt(record, key));
+      }
+    }
+
+    return Object.freeze(attempts.sort((first, second) => first.sequence - second.sequence));
+  },
+
+  attemptFromInput(input: DeliveryAttemptInput): AttemptInput {
+    const message = input.message;
+    const shard = DeliveryAttemptValues.requireShard(message.shard);
+    const messageId = DeliveryAttemptValues.requireText(
+      message.id.value,
+      "Delivery attempt message ID",
     );
-  }
+    const inboxId = DeliveryAttemptValues.inputInboxId(message.inboxId);
+    const signalId = DeliveryAttemptValues.requireText(
+      message.signalId,
+      "Delivery attempt signal ID",
+    );
+    const node = DeliveryAttemptValues.requireText(input.node, "Delivery attempt node");
+    const attemptedAtMs = DeliveryAttemptValues.requireDate(
+      input.attemptedAt,
+      "Delivery attempt time",
+    );
 
-  return sequence + 1;
-}
+    return Object.freeze({
+      messageKey: DeliveryAttemptValues.attemptMessageKey(message.id),
+      messageId,
+      shard: shard.key(),
+      shardIndex: shard.index,
+      shardTotal: shard.ofTotal,
+      inbox: DeliveryAttemptValues.inboxKey(inboxId),
+      inboxId,
+      signalId,
+      label: DeliveryAttemptValues.requireLabel(message.label),
+      node,
+      attemptedAtMs,
+      accepted: DeliveryAttemptValues.requireBoolean(input.accepted),
+      stage: DeliveryAttemptValues.requireStage(input.stage),
+      reason: DeliveryAttemptValues.requireReason(input.reason),
+    });
+  },
 
-async function readMessageAttempts(
-  storage: RecordStorage<string, Any>,
-  messageId: InboxMessageId,
-): Promise<readonly StoredAttempt[]> {
-  const messageKey = attemptMessageKey(messageId);
-  const attempts: StoredAttempt[] = [];
+  storedAttempt(input: AttemptInput, sequence: number): StoredAttempt {
+    return Object.freeze({
+      ...input,
+      sequence,
+      key: DeliveryAttemptValues.attemptKey(input.messageKey, sequence),
+    });
+  },
 
-  for (let slot = 1; slot <= deliveryAttemptCapacity; slot += 1) {
-    const key = attemptKey(messageKey, slot);
-    const record = await storage.read(key);
-    if (record !== undefined) {
-      attempts.push(readStoredAttempt(record, key));
+  attemptFromStored(stored: StoredAttempt): DeliveryAttempt {
+    return Object.freeze({
+      messageId: Object.freeze({
+        value: stored.messageId,
+        shard: new ShardIndex(stored.shardIndex, stored.shardTotal),
+      }),
+      inboxId: Object.freeze({ ...stored.inboxId }),
+      signalId: stored.signalId,
+      label: stored.label,
+      shard: new ShardIndex(stored.shardIndex, stored.shardTotal),
+      node: stored.node,
+      attemptedAt: new Date(stored.attemptedAtMs),
+      accepted: stored.accepted,
+      stage: stored.stage,
+      reason: stored.reason,
+    });
+  },
+
+  attemptSummary(storedAttempts: readonly StoredAttempt[]): DeliveryAttemptSummary {
+    const attempts = Object.freeze(storedAttempts.map(DeliveryAttemptValues.attemptFromStored));
+    const latestStored = storedAttempts.at(-1);
+    const latestAttempt =
+      latestStored === undefined
+        ? undefined
+        : DeliveryAttemptValues.attemptFromStored(latestStored);
+
+    return Object.freeze({
+      attempts,
+      count: attempts.length,
+      latestAttempt,
+      latestStage: latestStored?.stage,
+      latestReason: latestStored?.reason,
+      latestAccepted: latestStored?.accepted,
+    });
+  },
+
+  packAttempt(stored: StoredAttempt): Any {
+    const encoded = Buffer.from(JSON.stringify(stored), "utf8");
+    DeliveryAttemptValues.assertStoredRecordSize(encoded);
+
+    return create(AnySchema, {
+      typeUrl: attemptTypeUrl,
+      value: encoded,
+    });
+  },
+
+  readStoredAttempt(record: Any, expectedKey?: string): StoredAttempt {
+    const decoded = DeliveryAttemptValues.readStoredRecord(record);
+    const shard = DeliveryAttemptValues.storedShard(decoded);
+    const key = DeliveryAttemptValues.requireText(
+      Reflect.get(decoded, "key"),
+      "Delivery attempt key",
+    );
+    if (expectedKey !== undefined && key !== expectedKey) {
+      throw new DeliveryStorageCorruptionError(
+        `Delivery attempt "${expectedKey}" does not match its storage key.`,
+      );
     }
-  }
 
-  return Object.freeze(attempts.sort((first, second) => first.sequence - second.sequence));
-}
+    const messageKey = DeliveryAttemptValues.requireText(
+      Reflect.get(decoded, "messageKey"),
+      "Delivery attempt message key",
+    );
+    const messageId = DeliveryAttemptValues.requireText(
+      Reflect.get(decoded, "messageId"),
+      "Delivery attempt message ID",
+    );
+    const sequence = DeliveryAttemptValues.requireSequence(Reflect.get(decoded, "sequence"));
+    const inboxId = DeliveryAttemptValues.storedInboxId(Reflect.get(decoded, "inboxId"));
+    const stored = Object.freeze({
+      key,
+      messageKey,
+      messageId,
+      shard: shard.key(),
+      shardIndex: shard.index,
+      shardTotal: shard.ofTotal,
+      inbox: DeliveryAttemptValues.requireText(
+        Reflect.get(decoded, "inbox"),
+        "Delivery attempt inbox key",
+      ),
+      inboxId,
+      signalId: DeliveryAttemptValues.requireText(
+        Reflect.get(decoded, "signalId"),
+        "Delivery attempt signal ID",
+      ),
+      label: DeliveryAttemptValues.requireLabel(Reflect.get(decoded, "label")),
+      node: DeliveryAttemptValues.requireText(
+        Reflect.get(decoded, "node"),
+        "Delivery attempt node",
+      ),
+      attemptedAtMs: DeliveryAttemptValues.requireTimestamp(Reflect.get(decoded, "attemptedAtMs")),
+      accepted: DeliveryAttemptValues.requireBoolean(Reflect.get(decoded, "accepted")),
+      stage: DeliveryAttemptValues.requireStage(Reflect.get(decoded, "stage")),
+      reason: DeliveryAttemptValues.requireReason(Reflect.get(decoded, "reason")),
+      sequence,
+    });
 
-function attemptFromInput(input: DeliveryAttemptInput): AttemptInput {
-  const message = input.message;
-  const shard = requireShard(message.shard);
-  const messageId = requireText(message.id.value, "Delivery attempt message ID");
-  const inboxId = inputInboxId(message.inboxId);
-  const signalId = requireText(message.signalId, "Delivery attempt signal ID");
-  const node = requireText(input.node, "Delivery attempt node");
-  const attemptedAtMs = requireDate(input.attemptedAt, "Delivery attempt time");
+    DeliveryAttemptValues.assertAttemptIdentity(stored);
 
-  return Object.freeze({
-    messageKey: attemptMessageKey(message.id),
-    messageId,
-    shard: shard.key(),
-    shardIndex: shard.index,
-    shardTotal: shard.ofTotal,
-    inbox: inboxKey(inboxId),
-    inboxId,
-    signalId,
-    label: requireLabel(message.label),
-    node,
-    attemptedAtMs,
-    accepted: requireBoolean(input.accepted),
-    stage: requireStage(input.stage),
-    reason: requireReason(input.reason),
-  });
-}
+    return stored;
+  },
 
-function storedAttempt(input: AttemptInput, sequence: number): StoredAttempt {
-  return Object.freeze({
-    ...input,
-    sequence,
-    key: attemptKey(input.messageKey, sequence),
-  });
-}
+  readStoredRecord(record: Any): Record<string, unknown> {
+    const typeUrl = DeliveryAttemptValues.readStoredTypeUrl(record);
+    if (typeUrl !== attemptTypeUrl) {
+      throw new DeliveryStorageCorruptionError(
+        `Delivery attempt record type URL "${typeUrl}" is invalid.`,
+      );
+    }
 
-function attemptFromStored(stored: StoredAttempt): DeliveryAttempt {
-  return Object.freeze({
-    messageId: Object.freeze({
+    const value = DeliveryAttemptValues.readStoredBytes(record);
+    if (value.byteLength > maxStoredRecordBytes) {
+      throw new DeliveryStorageCorruptionError(
+        `Delivery attempt record exceeds ${String(maxStoredRecordBytes)} bytes and cannot be read.`,
+      );
+    }
+
+    try {
+      const decoded = JSON.parse(DeliveryAttemptValues.decodeStoredUtf8(value)) as unknown;
+
+      if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+        throw new DeliveryStorageCorruptionError("Delivery attempt record is not a JSON object.");
+      }
+
+      return decoded as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof DeliveryStorageCorruptionError) {
+        throw error;
+      }
+
+      throw new DeliveryStorageCorruptionError("Delivery attempt record contains malformed JSON.", {
+        cause: error,
+      });
+    }
+  },
+
+  readStoredTypeUrl(record: Any): string {
+    try {
+      return DeliveryAttemptValues.requireText(
+        Reflect.get(record, "typeUrl"),
+        "Delivery attempt type URL",
+      );
+    } catch (error) {
+      throw DeliveryAttemptValues.corruptionFrom(
+        error,
+        "Delivery attempt record type URL is invalid.",
+      );
+    }
+  },
+
+  readStoredBytes(record: Any): Uint8Array {
+    let value: unknown;
+    try {
+      value = Reflect.get(record, "value");
+    } catch (error) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt record value is invalid.", {
+        cause: error,
+      });
+    }
+    if (!(value instanceof Uint8Array)) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt record value must be bytes.");
+    }
+
+    return value;
+  },
+
+  decodeStoredUtf8(value: Uint8Array): string {
+    try {
+      return utf8Decoder.decode(value);
+    } catch (error) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt record contains invalid UTF-8.", {
+        cause: error,
+      });
+    }
+  },
+
+  assertAttemptIdentity(stored: StoredAttempt): void {
+    const messageKey = DeliveryAttemptValues.attemptMessageKey({
       value: stored.messageId,
       shard: new ShardIndex(stored.shardIndex, stored.shardTotal),
-    }),
-    inboxId: Object.freeze({ ...stored.inboxId }),
-    signalId: stored.signalId,
-    label: stored.label,
-    shard: new ShardIndex(stored.shardIndex, stored.shardTotal),
-    node: stored.node,
-    attemptedAt: new Date(stored.attemptedAtMs),
-    accepted: stored.accepted,
-    stage: stored.stage,
-    reason: stored.reason,
-  });
-}
+    });
+    if (
+      stored.messageKey !== messageKey ||
+      stored.shard !== DeliveryAttemptValues.storedMessageShard(stored)
+    ) {
+      throw new DeliveryStorageCorruptionError(
+        "Delivery attempt message identity does not match shard identity.",
+      );
+    }
+    const expectedKey = DeliveryAttemptValues.attemptKey(stored.messageKey, stored.sequence);
+    if (stored.key !== expectedKey) {
+      throw new DeliveryStorageCorruptionError(
+        "Delivery attempt key does not match message identity and sequence.",
+      );
+    }
+    if (stored.inbox !== DeliveryAttemptValues.inboxKey(stored.inboxId)) {
+      throw new DeliveryStorageCorruptionError(
+        "Delivery attempt inbox identity does not match its composite key.",
+      );
+    }
+  },
 
-function attemptSummary(storedAttempts: readonly StoredAttempt[]): DeliveryAttemptSummary {
-  const attempts = Object.freeze(storedAttempts.map(attemptFromStored));
-  const latestStored = storedAttempts.at(-1);
-  const latestAttempt = latestStored === undefined ? undefined : attemptFromStored(latestStored);
+  storedMessageShard(stored: Pick<StoredAttempt, "shardIndex" | "shardTotal">): string {
+    return new ShardIndex(stored.shardIndex, stored.shardTotal).key();
+  },
 
-  return Object.freeze({
-    attempts,
-    count: attempts.length,
-    latestAttempt,
-    latestStage: latestStored?.stage,
-    latestReason: latestStored?.reason,
-    latestAccepted: latestStored?.accepted,
-  });
-}
+  inputInboxId(value: InboxId): StoredAttempt["inboxId"] {
+    return Object.freeze({
+      targetId: DeliveryAttemptValues.requireText(
+        value.targetId,
+        "Delivery attempt inbox target ID",
+      ),
+      targetTypeUrl: DeliveryAttemptValues.requireText(
+        value.targetTypeUrl,
+        "Delivery attempt inbox target type URL",
+      ),
+    });
+  },
 
-function packAttempt(stored: StoredAttempt): Any {
-  const encoded = Buffer.from(JSON.stringify(stored), "utf8");
-  assertStoredRecordSize(encoded);
+  storedInboxId(value: unknown): StoredAttempt["inboxId"] {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt inbox identity is invalid.");
+    }
+    const input = value as Record<string, unknown>;
 
-  return create(AnySchema, {
-    typeUrl: attemptTypeUrl,
-    value: encoded,
-  });
-}
+    return Object.freeze({
+      targetId: DeliveryAttemptValues.requireText(
+        Reflect.get(input, "targetId"),
+        "Delivery attempt inbox target ID",
+      ),
+      targetTypeUrl: DeliveryAttemptValues.requireText(
+        Reflect.get(input, "targetTypeUrl"),
+        "Delivery attempt inbox target type URL",
+      ),
+    });
+  },
 
-function readStoredAttempt(record: Any, expectedKey?: string): StoredAttempt {
-  const decoded = readStoredRecord(record);
-  const shard = storedShard(decoded);
-  const key = requireText(Reflect.get(decoded, "key"), "Delivery attempt key");
-  if (expectedKey !== undefined && key !== expectedKey) {
-    throw new DeliveryStorageCorruptionError(
-      `Delivery attempt "${expectedKey}" does not match its storage key.`,
+  storedShard(input: Record<string, unknown>): ShardIndex {
+    const shardIndex = DeliveryAttemptValues.requireSafeInteger(
+      Reflect.get(input, "shardIndex"),
+      "Delivery attempt shard index",
     );
-  }
-
-  const messageKey = requireText(
-    Reflect.get(decoded, "messageKey"),
-    "Delivery attempt message key",
-  );
-  const messageId = requireText(Reflect.get(decoded, "messageId"), "Delivery attempt message ID");
-  const sequence = requireSequence(Reflect.get(decoded, "sequence"));
-  const inboxId = storedInboxId(Reflect.get(decoded, "inboxId"));
-  const stored = Object.freeze({
-    key,
-    messageKey,
-    messageId,
-    shard: shard.key(),
-    shardIndex: shard.index,
-    shardTotal: shard.ofTotal,
-    inbox: requireText(Reflect.get(decoded, "inbox"), "Delivery attempt inbox key"),
-    inboxId,
-    signalId: requireText(Reflect.get(decoded, "signalId"), "Delivery attempt signal ID"),
-    label: requireLabel(Reflect.get(decoded, "label")),
-    node: requireText(Reflect.get(decoded, "node"), "Delivery attempt node"),
-    attemptedAtMs: requireTimestamp(Reflect.get(decoded, "attemptedAtMs")),
-    accepted: requireBoolean(Reflect.get(decoded, "accepted")),
-    stage: requireStage(Reflect.get(decoded, "stage")),
-    reason: requireReason(Reflect.get(decoded, "reason")),
-    sequence,
-  });
-
-  assertAttemptIdentity(stored);
-
-  return stored;
-}
-
-function readStoredRecord(record: Any): Record<string, unknown> {
-  const typeUrl = readStoredTypeUrl(record);
-  if (typeUrl !== attemptTypeUrl) {
-    throw new DeliveryStorageCorruptionError(
-      `Delivery attempt record type URL "${typeUrl}" is invalid.`,
+    const shardTotal = DeliveryAttemptValues.requireSafeInteger(
+      Reflect.get(input, "shardTotal"),
+      "Delivery attempt shard total",
     );
-  }
 
-  const value = readStoredBytes(record);
-  if (value.byteLength > maxStoredRecordBytes) {
-    throw new DeliveryStorageCorruptionError(
-      `Delivery attempt record exceeds ${String(maxStoredRecordBytes)} bytes and cannot be read.`,
+    try {
+      return new ShardIndex(shardIndex, shardTotal);
+    } catch (error) {
+      throw DeliveryAttemptValues.corruptionFrom(
+        error,
+        "Delivery attempt shard identity is invalid.",
+      );
+    }
+  },
+
+  attemptMessageKey(id: InboxMessageId): string {
+    const shard = DeliveryAttemptValues.requireShard(id.shard);
+
+    return `${shard.key()}:${DeliveryAttemptValues.requireText(id.value, "Delivery attempt message ID")}`;
+  },
+
+  inboxKey(inboxId: StoredAttempt["inboxId"]): string {
+    return DeliveryAttemptValues.requireText(
+      JSON.stringify({
+        targetId: inboxId.targetId,
+        targetTypeUrl: inboxId.targetTypeUrl,
+      }),
+      "Delivery attempt inbox key",
     );
-  }
+  },
 
-  try {
-    const decoded = JSON.parse(decodeStoredUtf8(value)) as unknown;
+  requireShard(value: ShardIndex): ShardIndex {
+    return new ShardIndex(value.index, value.ofTotal);
+  },
 
-    if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
-      throw new DeliveryStorageCorruptionError("Delivery attempt record is not a JSON object.");
+  requireLabel(value: unknown): DeliveryEndpointMessage["label"] {
+    if (
+      value === "HANDLE_COMMAND" ||
+      value === "UPDATE_SUBSCRIBER" ||
+      value === "REACT_UPON_EVENT"
+    ) {
+      return value;
     }
 
-    return decoded as Record<string, unknown>;
-  } catch (error) {
-    if (error instanceof DeliveryStorageCorruptionError) {
-      throw error;
+    throw new DeliveryStorageCorruptionError(
+      `Delivery attempt label "${String(value)}" is invalid.`,
+    );
+  },
+
+  requireStage(value: unknown): DeliveryFailureStage {
+    if (
+      value === "CLAIM" ||
+      value === "LEASE" ||
+      value === "ENDPOINT" ||
+      value === "CLEANUP" ||
+      value === "STATUS_UPDATE"
+    ) {
+      return value;
     }
 
-    throw new DeliveryStorageCorruptionError("Delivery attempt record contains malformed JSON.", {
-      cause: error,
-    });
-  }
-}
-
-function readStoredTypeUrl(record: Any): string {
-  try {
-    return requireText(Reflect.get(record, "typeUrl"), "Delivery attempt type URL");
-  } catch (error) {
-    throw corruptionFrom(error, "Delivery attempt record type URL is invalid.");
-  }
-}
-
-function readStoredBytes(record: Any): Uint8Array {
-  let value: unknown;
-  try {
-    value = Reflect.get(record, "value");
-  } catch (error) {
-    throw new DeliveryStorageCorruptionError("Delivery attempt record value is invalid.", {
-      cause: error,
-    });
-  }
-  if (!(value instanceof Uint8Array)) {
-    throw new DeliveryStorageCorruptionError("Delivery attempt record value must be bytes.");
-  }
-
-  return value;
-}
-
-function decodeStoredUtf8(value: Uint8Array): string {
-  try {
-    return utf8Decoder.decode(value);
-  } catch (error) {
-    throw new DeliveryStorageCorruptionError("Delivery attempt record contains invalid UTF-8.", {
-      cause: error,
-    });
-  }
-}
-
-function assertAttemptIdentity(stored: StoredAttempt): void {
-  const messageKey = attemptMessageKey({
-    value: stored.messageId,
-    shard: new ShardIndex(stored.shardIndex, stored.shardTotal),
-  });
-  if (stored.messageKey !== messageKey || stored.shard !== storedMessageShard(stored)) {
     throw new DeliveryStorageCorruptionError(
-      "Delivery attempt message identity does not match shard identity.",
+      `Delivery attempt stage "${String(value)}" is invalid.`,
     );
-  }
-  const expectedKey = attemptKey(stored.messageKey, stored.sequence);
-  if (stored.key !== expectedKey) {
+  },
+
+  requireReason(value: unknown): DeliveryFailureReason {
+    if (
+      value === "CLAIM_FAILED" ||
+      value === "LEASE_INACTIVE" ||
+      value === "ENDPOINT_REJECTED" ||
+      value === "CLEANUP_FAILED" ||
+      value === "STATUS_UPDATE_FAILED"
+    ) {
+      return value;
+    }
+
     throw new DeliveryStorageCorruptionError(
-      "Delivery attempt key does not match message identity and sequence.",
+      `Delivery attempt reason "${String(value)}" is invalid.`,
     );
-  }
-  if (stored.inbox !== inboxKey(stored.inboxId)) {
-    throw new DeliveryStorageCorruptionError(
-      "Delivery attempt inbox identity does not match its composite key.",
-    );
-  }
-}
+  },
 
-function storedMessageShard(stored: Pick<StoredAttempt, "shardIndex" | "shardTotal">): string {
-  return new ShardIndex(stored.shardIndex, stored.shardTotal).key();
-}
+  requireText(value: unknown, label: string): string {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
+    }
+    if (Buffer.byteLength(value, "utf8") > maxTextBytes) {
+      throw new DeliveryStorageCorruptionError(
+        `${label} exceeds ${String(maxTextBytes)} bytes and cannot be stored.`,
+      );
+    }
 
-function inputInboxId(value: InboxId): StoredAttempt["inboxId"] {
-  return Object.freeze({
-    targetId: requireText(value.targetId, "Delivery attempt inbox target ID"),
-    targetTypeUrl: requireText(value.targetTypeUrl, "Delivery attempt inbox target type URL"),
-  });
-}
-
-function storedInboxId(value: unknown): StoredAttempt["inboxId"] {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new DeliveryStorageCorruptionError("Delivery attempt inbox identity is invalid.");
-  }
-  const input = value as Record<string, unknown>;
-
-  return Object.freeze({
-    targetId: requireText(Reflect.get(input, "targetId"), "Delivery attempt inbox target ID"),
-    targetTypeUrl: requireText(
-      Reflect.get(input, "targetTypeUrl"),
-      "Delivery attempt inbox target type URL",
-    ),
-  });
-}
-
-function storedShard(input: Record<string, unknown>): ShardIndex {
-  const shardIndex = requireSafeInteger(
-    Reflect.get(input, "shardIndex"),
-    "Delivery attempt shard index",
-  );
-  const shardTotal = requireSafeInteger(
-    Reflect.get(input, "shardTotal"),
-    "Delivery attempt shard total",
-  );
-
-  try {
-    return new ShardIndex(shardIndex, shardTotal);
-  } catch (error) {
-    throw corruptionFrom(error, "Delivery attempt shard identity is invalid.");
-  }
-}
-
-function attemptMessageKey(id: InboxMessageId): string {
-  const shard = requireShard(id.shard);
-
-  return `${shard.key()}:${requireText(id.value, "Delivery attempt message ID")}`;
-}
-
-function inboxKey(inboxId: StoredAttempt["inboxId"]): string {
-  return requireText(
-    JSON.stringify({
-      targetId: inboxId.targetId,
-      targetTypeUrl: inboxId.targetTypeUrl,
-    }),
-    "Delivery attempt inbox key",
-  );
-}
-
-function requireShard(value: ShardIndex): ShardIndex {
-  return new ShardIndex(value.index, value.ofTotal);
-}
-
-function requireLabel(value: unknown): DeliveryEndpointMessage["label"] {
-  if (value === "HANDLE_COMMAND" || value === "UPDATE_SUBSCRIBER" || value === "REACT_UPON_EVENT") {
     return value;
-  }
+  },
 
-  throw new DeliveryStorageCorruptionError(`Delivery attempt label "${String(value)}" is invalid.`);
-}
+  requireDate(value: unknown, label: string): number {
+    if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+      throw new DeliveryStorageCorruptionError(`${label} must be a valid date.`);
+    }
 
-function requireStage(value: unknown): DeliveryFailureStage {
-  if (
-    value === "CLAIM" ||
-    value === "LEASE" ||
-    value === "ENDPOINT" ||
-    value === "CLEANUP" ||
-    value === "STATUS_UPDATE"
-  ) {
+    return value.getTime();
+  },
+
+  requireTimestamp(value: unknown): number {
+    if (!Number.isSafeInteger(value)) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt time must be a safe integer.");
+    }
+
+    const timestamp = value as number;
+    const date = new Date(timestamp);
+    if (!Number.isFinite(date.getTime())) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt time is invalid.");
+    }
+
+    return timestamp;
+  },
+
+  requireBoolean(value: unknown): boolean {
+    if (typeof value !== "boolean") {
+      throw new DeliveryStorageCorruptionError("Delivery attempt accepted flag must be boolean.");
+    }
+
     return value;
-  }
+  },
 
-  throw new DeliveryStorageCorruptionError(`Delivery attempt stage "${String(value)}" is invalid.`);
-}
+  requireSafeInteger(value: unknown, label: string): number {
+    if (!Number.isSafeInteger(value)) {
+      throw new DeliveryStorageCorruptionError(`${label} must be a safe integer.`);
+    }
 
-function requireReason(value: unknown): DeliveryFailureReason {
-  if (
-    value === "CLAIM_FAILED" ||
-    value === "LEASE_INACTIVE" ||
-    value === "ENDPOINT_REJECTED" ||
-    value === "CLEANUP_FAILED" ||
-    value === "STATUS_UPDATE_FAILED"
-  ) {
+    return value as number;
+  },
+
+  requireSequence(value: unknown): number {
+    if (!Number.isSafeInteger(value)) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt sequence must be a safe integer.");
+    }
+    const sequence = value as number;
+    if (sequence <= 0) {
+      throw new DeliveryStorageCorruptionError("Delivery attempt sequence must be positive.");
+    }
+
+    return sequence;
+  },
+
+  requireLimit(value: number): number {
+    if (!Number.isSafeInteger(value) || value <= 0 || value > defaultReadLimit) {
+      throw new Error(
+        `Delivery attempt read limit must be a positive safe integer at most ${String(defaultReadLimit)}.`,
+      );
+    }
+
     return value;
-  }
+  },
 
-  throw new DeliveryStorageCorruptionError(
-    `Delivery attempt reason "${String(value)}" is invalid.`,
-  );
-}
+  attemptSlot(sequence: number): string {
+    const slot = ((sequence - 1) % deliveryAttemptCapacity) + 1;
 
-function requireText(value: unknown, label: string): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
-  }
-  if (Buffer.byteLength(value, "utf8") > maxTextBytes) {
-    throw new DeliveryStorageCorruptionError(
-      `${label} exceeds ${String(maxTextBytes)} bytes and cannot be stored.`,
-    );
-  }
+    return String(slot).padStart(12, "0");
+  },
 
-  return value;
-}
+  attemptKey(messageKey: string, sequence: number): string {
+    return `${messageKey}:attempt:${DeliveryAttemptValues.attemptSlot(sequence)}`;
+  },
 
-function requireDate(value: unknown, label: string): number {
-  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
-    throw new DeliveryStorageCorruptionError(`${label} must be a valid date.`);
-  }
+  assertStoredRecordSize(value: Buffer): void {
+    if (value.byteLength > maxStoredRecordBytes) {
+      throw new DeliveryStorageCorruptionError(
+        `Delivery attempt record exceeds ${String(maxStoredRecordBytes)} bytes and cannot be stored.`,
+      );
+    }
+  },
 
-  return value.getTime();
-}
+  corruptionFrom(error: unknown, message: string): DeliveryStorageCorruptionError {
+    return error instanceof DeliveryStorageCorruptionError
+      ? error
+      : new DeliveryStorageCorruptionError(message, { cause: error });
+  },
 
-function requireTimestamp(value: unknown): number {
-  if (!Number.isSafeInteger(value)) {
-    throw new DeliveryStorageCorruptionError("Delivery attempt time must be a safe integer.");
-  }
+  attemptStorageContext(context: StorageContext): StorageContext {
+    return context.multitenant
+      ? {
+          name: `${context.name}.delivery.attempts`,
+          multitenant: true,
+          ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+        }
+      : {
+          name: `${context.name}.delivery.attempts`,
+          multitenant: false,
+        };
+  },
 
-  const timestamp = value as number;
-  const date = new Date(timestamp);
-  if (!Number.isFinite(date.getTime())) {
-    throw new DeliveryStorageCorruptionError("Delivery attempt time is invalid.");
-  }
+  storageContextSnapshot(context: StorageContext): StorageContext {
+    if (context.multitenant) {
+      const tenantId = context.tenantId;
 
-  return timestamp;
-}
-
-function requireBoolean(value: unknown): boolean {
-  if (typeof value !== "boolean") {
-    throw new DeliveryStorageCorruptionError("Delivery attempt accepted flag must be boolean.");
-  }
-
-  return value;
-}
-
-function requireSafeInteger(value: unknown, label: string): number {
-  if (!Number.isSafeInteger(value)) {
-    throw new DeliveryStorageCorruptionError(`${label} must be a safe integer.`);
-  }
-
-  return value as number;
-}
-
-function requireSequence(value: unknown): number {
-  if (!Number.isSafeInteger(value)) {
-    throw new DeliveryStorageCorruptionError("Delivery attempt sequence must be a safe integer.");
-  }
-  const sequence = value as number;
-  if (sequence <= 0) {
-    throw new DeliveryStorageCorruptionError("Delivery attempt sequence must be positive.");
-  }
-
-  return sequence;
-}
-
-function requireLimit(value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0 || value > defaultReadLimit) {
-    throw new Error(
-      `Delivery attempt read limit must be a positive safe integer at most ${String(defaultReadLimit)}.`,
-    );
-  }
-
-  return value;
-}
-
-function attemptSlot(sequence: number): string {
-  const slot = ((sequence - 1) % deliveryAttemptCapacity) + 1;
-
-  return String(slot).padStart(12, "0");
-}
-
-function attemptKey(messageKey: string, sequence: number): string {
-  return `${messageKey}:attempt:${attemptSlot(sequence)}`;
-}
-
-function assertStoredRecordSize(value: Buffer): void {
-  if (value.byteLength > maxStoredRecordBytes) {
-    throw new DeliveryStorageCorruptionError(
-      `Delivery attempt record exceeds ${String(maxStoredRecordBytes)} bytes and cannot be stored.`,
-    );
-  }
-}
-
-function corruptionFrom(error: unknown, message: string): DeliveryStorageCorruptionError {
-  return error instanceof DeliveryStorageCorruptionError
-    ? error
-    : new DeliveryStorageCorruptionError(message, { cause: error });
-}
-
-function attemptStorageContext(context: StorageContext): StorageContext {
-  return context.multitenant
-    ? {
-        name: `${context.name}.delivery.attempts`,
+      return Object.freeze({
+        name: context.name,
         multitenant: true,
-        ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
-      }
-    : {
-        name: `${context.name}.delivery.attempts`,
-        multitenant: false,
-      };
-}
-
-function storageContextSnapshot(context: StorageContext): StorageContext {
-  if (context.multitenant) {
-    const tenantId = context.tenantId;
+        ...(tenantId === undefined ? {} : { tenantId }),
+      });
+    }
 
     return Object.freeze({
       name: context.name,
-      multitenant: true,
-      ...(tenantId === undefined ? {} : { tenantId }),
+      multitenant: false,
     });
-  }
-
-  return Object.freeze({
-    name: context.name,
-    multitenant: false,
-  });
-}
+  },
+});

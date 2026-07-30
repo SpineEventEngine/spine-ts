@@ -2,25 +2,32 @@ import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js"
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
-/** @internal Delivery labels backed by current worker endpoints. */
+/** Names the delivery labels that local inbox routes can handle. */
 export type SupportedDeliveryLabel = DeliveryEndpointMessage["label"];
 
-/** @internal One configured endpoint and shard obligation. */
+/** Describes one delivery target assigned to a shard. */
 export interface DeliveryEndpoint {
+  /** Names the delivery action performed for the target. */
   readonly label: SupportedDeliveryLabel;
+  /** Names the target message type. */
   readonly targetTypeUrl: string;
+  /** Locates the target within its delivery shard set. */
   readonly shard: ShardIndex;
 }
 
-/** @internal Post-persist readiness identity for one configured obligation. */
+/** Describes a delivery route that became eligible after persistence. */
 export interface DeliveryReady extends DeliveryEndpoint {
+  /** Identifies the tenant when this route is tenant-scoped. */
   readonly tenantId?: string;
 }
 
-/** @internal Synchronous post-persist readiness callback. */
+/** Observes a delivery route that became eligible after persistence.
+ * @param ready Describes the route that is ready to drain.
+ * @returns Returns an optional asynchronous observation outcome.
+ */
 export type OnDeliveryReady = (ready: DeliveryReady) => unknown;
 
-/** @internal Mutable single-route readiness seam shared by context handoffs. */
+/** Coordinates readiness notifications while delivery ownership changes hands. */
 export class DeliveryReadiness {
   #onReady: OnDeliveryReady;
   readonly #active = new Set<Promise<void>>();
@@ -29,10 +36,17 @@ export class DeliveryReadiness {
   #buffered = new Map<string, DeliveryReady>();
   #invalidTransition = false;
 
+  /** Creates a readiness coordinator.
+   * @param onReady Observes routes made ready before ownership is transferred.
+   */
   constructor(onReady: OnDeliveryReady = () => undefined) {
     this.#onReady = onReady;
   }
 
+  /** Sets the observer used before routing takes ownership.
+   * @param onReady Observes routes that become ready.
+   * @returns Returns a function that removes this observer when still active.
+   */
   onReady(onReady: OnDeliveryReady): () => void {
     if (this.#mode === "routed") {
       return () => undefined;
@@ -45,6 +59,10 @@ export class DeliveryReadiness {
     };
   }
 
+  /** Acquires readiness ownership for a persisted route.
+   * @param ready Describes the route when persistence made it ready.
+   * @returns Returns a claim that must be completed or abandoned.
+   */
   claim(ready?: DeliveryReady): DeliveryHandoff {
     if (this.#mode === "direct") {
       const handoff = this.#directHandoff();
@@ -55,9 +73,9 @@ export class DeliveryReadiness {
     }
     if (ready !== undefined) {
       if (this.#mode === "transition") {
-        const key = readyKey(ready);
+        const key = InboxHandoff.readyKey(ready);
         if (this.#configured.has(key)) {
-          this.#buffered.set(key, cloneReady(ready));
+          this.#buffered.set(key, InboxHandoff.cloneReady(ready));
         } else {
           this.#invalidTransition = true;
         }
@@ -68,6 +86,11 @@ export class DeliveryReadiness {
     return settledHandoff;
   }
 
+  /** Updates readiness ownership to use configured delivery routes.
+   * @param scopes Lists the routes that may receive buffered readiness.
+   * @param onReady Observes readiness after routed ownership begins.
+   * @param options Allows an empty configured route set when `allowEmpty` is true.
+   */
   transition(
     scopes: readonly DeliveryReady[],
     onReady: OnDeliveryReady,
@@ -78,7 +101,7 @@ export class DeliveryReadiness {
     }
     let configured: Map<string, DeliveryReady>;
     try {
-      configured = configuredScopes(scopes, options.allowEmpty === true);
+      configured = InboxHandoff.configuredScopes(scopes, options.allowEmpty === true);
     } catch (error) {
       return Promise.resolve().then(() => {
         throw error;
@@ -146,7 +169,7 @@ export class DeliveryReadiness {
   #notify(ready: DeliveryReady): void {
     try {
       const result = Reflect.apply(this.#onReady, undefined, [ready]);
-      if (isPromiseLike(result)) {
+      if (InboxHandoff.isPromiseLike(result)) {
         void Promise.resolve(result).catch(() => undefined);
       }
     } catch {
@@ -155,9 +178,13 @@ export class DeliveryReadiness {
   }
 }
 
-/** @internal One post-persist ownership claim made before direct admission can close. */
+/** Represents a post-persistence claim held while direct delivery remains active. */
 export interface DeliveryHandoff {
+  /** Completes the claim after draining the durable message.
+   * @param onDrain Drains the message associated with this claim.
+   */
   complete(onDrain: () => Promise<void>): Promise<void>;
+  /** Cancels the claim without draining it. */
   abandon(): void;
 }
 
@@ -167,190 +194,247 @@ const settledHandoff: DeliveryHandoff = Object.freeze({
   abandon: () => undefined,
 });
 
-export function deliveryReady(endpoint: DeliveryEndpoint, tenantId?: string): DeliveryReady {
-  return Object.freeze({
-    ...(tenantId === undefined ? {} : { tenantId }),
-    label: endpoint.label,
-    targetTypeUrl: endpoint.targetTypeUrl,
-    shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
-  });
-}
-
-function configuredScopes(
-  scopes: readonly DeliveryReady[],
-  allowEmpty: boolean,
-): Map<string, DeliveryReady> {
-  const configured = new Map<string, DeliveryReady>();
-  for (const scope of scopes) {
-    configured.set(readyKey(scope), cloneReady(scope));
-  }
-  if (configured.size === 0 && !allowEmpty) {
-    throw new Error("Delivery readiness transition requires configured scopes.");
-  }
-  return configured;
-}
-
-function readyKey(ready: DeliveryReady): string {
-  return JSON.stringify([
-    ready.tenantId ?? "",
-    ready.label,
-    ready.targetTypeUrl,
-    ready.shard.index,
-    ready.shard.ofTotal,
-  ]);
-}
-
-function cloneReady(ready: DeliveryReady): DeliveryReady {
-  return deliveryReady(ready, ready.tenantId);
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  if ((typeof value !== "object" || value === null) && typeof value !== "function") {
-    return false;
-  }
-  return "then" in value && typeof value.then === "function";
-}
-
 const drainLimit = 8;
 
-export async function coordinateLocalInboxHandoff(options: {
-  readonly handoffs: Map<string, Promise<InboxMessage>>;
-  readonly key: string;
-  readonly onHandoff: () => Promise<InboxMessage>;
-}): Promise<InboxMessage> {
-  const inFlightHandoff = options.handoffs.get(options.key);
-
-  if (inFlightHandoff !== undefined) {
-    return await inFlightHandoff;
-  }
-
-  const handoff = options.onHandoff();
-  options.handoffs.set(options.key, handoff);
-  try {
-    return await handoff;
-  } finally {
-    if (options.handoffs.get(options.key) === handoff) {
-      options.handoffs.delete(options.key);
-    }
-  }
-}
-
-export async function drainLocalInboxMessage(options: LocalInboxDrainOptions): Promise<void> {
-  await runLocalInboxDrain(options);
-}
-
-async function runLocalInboxDrain(options: LocalInboxDrainOptions): Promise<void> {
-  const {
-    delivery,
-    received,
-    node,
-    onReplay,
-    replayFailureMessage,
-    skippedMessage,
-    unfinishedMessage,
-  } = options;
-
-  for (let attempt = 0; attempt < drainLimit; attempt += 1) {
-    const run = await delivery.drainMessage(received, {
-      node,
-      onMessage: onReplay,
-    });
-    const target = await delivery.inbox.readMessage(received.id);
-
-    if (target?.status === "DELIVERED") {
-      return;
-    }
-
-    const failure = run.failures.find(({ message }) => sameMessageId(message.id, received.id));
-
-    if (failure !== undefined) {
-      throw failure.error instanceof Error
-        ? failure.error
-        : new Error(replayFailureMessage, { cause: failure.error });
-    }
-    if (run.status === "SKIPPED") {
-      throw new Error(skippedMessage);
-    }
-    if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
-      break;
-    }
-  }
-
-  throw new Error(unfinishedMessage);
-}
-
+/** Configures one bounded attempt to drain a local inbox message. */
 export interface LocalInboxDrainOptions {
+  /** Selects the delivery runtime that owns the inbox message. */
   readonly delivery: Delivery;
+  /** Identifies the persisted message to drain. */
   readonly received: InboxMessage;
+  /** Names the local delivery node acquiring the message. */
   readonly node: string;
+  /** Calls target replay after the delivery runtime acquires a message.
+   * @param message Contains the acquired inbox message.
+   * @returns Resolves after the target replay finishes.
+   */
   readonly onReplay: (message: InboxMessage) => Promise<void> | void;
+  /** Explains a replay failure that lacks an Error instance. */
   readonly replayFailureMessage: string;
+  /** Explains a delivery skipped before target replay. */
   readonly skippedMessage: string;
+  /** Explains exhaustion of local drain attempts. */
   readonly unfinishedMessage: string;
 }
 
+/** Identifies the fields that deduplicate an in-flight inbox handoff. */
 export interface LocalInboxKeyInput {
+  /** Identifies the inbox target receiving the message. */
   readonly inboxId: {
     readonly targetId: string;
     readonly targetTypeUrl: string;
   };
+  /** Identifies the source signal persisted in the inbox. */
   readonly signalId: string;
+  /** Names the delivery action for the message. */
   readonly label: InboxMessage["label"];
+  /** Locates the message in its delivery shard set. */
   readonly shard: InboxMessage["shard"];
 }
 
-export function localInboxHandoffKey(input: LocalInboxKeyInput, deliveryTenantId?: string): string {
-  return JSON.stringify([
-    deliveryTenantId ?? "",
-    input.label,
-    input.signalId,
-    input.inboxId.targetTypeUrl,
-    input.inboxId.targetId,
-    input.shard.index,
-    input.shard.ofTotal,
-  ]);
-}
-
-function sameMessageId(
-  left: {
-    readonly value: string;
-    readonly shard: { readonly index: number; readonly ofTotal: number };
+/** Coordinates durable local inbox ownership and delivery handoffs. */
+export const InboxHandoff: Readonly<{
+  ready(endpoint: DeliveryEndpoint, tenantId?: string): DeliveryReady;
+  configuredScopes(
+    scopes: readonly DeliveryReady[],
+    allowEmpty: boolean,
+  ): Map<string, DeliveryReady>;
+  readyKey(ready: DeliveryReady): string;
+  cloneReady(ready: DeliveryReady): DeliveryReady;
+  isPromiseLike(value: unknown): value is PromiseLike<unknown>;
+  coordinate(options: {
+    readonly handoffs: Map<string, Promise<InboxMessage>>;
+    readonly key: string;
+    readonly onHandoff: () => Promise<InboxMessage>;
+  }): Promise<InboxMessage>;
+  drain(options: LocalInboxDrainOptions): Promise<void>;
+  runDrain(options: LocalInboxDrainOptions): Promise<void>;
+  key(input: LocalInboxKeyInput, tenantId?: string): string;
+  sameMessageId(
+    left: {
+      readonly value: string;
+      readonly shard: { readonly index: number; readonly ofTotal: number };
+    },
+    right: {
+      readonly value: string;
+      readonly shard: { readonly index: number; readonly ofTotal: number };
+    },
+  ): boolean;
+  endpoint(input: {
+    readonly label: SupportedDeliveryLabel;
+    readonly inboxId: { readonly targetTypeUrl: string };
+    readonly shard: ShardIndex;
+  }): DeliveryEndpoint;
+  configuredEndpoint(
+    message: InboxMessage,
+    endpoints: readonly DeliveryEndpoint[],
+  ): DeliveryEndpoint | undefined;
+}> = Object.freeze({
+  ready(endpoint: DeliveryEndpoint, tenantId?: string): DeliveryReady {
+    return Object.freeze({
+      ...(tenantId === undefined ? {} : { tenantId }),
+      label: endpoint.label,
+      targetTypeUrl: endpoint.targetTypeUrl,
+      shard: new ShardIndex(endpoint.shard.index, endpoint.shard.ofTotal),
+    });
   },
-  right: {
-    readonly value: string;
-    readonly shard: { readonly index: number; readonly ofTotal: number };
+
+  configuredScopes(
+    scopes: readonly DeliveryReady[],
+    allowEmpty: boolean,
+  ): Map<string, DeliveryReady> {
+    const configured = new Map<string, DeliveryReady>();
+    for (const scope of scopes) {
+      configured.set(InboxHandoff.readyKey(scope), InboxHandoff.cloneReady(scope));
+    }
+    if (configured.size === 0 && !allowEmpty) {
+      throw new Error("Delivery readiness transition requires configured scopes.");
+    }
+    return configured;
   },
-): boolean {
-  return (
-    left.value === right.value &&
-    left.shard.index === right.shard.index &&
-    left.shard.ofTotal === right.shard.ofTotal
-  );
-}
 
-export function deliveryEndpoint(input: {
-  readonly label: SupportedDeliveryLabel;
-  readonly inboxId: { readonly targetTypeUrl: string };
-  readonly shard: ShardIndex;
-}): DeliveryEndpoint {
-  return Object.freeze({
-    label: input.label,
-    targetTypeUrl: input.inboxId.targetTypeUrl,
-    shard: new ShardIndex(input.shard.index, input.shard.ofTotal),
-  });
-}
+  readyKey(ready: DeliveryReady): string {
+    return JSON.stringify([
+      ready.tenantId ?? "",
+      ready.label,
+      ready.targetTypeUrl,
+      ready.shard.index,
+      ready.shard.ofTotal,
+    ]);
+  },
 
-export function configuredDeliveryEndpoint(
-  message: InboxMessage,
-  endpoints: readonly DeliveryEndpoint[],
-): DeliveryEndpoint | undefined {
-  if (message.status !== "TO_DELIVER") {
-    return undefined;
-  }
-  return endpoints.find(
-    (endpoint) =>
-      endpoint.targetTypeUrl === message.inboxId.targetTypeUrl &&
-      endpoint.label === message.label &&
-      endpoint.shard.key() === message.shard.key(),
-  );
-}
+  cloneReady(ready: DeliveryReady): DeliveryReady {
+    return InboxHandoff.ready(ready, ready.tenantId);
+  },
+
+  isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+    if ((typeof value !== "object" || value === null) && typeof value !== "function") {
+      return false;
+    }
+    return "then" in value && typeof value.then === "function";
+  },
+
+  async coordinate(options: {
+    readonly handoffs: Map<string, Promise<InboxMessage>>;
+    readonly key: string;
+    readonly onHandoff: () => Promise<InboxMessage>;
+  }): Promise<InboxMessage> {
+    const inFlightHandoff = options.handoffs.get(options.key);
+
+    if (inFlightHandoff !== undefined) {
+      return await inFlightHandoff;
+    }
+
+    const handoff = options.onHandoff();
+    options.handoffs.set(options.key, handoff);
+    try {
+      return await handoff;
+    } finally {
+      if (options.handoffs.get(options.key) === handoff) {
+        options.handoffs.delete(options.key);
+      }
+    }
+  },
+
+  async drain(options: LocalInboxDrainOptions): Promise<void> {
+    await InboxHandoff.runDrain(options);
+  },
+
+  async runDrain(options: LocalInboxDrainOptions): Promise<void> {
+    const {
+      delivery,
+      received,
+      node,
+      onReplay,
+      replayFailureMessage,
+      skippedMessage,
+      unfinishedMessage,
+    } = options;
+
+    for (let attempt = 0; attempt < drainLimit; attempt += 1) {
+      const run = await delivery.drainMessage(received, {
+        node,
+        onMessage: onReplay,
+      });
+      const target = await delivery.inbox.readMessage(received.id);
+
+      if (target?.status === "DELIVERED") {
+        return;
+      }
+
+      const failure = run.failures.find(({ message }) =>
+        InboxHandoff.sameMessageId(message.id, received.id),
+      );
+
+      if (failure !== undefined) {
+        throw failure.error instanceof Error
+          ? failure.error
+          : new Error(replayFailureMessage, { cause: failure.error });
+      }
+      if (run.status === "SKIPPED") {
+        throw new Error(skippedMessage);
+      }
+      if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
+        break;
+      }
+    }
+
+    throw new Error(unfinishedMessage);
+  },
+
+  key(input: LocalInboxKeyInput, deliveryTenantId?: string): string {
+    return JSON.stringify([
+      deliveryTenantId ?? "",
+      input.label,
+      input.signalId,
+      input.inboxId.targetTypeUrl,
+      input.inboxId.targetId,
+      input.shard.index,
+      input.shard.ofTotal,
+    ]);
+  },
+
+  sameMessageId(
+    left: {
+      readonly value: string;
+      readonly shard: { readonly index: number; readonly ofTotal: number };
+    },
+    right: {
+      readonly value: string;
+      readonly shard: { readonly index: number; readonly ofTotal: number };
+    },
+  ): boolean {
+    return (
+      left.value === right.value &&
+      left.shard.index === right.shard.index &&
+      left.shard.ofTotal === right.shard.ofTotal
+    );
+  },
+
+  endpoint(input: {
+    readonly label: SupportedDeliveryLabel;
+    readonly inboxId: { readonly targetTypeUrl: string };
+    readonly shard: ShardIndex;
+  }): DeliveryEndpoint {
+    return Object.freeze({
+      label: input.label,
+      targetTypeUrl: input.inboxId.targetTypeUrl,
+      shard: new ShardIndex(input.shard.index, input.shard.ofTotal),
+    });
+  },
+
+  configuredEndpoint(
+    message: InboxMessage,
+    endpoints: readonly DeliveryEndpoint[],
+  ): DeliveryEndpoint | undefined {
+    if (message.status !== "TO_DELIVER") {
+      return undefined;
+    }
+    return endpoints.find(
+      (endpoint) =>
+        endpoint.targetTypeUrl === message.inboxId.targetTypeUrl &&
+        endpoint.label === message.label &&
+        endpoint.shard.key() === message.shard.key(),
+    );
+  },
+});

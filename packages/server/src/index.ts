@@ -141,8 +141,8 @@ export {
 } from "./entity/entity-transaction.js";
 
 export {
-  type EntityStateTransitionValidationRequest,
-  type EntityStateTransitionValidationResult,
+  type StateTransitionRequest,
+  type StateTransitionResult,
   validateEntityStateTransition,
 } from "./entity/entity-transition-validation.js";
 
@@ -267,15 +267,15 @@ export {
   type EventSubscriptionHandlerMetadata,
   type HandlerKind,
   type HandlerMetadata,
+  EntityHandlers,
   HandlerMetadataError,
   type HandlerMetadataErrorCode,
   HandlerMetadataRegistry,
   HandlerMetadataRegistryError,
-  type HandlerMetadataRegistryErrorCode,
+  type HandlerRegistryErrorCode,
   type HandlerMetadataRegistryLookup,
   type HandlerMethodName,
   type HandlerParameterCount,
   type HandlerRegistrationBuilder,
   type RegisteredHandlerMetadata,
-  defineEntityHandlers,
 } from "./handler/handler-metadata.js";

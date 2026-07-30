@@ -571,12 +571,12 @@ transaction only for accepted commits; rejected commits return violations and
 leave the transaction active. `rollback()` closes the transaction and returns
 the discarded draft evidence.
 Server handler metadata exports include
-`defineEntityHandlers()`, `HandlerRegistrationBuilder`, the five handler
+`EntityHandlers.define()`, `HandlerRegistrationBuilder`, the five handler
 metadata roles for command assignment, command reaction, event subscription,
 event reaction, and legacy event application, `HandlerParameterCount` for
 canonical arity metadata, and `HandlerMetadataError` for registration-time
 structural failures. Handler names must refer to own prototype data methods
-declared with normal class method syntax. `defineEntityHandlers()` remains
+declared with normal class method syntax. `EntityHandlers.define()` remains
 public for framework tests, generated-registry ingestion, and legacy
 non-decorator migration tooling; ordinary application code should use bare
 decorators plus generated registry assembly instead. Decorator adapter exports

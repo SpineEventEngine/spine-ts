@@ -9,12 +9,7 @@ import {
   type RegisteredHandlerMetadata,
 } from "./handler-metadata.js";
 import type { EntityMetadata } from "../entity/entity-metadata.js";
-import {
-  compareFullTypeNames,
-  copyMetadataArrayMap,
-  copyReadinessMetadataFields,
-  createReadinessMetadataFields,
-} from "./registration-readiness-metadata.js";
+import { ReadinessMetadata } from "./registration-readiness-metadata.js";
 
 const eventRegistrationReadinessToken = Symbol("eventRegistrationReadinessToken");
 const authenticEventRegistrationReadiness = new WeakSet<object>();
@@ -56,7 +51,7 @@ export interface EventRegistrationApplicationMetadata {
   /** Fully qualified event message type name applied by one entity handler. */
   readonly eventFullTypeName: string;
   /** Entity state full type name that owns the event applier. */
-  readonly entityStateFullTypeName: string;
+  readonly stateTypeName: string;
   /** Entity handler metadata object that declared the event applier. */
   readonly entityHandlers: EntityHandlersMetadata;
   /** Entity class that owns the event applier method. */
@@ -71,14 +66,33 @@ export interface EventRegistrationApplicationMetadata {
 
 /** Read-only event registration readiness lookup surface. */
 export interface EventRegistrationReadinessLookup {
-  /** Return registered event message full type names in deterministic order. */
-  registeredEventMessageFullTypeNames(): readonly string[];
-  /** Return event subscriber metadata for an event message type in registry order. */
-  findEventSubscribers(eventFullTypeName: string): readonly EventRegistrationSubscriberMetadata[];
-  /** Return event reactor metadata for an event message type in registry order. */
-  findEventReactors(eventFullTypeName: string): readonly EventRegistrationReactorMetadata[];
-  /** Return event applier metadata for an event message type in registry order. */
-  findEventApplications(eventFullTypeName: string): readonly EventRegistrationApplicationMetadata[];
+  /**
+   * Returns registered event message type names in deterministic order.
+   *
+   * @returns A fresh frozen list of event message type names.
+   */
+  eventTypeNames(): readonly string[];
+  /**
+   * Finds subscriber metadata for an event message type in registry order.
+   *
+   * @param eventTypeName - Fully qualified event message type name.
+   * @returns A fresh frozen list of subscriber metadata.
+   */
+  findEventSubscribers(eventTypeName: string): readonly EventRegistrationSubscriberMetadata[];
+  /**
+   * Finds reactor metadata for an event message type in registry order.
+   *
+   * @param eventTypeName - Fully qualified event message type name.
+   * @returns A fresh frozen list of reactor metadata.
+   */
+  findEventReactors(eventTypeName: string): readonly EventRegistrationReactorMetadata[];
+  /**
+   * Finds applier metadata for an event message type in registry order.
+   *
+   * @param eventTypeName - Fully qualified event message type name.
+   * @returns A fresh frozen list of applier metadata.
+   */
+  findEventApplications(eventTypeName: string): readonly EventRegistrationApplicationMetadata[];
 }
 
 /**
@@ -98,15 +112,12 @@ export interface EventRegistrationReadinessLookup {
  */
 export class EventRegistrationReadiness implements EventRegistrationReadinessLookup {
   readonly #eventFullTypeNames: readonly string[];
-  readonly #subscribersByEventFullTypeName: ReadonlyMap<
+  readonly #subscribersByTypeName: ReadonlyMap<
     string,
     readonly EventRegistrationSubscriberMetadata[]
   >;
-  readonly #reactorsByEventFullTypeName: ReadonlyMap<
-    string,
-    readonly EventRegistrationReactorMetadata[]
-  >;
-  readonly #applicationsByEventFullTypeName: ReadonlyMap<
+  readonly #reactorsByTypeName: ReadonlyMap<string, readonly EventRegistrationReactorMetadata[]>;
+  readonly #applicationsByTypeName: ReadonlyMap<
     string,
     readonly EventRegistrationApplicationMetadata[]
   >;
@@ -114,15 +125,9 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
   private constructor(
     authenticityToken: typeof eventRegistrationReadinessToken,
     eventFullTypeNames: readonly string[],
-    subscribersByEventFullTypeName: ReadonlyMap<
-      string,
-      readonly EventRegistrationSubscriberMetadata[]
-    >,
-    reactorsByEventFullTypeName: ReadonlyMap<string, readonly EventRegistrationReactorMetadata[]>,
-    applicationsByEventFullTypeName: ReadonlyMap<
-      string,
-      readonly EventRegistrationApplicationMetadata[]
-    >,
+    subscribersByTypeName: ReadonlyMap<string, readonly EventRegistrationSubscriberMetadata[]>,
+    reactorsByTypeName: ReadonlyMap<string, readonly EventRegistrationReactorMetadata[]>,
+    applicationsByTypeName: ReadonlyMap<string, readonly EventRegistrationApplicationMetadata[]>,
   ) {
     if (authenticityToken !== eventRegistrationReadinessToken) {
       throw new TypeError(
@@ -131,32 +136,34 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
     }
 
     this.#eventFullTypeNames = Object.freeze([...eventFullTypeNames]);
-    this.#subscribersByEventFullTypeName = copyMetadataArrayMap(subscribersByEventFullTypeName);
-    this.#reactorsByEventFullTypeName = copyMetadataArrayMap(reactorsByEventFullTypeName);
-    this.#applicationsByEventFullTypeName = copyMetadataArrayMap(applicationsByEventFullTypeName);
+    this.#subscribersByTypeName = ReadinessMetadata.copyMap(subscribersByTypeName);
+    this.#reactorsByTypeName = ReadinessMetadata.copyMap(reactorsByTypeName);
+    this.#applicationsByTypeName = ReadinessMetadata.copyMap(applicationsByTypeName);
     authenticEventRegistrationReadiness.add(this);
     Object.freeze(this);
   }
 
-  /** Build readiness from an already validated handler metadata registry lookup. */
+  /**
+   * Builds readiness from an already validated handler metadata registry lookup.
+   *
+   * @param registry - Source of entity handler metadata.
+   * @returns Frozen event registration readiness.
+   */
   static fromRegistry(registry: HandlerMetadataRegistryLookup): EventRegistrationReadiness {
     const validatedRegistry = new HandlerMetadataRegistry(registry.listEntityHandlers());
     const eventFullTypeNames = new Set<string>();
-    const subscribersByEventFullTypeName = new Map<string, EventRegistrationSubscriberMetadata[]>();
-    const reactorsByEventFullTypeName = new Map<string, EventRegistrationReactorMetadata[]>();
-    const applicationsByEventFullTypeName = new Map<
-      string,
-      EventRegistrationApplicationMetadata[]
-    >();
+    const subscribersByTypeName = new Map<string, EventRegistrationSubscriberMetadata[]>();
+    const reactorsByTypeName = new Map<string, EventRegistrationReactorMetadata[]>();
+    const applicationsByTypeName = new Map<string, EventRegistrationApplicationMetadata[]>();
 
     for (const entry of validatedRegistry.findHandlersByKind("event-subscription")) {
       const eventFullTypeName = entry.handler.messageFullTypeName;
 
       eventFullTypeNames.add(eventFullTypeName);
-      pushMapValue(
-        subscribersByEventFullTypeName,
+      EventRegistrationReadiness.#push(
+        subscribersByTypeName,
         eventFullTypeName,
-        createSubscriberMetadata(eventFullTypeName, entry),
+        EventRegistrationReadiness.#createSubscriber(eventFullTypeName, entry),
       );
     }
 
@@ -164,10 +171,10 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
       const eventFullTypeName = entry.handler.messageFullTypeName;
 
       eventFullTypeNames.add(eventFullTypeName);
-      pushMapValue(
-        reactorsByEventFullTypeName,
+      EventRegistrationReadiness.#push(
+        reactorsByTypeName,
         eventFullTypeName,
-        createReactorMetadata(eventFullTypeName, entry),
+        EventRegistrationReadiness.#createReactor(eventFullTypeName, entry),
       );
     }
 
@@ -175,27 +182,32 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
       const eventFullTypeName = entry.handler.messageFullTypeName;
 
       eventFullTypeNames.add(eventFullTypeName);
-      pushMapValue(
-        applicationsByEventFullTypeName,
+      EventRegistrationReadiness.#push(
+        applicationsByTypeName,
         eventFullTypeName,
-        createApplicationMetadata(eventFullTypeName, entry),
+        EventRegistrationReadiness.#createApplication(eventFullTypeName, entry),
       );
     }
 
     return new EventRegistrationReadiness(
       eventRegistrationReadinessToken,
-      [...eventFullTypeNames].sort(compareFullTypeNames),
-      subscribersByEventFullTypeName,
-      reactorsByEventFullTypeName,
-      applicationsByEventFullTypeName,
+      [...eventFullTypeNames].sort((left, right) =>
+        ReadinessMetadata.compareTypeNames(left, right),
+      ),
+      subscribersByTypeName,
+      reactorsByTypeName,
+      applicationsByTypeName,
     );
   }
 
   /**
-   * Build readiness from entity handler metadata.
+   * Builds readiness from entity handler metadata.
    *
    * Duplicate event application validation is intentionally delegated to
    * `HandlerMetadataRegistry`. Subscriber and reactor fan-out is retained.
+   *
+   * @param entityHandlers - Entity handler metadata to validate and index.
+   * @returns Frozen event registration readiness.
    */
   static fromEntityHandlers(
     entityHandlers: Iterable<EntityHandlersMetadata>,
@@ -203,125 +215,145 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
     return EventRegistrationReadiness.fromRegistry(new HandlerMetadataRegistry(entityHandlers));
   }
 
-  /** Return registered event message full type names in deterministic order. */
-  registeredEventMessageFullTypeNames(): readonly string[] {
+  /**
+   * Returns registered event message type names in deterministic order.
+   *
+   * @returns A fresh frozen list of event message type names.
+   */
+  eventTypeNames(): readonly string[] {
     return Object.freeze([...this.#eventFullTypeNames]);
   }
 
-  /** Return event subscriber metadata for an event message type in registry order. */
-  findEventSubscribers(eventFullTypeName: string): readonly EventRegistrationSubscriberMetadata[] {
+  /**
+   * Finds subscriber metadata for an event message type in registry order.
+   *
+   * @param eventTypeName - Fully qualified event message type name.
+   * @returns A fresh frozen list of subscriber metadata.
+   */
+  findEventSubscribers(eventTypeName: string): readonly EventRegistrationSubscriberMetadata[] {
     return Object.freeze(
-      (this.#subscribersByEventFullTypeName.get(eventFullTypeName) ?? []).map(
-        copySubscriberMetadata,
+      (this.#subscribersByTypeName.get(eventTypeName) ?? []).map((subscriber) =>
+        EventRegistrationReadiness.#copySubscriber(subscriber),
       ),
     );
   }
 
-  /** Return event reactor metadata for an event message type in registry order. */
-  findEventReactors(eventFullTypeName: string): readonly EventRegistrationReactorMetadata[] {
+  /**
+   * Finds reactor metadata for an event message type in registry order.
+   *
+   * @param eventTypeName - Fully qualified event message type name.
+   * @returns A fresh frozen list of reactor metadata.
+   */
+  findEventReactors(eventTypeName: string): readonly EventRegistrationReactorMetadata[] {
     return Object.freeze(
-      (this.#reactorsByEventFullTypeName.get(eventFullTypeName) ?? []).map(copyReactorMetadata),
+      (this.#reactorsByTypeName.get(eventTypeName) ?? []).map((reactor) =>
+        EventRegistrationReadiness.#copyReactor(reactor),
+      ),
     );
   }
 
-  /** Return event applier metadata for an event message type in registry order. */
-  findEventApplications(
+  /**
+   * Finds applier metadata for an event message type in registry order.
+   *
+   * @param eventTypeName - Fully qualified event message type name.
+   * @returns A fresh frozen list of applier metadata.
+   */
+  findEventApplications(eventTypeName: string): readonly EventRegistrationApplicationMetadata[] {
+    return Object.freeze(
+      (this.#applicationsByTypeName.get(eventTypeName) ?? []).map((application) =>
+        EventRegistrationReadiness.#copyApplication(application),
+      ),
+    );
+  }
+  /**
+   * Checks whether a value was created by this module's readiness factories.
+   *
+   * @param value - Value to test for readiness authenticity.
+   * @returns `true` when the value is an authentic event registration readiness instance.
+   */
+  static isAuthentic(value: unknown): value is EventRegistrationReadiness {
+    return (
+      value !== null && typeof value === "object" && authenticEventRegistrationReadiness.has(value)
+    );
+  }
+
+  static #createSubscriber(
     eventFullTypeName: string,
-  ): readonly EventRegistrationApplicationMetadata[] {
-    return Object.freeze(
-      (this.#applicationsByEventFullTypeName.get(eventFullTypeName) ?? []).map(
-        copyApplicationMetadata,
-      ),
-    );
-  }
-}
+    registeredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata>,
+  ): EventRegistrationSubscriberMetadata {
+    const fields = ReadinessMetadata.create(registeredHandler);
 
-export function isAuthenticEventRegistrationReadiness(
-  value: unknown,
-): value is EventRegistrationReadiness {
-  return (
-    value !== null && typeof value === "object" && authenticEventRegistrationReadiness.has(value)
-  );
-}
-
-function createSubscriberMetadata(
-  eventFullTypeName: string,
-  registeredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata>,
-): EventRegistrationSubscriberMetadata {
-  const fields = createReadinessMetadataFields(registeredHandler);
-
-  return Object.freeze({
-    eventFullTypeName,
-    ...fields,
-  });
-}
-
-function copySubscriberMetadata(
-  subscriber: EventRegistrationSubscriberMetadata,
-): EventRegistrationSubscriberMetadata {
-  const fields = copyReadinessMetadataFields(subscriber.registeredHandler);
-
-  return Object.freeze({
-    eventFullTypeName: subscriber.eventFullTypeName,
-    ...fields,
-  });
-}
-
-function createReactorMetadata(
-  eventFullTypeName: string,
-  registeredHandler: RegisteredHandlerMetadata<EventReactionHandlerMetadata>,
-): EventRegistrationReactorMetadata {
-  const fields = createReadinessMetadataFields(registeredHandler);
-
-  return Object.freeze({
-    eventFullTypeName,
-    ...fields,
-  });
-}
-
-function copyReactorMetadata(
-  reactor: EventRegistrationReactorMetadata,
-): EventRegistrationReactorMetadata {
-  const fields = copyReadinessMetadataFields(reactor.registeredHandler);
-
-  return Object.freeze({
-    eventFullTypeName: reactor.eventFullTypeName,
-    ...fields,
-  });
-}
-
-function createApplicationMetadata(
-  eventFullTypeName: string,
-  registeredHandler: RegisteredHandlerMetadata<EventApplicationHandlerMetadata>,
-): EventRegistrationApplicationMetadata {
-  const fields = createReadinessMetadataFields(registeredHandler);
-
-  return Object.freeze({
-    eventFullTypeName,
-    entityStateFullTypeName: fields.entity.fullTypeName,
-    ...fields,
-  });
-}
-
-function copyApplicationMetadata(
-  application: EventRegistrationApplicationMetadata,
-): EventRegistrationApplicationMetadata {
-  const fields = copyReadinessMetadataFields(application.registeredHandler);
-
-  return Object.freeze({
-    eventFullTypeName: application.eventFullTypeName,
-    entityStateFullTypeName: application.entityStateFullTypeName,
-    ...fields,
-  });
-}
-
-function pushMapValue<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
-  const values = map.get(key);
-
-  if (values === undefined) {
-    map.set(key, [value]);
-    return;
+    return Object.freeze({
+      eventFullTypeName,
+      ...fields,
+    });
   }
 
-  values.push(value);
+  static #copySubscriber(
+    subscriber: EventRegistrationSubscriberMetadata,
+  ): EventRegistrationSubscriberMetadata {
+    const fields = ReadinessMetadata.copy(subscriber.registeredHandler);
+
+    return Object.freeze({
+      eventFullTypeName: subscriber.eventFullTypeName,
+      ...fields,
+    });
+  }
+
+  static #createReactor(
+    eventFullTypeName: string,
+    registeredHandler: RegisteredHandlerMetadata<EventReactionHandlerMetadata>,
+  ): EventRegistrationReactorMetadata {
+    const fields = ReadinessMetadata.create(registeredHandler);
+
+    return Object.freeze({
+      eventFullTypeName,
+      ...fields,
+    });
+  }
+
+  static #copyReactor(reactor: EventRegistrationReactorMetadata): EventRegistrationReactorMetadata {
+    const fields = ReadinessMetadata.copy(reactor.registeredHandler);
+
+    return Object.freeze({
+      eventFullTypeName: reactor.eventFullTypeName,
+      ...fields,
+    });
+  }
+
+  static #createApplication(
+    eventFullTypeName: string,
+    registeredHandler: RegisteredHandlerMetadata<EventApplicationHandlerMetadata>,
+  ): EventRegistrationApplicationMetadata {
+    const fields = ReadinessMetadata.create(registeredHandler);
+
+    return Object.freeze({
+      eventFullTypeName,
+      stateTypeName: fields.entity.fullTypeName,
+      ...fields,
+    });
+  }
+
+  static #copyApplication(
+    application: EventRegistrationApplicationMetadata,
+  ): EventRegistrationApplicationMetadata {
+    const fields = ReadinessMetadata.copy(application.registeredHandler);
+
+    return Object.freeze({
+      eventFullTypeName: application.eventFullTypeName,
+      stateTypeName: application.stateTypeName,
+      ...fields,
+    });
+  }
+
+  static #push<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
+    const values = map.get(key);
+
+    if (values === undefined) {
+      map.set(key, [value]);
+      return;
+    }
+
+    values.push(value);
+  }
 }

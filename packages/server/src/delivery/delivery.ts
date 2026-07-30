@@ -17,7 +17,7 @@ import {
   type InboxReadContinuation,
 } from "./inbox.js";
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
-import { requireDeliveryLeaseMs } from "./delivery-lease.js";
+import { DeliveryLeases } from "./delivery-lease.js";
 import { DeliveryRetryDecisions, type DeliveryRetryDecision } from "./delivery-retry-decision.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
@@ -64,11 +64,15 @@ export class Delivery {
   /** Storage-backed shard registry. */
   readonly shards: DeliveryWorkRegistry;
 
-  /** Open delivery from one storage context and factory. */
+  /**
+   * Opens delivery from one storage context and factory.
+   *
+   * @param options The durable delivery configuration.
+   */
   constructor(options: DeliveryOptions) {
-    const context = copyStorageContext(options.context);
+    const context = DeliveryValues.copyStorageContext(options.context);
     this.#context = context;
-    this.#leaseMs = requireDeliveryLeaseMs("Delivery", options.leaseMs ?? defaultShardLeaseMs);
+    this.#leaseMs = DeliveryLeases.requireMs("Delivery", options.leaseMs ?? defaultShardLeaseMs);
     this.#now = options.now ?? (() => new Date());
     this.#storageFactory = options.storageFactory;
     this.context = context;
@@ -104,7 +108,7 @@ export class Delivery {
   }
 
   /**
-   * Drain one shard through the framework-owned direct worker boundary.
+   * Processes one shard through the framework-owned direct worker boundary.
    *
    * The drain first picks up the shard with lease fencing, then scans
    * `TO_DELIVER` rows in inbox order. `limit` bounds accepted endpoint work;
@@ -137,6 +141,10 @@ export class Delivery {
    * promised to be frozen, bounded, or stack-free. Either path counts as one
    * failure. The gate is not configurable or a public retry policy: this method
    * does not schedule later runs, open transports, or implement backoff.
+   *
+   * @param shard The shard to pick up and drain.
+   * @param options The endpoint, node, and optional operation controls.
+   * @returns The bounded direct-drain result.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const outcome = await this.#drain(shard, options, {});
@@ -144,12 +152,22 @@ export class Delivery {
     return outcome.run;
   }
 
-  /** Run one shard through the configured finite local page boundary. */
+  /**
+   * Executes one shard through the configured finite local page boundary.
+   *
+   * @param options The shard and endpoint callback.
+   * @returns The terminal finite-run result.
+   */
   async run(options: DeliveryRunOptions): Promise<DeliveryResult> {
     return this.#run(options);
   }
 
-  /** @internal Run with package-owned operation fencing; public `run()` remains unchanged. */
+  /**
+   * Executes with package-owned operation fencing while preserving public `run()` behavior.
+   *
+   * @param options The controlled shard run.
+   * @returns The terminal finite-run result.
+   */
   async runControlled(
     options: import("./delivery-run-control.js").DeliveryControlledRun,
   ): Promise<DeliveryResult> {
@@ -187,7 +205,7 @@ export class Delivery {
     });
     for (let index = 0; index < this.batchSize; index += 1) {
       const loopRun = await loop.run();
-      const page = publicPage(loopRun);
+      const page = DeliveryPages.fromLoop(loopRun);
       pages.push(page);
       if (loopRun.status === "SKIPPED") {
         this.#monitor?.onSkipped?.(shard);
@@ -224,15 +242,17 @@ export class Delivery {
   ): Promise<DeliveryDrainOutcome> {
     const scope = this.#drainScope();
     const limit = inboxStorageAccess.readLimit(options.limit);
-    const maxFailures = requireFailureLimit(controls.maxFailures);
-    const fence = deliveryOperationFence(options.operation);
+    const maxFailures = DeliveryValues.requireFailureLimit(controls.maxFailures);
+    const fence = deliveryOperations.fence(options.operation);
     fence.requireActive();
     const session = await scope.shards.pickUp(shard, options.node, options.operation);
     if (session === undefined) {
-      return deliveryDrainOutcome(deliveryRun("SKIPPED", 0, 0, 0, 0, []));
+      return DeliveryRunValues.deliveryDrainOutcome(
+        DeliveryRunValues.deliveryRun("SKIPPED", 0, 0, 0, 0, []),
+      );
     }
     const active = new ActiveWork();
-    const lease = keepShardLease(
+    const lease = DeliveryRunValues.keepShardLease(
       scope.shards,
       session,
       this.#leaseMs,
@@ -289,7 +309,7 @@ export class Delivery {
     maxFailures: number | undefined,
     fence: DeliveryOperationFence,
   ): Promise<DeliveryDrainOutcome> {
-    const progress = drainProgress();
+    const progress = DeliveryRunValues.drainProgress();
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
     const initial = epoch.next;
     let next = initial;
@@ -345,7 +365,7 @@ export class Delivery {
     maxFailures: number | undefined,
     fence: DeliveryOperationFence,
   ): Promise<DeliveryDrainOutcome> {
-    const progress = drainProgress();
+    const progress = DeliveryRunValues.drainProgress();
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
     const scan = new DeliveryScanState(cursor);
 
@@ -459,7 +479,7 @@ export class Delivery {
   }
 
   /**
-   * Drain one exact pending inbox message through the local worker boundary.
+   * Processes one exact pending inbox message through the local worker boundary.
    *
    * Local framework handoffs use this when the caller has just written a
    * durable row and must not run unrelated pending rows from the same shard.
@@ -470,23 +490,27 @@ export class Delivery {
    *
    * The returned `DeliveryRun` uses the same counters as `drain()`, scoped to
    * this single row.
+   *
+   * @param message The pending inbox message.
+   * @param options The node and endpoint callback.
+   * @returns The exact-message drain result.
    */
   async drainMessage(
     message: InboxMessage,
     options: DeliveryMessageDrainOptions,
   ): Promise<DeliveryRun> {
     const scope = this.#drainScope();
-    const shard = requireMessageShard(message);
+    const shard = DeliveryValues.requireMessageShard(message);
     const id = Object.freeze({
       value: message.id.value,
       shard,
     });
     const session = await scope.shards.pickUp(shard, options.node);
     if (session === undefined) {
-      return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
+      return DeliveryRunValues.deliveryRun("SKIPPED", 0, 0, 0, 0, []);
     }
     const active = new ActiveWork();
-    const lease = keepShardLease(
+    const lease = DeliveryRunValues.keepShardLease(
       scope.shards,
       session,
       this.#leaseMs,
@@ -495,13 +519,13 @@ export class Delivery {
     );
 
     try {
-      if (!sameShard(session.shard, shard)) {
+      if (!DeliveryValues.sameShard(session.shard, shard)) {
         throw new InboxMessageError("Inbox message lease shard does not match message shard.");
       }
 
       const pending = await this.#readPendingMessage(scope.inbox, id, shard);
       if (pending === undefined) {
-        return deliveryRun("DRAINED", 0, 0, 0, 0, []);
+        return DeliveryRunValues.deliveryRun("DRAINED", 0, 0, 0, 0, []);
       }
 
       return await this.#drainExactMessage(
@@ -527,8 +551,8 @@ export class Delivery {
     if (pending?.status !== "TO_DELIVER") {
       return undefined;
     }
-    const pendingShard = requireMessageShard(pending);
-    if (!sameShard(pendingShard, shard)) {
+    const pendingShard = DeliveryValues.requireMessageShard(pending);
+    if (!DeliveryValues.sameShard(pendingShard, shard)) {
       throw new InboxMessageError("Inbox message row shard does not match message shard.");
     }
 
@@ -543,11 +567,11 @@ export class Delivery {
     lease: ShardLeaseKeeper,
     active: ActiveWork,
   ): Promise<DeliveryRun> {
-    if (!isEndpointLabel(message.label)) {
-      return deliveryRun("DRAINED", 1, 0, 0, 0, []);
+    if (!DeliveryValues.isEndpointLabel(message.label)) {
+      return DeliveryRunValues.deliveryRun("DRAINED", 1, 0, 0, 0, []);
     }
 
-    requireEndpointStatus(message.status);
+    DeliveryValues.requireEndpointStatus(message.status);
     const retry = await this.#decideRetry(attempts, message.id);
     if (retry.kind === "EXHAUSTED") {
       const action = await this.#markExhaustedDelivered(
@@ -556,41 +580,44 @@ export class Delivery {
         retry,
         lease,
         active,
-        deliveryOperationFence(undefined),
+        deliveryOperations.fence(undefined),
       );
       await this.#recordExhaustedActionFailure(attempts, message, action);
       if (action.kind === "SKIPPED") {
-        return deliveryRun("DRAINED", 1, 0, 0, 0, []);
+        return DeliveryRunValues.deliveryRun("DRAINED", 1, 0, 0, 0, []);
       }
       if (action.kind === "DELIVERED") {
-        return deliveryRun("DRAINED", 1, 0, 1, 0, []);
+        return DeliveryRunValues.deliveryRun("DRAINED", 1, 0, 1, 0, []);
       }
 
-      return deliveryRun("DRAINED", 1, 0, 0, 1, [
-        Object.freeze({ message: exhaustedFailureMessage(message), error: action.error }),
+      return DeliveryRunValues.deliveryRun("DRAINED", 1, 0, 0, 1, [
+        Object.freeze({
+          message: DeliveryValues.exhaustedFailureMessage(message),
+          error: action.error,
+        }),
       ]);
     }
 
-    const endpoint = requireEndpointMessage(message);
+    const endpoint = DeliveryValues.requireEndpointMessage(message);
     const attempt = await this.#deliverMessage(
       inbox,
       endpoint,
       onMessage,
       lease,
       active,
-      deliveryOperationFence(undefined),
+      deliveryOperations.fence(undefined),
     );
     if (attempt.kind === "SKIPPED") {
-      return deliveryRun("DRAINED", 1, 0, 0, 0, []);
+      return DeliveryRunValues.deliveryRun("DRAINED", 1, 0, 0, 0, []);
     }
     if (attempt.kind === "DELIVERED") {
-      return deliveryRun("DRAINED", 1, 1, 1, 0, []);
+      return DeliveryRunValues.deliveryRun("DRAINED", 1, 1, 1, 0, []);
     }
 
     await this.#recordFailedAttempt(attempts, endpoint, attempt);
     const failures = [Object.freeze({ message: endpoint, error: attempt.error })];
 
-    return deliveryRun("DRAINED", 1, attempt.accepted ? 1 : 0, 0, 1, failures);
+    return DeliveryRunValues.deliveryRun("DRAINED", 1, attempt.accepted ? 1 : 0, 0, 1, failures);
   }
 
   async #deliverMessage(
@@ -622,15 +649,15 @@ export class Delivery {
       const cleanup = await this.#clearFailedWork(error, active, fence.options);
       const failedStage = cleanup.cleanupFailed
         ? "CLEANUP"
-        : deliveryFailureStage(stage, active.callbackAccepted());
+        : DeliveryRunValues.deliveryFailureStage(stage, active.callbackAccepted());
 
       return Object.freeze({
         kind: "FAILED" as const,
         accepted: active.callbackAccepted(),
         error: cleanup.error,
-        node: sessionNode(lease.session()),
+        node: DeliverySessionValues.sessionNode(lease.session()),
         stage: failedStage,
-        reason: deliveryFailureReason(failedStage),
+        reason: DeliveryRunValues.deliveryFailureReason(failedStage),
       });
     } finally {
       active.clear();
@@ -671,15 +698,17 @@ export class Delivery {
       const cleanup = await this.#clearFailedWork(error, active, fence.options);
       const failedStage: DeliveryFailureStage = cleanup.cleanupFailed ? "CLEANUP" : failure.stage;
       const failureError =
-        failedStage === "STATUS_UPDATE" ? retryExhaustedMarkFailure(retry) : cleanup.error;
+        failedStage === "STATUS_UPDATE"
+          ? DeliveryRunValues.retryExhaustedMarkFailure(retry)
+          : cleanup.error;
 
       return Object.freeze({
         kind: "FAILED" as const,
         accepted: false,
         error: failureError,
-        node: sessionNode(lease.session()),
+        node: DeliverySessionValues.sessionNode(lease.session()),
         stage: failedStage,
-        reason: deliveryFailureReason(failedStage),
+        reason: DeliveryRunValues.deliveryFailureReason(failedStage),
       });
     } finally {
       active.clear();
@@ -692,7 +721,11 @@ export class Delivery {
     action: DeliveryMessageResult,
   ): Promise<void> {
     if (action.kind === "FAILED" && action.stage !== "STATUS_UPDATE") {
-      await this.#recordFailedAttempt(attempts, exhaustedFailureMessage(message), action);
+      await this.#recordFailedAttempt(
+        attempts,
+        DeliveryValues.exhaustedFailureMessage(message),
+        action,
+      );
     }
   }
 
@@ -727,9 +760,9 @@ export class Delivery {
   ): Promise<void> {
     await lease.awaitRenewal();
     lease.requireActive();
-    requireEndpointLabel(message.label);
+    DeliveryValues.requireEndpointLabel(message.label);
     active.markCallbackAccepted();
-    await onMessage(endpointSnapshot(message));
+    await onMessage(DeliveryValues.endpointSnapshot(message));
     fence.requireActive();
     active.markCallbackSucceeded();
   }
@@ -767,7 +800,7 @@ export class Delivery {
       return Object.freeze({ error, cleanupFailed: false });
     } catch (clearError) {
       return Object.freeze({
-        error: claimClearFailure(error, clearError),
+        error: DeliveryValues.claimClearFailure(error, clearError),
         cleanupFailed: true,
       });
     }
@@ -787,11 +820,11 @@ export class Delivery {
       return;
     }
 
-    if (!isEndpointLabel(message.label)) {
+    if (!DeliveryValues.isEndpointLabel(message.label)) {
       return;
     }
 
-    requireEndpointStatus(message.status);
+    DeliveryValues.requireEndpointStatus(message.status);
     const retry = await this.#decideRetry(attempts, message.id);
     if (retry.kind === "EXHAUSTED") {
       const action = await this.#markExhaustedDelivered(
@@ -807,7 +840,7 @@ export class Delivery {
       return;
     }
 
-    const endpoint = requireEndpointMessage(message);
+    const endpoint = DeliveryValues.requireEndpointMessage(message);
     const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active, fence);
     if (attempt.kind === "FAILED") {
       await this.#recordFailedAttempt(attempts, endpoint, attempt);
@@ -848,7 +881,7 @@ export class Delivery {
   }
 
   #drainScope(): DeliveryScope {
-    const context = snapshotStorageContext(this.#context);
+    const context = DeliveryValues.snapshotStorageContext(this.#context);
     const attempts = new DeliveryAttempts({
       context,
       storageFactory: this.#storageFactory,
@@ -858,7 +891,7 @@ export class Delivery {
   }
 
   #resolveDrainCursor(value: DeliveryDrainCursor | undefined): DeliveryDrainCursor {
-    return requireDrainCursor(value);
+    return DeliveryValues.requireDrainCursor(value);
   }
 }
 
@@ -870,7 +903,11 @@ export interface DeliveryOptions {
   readonly storageFactory: StorageFactory;
   /** Optional shard lease duration in milliseconds, at least 1000. */
   readonly leaseMs?: number;
-  /** Optional clock used for delivery timing decisions such as lease and dedup expiry. */
+  /**
+   * Returns the clock time for delivery timing decisions such as lease and dedup expiry.
+   *
+   * @returns The current time.
+   */
   readonly now?: () => Date;
   /** Optional public builder-selected work registry. */
   readonly workRegistry?: DeliveryWorkRegistry;
@@ -907,14 +944,30 @@ interface DeliveryDrainControls {
   readonly onStarted?: () => void;
 }
 
-/** @internal Framework-only access to loop-private delivery controls. */
+/** Provides framework-only access to loop-private delivery controls. */
 export interface DeliveryAccess {
+  /**
+   * Processes one shard through a registered delivery instance.
+   *
+   * @param delivery The delivery instance.
+   * @param shard The shard to drain.
+   * @param options The direct-drain options.
+   * @param controls The loop-private controls.
+   * @returns The bounded drain outcome.
+   */
   drain(
     delivery: Delivery,
     shard: ShardIndex,
     options: DeliveryDrainOptions,
     controls: DeliveryDrainControls,
   ): Promise<DeliveryDrainOutcome>;
+  /**
+   * Sets a delivery's private drainer.
+   *
+   * @param delivery The delivery instance.
+   * @param drainer The replacement drainer.
+   * @returns A function that restores the previous drainer.
+   */
   replace(delivery: Delivery, drainer: DeliveryDrainer): () => void;
 }
 
@@ -932,28 +985,33 @@ const singleShardStrategy: DeliveryStrategy = Object.freeze({
   shardFor: () => ShardIndex.single(),
 });
 
-function publicPage(run: DeliveryLoopRun): DeliveryPage {
-  return Object.freeze({
-    status: run.status,
-    processed: run.processed,
-    accepted: run.accepted,
-    delivered: run.delivered,
-    failed: run.failed,
-  });
-}
+/** Creates public immutable delivery page summaries. */
+const DeliveryPages = Object.freeze({
+  fromLoop(run: DeliveryLoopRun): DeliveryPage {
+    return Object.freeze({
+      status: run.status,
+      processed: run.processed,
+      accepted: run.accepted,
+      delivered: run.delivered,
+      failed: run.failed,
+    });
+  },
+});
 
-/** @internal Framework-only access to loop-private delivery controls. */
+/** Provides framework-only access to loop-private delivery controls. */
 export const deliveryAccess: DeliveryAccess = Object.freeze({
+  /** Processes one shard through a registered delivery instance. */
   drain(
     delivery: Delivery,
     shard: ShardIndex,
     options: DeliveryDrainOptions,
     controls: DeliveryDrainControls,
   ) {
-    return requireDeliveryDrainer(delivery)(shard, options, controls);
+    return DeliveryValues.requireDeliveryDrainer(delivery)(shard, options, controls);
   },
+  /** Sets a delivery's private drainer. */
   replace(delivery: Delivery, drainer: DeliveryDrainer) {
-    const previous = requireDeliveryDrainer(delivery);
+    const previous = DeliveryValues.requireDeliveryDrainer(delivery);
     deliveryDrainers.set(delivery, drainer);
 
     return () => {
@@ -991,7 +1049,12 @@ export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label" | "s
 /** One durable inbox row accepted by framework-owned direct worker endpoints. */
 type DeliveryEndpointLabel = DeliveryEndpointMessage["label"];
 
-/** Framework callback for one supported durable inbox row. */
+/**
+ * Invokes one supported durable inbox row.
+ *
+ * @param message The immutable endpoint message.
+ * @returns Completion of the endpoint callback.
+ */
 export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => Promise<void> | void;
 
 /** Simple delivery worker run statistics. */
@@ -1046,28 +1109,37 @@ interface DeliveryScope {
   readonly shards: DeliveryWorkRegistry;
 }
 
-/** @internal Cursor used only by the package-local delivery loop access path. */
+/** Describes the cursor used by the package-local delivery loop path. */
 export interface DeliveryDrainCursor {
+  /** Identifies the last scanned inbox row, when present. */
   readonly after?: InboxReadContinuation;
 }
 
-/** @internal Result metadata used by `DeliveryLoop` without widening public `DeliveryRun`. */
+/** Describes internal result metadata used by `DeliveryLoop`. */
 export interface DeliveryDrainOutcome {
+  /** Contains the public direct-drain result. */
   readonly run: DeliveryRun;
+  /** Holds the next resume cursor, when a scan remains. */
   readonly resumeCursor?: DeliveryDrainCursor;
+  /** States whether unavailable rows exhausted the scan. */
   readonly exhaustedSkippedScan: boolean;
+  /** Holds admitted-epoch progress, when applicable. */
   readonly epochProgress?: DeliveryEpochProgress;
 }
 
-/** @internal Immutable admitted row membership and opaque loop position. */
+/** Describes immutable admitted row membership and loop position. */
 export interface DeliveryEpochSlice {
+  /** Lists the immutable admitted rows. */
   readonly messages: readonly InboxMessage[];
+  /** Identifies the next admitted row index. */
   readonly next: number;
 }
 
-/** @internal Last safe position reached in one admitted delivery epoch. */
+/** Describes the last safe position in one admitted delivery epoch. */
 export interface DeliveryEpochProgress {
+  /** Identifies the next admitted row index. */
   readonly next: number;
+  /** States whether all admitted rows are complete. */
   readonly complete: boolean;
 }
 
@@ -1113,15 +1185,17 @@ class DeliveryScanState {
   }
 
   advancePast(message: InboxMessage): void {
-    this.#after = inboxContinuation(message);
+    this.#after = DeliveryValues.inboxContinuation(message);
   }
 
   cursor(): DeliveryDrainCursor {
-    return drainCursor(this.#after);
+    return DeliveryValues.drainCursor(this.#after);
   }
 
   finishShortPage(accepted: number, failed: number): DeliveryDrainCursor {
-    return this.#resumedCursor && accepted === 0 && failed === 0 ? drainCursor() : this.cursor();
+    return this.#resumedCursor && accepted === 0 && failed === 0
+      ? DeliveryValues.drainCursor()
+      : this.cursor();
   }
 
   shouldRescanHead(accepted: number, failed: number): boolean {
@@ -1161,260 +1235,293 @@ const defaultShardLeaseMs = 30_000;
 const maxContinuationTextBytes = 16 * 1024;
 const retryDecisions = new DeliveryRetryDecisions({ maxAttempts: deliveryAttemptCapacity });
 
-function deliveryRun(
-  status: DeliveryRun["status"],
-  processed: number,
-  accepted: number,
-  delivered: number,
-  failed: number,
-  failures: readonly DeliveryFailure[],
-): DeliveryRun {
-  return Object.freeze({
-    status,
-    processed,
-    accepted,
-    delivered,
-    failed,
-    failures: Object.freeze([...failures]),
-  });
-}
-
-function deliveryFailureStage(
-  stage: DeliveryFailureStage,
-  accepted: boolean,
-): DeliveryFailureStage {
-  return stage === "ENDPOINT" && !accepted ? "LEASE" : stage;
-}
-
-function deliveryFailureReason(stage: DeliveryFailureStage): DeliveryFailureReason {
-  switch (stage) {
-    case "CLAIM":
-      return "CLAIM_FAILED";
-    case "LEASE":
-      return "LEASE_INACTIVE";
-    case "ENDPOINT":
-      return "ENDPOINT_REJECTED";
-    case "CLEANUP":
-      return "CLEANUP_FAILED";
-    case "STATUS_UPDATE":
-      return "STATUS_UPDATE_FAILED";
-  }
-}
-
-function deliveryDrainOutcome(
-  run: DeliveryRun,
-  resumeCursor?: DeliveryDrainCursor,
-  exhaustedSkippedScan = false,
-): DeliveryDrainOutcome {
-  return Object.freeze({
-    run,
-    ...(resumeCursor === undefined ? {} : { resumeCursor }),
-    exhaustedSkippedScan,
-  });
-}
-
-function retryExhaustedMarkFailure(decision: DeliveryRetryDecision): DeliveryRetryExhaustedFailure {
-  return Object.freeze({
-    kind: "EXHAUSTED",
-    action: "MARK_DELIVERED",
-    message: "Delivery retry attempts exhausted; the row could not be marked delivered.",
-    count: decision.count,
-    limit: decision.limit,
-    latestStage: decision.latestStage,
-    latestReason: decision.latestReason,
-    latestAccepted: decision.latestAccepted,
-  });
-}
-
-function drainProgress(): DrainProgress {
-  const seen = new Set<string>();
-  const failures: DeliveryFailure[] = [];
-  let processed = 0;
-  let accepted = 0;
-  let delivered = 0;
-
-  return Object.freeze({
-    get accepted() {
-      return accepted;
-    },
-    get processed() {
-      return processed;
-    },
-    get failed() {
-      return failures.length;
-    },
-    finish(cursor: DeliveryDrainCursor, exhaustedSkippedScan = false) {
-      const run = deliveryRun("DRAINED", processed, accepted, delivered, failures.length, failures);
-      const resumableSkippedScan =
-        exhaustedSkippedScan && run.accepted === 0 && run.delivered === 0 && run.failed === 0;
-
-      return deliveryDrainOutcome(
-        run,
-        run.failed > 0 || cursor.after === undefined ? undefined : cursor,
-        resumableSkippedScan,
-      );
-    },
-    hasSeen(message: InboxMessage) {
-      return seen.has(message.id.value);
-    },
-    observe(message: InboxMessage) {
-      if (seen.has(message.id.value)) {
-        return false;
-      }
-      seen.add(message.id.value);
-      processed += 1;
-
-      return true;
-    },
-    recordExhausted(message: InboxMessage, action: DeliveryMessageResult) {
-      if (action.kind === "DELIVERED") {
-        delivered += 1;
-      } else if (action.kind === "FAILED") {
-        failures.push(
-          Object.freeze({ message: exhaustedFailureMessage(message), error: action.error }),
-        );
-      }
-    },
-    record(message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) {
-      if (attempt.kind === "SKIPPED") {
-        return;
-      }
-      if (attempt.kind === "FAILED" && !attempt.accepted) {
-        failures.push(Object.freeze({ message, error: attempt.error }));
-        return;
-      }
-      accepted += 1;
-      if (attempt.kind === "DELIVERED") {
-        delivered += 1;
-      } else {
-        failures.push(Object.freeze({ message, error: attempt.error }));
-      }
-    },
-  });
-}
-
-function keepShardLease(
-  shards: DeliveryWorkRegistry,
-  session: DeliveryWorkSession,
-  leaseMs: number,
-  nowMs: () => number,
-  options: ShardLeaseRenewalOptions,
-): ShardLeaseKeeper {
-  if (session.kind === "EXCLUSIVE") {
+/** Groups package-local delivery run and lease operations. */
+const DeliveryRunValues = Object.freeze({
+  deliveryRun(
+    status: DeliveryRun["status"],
+    processed: number,
+    accepted: number,
+    delivered: number,
+    failed: number,
+    failures: readonly DeliveryFailure[],
+  ): DeliveryRun {
     return Object.freeze({
-      awaitRenewal: () => Promise.resolve(),
-      close: () => Promise.resolve(),
-      requireActive: () => undefined,
-      session: () => session,
+      status,
+      processed,
+      accepted,
+      delivered,
+      failed,
+      failures: Object.freeze([...failures]),
     });
-  }
-  if (shards.renew === undefined) {
-    throw new Error("Leased delivery sessions require registry renewal.");
-  }
-  const renew = shards.renew.bind(shards);
-  let current = session;
-  let failed: unknown;
-  let renewing: Promise<void> | undefined;
-  let stopped = false;
-  const interval = setInterval(
-    () => {
-      if (stopped || renewing !== undefined) {
-        return;
-      }
+  },
 
-      renewing = renew(current, options.operation)
-        .then(async (next) => {
-          if (next === undefined) {
-            failed = new Error("Shard lease was lost.");
+  deliveryFailureStage(stage: DeliveryFailureStage, accepted: boolean): DeliveryFailureStage {
+    return stage === "ENDPOINT" && !accepted ? "LEASE" : stage;
+  },
 
-            return;
-          }
-          await options.onRenewWork(next);
-          current = next;
-        })
-        .catch((error: unknown) => {
-          failed = error;
-        })
-        .finally(() => {
-          renewing = undefined;
-        });
-    },
-    Math.max(1, Math.floor(leaseMs / 2)),
-  );
-
-  if (typeof interval.unref === "function") {
-    interval.unref();
-  }
-  const stopRenewal = (): void => {
-    if (!stopped) {
-      stopped = true;
-      clearInterval(interval);
+  deliveryFailureReason(stage: DeliveryFailureStage): DeliveryFailureReason {
+    switch (stage) {
+      case "CLAIM":
+        return "CLAIM_FAILED";
+      case "LEASE":
+        return "LEASE_INACTIVE";
+      case "ENDPOINT":
+        return "ENDPOINT_REJECTED";
+      case "CLEANUP":
+        return "CLEANUP_FAILED";
+      case "STATUS_UPDATE":
+        return "STATUS_UPDATE_FAILED";
     }
-  };
-  options.operation?.signal?.addEventListener("abort", stopRenewal, { once: true });
+  },
 
-  return Object.freeze({
-    async awaitRenewal() {
-      await renewing;
-    },
-    async close() {
-      stopRenewal();
-      options.operation?.signal?.removeEventListener("abort", stopRenewal);
-      await renewing;
-    },
-    requireActive() {
-      if (failed !== undefined) {
-        throw leaseError(failed);
+  deliveryDrainOutcome(
+    run: DeliveryRun,
+    resumeCursor?: DeliveryDrainCursor,
+    exhaustedSkippedScan = false,
+  ): DeliveryDrainOutcome {
+    return Object.freeze({
+      run,
+      ...(resumeCursor === undefined ? {} : { resumeCursor }),
+      exhaustedSkippedScan,
+    });
+  },
+
+  retryExhaustedMarkFailure(decision: DeliveryRetryDecision): DeliveryRetryExhaustedFailure {
+    return Object.freeze({
+      kind: "EXHAUSTED",
+      action: "MARK_DELIVERED",
+      message: "Delivery retry attempts exhausted; the row could not be marked delivered.",
+      count: decision.count,
+      limit: decision.limit,
+      latestStage: decision.latestStage,
+      latestReason: decision.latestReason,
+      latestAccepted: decision.latestAccepted,
+    });
+  },
+
+  drainProgress(): DrainProgress {
+    const seen = new Set<string>();
+    const failures: DeliveryFailure[] = [];
+    let processed = 0;
+    let accepted = 0;
+    let delivered = 0;
+
+    return Object.freeze({
+      get accepted() {
+        return accepted;
+      },
+      get processed() {
+        return processed;
+      },
+      get failed() {
+        return failures.length;
+      },
+      finish(cursor: DeliveryDrainCursor, exhaustedSkippedScan = false) {
+        const run = DeliveryRunValues.deliveryRun(
+          "DRAINED",
+          processed,
+          accepted,
+          delivered,
+          failures.length,
+          failures,
+        );
+        const resumableSkippedScan =
+          exhaustedSkippedScan && run.accepted === 0 && run.delivered === 0 && run.failed === 0;
+
+        return DeliveryRunValues.deliveryDrainOutcome(
+          run,
+          run.failed > 0 || cursor.after === undefined ? undefined : cursor,
+          resumableSkippedScan,
+        );
+      },
+      hasSeen(message: InboxMessage) {
+        return seen.has(message.id.value);
+      },
+      observe(message: InboxMessage) {
+        if (seen.has(message.id.value)) {
+          return false;
+        }
+        seen.add(message.id.value);
+        processed += 1;
+
+        return true;
+      },
+      recordExhausted(message: InboxMessage, action: DeliveryMessageResult) {
+        if (action.kind === "DELIVERED") {
+          delivered += 1;
+        } else if (action.kind === "FAILED") {
+          failures.push(
+            Object.freeze({
+              message: DeliveryValues.exhaustedFailureMessage(message),
+              error: action.error,
+            }),
+          );
+        }
+      },
+      record(message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) {
+        if (attempt.kind === "SKIPPED") {
+          return;
+        }
+        if (attempt.kind === "FAILED" && !attempt.accepted) {
+          failures.push(Object.freeze({ message, error: attempt.error }));
+          return;
+        }
+        accepted += 1;
+        if (attempt.kind === "DELIVERED") {
+          delivered += 1;
+        } else {
+          failures.push(Object.freeze({ message, error: attempt.error }));
+        }
+      },
+    });
+  },
+
+  keepShardLease(
+    shards: DeliveryWorkRegistry,
+    session: DeliveryWorkSession,
+    leaseMs: number,
+    nowMs: () => number,
+    options: ShardLeaseRenewalOptions,
+  ): ShardLeaseKeeper {
+    if (session.kind === "EXCLUSIVE") {
+      return Object.freeze({
+        awaitRenewal: () => Promise.resolve(),
+        close: () => Promise.resolve(),
+        requireActive: () => undefined,
+        session: () => session,
+      });
+    }
+    if (shards.renew === undefined) {
+      throw new Error("Leased delivery sessions require registry renewal.");
+    }
+    const renew = shards.renew.bind(shards);
+    let current = session;
+    let failed: unknown;
+    let renewing: Promise<void> | undefined;
+    let stopped = false;
+    const interval = setInterval(
+      () => {
+        if (stopped || renewing !== undefined) {
+          return;
+        }
+
+        renewing = renew(current, options.operation)
+          .then(async (next) => {
+            if (next === undefined) {
+              failed = new Error("Shard lease was lost.");
+
+              return;
+            }
+            await options.onRenewWork(next);
+            current = next;
+          })
+          .catch((error: unknown) => {
+            failed = error;
+          })
+          .finally(() => {
+            renewing = undefined;
+          });
+      },
+      Math.max(1, Math.floor(leaseMs / 2)),
+    );
+
+    if (typeof interval.unref === "function") {
+      interval.unref();
+    }
+    const stopRenewal = (): void => {
+      if (!stopped) {
+        stopped = true;
+        clearInterval(interval);
       }
-      if (current.expiresAt.getTime() <= nowMs()) {
-        failed = new Error("Shard lease expired.");
-        throw failed;
-      }
-    },
-    session() {
-      return current;
-    },
-  });
-}
+    };
+    options.operation?.signal?.addEventListener("abort", stopRenewal, { once: true });
+
+    return Object.freeze({
+      async awaitRenewal() {
+        await renewing;
+      },
+      async close() {
+        stopRenewal();
+        options.operation?.signal?.removeEventListener("abort", stopRenewal);
+        await renewing;
+      },
+      requireActive() {
+        if (failed !== undefined) {
+          throw DeliveryValues.leaseError(failed);
+        }
+        if (current.expiresAt.getTime() <= nowMs()) {
+          failed = new Error("Shard lease expired.");
+          throw failed;
+        }
+      },
+      session() {
+        return current;
+      },
+    });
+  },
+});
 
 interface DeliveryOperationFence {
   readonly options: DeliveryOperationOptions | undefined;
   requireActive(): void;
 }
 
-/** @internal Create one operation fence whose deadline starts at admission. */
-export function deliveryOperationFence(
-  options: DeliveryOperationOptions | undefined,
-): DeliveryOperationFence {
-  const deadline =
-    options?.timeoutMs === undefined
-      ? undefined
-      : Date.now() + requireOperationTimeout(options.timeoutMs);
-  return Object.freeze({
-    options,
-    requireActive() {
-      if (options?.signal?.aborted) {
-        throw options.signal.reason instanceof Error
-          ? options.signal.reason
-          : new Error("Delivery operation was aborted.");
-      }
-      if (deadline !== undefined && Date.now() >= deadline) {
-        throw new Error("Delivery operation deadline elapsed.");
-      }
-    },
-  });
+/** Creates package-local delivery operation fences. */
+export interface DeliveryOperations {
+  /**
+   * Creates an operation fence from optional controls.
+   *
+   * @param options Optional cancellation and deadline controls.
+   * @returns The active operation fence.
+   */
+  fence(options: DeliveryOperationOptions | undefined): DeliveryOperationFence;
 }
 
-function requireOperationTimeout(value: number): number {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error("Delivery operation timeoutMs must be a positive safe integer.");
-  }
-  return value;
-}
+/** Creates package-local delivery operation fences. */
+export const deliveryOperations: DeliveryOperations = Object.freeze({
+  /**
+   * Creates one operation fence whose deadline starts at admission.
+   *
+   * @param options Optional cancellation and deadline controls.
+   * @returns The active operation fence.
+   */
+  fence(options: DeliveryOperationOptions | undefined): DeliveryOperationFence {
+    const deadline =
+      options?.timeoutMs === undefined
+        ? undefined
+        : Date.now() + DeliveryOperationValues.requireTimeout(options.timeoutMs);
+    return Object.freeze({
+      options,
+      requireActive() {
+        if (options?.signal?.aborted) {
+          throw options.signal.reason instanceof Error
+            ? options.signal.reason
+            : new Error("Delivery operation was aborted.");
+        }
+        if (deadline !== undefined && Date.now() >= deadline) {
+          throw new Error("Delivery operation deadline elapsed.");
+        }
+      },
+    });
+  },
+});
 
-function sessionNode(session: DeliveryWorkSession): string {
-  return session.kind === "LEASED" ? session.node : "exclusive";
-}
+/** Groups internal operation-control validation. */
+const DeliveryOperationValues = Object.freeze({
+  requireTimeout(value: number): number {
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new Error("Delivery operation timeoutMs must be a positive safe integer.");
+    }
+    return value;
+  },
+});
+
+/** Groups package-local delivery value and validation operations. */
+const DeliverySessionValues = Object.freeze({
+  sessionNode(session: DeliveryWorkSession): string {
+    return session.kind === "LEASED" ? session.node : "exclusive";
+  },
+});
 
 class ActiveWork {
   #work: DeliveryInboxWork | undefined;
@@ -1511,236 +1618,249 @@ class ActiveWork {
   }
 }
 
-function endpointSnapshot(message: InboxMessage): DeliveryEndpointMessage {
-  const label = requireEndpointLabel(message.label);
-  const status = requireEndpointStatus(message.status);
+/** Groups package-local delivery message and storage operations. */
+const DeliveryValues = Object.freeze({
+  endpointSnapshot(message: InboxMessage): DeliveryEndpointMessage {
+    const label = DeliveryValues.requireEndpointLabel(message.label);
+    const status = DeliveryValues.requireEndpointStatus(message.status);
 
-  return Object.freeze({
-    id: Object.freeze({
-      value: message.id.value,
-      shard: message.id.shard,
-    }),
-    inboxId: Object.freeze({ ...message.inboxId }),
-    label,
-    status,
-    signalId: message.signalId,
-    shard: message.shard,
-    whenReceived: new Date(message.whenReceived),
-    version: message.version,
-    ...(message.signal === undefined ? {} : { signal: copySignal(message.signal) }),
-    ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
-  });
-}
+    return Object.freeze({
+      id: Object.freeze({
+        value: message.id.value,
+        shard: message.id.shard,
+      }),
+      inboxId: Object.freeze({ ...message.inboxId }),
+      label,
+      status,
+      signalId: message.signalId,
+      shard: message.shard,
+      whenReceived: new Date(message.whenReceived),
+      version: message.version,
+      ...(message.signal === undefined
+        ? {}
+        : { signal: DeliveryValues.copySignal(message.signal) }),
+      ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
+    });
+  },
 
-function exhaustedFailureMessage(message: InboxMessage): DeliveryEndpointMessage {
-  return Object.freeze({
-    id: Object.freeze({
-      value: message.id.value,
-      shard: message.id.shard,
-    }),
-    inboxId: Object.freeze({ ...message.inboxId }),
-    label: requireEndpointLabel(message.label),
-    status: requireEndpointStatus(message.status),
-    signalId: message.signalId,
-    shard: message.shard,
-    whenReceived: new Date(message.whenReceived),
-    version: message.version,
-    ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
-  });
-}
+  exhaustedFailureMessage(message: InboxMessage): DeliveryEndpointMessage {
+    return Object.freeze({
+      id: Object.freeze({
+        value: message.id.value,
+        shard: message.id.shard,
+      }),
+      inboxId: Object.freeze({ ...message.inboxId }),
+      label: DeliveryValues.requireEndpointLabel(message.label),
+      status: DeliveryValues.requireEndpointStatus(message.status),
+      signalId: message.signalId,
+      shard: message.shard,
+      whenReceived: new Date(message.whenReceived),
+      version: message.version,
+      ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
+    });
+  },
 
-function copySignal(signal: Any): Any {
-  const copied = clone(AnySchema, signal);
-  copied.value = new Uint8Array(copied.value);
+  copySignal(signal: Any): Any {
+    const copied = clone(AnySchema, signal);
+    copied.value = new Uint8Array(copied.value);
 
-  return copied;
-}
+    return copied;
+  },
 
-function requireEndpointLabel(label: InboxMessage["label"]): DeliveryEndpointLabel {
-  if (isEndpointLabel(label)) {
-    return label;
-  }
+  requireEndpointLabel(label: InboxMessage["label"]): DeliveryEndpointLabel {
+    if (DeliveryValues.isEndpointLabel(label)) {
+      return label;
+    }
 
-  throw new Error(`Delivery worker does not support "${label}" messages.`);
-}
+    throw new Error(`Delivery worker does not support "${label}" messages.`);
+  },
 
-function requireFailureLimit(value: unknown): number | undefined {
-  return value === undefined ? undefined : inboxStorageAccess.readLimit(value);
-}
+  requireFailureLimit(value: unknown): number | undefined {
+    return value === undefined ? undefined : inboxStorageAccess.readLimit(value);
+  },
 
-function requireDrainCursor(value: unknown): DeliveryDrainCursor {
-  if (value === undefined) {
-    return drainCursor();
-  }
-  if (typeof value !== "object" || value === null) {
-    throw new Error("Delivery resume cursor must be an object.");
-  }
+  requireDrainCursor(value: unknown): DeliveryDrainCursor {
+    if (value === undefined) {
+      return DeliveryValues.drainCursor();
+    }
+    if (typeof value !== "object" || value === null) {
+      throw new Error("Delivery resume cursor must be an object.");
+    }
 
-  const { after } = value as {
-    readonly after?: unknown;
-  };
-  if (after === undefined) {
-    return drainCursor();
-  }
-  return drainCursor(requireResumeContinuation(after));
-}
+    const { after } = value as {
+      readonly after?: unknown;
+    };
+    if (after === undefined) {
+      return DeliveryValues.drainCursor();
+    }
+    return DeliveryValues.drainCursor(DeliveryValues.requireResumeContinuation(after));
+  },
 
-function requireResumeContinuation(value: unknown): InboxReadContinuation {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error("Delivery resume cursor continuation must be an object.");
-  }
+  requireResumeContinuation(value: unknown): InboxReadContinuation {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new Error("Delivery resume cursor continuation must be an object.");
+    }
 
-  const input = value as {
-    readonly messageId?: unknown;
-    readonly whenReceived?: unknown;
-    readonly version?: unknown;
-  };
+    const input = value as {
+      readonly messageId?: unknown;
+      readonly whenReceived?: unknown;
+      readonly version?: unknown;
+    };
 
-  return continuationFromValues(input.messageId, input.whenReceived, input.version);
-}
-
-function drainCursor(after?: InboxReadContinuation): DeliveryDrainCursor {
-  return Object.freeze(after === undefined ? {} : { after });
-}
-
-function inboxContinuation(message: Pick<InboxMessage, "id" | "whenReceived" | "version">) {
-  return continuationFromValues(message.id.value, message.whenReceived, message.version);
-}
-
-function continuationFromValues(
-  messageId: unknown,
-  whenReceived: unknown,
-  version: unknown,
-): InboxReadContinuation {
-  if (typeof messageId !== "string" || messageId.trim().length === 0) {
-    throw new Error("Delivery resume cursor requires a message ID.");
-  }
-  if (Buffer.byteLength(messageId, "utf8") > maxContinuationTextBytes) {
-    throw new Error(
-      `Delivery resume cursor message ID exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+    return DeliveryValues.continuationFromValues(
+      input.messageId,
+      input.whenReceived,
+      input.version,
     );
-  }
-  if (!(whenReceived instanceof Date) || Number.isNaN(whenReceived.getTime())) {
-    throw new Error("Delivery resume cursor requires a valid receive time.");
-  }
-  if (typeof version !== "bigint") {
-    throw new Error("Delivery resume cursor requires a bigint version.");
-  }
-  const encodedVersion = version.toString();
-  if (Buffer.byteLength(encodedVersion, "utf8") > maxContinuationTextBytes) {
-    throw new Error(
-      `Delivery resume cursor version exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+  },
+
+  drainCursor(after?: InboxReadContinuation): DeliveryDrainCursor {
+    return Object.freeze(after === undefined ? {} : { after });
+  },
+
+  inboxContinuation(message: Pick<InboxMessage, "id" | "whenReceived" | "version">) {
+    return DeliveryValues.continuationFromValues(
+      message.id.value,
+      message.whenReceived,
+      message.version,
     );
-  }
+  },
 
-  return Object.freeze({
-    messageId,
-    whenReceived: new Date(whenReceived.getTime()),
-    version,
-  });
-}
+  continuationFromValues(
+    messageId: unknown,
+    whenReceived: unknown,
+    version: unknown,
+  ): InboxReadContinuation {
+    if (typeof messageId !== "string" || messageId.trim().length === 0) {
+      throw new Error("Delivery resume cursor requires a message ID.");
+    }
+    if (Buffer.byteLength(messageId, "utf8") > maxContinuationTextBytes) {
+      throw new Error(
+        `Delivery resume cursor message ID exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+      );
+    }
+    if (!(whenReceived instanceof Date) || Number.isNaN(whenReceived.getTime())) {
+      throw new Error("Delivery resume cursor requires a valid receive time.");
+    }
+    if (typeof version !== "bigint") {
+      throw new Error("Delivery resume cursor requires a bigint version.");
+    }
+    const encodedVersion = version.toString();
+    if (Buffer.byteLength(encodedVersion, "utf8") > maxContinuationTextBytes) {
+      throw new Error(
+        `Delivery resume cursor version exceeds ${String(maxContinuationTextBytes)} bytes and cannot be stored.`,
+      );
+    }
 
-function requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage {
-  return endpointSnapshot(message);
-}
+    return Object.freeze({
+      messageId,
+      whenReceived: new Date(whenReceived.getTime()),
+      version,
+    });
+  },
 
-function requireEndpointStatus(status: InboxMessage["status"]): DeliveryEndpointMessage["status"] {
-  if (status === "TO_DELIVER") {
-    return status;
-  }
+  requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage {
+    return DeliveryValues.endpointSnapshot(message);
+  },
 
-  throw new Error(`Delivery worker does not support "${status}" message status.`);
-}
+  requireEndpointStatus(status: InboxMessage["status"]): DeliveryEndpointMessage["status"] {
+    if (status === "TO_DELIVER") {
+      return status;
+    }
 
-function isEndpointLabel(label: InboxMessage["label"]): label is DeliveryEndpointLabel {
-  return (
-    label === "HANDLE_COMMAND" || label === "UPDATE_SUBSCRIBER" || label === "REACT_UPON_EVENT"
-  );
-}
+    throw new Error(`Delivery worker does not support "${status}" message status.`);
+  },
 
-function leaseError(error: unknown): Error {
-  return error instanceof Error
-    ? error
-    : new Error("Shard lease renewal failed.", { cause: error });
-}
+  isEndpointLabel(label: InboxMessage["label"]): label is DeliveryEndpointLabel {
+    return (
+      label === "HANDLE_COMMAND" || label === "UPDATE_SUBSCRIBER" || label === "REACT_UPON_EVENT"
+    );
+  },
 
-function claimClearFailure(deliveryError: unknown, clearError: unknown): AggregateError {
-  return new AggregateError(
-    [deliveryError, clearError],
-    "Delivery failed and framework cleanup failed.",
-  );
-}
+  leaseError(error: unknown): Error {
+    return error instanceof Error
+      ? error
+      : new Error("Shard lease renewal failed.", { cause: error });
+  },
 
-function requireDeliveryDrainer(delivery: Delivery): DeliveryDrainer {
-  const drainer = deliveryDrainers.get(delivery);
-  if (drainer === undefined) {
-    throw new TypeError("Loop drain access requires a Delivery instance.");
-  }
+  claimClearFailure(deliveryError: unknown, clearError: unknown): AggregateError {
+    return new AggregateError(
+      [deliveryError, clearError],
+      "Delivery failed and framework cleanup failed.",
+    );
+  },
 
-  return drainer;
-}
+  requireDeliveryDrainer(delivery: Delivery): DeliveryDrainer {
+    const drainer = deliveryDrainers.get(delivery);
+    if (drainer === undefined) {
+      throw new TypeError("Loop drain access requires a Delivery instance.");
+    }
 
-function requireMessageShard(message: InboxMessage): ShardIndex {
-  const idShard = readShard(message.id.shard, "Inbox message ID shard");
-  const rowShard = readShard(message.shard, "Inbox message shard");
+    return drainer;
+  },
 
-  if (!sameShard(idShard, rowShard)) {
-    throw new InboxMessageError("Inbox message ID shard does not match message shard.");
-  }
+  requireMessageShard(message: InboxMessage): ShardIndex {
+    const idShard = DeliveryValues.readShard(message.id.shard, "Inbox message ID shard");
+    const rowShard = DeliveryValues.readShard(message.shard, "Inbox message shard");
 
-  return idShard;
-}
+    if (!DeliveryValues.sameShard(idShard, rowShard)) {
+      throw new InboxMessageError("Inbox message ID shard does not match message shard.");
+    }
 
-function snapshotStorageContext(context: StorageContext): StorageContext {
-  if (!context.multitenant) {
+    return idShard;
+  },
+
+  snapshotStorageContext(context: StorageContext): StorageContext {
+    if (!context.multitenant) {
+      return Object.freeze({
+        name: context.name,
+        multitenant: false,
+      });
+    }
+
+    const { tenantId } = context;
+    if (tenantId === undefined || tenantId.trim().length === 0) {
+      throw new Error(`Multitenant storage "${context.name}" requires context.tenantId.`);
+    }
+
     return Object.freeze({
       name: context.name,
-      multitenant: false,
+      multitenant: true,
+      tenantId,
     });
-  }
+  },
 
-  const { tenantId } = context;
-  if (tenantId === undefined || tenantId.trim().length === 0) {
-    throw new Error(`Multitenant storage "${context.name}" requires context.tenantId.`);
-  }
-
-  return Object.freeze({
-    name: context.name,
-    multitenant: true,
-    tenantId,
-  });
-}
-
-function copyStorageContext(context: StorageContext): StorageContext {
-  if (!context.multitenant) {
-    return Object.freeze({ name: context.name, multitenant: false });
-  }
-  const tenantId = context.tenantId;
-  return Object.freeze({
-    name: context.name,
-    multitenant: true,
-    ...(tenantId === undefined ? {} : { tenantId }),
-  });
-}
-
-function readShard(value: unknown, label: string): ShardIndex {
-  try {
-    if (typeof value !== "object" || value === null) {
-      throw new Error(`${label} is invalid.`);
+  copyStorageContext(context: StorageContext): StorageContext {
+    if (!context.multitenant) {
+      return Object.freeze({ name: context.name, multitenant: false });
     }
-    const shard = value as { readonly index?: unknown; readonly ofTotal?: unknown };
-    const index = shard.index;
-    const ofTotal = shard.ofTotal;
+    const tenantId = context.tenantId;
+    return Object.freeze({
+      name: context.name,
+      multitenant: true,
+      ...(tenantId === undefined ? {} : { tenantId }),
+    });
+  },
 
-    return new ShardIndex(index as number, ofTotal as number);
-  } catch (error) {
-    throw new InboxMessageError(`${label} is invalid.`, { cause: error });
-  }
-}
+  readShard(value: unknown, label: string): ShardIndex {
+    try {
+      if (typeof value !== "object" || value === null) {
+        throw new Error(`${label} is invalid.`);
+      }
+      const shard = value as { readonly index?: unknown; readonly ofTotal?: unknown };
+      const index = shard.index;
+      const ofTotal = shard.ofTotal;
 
-function sameShard(
-  left: Pick<ShardIndex, "index" | "ofTotal">,
-  right: Pick<ShardIndex, "index" | "ofTotal">,
-): boolean {
-  return left.index === right.index && left.ofTotal === right.ofTotal;
-}
+      return new ShardIndex(index as number, ofTotal as number);
+    } catch (error) {
+      throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+    }
+  },
+
+  sameShard(
+    left: Pick<ShardIndex, "index" | "ofTotal">,
+    right: Pick<ShardIndex, "index" | "ofTotal">,
+  ): boolean {
+    return left.index === right.index && left.ofTotal === right.ofTotal;
+  },
+});

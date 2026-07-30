@@ -5,7 +5,10 @@ import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
-import { analyzeBuildHandlers } from "../../src/handler/build-time-handler-analyzer.js";
+import { BuildHandlerAnalyzer } from "../../src/handler/build-time-handler-analyzer.js";
+
+const analyzeBuildHandlers = (...args: Parameters<typeof BuildHandlerAnalyzer.analyze>) =>
+  BuildHandlerAnalyzer.analyze(...args);
 
 describe("build-time handler analyzer", () => {
   it("discovers bare handler decorators and generated schema references", () => {

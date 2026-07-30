@@ -2,9 +2,9 @@
 
 ## Status
 
-In progress. T-0080A-D and T-0080I are complete; T-0080E production
-storage/delivery adapter remediation is next. T-0080F and T-0080G are also
-unblocked for disjoint execution.
+In progress. T-0080A-G and T-0080I are complete and reviewed; T-0080G remains
+on its pushed isolated branch pending integration into the umbrella. T-0080H
+starts after F/G integration and combined checker reconciliation.
 
 ## Classification
 

@@ -3,18 +3,14 @@ import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
 import {
-  configuredDeliveryEndpoint,
-  coordinateLocalInboxHandoff,
   type DeliveryHandoff,
-  deliveryEndpoint,
-  deliveryReady,
   type DeliveryEndpoint,
   DeliveryReadiness,
-  drainLocalInboxMessage,
-  localInboxHandoffKey,
+  InboxHandoff,
   type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
 
+/** Persists and replays delivery rows for process-manager handlers. */
 export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProcessManagerInboxTarget>();
@@ -25,6 +21,11 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
   #nextVersion = 0n;
 
+  /** Creates a local process-manager inbox.
+   * @param contextName Names the bounded context that owns this inbox.
+   * @param readiness Coordinates delivery readiness after persistence.
+   * @param keepTenant Records a tenant before its message is persisted.
+   */
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
@@ -36,13 +37,16 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     this.#keepTenant = keepTenant;
   }
 
+  /** Registers a target that replays process-manager messages.
+   * @param target Handles messages for one process-manager type.
+   */
   register(target: ProcessManagerInboxTarget): void {
     this.#targets.set(target.targetTypeUrl, target);
     this.#endpoints.set(
       target.targetTypeUrl,
       Object.freeze(
         target.labels.map((label) =>
-          deliveryEndpoint({
+          InboxHandoff.endpoint({
             label,
             inboxId: { targetTypeUrl: target.targetTypeUrl },
             shard: ShardIndex.single(),
@@ -52,27 +56,45 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     );
   }
 
+  /** Lists endpoints registered for process-manager delivery.
+   * @returns Returns immutable endpoint descriptions.
+   */
   endpoints(): readonly DeliveryEndpoint[] {
     return Object.freeze([...this.#endpoints.values()].flat());
   }
 
-  /** Replay one already-durable inbox row through registered process-manager targets. */
+  /** Dispatches a durable inbox row through its process-manager target.
+   * @param message Contains the persisted inbox row to replay.
+   * @param deliveryTenantId Identifies the tenant that owns the row when present.
+   */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
     return this.#replay(message, deliveryTenantId);
   }
 
+  /** Persists and drains one process-manager inbox message.
+   * @param delivery Stores and drains the inbox row.
+   * @param input Describes the message to persist.
+   * @param deliveryTenantId Identifies the tenant that owns the message when present.
+   * @returns Resolves to the persisted inbox row.
+   */
   async receive(
     delivery: Delivery,
     input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    return await coordinateLocalInboxHandoff({
+    return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
-      key: localInboxHandoffKey(input, deliveryTenantId),
+      key: InboxHandoff.key(input, deliveryTenantId),
       onHandoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
     });
   }
 
+  /** Persists and drains a batch of process-manager inbox messages.
+   * @param delivery Stores and drains the inbox rows.
+   * @param inputs Describe the messages to persist.
+   * @param deliveryTenantId Identifies the tenant that owns the messages when present.
+   * @returns Resolves to the persisted inbox rows in input order.
+   */
   async receiveAll(
     delivery: Delivery,
     inputs: ProcessManagerInputs,
@@ -180,17 +202,17 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       }
       const written = row.owner.written;
       if (written === undefined) {
-        rejectRow(row.owner, failures[0]);
+        LocalProcessManagerInbox.#reject(row.owner, failures[0]);
         continue;
       }
       try {
         await written.handoff.complete(() =>
           this.#drainInboxRow(delivery, written.message, deliveryTenantId),
         );
-        resolveRow(row.owner, written.message);
+        LocalProcessManagerInbox.#resolve(row.owner, written.message);
       } catch (error) {
         failures.push(error);
-        rejectRow(row.owner, error);
+        LocalProcessManagerInbox.#reject(row.owner, error);
       }
     }
   }
@@ -215,7 +237,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
     const endpoint =
       written.outcome === "WRITTEN"
-        ? configuredDeliveryEndpoint(
+        ? InboxHandoff.configuredEndpoint(
             written.message,
             this.#endpoints.get(written.message.inboxId.targetTypeUrl) ?? [],
           )
@@ -224,7 +246,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     return {
       message: written.message,
       handoff: this.#readiness.claim(
-        endpoint === undefined ? undefined : deliveryReady(endpoint, deliveryTenantId),
+        endpoint === undefined ? undefined : InboxHandoff.ready(endpoint, deliveryTenantId),
       ),
     };
   }
@@ -234,7 +256,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     message: InboxMessage,
     deliveryTenantId?: string,
   ): Promise<void> {
-    await drainLocalInboxMessage({
+    await InboxHandoff.drain({
       delivery,
       received: message,
       node: this.#contextName,
@@ -249,14 +271,14 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
   #claimRows(inputs: ProcessManagerInputs, deliveryTenantId?: string): BatchRow[] {
     return inputs.map((input) => {
-      const key = localInboxHandoffKey(input, deliveryTenantId);
+      const key = InboxHandoff.key(input, deliveryTenantId);
       const inFlight = this.#inFlightHandoffs.get(key);
 
       if (inFlight !== undefined) {
         return { key, input, promise: inFlight };
       }
 
-      const owner = createInboxDeferred();
+      const owner = LocalProcessManagerInbox.#deferred();
       this.#inFlightHandoffs.set(key, owner.promise);
       return { key, input, promise: owner.promise, owner };
     });
@@ -276,11 +298,11 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   }
 
   #batchKey(inputs: ProcessManagerInputs, deliveryTenantId?: string): string {
-    return JSON.stringify(inputs.map((input) => localInboxHandoffKey(input, deliveryTenantId)));
+    return JSON.stringify(inputs.map((input) => InboxHandoff.key(input, deliveryTenantId)));
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    assertProcessManagerMessage(message);
+    LocalProcessManagerInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
 
@@ -291,6 +313,38 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     }
 
     await target.replay(message, deliveryTenantId);
+  }
+
+  static #deferred(): InboxDeferred {
+    let resolve!: (message: InboxMessage) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<InboxMessage>((nextResolve, nextReject) => {
+      resolve = nextResolve;
+      reject = nextReject;
+    });
+    void promise.catch(() => undefined);
+    return { promise, resolve, reject, settled: false };
+  }
+
+  static #resolve(owner: InboxDeferred, message: InboxMessage): void {
+    owner.settled = true;
+    owner.resolve(message);
+  }
+
+  static #reject(owner: InboxDeferred, reason: unknown): void {
+    owner.settled = true;
+    owner.reject(reason);
+  }
+
+  static #assert(message: InboxMessage): asserts message is ProcessManagerMessage {
+    if (message.label !== "HANDLE_COMMAND" && message.label !== "REACT_UPON_EVENT") {
+      throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
+    }
+    if (message.status !== "TO_DELIVER") {
+      throw new Error(
+        `BoundedContext delivery cannot replay process-manager inbox message with status "${message.status}".`,
+      );
+    }
   }
 }
 
@@ -316,39 +370,4 @@ interface BatchRow {
   readonly input: ProcessManagerInput;
   readonly promise: Promise<InboxMessage>;
   readonly owner?: InboxDeferred;
-}
-
-function createInboxDeferred(): InboxDeferred {
-  let resolve!: (message: InboxMessage) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<InboxMessage>((nextResolve, nextReject) => {
-    resolve = nextResolve;
-    reject = nextReject;
-  });
-  void promise.catch(() => undefined);
-
-  return { promise, resolve, reject, settled: false };
-}
-
-function resolveRow(owner: InboxDeferred, message: InboxMessage): void {
-  owner.settled = true;
-  owner.resolve(message);
-}
-
-function rejectRow(owner: InboxDeferred, reason: unknown): void {
-  owner.settled = true;
-  owner.reject(reason);
-}
-
-function assertProcessManagerMessage(
-  message: InboxMessage,
-): asserts message is ProcessManagerMessage {
-  if (message.label !== "HANDLE_COMMAND" && message.label !== "REACT_UPON_EVENT") {
-    throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
-  }
-  if (message.status !== "TO_DELIVER") {
-    throw new Error(
-      `BoundedContext delivery cannot replay process-manager inbox message with status "${message.status}".`,
-    );
-  }
 }
