@@ -204,3 +204,18 @@ behavior changes; otherwise standard.
 - Only API documentation and reliability reopen for N4; documentation reopens
   for final README. Style needs confirmation only if extraction broadens
   ownership or method structure.
+
+## Correction Completion And Re-review
+
+- N4 extracts a documented internal `LatencyDistribution` absent from package
+  exports, re-exports the unchanged public percentile type, removes percentile
+  methods from the load owner, and corrects p50 wording.
+- Direct unsorted values assert exact nearest-rank p50/p95/p99 and empty zeroes
+  without live timing. Existing pooled-session/cancellation behavior remains
+  covered.
+- Independent project build, ESLint, Prettier, all three example files and 11
+  tests, scoped TSDoc/cleanup expectations, package-export absence, and diff
+  integrity pass.
+- Focused API/Proto and reliability re-review reopen. Documentation waits for
+  M5 README; style remains closed unless re-review identifies broadened
+  ownership.
