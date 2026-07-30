@@ -122,3 +122,20 @@ behavior changes; otherwise standard.
   unchanged topology/storage/server behavior, and complete TSDoc.
 - N4 is dispatched when an implementation slot returns. N5 follows complete
   integration and review.
+
+## N4 Implementation Dispatch
+
+- After N2 returns, its existing implementer context is reassigned to N4 with
+  explicit `gpt-5.6-terra` / medium configuration.
+- N4 owns `src/load-runner.ts`, `scripts/load.mts`, and
+  `test/load-runner.test.ts`. It resolves 22 TSDoc rows, preserves exported
+  `runDatastoreOrdersLoad`, and moves nine private helpers into the existing
+  load-run and user-run owners.
+- Exact 16-session pooling, 10-user waves, unique identities, Ack/query/
+  subscription correlation, timings, failure messages, percentiles,
+  zero-elapsed throughput, per-RPC abort signals, timeout abort/clear,
+  rejection observation, user cleanup, outer session abort, and CLI shutdown
+  are frozen.
+- No generic utility or new public helper is allowed. The writer may not edit
+  Proto/index/docs/ledgers/records/package/shared/generated files, commit, push,
+  build Spine JVM, or spawn. Runtime metadata or its limitation is required.
