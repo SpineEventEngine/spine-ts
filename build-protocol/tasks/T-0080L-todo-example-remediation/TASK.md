@@ -77,3 +77,33 @@ standard.
   ownership and exact focused gates.
 - Both model and reasoning fields are explicit. Runtime metadata or its honest
   limitation is required.
+
+## Accepted Bounded Plan
+
+- Exact debt is 39 TSDoc rows in two TypeScript files, six standalone-function
+  rows, 34 Proto-comment rows in six authored files, and zero semantic-name
+  rows. There is no copied Proto inside the to-do root and no rename is
+  justified.
+- L1 owns only the six authored Proto files and adds the 34 leading comments
+  without changing declarations, imports, options, packages, filenames, field
+  layouts, type URLs, or wire behavior.
+- L2 owns only `src/index.ts`: 30 TSDoc rows, private task-ID/entrypoint
+  ownership, and exact package-boundary dispositions for the established
+  `createTodoContext`/`startTodoServer` callable exports.
+- L3 owns smoke row source plus its script/test consumers: nine TSDoc and two
+  standalone rows move to one cohesive bounded inspection/sanitization owner.
+- L4 runs after integration and owns README, USER_GUIDE, and the four exact L
+  ledgers. It targets empty TSDoc/Proto/name debt and only exact necessity
+  dispositions for deliberately preserved root callables.
+- L1-L3 use separate branches/worktrees with non-overlapping ownership. Every
+  writer is an existing implementer, explicitly `gpt-5.6-terra` / medium, may
+  not spawn, and preserves frozen wire/type-URL/package/export/registry,
+  command/Projection/query/subscription/rejection, smoke bounds, IPC,
+  multi-process, and shutdown behavior.
+- Baseline generation/workspace build and four focused files/56 tests pass.
+  Package/workspace/lock/manifests/config/generated output and
+  `src/entity-columns.ts` remain frozen.
+- All four canonical review concerns apply after the complete implementation
+  wave. Security is N/A until release readiness.
+- Splitter runtime self-introspection was unavailable for explicit Sol/high,
+  with no visible mismatch.
