@@ -252,3 +252,16 @@ behavior changes; otherwise standard.
   debt ledgers plus exactly four justified standalone functions:
   `createDatastoreOrdersContext`, `startDatastoreOrdersServer`,
   `startOrdersDatastoreServer`, and `runDatastoreOrdersLoad`.
+
+## N5 Deterministic Correction Batch
+
+- Exact ledger closure exposed six authored-source TSDoc findings previously
+  hidden by the N ledger: the `runDatastoreOrdersLoad` callable summary and the
+  `LatencyDistribution.from()`/`percentiles()` summaries, parameter, and return
+  documentation.
+- The same existing implementer context receives only those two source files
+  as a deterministic correction. It must preserve behavior and signatures,
+  rerun the scoped TSDoc checker, formatting, diff checks, and all three
+  focused files/11 tests, and may not change the completed README/ledgers.
+- Documentation and API review reopen only if the correction changes claims or
+  declarations beyond checker-conforming TSDoc.
