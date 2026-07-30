@@ -74,3 +74,54 @@ change; otherwise standard.
 - Performance/reliability is relevant for client/delivery lifecycle or
   generation resource behavior; otherwise each unaffected sub-area gets a
   concrete N/A.
+
+## Milestone Planning Assignment
+
+- Existing role: requirements splitter.
+- Expected/configured model: `gpt-5.6-sol`.
+- Expected/configured reasoning: high.
+- Both fields are explicit. This milestone-boundary planning is required because
+  the slice spans public client/delivery contracts, testing seams, and
+  reproducible Proto generation.
+- Initial exact partitions contain 440 TSDoc rows (client-node 71,
+  delivery-client 228, Proto tools 108, testing 33), 169 standalone rows
+  (32/61/61/15), and two delivery-client semantic names.
+- The strengthened combined checker also reports 13 stale constructor/function
+  rows in H-owned packages; planning must reconcile observed source rather than
+  trust the pre-expansion ledger.
+- The splitter is read-only and must return dependency-ordered, disjoint
+  implementation batches, frozen behavior, focused gates, and review relevance.
+  Runtime metadata or its limitation will be recorded before acceptance.
+
+## Accepted Bounded Plan
+
+- The existing requirements splitter completed under explicit
+  `gpt-5.6-sol` / high. Runtime self-introspection was unavailable with no
+  visible mismatch; no architectural blocker or human decision remains.
+- Exact inventory correction: 415 TSDoc rows are active and 25 are stale
+  ledger entries, totaling 440. All 169 standalone rows have cohesive owner
+  paths; none is currently justified as a necessity.
+- Three isolated write tracks may run in parallel without editing shared H
+  ledgers, root API expectations, or shared guides:
+  1. **H1 client-node:** `EntityQuery.eq/all/either/...`, define-only generated
+     Entity-column ownership, packaged `EntityColumnGenerator`, exact
+     query/cache/packing/bound semantics.
+  2. **H2 delivery-client:** wire/types, client/observation lifecycle, then
+     remote adapters, preserving read-only retries, exactly-once mutation
+     attempts, ACK/reconnect/cancellation, paging, quarantine, and
+     reconciliation.
+  3. **H3 Proto tooling:** config/manifest/model graph, generation/claims/atomic
+     publication, then CLI, preserving path/symlink confinement, graph/process
+     bounds, liveness ownership, sibling staging, rollback, and bundled Buf.
+- **H4 testing** follows H1 integration and keeps the public BlackBox API while
+  moving internal seams/normalization/startup/cleanup into cohesive owners.
+- **H5 reconciliation** serially updates exact imports/snippets/guides and all H
+  ledgers to zero. Shared API-export expectations remain T-0080O-owned; H
+  records the expected delta without editing that script.
+- Package writers return resolved declaration identities instead of editing the
+  three shared H debt JSON files. Generated output remains ignored and is never
+  hand-edited.
+- Each track runs its package type/build/tests plus lifecycle/generation
+  acceptance and scoped quality gates. Final H runs combined four-package
+  verification and one complete style, documentation, API, and reliability
+  review wave. Repository-wide coverage remains T-0080O-owned.
