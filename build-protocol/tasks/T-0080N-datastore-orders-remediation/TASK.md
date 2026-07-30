@@ -219,3 +219,15 @@ behavior changes; otherwise standard.
 - Focused API/Proto and reliability re-review reopen. Documentation waits for
   M5 README; style remains closed unless re-review identifies broadened
   ownership.
+
+## Implementation Review Acceptance
+
+- Reliability re-review is clean: exact varied/empty nearest-rank evidence and
+  unchanged aggregation, pool/waves, correlation, timeout abort/clear,
+  rejection observation, user cleanup, and outer-session cleanup.
+- API/Proto re-review is clean: public percentile shape and runner signature
+  remain compatible; the implementation class/internal path is absent from
+  package exports; the exact server rename and Proto token identity remain
+  accepted.
+- All implementation lanes are accepted for scoped commit, immediate push, and
+  integration. N5 then owns README accuracy and exact ledger closure.
