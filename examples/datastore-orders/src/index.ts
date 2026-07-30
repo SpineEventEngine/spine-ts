@@ -46,7 +46,14 @@ import {
   SkuSalesViewSchema,
 } from "../generated/spine/example/datastore_orders/v1/read_models_pb.js";
 
+/** Represents the order aggregate in the fixed topology. */
 export class OrderAggregate extends Aggregate<string, typeof OrderSchema> {
+  /**
+   * Creates an order and emits its creation event.
+   *
+   * @param command The requested order creation.
+   * @returns The event recording the created order.
+   */
   @Assign createOrder(command: CreateOrder): OrderCreated {
     this.update((draft) =>
       Object.assign(draft, create(OrderSchema, { id: this.id, skuId: command.skuId })),
@@ -55,7 +62,14 @@ export class OrderAggregate extends Aggregate<string, typeof OrderSchema> {
   }
 }
 
+/** Represents the SKU aggregate in the fixed topology. */
 export class SkuAggregate extends Aggregate<string, typeof SkuSchema> {
+  /**
+   * Registers a SKU and emits its registration event.
+   *
+   * @param command The requested SKU registration.
+   * @returns The event recording the registered SKU.
+   */
   @Assign registerSku(command: RegisterSku): SkuRegistered {
     this.update((draft) =>
       Object.assign(draft, create(SkuSchema, { id: this.id, displayName: command.displayName })),
@@ -64,70 +78,130 @@ export class SkuAggregate extends Aggregate<string, typeof SkuSchema> {
   }
 }
 
+/** Represents a fixed-topology row that records an order ID and SKU ID. */
 export class OrderSummaryProjection extends Projection<string, typeof OrderSummarySchema> {
+  /**
+   * Records an order ID and SKU ID in the fixed-topology row.
+   *
+   * @param event The order-created event that supplies the values.
+   */
   @Subscribe onOrderCreated(event: OrderCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(OrderSummarySchema, { id: event.id, value: event.skuId })),
     );
   }
 }
+/** Represents a fixed-topology row that records an order ID and SKU ID. */
 export class SalesSummaryProjection extends Projection<string, typeof SalesSummarySchema> {
+  /**
+   * Records an order ID and SKU ID in the fixed-topology row.
+   *
+   * @param event The order-created event that supplies the values.
+   */
   @Subscribe onOrderCreated(event: OrderCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(SalesSummarySchema, { id: event.id, value: event.skuId })),
     );
   }
 }
+/** Represents a fixed-topology row that records an order ID and SKU ID. */
 export class OrderSkuViewProjection extends Projection<string, typeof OrderSkuViewSchema> {
+  /**
+   * Records an order ID and SKU ID in the fixed-topology row.
+   *
+   * @param event The order-created event that supplies the values.
+   */
   @Subscribe onOrderCreated(event: OrderCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(OrderSkuViewSchema, { id: event.id, value: event.skuId })),
     );
   }
 }
+/** Represents a fixed-topology row that records an order ID and SKU ID. */
 export class OrderAuditViewProjection extends Projection<string, typeof OrderAuditViewSchema> {
+  /**
+   * Records an order ID and SKU ID in the fixed-topology row.
+   *
+   * @param event The order-created event that supplies the values.
+   */
   @Subscribe onOrderCreated(event: OrderCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(OrderAuditViewSchema, { id: event.id, value: event.skuId })),
     );
   }
 }
+/** Represents a fixed-topology row that records an order ID and SKU ID. */
 export class SalesFeedProjection extends Projection<string, typeof SalesFeedSchema> {
+  /**
+   * Records an order ID and SKU ID in the fixed-topology row.
+   *
+   * @param event The order-created event that supplies the values.
+   */
   @Subscribe onOrderCreated(event: OrderCreated): void {
     this.update((draft) =>
       Object.assign(draft, create(SalesFeedSchema, { id: event.id, value: event.skuId })),
     );
   }
 }
+/** Represents a fixed-topology row that records a SKU ID and display name. */
 export class SkuCatalogProjection extends Projection<string, typeof SkuCatalogSchema> {
+  /**
+   * Records a SKU ID and display name in the fixed-topology row.
+   *
+   * @param event The SKU-registered event that supplies the values.
+   */
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
     this.update((draft) =>
       Object.assign(draft, create(SkuCatalogSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
+/** Represents a fixed-topology row that records a SKU ID and display name. */
 export class SkuSalesViewProjection extends Projection<string, typeof SkuSalesViewSchema> {
+  /**
+   * Records a SKU ID and display name in the fixed-topology row.
+   *
+   * @param event The SKU-registered event that supplies the values.
+   */
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
     this.update((draft) =>
       Object.assign(draft, create(SkuSalesViewSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
+/** Represents a fixed-topology row that records a SKU ID and display name. */
 export class SkuAuditViewProjection extends Projection<string, typeof SkuAuditViewSchema> {
+  /**
+   * Records a SKU ID and display name in the fixed-topology row.
+   *
+   * @param event The SKU-registered event that supplies the values.
+   */
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
     this.update((draft) =>
       Object.assign(draft, create(SkuAuditViewSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
+/** Represents a fixed-topology row that records a SKU ID and display name. */
 export class InventoryViewProjection extends Projection<string, typeof InventoryViewSchema> {
+  /**
+   * Records a SKU ID and display name in the fixed-topology row.
+   *
+   * @param event The SKU-registered event that supplies the values.
+   */
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
     this.update((draft) =>
       Object.assign(draft, create(InventoryViewSchema, { id: event.id, value: event.displayName })),
     );
   }
 }
+/** Represents a fixed-topology row that records a SKU ID and display name. */
 export class SalesSkuIndexProjection extends Projection<string, typeof SalesSkuIndexSchema> {
+  /**
+   * Records a SKU ID and display name in the fixed-topology row.
+   *
+   * @param event The SKU-registered event that supplies the values.
+   */
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
     this.update((draft) =>
       Object.assign(draft, create(SalesSkuIndexSchema, { id: event.id, value: event.displayName })),
@@ -135,7 +209,13 @@ export class SalesSkuIndexProjection extends Projection<string, typeof SalesSkuI
   }
 }
 
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class OrderSalesManager extends ProcessManager<string, typeof OrderSalesManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for an order-created event.
+   *
+   * @param event The order-created event that triggers the update.
+   */
   @Subscribe onOrderCreated(event: OrderCreated): void {
     this.update((draft) =>
       Object.assign(
@@ -146,7 +226,13 @@ export class OrderSalesManager extends ProcessManager<string, typeof OrderSalesM
     void event;
   }
 }
+/** Represents a fixed-topology process manager with a generic update counter. */
 export class SkuSalesManager extends ProcessManager<string, typeof SkuSalesManagerSchema> {
+  /**
+   * Updates the generic counter by incrementing it for a SKU-registered event.
+   *
+   * @param event The SKU-registered event that triggers the update.
+   */
   @Subscribe onSkuRegistered(event: SkuRegistered): void {
     this.update((draft) =>
       Object.assign(
@@ -158,6 +244,7 @@ export class SkuSalesManager extends ProcessManager<string, typeof SkuSalesManag
   }
 }
 
+/** Lists the fixed datastore-orders registration topology. */
 export const datastoreOrdersTopology = {
   aggregates: ["OrderAggregate", "SkuAggregate"],
   processManagers: ["OrderSalesManager", "SkuSalesManager"],
@@ -175,7 +262,12 @@ export const datastoreOrdersTopology = {
   ],
 } as const;
 
-/** Builds the domain with a provider-neutral storage factory supplied at composition. */
+/**
+ * Builds the domain with a provider-neutral storage factory supplied at composition.
+ *
+ * @param storageFactory The storage factory used by the bounded context.
+ * @returns The assembled datastore-orders bounded context.
+ */
 export async function createDatastoreOrdersContext(
   storageFactory: StorageFactory,
 ): Promise<BoundedContext> {
@@ -199,10 +291,20 @@ export async function createDatastoreOrdersContext(
     .buildAsync();
 }
 
+/** Configures the datastore-orders server binding. */
 export interface DatastoreOrdersServerOptions {
+  /** Specifies the network host to bind. */
   readonly host?: string;
+  /** Specifies the network port to bind. */
   readonly port?: number;
 }
+/**
+ * Starts a datastore-orders server with the supplied storage factory.
+ *
+ * @param storageFactory The storage factory used by the bounded context.
+ * @param options The network binding options for the server.
+ * @returns The running datastore-orders server.
+ */
 export async function startDatastoreOrdersServer(
   storageFactory: StorageFactory,
   options: DatastoreOrdersServerOptions = {},
@@ -215,8 +317,14 @@ export async function startDatastoreOrdersServer(
     .start();
 }
 
-/** Creates a Datastore-backed server without leaking provider types into domain handlers. */
-export async function startDatastoreOrdersDatastoreServer(
+/**
+ * Creates a Datastore-backed server without leaking provider types into domain handlers.
+ *
+ * @param datastore The Datastore storage options used to create the factory.
+ * @param options The network binding options for the server.
+ * @returns The running Datastore-backed server.
+ */
+export async function startOrdersDatastoreServer(
   datastore: DatastoreStorageOptions,
   options: DatastoreOrdersServerOptions = {},
 ): Promise<RunningServer> {
