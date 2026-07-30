@@ -2,7 +2,8 @@
 
 ## Status
 
-Planned.
+In progress. Repository-wide residuals are measured and bounded planning is
+active.
 
 ## Parent And Dependencies
 
@@ -91,3 +92,27 @@ serialized-contract changes across the repository.
 - No dedicated security review runs for this corrective program unless the
   human explicitly requests it. Any affected security boundary is recorded for
   the next project/release-readiness security gate.
+
+## Baseline And Planning Dispatch
+
+- Baseline endpoint is pushed umbrella commit `c2812187`.
+- Example Proto quality and the production cleanup checker pass.
+- TSDoc enforcement reports 237 rows: Storage 90, Server 63,
+  Storage Datastore 33, Auth 18, Storage RDBMS 11, Transport 9, Client Web 7,
+  Delivery Server 4, and Core 2. Rules are 4 callable summaries,
+  26 constructor returns, 35 parameters, 147 returns, and 25 summaries.
+- The 26 constructor-return rows may conflict with the human requirement to
+  document constructor parameters, because constructors do not have an
+  end-user return value. Planning must decide whether the checker is wrong
+  before any production comments are added.
+- Cleanup-checker tests pass 99/105. All six failures share the known
+  `SignalEnvelopes.event`/`.command` dotted-member alias-resolution defect;
+  the production checker still passes.
+- TypeDoc generation succeeds with one React `children` parameter warning.
+  API-doc expectations omit four current Proto Tools exports: `readConfig`,
+  `readManifest`, `createManifest`, and `ProtoConfig`.
+- The existing requirements splitter is dispatched read-only, explicitly
+  `gpt-5.6-sol` with high reasoning. It must validate checker semantics,
+  partition non-overlapping implementation ownership, preserve public/runtime
+  behavior, define focused gates/review lanes, and avoid another broad
+  discovery round. Runtime metadata or its limitation is required.
