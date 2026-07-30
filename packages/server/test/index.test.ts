@@ -451,11 +451,11 @@ describe("@spine-event-engine/server", () => {
   });
 
   it("assembles a bounded-context metadata and routing smoke slice from public APIs", () => {
-    expectTypeOf<EntityHandlers>().toHaveProperty("define");
-    expectTypeOf<EntityHandlers>().not.toHaveProperty("isAuthentic");
-    expectTypeOf<EntityHandlers>().not.toHaveProperty("emittedSchemas");
-    expectTypeOf<EntityHandlers>().not.toHaveProperty("copyEmittedSchemas");
-    expectTypeOf<EntityHandlers>().not.toHaveProperty("defineArity");
+    expectTypeOf<typeof EntityHandlers>().toHaveProperty("define");
+    expectTypeOf<typeof EntityHandlers>().not.toHaveProperty("isAuthentic");
+    expectTypeOf<typeof EntityHandlers>().not.toHaveProperty("emittedSchemas");
+    expectTypeOf<typeof EntityHandlers>().not.toHaveProperty("copyEmittedSchemas");
+    expectTypeOf<typeof EntityHandlers>().not.toHaveProperty("defineArity");
     expect("isAuthentic" in EntityHandlers).toBe(false);
     expect("emittedSchemas" in EntityHandlers).toBe(false);
     expect("copyEmittedSchemas" in EntityHandlers).toBe(false);

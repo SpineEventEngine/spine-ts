@@ -123,6 +123,27 @@ unchanged.
 
 The correction is accepted for commit, immediate push, and umbrella merge.
 
+## Server Typecheck Correction Dispatch
+
+The final full gate found one stale test-only type assertion group. The five
+assertions now inspect `typeof EntityHandlers`, matching the exported object
+without changing runtime code. TypeScript/API reopens only to confirm the
+public object contract; documentation, style, reliability, and security are
+N/A for this type-only correction.
+
+## Server Typecheck Correction Disposition
+
+- TypeScript/API: clean. `typeof EntityHandlers` targets the public frozen
+  value object, and the negative type/runtime checks still reject all internal
+  metadata-authority members.
+- Documentation, style/maintainability, performance/reliability, and security:
+  N/A because the correction changes only test type expressions.
+- Runtime metadata was unavailable; the immutable configured
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high profile matched the
+  explicit dispatch.
+
+The correction is accepted for commit, immediate push, and full verification.
+
 ## Client Node Documentation Reconciliation
 
 The equipped documentation gates additionally require:

@@ -339,3 +339,24 @@ serialized-contract changes across the repository.
   Terra/high API, with runtime introspection unavailable and no mismatch.
 - Style/reliability remain N/A. The correction is accepted for commit/push/
   merge.
+
+## Server Typecheck Correction
+
+- Final verification exposed five test-only assertions using the public
+  `EntityHandlers` value as a type.
+- The assertions now use `typeof EntityHandlers`; tooling typecheck and the
+  focused Server public-API test pass.
+- The existing TypeScript/API reviewer is dispatched with explicit
+  `gpt-5.6-terra` / high configuration to verify this narrow public-contract
+  correction. Other lanes are N/A because no production or documentation
+  behavior changes.
+
+## Server Typecheck Correction Acceptance
+
+- TypeScript/API review is clean for the `typeof EntityHandlers` assertions
+  and their public/internal boundary checks.
+- Runtime introspection was unavailable; the immutable configured
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high profile matched the
+  explicit dispatch.
+- The correction is accepted for commit, immediate push, and restart of the
+  complete repository verification gate.
