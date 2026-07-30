@@ -7,30 +7,40 @@ import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.example.todo";
 
+// Records that a task was created.
 message TaskCreated {
+  // Identifies the created task.
   TaskId id = 1 [
     (required) = true,
     (validate) = true
   ];
+  // Stores the task's initial title.
   string title = 2 [(required) = true];
 }
 
+// Records that a task was renamed.
 message TaskRenamed {
+  // Identifies the renamed task.
   TaskId id = 1 [
     (required) = true,
     (validate) = true
   ];
+  // Stores the task's new title.
   string title = 2 [(required) = true];
 }
 
+// Records that a task was completed.
 message TaskCompleted {
+  // Identifies the completed task.
   TaskId id = 1 [
     (required) = true,
     (validate) = true
   ];
 }
 
+// Records that a completed task was reopened.
 message TaskReopened {
+  // Identifies the reopened task.
   TaskId id = 1 [
     (required) = true,
     (validate) = true
