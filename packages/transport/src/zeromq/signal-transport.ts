@@ -90,6 +90,7 @@ export const zeroMqSocketAccess = {
    *
    * @param socket Specifies the publisher.
    * @param address Specifies the IPC address.
+   * @returns Completes after the publisher binds.
    */
   async bindPublisher(socket: Publisher, address: string): Promise<void> {
     await socket.bind(address);
@@ -99,6 +100,7 @@ export const zeroMqSocketAccess = {
    *
    * @param socket Specifies the replier.
    * @param address Specifies the IPC address.
+   * @returns Completes after the replier binds.
    */
   async bindReply(socket: Reply, address: string): Promise<void> {
     await socket.bind(address);
@@ -124,6 +126,7 @@ export const zeroMqSocketAccess = {
    * Creates one private IPC directory component.
    *
    * @param directory Specifies the directory.
+   * @returns Completes after the directory is created.
    */
   async createIpcDirectoryComponent(directory: string): Promise<void> {
     await mkdir(directory, { mode: privateDirectoryMode });
@@ -141,6 +144,7 @@ export const zeroMqSocketAccess = {
    * Verifies a prepared IPC directory.
    *
    * @param prepared Specifies the directory identity.
+   * @returns Completes after the directory is verified.
    */
   async recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void> {
     await IpcDirectories.recheck(prepared);
@@ -150,6 +154,7 @@ export const zeroMqSocketAccess = {
    *
    * @param socket Specifies the publisher.
    * @param frames Specifies the frames.
+   * @returns Completes after the frames are sent.
    */
   async sendPublisher(socket: Publisher, frames: MessageLike[]): Promise<void> {
     await socket.send(frames);
@@ -159,6 +164,7 @@ export const zeroMqSocketAccess = {
    *
    * @param socket Specifies the requester.
    * @param frames Specifies the frames.
+   * @returns Completes after the frames are sent.
    */
   async sendRequest(socket: Request, frames: MessageLike[]): Promise<void> {
     await socket.send(frames);

@@ -6,7 +6,9 @@ export interface DeliveryServerShutdownResources {
   readonly closeAdmission: () => void;
   /** Closes Admin subscribers and publishing. */
   readonly closeAdmin: () => void;
-  /** Closes the listener and active HTTP/2 sessions. */
+  /** Closes the listener and active HTTP/2 sessions.
+   * @returns Completes after the listener closes.
+   */
   readonly closeNetwork: () => Promise<void>;
 }
 

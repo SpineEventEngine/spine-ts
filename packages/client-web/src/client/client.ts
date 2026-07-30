@@ -67,6 +67,7 @@ export interface ClientOptions {
   readonly subscriptions?: SubscriptionRuntimeOptions;
   /** Updates application credentials before one reconnect attempt.
    * @param signal Cancels the refresh when the reconnect attempt ends.
+   * @returns Completes after the application refresh ends.
    */
   readonly onReauthenticateBeforeReconnect?: (signal: AbortSignal) => Promise<void>;
 }
@@ -107,6 +108,7 @@ export interface SubscriptionScheduler {
   /** Waits for a retry delay unless cancelled.
    * @param delayMs Supplies the delay in milliseconds.
    * @param signal Cancels the wait.
+   * @returns Completes when the delay ends or rejects on cancellation.
    */
   wait(delayMs: number, signal: AbortSignal): Promise<void>;
 }
@@ -212,9 +214,12 @@ export interface Subscription {
   readonly lifecycle: AsyncIterable<SubscriptionLifecycle>;
   /** Starts the remote subscription and makes its updates available for iteration.
    * @param options Supplies cancellation options for activation.
+   * @returns Completes after remote activation ends.
    */
   activate(options?: ClientOperationOptions): Promise<void>;
-  /** Cancels local iteration and performs one bounded remote cancellation. */
+  /** Cancels local iteration and performs one bounded remote cancellation.
+   * @returns Completes after remote cancellation ends.
+   */
   cancel(): Promise<void>;
 }
 
@@ -315,7 +320,9 @@ export class Client {
     return new Request(this.#owner, this.#tenant, this.#zoneId, this.#subscriptions, user);
   }
 
-  /** Cancels open work and closes an owned platform transport once. */
+  /** Closes the client by requesting open-work cancellation, awaiting subscription cleanup, and closing its transport.
+   * @returns Completes after subscription cleanup and transport closure.
+   */
   close(): Promise<void> {
     return this.#owner.close();
   }

@@ -123,6 +123,7 @@ export type RequestTransportHandler<
 /** Defines a common asynchronous close contract. */
 export interface AsyncCloseable {
   /** Closes the resource gracefully.
+   * @returns Completes after the resource closes.
    */
   close(): Promise<void>;
 }
@@ -139,6 +140,7 @@ export interface TransportSubscriptionHandle<
 export interface SignalTransport extends AsyncCloseable {
   /** Publishes one envelope to a topic.
    * @param operation Specifies the operation to publish.
+   * @returns Completes after the operation is published.
    */
   publish<Envelope, Kind extends TransportSignalKind>(
     operation: PublishTransportOperation<Envelope, Kind>,

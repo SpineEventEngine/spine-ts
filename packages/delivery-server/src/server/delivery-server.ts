@@ -79,7 +79,6 @@ export class DeliveryServer {
    * is created or bound.
    *
    * @param options Holds explicit listener and retained-state options.
-   * @returns The constructed terminal-lifecycle server.
    */
   constructor(options: DeliveryServerOptions = {}) {
     this.#configuration = DeliveryConfig.resolve(options);
@@ -128,6 +127,8 @@ export class DeliveryServer {
    *
    * Concurrent and repeated calls share one promise. Closing before startup
    * prevents binding; closing during startup waits for reached-resource cleanup.
+   *
+   * @returns Completes after terminal resources close.
    */
   close(): Promise<void> {
     if (this.#close !== undefined) return this.#close;

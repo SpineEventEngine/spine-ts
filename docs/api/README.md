@@ -91,6 +91,8 @@ APIs. The frozen source manifest pins each copied source to an upstream commit
 and SHA-256. The generation workflow also compares the complete normalized
 FileDescriptorSet against its frozen digest, removing only `source_code_info`
 while preserving custom options and all other wire-relevant descriptor fields.
+Proto package configuration is read through `ProtoConfig.read()`; manifest
+creation and reading remain on the `ProtoManifest` API.
 
 Core exports include deterministic type URL derivation, registry and metadata
 types, the default registry for the curated Spine schema set, single-message

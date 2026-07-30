@@ -107,7 +107,6 @@ export class ValidationException extends Error {
 
   /** Creates an exception from structured Spine validation error data.
    * @param messageData The validation error represented by this exception.
-   * @returns The created validation exception.
    */
   constructor(messageData: ValidationError) {
     super(
@@ -570,7 +569,6 @@ export class TypeRegistry {
 
   /** Creates a registry and optionally registers schemas immediately.
    * @param schemas The schemas to register.
-   * @returns The created registry.
    */
   constructor(schemas: Iterable<MessageSchema> = []) {
     for (const schema of schemas) {

@@ -60,6 +60,7 @@ export interface SignedTokenRevocation {
    * The application owns persistence, cleanup, availability, and atomicity.
    * @param jti The token identifier to retain.
    * @param expiresAt The expiry after which retention may end.
+   * @returns Completes after the token ID is retained.
    */
   revoke(jti: string, expiresAt: Timestamp): Promise<void>;
 }
@@ -415,6 +416,7 @@ export class SignedSessions implements SessionResolver {
   /**
    * Closes the resolver and clears active, verification-key, and revocation references.
    * Node `KeyObject` memory cannot be explicitly zeroed.
+   * @returns Completes after resolver references are cleared.
    */
   close(): Promise<void> {
     this.#closed = true;

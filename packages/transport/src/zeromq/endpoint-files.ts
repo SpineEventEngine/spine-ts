@@ -6,6 +6,7 @@ export const EndpointFiles = {
    * Removes an endpoint file when it exists.
    *
    * @param filePath Specifies the endpoint file to remove.
+   * @returns Completes after the file is absent.
    */
   async remove(filePath: string): Promise<void> {
     try {

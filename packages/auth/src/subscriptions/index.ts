@@ -60,6 +60,7 @@ export interface SubscriptionUpdateWire {
 }
 /** Delivers one public update to an asynchronous stream.
  * @param update Supplies the copied public update.
+ * @returns Completes after the update is handled.
  */
 export type SubscriptionUpdateSink = (update: SubscriptionUpdateWire) => Promise<void>;
 /**
@@ -77,6 +78,7 @@ export type SubscriptionAbortSignal = AbortSignal;
 /** Processes a fresh private backend-envelope copy.
  * @param envelope Supplies the copied private envelope.
  * @param signal Cancels the backend effect.
+ * @returns Completes after the backend effect ends.
  */
 export type OnBackendSubscription = (
   envelope: BackendSubscriptionEnvelope,
@@ -172,9 +174,12 @@ export interface SubscriptionBindings {
   reserveCapacity(): SubscriptionCapacityReservation;
   /** Removes bindings expired at the supplied time.
    * @param nowMs Supplies the current time in milliseconds.
+   * @returns Completes after expired bindings are removed.
    */
   purgeExpired(nowMs: number): Promise<void>;
-  /** Closes all retained bindings. */
+  /** Closes all retained bindings.
+   * @returns Completes after retained bindings close.
+   */
   close(): Promise<void>;
 }
 
@@ -226,13 +231,16 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   }
   /** Removes already-expired private envelopes without a background timer.
    * @param nowMs Supplies the current time in milliseconds.
+   * @returns Completes after expired envelopes are removed.
    */
   purgeExpired(nowMs: number): Promise<void> {
     for (const [id, binding] of this.#bindings)
       if (binding.expiresAtMs <= nowMs) this.#expire(id, binding);
     return Promise.resolve();
   }
-  /** Closes the store and zeroes every private envelope after in-flight work. */
+  /** Closes the store and zeroes every private envelope after in-flight work.
+   * @returns Completes after in-flight work settles.
+   */
   async close(): Promise<void> {
     this.#closed = true;
     const closing = [...this.#bindings.entries()];
@@ -490,6 +498,7 @@ export interface SubscriptionCreator {
   /** Activates a backend subscription.
    * @param request Supplies copied subscription bytes, backend envelope, and update sink.
    * @param signal Cancels the backend operation.
+   * @returns Completes after activation ends.
    */
   activate(
     request: {
@@ -502,6 +511,7 @@ export interface SubscriptionCreator {
   /** Cancels a backend subscription.
    * @param request Supplies copied subscription bytes and backend envelope.
    * @param signal Cancels the backend operation.
+   * @returns Completes after cancellation ends.
    */
   cancel(
     request: {
@@ -513,6 +523,7 @@ export interface SubscriptionCreator {
   /** Removes a backend subscription envelope.
    * @param envelope Supplies the copied backend envelope.
    * @param signal Cancels the backend operation.
+   * @returns Completes after disposal ends.
    */
   dispose(envelope: BackendSubscriptionEnvelope, signal: SubscriptionAbortSignal): Promise<void>;
 }
@@ -601,7 +612,9 @@ export class SubscriptionGateway {
       admitted.wire.bytes.fill(0);
     }
   }
-  /** Closes admission, aborts pending Subscribe effects, and closes retained bindings. */
+  /** Closes admission, aborts pending Subscribe effects, and closes retained bindings.
+   * @returns Completes after retained bindings close.
+   */
   async close(): Promise<void> {
     this.#closed = true;
     for (const [controller, reservation] of this.#pendingSubscribes) {

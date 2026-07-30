@@ -139,6 +139,7 @@ export class BrowserSession {
   /** Updates informational context before a reconnect without treating it as credentials.
    * @param onContext Resolves the latest application context.
    * @param options Supplies optional cancellation.
+   * @returns Completes after the latest context is retained.
    */
   async reauthenticate(
     onContext: OnBrowserSessionContext,
@@ -152,7 +153,9 @@ export class BrowserSession {
     this.#context = context === undefined ? undefined : BrowserSessionValues.freezeContext(context);
   }
 
-  /** Closes session-owned HTTP or reauthentication work and clears memory-only credentials. */
+  /** Closes session-owned HTTP or reauthentication work and clears memory-only credentials.
+   * @returns Completes after cancellation is requested.
+   */
   close(): Promise<void> {
     if (this.#closed) return Promise.resolve();
     this.#closed = true;
