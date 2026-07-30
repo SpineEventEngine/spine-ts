@@ -7,31 +7,47 @@ import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.example.chat";
 
+// Identifies the chat room that contains messages.
 message ChatRoomId {
+  // Stores the room identifier value for this room.
   string value = 1 [(required) = true];
 }
 
+// Identifies a message in a chat room.
 message MessageId {
+  // Stores the identifier value for this message.
   string value = 1 [(required) = true];
 }
 
+// Holds command-side state for a message posted to a chat room.
 message ChatMessage {
   option (entity).kind = AGGREGATE;
 
+  // Identifies the aggregate message state.
   MessageId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+  // Identifies the room that contains this message.
   ChatRoomId room = 2 [(required) = true, (validate) = true];
+  // Identifies the user who posted this message.
   spine.example.users.v1.UserId author = 3 [(required) = true, (validate) = true];
+  // Contains the text written in this message.
   string text = 4 [(required) = true];
+  // Records when the message was posted.
   google.protobuf.Timestamp posted_at = 5 [(required) = true];
 }
 
+// Provides the read-side Projection of a chat message.
 message ChatMessageView {
   option (entity).kind = PROJECTION;
   option (entity).visibility = FULL;
 
+  // Identifies the message represented by this Projection.
   MessageId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+  // Identifies the room that contains the projected message.
   ChatRoomId room = 2 [(required) = true, (validate) = true, (column) = true];
+  // Identifies the user who posted the projected message.
   spine.example.users.v1.UserId author = 3 [(required) = true, (validate) = true, (column) = true];
+  // Contains the text written in the projected message.
   string text = 4 [(required) = true];
+  // Records when the projected message was posted.
   google.protobuf.Timestamp posted_at = 5 [(required) = true, (column) = true];
 }
