@@ -231,3 +231,24 @@ behavior changes; otherwise standard.
   accepted.
 - All implementation lanes are accepted for scoped commit, immediate push, and
   integration. N5 then owns README accuracy and exact ledger closure.
+
+## N5 Documentation Closure Dispatch
+
+- The existing implementer role owns only
+  `examples/datastore-orders/README.md` and the four exact T-0080N ledger files
+  under `build-protocol/tsdoc-debt`,
+  `build-protocol/example-proto-debt`,
+  `build-protocol/typescript-structure-debt`, and
+  `build-protocol/standalone-function-necessities`.
+- The dispatch explicitly uses `gpt-5.6-terra` with medium reasoning. The
+  implementer may not edit authored source, generated code, tests, package
+  metadata, shared protocol records, or spawn another agent.
+- The README must give the complete three-file/11-test command and accurately
+  explain provider-neutral composition, the Datastore convenience path, fixed
+  topology, shared session pool and waves, timing origins, per-RPC aborts,
+  500 ms iterator cleanup, shared-pool shutdown without a cancellation RPC,
+  and the limits of in-memory versus live Datastore evidence.
+- Exact closure requires empty TSDoc, Proto-comment, and TypeScript-structure
+  debt ledgers plus exactly four justified standalone functions:
+  `createDatastoreOrdersContext`, `startDatastoreOrdersServer`,
+  `startOrdersDatastoreServer`, and `runDatastoreOrdersLoad`.
