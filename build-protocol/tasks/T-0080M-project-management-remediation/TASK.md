@@ -179,3 +179,39 @@ standard.
 - Reviewers are read-only, inspect M1-M4 as one complete wave, may not spawn,
   and must report runtime metadata or its limitation. Security remains N/A
   because the slice changes no trust boundary.
+
+## Complete Review Wave Result
+
+- Documentation reports one README command/claim mismatch and semantic
+  overclaims in placeholder projection/read-model and process-manager
+  summaries. Core Proto and load-runner documentation are otherwise clean.
+- Style/maintainability confirms the semantic overclaims and reports the
+  73-line `ProjectManagementUserLoad.execute()` above the repository's 35-line
+  target.
+- TypeScript/API/Proto confirms identical normalized Proto tokens, exports,
+  declaration kinds, package/generated paths, the 3/20/10/33 topology, and the
+  public runner boundary. Its only finding is the same documentation
+  overclaim.
+- Performance/reliability accepts all-settled execution, user isolation,
+  correlation, timing, zero-elapsed behavior, bounded cleanup ordering, and
+  load-script shutdown. It requests a direct non-empty varied nearest-rank
+  percentile test.
+- Reviewer profiles were immutable Luna/medium for documentation and explicit
+  Terra/high for style, API/Proto, and reliability. Runtime self-introspection
+  was unavailable, with no mismatch.
+
+## Consolidated Correction Batch
+
+- M2 revises only affected `read_models.proto` summaries to describe the actual
+  fixed-topology ID/name state or generic update counters, without changing
+  non-comment tokens.
+- M3 mirrors those accurate placeholder semantics in `src/index.ts` TSDoc only,
+  preserving all non-comment tokens and public/behavioral contracts.
+- M4 splits `execute()` into cohesive private lifecycle steps below the
+  35-line method target and adds one focused varied-value nearest-rank test
+  without exposing private helpers or changing behavior.
+- M5 corrects the README command/claim and all accepted timing/limitation
+  wording while closing exact ledgers after integration.
+- Only documentation/style/reliability concerns affected by the corrections
+  reopen. API/Proto needs confirmation only that Proto non-comment tokens and
+  exported contracts remain unchanged.
