@@ -269,3 +269,20 @@ serialized-contract changes across the repository.
   focused To-do tests, cleanup 107/107 unchanged, formatting, and diff
   integrity. Documentation/API/style re-review; reliability is N/A absent
   runtime behavior change.
+
+## Equipped Correction Completion And Review Dispatch
+
+- `SmokeTaskLists` is now an exported documented object with unchanged
+  `inspectRows`/`sanitizeValue` call shapes and behavior.
+- The unused Proto parser local is removed. Proto quality production checking
+  and all 16 checker tests pass.
+- Auth API expectations and browser/auth guide/snippet requirements now use
+  `IncomingRequests.decode` and `TransportFacts.from`; owned stale-reference
+  scans are empty.
+- Owned TSDoc, script lint, smoke-source parsing, formatting, and diff integrity
+  pass. Isolated To-do/docs/API gates remain package-link blocked and are
+  deferred to equipped integration.
+- The original implementer remained explicit `gpt-5.6-terra` / medium with
+  runtime introspection unavailable and no mismatch.
+- Documentation, TypeScript/API, and style reopen read-only for this batch.
+  Reliability remains N/A.

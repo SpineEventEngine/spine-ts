@@ -104,3 +104,12 @@ Post-integration tooling exposes one additional deterministic batch:
 Documentation, TypeScript/API, and style reopen only for this batch.
 Performance/reliability is N/A because method behavior and Auth runtime remain
 unchanged.
+
+## Equipped Correction Review Dispatch
+
+- Documentation verifies browser/auth guide accuracy, current object examples,
+  and preserved security/limitation claims.
+- TypeScript/API verifies `SmokeTaskLists` call compatibility and exact Auth
+  export expectations.
+- Style verifies the required object grouping and deterministic checker cleanup.
+- Reliability remains N/A; no runtime behavior changes.
