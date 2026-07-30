@@ -12,7 +12,7 @@ import {
   InMemorySubscriptionBindings,
   SubscriptionGateway,
   SubscriptionUpdateRelay,
-  transportFacts,
+  TransportFacts,
 } from "../../src/index.js";
 import type { SubscriptionGatewayOptions } from "../../src/index.js";
 
@@ -43,7 +43,7 @@ function request(method: "Subscribe" | "Activate" | "Cancel", bytes: Uint8Array)
         ? { kind: "subscription-topic" as const, bytes }
         : { kind: "public-subscription" as const, bytes },
     credential: { kind: "bearer" as const, value: "credential" },
-    transport: transportFacts({ service, method }),
+    transport: TransportFacts.from({ service, method }),
   };
 }
 function user(value: string) {
@@ -473,7 +473,7 @@ describe("SubscriptionGateway", () => {
       return Promise.resolve(true);
     };
     const incoming = request("Subscribe", tenantlessTopic);
-    incoming.transport = transportFacts({
+    incoming.transport = TransportFacts.from({
       service,
       method: "Subscribe",
       origin: "https://browser.example",

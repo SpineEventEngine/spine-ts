@@ -18,12 +18,19 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 /** Allowlisted RPC facts exposed to authorization policy and diagnostics. */
 export interface TransportRequestContext {
+  /** Identifies the receiving RPC service. */
   readonly service: string;
+  /** Identifies the invoked RPC method. */
   readonly method: string;
+  /** Identifies the browser origin when the transport provides it. */
   readonly origin?: string;
+  /** Correlates this request with transport diagnostics. */
   readonly requestId?: string;
+  /** Correlates this request with its initiating operation. */
   readonly correlationId?: string;
+  /** Identifies the peer address when the transport provides it. */
   readonly peerAddress?: string;
+  /** Identifies the calling user agent when the transport provides it. */
   readonly userAgent?: string;
 }
 /** Raw transport facts from which the safe transport view is constructed. */
@@ -31,45 +38,70 @@ export interface TransportFactsInput extends Omit<
   TransportRequestContext,
   "requestId" | "correlationId"
 > {
+  /** Supplies raw request headers from which allowlisted values are selected. */
   readonly headers?: Readonly<Record<string, string | undefined>>;
 }
 /** Command facts available to authorization policy. */
 export interface IncomingCommand {
+  /** Identifies this request as a command. */
   readonly kind: "command";
+  /** Carries the received command envelope. */
   readonly command: Command;
+  /** Carries the unpacked command message when its type is known. */
   readonly message: Message | undefined;
+  /** Identifies the packed command message type. */
   readonly messageType: string;
+  /** Carries the context requested by the caller. */
   readonly requestedContext: ActorContext;
+  /** Carries allowlisted transport facts. */
   readonly transport: TransportRequestContext;
 }
 /** Query facts available to authorization policy. */
 export interface IncomingQuery {
+  /** Identifies this request as a query. */
   readonly kind: "query";
+  /** Carries the received query. */
   readonly query: Query;
+  /** Carries the query target. */
   readonly target: Target;
+  /** Carries the context requested by the caller. */
   readonly requestedContext: ActorContext;
+  /** Carries allowlisted transport facts. */
   readonly transport: TransportRequestContext;
 }
 /** Subscription-creation facts available to authorization policy. */
 export interface IncomingSubscription {
+  /** Identifies this request as subscription creation. */
   readonly kind: "subscribe";
+  /** Carries the requested topic. */
   readonly topic: Topic;
+  /** Carries the topic target. */
   readonly target: Target;
+  /** Carries the context requested by the caller. */
   readonly requestedContext: ActorContext;
+  /** Carries allowlisted transport facts. */
   readonly transport: TransportRequestContext;
 }
 /** Subscription-activation facts available to authorization policy. */
 export interface IncomingSubscriptionActivation {
+  /** Identifies this request as subscription activation. */
   readonly kind: "activate";
+  /** Carries the public subscription handle. */
   readonly subscription: Subscription;
+  /** Carries the context requested by the caller. */
   readonly requestedContext: ActorContext;
+  /** Carries allowlisted transport facts. */
   readonly transport: TransportRequestContext;
 }
 /** Subscription-cancellation facts available to authorization policy. */
 export interface IncomingSubscriptionCancellation {
+  /** Identifies this request as subscription cancellation. */
   readonly kind: "cancel";
+  /** Carries the public subscription handle. */
   readonly subscription: Subscription;
+  /** Carries the context requested by the caller. */
   readonly requestedContext: ActorContext;
+  /** Carries allowlisted transport facts. */
   readonly transport: TransportRequestContext;
 }
 /** Exhaustive request model used at the authorization boundary. */
@@ -81,54 +113,91 @@ export type IncomingRequest =
   | IncomingSubscriptionCancellation;
 /** Identity established by an application-specific authenticator. */
 export interface AuthenticatedPrincipal {
+  /** Identifies the authenticated application principal. */
   readonly id: string;
+  /** Carries application-defined identity attributes. */
   readonly attributes?: Readonly<Record<string, string>>;
 }
 /** Credential material supplied directly to an authenticator or session resolver. */
 export interface RequestCredential {
+  /** Identifies how the credential was presented. */
   readonly kind: "bearer" | "cookie";
+  /** Carries the opaque credential material. */
   readonly value: string;
 }
 /** Cookie credential issued by an application-session strategy. */
 export interface CookieCredential extends RequestCredential {
+  /** Identifies this credential as a cookie. */
   readonly kind: "cookie";
 }
 /** Bearer credential issued by a signed application-session strategy. */
 export interface BearerCredential extends RequestCredential {
+  /** Identifies this credential as a bearer token. */
   readonly kind: "bearer";
 }
 /** Session validated by an application-selected session strategy. */
 export interface ResolvedSession {
+  /** Identifies the authenticated session principal. */
   readonly principal: AuthenticatedPrincipal;
+  /** Specifies when the resolved session expires. */
   readonly expiresAt: Timestamp;
 }
 /** Provider-neutral authentication boundary. Credentials do not reach policy request facts. */
 export interface Authenticator {
+  /** Validates a presented credential.
+   * @param credential Supplies the credential to authenticate.
+   * @returns Returns the authenticated principal or `undefined` when rejected.
+   */
   authenticate(credential: RequestCredential): Promise<AuthenticatedPrincipal | undefined>;
 }
 /** Application-session validation boundary. Session persistence is deferred to Wave 4 C. */
 export interface SessionResolver {
+  /** Resolves a presented credential into a valid session.
+   * @param credential Supplies the credential to resolve.
+   * @returns Returns the resolved session or `undefined` when it is invalid.
+   */
   resolve(credential: RequestCredential): Promise<ResolvedSession | undefined>;
 }
 /** Authorization policy boundary evaluated separately for every incoming request. */
 export interface AuthorizationPolicy {
+  /** Checks whether a principal may make one incoming request.
+   * @param principal Supplies the authenticated principal.
+   * @param request Supplies the request being authorized.
+   * @returns Returns whether the request is allowed.
+   */
   authorize(principal: AuthenticatedPrincipal, request: IncomingRequest): Promise<boolean>;
 }
 /** Gateway-owned trusted context supplied after authentication and authorization. */
 export interface AuthorizedRequestContext {
+  /** Identifies the resolved application actor. */
   readonly actor: UserId;
+  /** Identifies the resolved tenant when the application is multi-tenant. */
   readonly tenant?: TenantId;
+  /** Records the trusted resolution time. */
   readonly timestamp: Timestamp;
+  /** Identifies the actor's time zone when resolved. */
   readonly zoneId?: ZoneId;
+  /** Identifies the actor's language when resolved. */
   readonly language?: Language;
 }
 /** Application-owned actor and tenant resolution boundary. */
 export interface ContextResolver {
+  /** Resolves a trusted context for one authorized request.
+   * @param principal Supplies the authenticated principal.
+   * @param request Supplies the authorized request.
+   * @param clock Supplies the trusted timestamp source.
+   * @returns Returns the resolved actor context.
+   */
   resolve(
     principal: AuthenticatedPrincipal,
     request: IncomingRequest,
     clock: Clock,
   ): Promise<AuthorizedRequestContext>;
+  /** Resolves a context when only the principal is available.
+   * @param principal Supplies the authenticated principal.
+   * @param clock Supplies the trusted timestamp source.
+   * @returns Returns the resolved actor context.
+   */
   resolveContext(
     principal: AuthenticatedPrincipal,
     clock: Clock,
@@ -136,69 +205,104 @@ export interface ContextResolver {
 }
 /** Clock boundary for trusted timestamps and deterministic gateway tests. */
 export interface Clock {
+  /** Returns the current trusted timestamp.
+   * @returns Returns the current timestamp.
+   */
   now(): Timestamp;
 }
 /** Envelope-decoding boundary used by the later gateway pipeline. */
 export interface RequestDecoder {
+  /** Decodes one transport request.
+   * @param input Supplies the wire request input.
+   * @returns Returns decoded request facts or `undefined` for invalid input.
+   */
   decode(input: IncomingRequestInput): IncomingRequest | undefined;
 }
 /** Wire envelope shape decoded by the gateway's later forwarding pipeline. */
 export type IncomingRequestInput =
   | CommandRequestInput
   | {
+      /** Identifies this input as a query. */
       readonly kind: "query";
+      /** Carries the serialized query bytes. */
       readonly value: Uint8Array;
+      /** Carries allowlisted transport facts. */
       readonly transport: TransportRequestContext;
     }
   | {
+      /** Identifies this input as subscription creation. */
       readonly kind: "subscribe";
+      /** Carries the serialized topic bytes. */
       readonly value: Uint8Array;
+      /** Carries allowlisted transport facts. */
       readonly transport: TransportRequestContext;
     }
   | {
+      /** Identifies this input as subscription activation. */
       readonly kind: "activate";
+      /** Carries the serialized subscription bytes. */
       readonly value: Uint8Array;
+      /** Carries allowlisted transport facts. */
       readonly transport: TransportRequestContext;
     }
   | {
+      /** Identifies this input as subscription cancellation. */
       readonly kind: "cancel";
+      /** Carries the serialized subscription bytes. */
       readonly value: Uint8Array;
+      /** Carries allowlisted transport facts. */
       readonly transport: TransportRequestContext;
     };
 /** Wire command envelope with an optional Wave 3 registry for content-aware policy. */
 export interface CommandRequestInput {
+  /** Identifies this input as a command. */
   readonly kind: "command";
+  /** Carries the serialized command bytes. */
   readonly value: Uint8Array;
+  /** Carries allowlisted transport facts. */
   readonly transport: TransportRequestContext;
+  /** Supplies message types used to unpack the command when available. */
   readonly registry?: TypeRegistryLookup;
 }
 
-/** Select allowlisted transport facts; credentials and unknown headers are omitted. */
-export function transportFacts(input: TransportFactsInput): TransportRequestContext {
-  const headers = Object.fromEntries(
-    Object.entries(input.headers ?? {})
-      .filter((entry): entry is [string, string] => entry[1] !== undefined)
-      .map(([name, value]) => [name.toLowerCase(), value]),
-  );
-  return compactFacts({
-    service: input.service,
-    method: input.method,
-    origin: input.origin,
-    requestId: headers["x-request-id"],
-    correlationId: headers["x-correlation-id"],
-    peerAddress: input.peerAddress,
-    userAgent: input.userAgent,
-  });
+interface TransportFactsApi {
+  from(input: TransportFactsInput): TransportRequestContext;
 }
-export { decodeIncomingRequest } from "./request/index.js";
-function compactFacts(
-  context: Readonly<Record<string, string | undefined>> &
-    Pick<TransportRequestContext, "service" | "method">,
-): TransportRequestContext {
-  return Object.fromEntries(
-    Object.entries(context).filter(([, value]) => value !== undefined),
-  ) as unknown as TransportRequestContext;
-}
+
+/** Builds the allowlisted transport facts used by authorization and diagnostics. */
+export const TransportFacts: Readonly<TransportFactsApi> = Object.freeze({
+  /** Builds allowlisted facts while omitting credentials and unknown headers.
+   * @param input Supplies raw transport facts and optional headers.
+   * @returns Returns the safe transport context.
+   */
+  from(input: TransportFactsInput): TransportRequestContext {
+    const headers = Object.fromEntries(
+      Object.entries(input.headers ?? {})
+        .filter((entry): entry is [string, string] => entry[1] !== undefined)
+        .map(([name, value]) => [name.toLowerCase(), value]),
+    );
+    return TransportFactsValues.compact({
+      service: input.service,
+      method: input.method,
+      origin: input.origin,
+      requestId: headers["x-request-id"],
+      correlationId: headers["x-correlation-id"],
+      peerAddress: input.peerAddress,
+      userAgent: input.userAgent,
+    });
+  },
+});
+export { IncomingRequests } from "./request/index.js";
+const TransportFactsValues = Object.freeze({
+  compact(
+    context: Readonly<Record<string, string | undefined>> &
+      Pick<TransportRequestContext, "service" | "method">,
+  ): TransportRequestContext {
+    return Object.fromEntries(
+      Object.entries(context).filter(([, value]) => value !== undefined),
+    ) as unknown as TransportRequestContext;
+  },
+});
 
 export { UnaryGateway } from "./gateway/index.js";
 export { OpaqueSessionCookies } from "./sessions/cookies.js";

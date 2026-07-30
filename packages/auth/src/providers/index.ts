@@ -25,7 +25,12 @@ interface PendingJwks {
   settled: boolean;
 }
 
-/** Node-compatible HTTP function injected by provider adapters for deterministic transport. */
+/**
+ * Sends a provider HTTP request through injected deterministic transport.
+ * @param input The provider URL.
+ * @param init The optional request initialization.
+ * @returns The provider response.
+ */
 export type ProviderFetch = (input: string, init?: RequestInit) => Promise<Response>;
 /** Token endpoint client authentication supported by the OIDC adapter. */
 export type OidcClientAuthentication = "client_secret_basic" | "client_secret_post" | "none";
@@ -51,7 +56,10 @@ export interface OidcProviderOptions {
   readonly timeoutMilliseconds?: number;
   /** Maximum bytes accepted for each provider response; defaults to 1 MiB. */
   readonly maxResponseBytes?: number;
-  /** Millisecond Unix clock used for token time checks and JWKS expiry. */
+  /**
+   * Returns the millisecond Unix clock used for token time checks and JWKS expiry.
+   * @returns The current milliseconds.
+   */
   readonly clock?: () => number;
 }
 /** Ready-to-use OIDC facts consumed by {@link OidcFlow}. */
@@ -86,7 +94,11 @@ export interface GitHubProviderOptions {
   /** Request and retain one verified primary email through GitHub's `user:email` scope. */
   readonly includeVerifiedPrimaryEmail?: boolean;
 }
-/** Fetches and validates OpenID Connect discovery metadata before constructing an adapter. */
+/**
+ * Fetches and validates OpenID Connect discovery metadata before constructing an adapter.
+ * @param options The trusted issuer and bounded discovery settings.
+ * @returns The configured provider, or undefined when discovery cannot be trusted.
+ */
 export async function discoverOidcProvider(
   options: Omit<OidcProviderOptions, "authorizationEndpoint" | "tokenEndpoint" | "jwksEndpoint"> & {
     /** Trusted HTTPS discovery URL; defaults under the configured issuer. */
@@ -94,71 +106,95 @@ export async function discoverOidcProvider(
   },
 ): Promise<ConfiguredOidcProvider | undefined> {
   try {
-    const issuer = https(options.issuer);
+    const issuer = ProviderValues.https(options.issuer);
     const discoveryEndpoint =
       options.discoveryEndpoint ?? `${issuer}/.well-known/openid-configuration`;
-    const timeout = positive(options.timeoutMilliseconds ?? DEFAULT_TIMEOUT, "timeoutMilliseconds");
-    const document = await boundedOperation(timeout, undefined, (signal) =>
-      json(discoveryEndpoint, options.fetch ?? fetch, options, signal),
+    const timeout = ProviderValues.positive(
+      options.timeoutMilliseconds ?? DEFAULT_TIMEOUT,
+      "timeoutMilliseconds",
     );
-    if (!plain(document) || document.issuer !== issuer) return undefined;
+    const document = await ProviderValues.boundedOperation(timeout, undefined, (signal) =>
+      ProviderValues.json(discoveryEndpoint, options.fetch ?? fetch, options, signal),
+    );
+    if (!ProviderValues.plain(document) || document.issuer !== issuer) return undefined;
     return createOidcProvider({
       ...options,
       issuer,
-      authorizationEndpoint: bounded(document.authorization_endpoint, "authorization_endpoint"),
-      tokenEndpoint: bounded(document.token_endpoint, "token_endpoint"),
-      jwksEndpoint: bounded(document.jwks_uri, "jwks_uri"),
+      authorizationEndpoint: ProviderValues.bounded(
+        document.authorization_endpoint,
+        "authorization_endpoint",
+      ),
+      tokenEndpoint: ProviderValues.bounded(document.token_endpoint, "token_endpoint"),
+      jwksEndpoint: ProviderValues.bounded(document.jwks_uri, "jwks_uri"),
     });
   } catch {
     return undefined;
   }
 }
-/** Creates an OIDC authorization-code verifier from explicitly trusted metadata. */
+/**
+ * Creates an OIDC authorization-code verifier from explicitly trusted metadata.
+ * @param options The trusted OIDC endpoints, client credentials, and bounds.
+ * @returns The configured OIDC provider.
+ */
 export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidcProvider {
-  const issuer = https(options.issuer);
-  const authorizationEndpoint = https(options.authorizationEndpoint);
-  const tokenEndpoint = https(options.tokenEndpoint);
-  const jwksEndpoint = https(options.jwksEndpoint);
-  const clientId = bounded(options.clientId, "clientId");
+  const issuer = ProviderValues.https(options.issuer);
+  const authorizationEndpoint = ProviderValues.https(options.authorizationEndpoint);
+  const tokenEndpoint = ProviderValues.https(options.tokenEndpoint);
+  const jwksEndpoint = ProviderValues.https(options.jwksEndpoint);
+  const clientId = ProviderValues.bounded(options.clientId, "clientId");
   const clientAuthentication = options.clientAuthentication ?? "none";
   if (
     !(["client_secret_basic", "client_secret_post", "none"] as const).includes(clientAuthentication)
   )
     throw new TypeError("clientAuthentication");
   const clientSecret =
-    options.clientSecret === undefined ? undefined : bounded(options.clientSecret, "clientSecret");
+    options.clientSecret === undefined
+      ? undefined
+      : ProviderValues.bounded(options.clientSecret, "clientSecret");
   if (clientAuthentication !== "none" && clientSecret === undefined)
     throw new TypeError("clientSecret");
-  const limit = positive(options.maxResponseBytes ?? DEFAULT_LIMIT, "maxResponseBytes");
-  const timeout = positive(options.timeoutMilliseconds ?? DEFAULT_TIMEOUT, "timeoutMilliseconds");
+  const limit = ProviderValues.positive(
+    options.maxResponseBytes ?? DEFAULT_LIMIT,
+    "maxResponseBytes",
+  );
+  const timeout = ProviderValues.positive(
+    options.timeoutMilliseconds ?? DEFAULT_TIMEOUT,
+    "timeoutMilliseconds",
+  );
   const http = options.fetch ?? fetch;
   const clock = options.clock ?? Date.now;
   let cachedKeys: { readonly keys: Jwk[]; readonly expiresAt: number } | undefined;
   let pendingKeys: PendingJwks | undefined;
   const loadKeys = async (refresh: boolean, signal: AbortSignal): Promise<Jwk[] | undefined> => {
-    const now = safeNow(clock);
+    const now = ProviderValues.safeNow(clock);
     if (!refresh && cachedKeys && cachedKeys.expiresAt > now) return cachedKeys.keys;
     let pending = pendingKeys;
     if (!pending) {
       const controller = new AbortController();
-      const request = boundedOperation(timeout, controller.signal, async (requestSignal) => {
-        const jwks = await jsonDocument(
-          jwksEndpoint,
-          http,
-          { maxResponseBytes: limit },
-          requestSignal,
-        );
-        const keys =
-          plain(jwks.value) && Array.isArray(jwks.value.keys) && jwks.value.keys.length <= MAX_JWKS
-            ? (jwks.value.keys.filter(plain) as Jwk[])
-            : undefined;
-        if (!keys) return undefined;
-        cachedKeys = Object.freeze({
-          keys,
-          expiresAt: now + jwks.cacheMilliseconds,
-        });
-        return keys;
-      });
+      const request = ProviderValues.boundedOperation(
+        timeout,
+        controller.signal,
+        async (requestSignal) => {
+          const jwks = await ProviderValues.jsonDocument(
+            jwksEndpoint,
+            http,
+            { maxResponseBytes: limit },
+            requestSignal,
+          );
+          const keys =
+            ProviderValues.plain(jwks.value) &&
+            Array.isArray(jwks.value.keys) &&
+            jwks.value.keys.length <= MAX_JWKS
+              ? (jwks.value.keys.filter(ProviderValues.plain) as Jwk[])
+              : undefined;
+          if (!keys) return undefined;
+          cachedKeys = Object.freeze({
+            keys,
+            expiresAt: now + jwks.cacheMilliseconds,
+          });
+          return keys;
+        },
+      );
       pending = {
         promise: request,
         controller,
@@ -180,7 +216,7 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
     }
     pending.waiters++;
     try {
-      return await waitForSignal(pending.promise, signal);
+      return await ProviderValues.waitForSignal(pending.promise, signal);
     } finally {
       pending.waiters--;
       if (pending.waiters === 0 && !pending.settled) pending.controller.abort();
@@ -190,9 +226,9 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
     issuer,
     async exchangeAuthorizationCode(input: OidcAuthorizationCodeExchange) {
       try {
-        if (input.clientId !== clientId || !validExchange(input)) return undefined;
+        if (input.clientId !== clientId || !ProviderValues.validExchange(input)) return undefined;
         const secret = clientSecret ?? "";
-        return await boundedOperation(timeout, input.signal, async (signal) => {
+        return await ProviderValues.boundedOperation(timeout, input.signal, async (signal) => {
           const body = new URLSearchParams({
             grant_type: "authorization_code",
             code: input.code,
@@ -210,16 +246,24 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
               "authorization",
               `Basic ${Buffer.from(`${clientId}:${secret}`).toString("base64")}`,
             );
-          const token = await json(tokenEndpoint, http, { maxResponseBytes: limit }, signal, {
-            method: "POST",
-            redirect: "error",
+          const token = await ProviderValues.json(
+            tokenEndpoint,
+            http,
+            { maxResponseBytes: limit },
             signal,
-            headers,
-            body,
-          });
-          const idToken = plain(token) ? string(token.id_token) : undefined;
+            {
+              method: "POST",
+              redirect: "error",
+              signal,
+              headers,
+              body,
+            },
+          );
+          const idToken = ProviderValues.plain(token)
+            ? ProviderValues.string(token.id_token)
+            : undefined;
           if (idToken === undefined) return undefined;
-          const verified = await verifyToken(
+          const verified = await ProviderValues.verifyToken(
             idToken,
             issuer,
             clientId,
@@ -240,7 +284,11 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
     provider,
   });
 }
-/** Discovers Google's fixed official OpenID Connect configuration. */
+/**
+ * Fetches Google's fixed official OpenID Connect configuration.
+ * @param options The Google client credentials and bounded provider settings.
+ * @returns The configured Google provider, or undefined when discovery fails.
+ */
 export async function createGoogleProvider(
   options: Omit<
     OidcProviderOptions,
@@ -274,10 +322,14 @@ export async function createGoogleProvider(
     })
   );
 }
-/** Creates GitHub OAuth code exchange with a fresh `/user` identity lookup. */
+/**
+ * Creates GitHub OAuth code exchange with a fresh `/user` identity lookup.
+ * @param options The GitHub client credentials, endpoints, scopes, and bounds.
+ * @returns The configured GitHub provider.
+ */
 export function createGitHubProvider(options: GitHubProviderOptions): ConfiguredOidcProvider {
-  const base = httpsBase(options.baseUrl ?? "https://github.com");
-  const api = httpsBase(options.apiBaseUrl ?? "https://api.github.com");
+  const base = ProviderValues.httpsBase(options.baseUrl ?? "https://github.com");
+  const api = ProviderValues.httpsBase(options.apiBaseUrl ?? "https://api.github.com");
   const publicEndpoints = base === "https://github.com" && api === "https://api.github.com";
   if (
     !publicEndpoints &&
@@ -286,8 +338,8 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
       new URL(base).origin !== new URL(api).origin)
   )
     throw new TypeError("GitHub origins must move together");
-  const clientId = bounded(options.clientId, "clientId"),
-    clientSecret = bounded(options.clientSecret, "clientSecret");
+  const clientId = ProviderValues.bounded(options.clientId, "clientId"),
+    clientSecret = ProviderValues.bounded(options.clientSecret, "clientSecret");
   if (options.scopes !== undefined && !Array.isArray(options.scopes)) throw new TypeError("scopes");
   if (
     options.includeVerifiedPrimaryEmail !== undefined &&
@@ -298,7 +350,7 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
   const suppliedScopes: readonly unknown[] = options.scopes ?? ["read:user"];
   const requiredScopes: string[] = [];
   for (const scope of suppliedScopes) {
-    if (!validScope(scope)) throw new TypeError("scopes");
+    if (!ProviderValues.validScope(scope)) throw new TypeError("scopes");
     if (!requiredScopes.includes(scope)) requiredScopes.push(scope);
   }
   if (includeVerifiedPrimaryEmail && !requiredScopes.includes("user:email"))
@@ -308,15 +360,18 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
   const apiVersion = options.apiVersion ?? "2022-11-28";
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(apiVersion)) throw new TypeError("apiVersion");
   const http = options.fetch ?? fetch,
-    limit = positive(options.maxResponseBytes ?? DEFAULT_LIMIT, "maxResponseBytes"),
-    timeout = positive(options.timeoutMilliseconds ?? DEFAULT_TIMEOUT, "timeoutMilliseconds");
+    limit = ProviderValues.positive(options.maxResponseBytes ?? DEFAULT_LIMIT, "maxResponseBytes"),
+    timeout = ProviderValues.positive(
+      options.timeoutMilliseconds ?? DEFAULT_TIMEOUT,
+      "timeoutMilliseconds",
+    );
   const provider: OidcVerifiedIdentityProvider = Object.freeze({
     issuer: base,
     async exchangeAuthorizationCode(input: OidcAuthorizationCodeExchange) {
       try {
-        if (input.clientId !== clientId || !validExchange(input)) return undefined;
-        return await boundedOperation(timeout, input.signal, async (signal) => {
-          const token = await json(
+        if (input.clientId !== clientId || !ProviderValues.validExchange(input)) return undefined;
+        return await ProviderValues.boundedOperation(timeout, input.signal, async (signal) => {
+          const token = await ProviderValues.json(
             `${base}/login/oauth/access_token`,
             http,
             { maxResponseBytes: limit },
@@ -338,30 +393,40 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
             },
           );
           if (
-            !plain(token) ||
-            !string(token.access_token) ||
+            !ProviderValues.plain(token) ||
+            !ProviderValues.string(token.access_token) ||
             typeof token.token_type !== "string" ||
             token.token_type.toLowerCase() !== "bearer"
           )
             return undefined;
-          const accessToken = string(token.access_token);
+          const accessToken = ProviderValues.string(token.access_token);
           if (accessToken === undefined) return undefined;
           const granted: string[] =
             typeof token.scope === "string" ? token.scope.split(/[ ,]+/).filter(Boolean) : [];
           if (requiredScopes.some((scope) => !granted.includes(scope))) return undefined;
-          const user = await json(`${api}/user`, http, { maxResponseBytes: limit }, signal, {
-            redirect: "error",
-            headers: {
-              accept: "application/json",
-              authorization: `Bearer ${accessToken}`,
-              "x-github-api-version": apiVersion,
+          const user = await ProviderValues.json(
+            `${api}/user`,
+            http,
+            { maxResponseBytes: limit },
+            signal,
+            {
+              redirect: "error",
+              headers: {
+                accept: "application/json",
+                authorization: `Bearer ${accessToken}`,
+                "x-github-api-version": apiVersion,
+              },
             },
-          });
-          if (!plain(user) || !Number.isSafeInteger(user.id) || (user.id as number) <= 0)
+          );
+          if (
+            !ProviderValues.plain(user) ||
+            !Number.isSafeInteger(user.id) ||
+            (user.id as number) <= 0
+          )
             return undefined;
           const claims = Object.create(null) as Record<string, string>;
           if (includeVerifiedPrimaryEmail) {
-            const emails = await json(
+            const emails = await ProviderValues.json(
               `${api}/user/emails`,
               http,
               { maxResponseBytes: limit },
@@ -376,7 +441,7 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
               },
             );
             if (!Array.isArray(emails) || emails.length > 64) return undefined;
-            const primary = emails.filter(validPrimaryEmail);
+            const primary = emails.filter(ProviderValues.validPrimaryEmail);
             if (primary.length !== 1) return undefined;
             const email = primary[0];
             if (email === undefined) return undefined;
@@ -400,274 +465,287 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
   });
 }
 
-async function verifyToken(
-  token: string,
-  issuer: string,
-  clientId: string,
-  nonce: string,
-  clock: () => number,
-  keys: (refresh: boolean) => Promise<Jwk[] | undefined>,
-): Promise<ExternalIdentity | undefined> {
-  const [encodedHeader] = token.split(".", 1);
-  const header = encodedHeader ? parse64(encodedHeader) : undefined;
-  if (!plain(header)) return undefined;
-  const protectedHeader = header;
-  const alg = string(protectedHeader.alg);
-  if (!alg || !ALGORITHMS.has(alg) || typeof protectedHeader.crit !== "undefined") return undefined;
-  const kid = string(protectedHeader.kid);
-  if (!kid) return undefined;
-  const candidates = (await keys(false))?.filter((key) => key.kid === kid) ?? [];
-  let key = candidates.length === 1 ? candidates[0] : undefined;
-  if (!key) {
-    const refreshed = (await keys(true))?.filter((value) => value.kid === kid) ?? [];
-    key = refreshed.length === 1 ? refreshed[0] : undefined;
-  }
-  if (!key || key.kty === "oct" || key.alg !== alg) return undefined;
-  let claims: Record<string, unknown>;
-  try {
-    const verified = await jwtVerify(token, await importJWK(key as never, alg), {
-      issuer,
-      audience: clientId,
-      algorithms: [alg],
-      currentDate: new Date(clock()),
-      typ: "JWT",
-    });
-    claims = verified.payload;
-  } catch {
-    return undefined;
-  }
-  const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (
-    claims.nonce !== nonce ||
-    typeof claims.sub !== "string" ||
-    !claims.sub ||
-    (audience.length > 1 && claims.azp !== clientId)
-  )
-    return undefined;
-  const kept = Object.create(null) as Record<string, string>;
-  for (const name of ["email", "name", "given_name", "family_name", "picture"])
-    if (
-      typeof claims[name] === "string" &&
-      claims[name].length <= 512 &&
-      (name !== "email" || validEmail(claims[name]))
-    )
-      Object.defineProperty(kept, name, { value: claims[name], enumerable: true });
-  if (typeof claims.email_verified === "boolean")
-    Object.defineProperty(kept, "email_verified", {
-      value: String(claims.email_verified),
-      enumerable: true,
-    });
-  return Object.freeze({ issuer, subject: claims.sub, claims: Object.freeze(kept) });
-}
-async function json(
-  url: string,
-  http: ProviderFetch,
-  limits: Pick<OidcProviderOptions, "maxResponseBytes">,
-  signal?: AbortSignal,
-  init?: RequestInit,
-): Promise<unknown> {
-  return (await jsonDocument(url, http, limits, signal, init)).value;
-}
-
-async function jsonDocument(
-  url: string,
-  http: ProviderFetch,
-  limits: Pick<OidcProviderOptions, "maxResponseBytes">,
-  signal?: AbortSignal,
-  init?: RequestInit,
-): Promise<{ readonly value: unknown; readonly cacheMilliseconds: number }> {
-  const request: RequestInit = {
-    redirect: "error",
-    headers: { accept: "application/json" },
-    ...init,
-  };
-  if (signal !== undefined) request.signal = signal;
-  if (signal?.aborted) throw new Error("response");
-  const response = await http(https(url), request);
-  if (signal?.aborted) {
-    void response.body?.cancel().catch(() => undefined);
-    throw new Error("response");
-  }
-  const limit = limits.maxResponseBytes ?? DEFAULT_LIMIT;
-  if (
-    !response.ok ||
-    !response.headers.get("content-type")?.toLowerCase().includes("application/json") ||
-    Number(response.headers.get("content-length") ?? 0) > limit
-  ) {
-    void response.body?.cancel().catch(() => undefined);
-    throw new Error("response");
-  }
-  if (!response.body) throw new Error("response");
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  let complete = false;
-  try {
-    for (;;) {
-      const next = await abortableRead(reader, signal);
-      if (next.done) {
-        complete = true;
-        break;
-      }
-      size += next.value.byteLength;
-      if (size > limit) throw new Error("response");
-      chunks.push(next.value);
+/** Owns provider-response parsing, bounded I/O, and OIDC verification details. */
+const ProviderValues = Object.freeze({
+  async verifyToken(
+    token: string,
+    issuer: string,
+    clientId: string,
+    nonce: string,
+    clock: () => number,
+    keys: (refresh: boolean) => Promise<Jwk[] | undefined>,
+  ): Promise<ExternalIdentity | undefined> {
+    const [encodedHeader] = token.split(".", 1);
+    const header = encodedHeader ? ProviderValues.parse64(encodedHeader) : undefined;
+    if (!ProviderValues.plain(header)) return undefined;
+    const protectedHeader = header;
+    const alg = ProviderValues.string(protectedHeader.alg);
+    if (!alg || !ALGORITHMS.has(alg) || typeof protectedHeader.crit !== "undefined")
+      return undefined;
+    const kid = ProviderValues.string(protectedHeader.kid);
+    if (!kid) return undefined;
+    const candidates = (await keys(false))?.filter((key) => key.kid === kid) ?? [];
+    let key = candidates.length === 1 ? candidates[0] : undefined;
+    if (!key) {
+      const refreshed = (await keys(true))?.filter((value) => value.kid === kid) ?? [];
+      key = refreshed.length === 1 ? refreshed[0] : undefined;
     }
-  } finally {
-    if (!complete) void reader.cancel().catch(() => undefined);
+    if (!key || key.kty === "oct" || key.alg !== alg) return undefined;
+    let claims: Record<string, unknown>;
     try {
-      reader.releaseLock();
-    } catch {
-      // A hostile stream may keep a read pending after cancellation.
-    }
-  }
-  if (signal?.aborted) throw new Error("response");
-  const value = JSON.parse(
-    Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"),
-  ) as unknown;
-  return Object.freeze({
-    value,
-    cacheMilliseconds: cacheMilliseconds(response.headers),
-  });
-}
-function validExchange(input: OidcAuthorizationCodeExchange) {
-  return [input.code, input.callbackUri, input.providerCodeVerifier, input.expectedNonce].every(
-    (value) => typeof value === "string" && value.length > 0 && value.length <= 4096,
-  );
-}
-function parse64(value: string): unknown {
-  try {
-    return JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
-  } catch {
-    return undefined;
-  }
-}
-function plain(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype
-  );
-}
-function string(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 && value.length <= 4096 ? value : undefined;
-}
-function bounded(value: unknown, name: string): string {
-  const result = string(value);
-  if (!result) throw new TypeError(name);
-  return result;
-}
-function validEmail(value: unknown): value is string {
-  return (
-    typeof value === "string" && value.length <= 320 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)
-  );
-}
-function validPrimaryEmail(value: unknown): value is { readonly email: string } {
-  return (
-    plain(value) && value.primary === true && value.verified === true && validEmail(value.email)
-  );
-}
-function validScope(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= 128 && !/\s/u.test(value);
-}
-function positive(value: unknown, name: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) <= 0) throw new TypeError(name);
-  return value as number;
-}
-function https(value: string): string {
-  const text = bounded(value, "URL");
-  const url = new URL(text);
-  if (url.protocol !== "https:" || url.username || url.password || url.hash)
-    throw new TypeError("HTTPS URL required");
-  return text;
-}
-
-function httpsBase(value: string): string {
-  https(value);
-  const url = new URL(value);
-  if (url.search) throw new TypeError("HTTPS base URL must not contain a query.");
-  return value.replace(/\/+$/u, "");
-}
-
-async function boundedOperation<T>(
-  timeoutMilliseconds: number,
-  externalSignal: AbortSignal | undefined,
-  operation: (signal: AbortSignal) => Promise<T>,
-): Promise<T> {
-  const controller = new AbortController();
-  const signal =
-    externalSignal === undefined
-      ? controller.signal
-      : AbortSignal.any([externalSignal, controller.signal]);
-  let rejectAbort: ((reason: Error) => void) | undefined;
-  const aborted = new Promise<never>((_resolve, reject) => {
-    rejectAbort = reject;
-  });
-  const onAbort = () => rejectAbort?.(new Error("Provider operation aborted."));
-  signal.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => {
-    controller.abort();
-  }, timeoutMilliseconds);
-  try {
-    if (signal.aborted) throw new Error("Provider operation aborted.");
-    return await Promise.race([operation(signal), aborted]);
-  } finally {
-    clearTimeout(timer);
-    signal.removeEventListener("abort", onAbort);
-  }
-}
-
-async function waitForSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) throw new Error("Provider operation aborted.");
-  let rejectAbort: ((reason: Error) => void) | undefined;
-  const aborted = new Promise<never>((_resolve, reject) => {
-    rejectAbort = reject;
-  });
-  const onAbort = () => rejectAbort?.(new Error("Provider operation aborted."));
-  signal.addEventListener("abort", onAbort, { once: true });
-  try {
-    return await Promise.race([operation, aborted]);
-  } finally {
-    signal.removeEventListener("abort", onAbort);
-  }
-}
-
-async function abortableRead(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  signal: AbortSignal | undefined,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (signal === undefined) return reader.read();
-  if (signal.aborted) throw new Error("Provider operation aborted.");
-  return new Promise((resolve, reject) => {
-    const onAbort = () => {
-      void reader.cancel().catch(() => undefined);
-      reject(new Error("Provider operation aborted."));
-    };
-    signal.addEventListener("abort", onAbort, { once: true });
-    reader
-      .read()
-      .then(resolve, reject)
-      .finally(() => {
-        signal.removeEventListener("abort", onAbort);
+      const verified = await jwtVerify(token, await importJWK(key as never, alg), {
+        issuer,
+        audience: clientId,
+        algorithms: [alg],
+        currentDate: new Date(clock()),
+        typ: "JWT",
       });
-  });
-}
+      claims = verified.payload;
+    } catch {
+      return undefined;
+    }
+    const audience = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+    if (
+      claims.nonce !== nonce ||
+      typeof claims.sub !== "string" ||
+      !claims.sub ||
+      (audience.length > 1 && claims.azp !== clientId)
+    )
+      return undefined;
+    const kept = Object.create(null) as Record<string, string>;
+    for (const name of ["email", "name", "given_name", "family_name", "picture"])
+      if (
+        typeof claims[name] === "string" &&
+        claims[name].length <= 512 &&
+        (name !== "email" || ProviderValues.validEmail(claims[name]))
+      )
+        Object.defineProperty(kept, name, { value: claims[name], enumerable: true });
+    if (typeof claims.email_verified === "boolean")
+      Object.defineProperty(kept, "email_verified", {
+        value: String(claims.email_verified),
+        enumerable: true,
+      });
+    return Object.freeze({ issuer, subject: claims.sub, claims: Object.freeze(kept) });
+  },
+  async json(
+    url: string,
+    http: ProviderFetch,
+    limits: Pick<OidcProviderOptions, "maxResponseBytes">,
+    signal?: AbortSignal,
+    init?: RequestInit,
+  ): Promise<unknown> {
+    return (await ProviderValues.jsonDocument(url, http, limits, signal, init)).value;
+  },
 
-function safeNow(clock: () => number): number {
-  const value = clock();
-  if (!Number.isSafeInteger(value) || value < 0) throw new TypeError("clock");
-  return value;
-}
+  async jsonDocument(
+    url: string,
+    http: ProviderFetch,
+    limits: Pick<OidcProviderOptions, "maxResponseBytes">,
+    signal?: AbortSignal,
+    init?: RequestInit,
+  ): Promise<{ readonly value: unknown; readonly cacheMilliseconds: number }> {
+    const request: RequestInit = {
+      redirect: "error",
+      headers: { accept: "application/json" },
+      ...init,
+    };
+    if (signal !== undefined) request.signal = signal;
+    if (signal?.aborted) throw new Error("response");
+    const response = await http(ProviderValues.https(url), request);
+    if (signal?.aborted) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new Error("response");
+    }
+    const limit = limits.maxResponseBytes ?? DEFAULT_LIMIT;
+    if (
+      !response.ok ||
+      !response.headers.get("content-type")?.toLowerCase().includes("application/json") ||
+      Number(response.headers.get("content-length") ?? 0) > limit
+    ) {
+      void response.body?.cancel().catch(() => undefined);
+      throw new Error("response");
+    }
+    if (!response.body) throw new Error("response");
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    let complete = false;
+    try {
+      for (;;) {
+        const next = await ProviderValues.abortableRead(reader, signal);
+        if (next.done) {
+          complete = true;
+          break;
+        }
+        size += next.value.byteLength;
+        if (size > limit) throw new Error("response");
+        chunks.push(next.value);
+      }
+    } finally {
+      if (!complete) void reader.cancel().catch(() => undefined);
+      try {
+        reader.releaseLock();
+      } catch {
+        // A hostile stream may keep a read pending after cancellation.
+      }
+    }
+    if (signal?.aborted) throw new Error("response");
+    const value = JSON.parse(
+      Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString("utf8"),
+    ) as unknown;
+    return Object.freeze({
+      value,
+      cacheMilliseconds: ProviderValues.cacheMilliseconds(response.headers),
+    });
+  },
+  validExchange(input: OidcAuthorizationCodeExchange) {
+    return [input.code, input.callbackUri, input.providerCodeVerifier, input.expectedNonce].every(
+      (value) => typeof value === "string" && value.length > 0 && value.length <= 4096,
+    );
+  },
+  parse64(value: string): unknown {
+    try {
+      return JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+    } catch {
+      return undefined;
+    }
+  },
+  plain(value: unknown): value is Record<string, unknown> {
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      Object.getPrototypeOf(value) === Object.prototype
+    );
+  },
+  string(value: unknown): string | undefined {
+    return typeof value === "string" && value.length > 0 && value.length <= 4096
+      ? value
+      : undefined;
+  },
+  bounded(value: unknown, name: string): string {
+    const result = ProviderValues.string(value);
+    if (!result) throw new TypeError(name);
+    return result;
+  },
+  validEmail(value: unknown): value is string {
+    return (
+      typeof value === "string" && value.length <= 320 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)
+    );
+  },
+  validPrimaryEmail(value: unknown): value is { readonly email: string } {
+    return (
+      ProviderValues.plain(value) &&
+      value.primary === true &&
+      value.verified === true &&
+      ProviderValues.validEmail(value.email)
+    );
+  },
+  validScope(value: unknown): value is string {
+    return (
+      typeof value === "string" && value.length > 0 && value.length <= 128 && !/\s/u.test(value)
+    );
+  },
+  positive(value: unknown, name: string): number {
+    if (!Number.isSafeInteger(value) || (value as number) <= 0) throw new TypeError(name);
+    return value as number;
+  },
+  https(value: string): string {
+    const text = ProviderValues.bounded(value, "URL");
+    const url = new URL(text);
+    if (url.protocol !== "https:" || url.username || url.password || url.hash)
+      throw new TypeError("HTTPS URL required");
+    return text;
+  },
 
-function cacheMilliseconds(headers: Headers): number {
-  const directives = (headers.get("cache-control") ?? "")
-    .split(",")
-    .map((directive) => directive.trim().toLowerCase());
-  if (directives.includes("no-store") || directives.includes("no-cache")) return 0;
-  const maxAge = directives
-    .map((directive) => /^max-age=(\d+)$/u.exec(directive)?.[1])
-    .find((value) => value !== undefined);
-  if (maxAge === undefined) return 0;
-  const seconds = Math.min(Number(maxAge), MAX_CACHE_SECONDS);
-  const age = Math.max(0, Number(headers.get("age") ?? 0));
-  if (!Number.isSafeInteger(seconds) || !Number.isFinite(age)) return 0;
-  return Math.max(0, seconds - age) * 1000;
-}
+  httpsBase(value: string): string {
+    ProviderValues.https(value);
+    const url = new URL(value);
+    if (url.search) throw new TypeError("HTTPS base URL must not contain a query.");
+    return value.replace(/\/+$/u, "");
+  },
+
+  async boundedOperation<T>(
+    timeoutMilliseconds: number,
+    externalSignal: AbortSignal | undefined,
+    operation: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const signal =
+      externalSignal === undefined
+        ? controller.signal
+        : AbortSignal.any([externalSignal, controller.signal]);
+    let rejectAbort: ((reason: Error) => void) | undefined;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      rejectAbort = reject;
+    });
+    const onAbort = () => rejectAbort?.(new Error("Provider operation aborted."));
+    signal.addEventListener("abort", onAbort, { once: true });
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMilliseconds);
+    try {
+      if (signal.aborted) throw new Error("Provider operation aborted.");
+      return await Promise.race([operation(signal), aborted]);
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+    }
+  },
+
+  async waitForSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+    if (signal.aborted) throw new Error("Provider operation aborted.");
+    let rejectAbort: ((reason: Error) => void) | undefined;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      rejectAbort = reject;
+    });
+    const onAbort = () => rejectAbort?.(new Error("Provider operation aborted."));
+    signal.addEventListener("abort", onAbort, { once: true });
+    try {
+      return await Promise.race([operation, aborted]);
+    } finally {
+      signal.removeEventListener("abort", onAbort);
+    }
+  },
+
+  async abortableRead(
+    reader: ReadableStreamDefaultReader<Uint8Array>,
+    signal: AbortSignal | undefined,
+  ): Promise<ReadableStreamReadResult<Uint8Array>> {
+    if (signal === undefined) return reader.read();
+    if (signal.aborted) throw new Error("Provider operation aborted.");
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        void reader.cancel().catch(() => undefined);
+        reject(new Error("Provider operation aborted."));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      reader
+        .read()
+        .then(resolve, reject)
+        .finally(() => {
+          signal.removeEventListener("abort", onAbort);
+        });
+    });
+  },
+
+  safeNow(clock: () => number): number {
+    const value = clock();
+    if (!Number.isSafeInteger(value) || value < 0) throw new TypeError("clock");
+    return value;
+  },
+
+  cacheMilliseconds(headers: Headers): number {
+    const directives = (headers.get("cache-control") ?? "")
+      .split(",")
+      .map((directive) => directive.trim().toLowerCase());
+    if (directives.includes("no-store") || directives.includes("no-cache")) return 0;
+    const maxAge = directives
+      .map((directive) => /^max-age=(\d+)$/u.exec(directive)?.[1])
+      .find((value) => value !== undefined);
+    if (maxAge === undefined) return 0;
+    const seconds = Math.min(Number(maxAge), MAX_CACHE_SECONDS);
+    const age = Math.max(0, Number(headers.get("age") ?? 0));
+    if (!Number.isSafeInteger(seconds) || !Number.isFinite(age)) return 0;
+    return Math.max(0, seconds - age) * 1000;
+  },
+});
