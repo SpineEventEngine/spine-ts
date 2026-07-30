@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  columnComparison,
-  generateEntityColumnCompanions,
-  isColumnField,
-  entityMessages,
-  resolveSpineOptionDescriptors,
-} from "../packages/client-node/codegen/generate-entity-columns.mjs";
+import { EntityColumnGenerator } from "../packages/client-node/codegen/generate-entity-columns.mjs";
 import { column, entity } from "../packages/proto/src/index.ts";
 import {
   AggregateStateSchema,
@@ -19,7 +13,7 @@ import {
 const columnOption = {
   $unknown: [{ no: column.number, wireType: 0, data: new Uint8Array([1]) }],
 };
-const spineOptions = resolveSpineOptionDescriptors({
+const spineOptions = EntityColumnGenerator.resolveOptions({
   allFiles: [{}],
   typesInFile: () => [entity, column],
 });
@@ -31,7 +25,7 @@ describe("Entity column companion generator", () => {
     const nested = { ...ProjectionStateSchema, parent: ProjectionStateSchema };
 
     expect(
-      entityMessages(
+      EntityColumnGenerator.entities(
         {
           messages: [
             ProjectionStateSchema,
@@ -43,20 +37,24 @@ describe("Entity column companion generator", () => {
         spineOptions,
       ),
     ).toEqual([ProjectionStateSchema, AggregateStateSchema, ProcessManagerStateSchema]);
-    expect(isColumnField(ProjectionStateSchema.field.title, spineOptions)).toBe(true);
-    expect(isColumnField(ProjectionStateSchema.field.note, spineOptions)).toBe(false);
+    expect(EntityColumnGenerator.isColumn(ProjectionStateSchema.field.title, spineOptions)).toBe(
+      true,
+    );
+    expect(EntityColumnGenerator.isColumn(ProjectionStateSchema.field.note, spineOptions)).toBe(
+      false,
+    );
   });
 
   it("resolves Spine option descriptors from the plugin request", () => {
     expect(
-      resolveSpineOptionDescriptors({
+      EntityColumnGenerator.resolveOptions({
         allFiles: [{}],
         typesInFile: () => [entity, column],
       }),
     ).toEqual(spineOptions);
-    expect(() => resolveSpineOptionDescriptors({ allFiles: [{}], typesInFile: () => [] })).toThrow(
-      /must include spine\/options\.proto descriptors/,
-    );
+    expect(() =>
+      EntityColumnGenerator.resolveOptions({ allFiles: [{}], typesInFile: () => [] }),
+    ).toThrow(/must include spine\/options\.proto descriptors/);
   });
 
   it("discovers entity kinds from the entity option enum descriptor", () => {
@@ -81,7 +79,7 @@ describe("Entity column companion generator", () => {
     };
 
     expect(
-      resolveSpineOptionDescriptors({
+      EntityColumnGenerator.resolveOptions({
         allFiles: [{}],
         typesInFile: () => [remappedEntity, column],
       }).entity,
@@ -89,33 +87,47 @@ describe("Entity column companion generator", () => {
   });
 
   it("maps descriptor kinds to deterministic comparison families", () => {
-    expect(columnComparison(scalarField("title", scalarString, columnOption))).toBe("ordering");
-    expect(columnComparison(scalarField("active", scalarBool, columnOption))).toBe("equality");
+    expect(EntityColumnGenerator.comparison(scalarField("title", scalarString, columnOption))).toBe(
+      "ordering",
+    );
+    expect(EntityColumnGenerator.comparison(scalarField("active", scalarBool, columnOption))).toBe(
+      "equality",
+    );
     expect(
-      columnComparison({
+      EntityColumnGenerator.comparison({
         fieldKind: "message",
         message: { typeName: "google.protobuf.Timestamp" },
       }),
     ).toBe("ordering");
     expect(
-      columnComparison({ fieldKind: "message", message: { typeName: "spine.core.Version" } }),
+      EntityColumnGenerator.comparison({
+        fieldKind: "message",
+        message: { typeName: "spine.core.Version" },
+      }),
     ).toBe("ordering");
-    expect(columnComparison({ fieldKind: "message", message: { typeName: "acme.Owner" } })).toBe(
-      "equality",
-    );
-    expect(columnComparison({ fieldKind: "enum" })).toBe("equality");
-    expect(() => columnComparison({ fieldKind: "list", localName: "tags" })).toThrow(
-      /must be singular/,
-    );
+    expect(
+      EntityColumnGenerator.comparison({
+        fieldKind: "message",
+        message: { typeName: "acme.Owner" },
+      }),
+    ).toBe("equality");
+    expect(EntityColumnGenerator.comparison({ fieldKind: "enum" })).toBe("equality");
+    expect(() =>
+      EntityColumnGenerator.comparison({ fieldKind: "list", localName: "tags" }),
+    ).toThrow(/must be singular/);
   });
 
   it("rejects truncated or trailing custom-option payloads", () => {
     const malformedEntity = projectionSchemaWithRawEntityOption(bytes(4, 8, 2));
-    expect(() => entityMessages({ messages: [malformedEntity] }, spineOptions)).toThrow();
-    const trailingEntity = projectionSchemaWithRawEntityOption(bytes(3, 8, 2, 0));
-    expect(() => entityMessages({ messages: [trailingEntity] }, spineOptions)).toThrow();
     expect(() =>
-      isColumnField(projectionFieldWithRawColumnOption(bytes(0x80)), spineOptions),
+      EntityColumnGenerator.entities({ messages: [malformedEntity] }, spineOptions),
+    ).toThrow();
+    const trailingEntity = projectionSchemaWithRawEntityOption(bytes(3, 8, 2, 0));
+    expect(() =>
+      EntityColumnGenerator.entities({ messages: [trailingEntity] }, spineOptions),
+    ).toThrow();
+    expect(() =>
+      EntityColumnGenerator.isColumn(projectionFieldWithRawColumnOption(bytes(0x80)), spineOptions),
     ).toThrow();
   });
 
@@ -123,7 +135,7 @@ describe("Entity column companion generator", () => {
     const output = generatedOutput();
     const generatedFiles = [];
 
-    generateEntityColumnCompanions({
+    EntityColumnGenerator.generate({
       allFiles: [{}],
       typesInFile: () => [entity, column],
       files: [
@@ -145,19 +157,20 @@ describe("Entity column companion generator", () => {
     expect(generatedFiles).toEqual(["spine/example/todo/v1/task_list_columns.ts"]);
     expect(output.imports).toContainEqual({
       from: "@spine-event-engine/client-node/codegen",
-      name: "defineGeneratedEntityColumns",
+      name: "GeneratedEntityColumns",
     });
     const source = output.printed.flat().join("");
     expect(source).toContain("ProjectionStateColumnDefinition");
     expect(source).toContain("AggregateStateColumnDefinition");
     expect(source).toContain("ProcessManagerStateColumnDefinition");
+    expect(source).toContain("GeneratedEntityColumns.define");
     expect(source).toContain('"title"');
     expect(source).not.toContain('"note"');
   });
 
   it("does not create a companion for files without queryable entities", () => {
     const generatedFiles = [];
-    generateEntityColumnCompanions({
+    EntityColumnGenerator.generate({
       allFiles: [{}],
       typesInFile: () => [entity, column],
       files: [{ name: "acme/messages", proto: { name: "acme/messages.proto" }, messages: [] }],

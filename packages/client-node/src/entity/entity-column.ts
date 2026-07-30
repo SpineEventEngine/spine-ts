@@ -7,7 +7,7 @@ import {
 } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { column, entity, EntityOption_Kind, type Version } from "@spine-event-engine/proto";
-import { classifyEntityField } from "../../codegen/entity-field-classification.mjs";
+import { EntityFieldClassification } from "../../codegen/entity-field-classification.mjs";
 
 /** Operators available for every Entity column. */
 export type EntityEqualityOperator = "equal";
@@ -23,7 +23,7 @@ export type EntityComparison = "equality" | "ordering";
 export type EntityColumnValueKind =
   "bigint" | "boolean" | "bytes" | "enum" | "message" | "number" | "string";
 
-/** One generated column declaration paired with its descriptor. */
+/** Represents one generated column declaration paired with its descriptor. */
 export interface EntityColumnDefinitionEntry<
   Comparison extends EntityComparison = EntityComparison,
 > {
@@ -61,7 +61,7 @@ type SupportedEntryConstraint<
 > = Exclude<keyof Entries, SupportedStateFieldName<Schema>> extends never ? unknown : never;
 
 /**
- * Nominal descriptor-backed column metadata emitted next to a Entity schema.
+ * Nominal descriptor-backed column metadata emitted next to an Entity schema.
  *
  * The package root exports this type, but not its value constructor. Application
  * code therefore consumes generated metadata instead of authoring string keys.
@@ -77,34 +77,44 @@ export interface EntityColumnDefinition<
   readonly entries: Entries;
 }
 
-/** @internal Construct metadata from generated code; not exported by the package root. */
-export function defineGeneratedEntityColumns<
-  Schema extends GenMessage<Message>,
-  const Entries extends EntityColumnEntries,
->(
-  _schema: Schema,
-  entries: Entries & SupportedEntryConstraint<NoInfer<Schema>, Entries>,
-): EntityColumnDefinition<Schema, Entries> {
-  const captured = captureDefinitionFacts(_schema, entries);
-  const copiedEntries = Object.fromEntries(
-    (Object.entries(entries) as [string, EntityColumnDefinitionEntry][]).map(([name, entry]) => {
-      deepFreezeDescriptorGraph(entry.field);
-      return [name, Object.freeze({ field: entry.field, comparison: entry.comparison })];
-    }),
-  );
-  const definition = Object.freeze({
-    entries: Object.freeze(copiedEntries),
-  }) as unknown as EntityColumnDefinition<Schema, Entries>;
-  capturedDefinitions.set(definition, captured);
-  return definition;
-}
+/** Creates immutable Entity-column metadata emitted by the companion generator. */
+export const GeneratedEntityColumns: Readonly<{
+  /** Creates immutable metadata for one generated Entity schema.
+   *
+   * @param schema - Generated Protobuf schema that owns the declared fields.
+   * @param entries - Generated field descriptors and their comparison families.
+   * @returns Metadata accepted by {@link EntityColumn.register}.
+   */
+  define<Schema extends GenMessage<Message>, const Entries extends EntityColumnEntries>(
+    schema: Schema,
+    entries: Entries & SupportedEntryConstraint<NoInfer<Schema>, Entries>,
+  ): EntityColumnDefinition<Schema, Entries>;
+}> = Object.freeze({
+  define<Schema extends GenMessage<Message>, const Entries extends EntityColumnEntries>(
+    schema: Schema,
+    entries: Entries & SupportedEntryConstraint<NoInfer<Schema>, Entries>,
+  ): EntityColumnDefinition<Schema, Entries> {
+    const captured = EntityColumnFacts.captureDefinition(schema, entries);
+    const copiedEntries = Object.fromEntries(
+      (Object.entries(entries) as [string, EntityColumnDefinitionEntry][]).map(([name, entry]) => {
+        EntityColumnFacts.deepFreeze(entry.field);
+        return [name, Object.freeze({ field: entry.field, comparison: entry.comparison })];
+      }),
+    );
+    const definition = Object.freeze({
+      entries: Object.freeze(copiedEntries),
+    }) as unknown as EntityColumnDefinition<Schema, Entries>;
+    capturedDefinitions.set(definition, captured);
+    return definition;
+  },
+});
 
 type OperatorsFor<Entry> =
   Entry extends EntityColumnDefinitionEntry<"ordering">
     ? EntityOrderingOperator
     : EntityEqualityOperator;
 
-/** Typed column collection returned for one generated Entity definition. */
+/** Represents the typed column collection returned for one generated Entity definition. */
 export type EntityColumns<
   Schema extends GenMessage<Message>,
   Entries extends EntityColumnEntries,
@@ -123,11 +133,11 @@ export type EntityColumns<
   }
 >;
 
-/** Extract the value type carried by a Entity column. */
+/** Extracts the value type carried by an Entity column. */
 export type EntityColumnValue<Column extends EntityColumn> =
   Column extends EntityColumn<GenMessage<Message>, string, infer Value> ? Value : never;
 
-/** Extract the legal operator union carried by a Entity column. */
+/** Extracts the legal operator union carried by an Entity column. */
 export type EntityColumnOperator<Column extends EntityColumn> =
   Column extends EntityColumn<GenMessage<Message>, string, unknown, infer Operator>
     ? Operator
@@ -149,7 +159,7 @@ interface CachedEntityColumns {
 
 const cache = new WeakMap<object, CachedEntityColumns>();
 const entityColumnConstructionToken = Symbol("EntityColumnConstructionToken");
-type FieldClassification = ReturnType<typeof classifyEntityField>;
+type FieldClassification = ReturnType<typeof EntityFieldClassification.classify>;
 interface CapturedFieldFacts {
   readonly field: DescField;
   readonly parent: object;
@@ -229,7 +239,12 @@ export class EntityColumn<
     Object.freeze(this);
   }
 
-  /** Validate and register generated Entity column metadata. */
+  /** Registers generated Entity-column metadata for a schema.
+   *
+   * @param schema - Generated Entity schema that owns the metadata.
+   * @param definition - Immutable generated field metadata.
+   * @returns Stable immutable columns for the Entity schema.
+   */
   static register<Schema extends GenMessage<Message>, const Entries extends EntityColumnEntries>(
     schema: Schema,
     definition: EntityColumnDefinition<Schema, Entries>,
@@ -239,8 +254,8 @@ export class EntityColumn<
       return existing.columns as EntityColumns<Schema, Entries>;
     }
     const captured = capturedDefinitions.get(definition);
-    validateEntitySchema(schema, captured);
-    const declared = validateDefinition(schema, definition, captured);
+    EntityColumnFacts.validateSchema(schema, captured);
+    const declared = EntityColumnFacts.validateDefinition(schema, definition, captured);
     if (existing !== undefined) {
       existing.definitions.add(definition);
       return existing.columns as EntityColumns<Schema, Entries>;
@@ -258,7 +273,7 @@ export class EntityColumn<
           valueKind: metadata.valueKind,
           messageType: metadata.messageType,
           comparison: metadata.comparison,
-          operators: operatorsFor(metadata.comparison),
+          operators: EntityColumnFacts.operatorsFor(metadata.comparison),
         },
         entityColumnConstructionToken,
       );
@@ -305,138 +320,153 @@ type RuntimeMetadata = Readonly<{
   comparison: EntityComparison;
 }>;
 
-function validateEntitySchema(
-  schema: GenMessage<Message>,
-  captured: CapturedDefinitionFacts | undefined,
-): void {
-  const entityKind =
-    captured?.schema === schema
-      ? captured.entityKind
-      : hasOption(schema, entity)
-        ? getOption(schema, entity).kind
-        : undefined;
-  if (
-    entityKind !== EntityOption_Kind.AGGREGATE &&
-    entityKind !== EntityOption_Kind.PROJECTION &&
-    entityKind !== EntityOption_Kind.PROCESS_MANAGER
-  ) {
-    throw new TypeError(`Entity column schema "${schema.typeName}" must declare Entity kind.`);
-  }
-}
-
-function validateDefinition(
-  schema: GenMessage<Message>,
-  definition: EntityColumnDefinition<GenMessage<Message>, EntityColumnEntries>,
-  captured: CapturedDefinitionFacts | undefined,
-): readonly (readonly [string, DescField, string, RuntimeMetadata])[] {
-  const facts =
-    captured?.schema === schema ? captured : captureDefinitionFacts(schema, definition.entries);
-  const annotated = new Map(facts.annotated);
-  const result: (readonly [string, DescField, string, RuntimeMetadata])[] = [];
-
-  for (const [localName, entry] of Object.entries(definition.entries) as [
-    string,
-    EntityColumnDefinitionEntry | undefined,
-  ][]) {
-    if (systemNames.has(localName)) {
-      throw new TypeError(`Entity column definition cannot replace system column "${localName}".`);
+/** Internal descriptor facts used while generated column metadata is registered. */
+const EntityColumnFacts = Object.freeze({
+  /** Validates that a schema declares one supported Entity kind. */
+  validateSchema(schema: GenMessage<Message>, captured: CapturedDefinitionFacts | undefined): void {
+    const entityKind =
+      captured?.schema === schema
+        ? captured.entityKind
+        : hasOption(schema, entity)
+          ? getOption(schema, entity).kind
+          : undefined;
+    if (
+      entityKind !== EntityOption_Kind.AGGREGATE &&
+      entityKind !== EntityOption_Kind.PROJECTION &&
+      entityKind !== EntityOption_Kind.PROCESS_MANAGER
+    ) {
+      throw new TypeError(`Entity column schema "${schema.typeName}" must declare Entity kind.`);
     }
-    if (entry === undefined) continue;
-    const fieldFacts = facts.entries.get(localName) ?? captureFieldFacts(entry.field);
-    if (fieldFacts.parent !== schema || fieldFacts.localName !== localName) {
-      throw new TypeError(
-        `Entity column definition key "${localName}" must reference field "${localName}".`,
-      );
-    }
-    if (!fieldFacts.markedColumn) {
-      throw new TypeError(`Entity field "${localName}" is not marked (column).`);
-    }
-    const metadata = describeField(fieldFacts);
-    if (entry.comparison !== metadata.comparison) {
-      throw new TypeError(
-        `Entity column "${localName}" requires ${metadata.comparison} comparison metadata.`,
-      );
-    }
-    annotated.delete(localName);
-    result.push([localName, fieldFacts.field, fieldFacts.name, metadata]);
-  }
+  },
 
-  const missing = annotated.keys().next().value;
-  if (missing !== undefined) {
-    throw new TypeError(`Entity column definition is missing annotated field "${missing}".`);
-  }
-  return result;
-}
+  /** Validates and describes every declared generated column. */
+  validateDefinition(
+    schema: GenMessage<Message>,
+    definition: EntityColumnDefinition<GenMessage<Message>, EntityColumnEntries>,
+    captured: CapturedDefinitionFacts | undefined,
+  ): readonly (readonly [string, DescField, string, RuntimeMetadata])[] {
+    const facts =
+      captured?.schema === schema
+        ? captured
+        : EntityColumnFacts.captureDefinition(schema, definition.entries);
+    const annotated = new Map(facts.annotated);
+    const result: (readonly [string, DescField, string, RuntimeMetadata])[] = [];
 
-function describeField(field: CapturedFieldFacts): RuntimeMetadata {
-  const metadata = field.classification;
-  if (!metadata.supported && metadata.reason === "singular") {
-    throw new TypeError(
-      `Entity column "${field.localName}" must be singular; repeated and map fields are unsupported.`,
-    );
-  }
-  if (!metadata.supported) {
-    throw new TypeError(`Entity column "${field.localName}" cannot belong to a oneof.`);
-  }
-  return metadata;
-}
-
-function captureDefinitionFacts(
-  schema: GenMessage<Message>,
-  entries: EntityColumnEntries,
-): CapturedDefinitionFacts {
-  const annotated = new Map(
-    schema.fields
-      .filter((field) => hasOption(field, column) && getOption(field, column))
-      .map((field) => [field.localName, field]),
-  );
-  const capturedEntries = new Map<string, CapturedFieldFacts>();
-  for (const [localName, entry] of Object.entries(entries)) {
-    capturedEntries.set(localName, captureFieldFacts(entry.field));
-  }
-  return Object.freeze({
-    schema,
-    entityKind: hasOption(schema, entity) ? getOption(schema, entity).kind : undefined,
-    annotated,
-    entries: capturedEntries,
-  });
-}
-
-function captureFieldFacts(field: DescField): CapturedFieldFacts {
-  return Object.freeze({
-    field,
-    parent: field.parent,
-    localName: field.localName,
-    name: field.name,
-    markedColumn: hasOption(field, column) && getOption(field, column),
-    classification: Object.freeze(classifyEntityField(field)),
-  });
-}
-
-function deepFreezeDescriptorGraph(root: object): void {
-  const pending: object[] = [root];
-  const visited = new WeakSet<object>();
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined || visited.has(current)) continue;
-    visited.add(current);
-    if (ArrayBuffer.isView(current)) continue;
-    for (const key of Reflect.ownKeys(current)) {
-      const property = Object.getOwnPropertyDescriptor(current, key);
-      if (property !== undefined && "value" in property && isObject(property.value)) {
-        pending.push(property.value);
+    for (const [localName, entry] of Object.entries(definition.entries) as [
+      string,
+      EntityColumnDefinitionEntry | undefined,
+    ][]) {
+      if (systemNames.has(localName)) {
+        throw new TypeError(
+          `Entity column definition cannot replace system column "${localName}".`,
+        );
       }
+      if (entry === undefined) continue;
+      const fieldFacts =
+        facts.entries.get(localName) ?? EntityColumnFacts.captureField(entry.field);
+      if (fieldFacts.parent !== schema || fieldFacts.localName !== localName) {
+        throw new TypeError(
+          `Entity column definition key "${localName}" must reference field "${localName}".`,
+        );
+      }
+      if (!fieldFacts.markedColumn) {
+        throw new TypeError(`Entity field "${localName}" is not marked (column).`);
+      }
+      const metadata = EntityColumnFacts.describeField(fieldFacts);
+      if (entry.comparison !== metadata.comparison) {
+        throw new TypeError(
+          `Entity column "${localName}" requires ${metadata.comparison} comparison metadata.`,
+        );
+      }
+      annotated.delete(localName);
+      result.push([localName, fieldFacts.field, fieldFacts.name, metadata]);
     }
-    Object.freeze(current);
-  }
-}
 
-function isObject(value: unknown): value is object {
-  return (typeof value === "object" && value !== null) || typeof value === "function";
-}
+    const missing = annotated.keys().next().value;
+    if (missing !== undefined) {
+      throw new TypeError(`Entity column definition is missing annotated field "${missing}".`);
+    }
+    return result;
+  },
 
-function operatorsFor(
-  comparison: EntityComparison,
-): typeof equalityOperators | typeof orderingOperators {
-  return comparison === "ordering" ? orderingOperators : equalityOperators;
-}
+  /** Derives runtime metadata from one validated descriptor. */
+  describeField(field: CapturedFieldFacts): RuntimeMetadata {
+    const metadata = field.classification;
+    if (!metadata.supported && metadata.reason === "singular") {
+      throw new TypeError(
+        `Entity column "${field.localName}" must be singular; repeated and map fields are unsupported.`,
+      );
+    }
+    if (!metadata.supported) {
+      throw new TypeError(`Entity column "${field.localName}" cannot belong to a oneof.`);
+    }
+    return metadata;
+  },
+
+  /** Captures immutable facts from one generated definition. */
+  captureDefinition(
+    schema: GenMessage<Message>,
+    entries: EntityColumnEntries,
+  ): CapturedDefinitionFacts {
+    const annotated = new Map(
+      schema.fields
+        .filter((field) => hasOption(field, column) && getOption(field, column))
+        .map((field) => [field.localName, field]),
+    );
+    const capturedEntries = new Map<string, CapturedFieldFacts>();
+    for (const [localName, entry] of Object.entries(entries)) {
+      capturedEntries.set(localName, EntityColumnFacts.captureField(entry.field));
+    }
+    return Object.freeze({
+      schema,
+      entityKind: hasOption(schema, entity) ? getOption(schema, entity).kind : undefined,
+      annotated,
+      entries: capturedEntries,
+    });
+  },
+
+  /** Captures immutable facts from one generated field descriptor. */
+  captureField(field: DescField): CapturedFieldFacts {
+    return Object.freeze({
+      field,
+      parent: field.parent,
+      localName: field.localName,
+      name: field.name,
+      markedColumn: hasOption(field, column) && getOption(field, column),
+      classification: Object.freeze(EntityFieldClassification.classify(field)),
+    });
+  },
+
+  /** Deeply freezes a descriptor graph without freezing typed-array views. */
+  deepFreeze(root: object): void {
+    const pending: object[] = [root];
+    const visited = new WeakSet<object>();
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (current === undefined || visited.has(current)) continue;
+      visited.add(current);
+      if (ArrayBuffer.isView(current)) continue;
+      for (const key of Reflect.ownKeys(current)) {
+        const property = Object.getOwnPropertyDescriptor(current, key);
+        if (
+          property !== undefined &&
+          "value" in property &&
+          EntityColumnFacts.isObject(property.value)
+        ) {
+          pending.push(property.value);
+        }
+      }
+      Object.freeze(current);
+    }
+  },
+
+  /** Checks whether a value can participate in a descriptor graph. */
+  isObject(value: unknown): value is object {
+    return (typeof value === "object" && value !== null) || typeof value === "function";
+  },
+
+  /** Returns the supported operator set for a comparison family. */
+  operatorsFor(comparison: EntityComparison): typeof equalityOperators | typeof orderingOperators {
+    return comparison === "ordering" ? orderingOperators : equalityOperators;
+  },
+});

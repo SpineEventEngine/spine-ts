@@ -19,10 +19,12 @@ import {
   type EntityEqualityOperator,
   type EntityOrderingOperator,
 } from "../../src/index.js";
-import { defineGeneratedEntityColumns } from "../../src/codegen/index.js";
-import { classifyEntityField } from "../../codegen/entity-field-classification.mjs";
+import { GeneratedEntityColumns } from "../../src/codegen/index.js";
+import { EntityFieldClassification } from "../../codegen/entity-field-classification.mjs";
 
-const definition = defineGeneratedEntityColumns(ProjectionStateSchema, {
+const { classify: classifyEntityField } = EntityFieldClassification;
+
+const definition = GeneratedEntityColumns.define(ProjectionStateSchema, {
   title: { field: ProjectionStateSchema.field.title, comparison: "ordering" as const },
   priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" as const },
   status: { field: ProjectionStateSchema.field.status, comparison: "equality" as const },
@@ -86,7 +88,7 @@ describe("EntityColumn", () => {
       field: ProjectionStateSchema.field.title,
       comparison: "ordering" as const,
     };
-    const generated = defineGeneratedEntityColumns(ProjectionStateSchema, { title });
+    const generated = GeneratedEntityColumns.define(ProjectionStateSchema, { title });
 
     expect(generated.entries.title).not.toBe(title);
     expect(Object.isFrozen(generated.entries)).toBe(true);
@@ -172,7 +174,7 @@ describe("EntityColumn", () => {
     const second = EntityColumn.register(ProjectionStateSchema, definition);
     const equivalent = EntityColumn.register(
       ProjectionStateSchema,
-      defineGeneratedEntityColumns(ProjectionStateSchema, { ...definition.entries }),
+      GeneratedEntityColumns.define(ProjectionStateSchema, { ...definition.entries }),
     );
 
     expect(first).toBe(second);
@@ -273,7 +275,7 @@ describe("EntityColumn", () => {
     expect(() =>
       EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedEntityColumns(ProjectionStateSchema, {
+        GeneratedEntityColumns.define(ProjectionStateSchema, {
           ...definition.entries,
           title: { field: ProjectionStateSchema.field.note, comparison: "ordering" },
         }),
@@ -282,7 +284,7 @@ describe("EntityColumn", () => {
     expect(() =>
       EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedEntityColumns(ProjectionStateSchema, {
+        GeneratedEntityColumns.define(ProjectionStateSchema, {
           ...definition.entries,
           status: { field: ProjectionStateSchema.field.status, comparison: "ordering" },
         }),
@@ -293,13 +295,13 @@ describe("EntityColumn", () => {
     expect(() =>
       EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedEntityColumns(ProjectionStateSchema, missingOwner),
+        GeneratedEntityColumns.define(ProjectionStateSchema, missingOwner),
       ),
     ).toThrow(/missing annotated field "owner"/);
     expect(() =>
       EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedEntityColumns(ProjectionStateSchema, {
+        GeneratedEntityColumns.define(ProjectionStateSchema, {
           ...definition.entries,
           note: { field: ProjectionStateSchema.field.note, comparison: "ordering" },
         }),
@@ -308,7 +310,7 @@ describe("EntityColumn", () => {
     expect(() =>
       EntityColumn.register(
         ProjectionStateSchema,
-        defineGeneratedEntityColumns(ProjectionStateSchema, {
+        GeneratedEntityColumns.define(ProjectionStateSchema, {
           ...definition.entries,
           version: { field: ProjectionStateSchema.field.title, comparison: "ordering" },
         } as never),
@@ -321,7 +323,7 @@ describe("EntityColumn", () => {
       EntityColumn.register(
         InvalidRepeatedStateSchema,
         // @ts-expect-error repeated descriptors cannot be generated Entity columns.
-        defineGeneratedEntityColumns(InvalidRepeatedStateSchema, {
+        GeneratedEntityColumns.define(InvalidRepeatedStateSchema, {
           tags: { field: InvalidRepeatedStateSchema.field.tags, comparison: "equality" },
         }),
       ),
@@ -330,7 +332,7 @@ describe("EntityColumn", () => {
       EntityColumn.register(
         InvalidMapStateSchema,
         // @ts-expect-error map descriptors cannot be generated Entity columns.
-        defineGeneratedEntityColumns(InvalidMapStateSchema, {
+        GeneratedEntityColumns.define(InvalidMapStateSchema, {
           labels: { field: InvalidMapStateSchema.field.labels, comparison: "equality" },
         }),
       ),
@@ -339,7 +341,7 @@ describe("EntityColumn", () => {
       EntityColumn.register(
         InvalidOneofStateSchema,
         // @ts-expect-error oneof descriptors cannot be generated Entity columns.
-        defineGeneratedEntityColumns(InvalidOneofStateSchema, {
+        GeneratedEntityColumns.define(InvalidOneofStateSchema, {
           label: { field: InvalidOneofStateSchema.field.label, comparison: "ordering" },
         }),
       ),
@@ -349,13 +351,13 @@ describe("EntityColumn", () => {
   it("registers declared columns for Aggregate and Process Manager schemas", () => {
     const aggregate = EntityColumn.register(
       AggregateStateSchema,
-      defineGeneratedEntityColumns(AggregateStateSchema, {
+      GeneratedEntityColumns.define(AggregateStateSchema, {
         title: { field: AggregateStateSchema.field.title, comparison: "ordering" },
       }),
     );
     const processManager = EntityColumn.register(
       ProcessManagerStateSchema,
-      defineGeneratedEntityColumns(ProcessManagerStateSchema, {
+      GeneratedEntityColumns.define(ProcessManagerStateSchema, {
         title: { field: ProcessManagerStateSchema.field.title, comparison: "ordering" },
       }),
     );

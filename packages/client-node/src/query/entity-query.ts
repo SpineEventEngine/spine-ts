@@ -67,7 +67,7 @@ type StateName<Schema extends GenMessage<Message>> = Exclude<
 > &
   string;
 
-/** One typed leaf comparison in a Entity query predicate. */
+/** Represents one typed leaf comparison in an Entity query predicate. */
 export interface EntityComparisonPredicate<Column extends EntityColumn = EntityColumn> {
   readonly kind: "comparison";
   readonly column: Column;
@@ -75,73 +75,17 @@ export interface EntityComparisonPredicate<Column extends EntityColumn = EntityC
   readonly value: Exclude<EntityColumnValue<Column>, undefined>;
 }
 
-/** A nested conjunction or disjunction in a Entity query predicate. */
+/** Represents a nested conjunction or disjunction in an Entity query predicate. */
 export interface EntityGroup<Column extends EntityColumn = EntityColumn> {
   readonly kind: "all" | "either";
   readonly predicates: readonly EntityPredicate<Column>[];
 }
 
-/** Typed predicate accepted by the Entity query builder. */
+/** Represents a typed predicate accepted by the Entity query builder. */
 export type EntityPredicate<Column extends EntityColumn = EntityColumn> =
   EntityComparisonPredicate<Column> | EntityGroup<Column>;
 
-/** Create an equality predicate for a descriptor-backed Entity column. */
-export function eq<Column extends EntityColumn>(
-  column: Column,
-  value: Exclude<EntityColumnValue<Column>, undefined>,
-): EntityComparisonPredicate<Column> {
-  return comparison(column, "equal" as EntityColumnOperator<Column>, value);
-}
-
-/** Create a greater-than predicate for an ordered Entity column. */
-export function gt<Column extends EntityColumn>(
-  column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
-  value: Exclude<EntityColumnValue<Column>, undefined>,
-): EntityComparisonPredicate<Column> {
-  return comparison(column, "greaterThan" as EntityColumnOperator<Column>, value);
-}
-
-/** Create a less-than predicate for an ordered Entity column. */
-export function lt<Column extends EntityColumn>(
-  column: "lessThan" extends EntityColumnOperator<Column> ? Column : never,
-  value: Exclude<EntityColumnValue<Column>, undefined>,
-): EntityComparisonPredicate<Column> {
-  return comparison(column, "lessThan" as EntityColumnOperator<Column>, value);
-}
-
-/** Create a greater-than-or-equal predicate for an ordered Entity column. */
-export function ge<Column extends EntityColumn>(
-  column: "greaterOrEqual" extends EntityColumnOperator<Column> ? Column : never,
-  value: Exclude<EntityColumnValue<Column>, undefined>,
-): EntityComparisonPredicate<Column> {
-  return comparison(column, "greaterOrEqual" as EntityColumnOperator<Column>, value);
-}
-
-/** Create a less-than-or-equal predicate for an ordered Entity column. */
-export function le<Column extends EntityColumn>(
-  column: "lessOrEqual" extends EntityColumnOperator<Column> ? Column : never,
-  value: Exclude<EntityColumnValue<Column>, undefined>,
-): EntityComparisonPredicate<Column> {
-  return comparison(column, "lessOrEqual" as EntityColumnOperator<Column>, value);
-}
-
-/** Combine predicates conjunctively. */
-export function all<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
-  first: First,
-  ...rest: Rest
-): EntityGroup<PredicateColumn<First | Rest[number]>> {
-  return group("all", first, rest);
-}
-
-/** Combine predicates disjunctively. */
-export function either<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
-  first: First,
-  ...rest: Rest
-): EntityGroup<PredicateColumn<First | Rest[number]>> {
-  return group("either", first, rest);
-}
-
-/** Fluent builder that compiles typed Entity queries to the frozen wire contract. */
+/** Builds a typed Entity query for the frozen Spine wire contract. */
 export class EntityQueryBuilder<
   Schema extends GenMessage<Message>,
   Columns extends EntityColumnCollection<Schema>,
@@ -155,7 +99,10 @@ export class EntityQueryBuilder<
   readonly #order: { readonly column: EntityColumn; readonly direction: "asc" | "desc" }[] = [];
   #limit: number | undefined;
 
-  /** @internal Construct through `EntityQuery.select()`. */
+  /** Creates a builder through {@link EntityQuery.select}.
+   *
+   * @param input - Schema, registered columns, and actor context for the query.
+   */
   constructor(input: {
     readonly schema: Schema;
     readonly columns: Columns;
@@ -166,7 +113,11 @@ export class EntityQueryBuilder<
     this.#context = clone(ActorContextSchema, input.context);
   }
 
-  /** Restrict the query to one or more entity IDs. */
+  /** Restricts the query to one or more Entity IDs.
+   *
+   * @param ids - Entity IDs to include.
+   * @returns This builder.
+   */
   byId(...ids: readonly unknown[]): this {
     if (ids.length === 0 || ids.some((id) => id === undefined)) {
       throw new TypeError("Entity query ID filter must not be empty.");
@@ -175,7 +126,11 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Add a typed predicate. Repeated calls are combined with `ALL`. */
+  /** Adds a typed predicate. Repeated calls are combined with `ALL`.
+   *
+   * @param predicate - Predicate owned by this builder's registered columns.
+   * @returns This builder.
+   */
   where<Predicate extends EntityPredicate>(
     predicate: ColumnSchema<PredicateColumn<Predicate>> extends Schema
       ? ColumnName<PredicateColumn<Predicate>> extends keyof Columns
@@ -192,10 +147,14 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Select top-level state fields returned by the server. */
+  /** Selects top-level state fields returned by the server.
+   *
+   * @param paths - Generated property names of state fields.
+   * @returns This builder.
+   */
   mask(...paths: readonly StateName<Schema>[]): this {
     for (const path of paths) {
-      const field = findField(this.#schema, path);
+      const field = EntityQueryWire.findField(this.#schema, path);
       if (field === undefined) {
         throw new TypeError(`Entity query mask path "${path}" is not a state field.`);
       }
@@ -204,17 +163,26 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Add one ordering clause in caller order. */
+  /** Adds one ordering clause in caller order.
+   *
+   * @param column - Ordered column owned by this builder's Entity schema.
+   * @param direction - Sort direction, ascending by default.
+   * @returns This builder.
+   */
   orderBy<Column extends EntityColumn<Schema>>(
     column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
     direction: "asc" | "desc" = "asc",
   ): this {
-    requireOwnedColumn(this.#schema, this.#columns, column);
+    EntityQueryWire.requireOwnedColumn(this.#schema, this.#columns, column);
     this.#order.push({ column, direction });
     return this;
   }
 
-  /** Bound the result count. A positive limit requires ordering. */
+  /** Bounds the result count. A positive limit requires ordering.
+   *
+   * @param value - Positive maximum number of returned entities.
+   * @returns This builder.
+   */
   limit(value: number): this {
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new TypeError("Entity query limit must be a positive integer.");
@@ -223,7 +191,10 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Compile this builder to the frozen `spine.client.Query` message. */
+  /** Compiles this builder to the frozen `spine.client.Query` message.
+   *
+   * @returns Immutable wire query message.
+   */
   build(): Query {
     if (this.#limit !== undefined && this.#order.length === 0) {
       throw new TypeError("Entity query limit requires ordering.");
@@ -231,9 +202,9 @@ export class EntityQueryBuilder<
     const filters = this.#filters();
     const format = this.#format();
     return create(QuerySchema, {
-      id: create(QueryIdSchema, { value: nextQueryId() }),
+      id: create(QueryIdSchema, { value: EntityQueryWire.nextId() }),
       target: create(TargetSchema, {
-        type: typeUrl(this.#schema),
+        type: EntityQueryWire.typeUrl(this.#schema),
         criterion:
           filters === undefined
             ? { case: "includeAll", value: true }
@@ -249,14 +220,18 @@ export class EntityQueryBuilder<
     if (this.#ids.length > 0 && idField === undefined) {
       throw new TypeError("Entity query target has no ID field.");
     }
-    const predicates = compileGroups(this.#predicates, this.#schema, this.#columns);
+    const predicates = EntityQueryCompiler.compileGroups(
+      this.#predicates,
+      this.#schema,
+      this.#columns,
+    );
     if (this.#ids.length === 0 && predicates.length === 0) return undefined;
     return create(TargetFiltersSchema, {
       ...(this.#ids.length === 0
         ? {}
         : {
             idFilter: create(IdFilterSchema, {
-              id: this.#ids.map((id) => packField(idField, id)),
+              id: this.#ids.map((id) => EntityQueryWire.packField(idField, id)),
             }),
           }),
       filter: [...predicates],
@@ -281,8 +256,83 @@ export class EntityQueryBuilder<
   }
 }
 
-/** Entity-only high-level query construction entrypoint. */
+/** Creates typed predicates and builders for Entity queries. */
 export const EntityQuery: Readonly<{
+  /** Creates an equality predicate for a descriptor-backed Entity column.
+   *
+   * @param column - Column to compare.
+   * @param value - Value to match.
+   * @returns Immutable equality predicate.
+   */
+  eq<Column extends EntityColumn>(
+    column: Column,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column>;
+  /** Creates a greater-than predicate for an ordered Entity column.
+   *
+   * @param column - Ordered column to compare.
+   * @param value - Lower exclusive bound.
+   * @returns Immutable greater-than predicate.
+   */
+  gt<Column extends EntityColumn>(
+    column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column>;
+  /** Creates a less-than predicate for an ordered Entity column.
+   *
+   * @param column - Ordered column to compare.
+   * @param value - Upper exclusive bound.
+   * @returns Immutable less-than predicate.
+   */
+  lt<Column extends EntityColumn>(
+    column: "lessThan" extends EntityColumnOperator<Column> ? Column : never,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column>;
+  /** Creates a greater-than-or-equal predicate for an ordered Entity column.
+   *
+   * @param column - Ordered column to compare.
+   * @param value - Lower inclusive bound.
+   * @returns Immutable inclusive lower-bound predicate.
+   */
+  ge<Column extends EntityColumn>(
+    column: "greaterOrEqual" extends EntityColumnOperator<Column> ? Column : never,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column>;
+  /** Creates a less-than-or-equal predicate for an ordered Entity column.
+   *
+   * @param column - Ordered column to compare.
+   * @param value - Upper inclusive bound.
+   * @returns Immutable inclusive upper-bound predicate.
+   */
+  le<Column extends EntityColumn>(
+    column: "lessOrEqual" extends EntityColumnOperator<Column> ? Column : never,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column>;
+  /** Combines predicates conjunctively.
+   *
+   * @param first - First predicate in the group.
+   * @param rest - Remaining predicates in the group.
+   * @returns Immutable conjunction predicate.
+   */
+  all<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
+    first: First,
+    ...rest: Rest
+  ): EntityGroup<PredicateColumn<First | Rest[number]>>;
+  /** Combines predicates disjunctively.
+   *
+   * @param first - First predicate in the group.
+   * @param rest - Remaining predicates in the group.
+   * @returns Immutable disjunction predicate.
+   */
+  either<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
+    first: First,
+    ...rest: Rest
+  ): EntityGroup<PredicateColumn<First | Rest[number]>>;
+  /** Creates a builder for one Entity schema.
+   *
+   * @param input - Schema, registered columns, and actor context for the query.
+   * @returns A mutable query builder.
+   */
   select<
     Schema extends GenMessage<Message>,
     Columns extends EntityColumnCollection<Schema>,
@@ -292,6 +342,64 @@ export const EntityQuery: Readonly<{
     readonly context: ActorContext;
   }): EntityQueryBuilder<Schema, Columns>;
 }> = Object.freeze({
+  eq<Column extends EntityColumn>(
+    column: Column,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column> {
+    return EntityQueryCompiler.comparison(column, "equal" as EntityColumnOperator<Column>, value);
+  },
+  gt<Column extends EntityColumn>(
+    column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column> {
+    return EntityQueryCompiler.comparison(
+      column,
+      "greaterThan" as EntityColumnOperator<Column>,
+      value,
+    );
+  },
+  lt<Column extends EntityColumn>(
+    column: "lessThan" extends EntityColumnOperator<Column> ? Column : never,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column> {
+    return EntityQueryCompiler.comparison(
+      column,
+      "lessThan" as EntityColumnOperator<Column>,
+      value,
+    );
+  },
+  ge<Column extends EntityColumn>(
+    column: "greaterOrEqual" extends EntityColumnOperator<Column> ? Column : never,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column> {
+    return EntityQueryCompiler.comparison(
+      column,
+      "greaterOrEqual" as EntityColumnOperator<Column>,
+      value,
+    );
+  },
+  le<Column extends EntityColumn>(
+    column: "lessOrEqual" extends EntityColumnOperator<Column> ? Column : never,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column> {
+    return EntityQueryCompiler.comparison(
+      column,
+      "lessOrEqual" as EntityColumnOperator<Column>,
+      value,
+    );
+  },
+  all<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
+    first: First,
+    ...rest: Rest
+  ): EntityGroup<PredicateColumn<First | Rest[number]>> {
+    return EntityQueryCompiler.group("all", first, rest);
+  },
+  either<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
+    first: First,
+    ...rest: Rest
+  ): EntityGroup<PredicateColumn<First | Rest[number]>> {
+    return EntityQueryCompiler.group("either", first, rest);
+  },
   select<
     Schema extends GenMessage<Message>,
     Columns extends EntityColumnCollection<Schema>,
@@ -304,115 +412,123 @@ export const EntityQuery: Readonly<{
   },
 });
 
-function comparison<Column extends EntityColumn>(
-  column: Column,
-  operator: EntityColumnOperator<Column>,
-  value: Exclude<EntityColumnValue<Column>, undefined>,
-): EntityComparisonPredicate<Column> {
-  if (!(column.operators as readonly string[]).includes(operator)) {
-    throw new TypeError(`Entity column "${column.name}" does not support ${operator}.`);
-  }
-  requireValue(column, value);
-  return Object.freeze({ kind: "comparison", column, operator, value });
-}
+/** Internal compiler for predicates, descriptors, and wire query messages. */
+const EntityQueryCompiler = Object.freeze({
+  comparison<Column extends EntityColumn>(
+    column: Column,
+    operator: EntityColumnOperator<Column>,
+    value: Exclude<EntityColumnValue<Column>, undefined>,
+  ): EntityComparisonPredicate<Column> {
+    if (!(column.operators as readonly string[]).includes(operator)) {
+      throw new TypeError(`Entity column "${column.name}" does not support ${operator}.`);
+    }
+    EntityQueryWire.requireValue(column, value);
+    return Object.freeze({ kind: "comparison", column, operator, value });
+  },
 
-function group<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
-  kind: "all" | "either",
-  first: First,
-  rest: Rest,
-): EntityGroup<PredicateColumn<First | Rest[number]>> {
-  return Object.freeze({
-    kind,
-    predicates: Object.freeze([first, ...rest]),
-  }) as EntityGroup<PredicateColumn<First | Rest[number]>>;
-}
+  group<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
+    kind: "all" | "either",
+    first: First,
+    rest: Rest,
+  ): EntityGroup<PredicateColumn<First | Rest[number]>> {
+    return Object.freeze({
+      kind,
+      predicates: Object.freeze([first, ...rest]),
+    }) as EntityGroup<PredicateColumn<First | Rest[number]>>;
+  },
 
-function compileGroups<Schema extends GenMessage<Message>>(
-  roots: readonly EntityPredicate[],
-  schema: Schema,
-  columns: EntityColumnCollection<Schema>,
-): readonly CompositeFilter[] {
-  const compiled = new WeakMap<object, CompiledPredicate>();
-  const seen = new WeakSet<object>();
-  const pending: CompileFrame[] = [];
-  let scheduled = 0;
-  for (let index = roots.length - 1; index >= 0; index -= 1) {
-    pending.push({ predicate: roots[index], depth: 0, expanded: false });
-    scheduled += 1;
-  }
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === undefined) break;
-    const predicate = requirePredicate(current.predicate);
-    if (current.expanded) {
-      if (predicate.kind === "comparison") {
-        throw new TypeError("Entity query predicate compilation state is invalid.");
-      }
-      const simple = [];
-      const nested = [];
-      for (const child of predicate.predicates) {
-        const childResult = compiled.get(child);
-        if (childResult === undefined) throw new TypeError("Entity query predicate is incomplete.");
-        if (childResult.kind === "comparison") simple.push(childResult.filter);
-        else nested.push(childResult.filter);
-      }
-      compiled.set(predicate, {
-        kind: "group",
-        filter: create(CompositeFilterSchema, {
-          operator:
-            predicate.kind === "either"
-              ? CompositeFilter_CompositeOperator.EITHER
-              : CompositeFilter_CompositeOperator.ALL,
-          filter: simple,
-          compositeFilter: nested,
-        }),
-      });
-      continue;
+  compileGroups<Schema extends GenMessage<Message>>(
+    roots: readonly EntityPredicate[],
+    schema: Schema,
+    columns: EntityColumnCollection<Schema>,
+  ): readonly CompositeFilter[] {
+    const compiled = new WeakMap<object, CompiledPredicate>();
+    const seen = new WeakSet<object>();
+    const pending: CompileFrame[] = [];
+    let scheduled = 0;
+    for (let index = roots.length - 1; index >= 0; index -= 1) {
+      pending.push({ predicate: roots[index], depth: 0, expanded: false });
+      scheduled += 1;
     }
-    if (seen.has(predicate)) throw new TypeError("Entity query predicate must not contain cycles.");
-    seen.add(predicate);
-    if (current.depth > maximumPredicateDepth) {
-      throw new TypeError(
-        `Entity query predicate exceeds maximum depth ${String(maximumPredicateDepth)}.`,
-      );
-    }
-    if (predicate.kind === "comparison") {
-      requireOwnedColumn(schema, columns, predicate.column);
-      compiled.set(predicate, { kind: "comparison", filter: compileComparison(predicate) });
-      continue;
-    }
-    if (predicate.predicates.length === 0) {
-      throw new TypeError(`${predicate.kind.toUpperCase()} predicate must not be empty.`);
-    }
-    if (scheduled + predicate.predicates.length > maximumPredicateNodes) {
-      throw new TypeError(
-        `Entity query predicate exceeds maximum node count ${String(maximumPredicateNodes)}.`,
-      );
-    }
-    scheduled += predicate.predicates.length;
-    pending.push({ ...current, expanded: true });
-    for (let index = predicate.predicates.length - 1; index >= 0; index -= 1) {
-      if (!Object.hasOwn(predicate.predicates, index)) {
-        throw new TypeError("Entity query predicate entries must be defined.");
-      }
-      pending.push({
-        predicate: predicate.predicates[index],
-        depth: current.depth + 1,
-        expanded: false,
-      });
-    }
-  }
-  return roots.map((root) => {
-    const result = compiled.get(root);
-    if (result === undefined) throw new TypeError("Entity query predicate is incomplete.");
-    return result.kind === "group"
-      ? result.filter
-      : create(CompositeFilterSchema, {
-          operator: CompositeFilter_CompositeOperator.ALL,
-          filter: [result.filter],
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (current === undefined) break;
+      const predicate = EntityQueryWire.requirePredicate(current.predicate);
+      if (current.expanded) {
+        if (predicate.kind === "comparison") {
+          throw new TypeError("Entity query predicate compilation state is invalid.");
+        }
+        const simple = [];
+        const nested = [];
+        for (const child of predicate.predicates) {
+          const childResult = compiled.get(child);
+          if (childResult === undefined)
+            throw new TypeError("Entity query predicate is incomplete.");
+          if (childResult.kind === "comparison") simple.push(childResult.filter);
+          else nested.push(childResult.filter);
+        }
+        compiled.set(predicate, {
+          kind: "group",
+          filter: create(CompositeFilterSchema, {
+            operator:
+              predicate.kind === "either"
+                ? CompositeFilter_CompositeOperator.EITHER
+                : CompositeFilter_CompositeOperator.ALL,
+            filter: simple,
+            compositeFilter: nested,
+          }),
         });
-  });
-}
+        continue;
+      }
+      if (seen.has(predicate))
+        throw new TypeError("Entity query predicate must not contain cycles.");
+      seen.add(predicate);
+      if (current.depth > maximumPredicateDepth) {
+        throw new TypeError(
+          `Entity query predicate exceeds maximum depth ${String(maximumPredicateDepth)}.`,
+        );
+      }
+      if (predicate.kind === "comparison") {
+        EntityQueryWire.requireOwnedColumn(schema, columns, predicate.column);
+        compiled.set(predicate, {
+          kind: "comparison",
+          filter: EntityQueryWire.compileComparison(predicate),
+        });
+        continue;
+      }
+      if (predicate.predicates.length === 0) {
+        throw new TypeError(`${predicate.kind.toUpperCase()} predicate must not be empty.`);
+      }
+      if (scheduled + predicate.predicates.length > maximumPredicateNodes) {
+        throw new TypeError(
+          `Entity query predicate exceeds maximum node count ${String(maximumPredicateNodes)}.`,
+        );
+      }
+      scheduled += predicate.predicates.length;
+      pending.push({ ...current, expanded: true });
+      for (let index = predicate.predicates.length - 1; index >= 0; index -= 1) {
+        if (!Object.hasOwn(predicate.predicates, index)) {
+          throw new TypeError("Entity query predicate entries must be defined.");
+        }
+        pending.push({
+          predicate: predicate.predicates[index],
+          depth: current.depth + 1,
+          expanded: false,
+        });
+      }
+    }
+    return roots.map((root) => {
+      const result = compiled.get(root);
+      if (result === undefined) throw new TypeError("Entity query predicate is incomplete.");
+      return result.kind === "group"
+        ? result.filter
+        : create(CompositeFilterSchema, {
+            operator: CompositeFilter_CompositeOperator.ALL,
+            filter: [result.filter],
+          });
+    });
+  },
+});
 
 interface CompileFrame {
   readonly predicate: unknown;
@@ -421,154 +537,165 @@ interface CompileFrame {
 }
 
 type CompiledPredicate =
-  | { readonly kind: "comparison"; readonly filter: ReturnType<typeof compileComparison> }
+  | {
+      readonly kind: "comparison";
+      readonly filter: ReturnType<typeof EntityQueryWire.compileComparison>;
+    }
   | { readonly kind: "group"; readonly filter: CompositeFilter };
 
-function requirePredicate(value: unknown): EntityPredicate {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new TypeError("Entity query predicate must be an object.");
-  }
-  const predicate = value as Partial<EntityPredicate>;
-  if (predicate.kind === "comparison") {
-    if (!(predicate.column instanceof EntityColumn)) {
-      throw new TypeError("Entity query comparison column is required.");
+/** Validates and compiles Entity query details. */
+const EntityQueryWire = Object.freeze({
+  requirePredicate(value: unknown): EntityPredicate {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new TypeError("Entity query predicate must be an object.");
     }
-    return predicate as EntityComparisonPredicate;
-  }
-  if (predicate.kind !== "all" && predicate.kind !== "either") {
-    throw new TypeError("Entity query predicate kind must be recognized.");
-  }
-  if (!Array.isArray(predicate.predicates)) {
-    throw new TypeError(`${predicate.kind.toUpperCase()} predicate predicates must be an array.`);
-  }
-  return predicate as EntityGroup;
-}
+    const predicate = value as Partial<EntityPredicate>;
+    if (predicate.kind === "comparison") {
+      if (!(predicate.column instanceof EntityColumn)) {
+        throw new TypeError("Entity query comparison column is required.");
+      }
+      return predicate as EntityComparisonPredicate;
+    }
+    if (predicate.kind !== "all" && predicate.kind !== "either") {
+      throw new TypeError("Entity query predicate kind must be recognized.");
+    }
+    if (!Array.isArray(predicate.predicates)) {
+      throw new TypeError(`${predicate.kind.toUpperCase()} predicate predicates must be an array.`);
+    }
+    return predicate as EntityGroup;
+  },
 
-function compileComparison(predicate: EntityComparisonPredicate) {
-  return create(FilterSchema, {
-    fieldPath: { fieldName: [predicate.column.name] },
-    value: packColumn(predicate.column, predicate.value),
-    operator: wireOperator(predicate.operator),
-  });
-}
+  compileComparison(predicate: EntityComparisonPredicate) {
+    return create(FilterSchema, {
+      fieldPath: { fieldName: [predicate.column.name] },
+      value: EntityQueryWire.packColumn(predicate.column, predicate.value),
+      operator: EntityQueryWire.wireOperator(predicate.operator),
+    });
+  },
 
-function wireOperator(operator: string): Filter_Operator {
-  switch (operator) {
-    case "equal":
-      return Filter_Operator.EQUAL;
-    case "greaterThan":
-      return Filter_Operator.GREATER_THAN;
-    case "lessThan":
-      return Filter_Operator.LESS_THAN;
-    case "greaterOrEqual":
-      return Filter_Operator.GREATER_OR_EQUAL;
-    case "lessOrEqual":
-      return Filter_Operator.LESS_OR_EQUAL;
-    default:
-      throw new TypeError("Entity query comparison operator is not recognized.");
-  }
-}
+  wireOperator(operator: string): Filter_Operator {
+    switch (operator) {
+      case "equal":
+        return Filter_Operator.EQUAL;
+      case "greaterThan":
+        return Filter_Operator.GREATER_THAN;
+      case "lessThan":
+        return Filter_Operator.LESS_THAN;
+      case "greaterOrEqual":
+        return Filter_Operator.GREATER_OR_EQUAL;
+      case "lessOrEqual":
+        return Filter_Operator.LESS_OR_EQUAL;
+      default:
+        throw new TypeError("Entity query comparison operator is not recognized.");
+    }
+  },
 
-function packColumn(column: EntityColumn, value: unknown) {
-  if (column.source === "system") {
-    if (column.name === "version") return packMessage(VersionSchema, value as never);
-    return packMessage(BoolValueSchema, create(BoolValueSchema, { value: value as boolean }));
-  }
-  if (column.descriptor === undefined) {
-    throw new TypeError("Entity query application column descriptor is required.");
-  }
-  return packField(column.descriptor, value);
-}
+  packColumn(column: EntityColumn, value: unknown) {
+    if (column.source === "system") {
+      if (column.name === "version")
+        return EntityQueryWire.packMessage(VersionSchema, value as never);
+      return EntityQueryWire.packMessage(
+        BoolValueSchema,
+        create(BoolValueSchema, { value: value as boolean }),
+      );
+    }
+    if (column.descriptor === undefined) {
+      throw new TypeError("Entity query application column descriptor is required.");
+    }
+    return EntityQueryWire.packField(column.descriptor, value);
+  },
 
-function packField(field: EntityColumn["descriptor"], value: unknown) {
-  if (field === undefined) throw new TypeError("Entity query field descriptor is required.");
-  if (field.fieldKind === "message") {
-    return packMessage(field.message as GenMessage<Message>, value as never);
-  }
-  if (field.fieldKind === "enum") {
-    return packMessage(Int32ValueSchema, create(Int32ValueSchema, { value: value as number }));
-  }
-  if (field.fieldKind !== "scalar") throw new TypeError("Entity query field kind is unsupported.");
-  const schema = scalarSchema(field.scalar);
-  return packMessage(schema, create(schema, { value } as never));
-}
+  packField(field: EntityColumn["descriptor"], value: unknown) {
+    if (field === undefined) throw new TypeError("Entity query field descriptor is required.");
+    if (field.fieldKind === "message") {
+      return EntityQueryWire.packMessage(field.message as GenMessage<Message>, value as never);
+    }
+    if (field.fieldKind === "enum") {
+      return EntityQueryWire.packMessage(
+        Int32ValueSchema,
+        create(Int32ValueSchema, { value: value as number }),
+      );
+    }
+    if (field.fieldKind !== "scalar")
+      throw new TypeError("Entity query field kind is unsupported.");
+    const schema = EntityQueryWire.scalarSchema(field.scalar);
+    return EntityQueryWire.packMessage(schema, create(schema, { value } as never));
+  },
 
-function scalarSchema(scalar: ScalarType): GenMessage<Message> {
-  switch (scalar) {
-    case ScalarType.BOOL:
-      return BoolValueSchema;
-    case ScalarType.BYTES:
-      return BytesValueSchema;
-    case ScalarType.DOUBLE:
-      return DoubleValueSchema;
-    case ScalarType.FLOAT:
-      return FloatValueSchema;
-    case ScalarType.INT64:
-    case ScalarType.SFIXED64:
-    case ScalarType.SINT64:
-      return Int64ValueSchema;
-    case ScalarType.UINT64:
-    case ScalarType.FIXED64:
-      return UInt64ValueSchema;
-    case ScalarType.UINT32:
-    case ScalarType.FIXED32:
-      return UInt32ValueSchema;
-    case ScalarType.STRING:
-      return StringValueSchema;
-    default:
-      return Int32ValueSchema;
-  }
-}
+  scalarSchema(scalar: ScalarType): GenMessage<Message> {
+    switch (scalar) {
+      case ScalarType.BOOL:
+        return BoolValueSchema;
+      case ScalarType.BYTES:
+        return BytesValueSchema;
+      case ScalarType.DOUBLE:
+        return DoubleValueSchema;
+      case ScalarType.FLOAT:
+        return FloatValueSchema;
+      case ScalarType.INT64:
+      case ScalarType.SFIXED64:
+      case ScalarType.SINT64:
+        return Int64ValueSchema;
+      case ScalarType.UINT64:
+      case ScalarType.FIXED64:
+        return UInt64ValueSchema;
+      case ScalarType.UINT32:
+      case ScalarType.FIXED32:
+        return UInt32ValueSchema;
+      case ScalarType.STRING:
+        return StringValueSchema;
+      default:
+        return Int32ValueSchema;
+    }
+  },
 
-function requireOwnedColumn<Schema extends GenMessage<Message>>(
-  schema: Schema,
-  columns: EntityColumnCollection<Schema>,
-  column: EntityColumn,
-): void {
-  if (
-    column.schema !== schema ||
-    !Object.values(columns).some((candidate) => candidate === column)
-  ) {
-    throw new TypeError("Entity query column does not belong to the selected target.");
-  }
-}
+  requireOwnedColumn<Schema extends GenMessage<Message>>(
+    schema: Schema,
+    columns: EntityColumnCollection<Schema>,
+    column: EntityColumn,
+  ): void {
+    if (
+      column.schema !== schema ||
+      !Object.values(columns).some((candidate) => candidate === column)
+    ) {
+      throw new TypeError("Entity query column does not belong to the selected target.");
+    }
+  },
 
-function requireValue(column: EntityColumn, value: unknown): void {
-  const valid =
-    value !== undefined &&
-    (column.valueKind === "message"
-      ? typeof value === "object" &&
-        value !== null &&
-        Reflect.get(value, "$typeName") === column.messageType
-      : column.valueKind === "bytes"
-        ? value instanceof Uint8Array
-        : column.valueKind === "enum" || column.valueKind === "number"
-          ? typeof value === "number" && Number.isFinite(value)
-          : typeof value === column.valueKind);
-  if (!valid) throw new TypeError(`Entity query value for "${column.name}" has the wrong type.`);
-}
+  requireValue(column: EntityColumn, value: unknown): void {
+    const valid =
+      value !== undefined &&
+      (column.valueKind === "message"
+        ? typeof value === "object" &&
+          value !== null &&
+          Reflect.get(value, "$typeName") === column.messageType
+        : column.valueKind === "bytes"
+          ? value instanceof Uint8Array
+          : column.valueKind === "enum" || column.valueKind === "number"
+            ? typeof value === "number" && Number.isFinite(value)
+            : typeof value === column.valueKind);
+    if (!valid) throw new TypeError(`Entity query value for "${column.name}" has the wrong type.`);
+  },
 
-function findField(schema: GenMessage<Message>, name: string) {
-  return schema.fields.find((field) => field.name === name || field.localName === name);
-}
+  findField(schema: GenMessage<Message>, name: string) {
+    return schema.fields.find((field) => field.name === name || field.localName === name);
+  },
 
-function nextQueryId(): string {
-  return `query-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
+  nextId(): string {
+    return `query-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  },
 
-function typeUrl(schema: GenMessage<Message>): string {
-  const prefix = hasOption(schema.file, type_url_prefix)
-    ? getOption(schema.file, type_url_prefix)
-    : "type.googleapis.com";
-  return `${prefix.replace(/\/+$/u, "")}/${schema.typeName}`;
-}
+  typeUrl(schema: GenMessage<Message>): string {
+    const prefix = hasOption(schema.file, type_url_prefix)
+      ? getOption(schema.file, type_url_prefix)
+      : "type.googleapis.com";
+    return `${prefix.replace(/\/+$/u, "")}/${schema.typeName}`;
+  },
 
-function packMessage<Schema extends GenMessage<Message>>(
-  schema: Schema,
-  value: MessageShape<Schema>,
-) {
-  return create(AnySchema, {
-    typeUrl: typeUrl(schema),
-    value: toBinary(schema, value, { writeUnknownFields: false }),
-  });
-}
+  packMessage<Schema extends GenMessage<Message>>(schema: Schema, value: MessageShape<Schema>) {
+    return create(AnySchema, {
+      typeUrl: EntityQueryWire.typeUrl(schema),
+      value: toBinary(schema, value, { writeUnknownFields: false }),
+    });
+  },
+});

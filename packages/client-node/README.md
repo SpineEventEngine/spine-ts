@@ -25,3 +25,29 @@ and `cancel`. `send()` accepts a built Spine `Query`; `createSubscription()`
 accepts a Spine `Topic`, returns an inactive handle, and `activate()` starts its
 wire stream. Entity-column generation remains Node-only on the `./codegen`
 subpath.
+
+## Entity queries
+
+The generated companion defines the only application columns accepted by an
+Entity query. Generated code imports `GeneratedEntityColumns` from the
+Node-only codegen subpath, while application code registers the definition and
+uses `EntityQuery` for both predicates and compilation.
+
+```ts
+import { EntityColumn, EntityQuery } from "@spine-event-engine/client-node";
+import { TaskViewColumnDefinition } from "@example/tasks-model/task_view_columns_pb";
+import { TaskViewSchema } from "@example/tasks-model/task_view_pb";
+
+const columns = EntityColumn.register(TaskViewSchema, TaskViewColumnDefinition);
+const query = EntityQuery.select({ schema: TaskViewSchema, columns, context })
+  .where(EntityQuery.all(EntityQuery.eq(columns.owner, owner), EntityQuery.ge(columns.priority, 1)))
+  .orderBy(columns.priority, "desc")
+  .limit(20)
+  .build();
+```
+
+`limit()` requires at least one `orderBy()` clause. Columns are immutable and
+bound to their registered schema, so predicates cannot be reused for a
+different Entity target. `EntityQuery` supports `eq`, `gt`, `lt`, `ge`, `le`,
+`all`, and `either`; it packs declared values and the `version`, `archived`,
+and `deleted` system columns into the Spine wire query.

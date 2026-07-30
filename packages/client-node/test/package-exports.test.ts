@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { EntityColumn } from "../dist/index.js";
 import * as clientRoot from "../dist/index.js";
-import { defineGeneratedEntityColumns } from "../dist/codegen/index.js";
+import { GeneratedEntityColumns } from "../dist/codegen/index.js";
 import { ProjectionStateSchema } from "../test-fixtures/entity-column-fixtures.js";
 
 describe("@spine-event-engine/client-node built exports", () => {
@@ -52,10 +52,10 @@ describe("@spine-event-engine/client-node built exports", () => {
   });
 
   it("keeps generated construction on the codegen subpath and preserves definition identity", () => {
-    expect("defineGeneratedEntityColumns" in clientRoot).toBe(false);
-    expect(defineGeneratedEntityColumns).toBeTypeOf("function");
+    expect("GeneratedEntityColumns" in clientRoot).toBe(false);
+    expect(GeneratedEntityColumns.define).toBeTypeOf("function");
 
-    const definition = defineGeneratedEntityColumns(ProjectionStateSchema, {
+    const definition = GeneratedEntityColumns.define(ProjectionStateSchema, {
       title: { field: ProjectionStateSchema.field.title, comparison: "ordering" },
       priority: { field: ProjectionStateSchema.field.priority, comparison: "ordering" },
       status: { field: ProjectionStateSchema.field.status, comparison: "equality" },

@@ -9,4 +9,12 @@ export type EntityFieldClassification =
       comparison: "equality" | "ordering";
     }>;
 
-export function classifyEntityField(field: DescField): EntityFieldClassification;
+/** Classifies Protobuf descriptors used by the Entity-column generator. */
+export declare const EntityFieldClassification: Readonly<{
+  /** Classifies one Protobuf field descriptor.
+   *
+   * @param field - Field descriptor supplied by the generator.
+   * @returns The Entity-column classification.
+   */
+  classify(field: DescField): EntityFieldClassification;
+}>;

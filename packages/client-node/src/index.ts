@@ -18,13 +18,6 @@ export {
 export {
   EntityQuery,
   EntityQueryBuilder,
-  all,
-  either,
-  eq,
-  ge,
-  gt,
-  le,
-  lt,
   type EntityComparisonPredicate,
   type EntityGroup,
   type EntityPredicate,
