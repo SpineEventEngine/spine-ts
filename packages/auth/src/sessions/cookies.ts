@@ -141,7 +141,9 @@ export class OpaqueSessionCookies {
     return this.cookieCredential(values);
   }
 
-  /** Closes the extractor, zeroes its HMAC secret, and rejects later operations. */
+  /** Closes the extractor, zeroes its HMAC secret, and rejects later operations.
+   * @returns Completes after the secret is cleared.
+   */
   close(): Promise<void> {
     if (this.closed) return Promise.resolve();
     this.closed = true;

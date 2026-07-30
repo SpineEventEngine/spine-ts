@@ -74,6 +74,7 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
    * Copies and validates an update before FIFO admission. Count precedes bytes;
    * either bound rejects with `ResourceExhausted`.
    * @param update The update bytes to admit.
+   * @returns Completes after the update is admitted or rejected.
    */
   push(update: SubscriptionUpdateWire): Promise<void> {
     try {
@@ -263,6 +264,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   /** Streams native Activate updates through the supplied asynchronous public-update sink.
    * @param request The public and private subscription envelopes plus update sink.
    * @param signal The admitted cancellation signal.
+   * @returns Completes after native activation ends.
    */
   async activate(
     request: {
@@ -286,6 +288,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   /** Cancels the native subscription represented by the private backend envelope.
    * @param request The public and private subscription envelopes.
    * @param signal The admitted cancellation signal.
+   * @returns Completes after native cancellation ends.
    */
   async cancel(
     request: {
@@ -303,6 +306,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   /** Performs mandatory native cancellation/disposal compensation for a private envelope.
    * @param envelope The private backend subscription envelope.
    * @param signal The admitted cancellation signal.
+   * @returns Completes after native disposal ends.
    */
   async dispose(
     envelope: BackendSubscriptionEnvelope,

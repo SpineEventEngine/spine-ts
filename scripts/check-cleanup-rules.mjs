@@ -414,6 +414,7 @@ function cloneState(state) {
     serverDecoratorAliases: new Map(state.serverDecoratorAliases),
     forbiddenApiAliases: new Map(state.forbiddenApiAliases),
     coreNamespaces: new Set(state.coreNamespaces),
+    coreSignalEnvelopeOwners: new Set(state.coreSignalEnvelopeOwners),
     serverNamespaces: new Set(state.serverNamespaces),
     protoTypeAliases: new Set(state.protoTypeAliases),
     protoNamespaces: new Set(state.protoNamespaces),
@@ -429,6 +430,7 @@ function createImportState() {
     serverDecoratorAliases: new Map(),
     forbiddenApiAliases: new Map(),
     coreNamespaces: new Set(),
+    coreSignalEnvelopeOwners: new Set(),
     serverNamespaces: new Set(),
     protoTypeAliases: new Set(),
     protoNamespaces: new Set(),
@@ -490,6 +492,9 @@ function recordCoreImport(clause, state) {
     }
 
     const importedName = element.propertyName?.text ?? element.name.text;
+    if (importedName === "SignalEnvelopes") {
+      state.coreSignalEnvelopeOwners.add(element.name.text);
+    }
     if (importedName === "SignalEnvelopes.event" || importedName === "SignalEnvelopes.command") {
       state.forbiddenApiAliases.set(element.name.text, importedName);
     }
@@ -610,12 +615,12 @@ function applyImportEqualsAlias(alias, importState) {
   const { namespace, name, valueImport } = alias;
   let changed = false;
 
-  if (
-    valueImport &&
-    importState.coreNamespaces.has(namespace) &&
-    (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")
-  ) {
-    changed = addToMap(importState.forbiddenApiAliases, alias.alias, name) || changed;
+  if (valueImport && importState.coreNamespaces.has(namespace) && name === "SignalEnvelopes") {
+    changed = addToSet(importState.coreSignalEnvelopeOwners, alias.alias) || changed;
+  }
+  if (valueImport && isSignalEnvelopeMember(namespace, name, importState)) {
+    changed =
+      addToMap(importState.forbiddenApiAliases, alias.alias, `SignalEnvelopes.${name}`) || changed;
   }
   if (valueImport && importState.serverNamespaces.has(namespace)) {
     changed = addToMap(importState.serverDecoratorAliases, alias.alias, name) || changed;
@@ -656,6 +661,9 @@ function applyNamespaceAlias(alias, state) {
 
   if (valueImport && state.coreNamespaces.has(namespace)) {
     changed = addToSet(state.coreNamespaces, alias.alias) || changed;
+  }
+  if (valueImport && state.coreSignalEnvelopeOwners.has(namespace)) {
+    changed = addToSet(state.coreSignalEnvelopeOwners, alias.alias) || changed;
   }
   if (valueImport && state.serverNamespaces.has(namespace)) {
     changed = addToSet(state.serverNamespaces, alias.alias) || changed;
@@ -703,6 +711,10 @@ function stateForScope(node, baseState) {
   const state = cloneState(baseState);
   const aliasNames = new Set();
 
+  for (const name of scopeDeclaredNames(node)) {
+    clearTrackedValue(state, name);
+  }
+
   for (const statement of scopeStatements(node)) {
     if (ts.isTypeAliasDeclaration(statement)) {
       state.localTypeAliases.set(statement.name.text, statement.type);
@@ -715,6 +727,15 @@ function stateForScope(node, baseState) {
   }
 
   return { state, aliasNames };
+}
+
+function clearTrackedValue(state, name) {
+  state.serverDecoratorAliases.delete(name);
+  state.forbiddenApiAliases.delete(name);
+  state.coreNamespaces.delete(name);
+  state.coreSignalEnvelopeOwners.delete(name);
+  state.serverNamespaces.delete(name);
+  state.protoNamespaces.delete(name);
 }
 
 function scopeStatements(node) {
@@ -781,6 +802,10 @@ function readValueAlias(initializer, state) {
       return { kind: "forbidden", name: forbiddenName };
     }
 
+    if (state.coreSignalEnvelopeOwners.has(expression.text)) {
+      return { kind: "signal-envelope-owner" };
+    }
+
     const namespace = readNamespaceAlias(expression, state);
     return namespace === undefined ? undefined : { kind: "namespace", namespace };
   }
@@ -797,10 +822,13 @@ function readValueAlias(initializer, state) {
     }
     if (
       namespace !== undefined &&
-      state.coreNamespaces.has(namespace) &&
-      (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")
+      name === "SignalEnvelopes" &&
+      state.coreNamespaces.has(namespace)
     ) {
-      return { kind: "forbidden", name };
+      return { kind: "signal-envelope-owner" };
+    }
+    if (isSignalEnvelopeMember(namespace, name, state)) {
+      return { kind: "forbidden", name: `SignalEnvelopes.${name}` };
     }
     if (
       namespace !== undefined &&
@@ -823,11 +851,13 @@ function readValueAlias(initializer, state) {
     }
     if (
       namespace !== undefined &&
-      name !== undefined &&
-      state.coreNamespaces.has(namespace) &&
-      (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")
+      name === "SignalEnvelopes" &&
+      state.coreNamespaces.has(namespace)
     ) {
-      return { kind: "forbidden", name };
+      return { kind: "signal-envelope-owner" };
+    }
+    if (isSignalEnvelopeMember(namespace, name, state)) {
+      return { kind: "forbidden", name: `SignalEnvelopes.${name}` };
     }
     if (
       namespace !== undefined &&
@@ -888,6 +918,10 @@ function applyValueAlias(alias, value, state) {
     addNamespaceAlias(alias, value.namespace, state);
     return;
   }
+  if (value.kind === "signal-envelope-owner") {
+    state.coreSignalEnvelopeOwners.add(alias);
+    return;
+  }
   if (value.kind === "server") {
     state.serverDecoratorAliases.set(alias, value.name);
     if (isForbiddenEndUserServerApi(value.name)) {
@@ -934,6 +968,10 @@ function readObjectMembers(initializer, state) {
   }
 
   const members = new Map();
+  if (isSignalEnvelopeOwner(path, state)) {
+    members.set("event", { kind: "forbidden", name: "SignalEnvelopes.event" });
+    members.set("command", { kind: "forbidden", name: "SignalEnvelopes.command" });
+  }
   const prefix = `${path}.`;
 
   for (const [key, value] of state.serverDecoratorAliases.entries()) {
@@ -977,11 +1015,29 @@ function addNamespaceAlias(alias, namespace, state) {
   }
 }
 
+function isSignalEnvelopeMember(owner, name, state) {
+  return (
+    owner !== undefined &&
+    (name === "event" || name === "command") &&
+    isSignalEnvelopeOwner(owner, state)
+  );
+}
+
+function isSignalEnvelopeOwner(path, state) {
+  if (state.coreSignalEnvelopeOwners.has(path)) {
+    return true;
+  }
+
+  const suffix = ".SignalEnvelopes";
+  return path.endsWith(suffix) && state.coreNamespaces.has(path.slice(0, -suffix.length));
+}
+
 function applyNamespaceMember(alias, namespace, name, state, aliasNames) {
-  if (
-    namespace === "core" &&
-    (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")
-  ) {
+  if (namespace === "core" && name === "SignalEnvelopes") {
+    state.coreSignalEnvelopeOwners.add(alias);
+    aliasNames.add(alias);
+  }
+  if (namespace === "core" && (name === "event" || name === "command")) {
     state.forbiddenApiAliases.set(alias, name);
   }
   if (namespace === "server") {
@@ -1008,11 +1064,21 @@ function externalModuleName(moduleReference) {
 }
 
 function importEqualsMember(moduleReference) {
-  if (ts.isQualifiedName(moduleReference) && ts.isIdentifier(moduleReference.left)) {
-    return { namespace: moduleReference.left.text, name: moduleReference.right.text };
+  if (ts.isQualifiedName(moduleReference)) {
+    const path = qualifiedNamePath(moduleReference);
+    const separator = path.lastIndexOf(".");
+    if (separator > 0) {
+      return { namespace: path.slice(0, separator), name: path.slice(separator + 1) };
+    }
   }
 
   return undefined;
+}
+
+function qualifiedNamePath(node) {
+  return ts.isIdentifier(node.left)
+    ? `${node.left.text}.${node.right.text}`
+    : `${qualifiedNamePath(node.left)}.${node.right.text}`;
 }
 
 function importEqualsNamespace(moduleReference) {
@@ -1088,9 +1154,7 @@ function forbiddenApiName(node, importState) {
     }
 
     if (
-      (namespace !== undefined &&
-        importState.coreNamespaces.has(namespace) &&
-        (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")) ||
+      isSignalEnvelopeMember(namespace, name, importState) ||
       (namespace !== undefined &&
         importState.protoNamespaces.has(namespace) &&
         name === "EventIdSchema") ||
@@ -1098,7 +1162,9 @@ function forbiddenApiName(node, importState) {
         importState.serverNamespaces.has(namespace) &&
         isForbiddenEndUserServerApi(name))
     ) {
-      return name;
+      return isSignalEnvelopeMember(namespace, name, importState)
+        ? `SignalEnvelopes.${name}`
+        : name;
     }
   }
 
@@ -1115,9 +1181,7 @@ function forbiddenApiName(node, importState) {
 
     if (
       name !== undefined &&
-      ((namespace !== undefined &&
-        importState.coreNamespaces.has(namespace) &&
-        (name === "SignalEnvelopes.event" || name === "SignalEnvelopes.command")) ||
+      (isSignalEnvelopeMember(namespace, name, importState) ||
         (namespace !== undefined &&
           importState.protoNamespaces.has(namespace) &&
           name === "EventIdSchema") ||
@@ -1125,7 +1189,9 @@ function forbiddenApiName(node, importState) {
           importState.serverNamespaces.has(namespace) &&
           isForbiddenEndUserServerApi(name)))
     ) {
-      return name;
+      return isSignalEnvelopeMember(namespace, name, importState)
+        ? `SignalEnvelopes.${name}`
+        : name;
     }
   }
 

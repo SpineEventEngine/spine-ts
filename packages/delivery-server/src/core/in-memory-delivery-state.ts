@@ -27,7 +27,6 @@ export class InMemoryDeliveryState {
 
   /** Creates empty state.
    * @param limits Configures retained-state limits.
-   * @returns Creates the state instance.
    */
   constructor(limits: Partial<DeliveryStateLimits> = {}) {
     this.#limits = DeliveryLimits.resolve(limits);

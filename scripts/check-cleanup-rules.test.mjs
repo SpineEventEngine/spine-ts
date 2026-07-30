@@ -1441,7 +1441,7 @@ describe("check-cleanup-rules", () => {
         'import { materializeDecoratedEntityHandlers as materialize } from "@spine-event-engine/server";',
         'import * as server from "@spine-event-engine/server";',
         "",
-        "emit({});",
+        "SignalEnvelopes.event({});",
         "core.SignalEnvelopes.command({});",
         "void EID;",
         "void proto.EventIdSchema;",
@@ -1471,10 +1471,14 @@ describe("check-cleanup-rules", () => {
         'import * as proto from "@spine-event-engine/proto";',
         "",
         "const emit = core.SignalEnvelopes.event;",
+        "const envelopes = core.SignalEnvelopes;",
+        "const indirect = envelopes;",
+        "const send = indirect.command;",
         "const eid = proto.EventIdSchema;",
         "const helpers = { emit: core.SignalEnvelopes.event, eid: proto.EventIdSchema };",
         "",
         "emit({});",
+        "send({});",
         "void eid;",
         "helpers.emit({});",
         "void helpers.eid;",
@@ -1488,7 +1492,59 @@ describe("check-cleanup-rules", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("SignalEnvelopes.event");
+    expect(result.stderr).toContain("SignalEnvelopes.command");
     expect(result.stderr).toContain("EventIdSchema");
+  });
+
+  it("recognizes nested import-equals SignalEnvelopes members", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "examples/todo/src"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "examples/todo/src/state.cts"),
+      [
+        'import Core = require("@spine-event-engine/core");',
+        "import emit = Core.SignalEnvelopes.event;",
+        "import send = Core.SignalEnvelopes.command;",
+        "emit({});",
+        "send({});",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "nested commonjs signal members"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("SignalEnvelopes.event");
+    expect(result.stderr).toContain("SignalEnvelopes.command");
+  });
+
+  it("accepts local SignalEnvelopes lookalikes that shadow framework imports", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import * as Core from "@spine-event-engine/core";',
+        'import { SignalEnvelopes } from "@spine-event-engine/core";',
+        "{",
+        "  const Core = { SignalEnvelopes: { event: () => undefined, command: () => undefined } };",
+        "  const SignalEnvelopes = Core.SignalEnvelopes;",
+        "  const { event, command } = SignalEnvelopes;",
+        "  event({});",
+        "  command({});",
+        "}",
+        "void SignalEnvelopes;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "local signal lookalikes"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Cleanup enforcement checks passed.");
   });
 
   it("rejects object-held namespace aliases of framework helpers", () => {
@@ -1610,7 +1666,8 @@ describe("check-cleanup-rules", () => {
         "const c = core;",
         "const p = proto;",
         "const s = server;",
-        "const { SignalEnvelopes.event: emit } = c;",
+        "const { SignalEnvelopes: envelopes } = c;",
+        "const { event: emit } = envelopes;",
         "const { EventIdSchema: eid } = p;",
         "const { materializeDecoratedEntityHandlers: materialize } = s;",
         "",

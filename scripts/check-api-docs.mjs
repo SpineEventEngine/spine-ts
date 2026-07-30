@@ -112,9 +112,7 @@ const expectedProtoToolsExports = [
   "ApplicationConfig",
   "SpineProtoConfig",
   "ProtoManifest",
-  "readConfig",
-  "readManifest",
-  "createManifest",
+  "ProtoConfig",
 ];
 const expectedAuthExports = [
   "ApplicationSessionIssue",

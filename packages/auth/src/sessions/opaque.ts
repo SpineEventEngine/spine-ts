@@ -219,6 +219,7 @@ export class OpaqueSessions implements SessionResolver {
   }
 
   /** Closes the store and drops retained session identity and record references.
+   * @returns Completes after retained records are dropped.
    */
   close(): Promise<void> {
     if (this.closed) return Promise.resolve();

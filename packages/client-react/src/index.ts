@@ -64,11 +64,11 @@ const subscriptionIdle = Object.freeze({
 });
 
 /** Renders one application-owned client request scope for descendants.
- * @param request Supplies the application-owned request scope.
- * @param children Supplies descendant React content.
+ * @param props Supplies the application-owned request scope and descendant content.
  * @returns Returns the provider element.
  */
-export function SpineClientProvider({ request, children }: SpineClientProviderProps): ReactElement {
+export function SpineClientProvider(props: SpineClientProviderProps): ReactElement {
+  const { request, children } = props;
   return createElement(requestContext.Provider, { value: request }, children);
 }
 
