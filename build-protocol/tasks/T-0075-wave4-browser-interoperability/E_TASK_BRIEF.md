@@ -67,8 +67,8 @@ Acceptance:
 
 Owned paths:
 
-- `interop/jvm/wire/**`;
-- `interop/jvm/wire-compatibility.test.mjs`;
+- `compatibility-tests/jvm/wire/**`;
+- `compatibility-tests/jvm/wire-compatibility.test.mjs`;
 - a minimal internal static-fixture seam and focused test only if required.
 
 Acceptance:

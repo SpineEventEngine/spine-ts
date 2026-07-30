@@ -34,7 +34,7 @@ test("fails closed after inventorying missing frozen wire dependencies and remov
     verifyWireCompatibility(),
     /file incompatibility: missing wire-bearing imports \(6\): spine\/base\/error\.proto, spine\/base\/field_path\.proto, spine\/net\/email_address\.proto, spine\/net\/internet_domain\.proto, spine\/time\/time\.proto, spine\/ui\/language\.proto; compared=16; annotation-only=1; wkt=8/,
   );
-  await assert.rejects(access(resolve("interop/jvm/.cache/staging")));
+  await assert.rejects(access(resolve("compatibility-tests/jvm/.cache/staging")));
 });
 
 test("fails closed with a descriptor category when the service closure changes", async () => {

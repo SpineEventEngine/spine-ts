@@ -1,5 +1,5 @@
 .worktrees/
-interop/jvm/.cache/
+compatibility-tests/jvm/.cache/
 node_modules/
 dist/
 coverage/

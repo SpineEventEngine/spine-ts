@@ -2,7 +2,7 @@
 
 ## Behavior
 
-`interop/jvm/wire/verify.mjs` invokes the existing checksum-verified archive
+`compatibility-tests/jvm/wire/verify.mjs` invokes the existing checksum-verified archive
 extraction callback and resolves imports recursively across every frozen
 `*/src/main/proto` root. It byte-compares every physically present reachable
 Spine Proto against `packages/proto/proto`, treats only Google protobuf imports

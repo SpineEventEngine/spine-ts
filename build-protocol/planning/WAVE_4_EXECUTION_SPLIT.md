@@ -69,9 +69,10 @@ approved plan without reopening product decisions.
 
 ## Dependency-ordered tasks
 
+<!-- prettier-ignore -->
 | ID  | Boundary                                                                                                                            | Prerequisite    | Required focus                            |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------- | ----------------------------------------- |
-| P1  | Freeze/checksum the unmodified JVM source reference and static service/descriptor evidence under `interop/jvm/**`; do not build it. | None            | Docs, reliability, supply-chain integrity |
+| P1  | Freeze/checksum the unmodified JVM source reference and static service/descriptor evidence under `compatibility-tests/jvm/**`; do not build it. | None            | Docs, reliability, supply-chain integrity |
 | A1  | Rename existing client to `client-node`, move codegen, migrate all Node consumers without behavior change.                          | P1 recorded     | Style, API, docs                          |
 | A2  | Add browser-safe `client-web` kernel/API and make Node reuse its transport seam.                                                    | A1              | Style, API, reliability                   |
 | A3  | Add explicit gRPC-Web/Connect factories, credential metadata, and secure browser IDs.                                               | A2              | API, reliability, security                |

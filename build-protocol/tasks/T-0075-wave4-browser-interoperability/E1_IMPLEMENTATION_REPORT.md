@@ -11,7 +11,7 @@ native gateway methods; no Chat backend route exists.
 
 - RED: renderer and static-wire tests initially failed because their modules
   did not exist.
-- GREEN: `node --test interop/envoy/render.test.mjs interop/jvm/wire-compatibility.test.mjs`
+- GREEN: `node --test interop/envoy/render.test.mjs compatibility-tests/jvm/wire-compatibility.test.mjs`
   passed 4/4.
 - The exact frozen image
   `envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb`

@@ -137,7 +137,9 @@ describe("the static JVM source reference", () => {
       expect(result).not.toHaveProperty("extracted");
     }
     await expectNoRunArtifacts(fixture);
-    await expect(stat(join(fixture.repositoryRoot, "interop/jvm/.cache/source"))).rejects.toThrow();
+    await expect(
+      stat(join(fixture.repositoryRoot, "compatibility-tests/jvm/.cache/source")),
+    ).rejects.toThrow();
   });
 
   test("one caller's cleanup cannot remove another caller's active staging directory", async () => {
@@ -268,7 +270,7 @@ async function createFixtureArchive(character, completeCapabilities) {
     repositoryRoot,
     revision,
     archiveRoot,
-    archive: join(repositoryRoot, "interop/jvm/.cache", `${revision}.zip`),
+    archive: join(repositoryRoot, "compatibility-tests/jvm/.cache", `${revision}.zip`),
     archiveBytes,
     archiveSha256: createHash("sha256").update(archiveBytes).digest("hex"),
     sourceTreeSha256: await treeDigest(source),
@@ -280,9 +282,9 @@ async function createFixtureArchive(character, completeCapabilities) {
 }
 
 async function writeFixtureLock(fixture) {
-  await mkdir(join(fixture.repositoryRoot, "interop/jvm"), { recursive: true });
+  await mkdir(join(fixture.repositoryRoot, "compatibility-tests/jvm"), { recursive: true });
   await writeFile(
-    join(fixture.repositoryRoot, "interop/jvm/fixture-lock.json"),
+    join(fixture.repositoryRoot, "compatibility-tests/jvm/fixture-lock.json"),
     JSON.stringify({
       revision: fixture.revision,
       archiveRoot: fixture.archiveRoot,
@@ -313,7 +315,7 @@ function rejectAfter(milliseconds) {
 }
 
 async function expectNoRunArtifacts(fixture) {
-  const cache = join(fixture.repositoryRoot, "interop/jvm/.cache");
+  const cache = join(fixture.repositoryRoot, "compatibility-tests/jvm/.cache");
   await expect(stat(join(cache, "staging"))).rejects.toThrow();
   const entries = await readdir(cache).catch(() => []);
   expect(entries.filter((entry) => entry.includes(".part"))).toEqual([]);

@@ -22,6 +22,7 @@
     "test:generated": "pnpm typecheck:build:generated && vitest run --passWithNoTests",
     "test:coverage": "pnpm proto:generate && pnpm test:coverage:generated",
     "test:coverage:generated": "pnpm typecheck:build:generated && vitest run --coverage --passWithNoTests",
+    "test:compatibility:jvm": "pnpm check:node && pnpm exec vitest run compatibility-tests/jvm/fixture.test.mjs && node --test compatibility-tests/jvm/wire-compatibility.test.mjs",
     "docs:api": "pnpm proto:generate && pnpm docs:api:generated",
     "docs:api:generated": "typedoc --options typedoc.json",
     "docs:check": "pnpm proto:generate && pnpm docs:check:generated",

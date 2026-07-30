@@ -132,9 +132,9 @@ export async function prepareFixture({
   afterExtraction = async () => {},
 } = {}) {
   const lock = JSON.parse(
-    await readFile(join(repositoryRoot, "interop/jvm/fixture-lock.json"), "utf8"),
+    await readFile(join(repositoryRoot, "compatibility-tests/jvm/fixture-lock.json"), "utf8"),
   );
-  const cache = join(repositoryRoot, "interop/jvm/.cache");
+  const cache = join(repositoryRoot, "compatibility-tests/jvm/.cache");
   const archive = join(cache, `${lock.revision}.zip`);
   await mkdir(cache, { recursive: true });
   await ensureArchive({ archive, cache, lock, download, fetchImpl, downloadTimeoutMs });

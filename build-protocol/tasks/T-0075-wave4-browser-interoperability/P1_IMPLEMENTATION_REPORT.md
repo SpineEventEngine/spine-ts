@@ -16,13 +16,13 @@ revision-lock, stale-takeover, `.ready` publication, and preservation claim in
 the historical correction entries below. Those mechanisms are removed rather
 than retained: this static reference shares only the immutable archive cache.
 
-- `interop/jvm/fixture-lock.json` is an immutable static-source manifest
+- `compatibility-tests/jvm/fixture-lock.json` is an immutable static-source manifest
   for official `SpineEventEngine/core-java` revision
   `461a8281e484c12636d8cf660a1d6c929fbbd7ec`.
 - Its official archive URL is pinned with SHA-256
   `bbecc94a9b2321da279f7997b50b9bc0aaab330f0ec78afe4e0d8fb971249e12`.
-- `node interop/jvm/fixture.mjs` caches only the immutable, checksum-verified
-  archive in ignored `interop/jvm/.cache/`. Each invocation uses a unique,
+- `node compatibility-tests/jvm/fixture.mjs` caches only the immutable, checksum-verified
+  archive in ignored `compatibility-tests/jvm/.cache/`. Each invocation uses a unique,
   caller-owned extraction directory, bounds streamed download/archive metadata,
   rejects absolute/traversing or unexpected-root entries, validates internal
   symbolic-link containment, and tree-hashes the extracted upstream source
@@ -42,14 +42,14 @@ than retained: this static reference shares only the immutable archive cache.
 RED, initial missing implementation:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 FAIL: Cannot find module './fixture.mjs'
 ```
 
 GREEN, checksum, clean-tree, and capability guards:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed
 Tests       4 passed (4)
 ```
@@ -57,7 +57,7 @@ Tests       4 passed (4)
 RED, expanded archive-safety/event-exposure behavior:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Tests       2 failed | 3 passed (5)
 Failures: absent eventSubscription capability; assertSafeArchiveEntries is not a function
 ```
@@ -65,7 +65,7 @@ Failures: absent eventSubscription capability; assertSafeArchiveEntries is not a
 GREEN, final focused suite:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       5 passed (5)
 ```
@@ -73,7 +73,7 @@ Tests       5 passed (5)
 Additional focused checks:
 
 ```text
-pnpm exec prettier --check interop/jvm/fixture.mjs interop/jvm/fixture.test.mjs interop/jvm/fixture-lock.json vitest.config.ts
+pnpm exec prettier --check compatibility-tests/jvm/fixture.mjs compatibility-tests/jvm/fixture.test.mjs compatibility-tests/jvm/fixture-lock.json vitest.config.ts
 All matched files use Prettier code style!
 
 git diff --check
@@ -89,10 +89,10 @@ bbecc94a9b2321da279f7997b50b9bc0aaab330f0ec78afe4e0d8fb971249e12  /private/tmp/c
 ## Files changed
 
 - `.gitignore` — ignores the fixture cache.
-- `vitest.config.ts` — discovers only `interop/jvm` focused tests.
-- `interop/jvm/fixture.mjs` — deterministic workflow and guards.
-- `interop/jvm/fixture.test.mjs` — focused behavior tests.
-- `interop/jvm/fixture-lock.json` — pinned provisional inputs/capabilities.
+- `vitest.config.ts` — discovers only `compatibility-tests/jvm` focused tests.
+- `compatibility-tests/jvm/fixture.mjs` — deterministic workflow and guards.
+- `compatibility-tests/jvm/fixture.test.mjs` — focused behavior tests.
+- `compatibility-tests/jvm/fixture-lock.json` — pinned provisional inputs/capabilities.
 - This report.
 
 ## Current limitation
@@ -112,7 +112,7 @@ RED: 3 failed / 8 focused tests
 - it retained shared `staging`/source publication state after a timed-out run
 
 GREEN:
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       8 passed (8)
 ```
@@ -191,7 +191,7 @@ and `EventUpdateHandler` evidence.
 RED correction evidence:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Tests       2 failed | 4 passed (6)
 - ENOENT: .cache/source/<sha>/gradle/wrapper/gradle-wrapper.jar
 - required JVM service capability is absent: eventSubscription
@@ -200,14 +200,14 @@ Tests       2 failed | 4 passed (6)
 GREEN correction evidence:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       6 passed (6)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 
-pnpm exec prettier --check interop/jvm/fixture.mjs interop/jvm/fixture.test.mjs interop/jvm/fixture-lock.json build-protocol/tasks/T-0075-wave4-browser-interoperability/P1_IMPLEMENTATION_REPORT.md
+pnpm exec prettier --check compatibility-tests/jvm/fixture.mjs compatibility-tests/jvm/fixture.test.mjs compatibility-tests/jvm/fixture-lock.json build-protocol/tasks/T-0075-wave4-browser-interoperability/P1_IMPLEMENTATION_REPORT.md
 All matched files use Prettier code style!
 
 git diff --check
@@ -231,7 +231,7 @@ or launch evidence, so the fixture remains provisional.
 RED before this correction:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed (1)
 Tests       3 failed | 5 passed (8)
 Failures: file-global capability evidence rejected file-specific native inputs;
@@ -241,14 +241,14 @@ archive metadata and wrapper-property guards were not implemented.
 GREEN after correction:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       8 passed (8)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 
-pnpm exec prettier --check interop/jvm/fixture.mjs interop/jvm/fixture.test.mjs interop/jvm/fixture-lock.json interop/jvm/README.md build-protocol/tasks/T-0075-wave4-browser-interoperability/P1_IMPLEMENTATION_REPORT.md
+pnpm exec prettier --check compatibility-tests/jvm/fixture.mjs compatibility-tests/jvm/fixture.test.mjs compatibility-tests/jvm/fixture-lock.json compatibility-tests/jvm/README.md build-protocol/tasks/T-0075-wave4-browser-interoperability/P1_IMPLEMENTATION_REPORT.md
 All matched files use Prettier code style!
 
 git diff --check
@@ -266,7 +266,7 @@ upstream wrapper does not currently declare it, so this is an intentional
 provisional preflight failure until checksum-backed wrapper resolution can be
 provided without patching upstream.
 
-`interop/jvm/README.md` documents prerequisites, online/offline behavior,
+`compatibility-tests/jvm/README.md` documents prerequisites, online/offline behavior,
 success output, cache cleanup, and the exact promotion evidence. No real
 Command/Query/Projection/Event execution occurred in this correction.
 
@@ -275,7 +275,7 @@ Command/Query/Projection/Event execution occurred in this correction.
 RED, before the replacement reliability work:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed
 Tests       3 failed | 6 passed (9)
 Failures: internal-safe symlinks were rejected; the unmodified upstream wrapper
@@ -286,11 +286,11 @@ was exported.
 GREEN:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       10 passed (10)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 ```
 
@@ -336,7 +336,7 @@ probe with `ENOTEMPTY` while renaming
 RED:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed (1)
 Tests       1 failed | 10 passed (11)
 Failure: an already prepared wrapper cache extracted gradle-9.6.1, while the
@@ -347,11 +347,11 @@ another staging publication.
 GREEN:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       11 passed (11)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 ```
 
@@ -391,7 +391,7 @@ FizzBuzzContext.kt:113: Unqualified function encountered: ...NumberQualification
 The retained probe was executed through the fixture's locked command sequence:
 
 ```text
-node interop/jvm/fixture.mjs
+node compatibility-tests/jvm/fixture.mjs
 # detached commands: ./gradlew --no-daemon :server:classes
 # then ./gradlew --no-daemon :server:test --tests io.spine.server.CommandServiceTest
 # --tests io.spine.server.QueryServiceTest --tests io.spine.server.SubscriptionServiceTest
@@ -402,7 +402,7 @@ An additional read-only task-graph attempt used:
 
 ```text
 JAVA_HOME=/opt/homebrew/Cellar/openjdk/21.0.3/libexec/openjdk.jdk/Contents/Home \
-GRADLE_USER_HOME=interop/jvm/.cache/gradle ./gradlew --no-daemon :server:classes --dry-run
+GRADLE_USER_HOME=compatibility-tests/jvm/.cache/gradle ./gradlew --no-daemon :server:classes --dry-run
 ```
 
 It was blocked in this sandbox before task execution by Gradle file-lock socket
@@ -421,7 +421,7 @@ selection correction.
 RED diagnostic-output regression:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed (1)
 Tests       1 failed | 11 passed (12)
 Failure: describeGradleFailure is not a function
@@ -430,11 +430,11 @@ Failure: describeGradleFailure is not a function
 GREEN:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       12 passed (12)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 ```
 
@@ -456,7 +456,7 @@ AArch64 archive URL, maximum archive-size bound `191677000`, and SHA-256
 RED:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed (1)
 Tests       1 failed | 12 passed (13)
 Failure: assertExactJavaHome is not a function; Java 21 was not rejected.
@@ -465,16 +465,16 @@ Failure: assertExactJavaHome is not a function; Java 21 was not rejected.
 GREEN:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       14 passed (14)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 ```
 
 The fixture now downloads to a per-run temporary file under ignored
-`interop/jvm/.cache/java`, applies the exact byte bound and SHA-256 before
+`compatibility-tests/jvm/.cache/java`, applies the exact byte bound and SHA-256 before
 atomic archive publication, validates TAR entry paths, atomically extracts the
 locked launcher, and invokes Gradle with that exact `JAVA_HOME` and its `bin`
 directory first on `PATH`. The test suite rejects `/opt/jdk-21` and verifies
@@ -492,7 +492,7 @@ mandatory identity check; byte count is not an identity surrogate.
 RED:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed (1)
 Tests       1 failed | 14 passed (15)
 Failure: assertArchiveSize is not a function; the launcher equality requirement
@@ -502,11 +502,11 @@ could not distinguish a valid shorter CDN artifact from an oversized artifact.
 GREEN:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       15 passed (15)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 ```
 
@@ -534,7 +534,7 @@ their tests/claims have been removed. The CLI explicitly labels success as a
 RED:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed (1)
 Tests       1 failed | 14 passed (15)
 Failure: the fixture attempted to execute <cache>/build/<revision>/<run>/gradlew
@@ -544,11 +544,11 @@ after the test callback rejected every Gradle/JDK/build command.
 GREEN:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       8 passed (8)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 ```
 
@@ -563,7 +563,7 @@ runtime compatibility claim is made.
 RED:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed (1)
 Tests       1 failed | 8 passed (9)
 Failure: parseArchiveMetadata is not a function; normalized
@@ -573,11 +573,11 @@ Failure: parseArchiveMetadata is not a function; normalized
 GREEN:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       12 passed (12)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 ```
 
@@ -611,7 +611,7 @@ remove or recreate another owner's marker.
 Focused evidence:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       13 passed (13)
 ```
@@ -629,11 +629,11 @@ exported and normalized `<root>/../unexpected` paths were not rejected.
 GREEN:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       13 passed (13)
 
-node --check interop/jvm/fixture.mjs
+node --check compatibility-tests/jvm/fixture.mjs
 exit 0
 ```
 
@@ -666,7 +666,7 @@ retry behavior without invoking a JVM.
 Final focused evidence:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       15 passed (15)
 ```
@@ -681,7 +681,7 @@ tests; a stalled abort-aware body is aborted and leaves no partial output.
 Focused verification after these additions:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       17 passed (17)
 ```
@@ -711,7 +711,7 @@ seam, both cases attempted the `fixture://` URL rather than their injected
 responses:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 failed (1)
 Tests       2 failed | 18 passed (20)
 Failures: expected "download aborted", received "fetch failed"; injected
@@ -728,7 +728,7 @@ digest, the failed staged tree and ready paths are absent, and a corrected lock
 and archive retry succeeds.
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run interop/jvm/fixture.test.mjs
+pnpm --config.verify-deps-before-run=false exec vitest run compatibility-tests/jvm/fixture.test.mjs
 Test Files  1 passed (1)
 Tests       20 passed (20)
 ```

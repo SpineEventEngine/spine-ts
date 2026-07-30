@@ -13,7 +13,7 @@ export default defineConfig({
       "examples/*/*/test/**/*.test.ts",
       "examples/*/*/test/**/*.test.tsx",
       "scripts/**/*.test.mjs",
-      "interop/jvm/**/*.test.mjs",
+      "compatibility-tests/jvm/**/*.test.mjs",
     ],
     coverage: {
       provider: "v8",

@@ -57,7 +57,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["interop/jvm/**/*.mjs", "interop/envoy/**/*.mjs"],
+    files: ["compatibility-tests/jvm/**/*.mjs", "interop/envoy/**/*.mjs"],
     languageOptions: {
       globals: {
         AbortController: "readonly",
