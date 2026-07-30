@@ -9,7 +9,7 @@ export interface ManifestFileOperations {
    * @param content The complete content to write.
    */
   readonly writeFile: (path: string, content: string) => void;
-  /** Renames a staging file over the destination manifest.
+  /** Replaces a destination manifest with a staging file.
    *
    * @param from The completed staging-file path.
    * @param to The destination manifest path.

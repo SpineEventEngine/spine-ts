@@ -119,7 +119,7 @@ export class EntityQueryBuilder<
     this.#context = clone(ActorContextSchema, input.context);
   }
 
-  /** Restricts the query to one or more Entity IDs.
+  /** Adds Entity IDs to the query target.
    *
    * @param ids - Entity IDs to include.
    * @returns This builder.
@@ -153,7 +153,7 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Selects top-level state fields returned by the server.
+  /** Adds top-level state fields returned by the server.
    *
    * @param paths - Generated property names of state fields.
    * @returns This builder.
@@ -184,7 +184,7 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Bounds the result count. A positive limit requires ordering.
+  /** Sets a positive result limit that requires ordering.
    *
    * @param value - Positive maximum number of returned entities.
    * @returns This builder.
@@ -197,9 +197,9 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Compiles this builder to the frozen `spine.client.Query` message.
+  /** Builds the `spine.client.Query` message.
    *
-   * @returns Immutable wire query message.
+   * @returns The wire query message.
    */
   build(): Query {
     if (this.#limit !== undefined && this.#order.length === 0) {
