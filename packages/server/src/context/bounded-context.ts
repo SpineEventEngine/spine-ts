@@ -168,6 +168,7 @@ export interface ContextDeliveryDescriptor {
   /** Dispatches a durable inbox message through its registered target.
    * @param message Contains the delivery message to replay.
    * @param tenantId Identifies the delivery tenant when the context is multitenant.
+   * @returns A promise that resolves after the message is replayed.
    */
   replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void>;
   /** Sets the observer for newly ready delivery routes.
@@ -179,6 +180,7 @@ export interface ContextDeliveryDescriptor {
    * @param scopes Lists routes that may receive buffered readiness.
    * @param onReady Observes readiness after routed ownership begins.
    * @param options Allows an empty route set when `allowEmpty` is true.
+   * @returns A promise that resolves after the readiness transition completes.
    */
   transition(
     scopes: readonly DeliveryReady[],
@@ -206,6 +208,7 @@ export interface CommandEndpoint {
 
   /** Posts a command into the context-owned command bus.
    * @param command Contains the command to dispatch.
+   * @returns A promise that settles after queued command dispatch completes and may reject.
    */
   post(command: Command): Promise<void>;
 }
@@ -219,6 +222,7 @@ export interface EventEndpoint {
 
   /** Posts an event into the context-owned event bus.
    * @param event Contains the event to dispatch.
+   * @returns A promise that settles after persistence and dispatch complete and may reject.
    */
   post(event: Event): Promise<void>;
 }
@@ -697,6 +701,7 @@ export class BoundedContext {
    * The context attempts every owned close hook; when any hook fails, the
    * returned promise rejects with an `AggregateError` after the remaining hooks
    * have also been attempted.
+   * @returns A promise that settles after all owned resources close.
    */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce();

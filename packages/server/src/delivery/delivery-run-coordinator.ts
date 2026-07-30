@@ -125,6 +125,7 @@ export class DeliveryRunCoordinator {
    * Removes quiesced, permanently retired owner state without disturbing siblings.
    *
    * @param ownerKeys The owner keys to remove.
+   * @returns A promise that resolves after the selected owner state is removed.
    */
   async removeOwners(ownerKeys: readonly string[]): Promise<void> {
     const owners = new Set(ownerKeys);
@@ -147,6 +148,7 @@ export class DeliveryRunCoordinator {
    * Awaits retained work that could still start selected owners without reclaiming evidence.
    *
    * @param ownerKeys The owner keys whose work must settle.
+   * @returns A promise that resolves after selected owners cannot start retained work.
    */
   async awaitOwnersBarrier(ownerKeys: readonly string[]): Promise<void> {
     if (ownerKeys.length === 0) {
@@ -189,6 +191,7 @@ export class DeliveryRunCoordinator {
    * Closes this coordinator after reporting its terminal settlement.
    *
    * @param onReport The terminal settlement reporter.
+   * @returns A promise that settles after retirement and terminal reporting complete.
    */
   retire(onReport: (settlement: DeliveryRunSettlement) => Promise<void>): Promise<void> {
     this.#onReport ??= onReport;
@@ -479,11 +482,14 @@ export interface DeliveryRunWorker {
   ): Promise<DeliveryWorkerEvidence>;
   /** Stops loop admission irreversibly. */
   stop(): void;
-  /** Awaits active work without interrupting it. */
+  /** Awaits active work without interrupting it.
+   * @returns A promise that resolves after active work settles.
+   */
   awaitSettled(): Promise<void>;
   /**
    * Closes after a completed stop and proven settlement. Permanently closes every
    * worker start entry before settling, even when inert-resource cleanup fails.
+   * @returns A promise that settles after the worker retires.
    */
   retire(): Promise<void>;
 }

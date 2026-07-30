@@ -30,6 +30,7 @@ export interface ServerRuntimeLifecycle {
    *
    * Calling `start()` on an already running runtime is a no-op. Calling it while
    * closing or after close rejects with `ServerRuntimeStateError`.
+   * @returns A promise that resolves after runtime work admission starts.
    */
   start(): Promise<void>;
 
@@ -40,6 +41,7 @@ export interface ServerRuntimeLifecycle {
    * `closed`; later calls return the same close outcome. Calling `close()` from
    * active runtime work rejects with `ServerRuntimeStateError` and state
    * `"running-work"`.
+   * @returns A promise that settles after accepted runtime work drains and closes.
    */
   close(): Promise<void>;
 }
@@ -136,7 +138,9 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     return this.#state;
   }
 
-  /** Starts accepting runtime work. */
+  /** Starts accepting runtime work.
+   * @returns A promise that resolves after runtime work admission starts.
+   */
   start(): Promise<void> {
     if (this.#state === "running") {
       return Promise.resolve();
@@ -159,6 +163,7 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
    * reentrant enqueue during active work is rejected to avoid queue self-deadlocks.
    *
    * @param work the trusted work to enqueue.
+   * @returns A promise that settles after the queued work completes.
    */
   enqueue(work: ServerRuntimeWork): Promise<void> {
     return this.#enqueue(work, false);
@@ -191,7 +196,9 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     return completion;
   }
 
-  /** Closes the runtime after accepted work drains. */
+  /** Closes the runtime after accepted work drains.
+   * @returns A promise that settles after the runtime closes.
+   */
   close(): Promise<void> {
     if (RuntimeValues.isRunningWork(this)) {
       return Promise.reject(new ServerRuntimeStateError("close", "running-work"));

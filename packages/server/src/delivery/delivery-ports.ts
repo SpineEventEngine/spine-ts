@@ -74,6 +74,7 @@ export interface DeliveryInboxWork {
    *
    * @param session - Supplies the current shard session.
    * @param options - Propagates cancellation and a delivery deadline.
+   * @returns A promise that resolves after the work has the matching session.
    */
   synchronize(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<void>;
   /**
@@ -87,6 +88,7 @@ export interface DeliveryInboxWork {
    * Clears the admitted message without remote removal.
    *
    * @param options - Propagates cancellation and a delivery deadline.
+   * @returns A promise that resolves after the admitted work is abandoned.
    */
   abandon(options?: DeliveryOperationOptions): Promise<void>;
 }

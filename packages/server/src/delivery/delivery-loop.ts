@@ -84,7 +84,9 @@ export class DeliveryLoop {
     this.#stopped = true;
   }
 
-  /** Closes the loop after its current drain, if any, finishes. */
+  /** Closes the loop after its current drain, if any, finishes.
+   * @returns A promise that settles after the active run finishes and may reject.
+   */
   async close(): Promise<void> {
     this.stop();
     await this.#running;

@@ -136,6 +136,7 @@ export class DeliverySupervisor {
   /**
    * Starts initial stale release and snapshot recovery, then accepts notifications and observation.
    * Repeated successful calls are idempotent; starting after close is rejected.
+   * @returns A promise that resolves after recovery and observation start.
    */
   async start(): Promise<void> {
     if (this.#closing || this.#closed) throw new Error("Delivery supervisor is closed.");
@@ -165,6 +166,7 @@ export class DeliverySupervisor {
 
   /**
    * Resolves when no active or retained pending shard work remains.
+   * @returns A promise that resolves when the supervisor is idle.
    *
    */
   whenIdle(): Promise<void> {
@@ -183,6 +185,7 @@ export class DeliverySupervisor {
    * an active-work timeout; incomplete cleanup is retained for a later close retry.
    *
    * @param options The bounded close controls.
+   * @returns A promise that settles after close cleanup completes.
    */
   close(options: DeliverySupervisorCloseOptions = {}): Promise<void> {
     if (this.#closed) return Promise.resolve();

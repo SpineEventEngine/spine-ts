@@ -360,6 +360,7 @@ export class Stand {
    * @param schema - The registered entity state schema.
    * @param state - The latest entity state to store.
    * @param options - The tenant, version, and lifecycle metadata to store.
+   * @returns A promise that resolves after the state update is stored.
    */
   async update<Schema extends MessageSchema>(
     schema: Schema,
@@ -487,6 +488,7 @@ export class Stand {
    * Close is idempotent. New operations are rejected once close begins, and the
    * close promise waits for already accepted direct reads/updates to finish
    * before clearing subscriptions and version metadata.
+   * @returns A promise that settles after the stand closes.
    *
    */
   close(): Promise<void> {

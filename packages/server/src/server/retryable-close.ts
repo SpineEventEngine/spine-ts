@@ -15,7 +15,9 @@ export class RetryableCloseGroup {
     this.#message = message;
   }
 
-  /** Closes each remaining resource and aggregates any failures. */
+  /** Closes each remaining resource and aggregates any failures.
+   * @returns A promise that settles after each remaining resource is attempted.
+   */
   async close(): Promise<void> {
     const errors: unknown[] = [];
 

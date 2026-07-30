@@ -94,6 +94,7 @@ export class DeliveryAttempts {
    * Records one supported endpoint failure attempt.
    *
    * @param input - Supplies the sanitized failed-delivery details.
+   * @returns A promise that resolves after the failure attempt is recorded.
    */
   async recordFailure(input: DeliveryAttemptInput): Promise<void> {
     const attempt = DeliveryAttemptValues.attemptFromInput(input);

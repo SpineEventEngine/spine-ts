@@ -18,6 +18,7 @@ export interface CommandDispatcher {
   /** Dispatches one generated Spine command envelope.
    *
    * @param command the command envelope to dispatch.
+   * @returns A promise that resolves after the command is dispatched.
    */
   dispatch(command: Command): Promise<void>;
 }
