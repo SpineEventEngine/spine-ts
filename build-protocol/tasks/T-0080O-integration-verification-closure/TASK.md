@@ -243,3 +243,29 @@ serialized-contract changes across the repository.
   accepted for scoped commit, immediate push, and ordered integration.
 - Reviewer runtime self-introspection remained unavailable; immutable/explicit
   profiles show no mismatch.
+
+## Equipped Integration Findings And Correction
+
+- Generation/build pass and global TSDoc enforcement passes. Cleanup remains
+  107/107.
+- Global lint exposes two deterministic residuals: `SmokeTaskLists` is a
+  static-only class that violates the required named-object pattern, and the
+  Proto quality parser retains one unused `next` local.
+- TypeDoc generation reaches API checking, which exposes stale Auth truth:
+  expectations and the browser/auth extension guide still name removed flat
+  `decodeIncomingRequest`/`transportFacts` helpers instead of current
+  `IncomingRequests`/`TransportFacts` objects.
+- The existing O3 implementer context is explicitly reassigned
+  `gpt-5.6-terra` / medium to:
+  convert `SmokeTaskLists` to an exported documented object without changing
+  method names/behavior; remove the unused parser local; replace Auth API
+  expectations and guide/snippet checks with `IncomingRequests.decode` and
+  `TransportFacts.from`.
+- Ownership is limited to the To-do smoke helper, the Proto/API checker files,
+  `docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md`, and its exact snippet checker.
+  No compatibility export, generated edit, runtime auth change, or other
+  documentation rewrite is allowed.
+- Verification requires global lint/TSDoc, docs check and snippet checks,
+  focused To-do tests, cleanup 107/107 unchanged, formatting, and diff
+  integrity. Documentation/API/style re-review; reliability is N/A absent
+  runtime behavior change.

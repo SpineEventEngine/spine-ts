@@ -90,3 +90,17 @@ Runtime self-introspection or its limitation is required with every result.
 
 The three implementation tracks are accepted for scoped commit, immediate
 push, and ordered integration into the umbrella.
+
+## Equipped Integration Correction
+
+Post-integration tooling exposes one additional deterministic batch:
+
+- replace the static-only To-do `SmokeTaskLists` class with an equivalent
+  documented object;
+- remove one unused Proto quality parser local;
+- replace obsolete Auth flat-helper expectations and browser/auth guide
+  examples with `IncomingRequests.decode` and `TransportFacts.from`.
+
+Documentation, TypeScript/API, and style reopen only for this batch.
+Performance/reliability is N/A because method behavior and Auth runtime remain
+unchanged.
