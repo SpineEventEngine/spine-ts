@@ -5,12 +5,18 @@ import "spine/options.proto";
 
 option (type_url_prefix) = "type.spine.example.datastore-orders";
 
+// Requests creation of an order for a SKU.
 message CreateOrder {
+  // Identifies the order to create.
   string id = 1 [(required) = true];
+  // Identifies the SKU ordered.
   string sku_id = 2 [(required) = true];
 }
 
+// Requests registration of a SKU.
 message RegisterSku {
+  // Identifies the SKU to register.
   string id = 1 [(required) = true];
+  // Provides the SKU name shown to users.
   string display_name = 2 [(required) = true];
 }
