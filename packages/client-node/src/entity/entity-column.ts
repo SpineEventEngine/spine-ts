@@ -63,7 +63,7 @@ type SupportedEntryConstraint<
 > = Exclude<keyof Entries, SupportedStateFieldName<Schema>> extends never ? unknown : never;
 
 /**
- * Nominal descriptor-backed column metadata emitted next to an Entity schema.
+ * Describes nominal descriptor-backed column metadata emitted next to an Entity schema.
  *
  * The package root exports this type, but not its value constructor. Application
  * code therefore consumes generated metadata instead of authoring string keys.

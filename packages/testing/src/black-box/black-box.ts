@@ -179,7 +179,7 @@ export class BlackBox {
   }
 
   /**
-   * Polls a read function until its predicate accepts or the bounded wait expires.
+   * Polls a read operation until its predicate accepts or the bounded wait expires.
    *
    * @param read - The value-producing operation to retry.
    * @param accept - The predicate that accepts a produced value.
