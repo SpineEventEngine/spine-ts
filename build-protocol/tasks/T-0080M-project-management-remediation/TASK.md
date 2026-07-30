@@ -253,3 +253,19 @@ standard.
   nine Proto mappings explicit, and replace live timing assertions with exact
   deterministic p50/p95/p99 evidence through an internal module that is not
   exposed by package exports.
+
+## Implementation Review Acceptance
+
+- M2 explicitly documents project ID to `id` and task ID to `name` for all nine
+  task-triggered projections. API/Proto final confirmation is clean and
+  normalized Proto tokens remain identical.
+- M4 extracts a documented latency distribution into an internal source module
+  absent from package exports. Direct unsorted input proves exact p50=5,
+  p95=100, p99=100 and empty zeroes without live timing.
+- Reliability final confirmation is clean for deterministic percentile proof,
+  aggregation, sequencing, correlation, rejection observation, and cleanup.
+- A final deterministic documentation correction removes the contradictory
+  `@internal` tag from the re-exported percentile type; API confirmation is
+  clean while the implementation class remains internal.
+- All implementation lanes are accepted for scoped commit, immediate push, and
+  integration. M5 then owns README accuracy and exact ledger closure.
