@@ -26,72 +26,99 @@ import {
 const MAX_AUTHORIZATION_COMPOSITE_FILTERS = 8;
 const MAX_AUTHORIZATION_SIMPLE_FILTERS = 16;
 
-/** Application-owned Chat room and actor policy for the public auth gateway. */
+/** Authorizes Chat gateway requests against the authenticated actor's room access. */
 export class ChatAuthorizationPolicy implements AuthorizationPolicy {
+  /**
+   * Checks whether an authenticated Chat principal may make a gateway request.
+   *
+   * @param principal - Identifies the authenticated actor and permitted rooms.
+   * @param request - Describes the command, query, subscription, or lifecycle call to authorize.
+   * @returns A promise that resolves to `true` when allowed and `false` otherwise.
+   */
   authorize(principal: AuthenticatedPrincipal, request: IncomingRequest): Promise<boolean> {
     if (request.kind === "activate" || request.kind === "cancel") return Promise.resolve(true);
-    const rooms = principal.attributes?.rooms?.split(",").filter(Boolean) ?? [];
-    if (request.kind === "command" && request.message?.$typeName === PostMessageSchema.typeName) {
-      const message = request.message as PostMessage;
-      return Promise.resolve(
-        message.author?.value === principal.id &&
-          message.room !== undefined &&
-          rooms.includes(message.room.value),
-      );
+    try {
+      const rooms = this.roomNames(principal);
+      if (request.kind === "command" && request.message?.$typeName === PostMessageSchema.typeName) {
+        const message = request.message as PostMessage;
+        return Promise.resolve(
+          message.author?.value === principal.id &&
+            message.room !== undefined &&
+            rooms.includes(message.room.value),
+        );
+      }
+      if (request.kind !== "query" && request.kind !== "subscribe") return Promise.resolve(false);
+      return Promise.resolve(this.authorizesRoom(request.target, rooms));
+    } catch {
+      return Promise.resolve(false);
     }
-    if (request.kind !== "query" && request.kind !== "subscribe") return Promise.resolve(false);
-    return Promise.resolve(roomIsAuthorized(request.target, rooms));
   }
-}
 
-function roomIsAuthorized(target: Target, rooms: readonly string[]): boolean {
-  if (target.type !== TypeUrls.derive(ChatMessageViewSchema)) return false;
-  if (target.criterion.case !== "filters") return false;
-  const budget = {
-    compositeFilters: MAX_AUTHORIZATION_COMPOSITE_FILTERS,
-    simpleFilters: MAX_AUTHORIZATION_SIMPLE_FILTERS,
-  };
-  let authorized = false;
-  for (const filter of target.criterion.value.filter) {
-    authorized = guaranteesAuthorizedRoom(filter, rooms, budget) || authorized;
+  private roomNames(principal: AuthenticatedPrincipal): readonly string[] {
+    return principal.attributes?.rooms?.split(",").filter(Boolean) ?? [];
+  }
+
+  private authorizesRoom(target: Target, rooms: readonly string[]): boolean {
+    if (target.type !== TypeUrls.derive(ChatMessageViewSchema)) return false;
+    if (target.criterion.case !== "filters") return false;
+    const budget = {
+      compositeFilters: MAX_AUTHORIZATION_COMPOSITE_FILTERS,
+      simpleFilters: MAX_AUTHORIZATION_SIMPLE_FILTERS,
+    };
+    let authorized = false;
+    for (const filter of target.criterion.value.filter) {
+      authorized = this.guaranteesAuthorizedRoom(filter, rooms, budget) || authorized;
+      if (budget.compositeFilters < 0 || budget.simpleFilters < 0) return false;
+    }
+    return authorized;
+  }
+
+  private guaranteesAuthorizedRoom(
+    composite: CompositeFilter,
+    rooms: readonly string[],
+    budget: { compositeFilters: number; simpleFilters: number },
+  ): boolean {
+    budget.compositeFilters -= 1;
+    budget.simpleFilters -= composite.filter.length;
     if (budget.compositeFilters < 0 || budget.simpleFilters < 0) return false;
+    const guaranteed = composite.filter.map((filter) => this.matchesAuthorizedRoom(filter, rooms));
+    for (const child of composite.compositeFilter) {
+      guaranteed.push(this.guaranteesAuthorizedRoom(child, rooms, budget));
+      if (budget.compositeFilters < 0 || budget.simpleFilters < 0) return false;
+    }
+    if (guaranteed.length === 0) return false;
+    return composite.operator === CompositeFilter_CompositeOperator.ALL
+      ? guaranteed.some(Boolean)
+      : composite.operator === CompositeFilter_CompositeOperator.EITHER &&
+          guaranteed.every(Boolean);
   }
-  return authorized;
-}
 
-function guaranteesAuthorizedRoom(
-  composite: CompositeFilter,
-  rooms: readonly string[],
-  budget: { compositeFilters: number; simpleFilters: number },
-): boolean {
-  budget.compositeFilters -= 1;
-  budget.simpleFilters -= composite.filter.length;
-  if (budget.compositeFilters < 0 || budget.simpleFilters < 0) return false;
-  const guaranteed: boolean[] = [];
-  for (const filter of composite.filter) {
+  private matchesAuthorizedRoom(
+    filter: CompositeFilter["filter"][number],
+    rooms: readonly string[],
+  ): boolean {
     if (
       filter.fieldPath?.fieldName.join(".") !== "room" ||
       filter.operator !== Filter_Operator.EQUAL
     ) {
-      guaranteed.push(false);
-      continue;
+      return false;
     }
     const room =
       filter.value === undefined ? undefined : AnyMessages.unpack(filter.value, ChatRoomIdSchema);
-    guaranteed.push(room !== undefined && rooms.includes(room.value));
+    return room !== undefined && rooms.includes(room.value);
   }
-  for (const child of composite.compositeFilter) {
-    guaranteed.push(guaranteesAuthorizedRoom(child, rooms, budget));
-    if (budget.compositeFilters < 0 || budget.simpleFilters < 0) return false;
-  }
-  if (guaranteed.length === 0) return false;
-  return composite.operator === CompositeFilter_CompositeOperator.ALL
-    ? guaranteed.some(Boolean)
-    : composite.operator === CompositeFilter_CompositeOperator.EITHER && guaranteed.every(Boolean);
 }
 
-/** Maps an authenticated Chat principal to the gateway-owned trusted actor context. */
+/** Resolves trusted actor context for an authenticated Chat gateway principal. */
 export class ChatContextResolver implements ContextResolver {
+  /**
+   * Resolves trusted context for a gateway request.
+   *
+   * @param principal - Identifies the authenticated Chat actor.
+   * @param _request - Supplies the gateway request whose context is being resolved.
+   * @param clock - Supplies the gateway-owned timestamp.
+   * @returns A promise that resolves to trusted actor, tenant, and timestamp context.
+   */
   async resolve(
     principal: AuthenticatedPrincipal,
     _request: IncomingRequest,
@@ -100,6 +127,13 @@ export class ChatContextResolver implements ContextResolver {
     return this.resolveContext(principal, clock);
   }
 
+  /**
+   * Resolves trusted context from an authenticated principal.
+   *
+   * @param principal - Identifies the authenticated Chat actor.
+   * @param clock - Supplies the gateway-owned timestamp.
+   * @returns A promise that resolves to trusted actor, tenant, and timestamp context.
+   */
   resolveContext(
     principal: AuthenticatedPrincipal,
     clock: Clock,

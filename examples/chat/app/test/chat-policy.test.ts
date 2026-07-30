@@ -460,6 +460,22 @@ describe("Chat gateway policy", () => {
     }
   });
 
+  it("fails closed when a malformed filter cannot be inspected", async () => {
+    const policy = new ChatAuthorizationPolicy();
+    const malformed = create(CompositeFilterSchema, {
+      operator: CompositeFilter_CompositeOperator.ALL,
+    });
+    Object.defineProperty(malformed, "filter", {
+      get: () => {
+        throw new Error("malformed filter");
+      },
+    });
+
+    await expect(policy.authorize(principal, nestedRoomRequest("query", malformed))).resolves.toBe(
+      false,
+    );
+  });
+
   it("derives the trusted actor, tenant, and gateway clock timestamp from the principal", async () => {
     const resolver = new ChatContextResolver();
     const clock: Clock = { now: () => create(TimestampSchema, { seconds: 42n }) };
