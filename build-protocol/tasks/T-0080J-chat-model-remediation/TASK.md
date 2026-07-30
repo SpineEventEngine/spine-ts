@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for commit and integration.
+Complete.
 
 ## Parent And Dependencies
 
@@ -192,3 +192,15 @@ change serialized/API contracts.
   descriptor/generated checks, and diff integrity pass afterward.
 - T-0080J is accepted for commit, push, umbrella integration, and
   post-integration verification.
+
+## Durable Closure
+
+- Reviewed task commit `ad32550b` is pushed on
+  `task/T-0080J-chat-model`.
+- Merge commit `baef9891` is pushed on
+  `task/T-0080-code-quality-examples`.
+- The merged task paths exactly match the reviewed task commit. Checker 16/16,
+  generation, Users/model/app/web typebuild, Proto lint/source/descriptor
+  verification, and generated cleanliness pass on the merged tree.
+- T-0080J is durably complete. T-0080K owns the remaining Chat application,
+  web-client, and family-guide remediation.

@@ -71,3 +71,15 @@ public example workflow code moves; otherwise standard.
   partitions, generated cleanliness, and `git diff --check`.
 - All four canonical concerns are relevant because public prose and
   lifecycle-sensitive application/browser behavior are touched.
+
+## Planning Dispatch
+
+- T-0080K starts after pushed T-0080J merge commit `baef9891`.
+- Because authentication, browser/React lifecycle, public example APIs, and
+  subscription/reconnect behavior are high-risk boundaries, the existing
+  requirements splitter is explicitly assigned `gpt-5.6-sol` / high.
+- The splitter is read-only, may not spawn subagents, and must return an exact
+  58-row TSDoc, 20-row standalone-function, one-row semantic-name, README,
+  behavior-invariant, test, and bounded-writer plan.
+- Both model and reasoning fields are explicit. Runtime metadata is recorded if
+  exposed; otherwise the configured profile and limitation are recorded.
