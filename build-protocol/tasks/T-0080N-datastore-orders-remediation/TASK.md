@@ -139,3 +139,38 @@ behavior changes; otherwise standard.
 - No generic utility or new public helper is allowed. The writer may not edit
   Proto/index/docs/ledgers/records/package/shared/generated files, commit, push,
   build Spine JVM, or spawn. Runtime metadata or its limitation is required.
+
+## Implementation Wave Completion
+
+- N1 adds exactly 18 comments to core Proto; N2 adds exactly 36 comments to
+  read-model Proto. Both preserve normalized non-comment hashes, expose only
+  exact stale ledger rows, and pass protected checksum/diff gates.
+- N3 resolves 57 application TSDoc rows and changes exactly one non-comment
+  token: the approved `startOrdersDatastoreServer` export rename. Full
+  workspace build, ESLint, Prettier, four topology tests, and diff integrity
+  pass.
+- N4 resolves 22 load-runner TSDoc rows and moves nine private helpers into the
+  existing load/user owners. Full workspace build, ESLint, Prettier, five
+  pooled-session/cancellation tests, zero live TSDoc findings, and diff
+  integrity pass.
+- Every writer was the existing implementer role, explicitly
+  `gpt-5.6-terra` / medium. Runtime self-introspection was unavailable, with no
+  visible mismatch.
+
+## Complete Review Wave Assignments
+
+- Style/maintainability uses the existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across helper ownership, method size, four-part
+  naming, exact rename, and absence of generic utilities.
+- Documentation uses the immutable reviewer configured
+  `gpt-5.6-luna` / medium, across 54 Proto comments, 79 TSDoc rows, and eventual
+  README evidence boundaries.
+- TypeScript/API documentation uses the existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across the public rename, declarations, Proto/wire
+  identity, generated consumers, and package boundaries.
+- Performance/reliability uses the existing reviewer, explicitly
+  `gpt-5.6-terra` / high, across storage composition, session pool/waves,
+  correlations, timings, failure accounting, percentiles, timeout aborts,
+  cleanup, and shutdown.
+- Reviewers are read-only, inspect N1-N4 as one complete wave, may not spawn,
+  and must report runtime metadata or its limitation. Security remains N/A.
