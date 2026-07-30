@@ -279,13 +279,6 @@ const expectedClientExports = [
   "EntityPredicate",
   "EntityQuery",
   "EntityQueryBuilder",
-  "all",
-  "either",
-  "eq",
-  "ge",
-  "gt",
-  "le",
-  "lt",
 ];
 const expectedClientWebExports = [
   "BearerBrowserSessionOptions",

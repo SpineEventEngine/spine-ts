@@ -39,6 +39,7 @@ import { TaskViewColumnDefinition } from "@example/tasks-model/task_view_columns
 import { TaskViewSchema } from "@example/tasks-model/task_view_pb";
 
 const columns = EntityColumn.register(TaskViewSchema, TaskViewColumnDefinition);
+const owner = "alice";
 const query = EntityQuery.select({ schema: TaskViewSchema, columns, context })
   .where(EntityQuery.all(EntityQuery.eq(columns.owner, owner), EntityQuery.ge(columns.priority, 1)))
   .orderBy(columns.priority, "desc")
