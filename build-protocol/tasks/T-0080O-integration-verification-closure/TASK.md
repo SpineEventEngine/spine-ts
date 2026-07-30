@@ -148,3 +148,39 @@ serialized-contract changes across the repository.
 - The splitter ran as the existing `requirements_splitter`, explicitly
   `gpt-5.6-sol` / high. Runtime self-introspection is unavailable with no
   mismatch.
+
+## Implementation Wave
+
+- O1 closes all 134 owned Storage/Datastore/RDBMS TSDoc rows across 16 files,
+  proves identical non-comment TypeScript tokens against `8bb30468`, and
+  passes formatting and diff integrity.
+- O2 closes all 63 owned Server TSDoc rows across 25 files, proves a
+  comment-only diff against `8bb30468`, and passes formatting and diff
+  integrity.
+- O3 closes all 40 remaining package TSDoc rows, removes four invalid
+  constructor return tags, documents one React provider props parameter,
+  reconciles Proto Tools expectations/API wording, and fixes the cohesive
+  `SignalEnvelopes` member resolver.
+- The production cleanup checker and all 105 cleanup tests pass. O3 script
+  lint, all changed-file formatting, and diff integrity pass.
+- Isolated worktree package-link limitations prevent trustworthy package
+  type-aware lint/build and TypeDoc. Those gates run after reviewed integration
+  into the dependency-equipped umbrella worktree.
+- All implementers were explicitly `gpt-5.6-terra` / medium. Runtime
+  self-introspection was unavailable with no visible mismatch.
+
+## Combined Review Dispatch
+
+- Documentation uses the immutable existing reviewer configured
+  `gpt-5.6-luna` / medium for concise, accurate TSDoc and API-guide wording.
+- TypeScript/API uses the existing reviewer explicitly
+  `gpt-5.6-terra` / high for signature/token identity, constructor/return
+  contracts, React parameter shape, and Proto Tools export truth.
+- Style/maintainability uses the existing reviewer explicitly
+  `gpt-5.6-terra` / high for the cleanup resolver and absence of accidental
+  runtime restructuring.
+- Performance/reliability uses the existing reviewer explicitly
+  `gpt-5.6-terra` / high only for factual storage/lifecycle/cancellation/async
+  completion claims and cleanup alias coverage.
+- Reviewers inspect O1/O2/O3 as one read-only wave, may not edit or spawn, and
+  must report actual runtime metadata or its limitation. Security is N/A.
