@@ -229,3 +229,17 @@ serialized-contract changes across the repository.
 - Documentation reopens for O2/O3 wording, style for the three resolver paths,
   and reliability for both. API remains closed because no signature/export
   changed.
+
+## Review Acceptance
+
+- Documentation focused re-review is clean for all seven Server/Web
+  settlement, rejection, cancellation, and awaited-cleanup descriptions.
+- Style/maintainability focused re-review is clean for qualified import-equals
+  flattening, local shadow-state clearing, indirect owner propagation,
+  type-only gating, and bounded resolver structure.
+- Performance/reliability focused re-review is clean for the same lifecycle
+  and resolver paths. TypeScript/API remains accepted.
+- All four canonical concerns are closed; security remains N/A. O1/O2/O3 are
+  accepted for scoped commit, immediate push, and ordered integration.
+- Reviewer runtime self-introspection remained unavailable; immutable/explicit
+  profiles show no mismatch.
