@@ -8,7 +8,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
-import { inspectTaskListRows, sanitizeSmokeValue } from "../src/smoke-task-lists.js";
+import { SmokeTaskLists } from "../src/smoke-task-lists.js";
 
 describe("to-do smoke row inspection", () => {
   it("skips absent and mismatched rows before matching a valid task list", () => {
@@ -34,7 +34,7 @@ describe("to-do smoke row inspection", () => {
       ],
     });
 
-    const inspected = inspectTaskListRows(response);
+    const inspected = SmokeTaskLists.inspectRows(response);
 
     expect(inspected.taskLists).toEqual([create(TaskListSchema, { id: targetId })]);
     expect(inspected.diagnostics).toEqual(["target row", "<3 unavailable rows>"]);
@@ -52,7 +52,7 @@ describe("to-do smoke row inspection", () => {
       ),
     });
 
-    const inspected = inspectTaskListRows(response);
+    const inspected = SmokeTaskLists.inspectRows(response);
 
     expect(inspected.taskLists).toHaveLength(16);
     expect(inspected.taskLists.map((taskList) => taskList.id)).toEqual(
@@ -71,6 +71,6 @@ describe("to-do smoke row inspection", () => {
   it("bounds control-character input before sanitizing an ID", () => {
     const oversizedId = `${"\n".repeat(1_000)}hidden suffix`;
 
-    expect(sanitizeSmokeValue(oversizedId)).toBe("<blank>");
+    expect(SmokeTaskLists.sanitizeValue(oversizedId)).toBe("<blank>");
   });
 });

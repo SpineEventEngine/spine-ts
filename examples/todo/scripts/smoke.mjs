@@ -23,7 +23,7 @@ import { SignalMetadata } from "@spine-event-engine/server";
 import { CreateTaskSchema } from "../dist/generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "../dist/generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema } from "../dist/generated/spine/example/todo/v1/task_list_pb.js";
-import { inspectTaskListRows, sanitizeSmokeValue } from "../dist/src/smoke-task-lists.js";
+import { SmokeTaskLists } from "../dist/src/smoke-task-lists.js";
 
 const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";
 const commandTimeoutMs = 1_000;
@@ -53,7 +53,7 @@ async function main() {
     );
     if (acknowledgement.status?.status.case !== "ok") {
       throw new Error(
-        `CreateTask acknowledgement was ${sanitizeSmokeValue(acknowledgement.status?.status.case ?? "missing")}.`,
+        `CreateTask acknowledgement was ${SmokeTaskLists.sanitizeValue(acknowledgement.status?.status.case ?? "missing")}.`,
       );
     }
 
@@ -94,7 +94,7 @@ async function readTaskListEventually(id, context) {
     );
     attempts += 1;
     lastResponse = response;
-    const taskList = inspectTaskListRows(response).taskLists.find(
+    const taskList = SmokeTaskLists.inspectRows(response).taskLists.find(
       (candidate) => candidate.id === id,
     );
     if (response.response?.status?.status.case === "ok" && taskList !== undefined) {
@@ -104,8 +104,8 @@ async function readTaskListEventually(id, context) {
   }
 
   throw new Error(
-    `TaskList ${sanitizeSmokeValue(id)} was not observed after ${queryDeadlineMs}ms (${attempts} reads); ` +
-      `last diagnostics [${inspectTaskListRows(lastResponse).diagnostics.join(", ")}].`,
+    `TaskList ${SmokeTaskLists.sanitizeValue(id)} was not observed after ${queryDeadlineMs}ms (${attempts} reads); ` +
+      `last diagnostics [${SmokeTaskLists.inspectRows(lastResponse).diagnostics.join(", ")}].`,
   );
 }
 
