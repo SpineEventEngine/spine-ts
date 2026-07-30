@@ -13,8 +13,7 @@ describe("spine-proto source bootstrap", () => {
   it.each([undefined, "generate"])("dispatches %s to model generation", async (command) => {
     const generateModel = vi.fn();
     vi.doMock("../src/generation/generator.js", () => ({
-      generateModel,
-      composeApplication: vi.fn(),
+      ProtoGeneration: { generate: generateModel, compose: vi.fn() },
     }));
     process.argv = command === undefined ? ["node", "bootstrap"] : ["node", "bootstrap", command];
 
@@ -26,8 +25,7 @@ describe("spine-proto source bootstrap", () => {
   it("dispatches compose to application composition", async () => {
     const composeApplication = vi.fn();
     vi.doMock("../src/generation/generator.js", () => ({
-      generateModel: vi.fn(),
-      composeApplication,
+      ProtoGeneration: { generate: vi.fn(), compose: composeApplication },
     }));
     process.argv = ["node", "bootstrap", "compose"];
 
@@ -39,7 +37,9 @@ describe("spine-proto source bootstrap", () => {
   it("rejects unsupported commands without dispatching", async () => {
     const generateModel = vi.fn();
     const composeApplication = vi.fn();
-    vi.doMock("../src/generation/generator.js", () => ({ generateModel, composeApplication }));
+    vi.doMock("../src/generation/generator.js", () => ({
+      ProtoGeneration: { generate: generateModel, compose: composeApplication },
+    }));
     process.argv = ["node", "bootstrap", "unknown"];
 
     await expect(import("../src/cli/spine-proto-bootstrap.js")).rejects.toThrow(
