@@ -80,3 +80,45 @@ behavior changes; otherwise standard.
   propose bounded non-overlapping ownership and exact gates.
 - Both model and reasoning fields are explicit. Runtime metadata or its honest
   limitation is required.
+
+## Accepted Bounded Plan
+
+- Exact debt is 79 TSDoc rows, 13 standalone-function rows, 54 Proto-comment
+  rows, and one semantic-name row.
+- N1 owns the command/entity/event Proto files and adds 18 comments. N2 owns
+  `read_models.proto` and adds 36 comments. Neither changes a non-comment token.
+- N3 owns `src/index.ts` and its topology test only if required. It resolves 57
+  TSDoc rows and renames only
+  `startDatastoreOrdersDatastoreServer` to `startOrdersDatastoreServer`;
+  no compatibility alias remains.
+- N4 owns `src/load-runner.ts`, its script, and its test. It resolves 22 TSDoc
+  rows, retains exported `runDatastoreOrdersLoad`, and moves nine private
+  helpers into the existing run/user owners without generic utilities.
+- N5 follows integration and owns README plus the four exact ledgers. It targets
+  zero TSDoc/Proto/name debt and exactly four necessities for the three public
+  composition/server boundaries plus the exported load runner.
+- Package, Proto package/type URLs/wire/options/generated paths, exact 2/10/2
+  topology and 14 repositories, storage-factory composition, Datastore adapter
+  creation, server defaults, load levels, 16-session pool, 10-user waves,
+  correlation, timings, all-settled failure messages, percentiles,
+  zero-elapsed throughput, timeout aborts, cleanup, and CLI shutdown are frozen.
+- Baseline clean generation/project build and all three focused files/10 tests
+  pass. The required CLI gate is the real 10-user in-memory loopback run; it is
+  not Datastore emulator/cloud evidence.
+- All four canonical review concerns apply. Security is N/A until final release
+  readiness.
+- Splitter runtime self-introspection was unavailable for explicit
+  `gpt-5.6-sol` / high, with no visible mismatch.
+
+## Implementation Dispatch
+
+- N1, N2, and N3 use isolated non-overlapping ownership. Each writer is the
+  existing implementer role, explicitly `gpt-5.6-terra` / medium, with both
+  fields explicit in dispatch.
+- Writers may not edit another track, shared tooling, package/workspace files,
+  generated output, ledgers, or records; may not commit, push, build Spine JVM,
+  or spawn; and must report runtime metadata or its limitation.
+- N1/N2 prove comment-only token identity. N3 proves the single exact rename,
+  unchanged topology/storage/server behavior, and complete TSDoc.
+- N4 is dispatched when an implementation slot returns. N5 follows complete
+  integration and review.
