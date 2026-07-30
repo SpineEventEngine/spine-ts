@@ -1,17 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createTestBlackBox,
-  openTestBlackBox,
-  trackTestHandle,
-} from "../src/black-box/black-box.js";
+import { BlackBoxTestAccess } from "../src/black-box/black-box.js";
 
 describe("BlackBox lifecycle seams", () => {
   it("aggregates subscription, client, and server cleanup failures", async () => {
     const subscriptionFailure = new Error("subscription");
     const clientFailure = new Error("client");
     const serverFailure = new Error("server");
-    const blackBox = createTestBlackBox({
+    const blackBox = BlackBoxTestAccess.create({
       client: { close: async () => Promise.reject(clientFailure) },
       server: { close: async () => Promise.reject(serverFailure) },
       subscriptions: [{ cancel: async () => Promise.reject(subscriptionFailure) }],
@@ -30,7 +26,7 @@ describe("BlackBox lifecycle seams", () => {
     const primary = new Error("connect");
     const cleanup = new Error("server cleanup");
 
-    const failure = await openTestBlackBox({
+    const failure = await BlackBoxTestAccess.open({
       start: () => Promise.resolve({ close: () => Promise.reject(cleanup) }),
       connect: () => {
         throw primary;
@@ -43,11 +39,11 @@ describe("BlackBox lifecycle seams", () => {
 
   it("releases a returned tracked handle and rejects unsupported activation", async () => {
     let cancellations = 0;
-    const blackBox = createTestBlackBox({
+    const blackBox = BlackBoxTestAccess.create({
       client: { close: () => Promise.resolve() },
       server: { close: () => Promise.resolve() },
     });
-    const tracked = trackTestHandle(blackBox, {
+    const tracked = BlackBoxTestAccess.track(blackBox, {
       cancel: () => {
         cancellations++;
         return Promise.resolve();

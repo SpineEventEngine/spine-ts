@@ -44,6 +44,11 @@ export interface BlackBoxOptions {
 
 /** Stable error thrown when an eventual read cannot satisfy its predicate. */
 export class BlackBoxTimeoutError extends Error {
+  /**
+   * Creates a timeout error.
+   *
+   * @param timeoutMs - The elapsed wait limit in milliseconds.
+   */
   constructor(timeoutMs: number) {
     super(`BlackBox eventually timed out after ${timeoutMs.toString()} milliseconds.`);
     this.name = "BlackBoxTimeoutError";
@@ -52,6 +57,7 @@ export class BlackBoxTimeoutError extends Error {
 
 /** Stable error thrown when an operation is attempted after BlackBox close begins. */
 export class BlackBoxClosedError extends Error {
+  /** Creates a closed error. */
   constructor() {
     super("BlackBox is closed.");
     this.name = "BlackBoxClosedError";
@@ -60,6 +66,13 @@ export class BlackBoxClosedError extends Error {
 
 /** One immutable actor scope within a BlackBox. */
 export interface BlackBoxScope extends ClientRequest {
+  /**
+   * Posts a direct domain event through this actor scope.
+   *
+   * @param schema - The schema of the event message.
+   * @param message - The event message to post.
+   * @returns A promise that resolves after the event is posted.
+   */
   postEvent<Schema extends GenMessage<Message>>(
     schema: Schema,
     message: MessageShape<Schema>,
@@ -75,14 +88,6 @@ interface BlackBoxInternal {
   ): Promise<void>;
   track<Handle extends { cancel(): Promise<void> }>(handle: Handle): Handle;
   onRelease(handle: { cancel(): Promise<void> }): void;
-}
-
-const blackBoxInternals = new WeakMap<BlackBox, BlackBoxInternal>();
-
-function internalsOf(blackBox: BlackBox): BlackBoxInternal {
-  const internals = blackBoxInternals.get(blackBox);
-  if (internals === undefined) throw new Error("BlackBox internals are unavailable.");
-  return internals;
 }
 
 /** A runner-neutral public-client test facade over one local bounded context. */
@@ -108,11 +113,11 @@ export class BlackBox {
     this.#context = context;
     this.#server = server;
     this.#client = client;
-    this.#tenant = cloneTenant(options.tenant);
+    this.#tenant = BlackBoxOptionsValues.cloneTenant(options.tenant);
     this.#zoneId = clone(ZoneIdSchema, options.zoneId);
     this.#timeoutMs = options.timeoutMs;
     this.#intervalMs = options.intervalMs;
-    blackBoxInternals.set(this, {
+    BlackBoxAccess.set(this, {
       assertOpen: () => {
         this.#assertOpen();
       },
@@ -124,17 +129,23 @@ export class BlackBox {
     });
   }
 
-  /** Start one ephemeral local server and one public client for a context or builder. */
+  /**
+   * Starts an ephemeral local server and public client for a context or builder.
+   *
+   * @param contextOrBuilder - The bounded context or builder to exercise.
+   * @param options - The tenant, zone, and eventual-wait options.
+   * @returns A ready BlackBox.
+   */
   static async from(
     contextOrBuilder: BoundedContext | BoundedContextBuilder,
     options: BlackBoxOptions = {},
   ): Promise<BlackBox> {
-    const normalized = normalizeOptions(contextOrBuilder, options);
+    const normalized = BlackBoxOptionsValues.normalize(contextOrBuilder, options);
     const context =
       contextOrBuilder instanceof BoundedContext
         ? contextOrBuilder
         : await contextOrBuilder.buildAsync();
-    return openBlackBox(
+    return BlackBoxLifecycle.open(
       context,
       normalized,
       () => new Server({ contexts: [context] }).start(),
@@ -146,38 +157,64 @@ export class BlackBox {
     );
   }
 
-  /** Create the guest scope. */
+  /**
+   * Creates the guest scope.
+   *
+   * @returns An immutable guest request scope.
+   */
   asGuest(): BlackBoxScope {
     this.#assertOpen();
     return new Request(this, this.#client.asGuest(), "guest");
   }
 
-  /** Create an immutable scope for one actor. */
+  /**
+   * Creates an immutable scope for one actor.
+   *
+   * @param actor - The actor identifier for requests and direct events.
+   * @returns An immutable actor request scope.
+   */
   onBehalfOf(actor: string): BlackBoxScope {
     this.#assertOpen();
     return new Request(this, this.#client.onBehalfOf(actor), actor);
   }
 
-  /** Poll a read function until its predicate accepts or the bounded wait expires. */
+  /**
+   * Polls a read function until its predicate accepts or the bounded wait expires.
+   *
+   * @param read - The value-producing operation to retry.
+   * @param accept - The predicate that accepts a produced value.
+   * @param options - Optional wait limits for this operation.
+   * @returns The first accepted value.
+   */
   async eventually<Value>(
     read: () => Value | Promise<Value>,
     accept: (value: Value) => boolean,
     options: Pick<BlackBoxOptions, "timeoutMs" | "intervalMs"> = {},
   ): Promise<Value> {
     this.#assertOpen();
-    const timeoutMs = positiveInteger(options.timeoutMs ?? this.#timeoutMs, "timeoutMs");
-    const intervalMs = positiveInteger(options.intervalMs ?? this.#intervalMs, "intervalMs");
+    const timeoutMs = BlackBoxOptionsValues.positiveInteger(
+      options.timeoutMs ?? this.#timeoutMs,
+      "timeoutMs",
+    );
+    const intervalMs = BlackBoxOptionsValues.positiveInteger(
+      options.intervalMs ?? this.#intervalMs,
+      "intervalMs",
+    );
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const value = await read();
       this.#assertOpen();
       if (accept(value)) return value;
       if (Date.now() >= deadline) throw new BlackBoxTimeoutError(timeoutMs);
-      await wait(Math.min(intervalMs, deadline - Date.now()), this.#waits.signal);
+      await BlackBoxClock.wait(Math.min(intervalMs, deadline - Date.now()), this.#waits.signal);
     }
   }
 
-  /** Stop admission, cancel owned subscriptions, then close the client and server once. */
+  /**
+   * Stops admission, cancels owned subscriptions, and closes the client and server once.
+   *
+   * @returns A shared promise for the close operation.
+   */
   close(): Promise<void> {
     this.#closing ??= this.closeOnce();
     return this.#closing;
@@ -198,7 +235,7 @@ export class BlackBox {
       SignalEnvelopes.event({
         id,
         context: create(EventContextSchema, {
-          timestamp: timestamp(),
+          timestamp: BlackBoxClock.timestamp(),
           origin: { case: "importContext", value: this.#actorContext(actor) },
         }),
         schema,
@@ -222,14 +259,14 @@ export class BlackBox {
       ...(this.#tenant === undefined ? {} : { tenantId: clone(TenantIdSchema, this.#tenant) }),
       actor: create(UserIdSchema, { value: actor }),
       zoneId: clone(ZoneIdSchema, this.#zoneId),
-      timestamp: timestamp(),
+      timestamp: BlackBoxClock.timestamp(),
     });
   }
 
   private async closeOnce(): Promise<void> {
     this.#admitting = false;
     this.#waits.abort(new BlackBoxClosedError());
-    const failures = rejected(
+    const failures = BlackBoxFailures.rejected(
       await Promise.allSettled([...this.#subscriptions].map((item) => item.cancel())),
     );
     for (const operation of [() => this.#client.close(), () => this.#server.close()]) {
@@ -243,87 +280,180 @@ export class BlackBox {
   }
 }
 
-/** @internal Internal lifecycle seam; intentionally omitted from the package entry point. */
-export function createTestBlackBox(resources: {
-  readonly client: { close(): Promise<void> };
-  readonly server: { close(): Promise<void> };
-  readonly subscriptions?: readonly { cancel(): Promise<void> }[];
-}): BlackBox {
-  const blackBox = instantiateBlackBox(
-    {} as BoundedContext,
-    resources.server as RunningServer,
-    resources.client as ClientKernel,
-    defaultNormalizedOptions(),
-  );
-  for (const subscription of resources.subscriptions ?? [])
-    internalsOf(blackBox).track(subscription);
-  return blackBox;
-}
-
-/** @internal Internal tracked-handle seam; intentionally omitted from the package entry point. */
-export function trackTestHandle(
-  blackBox: BlackBox,
-  handle: { cancel(): Promise<void> } & AsyncIterable<unknown>,
-): AsyncIterable<unknown> & { cancel(): Promise<void> } {
-  const tracked = new Tracked(handle, () => {
-    internalsOf(blackBox).onRelease(tracked);
+/** Holds internal operations without exposing them through the BlackBox facade. */
+const BlackBoxAccess = (() => {
+  const values = new WeakMap<BlackBox, BlackBoxInternal>();
+  return Object.freeze({
+    /** Associates internal operations with a BlackBox. */
+    set(blackBox: BlackBox, internals: BlackBoxInternal): void {
+      values.set(blackBox, internals);
+    },
+    /** Obtains the internal operations for a BlackBox. */
+    get(blackBox: BlackBox): BlackBoxInternal {
+      const internals = values.get(blackBox);
+      if (internals === undefined) throw new Error("BlackBox internals are unavailable.");
+      return internals;
+    },
   });
-  return internalsOf(blackBox).track(tracked);
+})();
+
+/** Internal operations exposed only through the unexported test-access module. */
+export interface BlackBoxTestAccess {
+  /**
+   * Creates a BlackBox with supplied closeable resources.
+   *
+   * @param resources - The test client, server, and optional subscriptions.
+   * @returns A BlackBox that owns the supplied resources.
+   */
+  create(resources: BlackBoxTestResources): BlackBox;
+  /**
+   * Tracks a generic subscription-like handle for lifecycle regression tests.
+   *
+   * @param blackBox - The BlackBox that owns the handle.
+   * @param handle - The cancelable async handle to track.
+   * @returns The tracked handle.
+   */
+  track(
+    blackBox: BlackBox,
+    handle: BlackBoxTestHandle,
+  ): AsyncIterable<unknown> & { cancel(): Promise<void> };
+  /**
+   * Opens a BlackBox through supplied lifecycle seams for startup regression tests.
+   *
+   * @param resources - The test startup and connection operations.
+   * @returns A BlackBox created through the supplied operations.
+   */
+  open(resources: BlackBoxTestStartup): Promise<BlackBox>;
 }
 
-/** @internal Internal startup seam; intentionally omitted from the package entry point. */
-export function openTestBlackBox(resources: {
-  readonly start: () => Promise<{ close(): Promise<void> }>;
-  readonly connect: (server: { close(): Promise<void> }) => { close(): Promise<void> };
-}): Promise<BlackBox> {
-  return openBlackBox(
-    {} as BoundedContext,
-    defaultNormalizedOptions(),
-    resources.start as () => Promise<RunningServer>,
-    resources.connect as unknown as (server: RunningServer) => ClientKernel,
-  );
-}
+/** Provides internal-only lifecycle seams for BlackBox regression tests. */
+export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
+  /**
+   * Creates a BlackBox with supplied closeable resources.
+   *
+   * @param resources - The test client, server, and optional subscriptions.
+   * @returns A BlackBox that owns the supplied resources.
+   */
+  create(resources: BlackBoxTestResources): BlackBox {
+    const blackBox = BlackBoxLifecycle.instantiate(
+      {} as BoundedContext,
+      resources.server as RunningServer,
+      resources.client as ClientKernel,
+      BlackBoxOptionsValues.defaults(),
+    );
+    for (const subscription of resources.subscriptions ?? [])
+      BlackBoxAccess.get(blackBox).track(subscription);
+    return blackBox;
+  },
+  /**
+   * Tracks a generic subscription-like handle for lifecycle regression tests.
+   *
+   * @param blackBox - The BlackBox that owns the handle.
+   * @param handle - The cancelable async handle to track.
+   * @returns The tracked handle.
+   */
+  track(
+    blackBox: BlackBox,
+    handle: BlackBoxTestHandle,
+  ): AsyncIterable<unknown> & { cancel(): Promise<void> } {
+    const tracked = new Tracked(handle, () => {
+      BlackBoxAccess.get(blackBox).onRelease(tracked);
+    });
+    return BlackBoxAccess.get(blackBox).track(tracked);
+  },
+  /**
+   * Opens a BlackBox through supplied lifecycle seams for startup regression tests.
+   *
+   * @param resources - The test startup and connection operations.
+   * @returns A BlackBox created through the supplied operations.
+   */
+  open(resources: BlackBoxTestStartup): Promise<BlackBox> {
+    return BlackBoxLifecycle.open(
+      {} as BoundedContext,
+      BlackBoxOptionsValues.defaults(),
+      resources.start as () => Promise<RunningServer>,
+      resources.connect as unknown as (server: RunningServer) => ClientKernel,
+    );
+  },
+});
 
-async function openBlackBox(
-  context: BoundedContext,
-  options: NormalizedBlackBoxOptions,
-  start: () => Promise<RunningServer>,
-  connect: (server: RunningServer) => ClientKernel,
-): Promise<BlackBox> {
-  let server: RunningServer | undefined;
-  let client: ClientKernel | undefined;
-  try {
-    server = await start();
-    client = connect(server);
-    return instantiateBlackBox(context, server, client, options);
-  } catch (error) {
-    const failures: unknown[] = [error];
-    for (const resource of [client, server]) {
-      if (resource === undefined) continue;
-      try {
-        await resource.close();
-      } catch (cleanupError) {
-        failures.push(cleanupError);
+/** Owns BlackBox construction and compensating startup cleanup. */
+const BlackBoxLifecycle = Object.freeze({
+  /** Opens the server and client before constructing a BlackBox. */
+  async open(
+    context: BoundedContext,
+    options: NormalizedBlackBoxOptions,
+    start: () => Promise<RunningServer>,
+    connect: (server: RunningServer) => ClientKernel,
+  ): Promise<BlackBox> {
+    let server: RunningServer | undefined;
+    let client: ClientKernel | undefined;
+    try {
+      server = await start();
+      client = connect(server);
+      return this.instantiate(context, server, client, options);
+    } catch (error) {
+      const failures: unknown[] = [error];
+      for (const resource of [client, server]) {
+        if (resource === undefined) continue;
+        try {
+          await resource.close();
+        } catch (cleanupError) {
+          failures.push(cleanupError);
+        }
       }
+      if (failures.length === 1) throw error;
+      throw new AggregateError(failures, "BlackBox startup cleanup failed.");
     }
-    if (failures.length === 1) throw error;
-    throw new AggregateError(failures, "BlackBox startup cleanup failed.");
-  }
-}
-
-function instantiateBlackBox(
-  context: BoundedContext,
-  server: RunningServer,
-  client: ClientKernel,
-  options: NormalizedBlackBoxOptions,
-): BlackBox {
-  const BlackBoxConstructor = BlackBox as unknown as new (
+  },
+  /** Instantiates a BlackBox through its deliberately private constructor. */
+  instantiate(
     context: BoundedContext,
     server: RunningServer,
     client: ClientKernel,
     options: NormalizedBlackBoxOptions,
-  ) => BlackBox;
-  return new BlackBoxConstructor(context, server, client, options);
+  ): BlackBox {
+    const Constructor = BlackBox as unknown as new (
+      context: BoundedContext,
+      server: RunningServer,
+      client: ClientKernel,
+      options: NormalizedBlackBoxOptions,
+    ) => BlackBox;
+    return new Constructor(context, server, client, options);
+  },
+});
+
+/** Internal resources accepted by the BlackBox lifecycle test seam. */
+export interface BlackBoxTestResources {
+  /** Closes the test client. */
+  readonly client: { close(): Promise<void> };
+  /** Closes the test server. */
+  readonly server: { close(): Promise<void> };
+  /** Lists subscriptions to close with the BlackBox. */
+  readonly subscriptions?: readonly { cancel(): Promise<void> }[];
+}
+
+/** Internal async handle accepted by the BlackBox lifecycle test seam. */
+export type BlackBoxTestHandle = {
+  /** Cancels the tracked handle. */
+  cancel(): Promise<void>;
+} & AsyncIterable<unknown>;
+
+/** Internal startup operations accepted by the BlackBox lifecycle test seam. */
+export interface BlackBoxTestStartup {
+  /**
+   * Starts the test server.
+   *
+   * @returns A closeable test server.
+   */
+  readonly start: () => Promise<{ close(): Promise<void> }>;
+  /**
+   * Connects the test client to the started server.
+   *
+   * @param server - The server returned by start.
+   * @returns A closeable test client.
+   */
+  readonly connect: (server: { close(): Promise<void> }) => { close(): Promise<void> };
 }
 
 class Request implements BlackBoxScope {
@@ -332,7 +462,7 @@ class Request implements BlackBoxScope {
   readonly #actor: string;
 
   constructor(blackBox: BlackBox, request: ClientRequest, actor: string) {
-    this.#internals = internalsOf(blackBox);
+    this.#internals = BlackBoxAccess.get(blackBox);
     this.#request = request;
     this.#actor = actor;
   }
@@ -518,78 +648,99 @@ interface NormalizedBlackBoxOptions {
   readonly intervalMs: number;
 }
 
-function normalizeOptions(
-  context: BoundedContext | BoundedContextBuilder,
-  options: BlackBoxOptions,
-): NormalizedBlackBoxOptions {
-  const multi = context instanceof BoundedContext ? context.isMultitenant : context.isMultitenant();
-  const selectedTenant = tenant(options.tenant);
-  if (multi && selectedTenant === undefined)
-    throw new TypeError("BlackBox multitenant context requires a tenant.");
-  if (!multi && selectedTenant !== undefined)
-    throw new TypeError("BlackBox single-tenant context rejects a tenant.");
-  return Object.freeze({
-    tenant: selectedTenant,
-    zoneId: zoneId(options.zoneId),
-    timeoutMs: positiveInteger(options.timeoutMs ?? 500, "timeoutMs"),
-    intervalMs: positiveInteger(options.intervalMs ?? 5, "intervalMs"),
-  });
-}
-function cloneTenant(value: TenantId | undefined): TenantId | undefined {
-  return value === undefined ? undefined : clone(TenantIdSchema, value);
-}
-function defaultNormalizedOptions(): NormalizedBlackBoxOptions {
-  return Object.freeze({
-    tenant: undefined,
-    zoneId: zoneId(undefined),
-    timeoutMs: 500,
-    intervalMs: 5,
-  });
-}
-function tenant(value: string | TenantId | undefined): TenantId | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== "string") {
-    if (value.kind.case !== "value" || value.kind.value.length === 0)
-      throw new TypeError("BlackBox tenant must not be empty.");
-    return clone(TenantIdSchema, value);
-  }
-  if (value.length === 0) throw new TypeError("BlackBox tenant must not be empty.");
-  return create(TenantIdSchema, { kind: { case: "value", value } });
-}
-function zoneId(value: string | ZoneId | undefined): ZoneId {
-  if (typeof value !== "string" && value !== undefined) {
-    if (value.value.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
-    return clone(ZoneIdSchema, value);
-  }
-  const zone = value ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
-  if (zone.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
-  return create(ZoneIdSchema, { value: zone });
-}
-function timestamp() {
-  return create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) });
-}
-function positiveInteger(value: number, name: "timeoutMs" | "intervalMs"): number {
-  if (!Number.isInteger(value) || value <= 0)
-    throw new TypeError(`BlackBox ${name} must be a positive integer.`);
-  return value;
-}
-function rejected(results: readonly PromiseSettledResult<unknown>[]): unknown[] {
-  const failures: unknown[] = [];
-  for (const result of results) {
-    if (result.status === "rejected") failures.push(result.reason);
-  }
-  return failures;
-}
-function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const abort = () => {
-      clearTimeout(timer);
-      reject(signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason)));
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, milliseconds);
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
+/** Normalizes BlackBox configuration and validates its tenant and timing rules. */
+const BlackBoxOptionsValues = Object.freeze({
+  /** Normalizes options for one context. */
+  normalize(
+    context: BoundedContext | BoundedContextBuilder,
+    options: BlackBoxOptions,
+  ): NormalizedBlackBoxOptions {
+    const multi =
+      context instanceof BoundedContext ? context.isMultitenant : context.isMultitenant();
+    const selectedTenant = this.tenant(options.tenant);
+    if (multi && selectedTenant === undefined)
+      throw new TypeError("BlackBox multitenant context requires a tenant.");
+    if (!multi && selectedTenant !== undefined)
+      throw new TypeError("BlackBox single-tenant context rejects a tenant.");
+    return Object.freeze({
+      tenant: selectedTenant,
+      zoneId: this.zoneId(options.zoneId),
+      timeoutMs: this.positiveInteger(options.timeoutMs ?? 500, "timeoutMs"),
+      intervalMs: this.positiveInteger(options.intervalMs ?? 5, "intervalMs"),
+    });
+  },
+  /** Clones an optional tenant message. */
+  cloneTenant(value: TenantId | undefined): TenantId | undefined {
+    return value === undefined ? undefined : clone(TenantIdSchema, value);
+  },
+  /** Creates default normalized options for internal test seams. */
+  defaults(): NormalizedBlackBoxOptions {
+    return Object.freeze({
+      tenant: undefined,
+      zoneId: this.zoneId(undefined),
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+  },
+  /** Converts a tenant option to its message form. */
+  tenant(value: string | TenantId | undefined): TenantId | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== "string") {
+      if (value.kind.case !== "value" || value.kind.value.length === 0)
+        throw new TypeError("BlackBox tenant must not be empty.");
+      return clone(TenantIdSchema, value);
+    }
+    if (value.length === 0) throw new TypeError("BlackBox tenant must not be empty.");
+    return create(TenantIdSchema, { kind: { case: "value", value } });
+  },
+  /** Converts a zone option to its message form. */
+  zoneId(value: string | ZoneId | undefined): ZoneId {
+    if (typeof value !== "string" && value !== undefined) {
+      if (value.value.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
+      return clone(ZoneIdSchema, value);
+    }
+    const zone = value ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (zone.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
+    return create(ZoneIdSchema, { value: zone });
+  },
+  /** Validates a positive whole-number duration. */
+  positiveInteger(value: number, name: "timeoutMs" | "intervalMs"): number {
+    if (!Number.isInteger(value) || value <= 0)
+      throw new TypeError(`BlackBox ${name} must be a positive integer.`);
+    return value;
+  },
+});
+
+/** Supplies time values and cancellable delays for BlackBox operations. */
+const BlackBoxClock = Object.freeze({
+  /** Creates the current Protobuf timestamp. */
+  timestamp() {
+    return create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) });
+  },
+  /** Waits for a delay or rejects when the supplied signal aborts. */
+  wait(milliseconds: number, signal: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        reject(signal.reason instanceof Error ? signal.reason : new Error(String(signal.reason)));
+      };
+      const timer = setTimeout(() => {
+        signal.removeEventListener("abort", abort);
+        resolve();
+      }, milliseconds);
+      signal.addEventListener("abort", abort, { once: true });
+    });
+  },
+});
+
+/** Collects rejected results while preserving their settlement order. */
+const BlackBoxFailures = Object.freeze({
+  /** Returns reasons from rejected promises. */
+  rejected(results: readonly PromiseSettledResult<unknown>[]): unknown[] {
+    const failures: unknown[] = [];
+    for (const result of results) {
+      if (result.status === "rejected") failures.push(result.reason);
+    }
+    return failures;
+  },
+});
