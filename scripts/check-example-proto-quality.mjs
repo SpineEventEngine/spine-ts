@@ -203,7 +203,9 @@ export function validateProtoDebtEntries(records, observed, observesBaseline) {
       !["missing-comment", "placeholder-comment", "semantic-name"].includes(entry.rule) ||
       entry.disposition !== "migration-debt" ||
       !/^Pre-T-0080C authored Proto quality debt /.test(entry.reason) ||
-      !/^examples\/(?:[^/]+|chat\/(?:model|users-model))\/proto\/.+\.proto$/.test(entry.file) ||
+      !/^examples\/(?:[^/]+|message-board\/(?:model|app|web))\/proto\/.+\.proto$/.test(
+        entry.file,
+      ) ||
       entry.file.includes("..") ||
       entry.file.includes("\\") ||
       protoPartition(entry.file) !== partition
@@ -226,8 +228,8 @@ export function validateProtoDebtEntries(records, observed, observesBaseline) {
 }
 
 function protoPartition(file) {
-  if (/^examples\/chat\/(?:model|users-model)\//.test(file)) return "T-0080J";
-  if (/^examples\/chat\/(?:app|web)\//.test(file)) return "T-0080K";
+  if (/^examples\/message-board\/model\//.test(file)) return "T-0080J";
+  if (/^examples\/message-board\/(?:app|web)\//.test(file)) return "T-0080K";
   if (/^examples\/todo\//.test(file)) return "T-0080L";
   if (/^examples\/project-management\//.test(file)) return "T-0080M";
   if (/^examples\/datastore-orders\//.test(file)) return "T-0080N";
@@ -280,8 +282,8 @@ function baselineContains(root, entry) {
 
 function movedChatBaselinePath(file) {
   return file
-    .replace(/^examples\/chat\/model\//, "examples/chat-model/")
-    .replace(/^examples\/chat\/users-model\//, "examples/users-model/");
+    .replace(/^examples\/message-board\/model\//, "examples/chat-model/")
+    .replace(/^examples\/message-board\/users-model\//, "examples/users-model/");
 }
 
 export function baselineObservesExampleProtoEntry(entry, source) {
@@ -485,7 +487,8 @@ function scanProto(file, source) {
  */
 export function scanExampleProtoContract(file, source) {
   const failures = [];
-  const domain = /(?:^|\/)examples\/(chat|projects|orders|todo)(?:\/|$)/.exec(file)?.[1];
+  const example = /(?:^|\/)examples\/(message-board|projects|orders|todo)(?:\/|$)/.exec(file)?.[1];
+  const domain = example === "message-board" ? "messageboard" : example;
   const packageName = /^\s*package\s+([\w.]+)\s*;/m.exec(source)?.[1];
   if (domain === undefined || packageName !== `spine.examples.${domain}`)
     failures.push(`${file} namespace spine.examples.<domain>`);

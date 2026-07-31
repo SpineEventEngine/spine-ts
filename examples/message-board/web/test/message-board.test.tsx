@@ -1,0 +1,663 @@
+// @vitest-environment jsdom
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import {
+  BoardMessageViewSchema,
+  BoardIdSchema,
+  MessageIdSchema,
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
+import { UserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
+import { AnyMessages } from "@spine-event-engine/core";
+import {
+  ConstraintViolationSchema,
+  ErrorSchema,
+  FieldPathSchema,
+  TemplateStringSchema,
+  ValidationErrorSchema,
+} from "@spine-event-engine/proto";
+import type {
+  ClientOperationOptions,
+  ClientOutcome,
+  ClientRequest,
+} from "@spine-event-engine/client-web";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { MessageBoardApp, type BoardSession } from "../src/index.js";
+
+type FixtureOptions = ClientOperationOptions;
+type FixtureSend = (
+  query: Parameters<ClientRequest["send"]>[0],
+  options?: FixtureOptions,
+) => ReturnType<ClientRequest["send"]>;
+type FixturePost = (
+  schema: Parameters<ClientRequest["post"]>[0],
+  message: Parameters<ClientRequest["post"]>[1],
+  options?: FixtureOptions,
+) => Promise<ClientOutcome>;
+
+describe("MessageBoardApp", () => {
+  afterEach(cleanup);
+
+  it("keeps sign-in application-owned before it starts MessageBoard client work", async () => {
+    const signIn = vi.fn(async () => signedInSession());
+    const request = requestFixture();
+    render(
+      createElement(MessageBoardApp, { session: guestSession(signIn), request, board: "general" }),
+    );
+
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+    expect(request.send).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows a rejected sign-in and permits a successful retry", async () => {
+    const request = requestFixture();
+    const signIn = vi
+      .fn<() => Promise<BoardSession>>()
+      .mockRejectedValueOnce(new Error("sign-in unavailable"))
+      .mockResolvedValueOnce(signedInSession());
+    render(
+      createElement(MessageBoardApp, { session: guestSession(signIn), request, board: "general" }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not publish a late sign-in completion after unmount", async () => {
+    const deferred = Promise.withResolvers<BrowserSession>();
+    const request = requestFixture();
+    const rendered = render(
+      createElement(MessageBoardApp, {
+        session: guestSession(() => deferred.promise),
+        request,
+        board: "general",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    rendered.unmount();
+    deferred.resolve(signedInSession());
+    await Promise.resolve();
+    expect(request.send).not.toHaveBeenCalled();
+  });
+
+  it("ignores a late rejected sign-in after unmount and does not start duplicate sign-in work", async () => {
+    const deferred = Promise.withResolvers<BrowserSession>();
+    const signIn = vi.fn(() => deferred.promise);
+    const rendered = render(
+      createElement(MessageBoardApp, {
+        session: guestSession(signIn),
+        request: requestFixture(),
+        board: "general",
+      }),
+    );
+    const button = screen.getByRole("button", { name: "Sign in" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(signIn).toHaveBeenCalledTimes(1);
+    rendered.unmount();
+    deferred.reject(new Error("late sign-in"));
+    await Promise.resolve();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("posts a PostMessage command and renders only the selected board query", async () => {
+    const request = requestFixture();
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    await screen.findByText("general message");
+    fillPost("Hello board");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    expect(request.post.mock.calls[0]?.[0].typeName).toBe(
+      "spine.examples.messageboard.PostMessage",
+    );
+    expect(request.send.mock.calls[0]?.[0].format?.orderBy).toEqual([
+      expect.objectContaining({ column: "posted_at", direction: 1 }),
+    ]);
+    expect(request.post.mock.calls[0]?.[1]).toMatchObject({ username: "Ada", text: "Hello board" });
+    expect(screen.getByText("general message")).toBeTruthy();
+    expect(screen.queryByText("other board message")).toBeNull();
+  });
+
+  it("shows a lifecycle gap and performs an authoritative board re-query", async () => {
+    const request = requestFixture();
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
+    request.subscription.emitLifecycle({ state: "gapPossible", generation: 1 });
+    await waitFor(() =>
+      expect(screen.getByText("Updates may be incomplete; refreshing messages.")).toBeTruthy(),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+  });
+
+  it("renders one authoritative recovery response without a duplicate board Query", async () => {
+    const request = requestFixture();
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
+    request.subscription.authoritativeQuery?.();
+    request.subscription.emitRecovery(responseRows("recovered message"));
+    await screen.findByText("recovered message");
+    expect(request.subscription.authoritativeQuery).toHaveBeenCalledTimes(1);
+    expect(request.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("coalesces raw update hints into one in-flight refresh and one follow-up", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolve(responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate();
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    request.subscription.emitUpdate();
+    request.query.resolveAt(1, responseRows("refresh one"));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    request.query.resolveAt(2, responseRows("refresh two"));
+    await screen.findByText("refresh two");
+  });
+
+  it("does not start a second raw-hint refresh until the deferred first refresh settles", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate();
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitUpdate();
+    expect(request.send).toHaveBeenCalledTimes(2);
+    request.query.resolveAt(1, responseRows("first refresh"));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    request.query.resolveAt(2, responseRows("second refresh"));
+    await screen.findByText("second refresh");
+  });
+
+  it("aborts an in-flight hint refresh on unmount and ignores its late result", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate();
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    const options = calledOptions(request.send, 1);
+    rendered.unmount();
+    expect(options.signal.aborted).toBe(true);
+    request.query.resolveAt(1, responseRows("late refresh"));
+    await Promise.resolve();
+    expect(screen.queryByText("late refresh")).toBeNull();
+  });
+
+  it("keeps the initial board state when a best-effort hint refresh rejects", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate();
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.query.rejectAt(1, new Error("hint unavailable"));
+    await Promise.resolve();
+    expect(screen.getByText("initial")).toBeTruthy();
+  });
+
+  it("supersedes recovered state with a later normal board refresh", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitRecovery(responseRows("recovered"));
+    await screen.findByText("recovered");
+    request.subscription.emitUpdate();
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.query.resolveAt(1, responseRows("fresh"));
+    await screen.findByText("fresh");
+    expect(screen.queryByText("recovered")).toBeNull();
+  });
+
+  it("retains one deterministic command payload after failure and retries it once", async () => {
+    const request = requestFixture({ postFailure: true });
+    render(
+      createElement(MessageBoardApp, {
+        session: signedInSession(),
+        request,
+        board: "general",
+        createMessageId: () => "message-1",
+      }),
+    );
+    await screen.findByText("general message");
+    fillPost(" keep this ");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    fireEvent.submit(screen.getByRole("textbox", { name: "Message" }).closest("form")!);
+    await screen.findByRole("alert");
+    expect(request.post).toHaveBeenCalledTimes(1);
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
+      " keep this ",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
+    const first = postPayload(request.post.mock.calls[0]?.[1]);
+    const second = postPayload(request.post.mock.calls[1]?.[1]);
+    expect(second).toMatchObject(first);
+    await waitFor(() =>
+      expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
+        "",
+      ),
+    );
+  });
+
+  it("submits blank fields to the server instead of duplicating Proto validation", async () => {
+    const request = requestFixture();
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("general message");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    expect(request.post.mock.calls[0]?.[1]).toMatchObject({ username: "", text: "" });
+  });
+
+  it("shows the username and message errors returned by the server", async () => {
+    const request = requestFixture({ validationFailure: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("general message");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+
+    expect(await screen.findByText("Enter a username.")).toBeTruthy();
+    expect(screen.getByText("Enter a message.")).toBeTruthy();
+    expect(screen.getByLabelText("Username").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByLabelText("Message").tagName).toBe("TEXTAREA");
+    expect(document.activeElement).toBe(screen.getByLabelText("Username"));
+  });
+
+  it("renders shuffled messages from oldest to newest", async () => {
+    const request = requestFixture({
+      initialRows: responseViews([
+        view("newest", "general", 3n),
+        view("oldest", "general", 1n),
+        view("middle", "general", 2n),
+      ]),
+    });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+
+    await screen.findByText("newest");
+    const messages = [...screen.getByRole("list", { name: "Messages" }).querySelectorAll("li")];
+    expect(messages.map((item) => item.textContent)).toEqual([
+      expect.stringContaining("oldest"),
+      expect.stringContaining("middle"),
+      expect.stringContaining("newest"),
+    ]);
+  });
+
+  it("shows a failed subscription lifecycle notice", async () => {
+    const request = requestFixture();
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
+    request.subscription.emitLifecycle({
+      state: "failed",
+      generation: 1,
+      error: new Error("closed"),
+    });
+    await screen.findByText("Message updates disconnected.");
+  });
+
+  it("retries a resolved command rejection with its original payload", async () => {
+    const request = requestFixture({ postResultFailure: true });
+    render(
+      createElement(MessageBoardApp, {
+        session: signedInSession(),
+        request,
+        board: "general",
+        createMessageId: () => "message-result-failure",
+      }),
+    );
+    await screen.findByText("general message");
+    fillPost("retry result");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
+    expect(request.post.mock.calls[1]?.[1]).toMatchObject(request.post.mock.calls[0]?.[1] as {});
+  });
+
+  it("aborts a deferred post and suppresses its late completion after unmount", async () => {
+    const request = requestFixture({ deferredPost: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("general message");
+    fillPost("late post");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    const options = postedOptions(request.post, 0);
+    rendered.unmount();
+    expect(options.signal.aborted).toBe(true);
+    request.postDeferred.resolve({ kind: "ok" });
+    await Promise.resolve();
+    expect(screen.queryByText("Message was not posted. Please retry.")).toBeNull();
+  });
+
+  it("suppresses a late rejected post after unmount", async () => {
+    const request = requestFixture({ deferredPost: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("general message");
+    fillPost("late post");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    rendered.unmount();
+    request.postDeferred.reject(new Error("late post"));
+    await Promise.resolve();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("abandons board A work and starts board B with clean board-owned state", async () => {
+    const request = requestFixture({ queuedQueries: true, deferredPost: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-a" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
+    await screen.findByText("board-a initial");
+    const oldSubscription = request.subscription;
+    request.subscription.emitUpdate();
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    const refreshOptions = calledOptions(request.send, 1);
+    fillPost("old message");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    const postOptions = postedOptions(request.post, 0);
+
+    rendered.rerender(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-b" }),
+    );
+
+    expect(refreshOptions.signal.aborted).toBe(true);
+    expect(postOptions.signal.aborted).toBe(true);
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    expect(oldSubscription.cancel).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Post message" })).not.toHaveProperty(
+      "disabled",
+      true,
+    );
+    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
+      "",
+    );
+    request.query.resolveAt(2, responseBoardRows("board-b initial", "board-b"));
+    await screen.findByText("board-b initial");
+    expect(screen.queryByText("board-a initial")).toBeNull();
+    fillPost("new message");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
+    request.subscription.emitUpdate();
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(4));
+  });
+
+  it("publishes neither late query state nor retained subscription after unmount", async () => {
+    const request = requestFixture({ deferredQuery: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    rendered.unmount();
+    request.query.resolve(responseRows("late message"));
+    await waitFor(() => expect(request.subscription.cancel).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("late message")).toBeNull();
+  });
+});
+
+function guestSession(signIn: () => Promise<BoardSession>): BoardSession {
+  return { status: "guest", signIn };
+}
+
+function signedInSession(): BoardSession {
+  return { status: "signedIn", actor: "ada", signIn: async () => signedInSession() };
+}
+
+function fillPost(text: string, username = "Ada"): void {
+  fireEvent.change(screen.getByLabelText("Username"), { target: { value: username } });
+  fireEvent.change(screen.getByLabelText("Message"), { target: { value: text } });
+}
+
+function requestFixture(
+  options: {
+    deferredQuery?: boolean;
+    queuedQueries?: boolean;
+    postFailure?: boolean;
+    postResultFailure?: boolean;
+    validationFailure?: boolean;
+    initialRows?: ReturnType<typeof responseRows>;
+    deferredPost?: boolean;
+  } = {},
+) {
+  const queries = [Promise.withResolvers<ReturnType<typeof responseRows>>()];
+  const postDeferred = Promise.withResolvers<ClientOutcome>();
+  const subscriptions: ReturnType<typeof subscriptionFixture>[] = [];
+  return {
+    send: vi.fn<FixtureSend>(() => {
+      if (options.deferredQuery) return queries[0]!.promise;
+      if (options.queuedQueries) {
+        const current = queries.at(-1)!;
+        queries.push(Promise.withResolvers<ReturnType<typeof responseRows>>());
+        return current.promise;
+      }
+      return Promise.resolve(
+        options.initialRows ?? responseRows("general message", "other board message"),
+      );
+    }),
+    post: fixturePost(options, postDeferred),
+    createSubscription: vi.fn(async (_topic, options) => {
+      const subscription = subscriptionFixture();
+      subscriptions.push(subscription);
+      subscription.authoritativeQuery = vi.fn<() => unknown>(options.authoritativeQuery);
+      return subscription;
+    }),
+    get subscription() {
+      return subscriptions.at(-1)!;
+    },
+    query: {
+      resolve(value: ReturnType<typeof responseRows>) {
+        queries[0]!.resolve(value);
+      },
+      resolveAt(index: number, value: ReturnType<typeof responseRows>) {
+        queries[index]!.resolve(value);
+      },
+      rejectAt(index: number, error: Error) {
+        queries[index]!.reject(error);
+      },
+    },
+    postDeferred,
+  };
+}
+
+function responseRows(...texts: string[]) {
+  return {
+    message: texts.map((text) => ({ state: AnyMessages.pack(BoardMessageViewSchema, view(text)) })),
+  } as never;
+}
+
+function responseViews(rows: readonly ReturnType<typeof view>[]) {
+  return {
+    message: rows.map((row) => ({ state: AnyMessages.pack(BoardMessageViewSchema, row) })),
+  } as never;
+}
+
+function responseBoardRows(text: string, board: string) {
+  return {
+    message: [{ state: AnyMessages.pack(BoardMessageViewSchema, view(text, board)) }],
+  } as never;
+}
+
+function view(
+  text: string,
+  board = text.startsWith("other") ? "other" : "general",
+  postedSeconds = 1n,
+) {
+  return create(BoardMessageViewSchema, {
+    id: create(MessageIdSchema, { value: text }),
+    board: create(BoardIdSchema, { value: board }),
+    author: create(UserIdSchema, { value: "ada" }),
+    username: "Ada",
+    text,
+    postedAt: create(TimestampSchema, { seconds: postedSeconds }),
+  });
+}
+
+function subscriptionFixture() {
+  const lifecycle = queue<never>();
+  const updates = queue<never>();
+  return {
+    activate: vi.fn(async () => undefined),
+    cancel: vi.fn(async () => {
+      lifecycle.close();
+      updates.close();
+    }),
+    lifecycle: lifecycle.values,
+    updates: updates.values,
+    authoritativeQuery: undefined as undefined | ReturnType<typeof vi.fn<() => unknown>>,
+    emitLifecycle(value: unknown) {
+      lifecycle.push(value as never);
+    },
+    emitRecovery(response: ReturnType<typeof responseRows>) {
+      updates.push({ kind: "resynchronization", response } as never);
+    },
+    emitUpdate() {
+      updates.push({ kind: "update", update: {} } as never);
+    },
+  };
+}
+
+function fixturePost(
+  options: {
+    readonly deferredPost?: boolean;
+    readonly postResultFailure?: boolean;
+    readonly validationFailure?: boolean;
+    readonly postFailure?: boolean;
+  },
+  deferred: PromiseWithResolvers<ClientOutcome>,
+) {
+  let attempts = 0;
+  return vi.fn<FixturePost>(() => {
+    attempts += 1;
+    if (options.deferredPost) return deferred.promise;
+    if (options.validationFailure) return Promise.resolve(validationOutcome());
+    if (options.postResultFailure && attempts === 1)
+      return Promise.resolve({ kind: "rejection", rejection: {} as never });
+    if (options.postFailure && attempts === 1) return Promise.reject(new Error("post unavailable"));
+    return Promise.resolve({ kind: "ok" });
+  });
+}
+
+function validationOutcome(): ClientOutcome {
+  const details = create(ValidationErrorSchema, {
+    constraintViolation: [
+      create(ConstraintViolationSchema, {
+        fieldPath: create(FieldPathSchema, { fieldName: ["username"] }),
+        message: create(TemplateStringSchema, { withPlaceholders: "Enter a username." }),
+      }),
+      create(ConstraintViolationSchema, {
+        fieldPath: create(FieldPathSchema, { fieldName: ["text"] }),
+        message: create(TemplateStringSchema, { withPlaceholders: "Enter a message." }),
+      }),
+    ],
+  });
+  return {
+    kind: "error",
+    error: create(ErrorSchema, {
+      type: "COMMAND_VALIDATION_ERROR",
+      details: AnyMessages.pack(ValidationErrorSchema, details),
+    }),
+  };
+}
+
+function calledOptions(
+  mock: ReturnType<typeof vi.fn<FixtureSend>>,
+  index: number,
+): FixtureOptions & { signal: AbortSignal } {
+  const options = mock.mock.calls[index]?.[1];
+  if (options?.signal === undefined)
+    throw new Error("Expected request options with an AbortSignal.");
+  return { signal: options.signal };
+}
+
+function postedOptions(
+  mock: ReturnType<typeof vi.fn<FixturePost>>,
+  index: number,
+): FixtureOptions & { signal: AbortSignal } {
+  const options = mock.mock.calls[index]?.[2];
+  if (options?.signal === undefined) throw new Error("Expected post options with an AbortSignal.");
+  return { signal: options.signal };
+}
+
+function postPayload(message: unknown): {
+  readonly id: { readonly value: string };
+  readonly text: string;
+} {
+  if (typeof message !== "object" || message === null)
+    throw new Error("Expected a posted message.");
+  const record = message as Record<string, unknown>;
+  const id = record.id;
+  if (typeof id !== "object" || id === null) throw new Error("Expected a posted message ID.");
+  const identifier = (id as Record<string, unknown>).value;
+  if (typeof identifier !== "string" || typeof record.text !== "string")
+    throw new Error("Expected a posted message payload.");
+  return { id: { value: identifier }, text: record.text };
+}
+
+function queue<T>() {
+  const pending: ((result: IteratorResult<T>) => void)[] = [];
+  let closed = false;
+  return {
+    values: {
+      [Symbol.asyncIterator]() {
+        return {
+          next: () =>
+            new Promise<IteratorResult<T>>((resolve) => {
+              if (closed) resolve({ done: true, value: undefined as never });
+              else pending.push(resolve);
+            }),
+        };
+      },
+    } as AsyncIterable<T>,
+    push(value: T) {
+      pending.shift()?.({ done: false, value });
+    },
+    close() {
+      closed = true;
+      for (const resolve of pending.splice(0)) resolve({ done: true, value: undefined as never });
+    },
+  };
+}

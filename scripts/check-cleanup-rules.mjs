@@ -2036,8 +2036,8 @@ function structurePartition(file) {
   if (/^packages\/server\//.test(file)) return "T-0080F";
   if (/^packages\/(?:auth|client-web|client-react)\//.test(file)) return "T-0080G";
   if (/^packages\//.test(file)) return "T-0080H";
-  if (/^examples\/chat\/(?:app|web)\//.test(file)) return "T-0080K";
-  if (/^examples\/chat\/(?:model|users-model)\//.test(file)) return "T-0080J";
+  if (/^examples\/message-board\/(?:app|web)\//.test(file)) return "T-0080K";
+  if (/^examples\/message-board\/model\//.test(file)) return "T-0080J";
   if (/^examples\/todo\//.test(file)) return "T-0080L";
   if (/^examples\/projects\//.test(file)) return "T-0080M";
   if (/^examples\/orders\//.test(file)) return "T-0080N";
@@ -2165,9 +2165,9 @@ function baselineContains(repoRoot, entry) {
 
 function movedChatBaselinePath(file) {
   return file
-    .replace(/^examples\/chat\/app\//, "examples/chat/")
-    .replace(/^examples\/chat\/web\//, "examples/chat-web/")
-    .replace(/^examples\/chat\/model\//, "examples/chat-model/")
+    .replace(/^examples\/chat\/app\//, "examples/message-board/")
+    .replace(/^examples\/chat\/web\//, "examples/message-board-web/")
+    .replace(/^examples\/chat\/model\//, "examples/message-board-model/")
     .replace(/^examples\/chat\/users-model\//, "examples/users-model/")
     .replace(/^examples\/projects\//, "examples/project-management/")
     .replace(/^examples\/orders\//, "examples/datastore-orders/");

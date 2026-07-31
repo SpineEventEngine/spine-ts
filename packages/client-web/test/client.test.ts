@@ -2637,6 +2637,40 @@ describe("Client", () => {
     await client.close();
   });
 
+  it("sends invalid commands so the server can return its validation result", async () => {
+    let packedMessage: Parameters<typeof AnyMessages.unpack>[0] | undefined;
+    const client = Client.usingTransport({
+      transport: unaryTransport((method, input) => {
+        expect(method.name).toBe("Post");
+        const command = input as {
+          readonly id?: { readonly uuid?: string };
+          readonly message?: Parameters<typeof AnyMessages.unpack>[0];
+        };
+        packedMessage = command.message;
+        return create(AckSchema, {
+          messageId: AnyMessages.pack(
+            CommandIdSchema,
+            create(CommandIdSchema, {
+              uuid: requireValue(command.id?.uuid, "command ID"),
+            }),
+          ),
+          status: create(StatusSchema, {
+            status: { case: "error", value: create(ErrorSchema) },
+          }),
+        });
+      }),
+      createRequestId: () => "invalid-post",
+    });
+
+    await expect(client.asGuest().post(UserIdSchema, create(UserIdSchema))).resolves.toMatchObject({
+      kind: "error",
+    });
+    expect(AnyMessages.unpack(requireValue(packedMessage, "packed command"), UserIdSchema)).toEqual(
+      create(UserIdSchema),
+    );
+    await client.close();
+  });
+
   it("rejects malformed and mismatched command acknowledgements", async () => {
     let malformed = true;
     const client = Client.usingTransport({

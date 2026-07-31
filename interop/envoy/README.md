@@ -69,4 +69,4 @@ as certificates, hostnames, observability, external rate limits, or a different
 network topology; keep the gateway-only public boundary when doing so.
 
 See the [user guide](../../docs/USER_GUIDE.md#browser-gateway-envoy-reference)
-and the [Chat web guide](../../examples/chat/web/README.md).
+and the [MessageBoard web guide](../../examples/message-board/web/README.md).

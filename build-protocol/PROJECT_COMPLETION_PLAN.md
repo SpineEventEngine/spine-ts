@@ -108,7 +108,7 @@ durably closed.
   universal gRPC-Web with optional Connect optimization, a standalone
   provider-neutral authentication gateway, opaque and signed application
   sessions, OIDC/Google/GitHub sign-in, a configurable Envoy reference, and the
-  Projection-based Chat example. Subscriptions are explicitly best-effort
+  Projection-based MessageBoard example. Subscriptions are explicitly best-effort
   notifications with reconnect/re-query behavior and no completeness promise.
 - **Wave 5:** storage-neutral application packaging/deployment contracts,
   containers, deterministic Compose, and minimal Kubernetes references.
@@ -1107,9 +1107,9 @@ The project is complete only after the closure commit itself is verified on
 ### T-0084: Application Hosting And Beginner Documentation
 
 T-0084 is complete. It adds one concise framework-owned host for native gRPC
-and browser HTTP transports, removes generic hosting boilerplate from Chat,
+and browser HTTP transports, removes generic hosting boilerplate from MessageBoard,
 splits human READMEs from agent references across all modules, verifies every
-example startup, and leaves the Chat server and UI running after reviewed
+example startup, and leaves the MessageBoard server and UI running after reviewed
 integration. Its reviewed tree passed the release profile with 3,250 tests and
 90.01% branch coverage, merged as `2a911ba0`, and passed focused post-merge and
 live browser acceptance. Its canonical ledger is in

@@ -27,12 +27,12 @@ session.
 import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Client } from "@spine-event-engine/client-node";
-import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/commands_pb.js";
+import { PostMessageSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/commands_pb.js";
 import {
-  ChatRoomIdSchema,
+  BoardIdSchema,
   MessageIdSchema,
-} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
-import { UserIdSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/users_pb.js";
+} from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
+import { UserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
 
 const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
 const request = client.onBehalfOf("alice");
@@ -40,9 +40,10 @@ const result = await request.post(
   PostMessageSchema,
   create(PostMessageSchema, {
     id: create(MessageIdSchema, { value: "message-1" }),
-    room: create(ChatRoomIdSchema, { value: "general" }),
+    board: create(BoardIdSchema, { value: "general" }),
     author: create(UserIdSchema, { value: "alice" }),
-    text: "Hello, Chat.",
+    username: "Alice",
+    text: "Hello, MessageBoard.",
     postedAt: timestampFromDate(new Date()),
   }),
 );
@@ -69,7 +70,7 @@ Generate those definitions in a model package with the Node code-generation
 plugin, then import the resulting declaration from that model:
 
 ```sh
-protoc --spine-entity-columns_out=generated proto/spine/examples/chat/chat.proto
+protoc --spine-entity-columns_out=generated proto/spine/examples/messageboard/message_board.proto
 ```
 
 ```ts

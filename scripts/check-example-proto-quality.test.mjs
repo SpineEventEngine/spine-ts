@@ -34,10 +34,13 @@ function writeModel(root, name, source, manifest = {}) {
 }
 
 function writeTrackedProtoWithoutManifest(root) {
-  const path = join(root, "examples/chat/model/proto/spine/example/chat-model/v1/model.proto");
+  const path = join(
+    root,
+    "examples/message-board/model/proto/spine/example/chat-model/v1/model.proto",
+  );
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `syntax = "proto3";\n// Represents a model.\nmessage Model {}\n`);
-  execFileSync("git", ["add", "examples/chat/model/proto"], { cwd: root });
+  execFileSync("git", ["add", "examples/message-board/model/proto"], { cwd: root });
   execFileSync("git", ["commit", "--quiet", "-m", "proto without manifest"], { cwd: root });
   return path;
 }
@@ -45,7 +48,7 @@ function writeTrackedProtoWithoutManifest(root) {
 function protoDebt(name = "Model") {
   return {
     rule: "missing-comment",
-    file: "examples/chat/model/proto/spine/example/chat-model/v1/model.proto",
+    file: "examples/message-board/model/proto/spine/example/chat-model/v1/model.proto",
     identity: `message:${name}#1`,
     name,
     disposition: "migration-debt",
@@ -86,32 +89,38 @@ option (type_url_prefix) = "type.spine.examples.todo-v1";
   it("does not classify required entity options as documentation jargon", () => {
     const source = `syntax = "proto3";
 
-package spine.examples.chat;
+package spine.examples.messageboard;
 
 // Chat message records one posted message.
-message ChatMessage {
+message BoardMessage {
   option (entity).kind = AGGREGATE;
 }
 `;
     expect(
-      scanExampleProtoContract("examples/chat/model/proto/spine/examples/chat/chat.proto", source),
+      scanExampleProtoContract(
+        "examples/message-board/model/proto/spine/examples/messageboard/message_board.proto",
+        source,
+      ),
     ).toEqual([]);
   });
 
   it("rejects implementation terms in authored example documentation comments", () => {
     const source = `syntax = "proto3";
 
-package spine.examples.chat;
+package spine.examples.messageboard;
 
 // Read-side Projection stores the projected message.
-message ChatMessageView {
+message BoardMessageView {
   option (entity).kind = PROJECTION;
 }
 `;
     expect(
-      scanExampleProtoContract("examples/chat/model/proto/spine/examples/chat/chat.proto", source),
+      scanExampleProtoContract(
+        "examples/message-board/model/proto/spine/examples/messageboard/message_board.proto",
+        source,
+      ),
     ).toContain(
-      "examples/chat/model/proto/spine/examples/chat/chat.proto unrelated-framework-jargon",
+      "examples/message-board/model/proto/spine/examples/messageboard/message_board.proto unrelated-framework-jargon",
     );
   });
 
@@ -391,7 +400,7 @@ message Model {
     const root = fixture();
     writeTrackedProtoWithoutManifest(root);
     writeFileSync(
-      join(root, "examples/chat/model/spine-proto-manifest.json"),
+      join(root, "examples/message-board/model/spine-proto-manifest.json"),
       '{"formatVersion":1,"protoFiles":["spine/example/chat-model/v1/model.proto"]}\n',
     );
 
@@ -458,15 +467,17 @@ message Model {
     const root = fixture();
     writeModel(
       root,
-      "chat/model",
+      "message-board/model",
       `syntax = "proto3";
-package spine.example.chat.v1;
+package spine.example.messageboard.v1;
 message Room { map<string, string> labels = 1; }
 `,
     );
 
     const text = checkExampleProtoQuality(root).join("\n");
-    expect(text).toContain("examples/chat/model/proto/spine/example/chat/model/v1/model.proto");
+    expect(text).toContain(
+      "examples/message-board/model/proto/spine/example/message-board/model/v1/model.proto",
+    );
     expect(text).toContain("missing-comment field:labels#1");
   });
 
@@ -482,7 +493,7 @@ message Room { map<string, string> labels = 1; }
     mkdirSync(directory, { recursive: true });
     writeFileSync(
       join(directory, "T-0080J.json"),
-      '[{"rule":"missing-comment","file":"examples/chat/model/proto/spine/example/chat-model/v1/model.proto","identity":"message:Model#1","name":"Model","disposition":"migration-debt","reason":"Pre-T-0080C authored Proto quality debt message:Model#1 requires remediation by the assigned slice."}]\n',
+      '[{"rule":"missing-comment","file":"examples/message-board/model/proto/spine/example/chat-model/v1/model.proto","identity":"message:Model#1","name":"Model","disposition":"migration-debt","reason":"Pre-T-0080C authored Proto quality debt message:Model#1 requires remediation by the assigned slice."}]\n',
     );
     expect(() => checkExampleProtoQuality(root)).toThrow(
       "Immutable Proto baseline b1a3dc7b1f21e4f7239014ea56f451941ef7addd is unavailable",

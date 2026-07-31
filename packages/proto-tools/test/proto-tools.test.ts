@@ -303,7 +303,7 @@ function packedHandlerTarballs(): readonly string[] {
     "packages/core",
     "packages/storage",
     "packages/transport",
-    "examples/chat/model",
+    "examples/message-board/model",
   ];
   for (const packagePath of packages) {
     execFileSync(
@@ -357,7 +357,7 @@ function createHandlerModelTarball(destination: string): void {
   });
   mkdirSync(join(model, "proto/chat/v1"), { recursive: true });
   writeFileSync(
-    join(model, "proto/chat/v1/chat.proto"),
+    join(model, "proto/chat/v1/message_board.proto"),
     'syntax = "proto3"; package chat.v1;\nmessage Message { string text = 1; }\n',
   );
   writeFileSync(
@@ -453,7 +453,7 @@ describe("spine proto model tooling", () => {
       join(app, "src/chat.ts"),
       [
         'import { Aggregate, Assign } from "@spine-event-engine/server";',
-        'import { type Message, MessageSchema } from "@acme/handler-model/generated/chat/v1/chat_pb.js";',
+        'import { type Message, MessageSchema } from "@acme/handler-model/generated/chat/v1/message_board_pb.js";',
         'import { type PostMessage } from "@acme/handler-model/generated/chat/v1/commands_pb.js";',
         'import { type MessagePosted } from "@acme/handler-model/generated/chat/v1/events_pb.js";',
         "",
@@ -476,7 +476,7 @@ describe("spine proto model tooling", () => {
     );
     const registry = join(app, "generated/handler/generated-handler-registry.ts");
     const source = readFileSync(registry, "utf8");
-    expect(source).toContain("@acme/handler-model/generated/chat/v1/chat_pb.js");
+    expect(source).toContain("@acme/handler-model/generated/chat/v1/message_board_pb.js");
     expect(source).toContain("@spine-event-engine/server/internal/generated-handler-registry");
     execFileSync(
       process.execPath,
@@ -490,8 +490,8 @@ describe("spine proto model tooling", () => {
     expect(
       require.resolve("@spine-event-engine/server/internal/generated-handler-registry"),
     ).toContain("generated-handler-registry.js");
-    expect(require.resolve("@acme/handler-model/generated/chat/v1/chat_pb.js")).toContain(
-      "chat_pb.js",
+    expect(require.resolve("@acme/handler-model/generated/chat/v1/message_board_pb.js")).toContain(
+      "message_board_pb.js",
     );
   }, 120_000);
   it("runs packaged Buf to generate only a model's owned source and module", () => {
@@ -713,7 +713,7 @@ describe("spine proto model tooling", () => {
       modelConfig("@example/chat-model", ["@example/users-model"]),
     );
     mkdirSync(join(chat, "proto"), { recursive: true });
-    writeFileSync(join(chat, "proto/chat.proto"), 'syntax = "proto3"; message Chat {}\n');
+    writeFileSync(join(chat, "proto/message_board.proto"), 'syntax = "proto3"; message Chat {}\n');
 
     expect(() => {
       generateModel(chat);
@@ -1389,8 +1389,8 @@ describe("spine proto model tooling", () => {
       formatVersion: 1,
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
-      protoFiles: ["users.proto"],
-      generatedExports: { "users.proto": "generated/users_pb.js" },
+      protoFiles: ["user.proto"],
+      generatedExports: { "user.proto": "generated/user_pb.js" },
       dependencies: [],
       moduleExport: "usersProtoModule",
     });
@@ -1479,9 +1479,9 @@ describe("spine proto model tooling", () => {
         },
       ],
       protoOwners: {
-        "example-chat-model.proto": {
+        "example-message-board-model.proto": {
           packageName: "@example/chat-model",
-          generatedExport: "generated/example-chat-model_pb.js",
+          generatedExport: "generated/example-message-board-model_pb.js",
         },
         "users/v1/user.proto": {
           packageName: "@example/users-model",
@@ -1702,13 +1702,14 @@ describe("spine proto model tooling", () => {
       formatVersion: 1,
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
-      protoFiles: ["example-chat-model.proto"],
-      generatedExports: { "example-chat-model.proto": "generated/users_pb.js" },
+      protoFiles: ["example-message-board-model.proto"],
+      generatedExports: { "example-message-board-model.proto": "generated/user_pb.js" },
       dependencies: [],
       moduleExport: "modelProtoModule",
     });
     expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
-      "spine-proto: @example/chat-model: Proto path example-chat-model.proto is already owned by @example/users-model",
+      "spine-proto: @example/chat-model: Proto path " +
+        "example-message-board-model.proto is already owned by @example/users-model",
     );
   });
 
@@ -1725,8 +1726,8 @@ describe("spine proto model tooling", () => {
       formatVersion: 1,
       packageName: "@example/users-model",
       packageVersion: "2.0.0",
-      protoFiles: ["users.proto"],
-      generatedExports: { "users.proto": "generated/users_pb.js" },
+      protoFiles: ["user.proto"],
+      generatedExports: { "user.proto": "generated/user_pb.js" },
       dependencies: [],
       moduleExport: "modelProtoModule",
     });
@@ -1749,8 +1750,8 @@ describe("spine proto model tooling", () => {
         formatVersion: 1,
         packageName: "@example/users-model",
         packageVersion: version,
-        protoFiles: ["users.proto"],
-        generatedExports: { "users.proto": "generated/users_pb.js" },
+        protoFiles: ["user.proto"],
+        generatedExports: { "user.proto": "generated/user_pb.js" },
         dependencies: [],
         moduleExport: "modelProtoModule",
       });

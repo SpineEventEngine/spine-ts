@@ -607,6 +607,7 @@ class Request implements ClientRequest {
         context: create(CommandContextSchema, { actorContext: this.#context() }),
         schema,
         message,
+        validate: false,
       });
       const ack = await createClient(CommandService, this.#owner.transport).post(command, {
         signal,

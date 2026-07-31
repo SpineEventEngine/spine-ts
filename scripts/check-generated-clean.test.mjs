@@ -11,7 +11,10 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkChatRegistryFresh, generatedTargetsForCheck } from "./check-generated-clean.mjs";
+import {
+  checkMessageBoardRegistryFresh,
+  generatedTargetsForCheck,
+} from "./check-generated-clean.mjs";
 
 const scriptPath = new URL("./check-generated-clean.mjs", import.meta.url).pathname;
 
@@ -99,7 +102,7 @@ writeFileSync(new URL("proof.ts", \`file://\${output}/\`), "export {};\\n");
   );
   mkdirSync(join(repoRoot, "packages/proto/generated"), { recursive: true });
   writeFileSync(join(repoRoot, ".gitignore"), "packages/proto/generated/\n");
-  const chat = join(repoRoot, "examples/chat/app");
+  const chat = join(repoRoot, "examples/message-board/app");
   mkdirSync(join(chat, "src"), { recursive: true });
   writeFileSync(join(chat, "package.json"), '{"name":"@example/chat"}\n');
   writeFileSync(join(chat, "spine-proto.json"), '{"formatVersion":1,"mode":"application"}\n');
@@ -113,8 +116,8 @@ describe("check-generated-clean", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
-      "examples/chat/model/generated",
-      "examples/chat/app/generated",
+      "examples/message-board/model/generated",
+      "examples/message-board/app/generated",
     ];
 
     for (const generatedRoot of generatedRoots) {
@@ -140,24 +143,24 @@ describe("check-generated-clean", () => {
       "examples/todo/generated",
       "examples/projects/generated",
       "examples/orders/generated",
-      "examples/chat/model/generated",
-      "examples/chat/app/generated",
+      "examples/message-board/model/generated",
+      "examples/message-board/app/generated",
     ]);
   });
 
-  it("detects a changed generated Chat registry", () => {
+  it("detects a changed generated MessageBoard registry", () => {
     const root = mkdtempSync(join(tmpdir(), "spine-chat-registry-freshness-"));
     const target = join(root, "model-registry.ts");
     const staged = join(root, "staged-model-registry.ts");
     writeFileSync(target, "previous registry\n");
     writeFileSync(staged, "next registry\n");
 
-    expect(checkChatRegistryFresh({ target, staged })).toBe(1);
+    expect(checkMessageBoardRegistryFresh({ target, staged })).toBe(1);
     writeFileSync(target, "next registry\n");
-    expect(checkChatRegistryFresh({ target, staged })).toBe(0);
+    expect(checkMessageBoardRegistryFresh({ target, staged })).toBe(0);
   });
 
-  it("cleans staged roots when direct Chat registry composition fails", () => {
+  it("cleans staged roots when direct MessageBoard registry composition fails", () => {
     const repoRoot = createCompositionFixture();
 
     const result = spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], {
@@ -169,15 +172,17 @@ describe("check-generated-clean", () => {
     });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Chat model registry composition failed");
+    expect(result.stderr).toContain("MessageBoard model registry composition failed");
     expect(
       readdirSync(join(repoRoot, "packages/proto")).some((name) => name.startsWith(".generated-")),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat")).some((name) => name.startsWith(".generated-")),
+      readdirSync(join(repoRoot, "examples/message-board")).some((name) =>
+        name.startsWith(".generated-"),
+      ),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat/app/src")).some((name) =>
+      readdirSync(join(repoRoot, "examples/message-board/app/src")).some((name) =>
         name.startsWith(".generated-"),
       ),
     ).toBe(false);
@@ -188,7 +193,10 @@ describe("check-generated-clean", () => {
       'import { mkdirSync, writeFileSync } from "node:fs";\nmkdirSync("src", { recursive: true });\nwriteFileSync("src/model-registry.ts", "fresh registry\\n");\n',
     );
     writeFileSync(join(repoRoot, "packages/proto/generated/proof.ts"), "export {};\n");
-    writeFileSync(join(repoRoot, "examples/chat/app/src/model-registry.ts"), "stale registry\n");
+    writeFileSync(
+      join(repoRoot, "examples/message-board/app/src/model-registry.ts"),
+      "stale registry\n",
+    );
 
     const result = spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], {
       encoding: "utf8",
@@ -199,15 +207,17 @@ describe("check-generated-clean", () => {
     });
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("Generated Chat model registry is stale.");
+    expect(result.stderr).toContain("Generated MessageBoard model registry is stale.");
     expect(
       readdirSync(join(repoRoot, "packages/proto")).some((name) => name.startsWith(".generated-")),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat")).some((name) => name.startsWith(".generated-")),
+      readdirSync(join(repoRoot, "examples/message-board")).some((name) =>
+        name.startsWith(".generated-"),
+      ),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat/app/src")).some((name) =>
+      readdirSync(join(repoRoot, "examples/message-board/app/src")).some((name) =>
         name.startsWith(".generated-"),
       ),
     ).toBe(false);
@@ -237,10 +247,12 @@ describe("check-generated-clean", () => {
       readdirSync(join(repoRoot, "packages/proto")).some((name) => name.startsWith(".generated-")),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat")).some((name) => name.startsWith(".generated-")),
+      readdirSync(join(repoRoot, "examples/message-board")).some((name) =>
+        name.startsWith(".generated-"),
+      ),
     ).toBe(false);
     expect(
-      readdirSync(join(repoRoot, "examples/chat/app/src")).some((name) =>
+      readdirSync(join(repoRoot, "examples/message-board/app/src")).some((name) =>
         name.startsWith(".generated-"),
       ),
     ).toBe(false);

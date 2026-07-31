@@ -1,0 +1,31 @@
+syntax = "proto3";
+package spine.examples.messageboard;
+
+import "google/protobuf/timestamp.proto";
+import "spine/examples/messageboard/message_board.proto";
+import "spine/examples/messageboard/user.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.messageboard";
+
+// Records a message posted on a board.
+message MessagePosted {
+
+  // The identifier assigned to the posted message.
+  MessageId id = 1 [(required) = true, (validate) = true];
+
+  // The board that received the message.
+  BoardId board = 2 [(required) = true, (validate) = true];
+
+  // The account that posted the message.
+  UserId author = 3 [(required) = true, (validate) = true];
+
+  // The username shown beside the message.
+  string username = 4 [(required) = true];
+
+  // The text written in the posted message.
+  string text = 5 [(required) = true];
+
+  // The time at which the message was posted.
+  google.protobuf.Timestamp posted_at = 6 [(required) = true];
+}
