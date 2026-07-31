@@ -1115,6 +1115,16 @@ integration. Its reviewed tree passed the release profile with 3,250 tests and
 live browser acceptance. Its canonical ledger is in
 `build-protocol/tasks/T-0084-app-host-docs/TASK.md`.
 
+### T-0086: MessageBoard Example
+
+T-0086 is complete. It renames Chat to MessageBoard, adds Proto-owned username
+and message validation with server-derived UI feedback, displays messages
+oldest-first with relative times, and supplies a polished Shadcn-based browser
+interface. The reviewed task tree passes 3,265 tests with exactly 90.00% global
+branch coverage, merged as `18090c2f`, and passes post-merge generation/build
+plus real Chromium, Firefox, and WebKit acceptance. Its canonical ledger is in
+`build-protocol/tasks/T-0086-message-board/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:

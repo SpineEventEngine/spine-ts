@@ -1,6 +1,6 @@
 # T-0086: MessageBoard example
 
-Status: Verified; integration pending
+Status: Complete
 Start: `2026-07-31`
 Baseline: `b0ad668163f598f487d71d380e2477bb8575f419`
 Branch: `task/T-0086-message-board`
@@ -89,3 +89,14 @@ overlong exploration and completed the plan from the traced evidence in
 - Cheap preflight: focused model/app/web tests, generated and tooling
   typechecks, deterministic Proto/docs checks, changed-file lint/format, browser
   acceptance, accessibility audit, bundle inspection, and `git diff --check`.
+
+## Integration
+
+- Reviewed task endpoint: `5c67ebfd13d6c346b8507b96a57422ba54872822`.
+- Integration merge: `18090c2faef565533914f0e9d176a4814372b4aa`.
+- The merged tree and verified task tree share exact tree hash
+  `a78586164a509c7cfed4acd708734c927ae94b77`.
+- Post-merge generation/build and real Playwright acceptance pass in Chromium,
+  Firefox, and WebKit.
+- The feature branch and integration merge were pushed to `origin`; this
+  closure record is pushed in its containing `main` commit.
