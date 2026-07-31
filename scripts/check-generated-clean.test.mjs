@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { checkChatRegistryFresh, generatedTargetsForCheck } from "./check-generated-clean.mjs";
 
@@ -53,14 +53,21 @@ function runChecker(repoRoot, expectedGeneratedRoot) {
   );
 }
 
+function runCurrentOutputChecker(repoRoot) {
+  return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot, "--current-output"], {
+    encoding: "utf8",
+  });
+}
+
 function createCompositionFixture(compositionSource = "process.exit(1);\n") {
   const repoRoot = mkdtempSync(join(tmpdir(), "spine-check-generated-clean-"));
   run("git", ["init"], repoRoot);
   mkdirSync(join(repoRoot, "node_modules/.bin"), { recursive: true });
-  const buf = join(repoRoot, "node_modules/.bin/buf");
+  const bin = join(repoRoot, "node_modules/.bin");
+  const bufScript = join(bin, "buf-fixture.mjs");
   writeFileSync(
-    buf,
-    `#!/usr/bin/env node
+    bufScript,
+    `
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 const template = readFileSync(process.argv.at(-1), "utf8");
 const output = template.match(/^\\s*out:\\s*(.+)$/mu)?.[1];
@@ -69,9 +76,19 @@ mkdirSync(output, { recursive: true });
 writeFileSync(new URL("proof.ts", \`file://\${output}/\`), "export {};\\n");
 `,
   );
-  chmodSync(buf, 0o755);
-  const plugin = join(repoRoot, "node_modules/.bin/test");
-  writeFileSync(plugin, "#!/usr/bin/env node\nprocess.exit(0);\n");
+  const buf = join(bin, process.platform === "win32" ? "buf.cmd" : "buf");
+  writeFileSync(
+    buf,
+    process.platform === "win32"
+      ? '@node "%~dp0\\buf-fixture.mjs" %*\r\n'
+      : '#!/usr/bin/env node\nimport("./buf-fixture.mjs");\n',
+  );
+  if (process.platform !== "win32") chmodSync(buf, 0o755);
+  const plugin = join(bin, process.platform === "win32" ? "test.cmd" : "test");
+  writeFileSync(
+    plugin,
+    process.platform === "win32" ? "@exit /b 0\r\n" : "#!/usr/bin/env node\nprocess.exit(0);\n",
+  );
   chmodSync(plugin, 0o755);
   const cli = join(repoRoot, "packages/proto-tools/dist/src/cli/spine-proto.js");
   mkdirSync(dirname(cli), { recursive: true });
@@ -90,6 +107,33 @@ writeFileSync(new URL("proof.ts", \`file://\${output}/\`), "export {};\\n");
 }
 
 describe("check-generated-clean", () => {
+  it("checks already-generated outputs without staging a second generation", () => {
+    const repoRoot = createFixture();
+    const generatedRoots = [
+      "examples/todo/generated",
+      "examples/projects/generated",
+      "examples/orders/generated",
+      "examples/chat/model/generated",
+      "examples/chat/app/generated",
+    ];
+
+    for (const generatedRoot of generatedRoots) {
+      mkdirSync(join(repoRoot, generatedRoot), { recursive: true });
+    }
+    writeFileSync(
+      join(repoRoot, ".gitignore"),
+      [
+        "packages/proto/generated/",
+        ...generatedRoots.map((generatedRoot) => `${generatedRoot}/`),
+      ].join("\n"),
+    );
+
+    const result = runCurrentOutputChecker(repoRoot);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("already-generated");
+  });
+
   it("compares every atomic model output by default", () => {
     expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
@@ -120,7 +164,7 @@ describe("check-generated-clean", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        PATH: `${join(repoRoot, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+        PATH: `${join(repoRoot, "node_modules/.bin")}${delimiter}${process.env.PATH ?? ""}`,
       },
     });
 
@@ -143,13 +187,14 @@ describe("check-generated-clean", () => {
     const repoRoot = createCompositionFixture(
       'import { mkdirSync, writeFileSync } from "node:fs";\nmkdirSync("src", { recursive: true });\nwriteFileSync("src/model-registry.ts", "fresh registry\\n");\n',
     );
+    writeFileSync(join(repoRoot, "packages/proto/generated/proof.ts"), "export {};\n");
     writeFileSync(join(repoRoot, "examples/chat/app/src/model-registry.ts"), "stale registry\n");
 
     const result = spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], {
       encoding: "utf8",
       env: {
         ...process.env,
-        PATH: `${join(repoRoot, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+        PATH: `${join(repoRoot, "node_modules/.bin")}${delimiter}${process.env.PATH ?? ""}`,
       },
     });
 
@@ -181,7 +226,7 @@ describe("check-generated-clean", () => {
       encoding: "utf8",
       env: {
         ...process.env,
-        PATH: `${join(repoRoot, "node_modules/.bin")}:${process.env.PATH ?? ""}`,
+        PATH: `${join(repoRoot, "node_modules/.bin")}${delimiter}${process.env.PATH ?? ""}`,
       },
     });
 

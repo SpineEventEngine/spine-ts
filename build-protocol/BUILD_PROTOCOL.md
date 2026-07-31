@@ -186,6 +186,61 @@ rename an agent role.
     limitations, and the next milestone; integrates the branch; closes every
     participant; and continues automatically.
 
+## Development Efficiency
+
+Speed comes from smaller review surfaces and eliminating repeated mechanical
+work, never from weakening correctness or review requirements.
+
+1. Split broad requests into independently closable milestones when they mix
+   runtime behavior, example migration, broad documentation, generated output,
+   or otherwise independent contracts. Preserve autonomous execution by running
+   the resulting milestones in sequence without asking for routine approval.
+2. Before the full gate, run one mandatory cheap preflight over the affected
+   scope: changed-file formatting, `git diff --check`, tooling and affected-
+   package typechecks, focused tests, deterministic documentation checks, and
+   changed-production-file coverage inspection. Begin the full gate only after
+   this preflight is clean.
+3. Identify required local capabilities before verification. Tests that bind
+   loopback HTTP, HTTP/2, gRPC, or ZeroMQ endpoints must run with the necessary
+   permission on their first attempt; a restricted sandbox is not a useful
+   baseline for them.
+4. Run full verification once per converged task. If it fails, return to and
+   complete the entire cheap preflight before another full attempt.
+5. Keep the final verification implementation single-pass. `pnpm verify` must
+   build TypeScript once, run tests once with coverage, generate TypeDoc once,
+   and perform each Proto generation/checksum check once. Downstream checks
+   must reuse those outputs rather than rebuilding or regenerating them.
+6. Treat coverage as an implementation-time requirement. Inspect changed
+   production branches and add focused behavior tests before review instead of
+   discovering a coverage shortage in the final repository-wide gate.
+7. Give runtime reviewers only runtime/API/test changes and give the
+   documentation reviewer only affected prose and claims. When a branch must
+   contain both, provide concern-specific diffs or path lists rather than one
+   undifferentiated package.
+8. Run deterministic documentation policy checks before documentation review,
+   including commands, links, prohibited internal wording, beginner sections,
+   README-to-REFERENCE links, package names, and example paths. Human-like
+   review then focuses on accuracy, teaching quality, and clarity.
+9. Return the complete accepted finding batch to the same implementation owner
+   while that context is available. Do not dispatch a fresh fixer merely to
+   rediscover the changed design.
+10. Use two verification profiles. `verify:task` requires either focused test
+    paths with an explicit coverage choice, or explicit `--no-tests` for
+    documentation/record-only work. Invoke it as one of:
+    `pnpm verify:task -- --coverage <test-paths...> --source
+<changed-source-paths...>`, `pnpm verify:task -- --no-coverage
+<test-paths...>`, or `pnpm verify:task -- --no-tests`. It runs the shared
+    gates for affected packages, examples, documentation, and generated
+    cleanliness, then runs the declared focused tests and coverage when chosen;
+    `verify:release` covers the entire repository and global coverage. Shared
+    runtime/build changes and release boundaries use `verify:release`; isolated
+    examples, documentation, and bounded packages use `verify:task` unless a
+    concrete risk requires escalation. `pnpm verify` is the release profile.
+
+These rules are execution gates. A task log must record the selected profile
+and why it is sufficient. Review scope or verification may expand when evidence
+reveals cross-package impact, but must not expand merely from habit.
+
 The splitter must prefer small task slices. A task should produce a review
 package that one reviewer can inspect carefully in one pass. If the proposed
 diff would mix independent contracts, broad documentation rewrites, generated
@@ -273,6 +328,13 @@ avoid a gate.
 The canonical remote is `origin`, currently
 `https://github.com/armiol/spine-ts.git` (a user-level Git URL rewrite may show
 the equivalent SSH transport).
+
+Feature branches are durable working state, not merge-time artifacts. Push a
+feature branch to `origin` immediately after every commit, including focused-
+verification checkpoints and review-correction commits. Do not wait for task
+completion or merge. Never rewrite or force-push already published task history
+unless the human explicitly requests it. A push failure is reported and
+diagnosed immediately, while local work remains preserved.
 
 After each task is complete, reviewed, merged into `main`, and post-merge
 verified:
@@ -540,12 +602,18 @@ Use focused tests and task-relevant checks during inner fix loops. Do not run a
 baseline full gate when recent verified `main` evidence exists, unless the task
 changes shared build/test infrastructure or must reproduce a baseline failure.
 
-Run the full `pnpm verify` gate once after review and corrections converge when
+The mandatory cheap preflight in Development Efficiency must be clean before
+either verification profile runs. Deterministic corrections after a failed
+profile return to the preflight; they do not justify repeatedly invoking the
+expensive profile as a diagnostic tool.
+
+Run the `verify:release` profile once after review and corrections converge when
 runtime code, tests, public or serialized contracts, generated artifacts,
 dependencies, or shared build tooling changed. Micro and documentation-only
-tasks instead run their relevant TypeDoc/docs, link, snippet/API-prohibition,
-formatting, generated-cleanliness where applicable, and `git diff --check`
-gates.
+tasks use `verify:task`, limited to their relevant TypeDoc/docs, link,
+snippet/API-prohibition, formatting, generated-cleanliness where applicable,
+and `git diff --check` gates. Standard bounded-package and example tasks use
+`verify:task` unless their recorded impact requires the release profile.
 
 After merge, rerun the full gate only when `main` moved after the task's last
 synchronization, conflict resolution changed the verified tree, shared
