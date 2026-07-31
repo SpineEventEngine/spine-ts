@@ -1,6 +1,6 @@
 # T-0084: Application hosting and beginner documentation
 
-Status: Ready to integrate
+Status: Complete
 Start: `2026-07-31`
 Baseline commit: `9d8c2c76d3c1d44abd727d9b53e54ee39a31356f`
 Branch: `task/T-0084-app-host-docs`
@@ -200,3 +200,16 @@ and its server running for human inspection.
   and 3,250 tests, with 3 files and 25 tests retaining established skips.
   Branch coverage is 90.01%; every shared build, tooling, documentation, Proto,
   generated-output, and release-readiness gate passed.
+
+## Integration Closure
+
+- The verified feature tree merged into `main` as `2a911ba0`; its tree is
+  byte-identical to the reviewed feature endpoint.
+- The feature branch and merged `main` were pushed to `origin`, and their local
+  and remote refs matched.
+- Post-merge `verify:task` passed every shared deterministic gate and 116
+  focused server, Chat, TSDoc, and verification-tooling tests.
+- The documented one-command Chat server and web starts are running at
+  `http://127.0.0.1:8090` and `http://127.0.0.1:5173` respectively.
+- Live Chromium acceptance posted a message through the browser gateway and
+  observed it in the Projection-backed UI without console or page errors.
