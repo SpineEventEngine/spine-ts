@@ -1,8 +1,8 @@
 # T-0083: Example documentation and startup
 
-Status: Accepted for integration
+Status: Complete
 Start: `2026-07-31 11:31 WEST`
-End: Pending
+End: `2026-07-31 14:12 WEST`
 Baseline commit: `c6f8d79419303b29079b49aad3b4b2ef8ecfc7d1`
 Task log path: `build-protocol/tasks/T-0083-example-startup/TASK.md`
 Branch: `task/T-0083-example-startup`
@@ -12,8 +12,8 @@ Authoring sub-agents: `/root/t0083_implement`,
 Reviewer sub-agents: `/root/t0083_style_review`,
 `/root/t0083_docs_review`, `/root/t0083_api_review`,
 `/root/t0083_reliability_review`
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation commit: `ab3f018a08902537e1f213db0898ff739c06b581`
+Final branch HEAD: `ab3f018a08902537e1f213db0898ff739c06b581`
 
 Task classification: High-risk
 Classification reason: The task establishes independently executable server
@@ -273,4 +273,12 @@ Converged:
 
 ## Integration Result
 
-Pending.
+Merged into `main` as `d5cff9a3fce2d3fa0a6d2a1bbc036f9b81637095`
+and pushed to `origin/main`. The task branch was pushed first at
+`ab3f018a08902537e1f213db0898ff739c06b581`.
+
+Post-merge `pnpm verify` passed after refreshing the primary checkout from the
+frozen lockfile and removing obsolete ignored generated/dependency directories.
+The final main-branch evidence matches the task gate: 166 test files / 3,231
+tests, 90.04% branch coverage, TypeDoc export checks, Proto freshness, and
+release readiness.

@@ -3,8 +3,7 @@
 Task log: `build-protocol/tasks/T-0083-example-startup/TASK.md`
 Branch: `task/T-0083-example-startup`
 Baseline commit: `c6f8d79419303b29079b49aad3b4b2ef8ecfc7d1`
-Reviewed endpoint: Staged worktree snapshot against
-`c6f8d79419303b29079b49aad3b4b2ef8ecfc7d1`
+Reviewed endpoint: `ab3f018a08902537e1f213db0898ff739c06b581`
 Worktree: `.worktrees/T-0083-example-startup`
 Status: Converged
 
