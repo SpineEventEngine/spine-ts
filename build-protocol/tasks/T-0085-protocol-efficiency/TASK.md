@@ -23,8 +23,8 @@ Status: In review
 - `pnpm verify` aliases the release profile.
 - One release invocation builds TypeScript once, runs tests once with coverage,
   generates TypeDoc once, and avoids repeated Proto source/checksum validation.
-- Task verification keeps focused tests/coverage as explicit task-owned
-  commands and runs common deterministic gates once.
+- Task verification machine-enforces focused test paths plus an explicit
+  coverage choice, or explicit `--no-tests` for documentation/record-only work.
 
 ## Human-Imposed Requirements Ledger
 
@@ -62,8 +62,9 @@ Status: In review
   TypeScript once, runs Vitest once with coverage, and invokes the TypeDoc/API
   check once. The generated-output Buf lint keeps the existing lint gate without
   rerunning the Proto source checksum preflight that generation already ran.
-- `verify:task` intentionally excludes test and coverage commands: focused task
-  tests and coverage remain explicitly selected and recorded by the task owner.
+- `verify:task` requires the task owner to pass focused test paths and an
+  explicit coverage choice; only documentation/record-only work may select its
+  explicit no-tests mode.
 - Assignment acceptance: existing `implementer` role, explicitly dispatched as
   `gpt-5.6-terra` / medium. Runtime self-metadata is not exposed in this
   surface, so the immutable configured profile is the available evidence.
@@ -108,3 +109,15 @@ scripts/package-metadata.test.mjs` passed (9 tests); `git diff --check`
   repository root. This keeps production behavior unchanged for the default
   root and makes isolated generated-cleanliness fixtures deterministic.
 - The complete 18-test focused suite passed after the correction.
+
+## Accepted review batch
+
+- `verify:task` now requires `--coverage <test-paths...> --source
+<changed-source-paths...>` or `--no-coverage <test-paths...>`; only
+  `--no-tests` can omit tests, for documentation/record-only work. Coverage is
+  scoped to declared changed sources, preventing unrelated global zero-coverage
+  files while runtime tasks still cannot silently omit a test/coverage decision.
+- Shared generated gates live in `verify:generated-gates`; release adds exactly
+  one full coverage run, while task execution adds its required focused run.
+- Todo companion staging now resolves Buf from the supplied root. Focused
+  fixtures use platform-specific fake launchers and `node:path` delimiters.

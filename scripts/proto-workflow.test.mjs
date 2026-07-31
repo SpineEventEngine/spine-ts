@@ -642,6 +642,35 @@ describe("proto-workflow", () => {
     },
   );
 
+  it("uses the supplied root Buf executable for Todo companion generation", () => {
+    const repoRoot = todoTransactionFixture();
+    const localBuf = join(
+      repoRoot,
+      "node_modules/.bin",
+      process.platform === "win32" ? "buf.cmd" : "buf",
+    );
+    mkdirSync(dirname(localBuf), { recursive: true });
+    writeFileSync(localBuf, "fixture Buf\n");
+    let companionExecutable;
+
+    try {
+      const staged = stageGeneratedTargets({
+        repoRoot,
+        runCommand: rootStageCommand,
+        runModelCommand(label, executable, args, cwd) {
+          if (label === "Todo companion generation") companionExecutable = executable;
+          return todoStageCommand(undefined)(label, executable, args, cwd);
+        },
+      });
+
+      expect(staged.status).toBe(0);
+      expect(companionExecutable).toBe(localBuf);
+      cleanupStagedTargets(staged.stagedTargets);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
   it("fails closed when the staged Todo manifest is missing", () => {
     const repoRoot = todoTransactionFixture();
     expect(

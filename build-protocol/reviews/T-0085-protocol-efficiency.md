@@ -18,12 +18,35 @@
 
 ## Canonical dispositions
 
-- Style/maintainability: pending for shared script composition.
-- Documentation: pending scoped re-review after accepted findings are fixed.
+- Style/maintainability: pending `/root/t0085_style_review`; existing
+  `style_maintainability_reviewer` role, expected `gpt-5.6-terra` / high.
+- Documentation: pending scoped re-review by `/root/t0085_docs_review`;
+  existing `documentation_reviewer` role, expected `gpt-5.6-luna` / medium.
 - TypeScript/API docs: N/A; no product API, declaration, Proto, or end-user API
   snippet changes.
-- Performance/reliability: pending for deterministic command sequencing and
-  failure propagation in the optimized verification chain.
+- Performance/reliability: pending `/root/t0085_reliability_review`; existing
+  `performance_reliability_reviewer` role, expected `gpt-5.6-terra` / high for
+  deterministic command sequencing and failure propagation.
+
+## Wave 2 findings and correction
+
+- Documentation P1 accepted: aligned the task-profile contract with its
+  machine-enforced focused test/coverage inputs and documented exact commands.
+- Reliability P1 accepted: the task runner now requires explicit focused tests
+  and a coverage choice, with changed-source includes for focused coverage.
+- Reliability/style companion-generation finding accepted: every Buf path now
+  resolves relative to the supplied repository root, including Todo companion
+  generation.
+- Style P2 accepted: common generated gates are composed once and reused by
+  task and release profiles.
+- Reliability P2 accepted: fake Buf launchers and PATH construction are
+  cross-platform.
+- Invocation correction: the runner accepts one conventional leading pnpm `--`
+  separator; its strict validation remains unchanged.
+- Independent correction evidence: the complete `verify:task` command passed
+  shared deterministic gates and 75 focused tests.
+- Scoped re-review of documentation, maintainability, and reliability remains
+  pending.
 
 ## Implementation supplied for review
 
@@ -66,3 +89,15 @@ scripts/package-metadata.test.mjs` (9 tests). `git diff --check` passed.
   Buf from the source worktree. `stageGeneratedTargets()` now resolves and runs
   Buf from its supplied root, making the fixture deterministic without changing
   generated-cleanliness policy. The 18 focused tests pass.
+
+## Accepted review batch applied
+
+- P1 task-profile contract resolved: `verify:task` machine-enforces focused
+  paths and an explicit coverage decision. Coverage requires changed sources
+  and supplies scoped Vitest includes; `--no-tests` is reserved for
+  documentation/record-only tasks.
+- P1 composition resolved: common generated gates are centralized; release adds
+  exactly one full coverage run and task execution adds a required focused run.
+- P2 portability resolved: Todo companion Buf uses its supplied root; fixture
+  fake launchers and PATH construction are cross-platform.
+- Dispositions remain pending only for scoped re-review of the updated batch.

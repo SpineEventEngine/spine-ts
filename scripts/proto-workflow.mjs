@@ -790,7 +790,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
       const template = writeStagedTemplate(target, output, stageRoot, root);
       const companionStatus = run(
         `${target.moduleName} companion generation`,
-        resolveBufExecutable(),
+        resolveBufExecutable(root),
         ["generate", "--template", template],
         root,
       );

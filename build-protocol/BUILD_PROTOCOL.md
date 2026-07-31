@@ -224,8 +224,14 @@ work, never from weakening correctness or review requirements.
 9. Return the complete accepted finding batch to the same implementation owner
    while that context is available. Do not dispatch a fresh fixer merely to
    rediscover the changed design.
-10. Use two verification profiles. `verify:task` covers affected packages,
-    examples, documentation, generated cleanliness, and focused coverage;
+10. Use two verification profiles. `verify:task` requires either focused test
+    paths with an explicit coverage choice, or explicit `--no-tests` for
+    documentation/record-only work. Invoke it as one of:
+    `pnpm verify:task -- --coverage <test-paths...> --source
+<changed-source-paths...>`, `pnpm verify:task -- --no-coverage
+<test-paths...>`, or `pnpm verify:task -- --no-tests`. It runs the shared
+    gates for affected packages, examples, documentation, and generated
+    cleanliness, then runs the declared focused tests and coverage when chosen;
     `verify:release` covers the entire repository and global coverage. Shared
     runtime/build changes and release boundaries use `verify:release`; isolated
     examples, documentation, and bounded packages use `verify:task` unless a
