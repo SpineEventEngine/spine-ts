@@ -1,6 +1,6 @@
 # T-0085: Faster autonomous development protocol
 
-Status: Ready to integrate
+Status: Complete
 
 ## Classification And Scope
 
@@ -67,6 +67,10 @@ Status: Ready to integrate
   lines.
 - All build, tooling typecheck, lint, cleanup, TSDoc, formatting, TypeDoc/API,
   Buf lint, generated-output, and release-readiness gates passed.
+- The task branch was merged into `main` by `805dcc91` and both refs were
+  pushed to `origin`.
+- Post-merge `verify:task` passed all shared deterministic gates and 75 focused
+  tests from the merged tree.
 
 ## Implementation Record
 
