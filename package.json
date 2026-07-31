@@ -26,14 +26,20 @@
     "docs:api": "pnpm proto:generate && pnpm docs:api:generated",
     "docs:api:generated": "typedoc --options typedoc.json",
     "docs:check": "pnpm proto:generate && pnpm docs:check:generated",
-    "docs:check:generated": "typedoc --options typedoc.json && node scripts/check-api-docs.mjs",
+    "docs:check:generated": "node scripts/check-api-docs.mjs",
     "proto:verify": "node scripts/verify-proto-sources.mjs",
     "proto:lint": "node scripts/proto-workflow.mjs lint",
+    "proto:lint:generated": "pnpm exec buf lint",
     "proto:generate": "node scripts/proto-workflow.mjs generate",
     "proto:check-generated": "node scripts/check-generated-clean.mjs",
+    "proto:check-generated:current": "node scripts/check-generated-clean.mjs --current-output",
     "check:release-readiness": "node scripts/check-release-readiness.mjs",
-    "verify": "pnpm check:node && pnpm proto:generate && pnpm verify:generated",
-    "verify:generated": "pnpm typecheck:generated && pnpm lint:generated && pnpm format:check && pnpm test:generated && pnpm test:coverage:generated && pnpm docs:check:generated && pnpm proto:lint && pnpm proto:check-generated && pnpm check:release-readiness"
+    "verify": "pnpm verify:release",
+    "verify:task": "pnpm check:node && pnpm proto:generate && pnpm verify:task:generated",
+    "verify:task:generated": "pnpm typecheck:build:generated && pnpm typecheck:tooling && eslint . && node scripts/check-cleanup-rules.mjs && node scripts/check-tsdoc.mjs && pnpm format:check && pnpm docs:check:generated && pnpm proto:lint:generated && pnpm proto:check-generated:current && pnpm check:release-readiness",
+    "verify:release": "pnpm check:node && pnpm proto:generate && pnpm verify:release:generated",
+    "verify:release:generated": "pnpm typecheck:build:generated && pnpm typecheck:tooling && eslint . && node scripts/check-cleanup-rules.mjs && node scripts/check-tsdoc.mjs && pnpm format:check && vitest run --coverage --passWithNoTests && pnpm docs:check:generated && pnpm proto:lint:generated && pnpm proto:check-generated:current && pnpm check:release-readiness",
+    "verify:generated": "pnpm verify:release:generated"
   },
   "devDependencies": {
     "@bufbuild/buf": "1.71.0",

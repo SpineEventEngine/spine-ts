@@ -97,14 +97,22 @@ agent identities.
 6. Collect one complete review wave, aggregate its findings, and return one
    correction batch to implementation. Re-review only substantively affected
    concerns; record-only and deterministic corrections do not reopen lanes.
-7. Run full verification only at the change-sensitive cadence in the build
-   protocol. Record acceptance, evidence, resolved findings, limitations, and
-   the next milestone, then continue automatically.
+7. Run the mandatory cheap preflight before an expensive verification profile.
+   Use `verify:task` for bounded changes and `verify:release` for shared runtime,
+   build, and release work. Run the selected expensive profile once after
+   convergence, not as a diagnostic loop.
+8. Keep reviewer inputs concern-specific, return one accepted finding batch to
+   the existing implementation owner, and use deterministic documentation and
+   coverage checks before review.
+9. Record acceptance, evidence, resolved findings, limitations, and the next
+   milestone, then continue automatically.
 
-After each task is complete, reviewed, merged, and post-merge verified, push
-the completed task branch and updated `main` to `origin`. Push any task tags at
-the same boundary. A task is not durably closed until the push succeeds or a
-real remote/authentication blocker is recorded.
+Push every feature-branch commit to `origin` immediately, including checkpoint
+and review-correction commits. After each task is complete, reviewed, merged,
+and post-merge verified, push updated `main` and any task tags. Never rewrite a
+published task branch without explicit human direction. A task is not durably
+closed until the required pushes succeed or a real remote/authentication
+blocker is recorded.
 
 Do not pause for routine implementation choices. Stop only for the blockers
 listed in `build-protocol/BUILD_PROTOCOL.md` and the completion plan.

@@ -53,6 +53,12 @@ function runChecker(repoRoot, expectedGeneratedRoot) {
   );
 }
 
+function runCurrentOutputChecker(repoRoot) {
+  return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot, "--current-output"], {
+    encoding: "utf8",
+  });
+}
+
 function createCompositionFixture(compositionSource = "process.exit(1);\n") {
   const repoRoot = mkdtempSync(join(tmpdir(), "spine-check-generated-clean-"));
   run("git", ["init"], repoRoot);
@@ -90,6 +96,33 @@ writeFileSync(new URL("proof.ts", \`file://\${output}/\`), "export {};\\n");
 }
 
 describe("check-generated-clean", () => {
+  it("checks already-generated outputs without staging a second generation", () => {
+    const repoRoot = createFixture();
+    const generatedRoots = [
+      "examples/todo/generated",
+      "examples/projects/generated",
+      "examples/orders/generated",
+      "examples/chat/model/generated",
+      "examples/chat/app/generated",
+    ];
+
+    for (const generatedRoot of generatedRoots) {
+      mkdirSync(join(repoRoot, generatedRoot), { recursive: true });
+    }
+    writeFileSync(
+      join(repoRoot, ".gitignore"),
+      [
+        "packages/proto/generated/",
+        ...generatedRoots.map((generatedRoot) => `${generatedRoot}/`),
+      ].join("\n"),
+    );
+
+    const result = runCurrentOutputChecker(repoRoot);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("already-generated");
+  });
+
   it("compares every atomic model output by default", () => {
     expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
@@ -143,6 +176,7 @@ describe("check-generated-clean", () => {
     const repoRoot = createCompositionFixture(
       'import { mkdirSync, writeFileSync } from "node:fs";\nmkdirSync("src", { recursive: true });\nwriteFileSync("src/model-registry.ts", "fresh registry\\n");\n',
     );
+    writeFileSync(join(repoRoot, "packages/proto/generated/proof.ts"), "export {};\n");
     writeFileSync(join(repoRoot, "examples/chat/app/src/model-registry.ts"), "stale registry\n");
 
     const result = spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], {

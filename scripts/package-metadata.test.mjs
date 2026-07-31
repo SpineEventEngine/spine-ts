@@ -296,7 +296,7 @@ describe("package metadata", () => {
     expect(hasAgentReferenceLink(readme)).toBe(false);
   });
 
-  it("keeps standalone commands self-sufficient while verify publishes generated output once", () => {
+  it("keeps standalone commands self-sufficient while release verification reuses generated outputs", () => {
     const rootPackage = readJson("package.json");
 
     expect(rootPackage.scripts["typecheck:build"]).toMatch(/^pnpm proto:generate && /);
@@ -304,18 +304,38 @@ describe("package metadata", () => {
     expect(rootPackage.scripts["docs:api"]).toMatch(/^pnpm proto:generate && /);
     expect(rootPackage.scripts["docs:check"]).toMatch(/^pnpm proto:generate && /);
 
-    const verify = rootPackage.scripts.verify;
-    const generatedVerify = rootPackage.scripts["verify:generated"];
+    const task = rootPackage.scripts["verify:task"];
+    const release = rootPackage.scripts["verify:release"];
+    const taskGenerated = rootPackage.scripts["verify:task:generated"];
+    const releaseGenerated = rootPackage.scripts["verify:release:generated"];
 
-    expect(verify.match(/pnpm proto:generate/gu)).toHaveLength(1);
-    expect(verify).toContain("pnpm verify:generated");
-    expect(generatedVerify).toContain("pnpm typecheck:generated");
-    expect(generatedVerify).toContain("pnpm lint:generated");
-    expect(generatedVerify).toContain("pnpm test:generated");
-    expect(generatedVerify).toContain("pnpm test:coverage:generated");
-    expect(generatedVerify).toContain("pnpm docs:check:generated");
-    expect(generatedVerify).toContain("pnpm proto:check-generated");
-    expect(generatedVerify).not.toContain("pnpm proto:generate");
+    expect(rootPackage.scripts.verify).toBe("pnpm verify:release");
+    expect(task).toContain("pnpm check:node");
+    expect(task.match(/pnpm proto:generate/gu)).toHaveLength(1);
+    expect(task).toContain("pnpm verify:task:generated");
+    expect(task).not.toMatch(/(?:^|&& )pnpm test(?::| |$)/u);
+    expect(task).not.toContain("coverage");
+    expect(taskGenerated).not.toMatch(/(?:^|&& )pnpm test(?::| |$)/u);
+    expect(taskGenerated).not.toContain("coverage");
+
+    expect(release.match(/pnpm proto:generate/gu)).toHaveLength(1);
+    expect(release).toContain("pnpm verify:release:generated");
+    expect(releaseGenerated.match(/pnpm typecheck:build:generated/gu)).toHaveLength(1);
+    expect(releaseGenerated.match(/vitest run --coverage/gu)).toHaveLength(1);
+    expect(releaseGenerated.match(/pnpm docs:check:generated/gu)).toHaveLength(1);
+    expect(releaseGenerated).toContain("pnpm proto:lint:generated");
+    expect(releaseGenerated).toContain("pnpm proto:check-generated:current");
+    expect(releaseGenerated).toContain("pnpm check:release-readiness");
+    expect(release).not.toContain("pnpm verify:generated");
+    expect(rootPackage.scripts["docs:check:generated"]).toBe("node scripts/check-api-docs.mjs");
+    expect(rootPackage.scripts["proto:lint:generated"]).toBe("pnpm exec buf lint");
+    expect(rootPackage.scripts["proto:check-generated:current"]).toBe(
+      "node scripts/check-generated-clean.mjs --current-output",
+    );
+
+    const apiDocsChecker = readFileSync(join(repoRoot, "scripts/check-api-docs.mjs"), "utf8");
+    expect(apiDocsChecker).not.toContain('"--out", htmlPath');
+    expect(apiDocsChecker).toContain('"--json", jsonPath');
   });
 
   it("exports the packaged Proto sources, compiled generated modules, and manifest", () => {
