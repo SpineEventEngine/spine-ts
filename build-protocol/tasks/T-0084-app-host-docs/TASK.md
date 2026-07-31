@@ -1,6 +1,6 @@
 # T-0084: Application hosting and beginner documentation
 
-Status: Synchronizing with current main
+Status: Ready to integrate
 Start: `2026-07-31`
 Baseline commit: `9d8c2c76d3c1d44abd727d9b53e54ee39a31356f`
 Branch: `task/T-0084-app-host-docs`
@@ -196,3 +196,7 @@ and its server running for human inspection.
 - The branch must now integrate the newer verified `main`, rerun the
   change-sensitive release profile, and complete merge, remote equality, and
   live Chat acceptance.
+- After integrating current `main`, `pnpm verify:release` passed 164 test files
+  and 3,250 tests, with 3 files and 25 tests retaining established skips.
+  Branch coverage is 90.01%; every shared build, tooling, documentation, Proto,
+  generated-output, and release-readiness gate passed.

@@ -131,3 +131,5 @@ Status: Accepted
   profile. Its focused metadata test and the full 182-test integration
   preflight pass. This deterministic composition correction does not reopen a
   specialist lane.
+- Final acceptance gate: `pnpm verify:release` passed 164 test files and 3,250
+  tests at 90.01% branch coverage, with every shared deterministic gate clean.
