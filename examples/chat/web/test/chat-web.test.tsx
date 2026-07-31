@@ -80,6 +80,26 @@ describe("ChatBrowserApp", () => {
     expect(request.send).not.toHaveBeenCalled();
   });
 
+  it("ignores a late rejected sign-in after unmount and does not start duplicate sign-in work", async () => {
+    const deferred = Promise.withResolvers<BrowserChatSession>();
+    const signIn = vi.fn(() => deferred.promise);
+    const rendered = render(
+      createElement(ChatBrowserApp, {
+        session: guestSession(signIn),
+        request: requestFixture(),
+        room: "general",
+      }),
+    );
+    const button = screen.getByRole("button", { name: "Sign in" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(signIn).toHaveBeenCalledTimes(1);
+    rendered.unmount();
+    deferred.reject(new Error("late sign-in"));
+    await Promise.resolve();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("posts a PostMessage command and renders only the selected room query", async () => {
     const request = requestFixture();
     render(createElement(ChatBrowserApp, { session: signedInSession(), request, room: "general" }));
@@ -277,6 +297,20 @@ describe("ChatBrowserApp", () => {
     request.postDeferred.resolve({ kind: "ok" });
     await Promise.resolve();
     expect(screen.queryByText("Message was not posted. Please retry.")).toBeNull();
+  });
+
+  it("suppresses a late rejected post after unmount", async () => {
+    const request = requestFixture({ deferredPost: true });
+    const rendered = render(
+      createElement(ChatBrowserApp, { session: signedInSession(), request, room: "general" }),
+    );
+    await screen.findByText("general message");
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "late post" } });
+    fireEvent.click(screen.getByRole("button", { name: "Post" }));
+    rendered.unmount();
+    request.postDeferred.reject(new Error("late post"));
+    await Promise.resolve();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("abandons room A work and starts room B with clean room-owned state", async () => {

@@ -34,6 +34,7 @@ import type {
   TaskNotDone as TaskNotDoneMessage,
 } from "../generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
+import { TodoProcessSignals } from "./process.js";
 
 export { todoProtoModule } from "../generated/proto-module.js";
 
@@ -367,6 +368,7 @@ if (todoEntrypoint.isCurrentModule()) {
   startTodoServer()
     .then((server) => {
       console.log(`To-do example server listening at ${server.baseUrl}`);
+      TodoProcessSignals.install(server);
     })
     .catch((error: unknown) => {
       console.error(error);

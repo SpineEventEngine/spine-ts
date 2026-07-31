@@ -1,0 +1,75 @@
+import { readFile } from "node:fs/promises";
+
+import { describe, expect, it, vi } from "vitest";
+
+import { TodoProcessSignals } from "../src/process.js";
+
+const examplePackages = [
+  "examples/projects/package.json",
+  "examples/orders/package.json",
+  "examples/todo/package.json",
+] as const;
+
+describe("example executable commands", () => {
+  it.each(examplePackages)(
+    "makes %s own generation and TypeScript build preparation",
+    async (path) => {
+      const manifest = JSON.parse(await readFile(path, "utf8")) as {
+        readonly scripts: Readonly<Record<string, string>>;
+      };
+      const command = manifest.scripts.load ?? manifest.scripts.start;
+
+      expect(command).toContain("pnpm -C ../..");
+      expect(command).toContain("typecheck:build");
+    },
+  );
+});
+
+describe("Chat app manifest", () => {
+  it("keeps the composed Chat model versioned while runtime packages use their established declarations", async () => {
+    const manifest = JSON.parse(await readFile("examples/chat/app/package.json", "utf8")) as {
+      readonly dependencies: Readonly<Record<string, string>>;
+      readonly devDependencies?: Readonly<Record<string, string>>;
+      readonly scripts: Readonly<Record<string, string>>;
+    };
+
+    expect(manifest.dependencies["@spine-event-engine/example-chat-model"]).toBe(
+      "2.0.0-snapshot.1",
+    );
+    expect(manifest.dependencies["@connectrpc/connect-node"]).toBe("2.1.2");
+    expect(manifest.dependencies["@spine-event-engine/core"]).toBe("2.0.0-snapshot.1");
+    expect(manifest.dependencies["@spine-event-engine/proto"]).toBe("2.0.0-snapshot.1");
+    expect(manifest.dependencies["@spine-event-engine/server"]).toBe("2.0.0-snapshot.1");
+    expect(manifest.devDependencies?.["@spine-event-engine/proto-tools"]).toBe("2.0.0-snapshot.1");
+    expect(manifest.scripts.start).toContain("typecheck:build");
+  });
+
+  it("makes the Chat web start command own workspace preparation", async () => {
+    const manifest = JSON.parse(await readFile("examples/chat/web/package.json", "utf8")) as {
+      readonly scripts: Readonly<Record<string, string>>;
+    };
+
+    expect(manifest.scripts.start).toContain("typecheck:build");
+  });
+});
+
+describe("To-Do process lifecycle", () => {
+  it.each(["SIGINT", "SIGTERM"] as const)("closes the listener once after %s", async (signal) => {
+    const handlers = new Map<string, () => void>();
+    const close = vi.fn(() => Promise.resolve());
+    const processLike = {
+      once: (name: string, handler: () => void) => {
+        handlers.set(name, handler);
+      },
+      exitCode: null as string | number | null | undefined,
+    };
+
+    TodoProcessSignals.install({ close }, processLike);
+    handlers.get(signal)?.();
+    handlers.get(signal)?.();
+    await vi.waitFor(() => {
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+    expect(processLike.exitCode).toBe(0);
+  });
+});

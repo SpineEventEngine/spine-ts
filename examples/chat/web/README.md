@@ -1,11 +1,33 @@
-# Browser Chat fixture
+# Browser Chat web UI
+
+Prerequisites: Node 24 LTS or newer and pnpm. Set
+`VITE_CHAT_GATEWAY_URL` only to an `http://127.0.0.1` URL with port 1–65535;
+it defaults to `http://127.0.0.1:8090`.
+
+From the repository root after `pnpm install --frozen-lockfile`, start the
+separate local server with `pnpm --dir examples/chat/app start`, then run:
+
+```sh
+pnpm --dir examples/chat/web start
+```
+
+The command owns generation/build work, starts Vite on
+`http://127.0.0.1:5173`, and renders the real `ChatBrowserApp` against the
+loopback Connect gateway at `http://127.0.0.1:8090`. Stop Vite with `Ctrl-C`.
+The visible UI has no deterministic transport fallback; its local bearer
+is memory-only, non-secret, unlogged, and for the loopback example
+only. The deterministic fixture remains test-only.
+
+The local demonstration uses binary Connect directly over loopback HTTP.
+The retained Envoy interoperability harness is the separate HTTPS/gRPC-Web
+reference; it is not required for this two-process local example.
 
 `@spine-event-engine/example-chat-web` is a deliberately small React browser
-fixture. It composes the public `@spine-event-engine/client-react` hooks and
+application. It composes the public `@spine-event-engine/client-react` hooks and
 the application-owned `ClientRequest`; it does not replace the hooks, cache
 entities, or model chat messages as events.
 
-The fixture has two seams. `ChatBrowserApp` receives the hosting application's
+The application has two seams. `ChatBrowserApp` receives the hosting application's
 session and `ClientRequest`; production hosts can provide a gRPC-Web or Connect
 browser request through `client-web`. `browser-fixture.tsx` supplies only a
 deterministic in-memory request for local browser acceptance. It is not a
@@ -19,7 +41,7 @@ after it has established its browser session. The supplied session object is a
 provider-neutral UI boundary: actor data is informational and is never a
 credential. Cookie and bearer session transport setup stays in `client-web`.
 
-For a room, the fixture posts `PostMessage`, queries `ChatMessageView`
+For a room, the application posts `PostMessage`, queries `ChatMessageView`
 Projection entities with a room filter, and subscribes to that Projection
 topic. Subscription delivery is a best-effort hint. A `resynchronization`
 delivery is already authoritative and becomes the visible room state without a
@@ -34,19 +56,20 @@ unmount are ignored. Command failures, including resolved Spine `error` and
 single-flight retry. A later normal room refresh supersedes any recovered
 state.
 
-## Running the fixture
+## Running the application
 
-From the repository root, generate and build the workspace before starting the
-fixture in a fresh checkout:
+Start the separately documented Chat server, then run the web application:
 
 ```sh
-pnpm typecheck
-pnpm --dir examples/chat/web exec vite --host 127.0.0.1 --port 4175
+pnpm --dir examples/chat/app start
+pnpm --dir examples/chat/web start
 ```
 
-Open the printed local URL. The page uses the deterministic signed-in fixture
-session; a real host passes its own session and request to `ChatBrowserApp`.
-The fixture's `Post` acknowledgement clears the input. Transport errors and
+Run these commands in separate terminals and open
+[http://127.0.0.1:5173](http://127.0.0.1:5173). The page uses the local
+development session and the real loopback gateway. A real host passes its own
+session and request to `ChatBrowserApp`. The application's `Post`
+acknowledgement clears the input. Transport errors and
 resolved `error` or `rejection` outcomes retain the same generated command ID
 and trimmed text for one retry; blank text never posts a command.
 
@@ -62,14 +85,14 @@ Real-browser acceptance is run with `@playwright/test@1.62.0`:
 pnpm --config.verify-deps-before-run=false --dir examples/chat/web test:browser
 ```
 
-The configured fixture passed in Chromium, Firefox, and WebKit. A fresh
-checkout needs `pnpm install` and
+The configured browser test runs in Chromium, Firefox, and WebKit. A fresh
+checkout needs `pnpm install --frozen-lockfile` and
 `pnpm exec playwright install chromium firefox webkit` before repeating that
 acceptance.
 
 ## Real-browser topology
 
-The acceptance fixture uses an HTTPS browser route through Envoy to a separate
+The interoperability harness uses an HTTPS browser route through Envoy to a separate
 application gateway, then to the Chat backend. The browser never reaches the
 backend directly. The gateway owns authentication context resolution and its
 listener lifecycle; Envoy only exposes `ResolveContext`, `Post`, `Read`,

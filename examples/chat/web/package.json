@@ -23,6 +23,7 @@
     "vitest": "4.1.9"
   },
   "scripts": {
+    "start": "pnpm -C ../../.. typecheck:build && vite --host 127.0.0.1 --port 5173",
     "test:browser": "playwright test -c test/browser/playwright.config.ts"
   }
 }

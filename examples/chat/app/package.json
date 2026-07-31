@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "pnpm -C ../../.. typecheck:build && node dist/src/local-entry.js",
     "proto:compose": "spine-proto compose",
     "handlers:generate": "spine-proto handlers",
     "prepack": "pnpm handlers:generate && tsc -b"
@@ -20,6 +21,8 @@
   ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",
+    "@connectrpc/connect": "2.1.2",
+    "@connectrpc/connect-node": "2.1.2",
     "@spine-event-engine/example-chat-model": "2.0.0-snapshot.1",
     "@spine-event-engine/auth": "workspace:*",
     "@spine-event-engine/client-node": "workspace:*",
@@ -29,7 +32,6 @@
     "@spine-event-engine/storage": "workspace:*"
   },
   "devDependencies": {
-    "@connectrpc/connect": "2.1.2",
     "@spine-event-engine/proto-tools": "2.0.0-snapshot.1"
   }
 }
