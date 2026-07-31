@@ -1,12 +1,22 @@
-# Spine TypeScript Documentation Corpus
+# Spine JVM behavior reference for Spine TS
 
-This corpus captures the functional surface of Spine Event Engine for a future TypeScript/Node.js implementation. It is meant to be read as one connected specification tree: domain messages and signals first, server runtime next, then entity state, routing and delivery, client APIs, and supporting runtime facilities.
+These documents record the Spine JVM behavior used while designing Spine TS.
+They help framework maintainers compare concepts and wire contracts without
+copying Java or Kotlin APIs blindly. Application developers normally start with
+the [Spine TS user guide](../docs/USER_GUIDE.md) instead.
+
+## 💡 How to use this reference
+
+- Read it when a Spine TS feature needs behavioral parity with Spine JVM.
+- Treat cited versions and commits as research evidence, not live dependencies.
+- Prefer idiomatic TypeScript when language mechanics differ.
+- Do not build Spine JVM merely to use this documentation.
 
 The source baseline is the researched Spine 2.0.0-series material, primarily `core-jvm` `2.0.0-SNAPSHOT.381`, with the `base`, `time`, `validation`, `logging`, `change`, `reflect`, and example repositories consulted where they define runtime behavior. The documents preserve behavior and implementation implications rather than Java/Kotlin API shape.
 
 Source citations that start with `/private/tmp/spine-research` refer to local research clones used while preparing this corpus. Interpret those paths as repository-relative paths under the named repo/version in the source baseline table; the local temporary prefix is not part of the specification.
 
-## Source Baseline
+## 📌 Source baseline
 
 | Repository                         | Version or role                                           | Commit used    |
 | ---------------------------------- | --------------------------------------------------------- | -------------- |
@@ -21,7 +31,7 @@ Source citations that start with `/private/tmp/spine-research` refer to local re
 | `spine-examples/todo-list`         | application-structure sample, mostly 1.x-era API          | `f9dcc2d510f3` |
 | `spine-examples/hello-validation`  | validation example sample                                 | `e536e1a95bc0` |
 
-## Reading Order
+## 📚 Reading order
 
 1. [Domain model and signals](spine-domain-model-and-signals.md) - Protobuf model roles, type URLs, identifiers, commands, events, rejections, metadata, validation-facing options, and TS descriptor implications.
 2. [Server runtime and bounded context](spine-server-runtime-and-bounded-context.md) - bounded context assembly, server services, multitenancy, integration, system context, storage wiring, and lifecycle behavior.
@@ -30,7 +40,7 @@ Source citations that start with `/private/tmp/spine-research` refer to local re
 5. [Client APIs, queries, subscriptions, and tests](spine-client-api-queries-subscriptions-and-tests.md) - command/query/subscription service clients, request factories, filters, streaming updates, test fixtures, and SDK surface.
 6. [Validation, storage, observability, and support](spine-validation-storage-observability-and-support.md) - validation runtime, generated/runtime boundary, storage abstractions, environment, time, logging, diagnostics, tracing, and support repo versions.
 
-## Key User-Facing Components
+## 🧭 Topics covered
 
 - Domain modeling: Protobuf messages, entity options, type URL prefixes, `Any` packing, identifiers, command/event/rejection conventions, actor and tenant metadata.
 - Server assembly: bounded contexts, repositories, dispatchers, filters, listeners, enrichers, storage factories, system context, command/query/subscription services, and integration brokers.
@@ -39,11 +49,11 @@ Source citations that start with `/private/tmp/spine-research` refer to local re
 - Client SDK: actor-scoped request factories, commands, queries, subscriptions, filters, columns, ordering, streaming consumers, error handling, and test support.
 - Support runtime: validation APIs, generated validators, storage adapters, environment configuration, clock/time utilities, logging context, diagnostic events, and optional tracing.
 
-## TypeScript Implementation Target
+## 🎯 TypeScript implementation target
 
 The target is a TypeScript/Node.js runtime and SDK that use generated Protobuf messages and descriptor metadata, preserve Spine type URLs and envelope semantics, and expose idiomatic TS APIs around the same behavioral contracts. Implementation notes assume descriptor-driven registration, `bufbuild/protobuf-es`-style generated types, structured validation failures, pluggable transports and storage, tenant-aware runtime state, and async-safe observability hooks.
 
-## Generated/Runtime Contract
+## 🔧 Generated and runtime contract
 
 The TypeScript side needs generated or explicitly registered artifacts at the runtime boundary. This contract describes what must be available, not how a compiler or plugin produces it:
 

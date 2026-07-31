@@ -1,4 +1,4 @@
-# @spine-event-engine/client-web
+# Spine client for web browsers
 
 Use this browser-safe package to post commands, send queries, and create Spine
 subscriptions. It is framework-neutral: React support is in
@@ -10,7 +10,14 @@ the [reference for agents](REFERENCE.md).
 The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains application-owned sign-in and gateway composition.
 
-## Create a browser client
+## 💡 Why use it?
+
+- ✅ Uses browser-compatible gRPC-Web or Connect transports.
+- ✅ Posts commands and sends entity queries without a UI-framework dependency.
+- ✅ Creates subscriptions with explicit activation and cancellation.
+- ✅ Supports cookie or bearer session metadata supplied by the application.
+
+## 🚀 Create a browser client
 
 Choose the protocol deliberately. gRPC-Web is the portable browser choice.
 Connect is an optional binary optimization for a gateway already configured to
@@ -33,7 +40,7 @@ await session.close();
 The endpoint should be an application gateway. Applications own sign-in,
 identity-provider redirects, session exchange, and authorization policy.
 
-## Post commands and send queries
+## 📬 Post commands and send queries
 
 Use an actor or guest request scope. Commands return an application outcome;
 queries return the raw Spine response.
@@ -78,9 +85,23 @@ await client.close();
 Commands are not retried. Pass an `AbortSignal` when application code needs to
 cancel an admitted call.
 
-## Handle reconnects
+## 🔄 Handle reconnects
 
 Subscriptions are useful notifications, not complete history. After an Entity
 reconnect, provide `authoritativeQuery` so the client can re-read current
 state. Event subscriptions report that a gap may have occurred; they do not
 replay missing events.
+
+## ⚠️ Security and delivery limits
+
+Connect the browser to an authenticated gateway, never directly to a trusted
+backend. This package does not implement sign-in, choose an identity provider,
+or store durable sessions. Commands are not retried, and subscription updates
+may be duplicated, reordered, or missed while disconnected.
+
+## 🔗 Learn more
+
+- [React adapter](../client-react/README.md)
+- [Authentication package](../auth/README.md)
+- [Browser authentication and extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [Reference for coding agents](REFERENCE.md)

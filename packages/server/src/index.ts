@@ -29,7 +29,12 @@ export {
 } from "./stand/stand.js";
 
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
-export { Server, type RunningServer, type ServerOptions } from "./server/server.js";
+export {
+  Server,
+  type BrowserServerOptions,
+  type RunningServer,
+  type ServerOptions,
+} from "./server/server.js";
 export { Environment, EnvironmentType } from "./server/environment.js";
 export {
   ServerEnvironment,

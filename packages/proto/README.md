@@ -1,4 +1,4 @@
-# @spine-event-engine/proto
+# Protobuf contracts used by Spine TS
 
 `@spine-event-engine/proto` supplies the generated Protobuf schemas that Spine
 TS itself uses: signal envelopes, contexts, validation messages, options, and
@@ -9,16 +9,24 @@ calling it directly.
 For the complete export map and model-package contract, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-## Use from this source workspace
+## 💡 Why use it?
+
+- ✅ Supplies the standard command, event, query, subscription, and context
+  schemas used across Spine TS.
+- ✅ Supplies Spine Protobuf options for entities, validation, and type URLs.
+- ✅ Gives application model packages one stable dependency for Spine imports.
+
+## 🚀 Build it in this workspace
 
 ```sh
-pnpm --filter @spine-event-engine/proto build
+pnpm typecheck:build
 ```
 
-This private snapshot package is not published to an npm registry. Use it from
-this workspace while developing the framework.
+Run this workspace-wide TypeScript build from the repository root. This private
+snapshot package is not published to an npm registry; use it from this
+workspace while developing the framework.
 
-## Use a Spine schema
+## 🧱 Use a Spine schema
 
 Generated schemas work with the standard Protobuf-ES helpers.
 
@@ -33,7 +41,7 @@ The package root exports commonly used Spine schemas such as `CommandSchema`,
 `EventSchema`, `ActorContextSchema`, `TenantIdSchema`, and the Spine option
 extensions.
 
-## Depend on it from an application model
+## 📦 Depend on it from an application model
 
 An application-owned model package declares this package both as an npm
 dependency and as a model-generation dependency. The generator then resolves
@@ -55,3 +63,15 @@ in the model module.
 
 Do not edit the generated output. Generate the model package through its
 configured Protobuf workflow.
+
+## ⚠️ Generated contracts, not an application API
+
+Most applications use these schemas through generated models, clients, and the
+server. Keep domain messages in the application’s own model package. The copied
+Spine definitions preserve their original versioned Proto packages.
+
+## 🔗 Learn more
+
+- [Model-generation tools](../proto-tools/README.md)
+- [Core message tools](../core/README.md)
+- [Reference for coding agents](REFERENCE.md)

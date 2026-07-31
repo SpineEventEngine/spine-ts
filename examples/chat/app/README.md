@@ -1,139 +1,69 @@
-# Runnable Chat
+# Chat server application
 
-Prerequisites: Node 24 LTS or newer and pnpm. This package exports the Chat
-application library; its `start` command is a private local-example CLI.
+This package turns the Chat model into a runnable Spine bounded context. The
+framework owns the network and process plumbing; the example contains only
+Chat domain code, local session policy, and concise server configuration.
 
-For the local two-process demonstration, start this complete server topology
-from the repository root after `pnpm install --frozen-lockfile`:
+## 💡 What is here?
 
-```sh
+- ✅ `ChatMessageAggregate` stores one posted message.
+- ✅ `ChatMessageViewProjection` creates the browser’s room view.
+- ✅ `ChatAuthorizationPolicy` protects rooms and message authors.
+- ✅ `ChatApplication` builds the context and starts the framework server.
+
+## 🚀 Start the server
+
+From the repository root:
+
+```bash
 pnpm --dir examples/chat/app start
 ```
 
-The command owns workspace generation/build preparation, binds the browser
-gateway only on `127.0.0.1:8090`, and prints readiness only after bind. It
-composes a native in-memory Chat backend on an internal ephemeral loopback port
-with the application authorization gateway. Only Vite's exact default origin
-`http://127.0.0.1:5173` receives Connect CORS headers. `Ctrl-C` or `SIGTERM`
-closes gateway intake, subscription bindings, and backend resources. The local
-bearer fixture is non-secret, loopback-only, and never logged; it makes no
-production authentication claim.
+The command generates and builds the required code, then prints
+`Chat local server ready at http://127.0.0.1:8090` after the public browser
+listener is ready. Stop it with `Ctrl-C`.
 
-For the browser, authentication-gateway, and Envoy extension path used by this
-example, see the [browser client and gateway guide](../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
-
-`@spine-event-engine/example-chat-model` owns every Chat Protobuf message,
-including `UserId`. The application directly depends on that single model
-package and does not copy Proto or generated output.
-
-`PostMessage` carries a browser-provided deterministic `MessageId`, a room,
-author, required text, and posting timestamp. `ChatMessageAggregate` stores one
-message per ID and emits `MessagePosted`; `ChatMessageViewProjection` reacts to
-that event and creates one `FULL`-visible `ChatMessageView` Projection row per
-message. The view indexes `room`, `author`, and `posted_at`. Browser delivery
-therefore uses room-filtered Projection Query and Projection subscription APIs,
-not event delivery or an unbounded aggregate message list.
-
-Before the handler runs, framework validation rejects any `PostMessage` whose
-required message, room, author, text, or posting timestamp is absent. Nested
-Chat identifiers use the declared `(validate) = true` options. The ID remains
-application provided: this example neither generates nor persists browser
-credentials.
-
-Reusing a `MessageId`, including concurrently, leaves the first Aggregate and
-Projection state unchanged and produces no second Projection subscription
-update. The admitted command transport still resolves `{ kind: "ok" }`;
-domain outcome is represented by exactly one stored `MessageAlreadyPosted`
-rejection event alongside the first command's one normal event.
-
-## Gateway trust boundary
-
-`ChatAuthorizationPolicy` and `ChatContextResolver` are application-owned
-implementations of the public auth contracts. A gateway integration must bind
-them after authentication: it admits a `PostMessage` only when the payload
-author matches the authenticated principal and the requested room is listed in
-that principal's `rooms` attribute. It likewise admits only a room-filtered
-`ChatMessageView` Query or subscription for an authorized room. The resolver,
-not browser input, supplies the trusted actor, optional `tenant` attribute, and
-gateway clock timestamp. Activation and cancellation remain bound to the
-gateway's authenticated subscription ownership.
-
-The native gateway is constructed with Chat's application `typeRegistry`, so
-registered `PostMessage` payload facts are independently decoded for the policy
-and context collaborators. They are not forwarded to the backend: forwarding
-retains only service, method, bytes, and cancellation capability. Command-post
-transport acknowledgement means the command was admitted; a later domain
-rejection is recorded as a stored rejection event rather than changing that
-acknowledgement.
-
-## Build the example
-
-From the repository root, generate every example's model, application registry,
-and handler metadata, then compile and run the Chat test:
-
-```bash
-pnpm proto:generate
-pnpm typecheck:build:generated
-pnpm exec vitest run examples/chat/app/test/model-registry.test.ts
-```
-
-For a local application-only iteration, run the exact build-time commands in
-this nested package after its model dependencies are generated and installed:
-
-```bash
-cd examples/chat/app
-pnpm proto:compose
-pnpm handlers:generate
-pnpm exec tsc -b
-```
-
-## Start the server
-
-`new ChatApplication().start({ host, port })` starts the in-memory Chat application. Its
-defaults bind only to loopback (`127.0.0.1`) and request an ephemeral port
-(`0`); callers may override either value for an explicitly chosen local
-listener. The server allows at most 1,000 active subscriptions.
+The complete entry point is intentionally small:
 
 ```ts
-const application = new ChatApplication();
-const server = await application.start({ host: "127.0.0.1", port: 0 });
+const server = await new ChatApplication().run({ port: 8090 });
+console.log(`Chat local server ready at ${server.baseUrl}`);
+```
+
+Use `start()` instead of `run()` when another host owns process signals:
+
+```ts
+const server = await new ChatApplication().start({ port: 0 });
 try {
-  // server.baseUrl contains the allocated loopback URL.
+  console.log(server.baseUrl);
 } finally {
   await server.close();
 }
 ```
 
-`src/model-registry.ts` is generated by `spine-proto compose` from this
-package's `spine-proto.json`:
+## 🔐 Authentication boundary
 
-```json
-{
-  "formatVersion": 1,
-  "mode": "application",
-  "modelPackages": ["@spine-event-engine/example-chat-model"],
-  "registryOutput": "src/model-registry.ts"
-}
+The local command uses a fixed in-memory session for `ada` and admits only room
+`general`. The bounded context never reads credentials. The framework gateway
+authenticates first, replaces caller-supplied actor and tenant data with trusted
+values, then forwards the request.
+
+## 🧪 Test the application
+
+```bash
+pnpm proto:generate
+pnpm exec vitest run examples/chat/app/test
 ```
 
-`spine-proto handlers` writes
-`generated/handler/generated-handler-registry.ts` from the decorated handler
-classes in `src/`. Neither generated file is authored by hand. The TypeScript
-configuration includes both `src/**/*.ts` and `generated/**/*.ts`, so the
-compiled handler registry is available at startup.
+## ⚠️ Local-only defaults
 
-The source package is intentionally in-memory by default:
+Storage, sessions, and subscription bindings are in memory. Production code
+must select durable storage and sessions, real identity integration, TLS, and
+network policy.
 
-```ts
-import { create } from "@bufbuild/protobuf";
-import { AnyMessages } from "@spine-event-engine/core";
-import { CommandIdSchema } from "@spine-event-engine/proto";
+## 🔗 Learn more
 
-const commandId = create(CommandIdSchema, { uuid: "command-1" });
-const packedCommandId = AnyMessages.pack(CommandIdSchema, commandId);
-
-void packedCommandId;
-```
-
-The repository packages are not published to npm yet. The external-consumer
-test uses local tarballs to simulate a clean registry installation.
+- [Complete Chat example](../README.md)
+- [Server package](../../../packages/server/README.md)
+- [Authentication package](../../../packages/auth/README.md)
+- [Reference for coding agents](REFERENCE.md)

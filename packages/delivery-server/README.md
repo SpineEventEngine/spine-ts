@@ -1,4 +1,4 @@
-# @spine-event-engine/delivery-server
+# In-memory Spine Delivery server
 
 This package provides the in-memory implementation of the Delivery simple
 server. Use it for local development, tests, and a deliberately ephemeral
@@ -7,7 +7,14 @@ multi-node topology. Its state disappears when the process stops.
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
 
-## Run a local server
+## 💡 Why use it?
+
+- ✅ Coordinates inbox work and shard ownership between trusted Node processes.
+- ✅ Starts as a standalone command or embeds in another Node server.
+- ✅ Bounds retained messages, retained bytes, and tracked shards.
+- ✅ Provides administration and gRPC health endpoints for local operations.
+
+## 🚀 Run a local server
 
 Construct a server, start it, and close it during application shutdown. Port
 zero asks the operating system for a free local port.
@@ -37,7 +44,7 @@ then defaults.
 | Retained bytes    | `MAX_RETAINED_BYTES`       | 32 MiB      |
 | Tracked shards    | `MAX_TRACKED_SHARDS`       | 1,000       |
 
-## Embed the public handlers
+## 🧩 Embed the handlers
 
 Use `InMemoryDelivery.create()` when an application owns the Connect router and
 listener itself. `DeliveryCore.inbox` and `.shards` are the public Connect
@@ -74,5 +81,15 @@ It binds only to the loopback address by default. An explicit non-loopback host
 is a caller-selected trusted-network deployment and should not be exposed
 directly to the public Internet.
 
-There is no durable mode, clustering, TLS, authentication, authorization,
-dynamic configuration reload, health watch stream, or admin UI.
+## ⚠️ In-memory means temporary
+
+State disappears when the process stops. The server has no durable mode, TLS,
+authentication, authorization, configuration reload, health watch stream, or
+administration UI. Its default loopback listener is for development; a wider
+listener belongs only on an application-managed trusted network.
+
+## 🔗 Learn more
+
+- [Delivery client](../delivery-client/README.md)
+- [Server](../server/README.md)
+- [Reference for coding agents](REFERENCE.md)

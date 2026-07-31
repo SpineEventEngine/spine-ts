@@ -1,6 +1,17 @@
 # API Reference
 
-TypeDoc is the canonical API documentation generator for this repository.
+This is the detailed contract index for framework maintainers and coding
+agents. Application developers should begin with the
+[end-user guide](../USER_GUIDE.md) and individual [package guides](../../README.md).
+TypeDoc is the canonical declaration generator for this repository.
+
+## 🧭 Start here
+
+- Building a server: [`@spine-event-engine/server`](../../packages/server/README.md)
+- Connecting a client: [Node](../../packages/client-node/README.md) or
+  [browser](../../packages/client-web/README.md)
+- Choosing storage: [`@spine-event-engine/storage`](../../packages/storage/README.md)
+- Agent-level package contracts: each package's `REFERENCE.md`
 
 For the end-to-end browser/authentication extension contract, including the
 exact trust-boundary limitations that TypeDoc declarations cannot convey, see

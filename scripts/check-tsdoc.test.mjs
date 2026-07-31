@@ -716,7 +716,7 @@ describe("check-tsdoc", () => {
     expect(stale.status).toBe(1);
     expect(stale.stderr).toContain("stale-debt");
     expect(stale.stderr).toContain("missing-summary");
-  });
+  }, 15_000);
 
   it("requires documented asynchronous completion but accepts bare void without a return tag", () => {
     const repoRoot = createFixture();

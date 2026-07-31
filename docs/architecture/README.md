@@ -1,12 +1,17 @@
 # Architecture Notes
 
-This architecture includes delivery/inbox
+These notes are for framework maintainers and coding agents. Application
+developers should start with the [end-user guide](../USER_GUIDE.md).
+
+They explain how package boundaries fit together: delivery/inbox
 processing, command/query/subscription services, same-host ZeroMQ transport
 for multi-process use, and a `Server` lifecycle owner that starts and closes
 those pieces together. It does not claim production deployment supervision,
 durable transport, authentication, or cross-host topology behavior.
 
-Architecture documentation starts from the build protocol and specification documents under `build-protocol/`. This folder is reserved for implementation-era architecture notes that evolve with actual package boundaries and runtime behavior.
+The notes describe current code rather than a learning sequence. Use the package
+READMEs for beginner examples and the adjacent `REFERENCE.md` files for
+package-specific details.
 
 ## Proto Contract Boundary
 

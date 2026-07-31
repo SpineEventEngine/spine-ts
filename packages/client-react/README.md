@@ -1,4 +1,4 @@
-# @spine-event-engine/client-react
+# React adapter for the Spine browser client
 
 Use this optional React adapter to observe work started through an
 application-owned `@spine-event-engine/client-web` request scope. It does not
@@ -10,7 +10,14 @@ agents](REFERENCE.md).
 The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains the subscription and authentication limits inherited from the browser client.
 
-## Provide a request scope
+## 💡 Why use it?
+
+- ✅ Provides a stable Spine request scope to a React tree.
+- ✅ Runs queries with familiar React loading, success, and error states.
+- ✅ Starts and cancels subscriptions with the component lifecycle.
+- ✅ Keeps the framework-neutral browser client free of React dependencies.
+
+## 🚀 Provide a request scope
 
 Create the browser client outside rendering, select an actor scope, and provide
 that stable scope to React descendants.
@@ -40,7 +47,7 @@ void App;
 hook. Application code otherwise uses the client verbs such as `post`, `send`,
 `createSubscription`, `activate`, and `cancel`.
 
-## Observe a subscription
+## 🔔 Observe a subscription
 
 An Entity subscription needs an authoritative query for reconnect recovery.
 The hook starts and cancels it after React commits the component.
@@ -74,3 +81,17 @@ function TaskUpdates() {
 
 void TaskUpdates;
 ```
+
+## ⚠️ What stays in application code
+
+This adapter is not a cache, router, state manager, or authentication system.
+The application creates the browser client, chooses when a user is signed in,
+and decides how query results appear in the UI. Subscription hooks still follow
+the browser client’s reconnect rule: re-read authoritative entity state after
+a possible gap.
+
+## 🔗 Learn more
+
+- [Browser client](../client-web/README.md)
+- [Chat web example](../../examples/chat/web/README.md)
+- [Reference for coding agents](REFERENCE.md)

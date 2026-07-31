@@ -1,20 +1,37 @@
-# Chat model
+# Chat Protobuf model
 
-Prerequisites: Node 24 LTS or newer and pnpm. Install once with
-`pnpm install --frozen-lockfile` from the repository root.
+This package contains the vocabulary shared by the Chat server and browser:
+user, room, and message IDs; commands; events; visible message state; and
+domain rejections.
 
-This private workspace package owns the Chat Proto messages, commands, events,
-rejections, and generated TypeScript used by the Chat app and browser UI. It
-has no server, UI, listener, or shutdown lifecycle of its own.
+## 💡 Why is the model separate?
 
-After `pnpm install --frozen-lockfile` at the repository root, the supported
-Chat app and web commands own generation and build preparation:
+- ✅ Server and browser compile against the same message schemas.
+- ✅ Validation rules live beside fields in Proto.
+- ✅ Generated TypeScript and rejection helpers are deterministic.
+- ✅ The package can be replaced by a published application model later.
 
-```sh
-pnpm --dir examples/chat/app start
-pnpm --dir examples/chat/web start
+## 🚀 Generate the model
+
+The normal Chat startup commands generate the model automatically. To run the
+workspace generation directly:
+
+```bash
+pnpm proto:generate
 ```
 
-Generated output is ignored and must not be edited. The model is local and
-in-memory examples use it only for development; it is not a published package
-or a production deployment contract.
+Authored `.proto` files are source. Files under `generated/` are outputs and
+must not be edited.
+
+## 📦 Used by
+
+- [`app`](../app/README.md) imports schemas and generated handler types.
+- [`web`](../web/README.md) imports the same commands and Projection schemas.
+
+The package has no server, UI, storage, or process lifecycle.
+
+## 🔗 Learn more
+
+- [Complete Chat example](../README.md)
+- [Protobuf tooling](../../../packages/proto-tools/README.md)
+- [Reference for coding agents](REFERENCE.md)

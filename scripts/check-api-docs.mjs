@@ -447,6 +447,7 @@ const expectedServerExports = [
   "BoundedContextName",
   "BoundedContextNameError",
   "BoundedContextSnapshot",
+  "BrowserServerOptions",
   "CommandBus",
   "Command",
   "CommandEndpoint",

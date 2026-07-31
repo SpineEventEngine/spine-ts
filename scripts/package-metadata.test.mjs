@@ -324,7 +324,9 @@ describe("package metadata", () => {
     expect(generatedGates).toContain("pnpm proto:lint:generated");
     expect(generatedGates).toContain("pnpm proto:check-generated:current");
     expect(release).not.toContain("pnpm verify:generated");
-    expect(rootPackage.scripts["docs:check:generated"]).toBe("node scripts/check-api-docs.mjs");
+    expect(rootPackage.scripts["docs:check:generated"]).toBe(
+      "node scripts/check-api-docs.mjs && node scripts/check-doc-audience.mjs",
+    );
     expect(rootPackage.scripts["proto:lint:generated"]).toBe("pnpm exec buf lint");
     expect(rootPackage.scripts["proto:check-generated:current"]).toBe(
       "node scripts/check-generated-clean.mjs --current-output",

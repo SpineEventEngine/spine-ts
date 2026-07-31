@@ -1,11 +1,26 @@
-# Multi-machine delivery suite
+# Multi-process Delivery test
+
+This maintainer test starts a local Delivery server and two independent Node
+applications. It verifies ownership transfer and cleanup across real processes;
+application developers do not need it for ordinary feature tests.
+
+## 🚀 Run it
 
 From a clean checkout, first run the composite generated-build prerequisite:
 
-`pnpm --config.verify-deps-before-run=false typecheck:build`
+```bash
+pnpm --config.verify-deps-before-run=false typecheck:build
+```
 
-Then run
-`pnpm --config.verify-deps-before-run=false exec vitest run packages/delivery-client/test/e2e/multi-machine-delivery.test.ts`
+Then run:
+
+```bash
+pnpm --config.verify-deps-before-run=false exec vitest run \
+  packages/delivery-client/test/e2e/multi-machine-delivery.test.ts
+```
+
+## ✨ What it proves
+
 The suite starts one standalone in-memory `simple-server` on trusted loopback,
 then starts two independent Node applications. Each application imports only
 package-root delivery APIs and generated descriptors; parent observation uses
@@ -23,7 +38,9 @@ sub-threshold window, requires takeover no earlier than the one-second expiry
 with a 100 ms scheduling tolerance, and bounds completion to less than five
 seconds.
 
-The fixture uses bounded IPC control/result frames and a disposable in-memory
+## ⚠️ Limits
+
+The test uses bounded IPC control/result frames and a disposable in-memory
 removal quarantine. It is test support, not a production supervisor or
 persistence adapter. The topology is TypeScript-to-TypeScript only; it does
 not establish live JVM interoperability. Redis, Hazelcast, durable recovery,

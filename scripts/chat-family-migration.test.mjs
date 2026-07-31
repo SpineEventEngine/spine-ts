@@ -50,7 +50,7 @@ describe("Chat family workspace migration", () => {
     expect(familyReadme).toContain(
       "[browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)",
     );
-    expect(familyReadme).toContain("The app directly depends on the single `model` package");
+    expect(familyReadme).toContain("Proto model is shared by a Node server and browser UI");
     expect(references.map(({ path }) => path)).toEqual(
       expect.arrayContaining(familyPackages.map(([directory]) => `./examples/chat/${directory}`)),
     );

@@ -1,4 +1,4 @@
-# @spine-event-engine/storage
+# Storage API and in-memory storage for Spine TS
 
 `@spine-event-engine/storage` defines the storage API used by Spine TS and
 includes an in-memory implementation for local development and tests. Use it
@@ -8,16 +8,24 @@ implement the same storage contract for a durable provider.
 For detailed query, lifecycle, and adapter notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-## Use from this source workspace
+## 💡 Why use it?
+
+- ✅ Gives every Spine repository one storage contract.
+- ✅ Includes a fast in-memory implementation for development and tests.
+- ✅ Supports typed IDs, declared columns, filtering, sorting, and limits.
+- ✅ Lets applications select persistence without changing domain handlers.
+
+## 🚀 Build it in this workspace
 
 ```sh
-pnpm --filter @spine-event-engine/storage build
+pnpm typecheck:build
 ```
 
-This private snapshot package is not published to an npm registry. Use it from
-this workspace while developing the framework.
+Run this workspace-wide TypeScript build from the repository root. This private
+snapshot package is not published to an npm registry; use it from this
+workspace while developing the framework.
 
-## Store a Protobuf record in memory
+## 🧪 Store a Protobuf record in memory
 
 Create a `RecordSpec` to describe the record's schema, identity, and searchable
 columns. Pass it to an `InMemoryStorageFactory` with the storage context.
@@ -60,9 +68,29 @@ handle's later operations. Other adapters can close live handles; see their
 [MySQL reference](../storage-rdbms/REFERENCE.md) before choosing shutdown
 behavior.
 
-## Choose a durable adapter
+## 🗄️ Choose a durable adapter
 
 `@spine-event-engine/storage-datastore` provides Google Cloud Datastore
 storage. `@spine-event-engine/storage-rdbms` provides MySQL storage. Configure
 those packages in application code and pass the resulting factory to the Spine
 server; this package does not choose a database.
+
+| Need                        | Adapter                                                                   |
+| --------------------------- | ------------------------------------------------------------------------- |
+| Local development and tests | `InMemoryStorageFactory` in this package                                  |
+| Google Cloud Datastore      | [`@spine-event-engine/storage-datastore`](../storage-datastore/README.md) |
+| MySQL                       | [`@spine-event-engine/storage-rdbms`](../storage-rdbms/README.md)         |
+
+## ⚠️ Lifecycle differences
+
+The common API defines record behavior, not deployment policy. Provider
+adapters may close live handles, impose query budgets, or require indexes and
+credentials. Read the selected adapter guide before configuring production
+shutdown and queries.
+
+## 🔗 Learn more
+
+- [Datastore adapter](../storage-datastore/README.md)
+- [MySQL adapter](../storage-rdbms/README.md)
+- [Server](../server/README.md)
+- [Reference for coding agents](REFERENCE.md)

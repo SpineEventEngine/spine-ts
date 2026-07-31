@@ -1,23 +1,37 @@
-# Project-management load example
+# Projects — Project management in Spine TS
 
-Prerequisites: Node 24 LTS or newer and pnpm. Install once with
-`pnpm install --frozen-lockfile` from the repository root.
+This example creates projects through a real local Spine server and follows the
+result through a query and a Projection subscription.
 
-This runnable local specimen exercises generated Spine TS handlers through the
-real gRPC-compatible `CreateProject`, query, and `ProjectSummary` subscription
-services. Its fixed registration topology is three aggregates (`Project`,
-`Task`, and `Person`), twenty projections, and ten process managers, for
-thirty-three repositories.
+## 💡 What will you learn?
 
-After `pnpm install --frozen-lockfile` from the repository root, run the
-complete one-shot local demonstration:
+- ✅ How a larger bounded context registers Aggregates, Process Managers, and
+  Projections.
+- ✅ How generated handlers connect commands and events to domain code.
+- ✅ How a Node client posts `CreateProject`, queries `ProjectSummary`, and
+  observes an update.
+- ✅ How to run a bounded, repeatable local load scenario.
+
+## 🚀 Run it
+
+Install workspace dependencies once:
+
+```bash
+pnpm install --frozen-lockfile
+```
+
+Then run ten independent users:
 
 ```bash
 SPINE_PROJECT_LOAD_USERS=10 pnpm --dir examples/projects run load
 ```
 
-Run the focused nine-test suite, including Proto-package, topology, and load
-runner coverage:
+The command generates and builds the required code, starts the local server,
+runs the scenario, prints one JSON result, and closes every connection.
+
+Supported user counts are `10`, `25`, `50`, and `100`.
+
+## 🧪 Run the example tests
 
 ```bash
 pnpm vitest run \
@@ -26,35 +40,15 @@ pnpm vitest run \
   examples/projects/test/load-runner.test.ts
 ```
 
-The command owns workspace generation/build preparation, prints one JSON result,
-closes its listener and sessions, then exits. The load-runner suite includes a
-real 10-user loopback smoke scenario. Choose another supported level with:
+## ⚠️ What this example does not prove
 
-```bash
-SPINE_PROJECT_LOAD_USERS=10 pnpm --dir examples/projects run load
-SPINE_PROJECT_LOAD_USERS=25 pnpm --dir examples/projects run load
-SPINE_PROJECT_LOAD_USERS=50 pnpm --dir examples/projects run load
-SPINE_PROJECT_LOAD_USERS=100 pnpm --dir examples/projects run load
-```
+It uses in-memory storage and loopback networking. Its latency numbers are
+local diagnostics, not a production benchmark or service-level objective. It
+does not configure authentication, persistence, deployment, monitoring, or a
+multi-machine transport.
 
-Each asynchronous user owns a local HTTP/2 session and a subscription targeted
-to its exact project ID. It activates that subscription, submits
-`CreateProject`, requires an OK command acknowledgement, polls the matching
-`ProjectSummary` query until that exact ID is visible, then consumes the first
-correlated subscription update. Command-acknowledgement and query-visibility
-latencies start at command submission. Subscription-delivery latency starts at
-the final subscription wait after query visibility, rather than at command
-submission. The runner records p50/p95/p99 values for those three measurements,
-completed path counts, failed users, and scenario throughput.
+## 🔗 Learn more
 
-Every user finally aborts its controller and HTTP/2 session, then gives the
-subscription iterator a bounded 500ms best-effort cleanup window. Command,
-query, and subscription visibility waits are bounded by five seconds. The
-runner does not call the subscription service's cancellation RPC.
-
-This is an in-memory local load specimen, not a production benchmark or an SLO.
-It does not exercise mixed updates, assignment, refusal, validation, persistence,
-authentication, deployment, monitoring, multi-host transport, warm-up or
-steady-state phases, randomized think time, or failure-injection metrics.
-Sandboxes that deny loopback listeners require an environment that permits
-`127.0.0.1` binding for the real gRPC checks.
+- [Server](../../packages/server/README.md)
+- [Node client](../../packages/client-node/README.md)
+- [Reference for coding agents](REFERENCE.md)

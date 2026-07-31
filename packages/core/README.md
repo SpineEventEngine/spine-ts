@@ -1,4 +1,4 @@
-# @spine-event-engine/core
+# Core Protobuf tools for Spine TS
 
 `@spine-event-engine/core` provides the small Protobuf utilities shared by a
 Spine TS application. Use it when application code needs to validate a message,
@@ -8,16 +8,24 @@ up a generated message schema by its Spine type URL.
 For the detailed contract and integration notes, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-## Use from this source workspace
+## 💡 Why use it?
+
+- ✅ Reads validation rules directly from generated Protobuf schemas.
+- ✅ Packs and unpacks `google.protobuf.Any` with Spine type URLs.
+- ✅ Builds registries that understand framework and application messages.
+- ✅ Creates the common envelopes used by commands, events, and rejections.
+
+## 🚀 Build it in this workspace
 
 ```sh
-pnpm --filter @spine-event-engine/core build
+pnpm typecheck:build
 ```
 
-This private snapshot package is not published to an npm registry. Use it from
-this workspace while developing the framework.
+Run this workspace-wide TypeScript build from the repository root. This private
+snapshot package is not published to an npm registry; use it from this
+workspace while developing the framework.
 
-## Validate a message
+## ✅ Validate a message
 
 Use `Validate.check()` when an invalid message should stop the current
 operation. It reads the validation options from the generated schema and throws
@@ -35,7 +43,7 @@ Validate.check(UserIdSchema, userId);
 Use `Validate.message()` when the caller needs the returned violations instead
 of an exception.
 
-## Pack and unpack a message
+## 📦 Pack and unpack a message
 
 `AnyMessages.pack()` derives the type URL from the schema's Protobuf file and
 validates the message by default. `unpack()` returns `undefined` when the URL
@@ -54,7 +62,7 @@ const unpacked = AnyMessages.unpack(packed, UserIdSchema);
 Only pass `{ validate: false }` for data a trusted caller has already
 validated.
 
-## Build a schema registry
+## 🗂️ Build a schema registry
 
 Applications normally give model modules to the server, which creates its own
 registry. A standalone integration can create a registry directly.
@@ -72,7 +80,7 @@ console.log(user.typeUrl);
 `@spine-event-engine/proto`. Use `TypeRegistry.spineCore()` if registrations
 must be added.
 
-## Domain rejections
+## 🚫 Throw a generated domain rejection
 
 The model generator creates typed rejection factories for top-level messages in
 an application's `*rejections.proto` files. Application code imports that
@@ -92,3 +100,17 @@ throw TaskAlreadyDone.create({ id });
 The generated factory validates the rejection message and returns a
 `RejectionThrowable`. The server package decides how a rejection is handled or
 published.
+
+## ⚠️ Keep framework behavior in framework packages
+
+Core provides message-level building blocks. It does not run bounded contexts,
+store entities, or send requests. Most applications use these helpers through
+the server, clients, and generated model code rather than assembling envelopes
+by hand.
+
+## 🔗 Learn more
+
+- [Protobuf package](../proto/README.md)
+- [Model-generation tools](../proto-tools/README.md)
+- [Server](../server/README.md)
+- [Reference for coding agents](REFERENCE.md)
