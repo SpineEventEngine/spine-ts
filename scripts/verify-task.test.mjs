@@ -34,6 +34,9 @@ describe("verify-task", () => {
       coverage: false,
       paths: ["test.mjs"],
     });
+    expect(() =>
+      parseTaskVerificationArgs(["--no-coverage", "test.mjs", "--source", "source.mjs"]),
+    ).toThrow("only with --coverage");
     expect(() => parseTaskVerificationArgs(["--no-tests", "test.mjs"])).toThrow("only argument");
   });
 });

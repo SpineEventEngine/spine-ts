@@ -1,6 +1,6 @@
 # T-0085: Faster autonomous development protocol
 
-Status: In review
+Status: Verifying
 
 ## Classification And Scope
 
@@ -51,6 +51,10 @@ Status: In review
   shared build tooling.
 - Mandatory preflight: changed-file formatting and diff integrity, tooling
   typecheck, focused script tests, and a dry inspection of command expansion.
+- Deterministic documentation-policy disposition: command forms were exercised
+  by the real task profile and package-metadata tests; relative links passed
+  release-readiness; no README, REFERENCE, package name, example path, or
+  beginner-facing document changed, so those audience checks are N/A.
 - Coverage inspection is N/A before implementation because no production code
   changes; the release profile must still prove the unchanged global threshold.
 

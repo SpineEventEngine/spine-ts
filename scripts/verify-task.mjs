@@ -16,6 +16,9 @@ export function parseTaskVerificationArgs(args) {
   }
   const coverage = values[0] === "--coverage";
   const sources = sourceIndex === -1 ? [] : values.slice(sourceIndex + 1);
+  if (!coverage && sourceIndex !== -1) {
+    throw new Error("verify:task --source is available only with --coverage.");
+  }
   if (coverage && sources.length === 0) {
     throw new Error("verify:task --coverage requires --source followed by changed source paths.");
   }

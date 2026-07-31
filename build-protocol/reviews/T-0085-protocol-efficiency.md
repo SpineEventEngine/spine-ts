@@ -18,15 +18,18 @@
 
 ## Canonical dispositions
 
-- Style/maintainability: pending `/root/t0085_style_review`; existing
-  `style_maintainability_reviewer` role, expected `gpt-5.6-terra` / high.
-- Documentation: pending scoped re-review by `/root/t0085_docs_review`;
-  existing `documentation_reviewer` role, expected `gpt-5.6-luna` / medium.
+- Style/maintainability: CLEAN after scoped re-review by
+  `/root/t0085_style_review`; immutable `style_maintainability_reviewer`,
+  `gpt-5.6-terra` / high. Runtime metadata unavailable.
+- Documentation: CLEAN after scoped re-review by `/root/t0085_docs_review`;
+  immutable `documentation_reviewer`, `gpt-5.6-luna` / medium. Runtime metadata
+  unavailable.
 - TypeScript/API docs: N/A; no product API, declaration, Proto, or end-user API
   snippet changes.
-- Performance/reliability: pending `/root/t0085_reliability_review`; existing
-  `performance_reliability_reviewer` role, expected `gpt-5.6-terra` / high for
-  deterministic command sequencing and failure propagation.
+- Performance/reliability: CLEAN after scoped re-review by
+  `/root/t0085_reliability_review`; immutable
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high. Runtime metadata
+  unavailable.
 
 ## Wave 2 findings and correction
 
@@ -43,10 +46,15 @@
   cross-platform.
 - Invocation correction: the runner accepts one conventional leading pnpm `--`
   separator; its strict validation remains unchanged.
+- Documentation evidence P2 accepted: the task record now explicitly records
+  command/link evidence and N/A audience dispositions for unchanged README,
+  REFERENCE, package-name, example-path, and beginner-document surfaces.
+- Style P2 accepted: no-coverage mode now rejects `--source` instead of silently
+  discarding an invalid argument.
 - Independent correction evidence: the complete `verify:task` command passed
   shared deterministic gates and 75 focused tests.
-- Scoped re-review of documentation, maintainability, and reliability remains
-  pending.
+- Documentation contract, performance/reliability, and maintainability
+  re-reviews are clean. Review is converged.
 
 ## Implementation supplied for review
 
