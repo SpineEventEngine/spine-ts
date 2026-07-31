@@ -2163,11 +2163,11 @@ function baselineContains(repoRoot, entry) {
   return baselineObservesStructureEntry(entry, source);
 }
 
-function movedChatBaselinePath(file) {
+export function movedChatBaselinePath(file) {
   return file
-    .replace(/^examples\/chat\/app\//, "examples/message-board/")
-    .replace(/^examples\/chat\/web\//, "examples/message-board-web/")
-    .replace(/^examples\/chat\/model\//, "examples/message-board-model/")
+    .replace(/^examples\/message-board\/app\//, "examples/chat/")
+    .replace(/^examples\/message-board\/web\//, "examples/chat-web/")
+    .replace(/^examples\/message-board\/model\//, "examples/chat-model/")
     .replace(/^examples\/chat\/users-model\//, "examples/users-model/")
     .replace(/^examples\/projects\//, "examples/project-management/")
     .replace(/^examples\/orders\//, "examples/datastore-orders/");

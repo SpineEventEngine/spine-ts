@@ -6,6 +6,8 @@ import { ErrorSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
  * Describes validation messages returned for the MessageBoard form.
  */
 export interface PostFeedbackValue {
+  // prettier-ignore
+
   /**
    * Maps each invalid form field to the server-provided message.
    */
@@ -21,8 +23,12 @@ export interface PostFeedbackValue {
  * Converts a command outcome into messages suitable for the post form.
  */
 export const PostFeedback: Readonly<{
+  // prettier-ignore
+
   from(outcome: Exclude<ClientOutcome, { readonly kind: "ok" }>): PostFeedbackValue;
 }> = Object.freeze({
+  // prettier-ignore
+
   /**
    * Extracts field messages from packed server validation details.
    *

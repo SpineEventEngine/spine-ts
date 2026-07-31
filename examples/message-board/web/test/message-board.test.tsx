@@ -20,6 +20,7 @@ import type {
   ClientOutcome,
   ClientRequest,
 } from "@spine-event-engine/client-web";
+import type { Query } from "@spine-event-engine/proto/client";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -71,7 +72,7 @@ describe("MessageBoardApp", () => {
   });
 
   it("does not publish a late sign-in completion after unmount", async () => {
-    const deferred = Promise.withResolvers<BrowserSession>();
+    const deferred = Promise.withResolvers<BoardSession>();
     const request = requestFixture();
     const rendered = render(
       createElement(MessageBoardApp, {
@@ -88,7 +89,7 @@ describe("MessageBoardApp", () => {
   });
 
   it("ignores a late rejected sign-in after unmount and does not start duplicate sign-in work", async () => {
-    const deferred = Promise.withResolvers<BrowserSession>();
+    const deferred = Promise.withResolvers<BoardSession>();
     const signIn = vi.fn(() => deferred.promise);
     const rendered = render(
       createElement(MessageBoardApp, {
@@ -121,7 +122,7 @@ describe("MessageBoardApp", () => {
     expect(request.post.mock.calls[0]?.[0].typeName).toBe(
       "spine.examples.messageboard.PostMessage",
     );
-    expect(request.send.mock.calls[0]?.[0].format?.orderBy).toEqual([
+    expect((request.send.mock.calls[0]?.[0] as Query).format?.orderBy).toEqual([
       expect.objectContaining({ column: "posted_at", direction: 1 }),
     ]);
     expect(request.post.mock.calls[0]?.[1]).toMatchObject({ username: "Ada", text: "Hello board" });
@@ -171,6 +172,27 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
     request.query.resolveAt(2, responseRows("refresh two"));
     await screen.findByText("refresh two");
+  });
+
+  it("keeps a post-success refresh queued when an earlier hint refresh rejects", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate();
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    fillPost("posted after rejected refresh");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+
+    request.query.rejectAt(1, new Error("hint unavailable"));
+
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    request.query.resolveAt(2, responseRows("posted after rejected refresh"));
+    await screen.findByText("posted after rejected refresh");
   });
 
   it("does not start a second raw-hint refresh until the deferred first refresh settles", async () => {
@@ -281,6 +303,41 @@ describe("MessageBoardApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
     await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
     expect(request.post.mock.calls[0]?.[1]).toMatchObject({ username: "", text: "" });
+  });
+
+  it("preserves entered whitespace for server-owned validation", async () => {
+    const request = requestFixture();
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("general message");
+    fillPost(" keep this text ", " Ada ");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    expect(request.post.mock.calls[0]?.[1]).toMatchObject({
+      username: " Ada ",
+      text: " keep this text ",
+    });
+  });
+
+  it("refreshes authoritative messages after a successful post without an update hint", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    fillPost("posted without update");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.query.resolveAt(1, responseRows("posted without update"));
+    await screen.findByText("posted without update");
   });
 
   it("shows the username and message errors returned by the server", async () => {

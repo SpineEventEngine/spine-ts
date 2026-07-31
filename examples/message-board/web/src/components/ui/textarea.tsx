@@ -8,7 +8,8 @@ import { cn } from "../../lib/utils.js";
  * @param props The native textarea attributes.
  * @returns The styled textarea element.
  */
-export function Textarea({ className, ...props }: ComponentProps<"textarea">): ReactElement {
+export const Textarea = (props: ComponentProps<"textarea">): ReactElement => {
+  const { className, ...nativeProps } = props;
   return (
     <textarea
       data-slot="textarea"
@@ -16,7 +17,7 @@ export function Textarea({ className, ...props }: ComponentProps<"textarea">): R
         "min-h-28 w-full resize-y rounded-xl border border-input bg-background px-3.5 py-3 text-base shadow-sm outline-none transition placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/25 aria-invalid:border-destructive aria-invalid:ring-destructive/20 md:text-sm",
         className,
       )}
-      {...props}
+      {...nativeProps}
     />
   );
-}
+};

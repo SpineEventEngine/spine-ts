@@ -8,7 +8,8 @@ import { cn } from "../../lib/utils.js";
  * @param props The native element attributes.
  * @returns The styled avatar element.
  */
-export function Avatar({ className, ...props }: ComponentProps<"span">): ReactElement {
+export const Avatar = (props: ComponentProps<"span">): ReactElement => {
+  const { className, ...nativeProps } = props;
   return (
     <span
       data-slot="avatar"
@@ -17,7 +18,7 @@ export function Avatar({ className, ...props }: ComponentProps<"span">): ReactEl
         className,
       )}
       aria-hidden="true"
-      {...props}
+      {...nativeProps}
     />
   );
-}
+};

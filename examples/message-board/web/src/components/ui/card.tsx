@@ -8,7 +8,8 @@ import { cn } from "../../lib/utils.js";
  * @param props The native element attributes.
  * @returns The card element.
  */
-export function Card({ className, ...props }: ComponentProps<"section">): ReactElement {
+export const Card = (props: ComponentProps<"section">): ReactElement => {
+  const { className, ...nativeProps } = props;
   return (
     <section
       data-slot="card"
@@ -16,10 +17,10 @@ export function Card({ className, ...props }: ComponentProps<"section">): ReactE
         "rounded-3xl border border-border/70 bg-card text-card-foreground shadow-xl",
         className,
       )}
-      {...props}
+      {...nativeProps}
     />
   );
-}
+};
 
 /**
  * Renders the heading area of a card.
@@ -27,9 +28,12 @@ export function Card({ className, ...props }: ComponentProps<"section">): ReactE
  * @param props The native element attributes.
  * @returns The card header element.
  */
-export function CardHeader({ className, ...props }: ComponentProps<"header">): ReactElement {
-  return <header data-slot="card-header" className={cn("space-y-1.5 p-6", className)} {...props} />;
-}
+export const CardHeader = (props: ComponentProps<"header">): ReactElement => {
+  const { className, ...nativeProps } = props;
+  return (
+    <header data-slot="card-header" className={cn("space-y-1.5 p-6", className)} {...nativeProps} />
+  );
+};
 
 /**
  * Renders the main content area of a card.
@@ -37,6 +41,7 @@ export function CardHeader({ className, ...props }: ComponentProps<"header">): R
  * @param props The native element attributes.
  * @returns The card content element.
  */
-export function CardContent({ className, ...props }: ComponentProps<"div">): ReactElement {
-  return <div data-slot="card-content" className={cn("px-6 pb-6", className)} {...props} />;
-}
+export const CardContent = (props: ComponentProps<"div">): ReactElement => {
+  const { className, ...nativeProps } = props;
+  return <div data-slot="card-content" className={cn("px-6 pb-6", className)} {...nativeProps} />;
+};

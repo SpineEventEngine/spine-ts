@@ -1,4 +1,4 @@
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageShape } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   Client,
@@ -20,7 +20,7 @@ import {
   UserIdSchema,
   type UserId,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
-import { ActorContextSchema } from "@spine-event-engine/proto";
+import { ActorContextSchema, ErrorSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
@@ -246,18 +246,32 @@ describe("MessageBoard Projection backend", () => {
       });
       await subscription.activate();
       const rejectedUpdate = subscription.updates[Symbol.asyncIterator]().next();
-      await expect(
-        client.asGuest().post(
-          PostMessageSchema,
-          create(PostMessageSchema, {
-            board: create(BoardIdSchema, { value: "valid-board" }),
-            author: create(UserIdSchema, { value: "ada" }),
-            username: "Ada",
-            text: "hello",
-            postedAt: create(TimestampSchema, { seconds: 1n }),
-          }),
-        ),
-      ).rejects.toThrow("Message validation failed");
+      const outcome = await client.asGuest().post(
+        PostMessageSchema,
+        create(PostMessageSchema, {
+          board: create(BoardIdSchema, { value: "valid-board" }),
+          author: create(UserIdSchema, { value: "ada" }),
+          username: "Ada",
+          text: "hello",
+          postedAt: create(TimestampSchema, { seconds: 1n }),
+        }),
+      );
+      expect(outcome).toMatchObject({
+        kind: "error",
+        error: { type: "COMMAND_VALIDATION_ERROR" },
+      });
+      if (outcome.kind !== "error") throw new Error("Expected a validation error.");
+      if (outcome.error.$typeName !== ErrorSchema.typeName)
+        throw new Error("Expected a Spine error.");
+      const validationError = outcome.error as MessageShape<typeof ErrorSchema>;
+      if (validationError.details === undefined)
+        throw new Error("Expected validation error details.");
+      expect(
+        AnyMessages.unpack(
+          validationError.details,
+          ValidationErrorSchema,
+        )?.constraintViolation.some((violation) => violation.fieldPath?.fieldName[0] === "id"),
+      ).toBe(true);
       expect(handler).not.toHaveBeenCalled();
       await expectNoView(rejectedUpdate);
       await expect(

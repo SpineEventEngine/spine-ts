@@ -10,8 +10,12 @@ const dayMilliseconds = 24 * hourMilliseconds;
  * @returns A compact relative age suitable for the message timeline.
  */
 export const RelativeTime: Readonly<{
+  // prettier-ignore
+
   format(postedAt: Date, now: Date): string;
 }> = Object.freeze({
+  // prettier-ignore
+
   /**
    * Formats the approximate elapsed age of a MessageBoard post.
    *

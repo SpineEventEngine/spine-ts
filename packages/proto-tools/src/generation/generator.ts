@@ -421,7 +421,9 @@ const protoGeneration = Object.freeze({
           `import { ${model.moduleExport} as ${aliases[index] ?? "model"} } from ${JSON.stringify(model.name)};`,
       ),
       "",
-      "/** Registry of every model package declared by this application. */",
+      "/**",
+      " * The application type registry composed from every declared model package.",
+      " */",
       `export const typeRegistry: TypeRegistry = TypeRegistry.from(${aliases.join(", ")});`,
       "",
     ].join("\n");

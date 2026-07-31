@@ -1341,7 +1341,9 @@ describe("spine proto model tooling", () => {
       'import { TypeRegistry } from "@spine-event-engine/core";\n' +
         'import { modelProtoModule as model0 } from "@example/chat-model";\n' +
         'import { modelProtoModule as model1 } from "@example/users-model";\n\n' +
-        "/** Registry of every model package declared by this application. */\n" +
+        "/**\n" +
+        " * The application type registry composed from every declared model package.\n" +
+        " */\n" +
         "export const typeRegistry: TypeRegistry = TypeRegistry.from(model0, model1);\n",
     );
   });
@@ -1479,9 +1481,9 @@ describe("spine proto model tooling", () => {
         },
       ],
       protoOwners: {
-        "example-message-board-model.proto": {
+        "example-chat-model.proto": {
           packageName: "@example/chat-model",
-          generatedExport: "generated/example-message-board-model_pb.js",
+          generatedExport: "generated/example-chat-model_pb.js",
         },
         "users/v1/user.proto": {
           packageName: "@example/users-model",
@@ -1702,14 +1704,14 @@ describe("spine proto model tooling", () => {
       formatVersion: 1,
       packageName: "@example/users-model",
       packageVersion: "1.2.3",
-      protoFiles: ["example-message-board-model.proto"],
-      generatedExports: { "example-message-board-model.proto": "generated/user_pb.js" },
+      protoFiles: ["example-chat-model.proto"],
+      generatedExports: { "example-chat-model.proto": "generated/user_pb.js" },
       dependencies: [],
       moduleExport: "modelProtoModule",
     });
     expect(() => resolveModelGraph(application, ["@example/chat-model"])).toThrow(
       "spine-proto: @example/chat-model: Proto path " +
-        "example-message-board-model.proto is already owned by @example/users-model",
+        "example-chat-model.proto is already owned by @example/users-model",
     );
   });
 

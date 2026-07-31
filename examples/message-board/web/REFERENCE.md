@@ -7,9 +7,9 @@ with the [MessageBoard web README](README.md).
 
 `MessageBoardApp` receives an application-owned browser session and
 `ClientRequest`. Production hosts may supply gRPC-Web or Connect through
-`client-web`; the visible local entry uses the real Connect gateway. The
-deterministic browser fixture is test-only and must not become a runtime
-fallback.
+`client-web`; the visible local entry uses the real Connect gateway. Blank
+username and message values are submitted to the server so its Proto validation
+messages can be shown, but the server does not accept them.
 
 The gateway URL defaults to `http://127.0.0.1:8090` and accepts only an
 `http://127.0.0.1` URL with a port from 1 through 65535. The Vite origin is
@@ -19,8 +19,8 @@ The gateway URL defaults to `http://127.0.0.1:8090` and accepts only an
 
 The host creates a fresh request only after sign-in. Late sign-in completions
 after unmount are ignored. Command transport failures and resolved `error` or
-`rejection` outcomes preserve the generated message ID and trimmed text for one
-single-flight retry; blank text never posts.
+`rejection` outcomes preserve the generated message ID and raw field values for
+one single-flight retry. Blank values are sent to the server for validation.
 
 Board state comes from an authoritative Query. A `resynchronization` delivery
 already contains authoritative state. Raw updates and `gapPossible` notices

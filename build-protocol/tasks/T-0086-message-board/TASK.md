@@ -1,6 +1,6 @@
 # T-0086: MessageBoard example
 
-Status: Implementation
+Status: Verified; integration pending
 Start: `2026-07-31`
 Baseline: `b0ad668163f598f487d71d380e2477bb8575f419`
 Branch: `task/T-0086-message-board`

@@ -3,7 +3,12 @@ import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobu
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport, Http2SessionManager } from "@connectrpc/connect-node";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
-import { EventContextSchema, UserIdSchema, ValidationErrorSchema } from "@spine-event-engine/proto";
+import {
+  ErrorSchema,
+  EventContextSchema,
+  UserIdSchema,
+  ValidationErrorSchema,
+} from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
@@ -732,9 +737,22 @@ describe("@spine-event-engine/example-todo", () => {
       (candidate) => taskTitle(candidate, "task-invalid") === "Kept",
     );
 
-    await expect(scope.post(RenameTaskSchema, renameTask("task-invalid", ""))).rejects.toThrow(
-      "Message validation failed",
-    );
+    const invalidRename = await scope.post(RenameTaskSchema, renameTask("task-invalid", ""));
+    expect(invalidRename).toMatchObject({
+      kind: "error",
+      error: { type: "COMMAND_VALIDATION_ERROR" },
+    });
+    if (invalidRename.kind !== "error") throw new Error("Expected a validation error.");
+    if (invalidRename.error.$typeName !== ErrorSchema.typeName)
+      throw new Error("Expected a Spine error.");
+    const validationError = invalidRename.error as MessageShape<typeof ErrorSchema>;
+    if (validationError.details === undefined)
+      throw new Error("Expected validation error details.");
+    expect(
+      AnyMessages.unpack(validationError.details, ValidationErrorSchema)?.constraintViolation.some(
+        (violation) => violation.fieldPath?.fieldName[0] === "title",
+      ),
+    ).toBe(true);
     const response = await expectTaskListEventuallyUnchanged(
       fixture,
       scope,

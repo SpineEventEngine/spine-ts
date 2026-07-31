@@ -35,12 +35,8 @@ const buttonVariants: (props?: ButtonVariants) => string = cva(
  * @param props The native button attributes and visual variants.
  * @returns The styled button element.
  */
-export function Button({
-  className,
-  variant,
-  size,
-  ...props
-}: ComponentProps<"button"> & ButtonVariants): ReactElement {
+export const Button = (props: ComponentProps<"button"> & ButtonVariants): ReactElement => {
+  const { className, variant, size, ...nativeProps } = props;
   return (
     <button
       data-slot="button"
@@ -51,7 +47,7 @@ export function Button({
         }),
         className,
       )}
-      {...props}
+      {...nativeProps}
     />
   );
-}
+};
