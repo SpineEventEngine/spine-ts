@@ -1,79 +1,152 @@
 import type { Command, Event } from "@spine-event-engine/proto";
 
-/** Defines transport-owned signal kinds for local routing contracts. */
+/**
+ * Defines transport-owned signal kinds for local routing contracts.
+ */
 export type TransportSignalKind = "command" | "event" | "query" | "subscription" | "system";
 
-/** Defines the envelope carried by a signal kind. */
+/**
+ * Defines the envelope carried by a signal kind.
+ */
 export type TransportSignalEnvelope<
   Kind extends TransportSignalKind,
   OtherEnvelope = unknown,
 > = Kind extends "command" ? Command : Kind extends "event" ? Event : OtherEnvelope;
 
-/** Defines a semantic tag copied from descriptor metadata. */
+/**
+ * Defines a semantic tag copied from descriptor metadata.
+ */
 export type TransportSemanticTag = string;
 
-/** Defines an immutable routing descriptor owned by transport. */
+/**
+ * Defines an immutable routing descriptor owned by transport.
+ */
 export interface TransportRoutingDescriptor<
   Kind extends TransportSignalKind = TransportSignalKind,
 > {
-  /** Identifies the high-level signal category. */
+  // prettier-ignore
+
+  /**
+   * Identifies the high-level signal category.
+   */
   readonly signalKind: Kind;
-  /** Identifies the canonical payload type URL. */
+
+  /**
+   * Identifies the canonical payload type URL.
+   */
   readonly messageTypeUrl: string;
-  /** Lists deterministic sorted semantic tags. */
+
+  /**
+   * Lists deterministic sorted semantic tags.
+   */
   readonly semanticTags: readonly TransportSemanticTag[];
-  /** Identifies the deterministic adapter-agnostic routing key. */
+
+  /**
+   * Identifies the deterministic adapter-agnostic routing key.
+   */
   readonly routingKey: string;
 }
 
-/** Defines input for one transport topic. */
+/**
+ * Defines input for one transport topic.
+ */
 export interface TransportTopicInput<Kind extends TransportSignalKind = TransportSignalKind> {
-  /** Identifies the high-level signal category. */
+  // prettier-ignore
+
+  /**
+   * Identifies the high-level signal category.
+   */
   readonly signalKind: Kind;
-  /** Identifies the canonical payload type URL. */
+
+  /**
+   * Identifies the canonical payload type URL.
+   */
   readonly messageTypeUrl: string;
-  /** Lists optional semantic tags copied from descriptor metadata. */
+
+  /**
+   * Lists optional semantic tags copied from descriptor metadata.
+   */
   readonly semanticTags?: readonly TransportSemanticTag[];
 }
 
-/** Defines an immutable transport topic and routing descriptor. */
+/**
+ * Defines an immutable transport topic and routing descriptor.
+ */
 export interface TransportTopic<
   Kind extends TransportSignalKind = TransportSignalKind,
 > extends TransportTopicInput<Kind> {
-  /** Lists deterministic sorted semantic tags. */
+  // prettier-ignore
+
+  /**
+   * Lists deterministic sorted semantic tags.
+   */
   readonly semanticTags: readonly TransportSemanticTag[];
-  /** Provides transport-owned routing for adapter mapping. */
+
+  /**
+   * Provides transport-owned routing for adapter mapping.
+   */
   readonly routing: TransportRoutingDescriptor<Kind>;
 }
 
-/** Defines subscription behavior without socket details. */
+/**
+ * Defines subscription behavior without socket details.
+ */
 export type TransportSubscriptionMode = "competing-consumer" | "fan-out";
 
-/** Defines input for one immutable subscription descriptor. */
+/**
+ * Defines input for one immutable subscription descriptor.
+ */
 export interface TransportSubscriptionInput<
   Kind extends TransportSignalKind = TransportSignalKind,
 > {
-  /** Identifies the stable logical subscriber. */
+  // prettier-ignore
+
+  /**
+   * Identifies the stable logical subscriber.
+   */
   readonly subscriberId: string;
-  /** Specifies the topic to subscribe to. */
+
+  /**
+   * Specifies the topic to subscribe to.
+   */
   readonly topic: TransportTopicInput<Kind> | TransportTopic<Kind>;
-  /** Specifies delivery behavior and defaults to `fan-out`. */
+
+  /**
+   * Specifies delivery behavior and defaults to `fan-out`.
+   */
   readonly mode?: TransportSubscriptionMode;
 }
 
-/** Defines an immutable transport subscription descriptor. */
+/**
+ * Defines an immutable transport subscription descriptor.
+ */
 export interface TransportSubscription<Kind extends TransportSignalKind = TransportSignalKind> {
-  /** Identifies the stable logical subscriber. */
+  // prettier-ignore
+
+  /**
+   * Identifies the stable logical subscriber.
+   */
   readonly subscriberId: string;
-  /** Identifies the delivery behavior. */
+
+  /**
+   * Identifies the delivery behavior.
+   */
   readonly mode: TransportSubscriptionMode;
-  /** Provides a copy-safe transport topic. */
+
+  /**
+   * Provides a copy-safe transport topic.
+   */
   readonly topic: TransportTopic<Kind>;
-  /** Identifies the deterministic topic, subscriber, and mode key. */
+
+  /**
+   * Identifies the deterministic topic, subscriber, and mode key.
+   */
   readonly descriptorKey: string;
 }
 
-/** Defines a publish-style transport operation. */
+/**
+ * Defines a publish-style transport operation.
+ */
 export type PublishTransportOperation<
   Envelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
@@ -84,7 +157,9 @@ export type PublishTransportOperation<
     }
   : never;
 
-/** Defines a request-style transport operation. */
+/**
+ * Defines a request-style transport operation.
+ */
 export type RequestTransportOperation<
   RequestEnvelope = unknown,
   Kind extends TransportSignalKind = TransportSignalKind,
@@ -120,32 +195,50 @@ export type RequestTransportHandler<
   operation: RequestTransportOperation<RequestEnvelope, Kind>,
 ) => ResponseEnvelope | Promise<ResponseEnvelope>;
 
-/** Defines a common asynchronous close contract. */
+/**
+ * Defines a common asynchronous close contract.
+ */
 export interface AsyncCloseable {
-  /** Closes the resource gracefully.
+  // prettier-ignore
+
+  /**
+   * Closes the resource gracefully.
    * @returns Completes after the resource closes.
    */
   close(): Promise<void>;
 }
 
-/** Defines the handle returned from a subscription. */
+/**
+ * Defines the handle returned from a subscription.
+ */
 export interface TransportSubscriptionHandle<
   Kind extends TransportSignalKind = TransportSignalKind,
 > extends AsyncCloseable {
-  /** Provides the descriptor associated with this subscription. */
+  // prettier-ignore
+
+  /**
+   * Provides the descriptor associated with this subscription.
+   */
   readonly subscription: TransportSubscription<Kind>;
 }
 
-/** Defines adapter-agnostic transport operations. */
+/**
+ * Defines adapter-agnostic transport operations.
+ */
 export interface SignalTransport extends AsyncCloseable {
-  /** Publishes one envelope to a topic.
+  // prettier-ignore
+
+  /**
+   * Publishes one envelope to a topic.
    * @param operation Specifies the operation to publish.
    * @returns Completes after the operation is published.
    */
   publish<Envelope, Kind extends TransportSignalKind>(
     operation: PublishTransportOperation<Envelope, Kind>,
   ): Promise<void>;
-  /** Subscribes a handler to a topic.
+
+  /**
+   * Subscribes a handler to a topic.
    * @param subscription Specifies the subscribed topic and mode.
    * @param handler Specifies the handler for published operations.
    * @returns Returns the closeable subscription handle.
@@ -154,14 +247,18 @@ export interface SignalTransport extends AsyncCloseable {
     subscription: TransportSubscription<Kind>,
     handler: PublishTransportHandler<Envelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>>;
-  /** Returns a typed response from a topic.
+
+  /**
+   * Returns a typed response from a topic.
    * @param operation Specifies the request operation.
    * @returns Returns the response envelope.
    */
   request<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
     operation: RequestTransportOperation<RequestEnvelope, Kind>,
   ): Promise<ResponseEnvelope>;
-  /** Registers a request handler for a topic.
+
+  /**
+   * Registers a request handler for a topic.
    * @param subscription Specifies the subscribed topic and mode.
    * @param handler Specifies the handler for request operations.
    * @returns Returns the closeable subscription handle.
@@ -173,7 +270,10 @@ export interface SignalTransport extends AsyncCloseable {
 }
 
 const transportTopics = {
-  /** Creates an immutable topic with deterministic routing.
+  // prettier-ignore
+
+  /**
+   * Creates an immutable topic with deterministic routing.
    * @param input Specifies the topic data.
    * @returns Returns the immutable transport topic.
    */
@@ -190,7 +290,8 @@ const transportTopics = {
     return Object.freeze({ signalKind, messageTypeUrl, semanticTags, routing });
   },
 
-  /** Checks a topic's top-level signal kind.
+  /**
+   * Checks a topic's top-level signal kind.
    * @param topic Specifies the topic to inspect.
    * @param signalKind Specifies the expected signal kind.
    * @returns Returns whether the top-level kind matches.
@@ -203,7 +304,10 @@ const transportTopics = {
   },
 };
 type TransportTopicsOwner = Readonly<typeof transportTopics>;
-/** Owns transport-topic construction, normalization, and kind checks. */
+
+/**
+ * Constructs normalized transport topics and checks their signal kinds.
+ */
 export const TransportTopics: TransportTopicsOwner = Object.freeze(transportTopics);
 
 const transportKinds = new Set<string>(["command", "event", "query", "subscription", "system"]);
@@ -251,7 +355,10 @@ const TransportTopicParts = {
 };
 
 const transportSubscriptions = {
-  /** Creates an immutable subscription descriptor.
+  // prettier-ignore
+
+  /**
+   * Creates an immutable subscription descriptor.
    * @param input Specifies the subscriber, topic, and mode.
    * @returns Returns the immutable subscription descriptor.
    */
@@ -270,7 +377,10 @@ const transportSubscriptions = {
   },
 };
 type TransportSubscriptionsOwner = Readonly<typeof transportSubscriptions>;
-/** Owns transport-subscription construction and validation. */
+
+/**
+ * Constructs and validates transport subscriptions.
+ */
 export const TransportSubscriptions: TransportSubscriptionsOwner =
   Object.freeze(transportSubscriptions);
 const TransportSubscriptionParts = {
@@ -292,7 +402,10 @@ const TransportSubscriptionParts = {
 };
 
 const transportOperations = {
-  /** Checks an operation's nested topic kind.
+  // prettier-ignore
+
+  /**
+   * Checks an operation's nested topic kind.
    * @param operation Specifies the operation to inspect.
    * @param signalKind Specifies the expected signal kind.
    * @returns Returns whether the nested topic kind matches.
@@ -308,5 +421,8 @@ const transportOperations = {
   },
 };
 type TransportOperationsOwner = Readonly<typeof transportOperations>;
-/** Owns transport-operation kind checks. */
+
+/**
+ * Checks transport operation kinds.
+ */
 export const TransportOperations: TransportOperationsOwner = Object.freeze(transportOperations);

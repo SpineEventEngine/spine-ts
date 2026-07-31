@@ -2,13 +2,6 @@ version: v2
 plugins:
   - local:
       - node
-      - scripts/generate-rejections.mjs
-    out: examples/todo/generated
-    opt:
-      - target=ts
-      - import_extension=js
-  - local:
-      - node
       - packages/client-node/codegen/generate-entity-columns.mjs
     out: examples/todo/generated
     include_imports: true

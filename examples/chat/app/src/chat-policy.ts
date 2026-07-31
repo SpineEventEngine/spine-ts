@@ -11,7 +11,7 @@ import { TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
 import {
   ChatMessageViewSchema,
   ChatRoomIdSchema,
-} from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
 import { TypeUrls, AnyMessages } from "@spine-event-engine/core";
 import type { CompositeFilter, Target } from "@spine-event-engine/proto/client";
 import {
@@ -21,18 +21,22 @@ import {
 import {
   PostMessageSchema,
   type PostMessage,
-} from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/commands_pb.js";
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/commands_pb.js";
 
 const MAX_AUTHORIZATION_COMPOSITE_FILTERS = 8;
 const MAX_AUTHORIZATION_SIMPLE_FILTERS = 16;
 
-/** Authorizes Chat gateway requests against the authenticated actor's room access. */
+/**
+ * Authorizes Chat gateway requests against the authenticated actor's room access.
+ */
 export class ChatAuthorizationPolicy implements AuthorizationPolicy {
+  // prettier-ignore
+
   /**
    * Checks whether an authenticated Chat principal may make a gateway request.
    *
-   * @param principal - Identifies the authenticated actor and permitted rooms.
-   * @param request - Describes the command, query, subscription, or lifecycle call to authorize.
+   * @param principal Identifies the authenticated actor and permitted rooms.
+   * @param request Describes the command, query, subscription, or lifecycle call to authorize.
    * @returns A promise that resolves to `true` when allowed and `false` otherwise.
    */
   authorize(principal: AuthenticatedPrincipal, request: IncomingRequest): Promise<boolean> {
@@ -109,14 +113,18 @@ export class ChatAuthorizationPolicy implements AuthorizationPolicy {
   }
 }
 
-/** Resolves trusted actor context for an authenticated Chat gateway principal. */
+/**
+ * Resolves trusted actor context for an authenticated Chat gateway principal.
+ */
 export class ChatContextResolver implements ContextResolver {
+  // prettier-ignore
+
   /**
    * Resolves trusted context for a gateway request.
    *
-   * @param principal - Identifies the authenticated Chat actor.
-   * @param _request - Supplies the gateway request whose context is being resolved.
-   * @param clock - Supplies the gateway-owned timestamp.
+   * @param principal Identifies the authenticated Chat actor.
+   * @param _request Supplies the gateway request whose context is being resolved.
+   * @param clock Supplies the gateway-owned timestamp.
    * @returns A promise that resolves to trusted actor, tenant, and timestamp context.
    */
   async resolve(
@@ -130,8 +138,8 @@ export class ChatContextResolver implements ContextResolver {
   /**
    * Resolves trusted context from an authenticated principal.
    *
-   * @param principal - Identifies the authenticated Chat actor.
-   * @param clock - Supplies the gateway-owned timestamp.
+   * @param principal Identifies the authenticated Chat actor.
+   * @param clock Supplies the gateway-owned timestamp.
    * @returns A promise that resolves to trusted actor, tenant, and timestamp context.
    */
   resolveContext(

@@ -3,25 +3,21 @@
 For the browser, authentication-gateway, and Envoy extension path used by this
 example, see the [browser client and gateway guide](../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
 
-This is the Wave 4 Projection-backed application example:
-`@spine-event-engine/example-chat-model` owns Chat Protobuf messages and imports `UserId` from the separate
-`@spine-event-engine/example-chat-users-model` package. The application directly
-depends on and imports both model packages, while registry composition includes
-Users through Chat's transitive model dependency. It does not copy Users Proto
-or generated output.
+`@spine-event-engine/example-chat-model` owns every Chat Protobuf message,
+including `UserId`. The application directly depends on that single model
+package and does not copy Proto or generated output.
 
 `PostMessage` carries a browser-provided deterministic `MessageId`, a room,
-author, bounded text, and posting timestamp. `ChatMessageAggregate` stores one
+author, required text, and posting timestamp. `ChatMessageAggregate` stores one
 message per ID and emits `MessagePosted`; `ChatMessageViewProjection` reacts to
 that event and creates one `FULL`-visible `ChatMessageView` Projection row per
 message. The view indexes `room`, `author`, and `posted_at`. Browser delivery
 therefore uses room-filtered Projection Query and Projection subscription APIs,
 not event delivery or an unbounded aggregate message list.
 
-Before state or event publication, command handling rejects missing, blank, or
-overlong UTF-8 message/room/author IDs (128 bytes); blank, missing, or overlong
-text (4,096 bytes); and missing timestamps, seconds outside the Protobuf
-`Timestamp` range, or nanoseconds outside `0..999,999,999`. The ID remains
+Before the handler runs, framework validation rejects any `PostMessage` whose
+required message, room, author, text, or posting timestamp is absent. Nested
+Chat identifiers use the declared `(validate) = true` options. The ID remains
 application provided: this example neither generates nor persists browser
 credentials.
 
@@ -50,13 +46,6 @@ retains only service, method, bytes, and cancellation capability. Command-post
 transport acknowledgement means the command was admitted; a later domain
 rejection is recorded as a stored rejection event rather than changing that
 acknowledgement.
-
-## Intentional v1 reset
-
-This unpublished example deliberately replaces the earlier incompatible Chat
-aggregate shape with the per-message aggregate and projection model. There is
-no production persisted data or published package compatibility promise, so no
-migration or deprecation bridge is supplied for this reset.
 
 ## Build the example
 
@@ -127,6 +116,5 @@ const packedCommandId = AnyMessages.pack(CommandIdSchema, commandId);
 void packedCommandId;
 ```
 
-The repository packages are not published to npm yet. The Wave 3 external
-consumer test uses local tarballs to simulate a clean registry installation;
-publication is revisited after all waves.
+The repository packages are not published to npm yet. The external-consumer
+test uses local tarballs to simulate a clean registry installation.

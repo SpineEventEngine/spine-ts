@@ -9,13 +9,17 @@ import type { MessageSchema } from "@spine-event-engine/core";
  * and method invocation; the bus only routes accepted command envelopes.
  */
 export interface CommandDispatcher {
-  /** Lists generated command message schemas accepted by this dispatcher.
+  // prettier-ignore
+
+  /**
+   * Lists generated command message schemas accepted by this dispatcher.
    *
    * @returns the accepted message schemas.
    */
   messageSchemas(): readonly MessageSchema[];
 
-  /** Dispatches one generated Spine command envelope.
+  /**
+   * Dispatches one generated Spine command envelope.
    *
    * @param command the command envelope to dispatch.
    * @returns A promise that resolves after the command is dispatched.

@@ -1,7 +1,7 @@
 [
   {
     "rule": "standalone-function",
-    "file": "examples/datastore-orders/src/index.ts",
+    "file": "examples/orders/src/index.ts",
     "kind": "function-declaration",
     "identity": "createDatastoreOrdersContext()#1",
     "name": "createDatastoreOrdersContext",
@@ -10,7 +10,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/datastore-orders/src/index.ts",
+    "file": "examples/orders/src/index.ts",
     "kind": "function-declaration",
     "identity": "startDatastoreOrdersServer()#1",
     "name": "startDatastoreOrdersServer",
@@ -19,7 +19,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/datastore-orders/src/index.ts",
+    "file": "examples/orders/src/index.ts",
     "kind": "function-declaration",
     "identity": "startOrdersDatastoreServer()#1",
     "name": "startOrdersDatastoreServer",
@@ -28,7 +28,7 @@
   },
   {
     "rule": "standalone-function",
-    "file": "examples/datastore-orders/src/load-runner.ts",
+    "file": "examples/orders/src/load-runner.ts",
     "kind": "function-declaration",
     "identity": "runDatastoreOrdersLoad()#1",
     "name": "runDatastoreOrdersLoad",

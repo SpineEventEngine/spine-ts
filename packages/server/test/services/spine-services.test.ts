@@ -103,9 +103,10 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
-import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
-import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
-import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
+import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
+import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
+import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   DurableSubscriptionRecords,
   durableSubscriptionRecordSpec,
@@ -126,11 +127,11 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
-type TaskId = Message<"spine.example.todo.v1.TaskId"> & {
+type TaskId = Message<"spine.examples.todo.TaskId"> & {
   value: string;
 };
 
-type Task = Message<"spine.example.todo.v1.Task"> & {
+type Task = Message<"spine.examples.todo.Task"> & {
   id?: TaskId;
   title: string;
   completed: boolean;
@@ -192,19 +193,8 @@ const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
-const fileTaskIdFixture = fileDesc(
-  "CiNzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza19pZC5wcm90bxIVc3BpbmUuZXhhbXBsZS50b2Rv" +
-    "LnYxIh0KBlRhc2tJZBITCgV2YWx1ZRgBIAEoCUIEoIUkAUIbqo0kF3R5cGUuc3BpbmUuZXhhbXBs" +
-    "ZS50b2RvYgZwcm90bzM",
-  [file_spine_options],
-);
-const fileTaskFixture = fileDesc(
-  "CiFzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza3MucHJvdG8SFXNwaW5lLmV4YW1wbGUudG9kby52" +
-    "MSJvCgRUYXNrEjcKAmlkGAEgASgLMh0uc3BpbmUuZXhhbXBsZS50b2RvLnYxLlRhc2tJZEIMoIUk" +
-    "AeiFJAGAhiQBEhMKBXRpdGxlGAIgASgJQgSghSQBEhEKCWNvbXBsZXRlZBgDIAEoCDoG+ookAggB" +
-    "QhuqjSQXdHlwZS5zcGluZS5leGFtcGxlLnRvZG9iBnByb3RvMw",
-  [fileTaskIdFixture, file_spine_options],
-);
+const fileTaskIdFixture = TodoIdSchema.file;
+const fileTaskFixture = TodoTaskSchema.file;
 const TaskIdSchema = messageDesc(fileTaskIdFixture, 0) as GenMessage<TaskId>;
 const TaskSchema = messageDesc(fileTaskFixture, 0) as GenMessage<Task>;
 
@@ -294,6 +284,11 @@ class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregat
 class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {}
 
 describe("SpineServices", () => {
+  it("uses the current Todo descriptor type names in routing fixtures", () => {
+    expect(TaskIdSchema.typeName).toBe("spine.examples.todo.TaskId");
+    expect(TaskSchema.typeName).toBe("spine.examples.todo.Task");
+  });
+
   it("posts commands through CommandService over a real gRPC transport", async () => {
     const observed: string[] = [];
     const dispatcher = createCommandDispatcher((command) => {
@@ -569,7 +564,7 @@ describe("SpineServices", () => {
       task,
     );
     expect(responseErrorMessage(incompatible)).toBe(
-      "QueryService.Read id_filter values must pack spine.example.todo.v1.TaskId.",
+      "QueryService.Read id_filter values must pack spine.examples.todo.TaskId.",
     );
   });
 
@@ -2797,7 +2792,7 @@ describe("SpineServices", () => {
     });
 
     expect(() => handlers.subscribe(topic)).toThrow(
-      "SubscriptionService.Subscribe field filter value must pack spine.example.todo.v1.TaskId.",
+      "SubscriptionService.Subscribe field filter value must pack spine.examples.todo.TaskId.",
     );
   });
 

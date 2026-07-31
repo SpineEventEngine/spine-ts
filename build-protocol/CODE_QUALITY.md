@@ -142,6 +142,32 @@ affected by the task:
 
 Both the framework and the to-do example must have separate `USER_GUIDE.md` files before they are considered usable.
 
+### Authored API and Proto Documentation
+
+Handwritten TSDoc in tracked TypeScript and JavaScript source, tests, and
+tooling uses multi-line blocks: an opener line containing only `/**`, a blank
+line before each block, and `@param name Description` without a hyphen. The
+only opening exception is a block at byte zero; files must not start with a
+blank line. Summaries explain behavior or domain meaning rather than using
+placeholders or vague verbs such as `Owns` and `Consists`. Public production
+and example declarations require semantic TSDoc coverage; tests and tooling
+are subject to layout rules only. Generated, distribution, dependency, and
+frozen sources are excluded.
+
+Authored example Proto uses meaningful domain documentation with a blank line
+between a field or declaration and its following documentation block. Its
+package is `spine.examples.<domain>` and its type URL prefix is
+`type.spine.examples.<domain>`, where `<domain>` is exactly `chat`, `projects`,
+`orders`, or `todo`. Authored example paths, packages, and imports contain no
+`v1` component. Manifest-declared frozen copied Proto sources remain exempt and
+unchanged.
+
+Every production package has a beginner-oriented `README.md` for people and a
+sibling `REFERENCE.md` for agents. The README links to the reference and states
+its audience; the reference records the current detailed contract, entrypoints,
+guarantees, limits, and applicable lifecycle or error behavior without
+implementation-history narrative.
+
 ## Review Standards
 
 Every task records a disposition for these concerns, but invokes only the

@@ -1,47 +1,90 @@
-/** Write-side signal kinds accepted by the first intake-result seam. */
+/**
+ * Write-side signal kinds accepted by the first intake-result seam.
+ */
 export type SignalKind = "command" | "event";
 
-/** Marker for intake that accepted responsibility for later asynchronous work. */
+/**
+ * Marker for intake that accepted responsibility for later asynchronous work.
+ */
 export type SignalIntakeAcceptedFor = "async-work";
 
-/** Stable machine-readable reason code for immediate signal intake failures. */
+/**
+ * Stable machine-readable reason code for immediate signal intake failures.
+ */
 export type SignalIntakeFailureCode =
   "RUNTIME_NOT_ACCEPTING" | "MALFORMED_ENVELOPE" | "UNSUPPORTED_SIGNAL_KIND";
 
-/** Sanitized scalar diagnostic metadata for immediate signal intake failures. */
+/**
+ * Sanitized scalar diagnostic metadata for immediate signal intake failures.
+ */
 export type SignalIntakeFailureDiagnostics = Readonly<
   Record<string, string | number | boolean | null>
 >;
 
-/** Result returned when a write-side signal is accepted for later asynchronous work. */
+/**
+ * Result returned when a write-side signal is accepted for later asynchronous work.
+ */
 export interface SignalIntakeAccepted<Kind extends SignalKind = SignalKind> {
-  /** Discriminant for accepted intake. */
+  // prettier-ignore
+
+  /**
+   * Discriminant for accepted intake.
+   */
   readonly status: "accepted";
-  /** Whether the accepted signal is a command or event. */
+
+  /**
+   * Whether the accepted signal is a command or event.
+   */
   readonly signalKind: Kind;
-  /** Accepted intake only promises future asynchronous work ownership. */
+
+  /**
+   * Accepted intake only promises future asynchronous work ownership.
+   */
   readonly acceptedFor: SignalIntakeAcceptedFor;
 }
 
-/** Structured immediate failure details with sanitized diagnostics only. */
+/**
+ * Structured immediate failure details with sanitized diagnostics only.
+ */
 export interface SignalIntakeFailureDetails {
-  /** Stable machine-readable intake failure reason. */
+  // prettier-ignore
+
+  /**
+   * Stable machine-readable intake failure reason.
+   */
   readonly code: SignalIntakeFailureCode;
-  /** Copy-safe scalar diagnostics; never a full signal, envelope, or message payload. */
+
+  /**
+   * Copy-safe scalar diagnostics; never a full signal, envelope, or message payload.
+   */
   readonly diagnostics: SignalIntakeFailureDiagnostics;
 }
 
-/** Result returned when a write-side signal fails immediately at intake. */
+/**
+ * Result returned when a write-side signal fails immediately at intake.
+ */
 export interface SignalIntakeFailure<Kind extends SignalKind = SignalKind> {
-  /** Discriminant for immediate intake failure. */
+  // prettier-ignore
+
+  /**
+   * Discriminant for immediate intake failure.
+   */
   readonly status: "failed";
-  /** Whether the rejected signal is a command or event. */
+
+  /**
+   * Whether the rejected signal is a command or event.
+   */
   readonly signalKind: Kind;
-  /** Stable failure reason and sanitized diagnostics. */
+
+  /**
+   * Stable failure reason and sanitized diagnostics.
+   */
   readonly failure: SignalIntakeFailureDetails;
 }
 
-/** Write-side signal intake result value. */
+/**
+ * Write-side signal intake result value.
+ */
 export type SignalIntakeResult<Kind extends SignalKind = SignalKind> =
   SignalIntakeAccepted<Kind> | SignalIntakeFailure<Kind>;
 
@@ -64,7 +107,8 @@ const allowedDiagnosticKeys = new Set([
   "runtimeState",
 ]);
 
-/** Creates an immutable accepted-for-async-work signal intake result.
+/**
+ * Creates an immutable accepted-for-async-work signal intake result.
  *
  * @param signalKind the kind of accepted signal.
  * @returns the accepted intake result.
@@ -79,7 +123,8 @@ export function acceptSignalIntake<Kind extends SignalKind>(
   });
 }
 
-/** Creates an immutable immediate signal intake failure result.
+/**
+ * Creates an immutable immediate signal intake failure result.
  *
  * @param signalKind the kind of rejected signal.
  * @param code the stable intake failure code.
@@ -101,7 +146,9 @@ export function failSignalIntake<Kind extends SignalKind>(
   });
 }
 
-/** Private signal-intake diagnostic helpers. */
+/**
+ * Private signal-intake diagnostic helpers.
+ */
 const SignalIntakeValues = Object.freeze({
   sanitizeDiagnostics(
     diagnostics: Readonly<Record<string, unknown>>,

@@ -8,31 +8,64 @@ import { readManifestAt } from "../io/manifest-reader.js";
 import { RegistryDependency } from "./registry-dependency.js";
 import { NpmPackageName } from "./npm-package-name.js";
 
-/** Describes one installed model package in a resolved dependency graph. */
+/**
+ * Describes one installed model package in a resolved dependency graph.
+ */
 export interface ResolvedModel {
-  /** Names the resolved model package. */
+  // prettier-ignore
+
+  /**
+   * Names the resolved model package.
+   */
   readonly name: string;
-  /** States the resolved package version. */
+
+  /**
+   * States the resolved package version.
+   */
   readonly version: string;
-  /** Names the package export that provides its Proto module. */
+
+  /**
+   * Names the package export that provides its Proto module.
+   */
   readonly moduleExport: string;
-  /** Locates the installed package root. */
+
+  /**
+   * Locates the installed package root.
+   */
   readonly root: string;
 }
 
-/** Identifies the model package that owns a generated Proto path. */
+/**
+ * Identifies the model package that owns a generated Proto path.
+ */
 export interface ProtoOwner {
-  /** Names the package that owns the Proto path. */
+  // prettier-ignore
+
+  /**
+   * Names the package that owns the Proto path.
+   */
   readonly packageName: string;
-  /** Names the package-relative generated import subpath. */
+
+  /**
+   * Names the package-relative generated import subpath.
+   */
   readonly generatedExport: string;
 }
 
-/** Contains the resolved model packages and their Proto-path owners. */
+/**
+ * Contains the resolved model packages and their Proto-path owners.
+ */
 export interface ResolvedModelGraph {
-  /** Lists model packages in deterministic dependency order. */
+  // prettier-ignore
+
+  /**
+   * Lists model packages in deterministic dependency order.
+   */
   readonly models: readonly ResolvedModel[];
-  /** Maps every owned Proto path to its model package. */
+
+  /**
+   * Maps every owned Proto path to its model package.
+   */
   readonly protoOwners: Readonly<Record<string, ProtoOwner>>;
 }
 
@@ -51,7 +84,9 @@ type TraversalStep =
   | { readonly kind: "visit"; readonly requesterRoot: string; readonly name: string }
   | { readonly kind: "complete"; readonly requesterRoot: string; readonly name: string };
 
-/** Resolves explicitly declared installed model-package graphs. */
+/**
+ * Resolves explicitly declared installed model-package graphs.
+ */
 export const ModelGraph: Readonly<{
   resolve(requesterRoot: string, modelPackages: readonly string[]): ResolvedModelGraph;
   findPackageRoot(manifestPath: string, requester: string): string;
@@ -62,7 +97,10 @@ export const ModelGraph: Readonly<{
   satisfiesRegistrySpecifier(version: string, specifier: string): boolean;
   fail(name: string, message: string): never;
 }> = Object.freeze({
-  /** Resolves explicitly declared installed model packages without scanning `node_modules`.
+  // prettier-ignore
+
+  /**
+   * Resolves explicitly declared installed model packages without scanning `node_modules`.
    *
    * @param requesterRoot The application or model package root.
    * @param modelPackages The explicitly declared direct model packages.

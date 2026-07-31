@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 import { DeliveryServer } from "../server/delivery-server.js";
 
-/** Provides process lifecycle handling for the delivery server executable. */
+/**
+ * Provides process lifecycle handling for the delivery server executable.
+ */
 const DeliveryProcess: Readonly<{
+  // prettier-ignore
+
   /**
    * Starts a delivery server and installs terminal signal handling.
    *
@@ -10,6 +14,7 @@ const DeliveryProcess: Readonly<{
    * @returns Nothing after scheduling the server lifecycle.
    */
   run: (server: DeliveryServer) => void;
+
   /**
    * Describes an unknown error for process output.
    *
@@ -36,8 +41,8 @@ const DeliveryProcess: Readonly<{
         .finally(removeSignalHandlers);
     };
 
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
+    process.on("SIGINT", stop);
+    process.on("SIGTERM", stop);
     server.start().then(
       (running) => {
         process.stdout.write(`Delivery server listening at ${running.baseUrl}\n`);

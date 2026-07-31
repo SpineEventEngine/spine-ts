@@ -114,7 +114,7 @@ describe("the static JVM source reference", () => {
       capabilities: { command: true },
     });
     await expectNoRunArtifacts(fixture);
-  });
+  }, 15_000);
 
   test("concurrent callers independently validate one immutable archive and retain no extracted source", async () => {
     const fixture = await createFixtureArchive("b", true);

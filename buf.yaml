@@ -2,8 +2,8 @@ version: v2
 modules:
   - path: packages/proto/proto
   - path: examples/todo/proto
-  - path: examples/project-management/proto
-  - path: examples/datastore-orders/proto
+  - path: examples/projects/proto
+  - path: examples/orders/proto
 lint:
   use:
     - STANDARD

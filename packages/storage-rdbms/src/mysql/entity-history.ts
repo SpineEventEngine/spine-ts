@@ -31,7 +31,10 @@ const idBytes = 768;
 const batchSize = 128;
 interface EntityColumnSchema {
   readonly name: string;
-  /** The INFORMATION_SCHEMA type expected after MySQL normalizes the DDL. */
+
+  /**
+   * The INFORMATION_SCHEMA type expected after MySQL normalizes the DDL.
+   */
   readonly mysqlType: string;
   readonly ddlType: string;
   readonly autoIncrement?: boolean;
@@ -56,21 +59,43 @@ interface EntityTableSchema {
 }
 
 interface EntityHistorySchema {
-  /** Whether all generated columns are non-nullable. */
+  // prettier-ignore
+
+  /**
+   * Whether all generated columns are non-nullable.
+   */
   readonly columnNullable: boolean;
-  /** Names the required MySQL table engine. */
+
+  /**
+   * Names the required MySQL table engine.
+   */
   readonly engine: string;
-  /** Describes the durable entity-history tables. */
+
+  /**
+   * Describes the durable entity-history tables.
+   */
   readonly tables: readonly EntityTableSchema[];
 }
 
-/** Describes the immutable MySQL entity-history schema contract. */
+/**
+ * Describes the immutable MySQL entity-history schema contract.
+ */
 export const entityHistorySchema: EntityHistorySchema = {
-  /** Keeps all durable entity-history columns non-nullable. */
+  // prettier-ignore
+
+  /**
+   * Keeps all durable entity-history columns non-nullable.
+   */
   columnNullable: false,
-  /** Requires MySQL's transactional InnoDB engine. */
+
+  /**
+   * Requires MySQL's transactional InnoDB engine.
+   */
   engine: "InnoDB",
-  /** Defines the durable entity-history table layouts. */
+
+  /**
+   * Defines the durable entity-history table layouts.
+   */
   tables: [
     {
       name: "spine_ts_entity_specs",
@@ -199,13 +224,28 @@ const EntityHistoryTables = Object.freeze({
 });
 const tables = entityHistorySchema.tables.map(EntityHistoryTables.create);
 
-/** A factory-owned, lifecycle-admitted entity connection lease seam. */
+/**
+ * A factory-owned, lifecycle-admitted entity connection lease seam.
+ */
 export interface MysqlEntityConnectionProvider {
-  /** Acquires an admitted MySQL connection lease. @returns A connection lease. */
+  // prettier-ignore
+
+  /**
+   * Acquires an admitted MySQL connection lease.
+   * @returns A connection lease.
+   */
   acquire(): Promise<PoolConnection>;
-  /** Clears a successful or failed connection lease. @param connection The lease to release. */
+
+  /**
+   * Clears a successful or failed connection lease.
+   * @param connection The lease to release.
+   */
   release(connection: PoolConnection): void;
-  /** Removes an unusable connection lease. @param connection The lease to destroy. */
+
+  /**
+   * Removes an unusable connection lease.
+   * @param connection The lease to destroy.
+   */
   destroy(connection: PoolConnection): void;
 }
 
@@ -217,25 +257,54 @@ export interface MysqlEntityConnectionProvider {
  * live handle during factory shutdown. It is not a remote history API.
  */
 export interface MysqlEntityStorageHandle<I, S extends Message> {
-  /** Stores current entity records. */
+  // prettier-ignore
+
+  /**
+   * Stores current entity records.
+   */
   readonly current: EntityRecordStorage<I, S>;
-  /** Stores state history records. */
+
+  /**
+   * Stores state history records.
+   */
   readonly states: EntityStateHistoryPort<I, S>;
-  /** Stores event history records. */
+
+  /**
+   * Stores event history records.
+   */
   readonly events: EntityEventHistoryPort<I>;
-  /** Closes this storage handle. */
+
+  /**
+   * Closes this storage handle.
+   */
   close(): void;
-  /** Determines whether this handle remains open. @returns Whether the handle is open. */
+
+  /**
+   * Determines whether this handle remains open.
+   * @returns Whether the handle is open.
+   */
   isOpen(): boolean;
 }
 
-/** Provider-neutral-shaped MySQL implementation; only the MySQL dialect is supplied today. */
+/**
+ * Provider-neutral-shaped MySQL implementation; only the MySQL dialect is supplied today.
+ */
 export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStorageHandle<I, S> {
-  /** Stores current entity records. */
+  // prettier-ignore
+
+  /**
+   * Stores current entity records.
+   */
   readonly current: EntityRecordStorage<I, S>;
-  /** Stores state history records. */
+
+  /**
+   * Stores state history records.
+   */
   readonly states: EntityStateHistoryPort<I, S>;
-  /** Stores event history records. */
+
+  /**
+   * Stores event history records.
+   */
   readonly events: EntityEventHistoryPort<I>;
   #open = true;
   #schemaReady: Promise<void> | undefined;
@@ -275,7 +344,9 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     };
   }
 
-  /** Closes this handle and unregisters it from its factory. */
+  /**
+   * Closes this handle and unregisters it from its factory.
+   */
   close(): void {
     if (this.#open) {
       this.#open = false;
@@ -283,7 +354,10 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     }
   }
 
-  /** Determines whether this handle remains open. @returns Whether the handle is open. */
+  /**
+   * Determines whether this handle remains open.
+   * @returns Whether the handle is open.
+   */
   isOpen(): boolean {
     return this.#open;
   }

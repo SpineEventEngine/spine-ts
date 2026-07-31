@@ -22,17 +22,36 @@ import { ShardIndex } from "../delivery/shard-index.js";
  * @internal
  */
 export interface EnvironmentDeliveryRuntime {
-  /** Identifies the delivery owner. */
+  // prettier-ignore
+
+  /**
+   * Identifies the delivery owner.
+   */
   readonly owner: DeliveryRunOwner;
-  /** Supplies the context delivery endpoint. */
+
+  /**
+   * Supplies the context delivery endpoint.
+   */
   readonly descriptor: ContextDeliveryDescriptor;
-  /** Creates durable storage for the runtime. */
+
+  /**
+   * Creates durable storage for the runtime.
+   */
   readonly storageFactory: StorageFactory;
-  /** Identifies the tenant served by the runtime. */
+
+  /**
+   * Identifies the tenant served by the runtime.
+   */
   readonly tenant: DeliveryTenantScope;
-  /** Names the storage context used by the runtime. */
+
+  /**
+   * Names the storage context used by the runtime.
+   */
   readonly context: StorageContext;
-  /** Lists scopes assigned to the runtime. */
+
+  /**
+   * Lists scopes assigned to the runtime.
+   */
   readonly scopes: readonly DeliveryRunScope[];
 }
 
@@ -42,19 +61,38 @@ export interface EnvironmentDeliveryRuntime {
  * @internal
  */
 export interface EnvironmentGenerationWorker extends DeliveryRunWorker {
-  /** Adds one delivery runtime. @param runtime - Supplies the runtime to add. */
+  // prettier-ignore
+
+  /**
+   * Adds one delivery runtime.
+   * @param runtime Supplies the runtime to add.
+   */
   add(runtime: EnvironmentDeliveryRuntime): void;
-  /** Notifies the worker about new work. @param scope - Identifies the changed scope. */
+
+  /**
+   * Notifies the worker about new work.
+   * @param scope Identifies the changed scope.
+   */
   notify?(scope: DeliveryRunScope): void;
-  /** Stops work owned by supplied owners. @param ownerKeys - Identifies owners to stop. */
+
+  /**
+   * Stops work owned by supplied owners.
+   * @param ownerKeys Identifies owners to stop.
+   */
   stopOwners(ownerKeys: readonly string[]): void;
-  /** Awaits active work for supplied owners.
-   * @param ownerKeys - Identifies owners to await.
+
+  /**
+   * Awaits active work for supplied owners.
+   *
+   * @param ownerKeys Identifies owners to await.
    * @returns A promise that resolves after selected owner work settles.
    */
   awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void>;
-  /** Closes workers for supplied owners.
-   * @param ownerKeys - Identifies owners to retire.
+
+  /**
+   * Closes workers for supplied owners.
+   *
+   * @param ownerKeys Identifies owners to retire.
    * @returns A promise that settles after selected owners retire.
    */
   retireOwners(ownerKeys: readonly string[]): Promise<void>;
@@ -76,13 +114,16 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   /**
    * Creates an environment delivery worker.
    *
-   * @param options - Optionally supplies a worker factory for lifecycle tests.
+   * @param options Optionally supplies a worker factory for lifecycle tests.
    */
   constructor(options: EnvironmentDeliveryWorkerOptions = {}) {
     this.#createWorker = options.createWorker ?? EnvironmentDeliveryValues.createWorker;
   }
 
-  /** Adds one owner-specific delivery runtime. @param runtime - Supplies the runtime to configure. */
+  /**
+   * Adds one owner-specific delivery runtime.
+   * @param runtime Supplies the runtime to configure.
+   */
   add(runtime: EnvironmentDeliveryRuntime): void {
     if (this.#workers.has(runtime.owner.key)) {
       throw new Error("Environment delivery owner is already configured.");
@@ -97,8 +138,8 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   /**
    * Starts selected shards for one owner-specific obligation.
    *
-   * @param obligation - Supplies the finite delivery obligation.
-   * @param shards - Selects shards to run.
+   * @param obligation Supplies the finite delivery obligation.
+   * @param shards Selects shards to run.
    * @returns Evidence produced by the worker.
    */
   start(
@@ -116,7 +157,10 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     });
   }
 
-  /** Notifies a running supervisor about new work. @param scope - Identifies the changed scope. */
+  /**
+   * Notifies a running supervisor about new work.
+   * @param scope Identifies the changed scope.
+   */
   notify(scope: DeliveryRunScope): void {
     if (this.#stoppedSupervisors.has(scope.owner.key)) {
       return;
@@ -124,7 +168,9 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     this.#requiredSupervisor(scope.owner.key).notify(scope.ready.shard);
   }
 
-  /** Stops every configured owner and aggregates failures. */
+  /**
+   * Stops every configured owner and aggregates failures.
+   */
   stop(): void {
     const failures: unknown[] = [];
     for (const [key, worker] of this.#workers) {
@@ -136,7 +182,9 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     EnvironmentDeliveryValues.throwFailures(failures, "Environment delivery worker stop failed.");
   }
 
-  /** Awaits every configured worker and supervisor.
+  /**
+   * Awaits every configured worker and supervisor.
+   *
    * @returns A promise that resolves after all configured work settles.
    */
   async awaitSettled(): Promise<void> {
@@ -146,7 +194,9 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     ]);
   }
 
-  /** Closes every configured worker and supervisor.
+  /**
+   * Closes every configured worker and supervisor.
+   *
    * @returns A promise that settles after all configured resources retire.
    */
   async retire(): Promise<void> {
@@ -170,7 +220,10 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     );
   }
 
-  /** Stops selected owners and aggregates failures. @param ownerKeys - Identifies owners to stop. */
+  /**
+   * Stops selected owners and aggregates failures.
+   * @param ownerKeys Identifies owners to stop.
+   */
   stopOwners(ownerKeys: readonly string[]): void {
     const selected = ownerKeys.map((key) => {
       const worker = this.#workers.get(key);
@@ -192,8 +245,10 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     );
   }
 
-  /** Awaits selected owners.
-   * @param ownerKeys - Identifies owners to await.
+  /**
+   * Awaits selected owners.
+   *
+   * @param ownerKeys Identifies owners to await.
    * @returns A promise that resolves after selected owner work settles.
    */
   async awaitOwnersSettled(ownerKeys: readonly string[]): Promise<void> {
@@ -209,8 +264,10 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     );
   }
 
-  /** Closes selected owners and releases local state.
-   * @param ownerKeys - Identifies owners to retire.
+  /**
+   * Closes selected owners and releases local state.
+   *
+   * @param ownerKeys Identifies owners to retire.
    * @returns A promise that settles after selected owners retire.
    */
   async retireOwners(ownerKeys: readonly string[]): Promise<void> {
@@ -430,7 +487,10 @@ class LocalDeliverySource {
   }
 }
 
-/** @internal Groups private delivery-runtime assembly and failure operations. */
+/**
+ *
+ * @internal Groups private delivery-runtime assembly and failure operations.
+ */
 const EnvironmentDeliveryValues = Object.freeze({
   createWorker(runtime: EnvironmentDeliveryRuntime): DeliveryRunWorker {
     const delivery = new Delivery({

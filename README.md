@@ -17,14 +17,14 @@ The runnable `examples/todo` package is a real local Connect/Node
 gRPC-compatible app. It uses generated Protobuf and handler-registry artifacts
 from the build workflow, bare application handler decorators, and process-local
 in-memory storage. It is not a production persistence, deployment,
-authentication, tracing, or multi-machine topology recipe. The framework now
-also provides a trusted-network in-memory delivery server, delivery client, and
-supervisor; the example does not configure or prove those capabilities.
-Remaining Wave 1 exclusions are durable delivery-server persistence, Redis,
-Hazelcast, TLS, authentication/authorization, public-Internet hardening, live
-TypeScript/JVM compatibility, deployment packaging, a human administration
-surface, retained attempt/update replay policy, application-owned semantic-tag
-registration or handler materialization, and broader production verification.
+authentication, tracing, or multi-machine topology recipe. The framework also
+provides a trusted-network in-memory delivery server, delivery client, and
+supervisor; the example does not configure or prove those capabilities. The
+delivery server deliberately excludes durable persistence, Redis, Hazelcast,
+TLS, authentication/authorization, public-Internet hardening, a human
+administration surface, retained attempt/update replay policy,
+application-owned semantic-tag registration or handler materialization, and
+broader production verification.
 
 ## Workspace
 
@@ -72,6 +72,6 @@ registration or handler materialization, and broader production verification.
 
 See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide,
 [examples/todo/README.md](examples/todo/README.md) for the local runnable flow,
-and [examples/project-management/README.md](examples/project-management/README.md)
+and [examples/projects/README.md](examples/projects/README.md)
 for the project-management load specimen,
 and [build-protocol](build-protocol/README.md) for the implementation protocol.

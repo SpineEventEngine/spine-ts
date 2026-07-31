@@ -77,7 +77,9 @@ export class DeliveryWorker {
     return running;
   }
 
-  /** Stops future drain starts without interrupting current drains. */
+  /**
+   * Stops future drain starts without interrupting current drains.
+   */
   stop(): void {
     this.#stopped = true;
     for (const loop of this.#loops) {
@@ -85,7 +87,9 @@ export class DeliveryWorker {
     }
   }
 
-  /** Closes active loops after they finish.
+  /**
+   * Closes active loops after they finish.
+   *
    * @returns A promise that settles after the worker closes.
    */
   async close(): Promise<void> {
@@ -177,16 +181,32 @@ export class DeliveryWorker {
   }
 }
 
-/** Delivery worker construction options. */
+/**
+ * Delivery worker construction options.
+ */
 export interface DeliveryWorkerOptions {
-  /** Delivery owner drained by this worker. */
+  // prettier-ignore
+
+  /**
+   * Delivery owner drained by this worker.
+   */
   readonly delivery: Delivery;
-  /** Non-empty list of shards this worker drains for its node. */
+
+  /**
+   * Non-empty list of shards this worker drains for its node.
+   */
   readonly shards: readonly ShardIndex[];
-  /** Worker node name used for shard pickup. */
+
+  /**
+   * Worker node name used for shard pickup.
+   */
   readonly node: string;
-  /** Optional positive accepted-work cap for each drain. */
+
+  /**
+   * Optional positive accepted-work cap for each drain.
+   */
   readonly limit?: number;
+
   /**
    * Maximum failed observations per loop before that loop stops. Successful
    * exhaustion marking consumes no failure budget; a failed exhaustion mark
@@ -194,62 +214,127 @@ export interface DeliveryWorkerOptions {
    * failures do. Defaults to one; capped at 1000.
    */
   readonly maxFailures?: number;
-  /** Framework endpoint callback invoked for each available supported worker row. */
+
+  /**
+   * Framework endpoint callback invoked for each available supported worker row.
+   */
   readonly onMessage: OnDeliveryMessage;
 }
 
-/** Aggregate result from one delivery worker run. */
+/**
+ * Aggregate result from one delivery worker run.
+ */
 export interface DeliveryWorkerRun {
-  /** Highest-priority stop reason across configured loops. */
+  // prettier-ignore
+
+  /**
+   * Highest-priority stop reason across configured loops.
+   */
   readonly status: DeliveryLoopStatus;
-  /** Per-shard loop results in configured shard order. */
+
+  /**
+   * Per-shard loop results in configured shard order.
+   */
   readonly loops: readonly DeliveryLoopRun[];
 }
 
-/** Identifies one package-owned request to run configured delivery shards. */
+/**
+ * Identifies one package-owned request to run configured delivery shards.
+ */
 export type DeliveryWorkerObligation = object;
 
-/** Describes ordered fulfilled and rejected evidence for one worker invocation. */
+/**
+ * Describes ordered fulfilled and rejected evidence for one worker invocation.
+ */
 export interface DeliveryWorkerEvidence {
-  /** Holds the exact worker obligation. */
+  // prettier-ignore
+
+  /**
+   * Holds the exact worker obligation.
+   */
   readonly obligation: DeliveryWorkerObligation;
-  /** Lists per-shard evidence in configured order. */
+
+  /**
+   * Lists per-shard evidence in configured order.
+   */
   readonly shards: readonly DeliveryShardEvidence[];
 }
 
-/** Names evidence for one configured shard. */
+/**
+ * Names evidence for one configured shard.
+ */
 export type DeliveryShardEvidence = FulfilledDeliveryShard | RejectedDeliveryShard;
 
-/** Describes fulfilled loop evidence for a shard and obligation. */
+/**
+ * Describes fulfilled loop evidence for a shard and obligation.
+ */
 export interface FulfilledDeliveryShard {
-  /** States that the loop fulfilled. */
+  // prettier-ignore
+
+  /**
+   * States that the loop fulfilled.
+   */
   readonly status: "fulfilled";
-  /** Identifies the shard. */
+
+  /**
+   * Identifies the shard.
+   */
   readonly shard: ShardIndex;
-  /** Holds the worker obligation. */
+
+  /**
+   * Holds the worker obligation.
+   */
   readonly obligation: DeliveryWorkerObligation;
-  /** Holds the loop result. */
+
+  /**
+   * Holds the loop result.
+   */
   readonly run: DeliveryLoopRun;
-  /** Holds the final safe progress. */
+
+  /**
+   * Holds the final safe progress.
+   */
   readonly progress: DeliveryLoopProgress;
 }
 
-/** Describes rejected loop evidence and its last safe progress. */
+/**
+ * Describes rejected loop evidence and its last safe progress.
+ */
 export interface RejectedDeliveryShard {
-  /** States that the loop rejected. */
+  // prettier-ignore
+
+  /**
+   * States that the loop rejected.
+   */
   readonly status: "rejected";
-  /** Identifies the shard. */
+
+  /**
+   * Identifies the shard.
+   */
   readonly shard: ShardIndex;
-  /** Holds the worker obligation. */
+
+  /**
+   * Holds the worker obligation.
+   */
   readonly obligation: DeliveryWorkerObligation;
-  /** Holds the rejection cause. */
+
+  /**
+   * Holds the rejection cause.
+   */
   readonly cause: unknown;
-  /** Holds the final safe progress. */
+
+  /**
+   * Holds the final safe progress.
+   */
   readonly progress: DeliveryLoopProgress;
 }
 
-/** Provides package-internal worker coordination and lifecycle access. */
+/**
+ * Provides package-internal worker coordination and lifecycle access.
+ */
 export interface DeliveryWorkerAccess {
+  // prettier-ignore
+
   /**
    * Determines aggregate compatibility status from fulfilled loop results.
    *
@@ -257,6 +342,7 @@ export interface DeliveryWorkerAccess {
    * @returns The aggregate loop status.
    */
   status(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus;
+
   /**
    * Starts eligible configured shards for one finite obligation.
    *
@@ -270,6 +356,7 @@ export interface DeliveryWorkerAccess {
     obligation: DeliveryWorkerObligation,
     shards?: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence>;
+
   /**
    * Awaits the current active start without interrupting it.
    *
@@ -277,6 +364,7 @@ export interface DeliveryWorkerAccess {
    * @returns A promise that resolves after the worker's active run settles.
    */
   awaitSettled(worker: DeliveryWorker): Promise<void>;
+
   /**
    * Closes a stopped worker permanently after active work settles.
    *
@@ -285,6 +373,7 @@ export interface DeliveryWorkerAccess {
    * Requires a successful prior `stop()`, then permanently closes public and
    * internal starts and awaits active settlement. Prior active rejection is
    * treated as settled; no fallible resource cleanup follows closure.
+   *
    * @returns A promise that settles after the worker retires.
    */
   retire(worker: DeliveryWorker): Promise<void>;
@@ -309,7 +398,9 @@ type DeliveryShardState = "READY" | "PAUSED" | "REJECTED" | "PARKED" | "COMPLETE
 
 const deliveryWorkerInternals = new WeakMap<DeliveryWorker, DeliveryWorkerInternals>();
 
-/** Provides package-internal worker coordination and lifecycle access. */
+/**
+ * Provides package-internal worker coordination and lifecycle access.
+ */
 export const deliveryWorkerAccess: DeliveryWorkerAccess = Object.freeze({
   status(loops: readonly DeliveryLoopRun[]) {
     return DeliveryWorkerValues.status(loops);
@@ -329,7 +420,9 @@ export const deliveryWorkerAccess: DeliveryWorkerAccess = Object.freeze({
   },
 });
 
-/** Groups internal worker validation, evidence, and compatibility operations. */
+/**
+ * Groups internal worker validation, evidence, and compatibility operations.
+ */
 const DeliveryWorkerValues = Object.freeze({
   requireShards(shards: readonly ShardIndex[]): readonly ShardIndex[] {
     if (!Array.isArray(shards) || shards.length === 0) {

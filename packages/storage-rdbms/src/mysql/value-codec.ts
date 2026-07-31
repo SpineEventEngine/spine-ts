@@ -10,7 +10,9 @@ interface CanonicalMysqlValuesCodec {
   isPlainObject(value: object): boolean;
 }
 
-/** Encodes canonical MySQL values used as binary storage identifiers. */
+/**
+ * Encodes canonical MySQL values used as binary storage identifiers.
+ */
 export const CanonicalMysqlValues: Readonly<CanonicalMysqlValuesCodec> = Object.freeze({
   encode(value: unknown, maxBytes = maxKeyBytes): Uint8Array {
     const encoded = encoder.encode(
@@ -29,7 +31,10 @@ export const CanonicalMysqlValues: Readonly<CanonicalMysqlValuesCodec> = Object.
       throw new Error("MySQL storage has no valid record identifier.");
     }
   },
-  /** Encodes a recursively canonical value representation. */
+
+  /**
+   * Encodes a recursively canonical value representation.
+   */
   encodeValue(value: unknown, ancestors: WeakSet<object>): unknown {
     if (value === undefined) return ["undefined"];
     if (value === null) return ["null"];
@@ -70,7 +75,10 @@ export const CanonicalMysqlValues: Readonly<CanonicalMysqlValuesCodec> = Object.
     }
     throw new Error("MySQL storage identifier has an unsupported value.");
   },
-  /** Decodes and validates a recursively canonical value representation. */
+
+  /**
+   * Decodes and validates a recursively canonical value representation.
+   */
   decodeValue(encoded: unknown): unknown {
     if (!Array.isArray(encoded) || typeof encoded[0] !== "string") throw new Error("invalid");
     const [kind, ...payload] = encoded as unknown[];
@@ -116,14 +124,19 @@ export const CanonicalMysqlValues: Readonly<CanonicalMysqlValuesCodec> = Object.
     }
     throw new Error("invalid");
   },
-  /** Determines whether a value has a canonical plain-object representation. */
+
+  /**
+   * Determines whether a value has a canonical plain-object representation.
+   */
   isPlainObject(value: object): boolean {
     const prototype = Object.getPrototypeOf(value) as object | null;
     return prototype === Object.prototype || prototype === null;
   },
 });
 
-/** Private sortable bytes: bigint < boolean < null < number < string. */
+/**
+ * Private sortable bytes: bigint < boolean < null < number < string.
+ */
 export const SortableMysqlColumnValue: Readonly<{
   encode(value: unknown): { readonly kind: number; readonly data: Uint8Array };
 }> = Object.freeze({
@@ -160,7 +173,9 @@ export const SortableMysqlColumnValue: Readonly<{
   },
 });
 
-/** Encodes fixed-width sortable MySQL integer bytes. */
+/**
+ * Encodes fixed-width sortable MySQL integer bytes.
+ */
 const MysqlIntegers = Object.freeze({
   bytes(value: bigint): Uint8Array {
     const bytes = new Uint8Array(8);

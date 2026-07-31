@@ -46,13 +46,25 @@ const historyPageSize = 128;
 const minimumInt64 = -(1n << 63n);
 const maximumInt64 = (1n << 63n) - 1n;
 
-/** Datastore implementation bundle for the provider-only entity-history SPI. */
+/**
+ * Datastore implementation bundle for the provider-only entity-history SPI.
+ */
 export class DatastoreEntityStorage<I, S extends Message> {
-  /** Stores the current durable entity record. */
+  // prettier-ignore
+
+  /**
+   * Stores the current durable entity record.
+   */
   readonly current: EntityRecordStorage<I, S>;
-  /** Stores immutable event-history records. */
+
+  /**
+   * Stores immutable event-history records.
+   */
   readonly events: EntityEventHistoryPort<I>;
-  /** Stores immutable state-history records. */
+
+  /**
+   * Stores immutable state-history records.
+   */
   readonly states: EntityStateHistoryPort<I, S>;
   readonly #codec: EntityCodec<I, S>;
 
@@ -70,7 +82,9 @@ export class DatastoreEntityStorage<I, S extends Message> {
     this.states = new StateHistory(codec);
   }
 
-  /** Closes this handle without closing the caller-owned Datastore client. */
+  /**
+   * Closes this handle without closing the caller-owned Datastore client.
+   */
   close(): void {
     this.#codec.close();
   }

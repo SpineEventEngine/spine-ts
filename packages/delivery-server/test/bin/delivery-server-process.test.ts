@@ -33,7 +33,10 @@ describe("spine-delivery-server executable", () => {
     });
     const stderr = collect(child.stderr);
     const readiness = await waitFor(child, "Delivery server listening at http://127.0.0.1:");
-    for (const signal of signals) child.kill(signal);
+    for (const signal of signals) {
+      child.kill(signal);
+      await nextTurn();
+    }
     const code = await exited(child);
     expect(code).toBe(0);
     await expect(stderr).resolves.toBe("");
@@ -85,4 +88,8 @@ function readinessPort(readiness: string): number {
   const match = /http:\/\/127\.0\.0\.1:(\d+)/u.exec(readiness);
   if (match?.[1] === undefined) throw new Error("Executable readiness port is missing.");
   return Number(match[1]);
+}
+
+function nextTurn(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }

@@ -4,18 +4,34 @@ import type { DeliveryOperationOptions } from "./delivery-ports.js";
 import { DeliveryRunControl } from "./delivery-run-control.js";
 import { ShardIndex } from "./shard-index.js";
 
-/** A detached shard update consumed by {@link DeliverySupervisor}. */
+/**
+ * A detached shard update consumed by {@link DeliverySupervisor}.
+ */
 export interface DeliveryShardUpdate {
-  /** Shard whose detached delivery status changed. */
+  // prettier-ignore
+
+  /**
+   * Shard whose detached delivery status changed.
+   */
   readonly shard: ShardIndex;
-  /** Current remote pickup state used for fail-closed admission. */
+
+  /**
+   * Current remote pickup state used for fail-closed admission.
+   */
   readonly status: "PICKED" | "NOT_PICKED";
-  /** Non-negative remote message count; only positive counts are admitted. */
+
+  /**
+   * Non-negative remote message count; only positive counts are admitted.
+   */
   readonly messages: number;
 }
 
-/** Structural remote source required by {@link DeliverySupervisor}. */
+/**
+ * Structural remote source required by {@link DeliverySupervisor}.
+ */
 export interface DeliverySource {
+  // prettier-ignore
+
   /**
    * Reads one detached shard snapshot for startup or recovery.
    * The optional signal/deadline controls this read only; cancellation is cooperative.
@@ -24,6 +40,7 @@ export interface DeliverySource {
    * @returns The detached shard updates.
    */
   shardSnapshot(options?: DeliveryOperationOptions): Promise<readonly DeliveryShardUpdate[]>;
+
   /**
    * Observes detached Admin shard updates until completion, cancellation, or failure.
    * The supervisor owns bounded reconnect and passes its lifecycle signal.
@@ -32,6 +49,7 @@ export interface DeliverySource {
    * @returns The stream of detached shard updates.
    */
   observeShardUpdates(options?: DeliveryOperationOptions): AsyncIterable<DeliveryShardUpdate>;
+
   /**
    * Deletes sessions older than `inactivityMs` as one non-retried mutation.
    * Rejection or timeout is never treated as successful release.
@@ -48,9 +66,15 @@ export interface DeliverySource {
 
 export type { DeliveryOperationOptions } from "./delivery-ports.js";
 
-/** Raised when active delivery or release cleanup exceeds its bounded close phase. */
+/**
+ * Raised when active delivery or release cleanup exceeds its bounded close phase.
+ */
 export class DeliveryShutdownTimeoutError extends Error {
-  /** Creates the bounded-shutdown timeout error. */
+  // prettier-ignore
+
+  /**
+   * Creates the bounded-shutdown timeout error.
+   */
   constructor() {
     super("Delivery supervisor shutdown timed out.");
     this.name = "DeliveryShutdownTimeoutError";
@@ -63,7 +87,9 @@ export class DeliveryShutdownTimeoutError extends Error {
  */
 export type SupervisedDelivery = Delivery;
 
-/** Owns bounded local delivery admission and remote shard observation. */
+/**
+ * Admits bounded local delivery and observes remote shards.
+ */
 export class DeliverySupervisor {
   readonly #source: DeliverySource;
   readonly #runs: DeliveryRunControl;
@@ -136,6 +162,7 @@ export class DeliverySupervisor {
   /**
    * Starts initial stale release and snapshot recovery, then accepts notifications and observation.
    * Repeated successful calls are idempotent; starting after close is rejected.
+   *
    * @returns A promise that resolves after recovery and observation start.
    */
   async start(): Promise<void> {
@@ -166,6 +193,7 @@ export class DeliverySupervisor {
 
   /**
    * Resolves when no active or retained pending shard work remains.
+   *
    * @returns A promise that resolves when the supervisor is idle.
    *
    */
@@ -409,24 +437,52 @@ export class DeliverySupervisor {
   }
 }
 
-/** Construction options for {@link DeliverySupervisor}. */
+/**
+ * Construction options for {@link DeliverySupervisor}.
+ */
 export interface DeliverySupervisorOptions {
-  /** Structural Admin source; mutable releases are serialized and never blindly retried. */
+  // prettier-ignore
+
+  /**
+   * Structural Admin source; mutable releases are serialized and never blindly retried.
+   */
   readonly source: DeliverySource;
-  /** Delivery returned by {@link DeliveryBuilder.build}; forged lookalike ports are rejected. */
+
+  /**
+   * Delivery returned by {@link DeliveryBuilder.build}; forged lookalike ports are rejected.
+   */
   readonly delivery: SupervisedDelivery;
-  /** Framework endpoint invoked for each supported admitted delivery row. */
+
+  /**
+   * Framework endpoint invoked for each supported admitted delivery row.
+   */
   readonly onMessage: OnDeliveryMessage;
-  /** Positive safe-integer active-shard limit. Defaults to `1`. */
+
+  /**
+   * Positive safe-integer active-shard limit. Defaults to `1`.
+   */
   readonly concurrency?: number;
-  /** Positive safe-integer retained pending-shard limit. Defaults to `100`. */
+
+  /**
+   * Positive safe-integer retained pending-shard limit. Defaults to `100`.
+   */
   readonly pendingLimit?: number;
-  /** Positive safe-integer periodic recovery delay in milliseconds. Defaults to `30000`. */
+
+  /**
+   * Positive safe-integer periodic recovery delay in milliseconds. Defaults to `30000`.
+   */
   readonly recoveryMs?: number;
-  /** Positive safe-integer stale-session age in milliseconds. Defaults to `60000`. */
+
+  /**
+   * Positive safe-integer stale-session age in milliseconds. Defaults to `60000`.
+   */
   readonly staleMs?: number;
-  /** Positive safe-integer initial watch reconnect delay. Defaults to `100` milliseconds. */
+
+  /**
+   * Positive safe-integer initial watch reconnect delay. Defaults to `100` milliseconds.
+   */
   readonly watchInitialBackoffMs?: number;
+
   /**
    * Positive safe-integer maximum watch reconnect delay. Defaults to `30000` milliseconds and
    * must not be smaller than `watchInitialBackoffMs`.
@@ -434,8 +490,12 @@ export interface DeliverySupervisorOptions {
   readonly watchMaxBackoffMs?: number;
 }
 
-/** Bounded close controls for {@link DeliverySupervisor}. */
+/**
+ * Bounded close controls for {@link DeliverySupervisor}.
+ */
 export interface DeliverySupervisorCloseOptions {
+  // prettier-ignore
+
   /**
    * Non-negative safe-integer bound used separately for active work and release cleanup.
    * Defaults to `30000` milliseconds. A zero value fences without waiting.

@@ -5,14 +5,19 @@
  * token to independently constructed factories only when they must share rows.
  */
 export class InMemoryStorageBackend {
-  /** Identifies this opaque backend in diagnostics. */
+  // prettier-ignore
+
+  /**
+   * Identifies this opaque backend in diagnostics.
+   */
   readonly [Symbol.toStringTag] = "InMemoryStorageBackend";
 
-  /** Binds one canonical scope to one compatible backend-owned value.
-   * @param backend - Selects the shared ephemeral backend.
-   * @param scope - Identifies the canonical storage scope.
-   * @param fingerprint - Identifies the compatible record layout.
-   * @param create - Creates the value when the scope is first bound.
+  /**
+   * Binds one canonical scope to one compatible backend-owned value.
+   * @param backend Selects the shared ephemeral backend.
+   * @param scope Identifies the canonical storage scope.
+   * @param fingerprint Identifies the compatible record layout.
+   * @param create Creates the value when the scope is first bound.
    * @returns The existing or newly created backend-owned value.
    */
   static bind<T>(
@@ -32,9 +37,15 @@ interface BoundScope {
 
 const scopesByBackend = new WeakMap<InMemoryStorageBackend, Map<string, BoundScope>>();
 
-/** Owns backend-scoped values and compatibility checks. */
+/**
+ * Binds canonical scopes to compatible values for each in-memory backend.
+ */
 const MemoryBackendScopes = {
-  /** Binds one canonical scope to one compatible backend-owned value. */
+  // prettier-ignore
+
+  /**
+   * Binds one canonical scope to one compatible backend-owned value.
+   */
   bind<T>(backend: InMemoryStorageBackend, scope: string, fingerprint: string, create: () => T): T {
     let scopes = scopesByBackend.get(backend);
     if (scopes === undefined) {

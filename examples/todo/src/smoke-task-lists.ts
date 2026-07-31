@@ -1,27 +1,40 @@
 import { AnyMessages } from "@spine-event-engine/core";
 import type { QueryResponse } from "@spine-event-engine/proto/client";
 
-import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
+import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
 
 const maxInspectedRows = 16;
 const maxDiagnosticRows = 4;
 const maxDiagnosticInputLength = 256;
 const maxDiagnosticLength = 64;
 
-/** Bounded decoded task-list rows and safe diagnostics from a smoke query response. */
+/**
+ * Bounded decoded task-list rows and safe diagnostics from a smoke query response.
+ */
 export interface InspectedTaskListRows {
-  /** Sanitized task-list IDs and unavailable-row summaries for smoke diagnostics. */
+  // prettier-ignore
+
+  /**
+   * Sanitized task-list IDs and unavailable-row summaries for smoke diagnostics.
+   */
   readonly diagnostics: readonly string[];
-  /** Decoded task-list states retained from the bounded query response. */
+
+  /**
+   * Decoded task-list states retained from the bounded query response.
+   */
   readonly taskLists: readonly TaskList[];
 }
 
-/** Inspects bounded task-list query rows and formats safe smoke diagnostics. */
+/**
+ * Inspects bounded task-list query rows and formats safe smoke diagnostics.
+ */
 export const SmokeTaskLists = {
+  // prettier-ignore
+
   /**
    * Decodes bounded task-list rows and records unavailable or omitted-row diagnostics.
    *
-   * @param response - Query response whose entity states are inspected.
+   * @param response Query response whose entity states are inspected.
    * @returns Retained task lists with sanitized diagnostics.
    */
   inspectRows(response: QueryResponse): InspectedTaskListRows {
@@ -67,7 +80,7 @@ export const SmokeTaskLists = {
   /**
    * Creates bounded diagnostic text without control characters.
    *
-   * @param value - Value to convert into safe diagnostic text.
+   * @param value Value to convert into safe diagnostic text.
    * @returns Bounded diagnostic text, or a blank marker.
    */
   sanitizeValue(value: unknown): string {

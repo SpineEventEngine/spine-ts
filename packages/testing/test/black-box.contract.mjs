@@ -65,7 +65,9 @@ class TaskProjection extends Projection {
   }
 }
 
-/** Register the runner-neutral BlackBox contract with any `(name, body)` test API. */
+/**
+ * Register the runner-neutral BlackBox contract with any `(name, body)` test API.
+ */
 export function registerBlackBoxContract(test, testing) {
   const { BlackBox, BlackBoxClosedError, BlackBoxTimeoutError } = testing;
   test("posts a command then eventually sends a query and decodes its projection", async () => {

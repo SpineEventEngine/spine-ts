@@ -18,7 +18,7 @@ export class ContextTransportGroup {
   /**
    * Creates a group for one signal transport.
    *
-   * @param transport - Carries signals for every context in the assembly.
+   * @param transport Carries signals for every context in the assembly.
    */
   constructor(transport: SignalTransport) {
     this.#transport = transport;
@@ -27,7 +27,7 @@ export class ContextTransportGroup {
   /**
    * Opens transport bindings for contexts in their supplied order.
    *
-   * @param contexts - Supplies the contexts whose intake must be opened.
+   * @param contexts Supplies the contexts whose intake must be opened.
    * @returns A promise that resolves after all context bindings open.
    */
   async open(contexts: readonly BoundedContext[]): Promise<void> {
@@ -44,7 +44,8 @@ export class ContextTransportGroup {
     }
   }
 
-  /** Closes opened bindings, retaining unsuccessful closes for a later retry.
+  /**
+   * Closes opened bindings, retaining unsuccessful closes for a later retry.
    * @returns A promise that settles after every close attempt finishes.
    */
   close(): Promise<void> {

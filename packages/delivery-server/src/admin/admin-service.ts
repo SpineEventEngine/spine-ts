@@ -15,27 +15,49 @@ import type { InMemoryDeliveryState } from "../core/in-memory-delivery-state.js"
 import { MAX_DELIVERY_RESPONSE_SHARDS } from "../core/limits.js";
 import { DeliveryShards } from "../core/wire-values.js";
 
-/** Represents administrative observation publishing resources. */
+/**
+ * Represents administrative observation publishing resources.
+ */
 export interface AdminPublisherHandle {
-  /** Serves administrative delivery RPCs. */
+  // prettier-ignore
+
+  /**
+   * Serves administrative delivery RPCs.
+   */
   readonly service: ServiceImpl<typeof AdminService>;
-  /** Reports active update subscribers. */
+
+  /**
+   * Reports active update subscribers.
+   */
   readonly subscriberCount: number;
-  /** Publishes a shard observation update.
+
+  /**
+   * Publishes a shard observation update.
+   *
    * @param shard Identifies the changed shard.
    */
   publish(shard: ShardIndex): void;
-  /** Records an Inbox message-count transition.
+
+  /**
+   * Records an Inbox message-count transition.
+   *
    * @param shard Identifies the changed shard.
    * @param delta Supplies the inserted or removed count.
    */
   recordMessageTransition(shard: ShardIndex, delta: 1 | -1): void;
-  /** Closes all active administrative subscriptions. */
+
+  /**
+   * Closes all active administrative subscriptions.
+   */
   close(): void;
 }
 
-/** Publishes administrative shard observations. */
+/**
+ * Publishes administrative shard observations.
+ */
 export const AdminPublisher: Readonly<{
+  // prettier-ignore
+
   /**
    * Creates an administrative publisher.
    *
@@ -111,14 +133,23 @@ export const AdminPublisher: Readonly<{
   },
 });
 
-/** Produces administrative shard observation snapshots. */
+/**
+ * Produces administrative shard observation snapshots.
+ */
 const AdminSnapshots: Readonly<{
-  /** Produces a bounded deterministic shard snapshot. */
+  // prettier-ignore
+
+  /**
+   * Produces a bounded deterministic shard snapshot.
+   */
   snapshot: (
     state: InMemoryDeliveryState,
     messageCounts: ReadonlyMap<string, { readonly shard: ShardIndex; readonly count: number }>,
   ) => ReturnType<typeof create<typeof ShardInfoListSchema>>;
-  /** Produces one shard observation. */
+
+  /**
+   * Produces one shard observation.
+   */
   observation: (
     state: InMemoryDeliveryState,
     messageCounts: ReadonlyMap<string, { readonly count: number }>,
@@ -132,12 +163,18 @@ const AdminSnapshots: Readonly<{
     readonly newStatus: ShardStatus;
     readonly newMessagesCount: number;
   };
-  /** Lists every observed shard in deterministic order. */
+
+  /**
+   * Lists every observed shard in deterministic order.
+   */
   shards: (
     state: InMemoryDeliveryState,
     messageCounts: ReadonlyMap<string, { readonly shard: ShardIndex }>,
   ) => Iterable<ShardIndex>;
-  /** Converts milliseconds to a protobuf timestamp. */
+
+  /**
+   * Converts milliseconds to a protobuf timestamp.
+   */
   timestamp: (milliseconds: number) => { readonly seconds: bigint; readonly nanos: number };
 }> = Object.freeze({
   snapshot: (

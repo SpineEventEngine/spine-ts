@@ -2,30 +2,67 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import type { RequestCredential } from "../index.js";
 
-/** Header input whose own-property arrays preserve observable duplicate values. */
+/**
+ * Header input whose own-property arrays preserve observable duplicate values.
+ */
 export type OpaqueSessionHeaders = Readonly<Record<string, string | readonly string[] | undefined>>;
-/** Construction options for strict opaque-session browser cookie handling. */
+
+/**
+ * Construction options for strict opaque-session browser cookie handling.
+ */
 export interface OpaqueSessionCookiesOptions {
-  /** HMAC key copied on construction; it needs at least 32 bytes and the owned copy is zeroed on `close()`. */
+  // prettier-ignore
+
+  /**
+   * HMAC key copied on construction; it needs at least 32 bytes and the owned copy is zeroed on `close()`.
+   */
   readonly csrfSecret: Uint8Array;
-  /** One or more non-empty canonical Origins matched byte-for-byte on cookie requests. */
+
+  /**
+   * One or more non-empty canonical Origins matched byte-for-byte on cookie requests.
+   */
   readonly origins: readonly string[];
-  /** Distinct valid `__Host-` session-cookie name; defaults to `__Host-spine-session`. */
+
+  /**
+   * Distinct valid `__Host-` session-cookie name; defaults to `__Host-spine-session`.
+   */
   readonly sessionCookieName?: string;
-  /** Distinct valid `__Host-` CSRF-cookie name; defaults to `__Host-spine-csrf`. */
+
+  /**
+   * Distinct valid `__Host-` CSRF-cookie name; defaults to `__Host-spine-csrf`.
+   */
   readonly csrfCookieName?: string;
-  /** Maximum observable own header fields and array values. Defaults to 32. */
+
+  /**
+   * Maximum observable own header fields and array values. Defaults to 32.
+   */
   readonly maxHeaderValues?: number;
-  /** Maximum total header characters. Defaults to 16,384. */
+
+  /**
+   * Maximum total header characters. Defaults to 16,384.
+   */
   readonly maxHeaderCharacters?: number;
-  /** Maximum cookie pairs. Defaults to 64. */
+
+  /**
+   * Maximum cookie pairs. Defaults to 64.
+   */
   readonly maxCookiePairs?: number;
 }
-/** Rejection result from strict browser credential extraction. */
+
+/**
+ * Rejection result from strict browser credential extraction.
+ */
 export interface OpaqueCredentialRejection {
-  /** Identifies the rejected extraction result. */
+  // prettier-ignore
+
+  /**
+   * Identifies the rejected extraction result.
+   */
   readonly kind: "rejected";
-  /** Explains why the credential was rejected. */
+
+  /**
+   * Explains why the credential was rejected.
+   */
   readonly reason:
     | "missing-credential"
     | "duplicate-authorization"
@@ -41,10 +78,15 @@ export interface OpaqueCredentialRejection {
     | "request-too-large"
     | "closed";
 }
-/** Result of extracting a bearer or CSRF-protected opaque-cookie credential. */
+
+/**
+ * Result of extracting a bearer or CSRF-protected opaque-cookie credential.
+ */
 export type OpaqueCredentialExtraction = RequestCredential | OpaqueCredentialRejection;
 
-/** Strict, framework-neutral helper whose `close()` zeroes the copied CSRF secret. */
+/**
+ * Strict, framework-neutral helper whose `close()` zeroes the copied CSRF secret.
+ */
 export class OpaqueSessionCookies {
   private readonly secret: Uint8Array;
   private readonly origins: ReadonlySet<string>;
@@ -55,7 +97,8 @@ export class OpaqueSessionCookies {
   private readonly maxCookiePairs: number;
   private closed = false;
 
-  /** Creates strict cookie extraction with copied CSRF key material.
+  /**
+   * Creates strict cookie extraction with copied CSRF key material.
    * @param options The cookie names, trusted origins, bounds, and CSRF secret.
    */
   constructor(options: OpaqueSessionCookiesOptions) {
@@ -88,7 +131,8 @@ export class OpaqueSessionCookies {
     );
   }
 
-  /** Creates the fixed-length unpadded base64url CSRF value for one session ID.
+  /**
+   * Creates the fixed-length unpadded base64url CSRF value for one session ID.
    * @param sessionId The session identifier protected by the CSRF value.
    * @returns The derived CSRF value.
    */
@@ -100,7 +144,8 @@ export class OpaqueSessionCookies {
     return createHmac("sha256", this.secret).update(sessionId, "utf8").digest("base64url");
   }
 
-  /** Creates the immutable pair of host-only cookies for a newly issued session.
+  /**
+   * Creates the immutable pair of host-only cookies for a newly issued session.
    * @param sessionId The issued opaque session identifier.
    * @returns The session and CSRF Set-Cookie values.
    */
@@ -112,7 +157,8 @@ export class OpaqueSessionCookies {
     ]);
   }
 
-  /** Creates the immutable pair of host-only cookie removals.
+  /**
+   * Creates the immutable pair of host-only cookie removals.
    * @returns The expired session and CSRF Set-Cookie values.
    */
   clear(): readonly string[] {
@@ -123,7 +169,8 @@ export class OpaqueSessionCookies {
     ]);
   }
 
-  /** Reads bearer credentials first, otherwise a fully checked cookie credential.
+  /**
+   * Reads bearer credentials first, otherwise a fully checked cookie credential.
    * @param headers The request headers to inspect.
    * @returns The admitted credential or its rejection reason.
    */
@@ -141,7 +188,8 @@ export class OpaqueSessionCookies {
     return this.cookieCredential(values);
   }
 
-  /** Closes the extractor, zeroes its HMAC secret, and rejects later operations.
+  /**
+   * Closes the extractor, zeroes its HMAC secret, and rejects later operations.
    * @returns Completes after the secret is cleared.
    */
   close(): Promise<void> {
@@ -183,7 +231,9 @@ export class OpaqueSessionCookies {
   }
 }
 
-/** Owns strict cookie parsing and validation values used only by {@link OpaqueSessionCookies}. */
+/**
+ * Parses and validates cookie values used by {@link OpaqueSessionCookies}.
+ */
 const CookieValues = Object.freeze({
   headerValues(
     headers: OpaqueSessionHeaders,

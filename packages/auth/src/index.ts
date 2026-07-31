@@ -16,173 +16,386 @@ import {
 } from "@spine-event-engine/proto/client";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
-/** Allowlisted RPC facts exposed to authorization policy and diagnostics. */
+/**
+ * Allowlisted RPC facts exposed to authorization policy and diagnostics.
+ */
 export interface TransportRequestContext {
-  /** Identifies the receiving RPC service. */
+  // prettier-ignore
+
+  /**
+   * Identifies the receiving RPC service.
+   */
   readonly service: string;
-  /** Identifies the invoked RPC method. */
+
+  /**
+   * Identifies the invoked RPC method.
+   */
   readonly method: string;
-  /** Identifies the browser origin when the transport provides it. */
+
+  /**
+   * Identifies the browser origin when the transport provides it.
+   */
   readonly origin?: string;
-  /** Correlates this request with transport diagnostics. */
+
+  /**
+   * Correlates this request with transport diagnostics.
+   */
   readonly requestId?: string;
-  /** Correlates this request with its initiating operation. */
+
+  /**
+   * Correlates this request with its initiating operation.
+   */
   readonly correlationId?: string;
-  /** Identifies the peer address when the transport provides it. */
+
+  /**
+   * Identifies the peer address when the transport provides it.
+   */
   readonly peerAddress?: string;
-  /** Identifies the calling user agent when the transport provides it. */
+
+  /**
+   * Identifies the calling user agent when the transport provides it.
+   */
   readonly userAgent?: string;
 }
-/** Raw transport facts from which the safe transport view is constructed. */
+
+/**
+ * Raw transport facts from which the safe transport view is constructed.
+ */
 export interface TransportFactsInput extends Omit<
   TransportRequestContext,
   "requestId" | "correlationId"
 > {
-  /** Supplies raw request headers from which allowlisted values are selected. */
+  // prettier-ignore
+
+  /**
+   * Supplies raw request headers from which allowlisted values are selected.
+   */
   readonly headers?: Readonly<Record<string, string | undefined>>;
 }
-/** Command facts available to authorization policy. */
+
+/**
+ * Command facts available to authorization policy.
+ */
 export interface IncomingCommand {
-  /** Identifies this request as a command. */
+  // prettier-ignore
+
+  /**
+   * Identifies this request as a command.
+   */
   readonly kind: "command";
-  /** Carries the received command envelope. */
+
+  /**
+   * Carries the received command envelope.
+   */
   readonly command: Command;
-  /** Carries the unpacked command message when its type is known. */
+
+  /**
+   * Carries the unpacked command message when its type is known.
+   */
   readonly message: Message | undefined;
-  /** Identifies the packed command message type. */
+
+  /**
+   * Identifies the packed command message type.
+   */
   readonly messageType: string;
-  /** Carries the context requested by the caller. */
+
+  /**
+   * Carries the context requested by the caller.
+   */
   readonly requestedContext: ActorContext;
-  /** Carries allowlisted transport facts. */
+
+  /**
+   * Carries allowlisted transport facts.
+   */
   readonly transport: TransportRequestContext;
 }
-/** Query facts available to authorization policy. */
+
+/**
+ * Query facts available to authorization policy.
+ */
 export interface IncomingQuery {
-  /** Identifies this request as a query. */
+  // prettier-ignore
+
+  /**
+   * Identifies this request as a query.
+   */
   readonly kind: "query";
-  /** Carries the received query. */
+
+  /**
+   * Carries the received query.
+   */
   readonly query: Query;
-  /** Carries the query target. */
+
+  /**
+   * Carries the query target.
+   */
   readonly target: Target;
-  /** Carries the context requested by the caller. */
+
+  /**
+   * Carries the context requested by the caller.
+   */
   readonly requestedContext: ActorContext;
-  /** Carries allowlisted transport facts. */
+
+  /**
+   * Carries allowlisted transport facts.
+   */
   readonly transport: TransportRequestContext;
 }
-/** Subscription-creation facts available to authorization policy. */
+
+/**
+ * Subscription-creation facts available to authorization policy.
+ */
 export interface IncomingSubscription {
-  /** Identifies this request as subscription creation. */
+  // prettier-ignore
+
+  /**
+   * Identifies this request as subscription creation.
+   */
   readonly kind: "subscribe";
-  /** Carries the requested topic. */
+
+  /**
+   * Carries the requested topic.
+   */
   readonly topic: Topic;
-  /** Carries the topic target. */
+
+  /**
+   * Carries the topic target.
+   */
   readonly target: Target;
-  /** Carries the context requested by the caller. */
+
+  /**
+   * Carries the context requested by the caller.
+   */
   readonly requestedContext: ActorContext;
-  /** Carries allowlisted transport facts. */
+
+  /**
+   * Carries allowlisted transport facts.
+   */
   readonly transport: TransportRequestContext;
 }
-/** Subscription-activation facts available to authorization policy. */
+
+/**
+ * Subscription-activation facts available to authorization policy.
+ */
 export interface IncomingSubscriptionActivation {
-  /** Identifies this request as subscription activation. */
+  // prettier-ignore
+
+  /**
+   * Identifies this request as subscription activation.
+   */
   readonly kind: "activate";
-  /** Carries the public subscription handle. */
+
+  /**
+   * Carries the public subscription handle.
+   */
   readonly subscription: Subscription;
-  /** Carries the context requested by the caller. */
+
+  /**
+   * Carries the context requested by the caller.
+   */
   readonly requestedContext: ActorContext;
-  /** Carries allowlisted transport facts. */
+
+  /**
+   * Carries allowlisted transport facts.
+   */
   readonly transport: TransportRequestContext;
 }
-/** Subscription-cancellation facts available to authorization policy. */
+
+/**
+ * Subscription-cancellation facts available to authorization policy.
+ */
 export interface IncomingSubscriptionCancellation {
-  /** Identifies this request as subscription cancellation. */
+  // prettier-ignore
+
+  /**
+   * Identifies this request as subscription cancellation.
+   */
   readonly kind: "cancel";
-  /** Carries the public subscription handle. */
+
+  /**
+   * Carries the public subscription handle.
+   */
   readonly subscription: Subscription;
-  /** Carries the context requested by the caller. */
+
+  /**
+   * Carries the context requested by the caller.
+   */
   readonly requestedContext: ActorContext;
-  /** Carries allowlisted transport facts. */
+
+  /**
+   * Carries allowlisted transport facts.
+   */
   readonly transport: TransportRequestContext;
 }
-/** Exhaustive request model used at the authorization boundary. */
+
+/**
+ * Exhaustive request model used at the authorization boundary.
+ */
 export type IncomingRequest =
   | IncomingCommand
   | IncomingQuery
   | IncomingSubscription
   | IncomingSubscriptionActivation
   | IncomingSubscriptionCancellation;
-/** Identity established by an application-specific authenticator. */
+
+/**
+ * Identity established by an application-specific authenticator.
+ */
 export interface AuthenticatedPrincipal {
-  /** Identifies the authenticated application principal. */
+  // prettier-ignore
+
+  /**
+   * Identifies the authenticated application principal.
+   */
   readonly id: string;
-  /** Carries application-defined identity attributes. */
+
+  /**
+   * Carries application-defined identity attributes.
+   */
   readonly attributes?: Readonly<Record<string, string>>;
 }
-/** Credential material supplied directly to an authenticator or session resolver. */
+
+/**
+ * Credential material supplied directly to an authenticator or session resolver.
+ */
 export interface RequestCredential {
-  /** Identifies how the credential was presented. */
+  // prettier-ignore
+
+  /**
+   * Identifies how the credential was presented.
+   */
   readonly kind: "bearer" | "cookie";
-  /** Carries the opaque credential material. */
+
+  /**
+   * Carries the opaque credential material.
+   */
   readonly value: string;
 }
-/** Cookie credential issued by an application-session strategy. */
+
+/**
+ * Cookie credential issued by an application-session strategy.
+ */
 export interface CookieCredential extends RequestCredential {
-  /** Identifies this credential as a cookie. */
+  // prettier-ignore
+
+  /**
+   * Identifies this credential as a cookie.
+   */
   readonly kind: "cookie";
 }
-/** Bearer credential issued by a signed application-session strategy. */
+
+/**
+ * Bearer credential issued by a signed application-session strategy.
+ */
 export interface BearerCredential extends RequestCredential {
-  /** Identifies this credential as a bearer token. */
+  // prettier-ignore
+
+  /**
+   * Identifies this credential as a bearer token.
+   */
   readonly kind: "bearer";
 }
-/** Session validated by an application-selected session strategy. */
+
+/**
+ * Session validated by an application-selected session strategy.
+ */
 export interface ResolvedSession {
-  /** Identifies the authenticated session principal. */
+  // prettier-ignore
+
+  /**
+   * Identifies the authenticated session principal.
+   */
   readonly principal: AuthenticatedPrincipal;
-  /** Specifies when the resolved session expires. */
+
+  /**
+   * Specifies when the resolved session expires.
+   */
   readonly expiresAt: Timestamp;
 }
-/** Provider-neutral authentication boundary. Credentials do not reach policy request facts. */
+
+/**
+ * Provider-neutral authentication boundary. Credentials do not reach policy request facts.
+ */
 export interface Authenticator {
-  /** Validates a presented credential.
+  // prettier-ignore
+
+  /**
+   * Validates a presented credential.
    * @param credential Supplies the credential to authenticate.
    * @returns Returns the authenticated principal or `undefined` when rejected.
    */
   authenticate(credential: RequestCredential): Promise<AuthenticatedPrincipal | undefined>;
 }
-/** Application-session validation boundary. Session persistence is deferred to Wave 4 C. */
+
+/**
+ * Application-session validation boundary.
+ */
 export interface SessionResolver {
-  /** Resolves a presented credential into a valid session.
+  // prettier-ignore
+
+  /**
+   * Resolves a presented credential into a valid session.
    * @param credential Supplies the credential to resolve.
    * @returns Returns the resolved session or `undefined` when it is invalid.
    */
   resolve(credential: RequestCredential): Promise<ResolvedSession | undefined>;
 }
-/** Authorization policy boundary evaluated separately for every incoming request. */
+
+/**
+ * Authorization policy boundary evaluated separately for every incoming request.
+ */
 export interface AuthorizationPolicy {
-  /** Checks whether a principal may make one incoming request.
+  // prettier-ignore
+
+  /**
+   * Checks whether a principal may make one incoming request.
    * @param principal Supplies the authenticated principal.
    * @param request Supplies the request being authorized.
    * @returns Returns whether the request is allowed.
    */
   authorize(principal: AuthenticatedPrincipal, request: IncomingRequest): Promise<boolean>;
 }
-/** Gateway-owned trusted context supplied after authentication and authorization. */
+
+/**
+ * Gateway-owned trusted context supplied after authentication and authorization.
+ */
 export interface AuthorizedRequestContext {
-  /** Identifies the resolved application actor. */
+  // prettier-ignore
+
+  /**
+   * Identifies the resolved application actor.
+   */
   readonly actor: UserId;
-  /** Identifies the resolved tenant when the application is multi-tenant. */
+
+  /**
+   * Identifies the resolved tenant when the application is multi-tenant.
+   */
   readonly tenant?: TenantId;
-  /** Records the trusted resolution time. */
+
+  /**
+   * Records the trusted resolution time.
+   */
   readonly timestamp: Timestamp;
-  /** Identifies the actor's time zone when resolved. */
+
+  /**
+   * Identifies the actor's time zone when resolved.
+   */
   readonly zoneId?: ZoneId;
-  /** Identifies the actor's language when resolved. */
+
+  /**
+   * Identifies the actor's language when resolved.
+   */
   readonly language?: Language;
 }
-/** Application-owned actor and tenant resolution boundary. */
+
+/**
+ * Application-owned actor and tenant resolution boundary.
+ */
 export interface ContextResolver {
-  /** Resolves a trusted context for one authorized request.
+  // prettier-ignore
+
+  /**
+   * Resolves a trusted context for one authorized request.
    * @param principal Supplies the authenticated principal.
    * @param request Supplies the authorized request.
    * @param clock Supplies the trusted timestamp source.
@@ -193,7 +406,9 @@ export interface ContextResolver {
     request: IncomingRequest,
     clock: Clock,
   ): Promise<AuthorizedRequestContext>;
-  /** Resolves a context when only the principal is available.
+
+  /**
+   * Resolves a context when only the principal is available.
    * @param principal Supplies the authenticated principal.
    * @param clock Supplies the trusted timestamp source.
    * @returns Returns the resolved actor context.
@@ -203,65 +418,136 @@ export interface ContextResolver {
     clock: Clock,
   ): Promise<AuthorizedRequestContext>;
 }
-/** Clock boundary for trusted timestamps and deterministic gateway tests. */
+
+/**
+ * Clock boundary for trusted timestamps and deterministic gateway tests.
+ */
 export interface Clock {
-  /** Returns the current trusted timestamp.
+  // prettier-ignore
+
+  /**
+   * Returns the current trusted timestamp.
    * @returns Returns the current timestamp.
    */
   now(): Timestamp;
 }
-/** Envelope-decoding boundary used by the later gateway pipeline. */
+
+/**
+ * Envelope-decoding boundary used by the later gateway pipeline.
+ */
 export interface RequestDecoder {
-  /** Decodes one transport request.
+  // prettier-ignore
+
+  /**
+   * Decodes one transport request.
    * @param input Supplies the wire request input.
    * @returns Returns decoded request facts or `undefined` for invalid input.
    */
   decode(input: IncomingRequestInput): IncomingRequest | undefined;
 }
-/** Wire envelope shape decoded by the gateway's later forwarding pipeline. */
+
+/**
+ * Wire envelope shape decoded by the gateway's later forwarding pipeline.
+ */
 export type IncomingRequestInput =
   | CommandRequestInput
   | {
-      /** Identifies this input as a query. */
+      // prettier-ignore
+
+      /**
+       * Identifies this input as a query.
+       */
       readonly kind: "query";
-      /** Carries the serialized query bytes. */
+
+      /**
+       * Carries the serialized query bytes.
+       */
       readonly value: Uint8Array;
-      /** Carries allowlisted transport facts. */
+
+      /**
+       * Carries allowlisted transport facts.
+       */
       readonly transport: TransportRequestContext;
     }
   | {
-      /** Identifies this input as subscription creation. */
+      // prettier-ignore
+
+      /**
+       * Identifies this input as subscription creation.
+       */
       readonly kind: "subscribe";
-      /** Carries the serialized topic bytes. */
+
+      /**
+       * Carries the serialized topic bytes.
+       */
       readonly value: Uint8Array;
-      /** Carries allowlisted transport facts. */
+
+      /**
+       * Carries allowlisted transport facts.
+       */
       readonly transport: TransportRequestContext;
     }
   | {
-      /** Identifies this input as subscription activation. */
+      // prettier-ignore
+
+      /**
+       * Identifies this input as subscription activation.
+       */
       readonly kind: "activate";
-      /** Carries the serialized subscription bytes. */
+
+      /**
+       * Carries the serialized subscription bytes.
+       */
       readonly value: Uint8Array;
-      /** Carries allowlisted transport facts. */
+
+      /**
+       * Carries allowlisted transport facts.
+       */
       readonly transport: TransportRequestContext;
     }
   | {
-      /** Identifies this input as subscription cancellation. */
+      // prettier-ignore
+
+      /**
+       * Identifies this input as subscription cancellation.
+       */
       readonly kind: "cancel";
-      /** Carries the serialized subscription bytes. */
+
+      /**
+       * Carries the serialized subscription bytes.
+       */
       readonly value: Uint8Array;
-      /** Carries allowlisted transport facts. */
+
+      /**
+       * Carries allowlisted transport facts.
+       */
       readonly transport: TransportRequestContext;
     };
-/** Wire command envelope with an optional Wave 3 registry for content-aware policy. */
+
+/**
+ * Wire command envelope with an optional registry for content-aware policy.
+ */
 export interface CommandRequestInput {
-  /** Identifies this input as a command. */
+  // prettier-ignore
+
+  /**
+   * Identifies this input as a command.
+   */
   readonly kind: "command";
-  /** Carries the serialized command bytes. */
+
+  /**
+   * Carries the serialized command bytes.
+   */
   readonly value: Uint8Array;
-  /** Carries allowlisted transport facts. */
+
+  /**
+   * Carries allowlisted transport facts.
+   */
   readonly transport: TransportRequestContext;
-  /** Supplies message types used to unpack the command when available. */
+
+  /**
+   * Supplies message types used to unpack the command when available.
+   */
   readonly registry?: TypeRegistryLookup;
 }
 
@@ -269,9 +555,14 @@ interface TransportFactsApi {
   from(input: TransportFactsInput): TransportRequestContext;
 }
 
-/** Builds the allowlisted transport facts used by authorization and diagnostics. */
+/**
+ * Builds the allowlisted transport facts used by authorization and diagnostics.
+ */
 export const TransportFacts: Readonly<TransportFactsApi> = Object.freeze({
-  /** Builds allowlisted facts while omitting credentials and unknown headers.
+  // prettier-ignore
+
+  /**
+   * Builds allowlisted facts while omitting credentials and unknown headers.
    * @param input Supplies raw transport facts and optional headers.
    * @returns Returns the safe transport context.
    */

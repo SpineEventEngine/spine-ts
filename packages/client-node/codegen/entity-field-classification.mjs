@@ -6,11 +6,16 @@ const scalarFixed64 = 6;
 const scalarSfixed64 = 16;
 const scalarSint64 = 18;
 
-/** Classifies Protobuf fields for Entity-column generation and registration. */
+/**
+ * Classifies Protobuf fields for Entity-column generation and registration.
+ */
 export const EntityFieldClassification = Object.freeze({
-  /** Classifies one field without depending on generated Spine descriptors.
+  // prettier-ignore
+
+  /**
+   * Classifies one field without depending on generated Spine descriptors.
    *
-   * @param field - Protobuf field descriptor supplied by the generator.
+   * @param field Protobuf field descriptor supplied by the generator.
    * @returns The supported value and comparison classification.
    */
   classify(field) {

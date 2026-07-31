@@ -32,18 +32,28 @@ import {
   VersionSchema,
 } from "@spine-event-engine/proto";
 
-/** Supplies the current wall-clock time for signal metadata. */
+/**
+ * Supplies the current wall-clock time for signal metadata.
+ */
 export interface Clock {
-  /** Returns the current wall-clock time.
+  // prettier-ignore
+
+  /**
+   * Returns the current wall-clock time.
    *
    * @returns Current time as a `Date`.
    */
   now(): Date;
 }
 
-/** Supplies system wall-clock time. */
+/**
+ * Supplies system wall-clock time.
+ */
 export class SystemClock implements Clock {
-  /** Returns the current system time.
+  // prettier-ignore
+
+  /**
+   * Returns the current system time.
    *
    * @returns Current system time.
    */
@@ -52,19 +62,23 @@ export class SystemClock implements Clock {
   }
 }
 
-/** Supplies a fixed wall-clock time for deterministic work. */
+/**
+ * Supplies a fixed wall-clock time for deterministic work.
+ */
 export class FixedClock implements Clock {
   readonly #value: number;
 
-  /** Creates a clock fixed at one time.
+  /**
+   * Creates a clock fixed at one time.
    *
-   * @param value - Finite time to return from `now()`.
+   * @param value Finite time to return from `now()`.
    */
   constructor(value: Date) {
     this.#value = SignalValues.time(value).getTime();
   }
 
-  /** Returns a fresh date at the configured time.
+  /**
+   * Returns a fresh date at the configured time.
    *
    * @returns Fixed time.
    */
@@ -73,30 +87,35 @@ export class FixedClock implements Clock {
   }
 }
 
-/** Creates validated command and event identifiers. */
+/**
+ * Creates validated command and event identifiers.
+ */
 export class SignalIds {
   readonly #next: () => string;
 
-  /** Creates an identifier source.
+  /**
+   * Creates an identifier source.
    *
-   * @param next - Function that supplies a new identifier when one is omitted.
+   * @param next Function that supplies a new identifier when one is omitted.
    */
   constructor(next: () => string = randomUUID) {
     this.#next = next;
   }
 
-  /** Creates a validated command identifier.
+  /**
+   * Creates a validated command identifier.
    *
-   * @param uuid - Command UUID, generated when omitted.
+   * @param uuid Command UUID, generated when omitted.
    * @returns Command identifier.
    */
   command(uuid: string = this.#next()): CommandId {
     return create(CommandIdSchema, { uuid: SignalValues.command(uuid) });
   }
 
-  /** Creates a validated event identifier.
+  /**
+   * Creates a validated event identifier.
    *
-   * @param value - Event identifier value, generated when omitted.
+   * @param value Event identifier value, generated when omitted.
    * @returns Event identifier.
    */
   event(value: string = this.#next()): EventId {
@@ -104,75 +123,120 @@ export class SignalIds {
   }
 }
 
-/** Configures the sources used to create signal metadata. */
+/**
+ * Configures the sources used to create signal metadata.
+ */
 export interface SignalMetadataOptions {
-  /** Supplies timestamps; defaults to {@link SystemClock}. */
+  // prettier-ignore
+
+  /**
+   * Supplies timestamps; defaults to {@link SystemClock}.
+   */
   readonly clock?: Clock;
-  /** Supplies command and event identifiers; defaults to {@link SignalIds}. */
+
+  /**
+   * Supplies command and event identifiers; defaults to {@link SignalIds}.
+   */
   readonly ids?: SignalIds;
 }
 
-/** Supplies optional actor and tenant data for a signal context. */
+/**
+ * Supplies optional actor and tenant data for a signal context.
+ */
 export interface ActorContextInput {
-  /** Identifies the acting user. */
+  // prettier-ignore
+
+  /**
+   * Identifies the acting user.
+   */
   readonly actor?: ActorContext["actor"];
-  /** Identifies the tenant that contains the signal. */
+
+  /**
+   * Identifies the tenant that contains the signal.
+   */
   readonly tenantId?: ActorContext["tenantId"];
 }
 
-/** Supplies actor and origin data for a command context. */
+/**
+ * Supplies actor and origin data for a command context.
+ */
 export interface CommandContextInput extends ActorContextInput {
-  /** Provides a prebuilt actor context in preference to separate actor fields. */
+  // prettier-ignore
+
+  /**
+   * Provides a prebuilt actor context in preference to separate actor fields.
+   */
   readonly actorContext?: ActorContext;
-  /** Provides the signal origin. */
+
+  /**
+   * Provides the signal origin.
+   */
   readonly origin?: Origin;
 }
 
-/** Supplies producer, version, and origin data for an event context. */
+/**
+ * Supplies producer, version, and origin data for an event context.
+ */
 export interface EventContextInput {
-  /** Identifies the event producer with a supported scalar identifier. */
+  // prettier-ignore
+
+  /**
+   * Identifies the event producer with a supported scalar identifier.
+   */
   readonly producerId?: string | number | boolean;
-  /** Declares the signed 32-bit event version. */
+
+  /**
+   * Declares the signed 32-bit event version.
+   */
   readonly version?: number;
-  /** Provides the origin signal. */
+
+  /**
+   * Provides the origin signal.
+   */
   readonly origin?: Origin;
 }
 
-/** Creates immutable metadata for commands and events. */
+/**
+ * Creates immutable metadata for commands and events.
+ */
 export class SignalMetadata {
   readonly #clock: Clock;
   readonly #ids: SignalIds;
 
-  /** Creates a metadata factory.
+  /**
+   * Creates a metadata factory.
    *
-   * @param options - Optional clock and identifier sources.
+   * @param options Optional clock and identifier sources.
    */
   constructor(options: SignalMetadataOptions = {}) {
     this.#clock = options.clock ?? new SystemClock();
     this.#ids = options.ids ?? new SignalIds();
   }
 
-  /** Creates a command identifier.
+  /**
+   * Creates a command identifier.
    *
-   * @param uuid - Optional command UUID.
+   * @param uuid Optional command UUID.
    * @returns Validated command identifier.
    */
   commandId(uuid?: string): CommandId {
     return this.#ids.command(uuid);
   }
 
-  /** Creates an event identifier.
+  /**
+   * Creates an event identifier.
    *
-   * @param value - Optional event identifier value.
+   * @param value Optional event identifier value.
    * @returns Validated event identifier.
    */
   eventId(value?: string): EventId {
     return this.#ids.event(value);
   }
 
-  /** Creates a Protobuf timestamp from a finite date.
+  /**
+   * Creates a Protobuf timestamp from a finite date.
    *
-   * @param value - Date to convert; defaults to the configured clock.
+   * @param value Date to convert; defaults to the configured clock.
    * @returns Protobuf timestamp.
    */
   timestamp(value: Date = this.#clock.now()): Timestamp {
@@ -187,9 +251,10 @@ export class SignalMetadata {
     });
   }
 
-  /** Creates an actor context from actor and tenant input.
+  /**
+   * Creates an actor context from actor and tenant input.
    *
-   * @param input - Optional actor and tenant values.
+   * @param input Optional actor and tenant values.
    * @returns Cloned actor context.
    */
   actorContext(input: ActorContextInput = {}): ActorContext {
@@ -199,9 +264,10 @@ export class SignalMetadata {
     });
   }
 
-  /** Creates a command context from actor and origin input.
+  /**
+   * Creates a command context from actor and origin input.
    *
-   * @param input - Optional actor context and origin values.
+   * @param input Optional actor context and origin values.
    * @returns Cloned command context.
    */
   commandContext(input: CommandContextInput = {}): CommandContext {
@@ -215,9 +281,10 @@ export class SignalMetadata {
     });
   }
 
-  /** Creates an event context with a timestamp and optional causal data.
+  /**
+   * Creates an event context with a timestamp and optional causal data.
    *
-   * @param input - Optional producer, version, and origin values.
+   * @param input Optional producer, version, and origin values.
    * @returns Event context.
    */
   eventContext(input: EventContextInput = {}): EventContext {
@@ -238,9 +305,10 @@ export class SignalMetadata {
     });
   }
 
-  /** Creates an origin from a command.
+  /**
+   * Creates an origin from a command.
    *
-   * @param command - Source command.
+   * @param command Source command.
    * @returns Origin that preserves actor and grand-origin context.
    */
   originFromCommand(command: Command): Origin {
@@ -258,9 +326,10 @@ export class SignalMetadata {
     });
   }
 
-  /** Creates an origin from an event.
+  /**
+   * Creates an origin from an event.
    *
-   * @param event - Source event.
+   * @param event Source event.
    * @returns Origin that preserves causal context.
    */
   originFromEvent(event: Event): Origin {
@@ -277,9 +346,10 @@ export class SignalMetadata {
     });
   }
 
-  /** Packs a supported finite scalar producer identifier.
+  /**
+   * Packs a supported finite scalar producer identifier.
    *
-   * @param value - Candidate producer identifier.
+   * @param value Candidate producer identifier.
    * @returns Packed value, or `undefined` when it is unsupported.
    */
   producerId(value: string | number | boolean | undefined): Any | undefined {
@@ -297,9 +367,10 @@ export class SignalMetadata {
     }
   }
 
-  /** Creates a signed 32-bit event version.
+  /**
+   * Creates a signed 32-bit event version.
    *
-   * @param number - Finite integer version.
+   * @param number Finite integer version.
    * @returns Protobuf version.
    */
   version(number: number): Version {
@@ -310,10 +381,11 @@ export class SignalMetadata {
     return create(VersionSchema, { number });
   }
 
-  /** Creates command metadata from an event.
+  /**
+   * Creates command metadata from an event.
    *
-   * @param event - Source event.
-   * @param sequence - Causal sequence number.
+   * @param event Source event.
+   * @param sequence Causal sequence number.
    * @returns Derived command identifier and context.
    */
   commandFromEvent(
@@ -331,11 +403,12 @@ export class SignalMetadata {
     };
   }
 
-  /** Creates event metadata from a command.
+  /**
+   * Creates event metadata from a command.
    *
-   * @param command - Source command.
-   * @param sequence - Causal sequence number.
-   * @param input - Additional event context input.
+   * @param command Source command.
+   * @param sequence Causal sequence number.
+   * @param input Additional event context input.
    * @returns Derived event identifier and context.
    */
   eventFromCommand(
@@ -355,11 +428,12 @@ export class SignalMetadata {
     };
   }
 
-  /** Creates event metadata from an event.
+  /**
+   * Creates event metadata from an event.
    *
-   * @param event - Source event.
-   * @param sequence - Causal sequence number.
-   * @param input - Additional event context input.
+   * @param event Source event.
+   * @param sequence Causal sequence number.
+   * @param input Additional event context input.
    * @returns Derived event identifier and context.
    */
   eventFromEvent(
@@ -427,7 +501,9 @@ export class SignalMetadata {
   }
 }
 
-/** Owns validation shared by the clock and identifier sources. */
+/**
+ * Validates values shared by the clock and identifier sources.
+ */
 const SignalValues = Object.freeze({
   time(value: Date): Date {
     if (!Number.isFinite(value.getTime()))

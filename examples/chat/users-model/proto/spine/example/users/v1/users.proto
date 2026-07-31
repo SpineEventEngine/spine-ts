@@ -1,8 +1,0 @@
-syntax = "proto3";
-package spine.example.users.v1;
-
-// Identifies a user in the Chat application.
-message UserId {
-  // Stores the identifier value for this user.
-  string value = 1;
-}

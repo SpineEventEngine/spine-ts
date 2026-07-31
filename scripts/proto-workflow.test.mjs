@@ -57,8 +57,8 @@ function todoTransactionFixture() {
   const repoRoot = mkdtempSync(join(tmpdir(), "spine-todo-transaction-"));
   for (const [template, output] of [
     ["buf.gen.yaml", "packages/proto/generated"],
-    ["examples/project-management/buf.gen.yaml", "examples/project-management/generated"],
-    ["examples/datastore-orders/buf.gen.yaml", "examples/datastore-orders/generated"],
+    ["examples/projects/buf.gen.yaml", "examples/projects/generated"],
+    ["examples/orders/buf.gen.yaml", "examples/orders/generated"],
   ]) {
     mkdirSync(join(repoRoot, dirname(template)), { recursive: true });
     writeFileSync(
@@ -426,23 +426,33 @@ describe("proto-workflow", () => {
     expect(existsSync(second)).toBe(false);
   }, 30_000);
 
+  it("includes the generated rejection companion plugin in the bootstrap output", () => {
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    const executable = prepareProtoToolsBootstrap(root);
+    try {
+      expect(existsSync(join(dirname(executable), "../generation/rejection-generator.js"))).toBe(
+        true,
+      );
+    } finally {
+      releaseProtoToolsBootstrap(root);
+    }
+  }, 30_000);
+
   it("keeps every application model inside the single atomic publication boundary", () => {
     expect(generatedTargets.map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
     ]);
     expect(modelAtomicTargets.map((target) => target.displayPath)).toEqual([
       "examples/todo/generated",
-      "examples/project-management/generated",
-      "examples/datastore-orders/generated",
-      "examples/chat/users-model/generated",
+      "examples/projects/generated",
+      "examples/orders/generated",
       "examples/chat/model/generated",
     ]);
     expect(atomicGeneratedTargets.map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
       "examples/todo/generated",
-      "examples/project-management/generated",
-      "examples/datastore-orders/generated",
-      "examples/chat/users-model/generated",
+      "examples/projects/generated",
+      "examples/orders/generated",
       "examples/chat/model/generated",
       "examples/chat/app/generated",
     ]);
@@ -1192,8 +1202,8 @@ describe("proto-workflow", () => {
     const modulePaths = [
       "packages/proto/proto",
       "examples/todo/proto",
-      "examples/project-management/proto",
-      "examples/datastore-orders/proto",
+      "examples/projects/proto",
+      "examples/orders/proto",
     ];
 
     for (const modulePath of modulePaths) {
@@ -1208,40 +1218,37 @@ describe("proto-workflow", () => {
       'syntax = "proto3";\npackage grpc.health.v1;\nservice Health {}\n',
     );
     const validExampleModules = [
-      [
-        "examples/project-management/proto/spine/example/project_management/v1",
-        "project_management",
-      ],
-      ["examples/datastore-orders/proto/spine/example/datastore_orders/v1", "datastore_orders"],
+      ["examples/projects/proto/spine/examples/projects", "projects"],
+      ["examples/orders/proto/spine/examples/orders", "orders"],
     ];
     for (const [directory, packageSegment] of validExampleModules) {
       const absoluteDirectory = join(repoRoot, directory);
       mkdirSync(absoluteDirectory, { recursive: true });
       writeFileSync(
         join(absoluteDirectory, "fixture.proto"),
-        `syntax = "proto3";\npackage spine.example.${packageSegment}.v1;\n`,
+        `syntax = "proto3";\npackage spine.examples.${packageSegment};\n`,
       );
     }
 
     const authoredRoot = join(repoRoot, "examples/todo/proto");
-    const packageRoot = join(authoredRoot, "spine/example/todo/v1");
+    const packageRoot = join(authoredRoot, "spine/examples/todo");
     mkdirSync(packageRoot, { recursive: true });
     writeFileSync(
       join(packageRoot, "service.proto"),
-      'syntax = "proto3";\npackage spine.example.todo.v1;\nservice Todo {}\n',
+      'syntax = "proto3";\npackage spine.examples.todo;\nservice Todo {}\n',
     );
     writeFileSync(
       join(packageRoot, "first.proto"),
-      'syntax = "proto3";\npackage spine.example.todo.v1;\noption java_multiple_files = true;\n',
+      'syntax = "proto3";\npackage spine.examples.todo;\noption java_multiple_files = true;\n',
     );
     writeFileSync(
       join(packageRoot, "second.proto"),
-      'syntax = "proto3";\npackage spine.example.todo.v1;\n',
+      'syntax = "proto3";\npackage spine.examples.todo;\n',
     );
     mkdirSync(join(authoredRoot, "alternate"), { recursive: true });
     writeFileSync(
       join(authoredRoot, "alternate/shared.proto"),
-      'syntax = "proto3";\npackage spine.example.todo.v1;\n',
+      'syntax = "proto3";\npackage spine.examples.todo;\n',
     );
 
     const result = spawnSync(
@@ -1734,8 +1741,8 @@ describe("proto-workflow", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
-    const projectGenerated = join(repoRoot, "examples/project-management/generated");
-    const datastoreOrdersGenerated = join(repoRoot, "examples/datastore-orders/generated");
+    const projectGenerated = join(repoRoot, "examples/projects/generated");
+    const datastoreOrdersGenerated = join(repoRoot, "examples/orders/generated");
     const commands = [];
 
     mkdirSync(packageGenerated, { recursive: true });
@@ -1743,8 +1750,8 @@ describe("proto-workflow", () => {
     mkdirSync(projectGenerated, { recursive: true });
     mkdirSync(datastoreOrdersGenerated, { recursive: true });
     mkdirSync(join(repoRoot, "examples/todo"), { recursive: true });
-    mkdirSync(join(repoRoot, "examples/project-management"), { recursive: true });
-    mkdirSync(join(repoRoot, "examples/datastore-orders"), { recursive: true });
+    mkdirSync(join(repoRoot, "examples/projects"), { recursive: true });
+    mkdirSync(join(repoRoot, "examples/orders"), { recursive: true });
     writeFileSync(
       join(repoRoot, "buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: packages/proto/generated\n",
@@ -1754,12 +1761,12 @@ describe("proto-workflow", () => {
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/todo/generated\n",
     );
     writeFileSync(
-      join(repoRoot, "examples/project-management/buf.gen.yaml"),
-      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/project-management/generated\n",
+      join(repoRoot, "examples/projects/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/projects/generated\n",
     );
     writeFileSync(
-      join(repoRoot, "examples/datastore-orders/buf.gen.yaml"),
-      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/datastore-orders/generated\n",
+      join(repoRoot, "examples/orders/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/orders/generated\n",
     );
     writeFileSync(join(packageGenerated, "message.txt"), "previous package output\n");
     writeFileSync(join(todoGenerated, "message.txt"), "previous todo output\n");
@@ -1798,8 +1805,8 @@ describe("proto-workflow", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
     const packageGenerated = join(repoRoot, "packages/proto/generated");
     const todoGenerated = join(repoRoot, "examples/todo/generated");
-    const projectGenerated = join(repoRoot, "examples/project-management/generated");
-    const datastoreOrdersGenerated = join(repoRoot, "examples/datastore-orders/generated");
+    const projectGenerated = join(repoRoot, "examples/projects/generated");
+    const datastoreOrdersGenerated = join(repoRoot, "examples/orders/generated");
     const commands = [];
 
     mkdirSync(packageGenerated, { recursive: true });
@@ -1807,8 +1814,8 @@ describe("proto-workflow", () => {
     mkdirSync(projectGenerated, { recursive: true });
     mkdirSync(datastoreOrdersGenerated, { recursive: true });
     mkdirSync(join(repoRoot, "examples/todo"), { recursive: true });
-    mkdirSync(join(repoRoot, "examples/project-management"), { recursive: true });
-    mkdirSync(join(repoRoot, "examples/datastore-orders"), { recursive: true });
+    mkdirSync(join(repoRoot, "examples/projects"), { recursive: true });
+    mkdirSync(join(repoRoot, "examples/orders"), { recursive: true });
     writeFileSync(
       join(repoRoot, "buf.gen.yaml"),
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: packages/proto/generated\n",
@@ -1818,12 +1825,12 @@ describe("proto-workflow", () => {
       "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/todo/generated\n",
     );
     writeFileSync(
-      join(repoRoot, "examples/project-management/buf.gen.yaml"),
-      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/project-management/generated\n",
+      join(repoRoot, "examples/projects/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/projects/generated\n",
     );
     writeFileSync(
-      join(repoRoot, "examples/datastore-orders/buf.gen.yaml"),
-      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/datastore-orders/generated\n",
+      join(repoRoot, "examples/orders/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/orders/generated\n",
     );
     writeFileSync(join(packageGenerated, "message.txt"), "previous package output\n");
     writeFileSync(join(todoGenerated, "message.txt"), "previous todo output\n");

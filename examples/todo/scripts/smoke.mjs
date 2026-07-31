@@ -20,9 +20,9 @@ import {
 } from "@spine-event-engine/proto/client";
 import { SignalMetadata } from "@spine-event-engine/server";
 
-import { CreateTaskSchema } from "../dist/generated/spine/example/todo/v1/task_commands_pb.js";
-import { TaskIdSchema } from "../dist/generated/spine/example/todo/v1/task_id_pb.js";
-import { TaskListSchema } from "../dist/generated/spine/example/todo/v1/task_list_pb.js";
+import { CreateTaskSchema } from "../dist/generated/spine/examples/todo/task_commands_pb.js";
+import { TaskIdSchema } from "../dist/generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema } from "../dist/generated/spine/examples/todo/task_list_pb.js";
 import { SmokeTaskLists } from "../dist/src/smoke-task-lists.js";
 
 const baseUrl = process.env.SPINE_TODO_BASE_URL ?? "http://127.0.0.1:8080";

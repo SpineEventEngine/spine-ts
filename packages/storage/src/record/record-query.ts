@@ -3,25 +3,50 @@
  * offsets, limits, and masks.
  */
 export interface RecordQuery<I> extends RecordReadOptions {
-  /** Exact storage slot identifier filter. */
+  // prettier-ignore
+
+  /**
+   * Exact storage slot identifier filter.
+   */
   readonly ids?: readonly I[];
-  /** Exact column filters. */
+
+  /**
+   * Exact column filters.
+   */
   readonly filters?: readonly RecordFilter[];
-  /** Deterministic sort order. */
+
+  /**
+   * Deterministic sort order.
+   */
   readonly sort?: readonly RecordOrder[];
-  /** Stable ordered row key after which the query should continue. */
+
+  /**
+   * Stable ordered row key after which the query should continue.
+   */
   readonly after?: RecordContinuation<I>;
-  /** Positive limit applied after sorting. */
+
+  /**
+   * Positive limit applied after sorting.
+   */
   readonly limit?: number;
-  /** Non-negative row offset applied after sorting and before the limit. */
+
+  /**
+   * Non-negative row offset applied after sorting and before the limit.
+   */
   readonly offset?: number;
 }
 
-/** Provides record-query validation operations. */
+/**
+ * Provides record-query validation operations.
+ */
 export const RecordQuery: Readonly<{
   validate<I>(query: RecordQuery<I>): void;
 }> = Object.freeze({
-  /** Validate a record query before execution. */
+  // prettier-ignore
+
+  /**
+   * Validate a record query before execution.
+   */
   validate<I>(query: RecordQuery<I>): void {
     if (
       query.limit !== undefined &&
@@ -49,17 +74,32 @@ export const RecordQuery: Readonly<{
   },
 });
 
-/** Read-time options for one record fetch. */
+/**
+ * Read-time options for one record fetch.
+ */
 export interface RecordReadOptions {
-  /** Optional simple mask applied to the cloned result. */
+  // prettier-ignore
+
+  /**
+   * Optional simple mask applied to the cloned result.
+   */
   readonly mask?: import("./record-mask.js").RecordMask;
 }
 
-/** Query sort order against one stored column, `id`, or a dotted record path. */
+/**
+ * Query sort order against one stored column, `id`, or a dotted record path.
+ */
 export interface RecordOrder {
-  /** Stored column name, `id`, or a dotted record path. */
+  // prettier-ignore
+
+  /**
+   * Stored column name, `id`, or a dotted record path.
+   */
   readonly field: string;
-  /** Sort direction, ascending by default. */
+
+  /**
+   * Sort direction, ascending by default.
+   */
   readonly direction?: "asc" | "desc";
 }
 
@@ -71,24 +111,49 @@ export interface RecordOrder {
  * remaining ties.
  */
 export interface RecordContinuation<I> {
-  /** Ordered field values captured from the last row of the previous page. */
+  // prettier-ignore
+
+  /**
+   * Ordered field values captured from the last row of the previous page.
+   */
   readonly values: readonly RecordContinuationValue[];
-  /** Actual storage slot identifier captured from the last row of the previous page. */
+
+  /**
+   * Actual storage slot identifier captured from the last row of the previous page.
+   */
   readonly id: I;
 }
 
-/** One captured sort-field value in a record continuation. */
+/**
+ * One captured sort-field value in a record continuation.
+ */
 export interface RecordContinuationValue {
-  /** Sort field this value was captured from. */
+  // prettier-ignore
+
+  /**
+   * Sort field this value was captured from.
+   */
   readonly field: string;
-  /** Captured value for the sort field. */
+
+  /**
+   * Captured value for the sort field.
+   */
   readonly value: unknown;
 }
 
-/** Equality filter against one stored column or the `id` field. */
+/**
+ * Equality filter against one stored column or the `id` field.
+ */
 export interface RecordFilter {
-  /** Stored column name or `id`. */
+  // prettier-ignore
+
+  /**
+   * Stored column name or `id`.
+   */
   readonly column: string;
-  /** One accepted value or a small accepted set. */
+
+  /**
+   * One accepted value or a small accepted set.
+   */
   readonly value: unknown;
 }

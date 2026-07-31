@@ -15,8 +15,12 @@ import { MAX_DELIVERY_RESPONSE_SHARDS, MAX_DELIVERY_WORKER_BYTES } from "./limit
 import { MutationAdmission } from "./mutation-admission.js";
 import { DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
-/** Provides Shard RPC handler implementations. */
+/**
+ * Provides Shard RPC handler implementations.
+ */
 export const ShardHandlers: Readonly<{
+  // prettier-ignore
+
   /**
    * Creates Shard RPC handlers.
    *
@@ -45,6 +49,7 @@ export const ShardHandlers: Readonly<{
     pickShard: async (request, context) => {
       const shard = ShardInputs.requireShard(request.shard);
       const worker = DeliveryWorkers.copy(ShardInputs.requireWorker(request.worker));
+      const pendingOnly = ShardInputs.pendingOnly(context.requestHeader);
       return admission.run(context.signal, () => {
         const pickedAt = ShardTime.current(now);
         const current = state.session(shard);
@@ -53,7 +58,10 @@ export const ShardHandlers: Readonly<{
           processingTimeoutMs > 0 &&
           pickedAt - ShardInputs.requireWhenPicked(current) > processingTimeoutMs;
         if (current === undefined || stale) {
+          if (pendingOnly && !state.hasPending(shard)) throw ShardErrors.noPendingWork();
           state.setSession(shard, worker, pickedAt);
+          if (pendingOnly)
+            context.responseHeader.set("x-spine-delivery-outcome", "pending-acknowledged");
           onTransition?.(shard);
           return create(PickUpOutcomeSchema, {
             value: {
@@ -66,6 +74,8 @@ export const ShardHandlers: Readonly<{
             },
           });
         }
+        if (pendingOnly)
+          context.responseHeader.set("x-spine-delivery-outcome", "pending-acknowledged");
         return create(PickUpOutcomeSchema, {
           value: {
             case: "alreadyPickedUp",
@@ -123,8 +133,12 @@ export const ShardHandlers: Readonly<{
   }),
 });
 
-/** Owns Shard request validation and input conversions. */
+/**
+ * Validates Shard requests and converts their inputs.
+ */
 const ShardInputs: Readonly<{
+  // prettier-ignore
+
   /**
    * Requires a Shard session pickup time.
    *
@@ -132,6 +146,7 @@ const ShardInputs: Readonly<{
    * @returns The recorded pickup time in milliseconds.
    */
   requireWhenPicked: (record: { readonly whenLastPicked: number | undefined }) => number;
+
   /**
    * Requires a valid worker identity.
    *
@@ -139,6 +154,7 @@ const ShardInputs: Readonly<{
    * @returns The validated worker identity.
    */
   requireWorker: (worker: WorkerId | undefined) => WorkerId;
+
   /**
    * Requires a valid Shard identity.
    *
@@ -146,6 +162,15 @@ const ShardInputs: Readonly<{
    * @returns The validated Shard identity.
    */
   requireShard: (shard: ShardIndex | undefined) => ShardIndex;
+
+  /**
+   * Reads the optional conditional-pickup request mode.
+   *
+   * @param headers Supplies request metadata.
+   * @returns Whether pickup must find pending work.
+   */
+  pendingOnly: (headers: Headers | undefined) => boolean;
+
   /**
    * Validates a protobuf duration.
    *
@@ -153,6 +178,7 @@ const ShardInputs: Readonly<{
    * @returns Whether the duration is within protobuf bounds.
    */
   validDuration: (value: { readonly seconds: bigint; readonly nanos: number }) => boolean;
+
   /**
    * Measures a string's UTF-8 size.
    *
@@ -191,6 +217,12 @@ const ShardInputs: Readonly<{
     }
     return shard;
   },
+  pendingOnly: (headers: Headers | undefined): boolean => {
+    const mode = headers?.get("x-spine-delivery-pickup-mode");
+    if (mode === null || mode === undefined) return false;
+    if (mode === "pending") return true;
+    throw ShardErrors.invalid("Delivery pickup mode is invalid.");
+  },
   validDuration: (value: { readonly seconds: bigint; readonly nanos: number }): boolean =>
     value.seconds >= 0n &&
     value.seconds <= 315_576_000_000n &&
@@ -200,8 +232,12 @@ const ShardInputs: Readonly<{
   utf8Bytes: (value: string): number => new TextEncoder().encode(value).byteLength,
 });
 
-/** Owns Shard clock validation and protobuf timestamp conversion. */
+/**
+ * Validates Shard clocks and converts protobuf timestamps.
+ */
 const ShardTime: Readonly<{
+  // prettier-ignore
+
   /**
    * Converts milliseconds to a protobuf timestamp.
    *
@@ -209,6 +245,7 @@ const ShardTime: Readonly<{
    * @returns The equivalent protobuf timestamp.
    */
   timestamp: (milliseconds: number) => { seconds: bigint; nanos: number };
+
   /**
    * Reads and validates the current millisecond time.
    *
@@ -229,8 +266,12 @@ const ShardTime: Readonly<{
   },
 });
 
-/** Owns Shard RPC error creation. */
+/**
+ * Creates Shard RPC errors.
+ */
 const ShardErrors: Readonly<{
+  // prettier-ignore
+
   /**
    * Creates an invalid-argument RPC error.
    *
@@ -238,6 +279,19 @@ const ShardErrors: Readonly<{
    * @returns The invalid-argument error.
    */
   invalid: (message: string) => ConnectError;
+
+  /**
+   * Creates the exact no-pending-work conditional pickup outcome.
+   *
+   * @returns The conditional pickup error.
+   */
+  noPendingWork: () => ConnectError;
 }> = Object.freeze({
   invalid: (message: string): ConnectError => new ConnectError(message, Code.InvalidArgument),
+  noPendingWork: (): ConnectError =>
+    new ConnectError(
+      "Delivery shard has no pending work.",
+      Code.FailedPrecondition,
+      new Headers([["x-spine-delivery-outcome", "no-pending-work"]]),
+    ),
 });

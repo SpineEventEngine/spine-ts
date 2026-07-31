@@ -5,7 +5,9 @@ import type {
 } from "./delivery-attempts.js";
 import { deliveryAttemptCapacity } from "./delivery-attempts.js";
 
-/** Internal bounded retry classifier over one exact-message attempt summary. */
+/**
+ * Internal bounded retry classifier over one exact-message attempt summary.
+ */
 export class DeliveryRetryDecisions {
   readonly #limit: number;
 
@@ -62,27 +64,56 @@ export class DeliveryRetryDecisions {
   }
 }
 
-/** Configures the internal retry classifier. */
+/**
+ * Configures the internal retry classifier.
+ */
 export interface DeliveryRetryDecisionOptions {
-  /** Positive bounded maximum number of retained failed attempts. */
+  // prettier-ignore
+
+  /**
+   * Positive bounded maximum number of retained failed attempts.
+   */
   readonly maxAttempts: number | undefined;
 }
 
-/** Describes immutable sanitized retry decision facts. */
+/**
+ * Describes immutable sanitized retry decision facts.
+ */
 export interface DeliveryRetryDecision {
-  /** Whether the retained attempt count still permits retry. */
+  // prettier-ignore
+
+  /**
+   * Whether the retained attempt count still permits retry.
+   */
   readonly kind: DeliveryRetryDecisionKind;
-  /** Retained failed attempt count for the exact message. */
+
+  /**
+   * Retained failed attempt count for the exact message.
+   */
   readonly count: number;
-  /** Configured bounded attempt limit. */
+
+  /**
+   * Configured bounded attempt limit.
+   */
   readonly limit: number;
-  /** Latest retained failure stage, when present. */
+
+  /**
+   * Latest retained failure stage, when present.
+   */
   readonly latestStage: DeliveryFailureStage | undefined;
-  /** Latest retained failure reason, when present. */
+
+  /**
+   * Latest retained failure reason, when present.
+   */
   readonly latestReason: DeliveryFailureReason | undefined;
-  /** Latest retained accepted flag, when present. */
+
+  /**
+   * Latest retained accepted flag, when present.
+   */
   readonly latestAccepted: boolean | undefined;
 }
 
-/** Names the possible internal retry decisions. */
+/**
+ * Names the possible internal retry decisions.
+ */
 export type DeliveryRetryDecisionKind = "RETRYABLE" | "EXHAUSTED";

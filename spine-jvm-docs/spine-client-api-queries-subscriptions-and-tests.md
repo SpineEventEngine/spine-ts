@@ -94,7 +94,8 @@ There are two query construction paths in `core-jvm`:
 For TypeScript, expose one coherent API while preserving wire expressiveness:
 
 ```ts
-const tasks = await client.onBehalfOf(user)
+const tasks = await client
+  .onBehalfOf(user)
   .select(TaskView)
   .byId(taskId)
   .where(eq(TaskView.Column.status, TaskStatus.OPEN))

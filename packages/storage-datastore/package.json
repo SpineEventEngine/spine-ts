@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/storage-datastore",
-  "version": "0.0.0",
+  "version": "2.0.0-snapshot.1",
   "private": true,
   "type": "module",
   "description": "Google Cloud Datastore adapter for Spine TS storage.",
@@ -13,6 +13,7 @@
   "files": [
     "dist",
     "README.md",
+    "REFERENCE.md",
     "index.yaml"
   ],
   "scripts": {

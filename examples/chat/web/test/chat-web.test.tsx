@@ -5,14 +5,14 @@ import {
   ChatMessageViewSchema,
   ChatRoomIdSchema,
   MessageIdSchema,
-} from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
+import { UserIdSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/users_pb.js";
 import { AnyMessages } from "@spine-event-engine/core";
 import type {
   ClientOperationOptions,
   ClientOutcome,
   ClientRequest,
 } from "@spine-event-engine/client-web";
-import { UserIdSchema } from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -89,7 +89,7 @@ describe("ChatBrowserApp", () => {
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Hello room" } });
     fireEvent.click(screen.getByRole("button", { name: "Post" }));
     await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
-    expect(request.post.mock.calls[0]?.[0].typeName).toBe("spine.example.chat.v1.PostMessage");
+    expect(request.post.mock.calls[0]?.[0].typeName).toBe("spine.examples.chat.PostMessage");
     expect(screen.getByText("general message")).toBeTruthy();
     expect(screen.queryByText("other room message")).toBeNull();
   });

@@ -33,7 +33,9 @@ const maxReadLimit = 1_000;
 const maxContinuationTextBytes = 16 * 1024;
 const casRetryLimit = 8;
 
-/** Durable inbox storage over record storage. */
+/**
+ * Durable inbox storage over record storage.
+ */
 export class InboxStorage {
   readonly #context: StorageContext;
   readonly #storageFactory: StorageFactory;
@@ -42,7 +44,7 @@ export class InboxStorage {
   /**
    * Opens inbox storage from one storage context and factory.
    *
-   * @param options - Supplies durable storage and an optional retention clock.
+   * @param options Supplies durable storage and an optional retention clock.
    */
   constructor(options: InboxStorageOptions) {
     this.#context = options.context;
@@ -60,8 +62,8 @@ export class InboxStorage {
   /**
    * Reads ordered inbox messages for one shard.
    *
-   * @param shard - Selects the shard to inspect.
-   * @param options - Filters and bounds the ordered page.
+   * @param shard Selects the shard to inspect.
+   * @param options Filters and bounds the ordered page.
    * @returns The matching message snapshots.
    */
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
@@ -104,7 +106,7 @@ export class InboxStorage {
   /**
    * Reads one exact durable inbox message by ID.
    *
-   * @param id - Identifies the durable message.
+   * @param id Identifies the durable message.
    * @returns The message when it remains durable.
    */
   async readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
@@ -124,7 +126,7 @@ export class InboxStorage {
   /**
    * Writes one inbox message unless a live dedup key already exists.
    *
-   * @param message - Supplies the message snapshot to write.
+   * @param message Supplies the message snapshot to write.
    * @returns The write or deduplication outcome.
    */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
@@ -154,7 +156,7 @@ export class InboxStorage {
    * returned idempotently only when they match the same message apart from the
    * status transition.
    *
-   * @param message - Supplies the pending message snapshot.
+   * @param message Supplies the pending message snapshot.
    * @returns The delivered message when the transition succeeds.
    */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
@@ -956,23 +958,32 @@ export class InboxStorage {
   }
 }
 
-/** Defines claim-bearing access for delivery workers. @internal */
+/**
+ * Defines claim-bearing access for delivery workers.
+ * @internal
+ */
 export interface InboxStorageAccess {
-  /** Limits one internal ordered inbox read. */
+  // prettier-ignore
+
+  /**
+   * Limits one internal ordered inbox read.
+   */
   readonly maxReadLimit: number;
+
   /**
    * Validates one internal inbox read limit.
    *
-   * @param value - Supplies the requested read limit.
+   * @param value Supplies the requested read limit.
    * @returns The validated bounded limit.
    */
   readonly readLimit: (value: unknown) => number;
+
   /**
    * Returns one pending message claimed under a shard session.
    *
-   * @param storage - Supplies the owning inbox storage.
-   * @param message - Identifies the pending message.
-   * @param session - Supplies the shard fence.
+   * @param storage Supplies the owning inbox storage.
+   * @param message Identifies the pending message.
+   * @param session Supplies the shard fence.
    * @returns The claimed message when the claim succeeds.
    */
   readonly claim: (
@@ -980,12 +991,13 @@ export interface InboxStorageAccess {
     message: InboxMessage,
     session: ShardSession,
   ) => Promise<ClaimedInboxMessage | undefined>;
+
   /**
    * Returns one claimed message renewed under a shard session.
    *
-   * @param storage - Supplies the owning inbox storage.
-   * @param message - Identifies the claimed message.
-   * @param session - Supplies the renewed shard fence.
+   * @param storage Supplies the owning inbox storage.
+   * @param message Identifies the claimed message.
+   * @param session Supplies the renewed shard fence.
    * @returns The renewed claim when it remains current.
    */
   readonly renew: (
@@ -993,22 +1005,24 @@ export interface InboxStorageAccess {
     message: ClaimedInboxMessage,
     session: ShardSession,
   ) => Promise<ClaimedInboxMessage | undefined>;
+
   /**
    * Returns one claimed message updated to delivered.
    *
-   * @param storage - Supplies the owning inbox storage.
-   * @param message - Identifies the claimed message.
+   * @param storage Supplies the owning inbox storage.
+   * @param message Identifies the claimed message.
    * @returns The delivered message when the transition succeeds.
    */
   readonly markDelivered: (
     storage: InboxStorage,
     message: ClaimedInboxMessage,
   ) => Promise<InboxMessage | undefined>;
+
   /**
    * Clears one claimed message without completing it.
    *
-   * @param storage - Supplies the owning inbox storage.
-   * @param message - Identifies the claimed message.
+   * @param storage Supplies the owning inbox storage.
+   * @param message Identifies the claimed message.
    * @returns The pending message when the claim is cleared.
    */
   readonly clear: (
@@ -1017,7 +1031,10 @@ export interface InboxStorageAccess {
   ) => Promise<InboxMessage | undefined>;
 }
 
-/** Exposes the claim-bearing operations used by delivery workers. @internal */
+/**
+ * Exposes the claim-bearing operations used by delivery workers.
+ * @internal
+ */
 export const inboxStorageAccess: InboxStorageAccess = Object.freeze({
   maxReadLimit,
   readLimit(value: unknown = defaultReadLimit) {
@@ -1037,12 +1054,22 @@ export const inboxStorageAccess: InboxStorageAccess = Object.freeze({
   },
 });
 
-/** Inbox storage construction options. */
+/**
+ * Inbox storage construction options.
+ */
 export interface InboxStorageOptions {
-  /** Storage context owning this inbox set. */
+  // prettier-ignore
+
+  /**
+   * Storage context owning this inbox set.
+   */
   readonly context: StorageContext;
-  /** Storage factory used for durable records. */
+
+  /**
+   * Storage factory used for durable records.
+   */
   readonly storageFactory: StorageFactory;
+
   /**
    * Returns the optional clock used for deduplication retention decisions.
    *
@@ -1051,7 +1078,9 @@ export interface InboxStorageOptions {
   readonly now?: () => Date;
 }
 
-/** Builds storage filters for one optional set of delivery statuses. */
+/**
+ * Builds storage filters for one optional set of delivery statuses.
+ */
 const InboxReadValues = Object.freeze({
   statusFilters(statuses: readonly DeliveryStatus[] | undefined) {
     return statuses === undefined || statuses.length === 0

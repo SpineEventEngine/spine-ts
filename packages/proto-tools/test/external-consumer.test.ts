@@ -17,6 +17,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+const spineVersion = (
+  JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")) as { version: string }
+).version;
 const processTimeoutMs = 30_000;
 
 interface PackedPackage {
@@ -48,6 +51,7 @@ function run(command: string, args: readonly string[], cwd: string): void {
 }
 
 function packSpinePackages(destination: string): readonly PackedPackage[] {
+  run("pnpm", ["--dir", "packages/proto-tools", "exec", "tsc", "-b"], repositoryRoot);
   const sources = [
     "packages/proto-tools",
     "packages/server",
@@ -104,12 +108,38 @@ function extractTarball(tarball: string, modules: string): void {
 function installTarballs(directory: string, packages: readonly PackedPackage[]): void {
   const modules = join(directory, "node_modules");
   mkdirSync(modules, { recursive: true });
-  for (const packed of packages) extractTarball(packed.tarball, modules);
-  linkRuntimeDependencies(directory);
+  const packed = new Map(packages.map((entry) => [entry.name, entry]));
+  const packageJson: unknown = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+  const dependencies =
+    packageJson !== null && typeof packageJson === "object"
+      ? (packageJson as Record<string, unknown>).dependencies
+      : undefined;
+  const pending = Object.keys(
+    dependencies !== null && typeof dependencies === "object" ? dependencies : {},
+  );
+  const installed = new Set<string>();
+  while (pending.length > 0) {
+    const name = pending.pop();
+    if (name === undefined || installed.has(name)) continue;
+    installed.add(name);
+    const artifact = packed.get(name);
+    if (artifact === undefined) continue;
+    extractTarball(artifact.tarball, modules);
+    const manifest = JSON.parse(
+      readFileSync(join(modules, ...name.split("/"), "package.json"), "utf8"),
+    ) as { dependencies?: Record<string, string> };
+    pending.push(...Object.keys(manifest.dependencies ?? {}));
+  }
+  linkRuntimeDependencies(directory, installed);
 }
 
-function linkRuntimeDependencies(directory: string): void {
+function linkRuntimeDependencies(directory: string, declared: ReadonlySet<string>): void {
   const modules = join(directory, "node_modules");
+  const required = new Set(declared);
+  if (required.has("@bufbuild/protoplugin")) {
+    required.add("@typescript/vfs");
+    required.add("typescript");
+  }
   const dependencies = [
     ["@bufbuild", join(repositoryRoot, "packages/proto-tools/node_modules/@bufbuild")],
     [
@@ -117,6 +147,13 @@ function linkRuntimeDependencies(directory: string): void {
       join(
         repositoryRoot,
         "node_modules/.pnpm/@bufbuild+protoplugin@2.12.1/node_modules/@bufbuild/protoplugin",
+      ),
+    ],
+    [
+      "@typescript/vfs",
+      join(
+        repositoryRoot,
+        "node_modules/.pnpm/@bufbuild+protoplugin@2.12.1/node_modules/@typescript/vfs",
       ),
     ],
     ["@connectrpc", join(repositoryRoot, "packages/server/node_modules/@connectrpc")],
@@ -128,6 +165,10 @@ function linkRuntimeDependencies(directory: string): void {
     ],
   ] as const;
   for (const [name, source] of dependencies) {
+    if (
+      ![...required].some((dependency) => dependency === name || dependency.startsWith(`${name}/`))
+    )
+      continue;
     const target = join(modules, ...name.split("/"));
     mkdirSync(dirname(target), { recursive: true });
     run("cp", ["-RL", realpathSync(source), target], directory);
@@ -267,15 +308,19 @@ describe("packed external model consumer", () => {
 
       const users = join(root, "users-model");
       mkdirSync(users);
-      installTarballs(users, spinePackages);
-      assertIsolatedInstalledTree(users);
       writeJson(
         users,
         "package.json",
         modelPackage("@external/users-model", {
           "@bufbuild/protobuf": "2.12.1",
-          "@spine-event-engine/proto": "0.0.0",
+          "@spine-event-engine/proto": spineVersion,
+          "@spine-event-engine/proto-tools": spineVersion,
         }),
+      );
+      installTarballs(users, spinePackages);
+      assertIsolatedInstalledTree(users);
+      expect(existsSync(join(users, "node_modules/@spine-event-engine/delivery-client"))).toBe(
+        false,
       );
       writeJson(
         users,
@@ -295,17 +340,19 @@ describe("packed external model consumer", () => {
 
       const chat = join(root, "chat-model");
       mkdirSync(chat);
-      installTarballs(chat, [...spinePackages, usersPacked]);
-      assertIsolatedInstalledTree(chat);
       writeJson(
         chat,
         "package.json",
         modelPackage("@external/chat-model", {
           "@bufbuild/protobuf": "2.12.1",
-          "@spine-event-engine/proto": "0.0.0",
+          "@spine-event-engine/core": spineVersion,
+          "@spine-event-engine/proto": spineVersion,
+          "@spine-event-engine/proto-tools": spineVersion,
           "@external/users-model": "1.0.0",
         }),
       );
+      installTarballs(chat, [...spinePackages, usersPacked]);
+      assertIsolatedInstalledTree(chat);
       writeJson(
         chat,
         "spine-proto.json",
@@ -327,23 +374,49 @@ describe("packed external model consumer", () => {
           "",
         ].join("\n"),
       );
+      writeFileSync(
+        join(chat, "proto/external/chat/v1/task_rejections.proto"),
+        [
+          'syntax = "proto3";',
+          "package external.chat.v1;",
+          "// Explains why the requested chat task cannot continue.",
+          "message TaskRejected { message NestedDetail {} }",
+          "// Explains why a chat task remains blocked.",
+          "message TaskBlocked {}",
+          "",
+        ].join("\n"),
+      );
       const chatTarballs = join(root, "chat-tarballs");
       mkdirSync(chatTarballs);
       const chatPacked = generateBuildAndPack(chat, chatTarballs);
       assertPortableModel(chat);
+      const rejectionCompanion = join(chat, "generated/external/chat/v1/task_rejections.ts");
+      expect(readFileSync(rejectionCompanion, "utf8")).toContain(
+        "Explains why the requested chat task cannot continue.",
+      );
+      expect(readFileSync(rejectionCompanion, "utf8")).toContain("TaskRejected");
+      const companionSource = readFileSync(rejectionCompanion, "utf8");
+      expect(companionSource).toContain("TaskBlocked");
+      expect(companionSource).not.toContain("NestedDetail");
+      expect(companionSource.match(/export const TaskRejected/g)).toHaveLength(1);
+      expect(companionSource.match(/export const TaskBlocked/g)).toHaveLength(1);
       expect(existsSync(join(chat, "generated/external/users/v1/users_pb.ts"))).toBe(false);
       expect(existsSync(join(chat, "dist/generated/external/users/v1/users_pb.js"))).toBe(false);
 
       const app = join(root, "chat-app");
       mkdirSync(app);
-      installTarballs(app, [...spinePackages, usersPacked, chatPacked]);
-      assertIsolatedInstalledTree(app);
       writeJson(app, "package.json", {
         name: "@external/chat-app",
         version: "1.0.0",
         type: "module",
-        dependencies: { "@external/chat-model": "1.0.0", "@external/users-model": "1.0.0" },
+        dependencies: {
+          "@external/chat-model": "1.0.0",
+          "@external/users-model": "1.0.0",
+          "@spine-event-engine/proto-tools": spineVersion,
+        },
       });
+      installTarballs(app, [...spinePackages, usersPacked, chatPacked]);
+      assertIsolatedInstalledTree(app);
       writeJson(app, "spine-proto.json", {
         formatVersion: 1,
         mode: "application",
@@ -378,11 +451,13 @@ describe("packed external model consumer", () => {
           'import { CommandIdSchema } from "@spine-event-engine/proto";',
           'import { UserIdSchema } from "@external/users-model/generated/external/users/v1/users_pb.js";',
           'import { ChatSchema } from "@external/chat-model/generated/external/chat/v1/chat_pb.js";',
+          'import { TaskRejected } from "@external/chat-model/generated/external/chat/v1/task_rejections.js";',
           'import { typeRegistry } from "./model-registry.js";',
           "",
           'const user = create(UserIdSchema, { value: "author-1" });',
           'const chat = create(ChatSchema, { author: user, text: "Hello" });',
           'const commandId = create(CommandIdSchema, { uuid: "spine-1" });',
+          "TaskRejected.create({});",
           "const values = [[UserIdSchema, user], [ChatSchema, chat], " +
             "[CommandIdSchema, commandId]] as const;",
           "for (const [schema, value] of values) {",

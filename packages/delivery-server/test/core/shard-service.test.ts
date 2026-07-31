@@ -1,13 +1,21 @@
 import { create } from "@bufbuild/protobuf";
-import { Code } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { describe, expect, it } from "vitest";
 
 import {
   PickUpShardSchema,
   ReleaseExpiredSessionsSchema,
   ReleaseShardSchema,
+  RemoveMessageSchema,
+  WriteMessageSchema,
 } from "@spine-event-engine/proto/delivery-server";
-import { ShardIndexSchema, WorkerIdSchema } from "@spine-event-engine/proto/delivery";
+import { CommandSchema } from "@spine-event-engine/proto";
+import {
+  InboxMessageSchema,
+  InboxMessageStatus,
+  ShardIndexSchema,
+  WorkerIdSchema,
+} from "@spine-event-engine/proto/delivery";
 
 import { InMemoryDelivery } from "../../src/index.js";
 
@@ -16,6 +24,135 @@ const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
 
 describe("in-memory Shards", () => {
+  it("counts only TO_DELIVER messages across replacement and deletion", async () => {
+    const core = InMemoryDelivery.create();
+    const pending = {
+      signal: new AbortController().signal,
+      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "pending"]]),
+      responseHeader: new Headers(),
+    } as never;
+    const request = create(PickUpShardSchema, { shard, worker });
+    const message = pendingMessage("status");
+    await core.inbox.writeOne(create(WriteMessageSchema, { message }), context);
+    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
+      value: { case: "pickedUp" },
+    });
+    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    const delivered = create(InboxMessageSchema, {
+      ...message,
+      status: InboxMessageStatus.DELIVERED,
+    });
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: delivered }), context);
+    await expect(core.shards.pickShard(request, pending)).rejects.toMatchObject({
+      code: Code.FailedPrecondition,
+    });
+    await core.inbox.writeOne(create(WriteMessageSchema, { message }), context);
+    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
+      value: { case: "pickedUp" },
+    });
+    await core.inbox.removeOne(create(RemoveMessageSchema, { message }), context);
+    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker }), context);
+    await expect(core.shards.pickShard(request, pending)).rejects.toMatchObject({
+      code: Code.FailedPrecondition,
+    });
+  });
+  it("conditionally refuses an empty shard without creating a session", async () => {
+    const core = InMemoryDelivery.create();
+    const pending = {
+      signal: new AbortController().signal,
+      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "pending"]]),
+      responseHeader: new Headers(),
+    } as never;
+    const request = create(PickUpShardSchema, { shard, worker });
+
+    let outcome: unknown;
+    try {
+      await core.shards.pickShard(request, pending);
+    } catch (error) {
+      outcome = error;
+    }
+    expect(outcome).toMatchObject({ code: Code.FailedPrecondition });
+    expect((outcome as ConnectError).metadata.get("x-spine-delivery-outcome")).toBe(
+      "no-pending-work",
+    );
+    await expect(core.shards.pickShard(request, context)).resolves.toMatchObject({
+      value: { case: "pickedUp" },
+    });
+  });
+
+  it("conditionally picks up a shard with retained pending work and rejects malformed pickup modes", async () => {
+    const core = InMemoryDelivery.create();
+    await core.inbox.writeOne(
+      create(WriteMessageSchema, { message: pendingMessage("pending") }),
+      context,
+    );
+    const request = create(PickUpShardSchema, { shard, worker });
+    const pending = {
+      signal: new AbortController().signal,
+      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "pending"]]),
+      responseHeader: new Headers(),
+    } as never;
+    const malformed = {
+      signal: new AbortController().signal,
+      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "anything-else"]]),
+      responseHeader: new Headers(),
+    } as never;
+
+    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
+      value: { case: "pickedUp" },
+    });
+    expect(
+      (pending as { responseHeader: Headers }).responseHeader.get("x-spine-delivery-outcome"),
+    ).toBe("pending-acknowledged");
+    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
+      value: { case: "alreadyPickedUp" },
+    });
+    expect(
+      (pending as { responseHeader: Headers }).responseHeader.get("x-spine-delivery-outcome"),
+    ).toBe("pending-acknowledged");
+    await expect(core.shards.pickShard(request, malformed)).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    });
+  });
+
+  it("rejects a delayed conditional loser after removal and observes arrivals on either side", async () => {
+    const core = InMemoryDelivery.create();
+    const request = create(PickUpShardSchema, { shard, worker });
+    const release = create(ReleaseShardSchema, { shard, worker });
+    const pending = {
+      signal: new AbortController().signal,
+      requestHeader: new Headers([["x-spine-delivery-pickup-mode", "pending"]]),
+      responseHeader: new Headers(),
+    } as never;
+    const winnerMessage = pendingMessage("winner");
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: winnerMessage }), context);
+    await core.shards.pickShard(request, context);
+    await core.inbox.removeOne(create(RemoveMessageSchema, { message: winnerMessage }), context);
+    await core.shards.releaseSession(release, context);
+
+    await expect(core.shards.pickShard(request, pending)).rejects.toMatchObject({
+      code: Code.FailedPrecondition,
+    });
+    const before = pendingMessage("before");
+    await core.inbox.writeOne(create(WriteMessageSchema, { message: before }), context);
+    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
+      value: { case: "pickedUp" },
+    });
+    await core.inbox.removeOne(create(RemoveMessageSchema, { message: before }), context);
+    await core.shards.releaseSession(release, context);
+    await expect(core.shards.pickShard(request, pending)).rejects.toMatchObject({
+      code: Code.FailedPrecondition,
+    });
+
+    await core.inbox.writeOne(
+      create(WriteMessageSchema, { message: pendingMessage("after") }),
+      context,
+    );
+    await expect(core.shards.pickShard(request, pending)).resolves.toMatchObject({
+      value: { case: "pickedUp" },
+    });
+  });
+
   it("allows exactly one active pickup and allows reacquisition after worker-agnostic release", async () => {
     const core = InMemoryDelivery.create();
     const request = create(PickUpShardSchema, { shard, worker });
@@ -231,3 +368,19 @@ describe("in-memory Shards", () => {
     ).resolves.toMatchObject({ value: { case: "pickedUp" } });
   });
 });
+
+function pendingMessage(uuid: string) {
+  return create(InboxMessageSchema, {
+    id: { uuid, index: shard },
+    signalId: { value: "signal" },
+    inboxId: { entityId: { id: { typeUrl: "example.Entity" } }, typeUrl: "example.State" },
+    payload: {
+      case: "command",
+      value: create(CommandSchema, { message: { typeUrl: "example.Command" } }),
+    },
+    label: 1,
+    status: 1,
+    whenReceived: { seconds: 1n, nanos: 0 },
+    version: 1,
+  });
+}

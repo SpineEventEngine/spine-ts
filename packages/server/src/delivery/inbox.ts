@@ -7,17 +7,26 @@ import { inboxStorageAccess } from "./inbox-storage.js";
 import type { DeliveryInboxWork, DeliveryWorkSession } from "./delivery-ports.js";
 import type { ShardIndex } from "./shard-index.js";
 
-/** Small JVM-style inbox facade over durable storage. */
+/**
+ * Small JVM-style inbox facade over durable storage.
+ */
 export class Inbox {
-  /** Local inbox work is admitted only under a renewable leased session. */
+  // prettier-ignore
+
+  /**
+   * Local inbox work is admitted only under a renewable leased session.
+   */
   readonly sessionKind = "LEASED" as const;
-  /** Intentional low-level escape hatch for storage-focused tests and integrations. */
+
+  /**
+   * Intentional low-level escape hatch for storage-focused tests and integrations.
+   */
   readonly storage: InboxStorage;
 
   /**
    * Opens an inbox over durable inbox storage.
    *
-   * @param storage - Stores the inbox rows and deduplication guards.
+   * @param storage Stores the inbox rows and deduplication guards.
    */
   constructor(storage: InboxStorage) {
     this.storage = storage;
@@ -27,7 +36,7 @@ export class Inbox {
   /**
    * Stores one message in durable inbox storage.
    *
-   * @param input - Describes the message to make durable.
+   * @param input Describes the message to make durable.
    * @returns The write or deduplication outcome.
    */
   async receive(input: InboxMessageInput): Promise<InboxWriteResult> {
@@ -57,8 +66,8 @@ export class Inbox {
   /**
    * Reads ordered messages for one shard.
    *
-   * @param shard - Selects the shard to inspect.
-   * @param options - Filters and bounds the ordered page.
+   * @param shard Selects the shard to inspect.
+   * @param options Filters and bounds the ordered page.
    * @returns The matching durable messages.
    */
   read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
@@ -68,7 +77,7 @@ export class Inbox {
   /**
    * Reads one exact durable inbox message by ID.
    *
-   * @param id - Identifies the durable message.
+   * @param id Identifies the durable message.
    * @returns The message when it remains durable.
    */
   readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
@@ -78,7 +87,7 @@ export class Inbox {
   /**
    * Updates one pending message to delivered when its snapshot still matches.
    *
-   * @param message - Supplies the pending message snapshot.
+   * @param message Supplies the pending message snapshot.
    * @returns The delivered message, or `undefined` when the durable row is missing,
    * not pending, or no longer matches the snapshot. Matching delivered rows return
    * idempotently so concurrent workers converge without re-dispatching.
@@ -90,8 +99,8 @@ export class Inbox {
   /**
    * Returns exact-row work behind local claim fencing.
    *
-   * @param message - Identifies the pending message.
-   * @param session - Supplies the leased shard fence.
+   * @param message Identifies the pending message.
+   * @param session Supplies the leased shard fence.
    * @returns The admitted work, when the claim succeeds.
    */
   async begin(
@@ -177,19 +186,37 @@ class LocalInboxWork implements DeliveryInboxWork {
   }
 }
 
-/** Durable target inbox identity. */
+/**
+ * Durable target inbox identity.
+ */
 export interface InboxId {
-  /** Target entity ID routed to one inbox. */
+  // prettier-ignore
+
+  /**
+   * Target entity ID routed to one inbox.
+   */
   readonly targetId: string;
-  /** Target entity state type URL. */
+
+  /**
+   * Target entity state type URL.
+   */
   readonly targetTypeUrl: string;
 }
 
-/** Durable inbox message identity. */
+/**
+ * Durable inbox message identity.
+ */
 export interface InboxMessageId {
-  /** Message UUID within one shard. */
+  // prettier-ignore
+
+  /**
+   * Message UUID within one shard.
+   */
   readonly value: string;
-  /** Shard that owns the message; must match `InboxMessage.shard`. */
+
+  /**
+   * Shard that owns the message; must match `InboxMessage.shard`.
+   */
   readonly shard: ShardIndex;
 }
 
@@ -199,11 +226,13 @@ export interface InboxMessageId {
  * `DeliveryStorageCorruptionError`.
  */
 export class InboxMessageError extends Error {
+  // prettier-ignore
+
   /**
    * Creates an error for invalid public inbox input.
    *
-   * @param message - Describes the invalid input.
-   * @param options - Optionally preserves the originating failure.
+   * @param message Describes the invalid input.
+   * @param options Optionally preserves the originating failure.
    */
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -211,85 +240,188 @@ export class InboxMessageError extends Error {
   }
 }
 
-/** Delivery destination label. */
+/**
+ * Delivery destination label.
+ */
 export type DeliveryLabel =
   "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT" | "CATCH_UP";
 
-/** Durable delivery state. */
+/**
+ * Durable delivery state.
+ */
 export type DeliveryStatus = "TO_DELIVER" | "SCHEDULED" | "DELIVERED" | "TO_CATCH_UP";
 
-/** One durable inbox message. */
+/**
+ * One durable inbox message.
+ */
 export interface InboxMessage {
-  /** Durable record identity. */
+  // prettier-ignore
+
+  /**
+   * Durable record identity.
+   */
   readonly id: InboxMessageId;
-  /** Target inbox identity. */
+
+  /**
+   * Target inbox identity.
+   */
   readonly inboxId: InboxId;
-  /** Original signal identity used for delivery deduplication. */
+
+  /**
+   * Original signal identity used for delivery deduplication.
+   */
   readonly signalId: string;
-  /** Optional packed signal payload. */
+
+  /**
+   * Optional packed signal payload.
+   */
   readonly signal?: Any;
-  /** Delivery destination label. */
+
+  /**
+   * Delivery destination label.
+   */
   readonly label: DeliveryLabel;
-  /** Current delivery status. */
+
+  /**
+   * Current delivery status.
+   */
   readonly status: DeliveryStatus;
-  /** Shard responsible for delivery; must match `id.shard`. */
+
+  /**
+   * Shard responsible for delivery; must match `id.shard`.
+   */
   readonly shard: ShardIndex;
-  /** Durable receive time. */
+
+  /**
+   * Durable receive time.
+   */
   readonly whenReceived: Date;
-  /** Ordering tie-breaker for equal receive times. */
+
+  /**
+   * Ordering tie-breaker for equal receive times.
+   */
   readonly version: bigint;
-  /** Optional deduplication retention deadline. */
+
+  /**
+   * Optional deduplication retention deadline.
+   */
   readonly keepUntil?: Date;
 }
 
-/** Write request for one new inbox message. */
+/**
+ * Write request for one new inbox message.
+ */
 export interface InboxMessageInput {
-  /** Target inbox identity. */
+  // prettier-ignore
+
+  /**
+   * Target inbox identity.
+   */
   readonly inboxId: InboxId;
-  /** Original signal identity used for delivery deduplication. */
+
+  /**
+   * Original signal identity used for delivery deduplication.
+   */
   readonly signalId: string;
-  /** Optional packed signal payload. */
+
+  /**
+   * Optional packed signal payload.
+   */
   readonly signal?: Any;
-  /** Delivery destination label. */
+
+  /**
+   * Delivery destination label.
+   */
   readonly label: DeliveryLabel;
-  /** Current delivery status. */
+
+  /**
+   * Current delivery status.
+   */
   readonly status: DeliveryStatus;
-  /** Shard responsible for delivery. */
+
+  /**
+   * Shard responsible for delivery.
+   */
   readonly shard: ShardIndex;
-  /** Durable receive time. */
+
+  /**
+   * Durable receive time.
+   */
   readonly whenReceived: Date;
-  /** Ordering tie-breaker for equal receive times. */
+
+  /**
+   * Ordering tie-breaker for equal receive times.
+   */
   readonly version: bigint;
-  /** Optional deduplication retention deadline. */
+
+  /**
+   * Optional deduplication retention deadline.
+   */
   readonly keepUntil?: Date;
 }
 
-/** Read filter for one shard page. */
+/**
+ * Read filter for one shard page.
+ */
 export interface InboxReadOptions {
-  /** Optional delivery statuses to keep. */
+  // prettier-ignore
+
+  /**
+   * Optional delivery statuses to keep.
+   */
   readonly statuses?: readonly DeliveryStatus[];
-  /** Optional page limit for one ordered page; must be positive and at most 1000. */
+
+  /**
+   * Optional page limit for one ordered page; must be positive and at most 1000.
+   */
   readonly limit?: number;
-  /** Optional stable inbox row key after which the ordered read should continue. */
+
+  /**
+   * Optional stable inbox row key after which the ordered read should continue.
+   */
   readonly after?: InboxReadContinuation;
-  /** Optional non-negative page offset in inbox order; defaults to the first row. */
+
+  /**
+   * Optional non-negative page offset in inbox order; defaults to the first row.
+   */
   readonly offset?: number;
 }
 
-/** Stable ordered inbox row key used to continue an ordered read. */
+/**
+ * Stable ordered inbox row key used to continue an ordered read.
+ */
 export interface InboxReadContinuation {
-  /** Inbox message UUID from the last row of the previous page. */
+  // prettier-ignore
+
+  /**
+   * Inbox message UUID from the last row of the previous page.
+   */
   readonly messageId: string;
-  /** Receive time from the last row of the previous page. */
+
+  /**
+   * Receive time from the last row of the previous page.
+   */
   readonly whenReceived: Date;
-  /** Version from the last row of the previous page. */
+
+  /**
+   * Version from the last row of the previous page.
+   */
   readonly version: bigint;
 }
 
-/** Durable inbox write outcome. */
+/**
+ * Durable inbox write outcome.
+ */
 export interface InboxWriteResult {
-  /** Whether the message was written or matched an existing dedup key. */
+  // prettier-ignore
+
+  /**
+   * Whether the message was written or matched an existing dedup key.
+   */
   readonly outcome: "WRITTEN" | "DUPLICATE";
-  /** Stored message selected for the outcome. */
+
+  /**
+   * Stored message selected for the outcome.
+   */
   readonly message: InboxMessage;
 }

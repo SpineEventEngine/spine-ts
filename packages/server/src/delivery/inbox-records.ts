@@ -13,19 +13,27 @@ import {
 import type { InboxClaim, InboxRecordMessage } from "./inbox-claim.js";
 import { ShardIndex } from "./shard-index.js";
 
-/** Encodes and decodes durable inbox message records. */
+/**
+ * Encodes and decodes durable inbox message records.
+ */
 export const InboxRecords: Readonly<{
   read(record: Any, expectedKey?: string): InboxRecordMessage;
   write(message: InboxRecordMessage): Any;
 }> = Object.freeze({
-  /** Reads a durable inbox message record. */
+  // prettier-ignore
+
+  /**
+   * Reads a durable inbox message record.
+   */
   read(record: Any, expectedKey?: string): InboxRecordMessage {
     return InboxRecordValues.inboxMessageFromStored(
       InboxRecordValues.readStoredInboxMessage(record, expectedKey),
     );
   },
 
-  /** Writes a durable inbox message record. */
+  /**
+   * Writes a durable inbox message record.
+   */
   write(message: InboxRecordMessage): Any {
     return InboxRecordValues.packRecord(
       inboxRecordTypeUrl,
@@ -35,11 +43,17 @@ export const InboxRecords: Readonly<{
   },
 });
 
-/** Encodes and decodes internal durable inbox claims. */
+/**
+ * Encodes and decodes internal durable inbox claims.
+ */
 export const InboxClaimRecords: Readonly<{
   snapshot(claim: InboxClaim): InboxClaim;
 }> = Object.freeze({
-  /** Validates and copies one caller-provided claim snapshot. */
+  // prettier-ignore
+
+  /**
+   * Validates and copies one caller-provided claim snapshot.
+   */
   snapshot(claim: InboxClaim): InboxClaim {
     return InboxRecordValues.snapshotClaim(claim);
   },
@@ -97,13 +111,25 @@ interface StoredFinalDedupRecord {
 
 type StoredDedupRecord = StoredPendingDedupRecord | StoredFinalDedupRecord;
 
-/** Describes the durable deduplication guard for one delivered signal. */
+/**
+ * Describes the durable deduplication guard for one delivered signal.
+ */
 export interface DedupGuardState {
-  /** Identifies the inbox message protected by this guard. */
+  // prettier-ignore
+
+  /**
+   * Identifies the inbox message protected by this guard.
+   */
   readonly messageId: InboxMessageId;
-  /** Records the message status represented by the guard. */
+
+  /**
+   * Records the message status represented by the guard.
+   */
   readonly status: DeliveryStatus;
-  /** Limits how long a delivered guard suppresses duplicates. */
+
+  /**
+   * Limits how long a delivered guard suppresses duplicates.
+   */
   readonly keepUntil?: Date;
 }
 
@@ -131,7 +157,9 @@ type StoredDeliveryLabel = DeliveryLabel | "IMPORT_EVENT";
 const maxSignalPayloadBytes: number = 256 * 1024;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
-/** Defines the durable record shape for inbox messages. */
+/**
+ * Defines the durable record shape for inbox messages.
+ */
 export const inboxRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
   storageKey: "spine.delivery.Inbox:current",
@@ -184,7 +212,9 @@ export const inboxRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, A
   ],
 });
 
-/** Defines the durable record shape for inbox deduplication guards. */
+/**
+ * Defines the durable record shape for inbox deduplication guards.
+ */
 export const dedupRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
   storageKey: "spine.delivery.Deduplication:current",
@@ -192,7 +222,9 @@ export const dedupRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, A
   extractId: (record) => InboxRecordValues.readStoredDedupRecord(record).key,
 });
 
-/** Encodes, decodes, and keys durable dedup guard records. */
+/**
+ * Encodes, decodes, and keys durable dedup guard records.
+ */
 export const DedupRecords: Readonly<{
   guardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string;
   isPending(record: Any): boolean;
@@ -201,19 +233,27 @@ export const DedupRecords: Readonly<{
   readGuard(record: Any, expectedKey?: string): DedupGuardState;
   readPendingMessage(record: Any): InboxRecordMessage | undefined;
 }> = Object.freeze({
-  /** Builds the durable dedup guard key for one inbox signal target. */
+  // prettier-ignore
+
+  /**
+   * Builds the durable dedup guard key for one inbox signal target.
+   */
   guardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
     const inbox = InboxRecordValues.inboxKey(message.inboxId);
     const signal = InboxRecordValues.requireInputText(message.signalId, "Inbox signal ID");
     return InboxRecordValues.requireCompositeInputText(`${inbox}:${signal}`, "Inbox dedup key");
   },
 
-  /** Whether the durable guard is a pending claim. */
+  /**
+   * Whether the durable guard is a pending claim.
+   */
   isPending(record: Any): boolean {
     return InboxRecordValues.readStoredDedupRecord(record).state === "PENDING";
   },
 
-  /** Writes a pending durable dedup claim. */
+  /**
+   * Writes a pending durable dedup claim.
+   */
   writeClaim(message: InboxRecordMessage): Any {
     const storedMessage = InboxRecordValues.storedInboxMessage(message);
     const stored: StoredPendingDedupRecord = {
@@ -229,7 +269,9 @@ export const DedupRecords: Readonly<{
     return InboxRecordValues.packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
   },
 
-  /** Writes a final durable dedup guard. */
+  /**
+   * Writes a final durable dedup guard.
+   */
   writeFinal(message: InboxRecordMessage): Any {
     const storedMessage = InboxRecordValues.storedInboxMessage(message);
 
@@ -253,7 +295,9 @@ export const DedupRecords: Readonly<{
     return InboxRecordValues.packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
   },
 
-  /** Reads a durable dedup guard state. */
+  /**
+   * Reads a durable dedup guard state.
+   */
   readGuard(record: Any, expectedKey?: string): DedupGuardState {
     const dedup = InboxRecordValues.readStoredDedupRecord(record);
     if (expectedKey !== undefined && dedup.key !== expectedKey) {
@@ -279,7 +323,9 @@ export const DedupRecords: Readonly<{
         );
   },
 
-  /** Reads the pending message embedded in a durable dedup guard. */
+  /**
+   * Reads the pending message embedded in a durable dedup guard.
+   */
   readPendingMessage(record: Any): InboxRecordMessage | undefined {
     const dedup = InboxRecordValues.readStoredDedupRecord(record);
     return dedup.state === "PENDING"

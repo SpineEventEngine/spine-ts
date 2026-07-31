@@ -1,7 +1,7 @@
 # Proto Intake
 
-This directory contains verbatim Spine `.proto` intake sets and the frozen
-Wave 1 client/delivery closure.
+This directory contains the verbatim Spine `.proto` intake sets used by the
+framework's client and delivery contracts.
 
 ## Frozen Source Closure
 
@@ -34,11 +34,8 @@ The original curated package-root subset includes:
 
 `proto/spine-sources.json` records the upstream repository, full commit, source
 URL, raw URL, upstream path, local path, and SHA-256 checksum for each copied
-file. The files are copied from the exact commits recorded in
-`build-protocol/DECISION_LOG.md#d-0025-t-0004-proto-intake-uses-exact-researched-spine-source-commits`
-and the later task-specific decisions that extend the manifest. Buf resolves
-standard imported descriptors while compiling these 39 sources, producing the
-48-file frozen descriptor set checked by this task.
+file. Buf resolves standard imported descriptors while compiling these 39
+sources, producing the 48-file frozen descriptor set checked by the workflow.
 
 ## Verification And Generation
 

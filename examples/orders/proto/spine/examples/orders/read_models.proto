@@ -1,0 +1,149 @@
+syntax = "proto3";
+
+package spine.examples.orders;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.orders";
+
+// A compact record of an order and its SKU.
+message OrderSummary {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the order in this summary.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The ordered SKU identifier.
+  string value = 2;
+}
+
+// A sales record for an order and its SKU.
+message SalesSummary {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the order in this sales summary.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The ordered SKU identifier.
+  string value = 2;
+}
+
+// An order listed with its SKU.
+message OrderSkuView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the order in this SKU listing.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The ordered SKU identifier.
+  string value = 2;
+}
+
+// An audit record for an order.
+message OrderAuditView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the order in this audit record.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The ordered SKU identifier.
+  string value = 2;
+}
+
+// An order listed in the sales feed.
+message SalesFeed {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the order in this sales feed.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The ordered SKU identifier.
+  string value = 2;
+}
+
+// A catalog entry for a SKU.
+message SkuCatalog {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the SKU in this catalog.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // A name shown for the SKU.
+  string value = 2;
+}
+
+// A SKU listed for sales.
+message SkuSalesView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the SKU in this sales listing.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // A name shown for the SKU.
+  string value = 2;
+}
+
+// An audit record for a SKU.
+message SkuAuditView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the SKU in this audit record.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // A name shown for the SKU.
+  string value = 2;
+}
+
+// A SKU shown as inventory.
+message InventoryView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the SKU in this inventory listing.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // A name shown for the SKU.
+  string value = 2;
+}
+
+// A SKU entry in the sales index.
+message SalesSkuIndex {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the SKU in this sales index.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // A name shown for the SKU.
+  string value = 2;
+}
+
+// A sales counter for orders.
+message OrderSalesManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies the order sales counter.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The number of recorded orders.
+  int32 updates = 2;
+}
+
+// A sales counter for SKUs.
+message SkuSalesManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies the SKU sales counter.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The number of recorded SKUs.
+  int32 updates = 2;
+}

@@ -453,6 +453,62 @@ describe("SubscriptionGateway", () => {
     });
   });
 
+  it("rejects a session timestamp whose milliseconds exceed the safe integer range", async () => {
+    const fixture = setup();
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 9_007_199_254_741n }),
+      });
+
+    await expect(gateway(fixture).handle(request("Subscribe", topic))).resolves.toEqual({
+      kind: "rejected",
+      reason: "denied",
+    });
+    expect(fixture.calls).toEqual([]);
+  });
+
+  it("normalizes identifier failures and distinguishes absent from expired cancellation", async () => {
+    const unavailableId = new InMemorySubscriptionBindings({
+      nextId: () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercises raw identifier normalization.
+        throw "identifier source unavailable";
+      },
+      dispose: () => Promise.resolve(),
+    });
+    await expect(
+      unavailableId.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "owner",
+        tenant: undefined,
+        expiresAtMs: 100,
+      }),
+    ).rejects.toThrow("subscription binding creation failed");
+
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      dispose: () => Promise.resolve(),
+    });
+    const cancel = (id: string, nowMs: number) =>
+      bindings.cancel({
+        id,
+        principalFingerprint: "owner",
+        tenant: undefined,
+        nowMs,
+        onBackend: () => Promise.resolve(),
+      });
+    await expect(cancel("missing", 0)).resolves.toEqual({ kind: "closed" });
+    await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "owner",
+      tenant: undefined,
+      expiresAtMs: 1,
+    });
+    await expect(cancel("one", 1)).resolves.toEqual({ kind: "denied" });
+    await tick();
+    expect(bindings.size).toBe(0);
+  });
+
   it("preserves present transport facts while accepting a tenant-less trusted context", async () => {
     const fixture = setup();
     const tenantlessTopic = toBinary(
@@ -797,6 +853,198 @@ describe("SubscriptionGateway", () => {
     expect(bindings.size).toBe(0);
   });
 
+  it("waits for an aborted activation before disposing its binding during close", async () => {
+    let releaseActivation: (() => void) | undefined;
+    let activationAborted = false;
+    let disposeCalls = 0;
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      dispose: () => {
+        disposeCalls++;
+        return Promise.resolve();
+      },
+    });
+    await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "owner",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    const activating = bindings.activate({
+      id: "one",
+      principalFingerprint: "owner",
+      tenant: undefined,
+      nowMs: 0,
+      signal: new AbortController().signal,
+      onBackend: async (_envelope, signal) => {
+        await new Promise<void>((resolve) => {
+          releaseActivation = resolve;
+          signal.addEventListener(
+            "abort",
+            () => {
+              activationAborted = true;
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    await tick();
+    const activationOutcome = activating.catch((error: unknown) => error);
+    const closing = bindings.close();
+    await tick();
+    expect(activationAborted).toBe(true);
+    expect(disposeCalls).toBe(0);
+    defined(releaseActivation, "expected held activation")();
+    await expect(activationOutcome).resolves.toBeInstanceOf(Error);
+    await closing;
+    expect(disposeCalls).toBe(1);
+    expect(bindings.size).toBe(0);
+  });
+
+  it("waits for an abort-ignoring activation before disposing an expired binding", async () => {
+    let releaseActivation: (() => void) | undefined;
+    let disposeCalls = 0;
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      dispose: () => {
+        disposeCalls++;
+        return Promise.resolve();
+      },
+    });
+    await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "owner",
+      tenant: undefined,
+      expiresAtMs: 1,
+    });
+    const activating = bindings.activate({
+      id: "one",
+      principalFingerprint: "owner",
+      tenant: undefined,
+      nowMs: 0,
+      signal: new AbortController().signal,
+      onBackend: async () =>
+        new Promise<void>((resolve) => {
+          releaseActivation = resolve;
+        }),
+    });
+    await tick();
+    const activationOutcome = activating.catch((error: unknown) => error);
+    await bindings.purgeExpired(1);
+    await tick();
+    expect(disposeCalls).toBe(0);
+    defined(releaseActivation, "expected held activation")();
+    await expect(activationOutcome).resolves.toBeInstanceOf(Error);
+    await tick();
+    expect(disposeCalls).toBe(1);
+    expect(bindings.size).toBe(0);
+  });
+
+  it("tracks a synchronous callback failure and releases its private envelope", async () => {
+    let envelope: Uint8Array | undefined;
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      dispose: () => Promise.resolve(),
+    });
+    await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "owner",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    await expect(
+      bindings.activate({
+        id: "one",
+        principalFingerprint: "owner",
+        tenant: undefined,
+        nowMs: 0,
+        signal: new AbortController().signal,
+        onBackend: (received) => {
+          envelope = received.bytes;
+          throw new Error("synchronous activation failure");
+        },
+      }),
+    ).rejects.toThrow("synchronous activation failure");
+    expect(envelope).toEqual(new Uint8Array([0]));
+    await expect(bindings.close()).resolves.toBeUndefined();
+    expect(bindings.size).toBe(0);
+  });
+
+  it("normalizes a synchronous non-Error callback throw without losing its cause", async () => {
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      dispose: () => Promise.resolve(),
+    });
+    await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "owner",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+
+    await expect(
+      bindings.activate({
+        id: "one",
+        principalFingerprint: "owner",
+        tenant: undefined,
+        nowMs: 0,
+        signal: new AbortController().signal,
+        onBackend: () => {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercises raw callback normalization.
+          throw "non-Error callback failure";
+        },
+      }),
+    ).rejects.toMatchObject({
+      message: "Subscription backend callback threw a non-Error value.",
+      cause: "non-Error callback failure",
+    });
+    await expect(bindings.close()).resolves.toBeUndefined();
+  });
+
+  it("bounds close while scheduling disposal after an abort-ignoring activation settles", async () => {
+    let releaseActivation: (() => void) | undefined;
+    let disposeCalls = 0;
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      limits: { shutdownTimeoutMs: 1 },
+      dispose: () => {
+        disposeCalls++;
+        return Promise.resolve();
+      },
+    });
+    await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "owner",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    const activating = bindings.activate({
+      id: "one",
+      principalFingerprint: "owner",
+      tenant: undefined,
+      nowMs: 0,
+      signal: new AbortController().signal,
+      onBackend: async () =>
+        new Promise<void>((resolve) => {
+          releaseActivation = resolve;
+        }),
+    });
+    await tick();
+    const activationOutcome = activating.catch((error: unknown) => error);
+    const closing = bindings.close();
+    try {
+      await expect(closing).rejects.toBeInstanceOf(AggregateError);
+      expect(disposeCalls).toBe(0);
+    } finally {
+      defined(releaseActivation, "expected held activation")();
+    }
+    await expect(activationOutcome).resolves.toBeInstanceOf(Error);
+    await tick();
+    expect(disposeCalls).toBe(1);
+    expect(bindings.size).toBe(0);
+  });
+
   it("rejects a fabricated actor context before the backend callback", async () => {
     const fixture = setup();
     const fabricated = toBinary(
@@ -1009,6 +1257,111 @@ describe("SubscriptionGateway", () => {
     defined(releaseSession, "expected session release")();
     await expect(pending).resolves.toMatchObject({ kind: "subscribed" });
     expect(seen).toEqual([{ actor: "owner-a", requestId: "original" }]);
+  });
+
+  it("rejects Subscribe when an awaited authorization gate outlives the session", async () => {
+    let now = 10n;
+    const fixture = setup();
+    fixture.options.clock = { now: () => create(TimestampSchema, { seconds: now }) };
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: 11n }),
+      });
+    fixture.options.authorize = () => {
+      now = 12n;
+      return Promise.resolve(true);
+    };
+
+    await expect(gateway(fixture).handle(request("Subscribe", topic))).resolves.toEqual({
+      kind: "rejected",
+      reason: "denied",
+    });
+    expect(fixture.calls).toEqual([]);
+    expect(fixture.bindings.size).toBe(0);
+  });
+
+  it("compensates an expired delayed Subscribe and releases its reserved capacity", async () => {
+    let now = 10n;
+    let expiresAt = 11n;
+    let releaseBackend:
+      | ((envelope: {
+          readonly kind: "backend-subscription-envelope";
+          readonly bytes: Uint8Array;
+        }) => void)
+      | undefined;
+    let disposeCalls = 0;
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      limits: { bindingLimit: 1 },
+      dispose: () => Promise.resolve(),
+    });
+    const fixture = setup();
+    fixture.options.bindings = bindings;
+    fixture.options.clock = { now: () => create(TimestampSchema, { seconds: now }) };
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: expiresAt }),
+      });
+    fixture.options.creator.subscribe = () =>
+      new Promise((resolve) => {
+        releaseBackend = resolve;
+      });
+    fixture.options.creator.dispose = () => {
+      disposeCalls++;
+      return Promise.resolve();
+    };
+    const subscriptionGateway = gateway(fixture);
+    const pending = subscriptionGateway.handle(request("Subscribe", topic));
+    await tick();
+    now = 12n;
+    defined(
+      releaseBackend,
+      "expected delayed backend Subscribe",
+    )({
+      kind: "backend-subscription-envelope",
+      bytes: new Uint8Array([1]),
+    });
+
+    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(disposeCalls).toBe(1);
+    expect(bindings.size).toBe(0);
+
+    expiresAt = 100n;
+    fixture.options.creator.subscribe = () =>
+      Promise.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([2]) });
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
+      kind: "subscribed",
+    });
+    expect(bindings.size).toBe(1);
+    await subscriptionGateway.close();
+  });
+
+  it("rejects Activate when an awaited authorization gate outlives the session", async () => {
+    let now = 10n;
+    let expiresAt = 100n;
+    const fixture = setup();
+    fixture.options.clock = { now: () => create(TimestampSchema, { seconds: now }) };
+    fixture.options.sessions.resolve = () =>
+      Promise.resolve({
+        principal: { id: "owner-a" },
+        expiresAt: create(TimestampSchema, { seconds: expiresAt }),
+      });
+    const subscriptionGateway = gateway(fixture);
+    const wire = await subscribe(subscriptionGateway);
+    expiresAt = 11n;
+    fixture.options.authorize = () => {
+      now = 12n;
+      return Promise.resolve(true);
+    };
+
+    await expect(subscriptionGateway.handle(request("Activate", wire))).resolves.toEqual({
+      kind: "rejected",
+      reason: "denied",
+    });
+    expect(fixture.calls).toEqual(["subscribe"]);
+    expect(fixture.bindings.size).toBe(1);
   });
 
   it("rejects stale Actor and Tenant Activate and Cancel at the gateway without backend callbacks", async () => {

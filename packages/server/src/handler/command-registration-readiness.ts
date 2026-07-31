@@ -12,34 +12,60 @@ import { ReadinessMetadata } from "./registration-readiness-metadata.js";
 const commandRegistrationReadinessToken = Symbol("commandRegistrationReadinessToken");
 const authenticCommandRegistrationReadiness = new WeakSet<object>();
 
-/** Command assignment entry exposed by command registration readiness lookups. */
+/**
+ * Command assignment entry exposed by command registration readiness lookups.
+ */
 export interface CommandRegistrationAssigneeMetadata {
-  /** Fully qualified command message type name assigned to one entity handler. */
+  // prettier-ignore
+
+  /**
+   * Fully qualified command message type name assigned to one entity handler.
+   */
   readonly commandFullTypeName: string;
-  /** Entity handler metadata object that declared the command assignment. */
+
+  /**
+   * Entity handler metadata object that declared the command assignment.
+   */
   readonly entityHandlers: EntityHandlersMetadata;
-  /** Entity class that owns the assigned command handler method. */
+
+  /**
+   * Entity class that owns the assigned command handler method.
+   */
   readonly entityType: EntityClass;
-  /** Descriptor-derived entity metadata for the assignee state type. */
+
+  /**
+   * Descriptor-derived entity metadata for the assignee state type.
+   */
   readonly entity: EntityMetadata;
-  /** Command assignment handler metadata declared by the entity. */
+
+  /**
+   * Command assignment handler metadata declared by the entity.
+   */
   readonly handler: CommandAssignmentHandlerMetadata;
-  /** Original registered handler entry from the handler metadata registry. */
+
+  /**
+   * Original registered handler entry from the handler metadata registry.
+   */
   readonly registeredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>;
 }
 
-/** Read-only command registration readiness lookup surface. */
+/**
+ * Read-only command registration readiness lookup surface.
+ */
 export interface CommandRegistrationReadinessLookup {
+  // prettier-ignore
+
   /**
    * Returns registered command message type names in deterministic order.
    *
    * @returns A fresh frozen list of command message type names.
    */
   commandTypeNames(): readonly string[];
+
   /**
    * Finds unique assignee metadata for a command message type.
    *
-   * @param commandTypeName - Fully qualified command message type name.
+   * @param commandTypeName Fully qualified command message type name.
    * @returns The assignee metadata, or `undefined` when no assignee is registered.
    */
   findCommandAssignee(commandTypeName: string): CommandRegistrationAssigneeMetadata | undefined;
@@ -77,7 +103,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
   /**
    * Builds readiness from a handler metadata registry lookup.
    *
-   * @param registry - Source of entity handler metadata.
+   * @param registry Source of entity handler metadata.
    * @returns Frozen command registration readiness.
    */
   static fromRegistry(registry: HandlerMetadataRegistryLookup): CommandRegistrationReadiness {
@@ -117,7 +143,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
    * Duplicate command assignment validation is intentionally delegated to
    * `HandlerMetadataRegistry`.
    *
-   * @param entityHandlers - Entity handler metadata to validate and index.
+   * @param entityHandlers Entity handler metadata to validate and index.
    * @returns Frozen command registration readiness.
    */
   static fromEntityHandlers(
@@ -138,7 +164,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
   /**
    * Finds unique assignee metadata for a command message type.
    *
-   * @param commandTypeName - Fully qualified command message type name.
+   * @param commandTypeName Fully qualified command message type name.
    * @returns The assignee metadata, or `undefined` when no assignee is registered.
    */
   findCommandAssignee(commandTypeName: string): CommandRegistrationAssigneeMetadata | undefined {
@@ -152,7 +178,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
   /**
    * Checks whether a value was created by this module's readiness factories.
    *
-   * @param value - Value to test for readiness authenticity.
+   * @param value Value to test for readiness authenticity.
    * @returns `true` when the value is an authentic command registration readiness instance.
    */
   static isAuthentic(value: unknown): value is CommandRegistrationReadiness {

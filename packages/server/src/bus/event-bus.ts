@@ -1,5 +1,5 @@
 import { clone } from "@bufbuild/protobuf";
-import type { MessageSchema } from "@spine-event-engine/core";
+import { AnyMessages, Validate, type MessageSchema } from "@spine-event-engine/core";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import type { EventStore } from "@spine-event-engine/storage";
 
@@ -23,6 +23,7 @@ const subscriberRegistrars = new WeakMap<
   (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
 >();
 const eventSchemaLists = new WeakMap<EventBus, () => readonly MessageSchema[]>();
+const eventSchemaRegistrars = new WeakMap<EventBus, (schemas: Iterable<MessageSchema>) => void>();
 const eventBusCloseStarters = new WeakMap<EventBus, () => void>();
 const eventBusDrainers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
@@ -35,6 +36,7 @@ interface EventBusAccess {
   runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result>;
   subscribe(eventBus: EventBus, typeUrl: string, subscriber: EventSubscriber): EventSubscription;
   eventSchemas(eventBus: EventBus): readonly MessageSchema[];
+  registerSchemas(eventBus: EventBus, schemas: Iterable<MessageSchema>): void;
   beginClose(eventBus: EventBus): void;
   drain(eventBus: EventBus): Promise<void>;
   finishClose(eventBus: EventBus): Promise<void>;
@@ -47,9 +49,11 @@ type EventBusIntakeState = "open" | "closing" | "closed";
  * Small single-process multicast event bus.
  *
  * Events are accepted asynchronously through `post()`, prechecked by the
- * injected `EventStore`, validated by matching dispatchers, appended, and then
+ * injected `EventStore`, validated against their registered message schemas,
+ * accepted by matching dispatchers, appended, and then
  * dispatched in deterministic registration order. Events with no matching
- * dispatcher remain stored and resolve without dispatch.
+ * dispatcher remain stored and resolve without dispatch. Events with no
+ * registered schema reject deterministically before persistence.
  */
 export class EventBus {
   readonly #eventStore: EventStore;
@@ -61,7 +65,8 @@ export class EventBus {
   #acceptedWorkCount = 0;
   #closed: Promise<void> | undefined;
 
-  /** Creates a bus backed by an event store and initial dispatchers.
+  /**
+   * Creates a bus backed by an event store and initial dispatchers.
    *
    * @param eventStore the store that persists accepted events.
    * @param dispatchers the dispatchers to register.
@@ -75,6 +80,9 @@ export class EventBus {
     exclusiveWorkers.set(this, (work) => this.#runExclusive(work));
     subscriberRegistrars.set(this, (typeUrl, subscriber) => this.#subscribe(typeUrl, subscriber));
     eventSchemaLists.set(this, () => this.#registry.schemas());
+    eventSchemaRegistrars.set(this, (schemas) => {
+      this.#registry.registerSchemas(schemas);
+    });
     eventBusCloseStarters.set(this, () => {
       this.#beginClose();
     });
@@ -87,7 +95,8 @@ export class EventBus {
     }
   }
 
-  /** Registers an event dispatcher.
+  /**
+   * Registers an event dispatcher.
    *
    * @param dispatcher the dispatcher to register.
    * @returns the registered dispatcher.
@@ -97,7 +106,8 @@ export class EventBus {
     return dispatcher;
   }
 
-  /** Posts an event for persistence and asynchronous dispatch.
+  /**
+   * Posts an event for persistence and asynchronous dispatch.
    *
    * @param event the event envelope to post.
    * @returns A promise that settles after persistence and dispatch complete and may reject.
@@ -118,6 +128,7 @@ export class EventBus {
    * Close is idempotent and returns the same close outcome on repeated calls.
    * Runtime and event-store close hooks are both attempted; failures reject as
    * an `AggregateError`.
+   *
    * @returns A promise that settles after the event bus closes.
    *
    */
@@ -150,9 +161,10 @@ export class EventBus {
     }
 
     const dispatchers = this.#registry.find(typeUrl);
-    const stored = await this.#eventStore.acceptThenAppend(event, (accepted) =>
-      this.#accept(accepted, dispatchers),
-    );
+    const stored = await this.#eventStore.acceptThenAppend(event, async (accepted) => {
+      this.#validate(accepted, typeUrl);
+      await this.#accept(accepted, dispatchers);
+    });
 
     for (const dispatcher of dispatchers) {
       await dispatcher.dispatch(clone(EventSchema, stored));
@@ -204,6 +216,7 @@ export class EventBus {
     }
 
     const dispatchers = this.#registry.find(typeUrl);
+    this.#validate(event, typeUrl);
     await this.#accept(event, dispatchers);
 
     for (const dispatcher of dispatchers) {
@@ -216,6 +229,23 @@ export class EventBus {
     for (const dispatcher of dispatchers) {
       await dispatcher.accept?.(clone(EventSchema, event));
     }
+  }
+
+  #validate(event: Event, typeUrl: string): void {
+    const schema = this.#registry.schema(typeUrl);
+
+    if (schema === undefined) {
+      throw new Error(`No event schema registered for "${typeUrl}".`);
+    }
+
+    const message =
+      event.message === undefined ? undefined : AnyMessages.unpack(event.message, schema);
+
+    if (message === undefined) {
+      throw new Error("Event payload does not match its registered schema.");
+    }
+
+    Validate.check(schema, message);
   }
 
   #runExclusive<Result>(work: () => Result | Promise<Result>): Promise<Result> {
@@ -324,26 +354,38 @@ export class EventBus {
   }
 }
 
-/** Accepts events for framework service adapters.
+/**
+ * Accepts events for framework service adapters.
  *
  * @internal
  */
 export interface EventSubscriber {
-  /** Accepts a cloned stored event.
+  // prettier-ignore
+
+  /**
+   * Accepts a cloned stored event.
    *
    * @param event the event received by the subscription.
    */
   onEvent(event: Event): void;
 }
 
-/** Represents an explicit cleanup handle for framework event subscriptions.
+/**
+ * Represents an explicit cleanup handle for framework event subscriptions.
  *
  * @internal
  */
 export interface EventSubscription {
-  /** Indicates whether the subscription no longer receives events. */
+  // prettier-ignore
+
+  /**
+   * Indicates whether the subscription no longer receives events.
+   */
   readonly closed: boolean;
-  /** Stops this subscription from receiving events. */
+
+  /**
+   * Stops this subscription from receiving events.
+   */
   unsubscribe(): void;
 }
 
@@ -353,7 +395,8 @@ interface EventSubscriberRecord {
   readonly typeUrl: string;
 }
 
-/** Provides event-bus access for events that are already stored.
+/**
+ * Provides event-bus access for events that are already stored.
  *
  * @internal
  */
@@ -416,6 +459,16 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     }
 
     return eventSchemas();
+  },
+
+  registerSchemas(eventBus: EventBus, schemas: Iterable<MessageSchema>): void {
+    const registerSchemas = eventSchemaRegistrars.get(eventBus);
+
+    if (registerSchemas === undefined) {
+      throw new TypeError("Event schema registration requires an EventBus instance.");
+    }
+
+    registerSchemas(schemas);
   },
 
   beginClose(eventBus: EventBus): void {

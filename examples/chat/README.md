@@ -2,18 +2,16 @@
 
 This is the repository's end-to-end Chat example. Start here when you want a
 small Spine application with commands, Projection reads, browser delivery, and
-an authentication gateway. It is one four-package workspace family, not four
+an authentication gateway. It is one three-package workspace family, not three
 published npm packages:
 
-- `users-model/` owns the `UserId` Proto model.
-- `model/` owns Chat Proto messages, commands, events, and rejections.
+- `model/` owns `UserId`, Chat Proto messages, commands, events, and rejections.
 - `app/` owns the in-memory server, Aggregate, Projection, and application
   registry/handler composition.
 - `web/` owns the React fixture built on `client-react` and `client-web`.
 
-The app directly depends on `users-model` and `model`; the Chat model also
-imports `users-model`, so the composed application registry reaches `UserId`
-through the model module. `app/src/model-registry.ts` is tracked composed
+The app directly depends on the single `model` package, which provides every
+Chat type including `UserId`. `app/src/model-registry.ts` is tracked composed
 source. Generated Proto, handler output, and `dist` are ignored build products:
 generate them; never edit them. Nothing in this family is published to npm.
 
@@ -27,11 +25,10 @@ pnpm install --frozen-lockfile
 pnpm proto:generate
 ```
 
-Build exactly the four Chat projects after generation:
+Build exactly the three Chat projects after generation:
 
 ```sh
 pnpm exec tsc -b \
-  examples/chat/users-model/tsconfig.json \
   examples/chat/model/tsconfig.json \
   examples/chat/app/tsconfig.json \
   examples/chat/web/tsconfig.json

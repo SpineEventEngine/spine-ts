@@ -33,7 +33,9 @@ const frozenProvenance = Object.freeze({
   categories: Object.freeze({ compared: 16, unresolvedWire: 6, annotationOnly: 1, googleWkt: 8 }),
 });
 
-/** Checks repository-owned Proto sources and TS-generated schemas without a JVM operation. */
+/**
+ * Checks repository-owned Proto sources and TS-generated schemas without a JVM operation.
+ */
 export async function verifyWireCompatibility(options = {}) {
   const services = options.services ?? expectedServices;
   if (services.join("\n") !== expectedServices.join("\n"))

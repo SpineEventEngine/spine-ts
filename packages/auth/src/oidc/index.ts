@@ -64,7 +64,8 @@ export class OidcFlow {
   readonly #callbacks = new Set<AbortController>();
   #closed = false;
 
-  /** Creates a bounded authorization-code flow.
+  /**
+   * Creates a bounded authorization-code flow.
    * @param options The trusted provider, callback, transaction, grant, and session settings.
    */
   constructor(options: OidcFlowOptions) {
@@ -124,7 +125,8 @@ export class OidcFlow {
     );
   }
 
-  /** Starts one finite authorization-code transaction without exposing any application credential.
+  /**
+   * Starts one finite authorization-code transaction without exposing any application credential.
    * @param input The browser redirect and requested scopes.
    * @returns The authorization URL and state, or a rejection.
    */
@@ -324,7 +326,9 @@ export class OidcFlow {
     });
   }
 
-  /** Closes the flow and discards retained OIDC transaction material. */
+  /**
+   * Closes the flow and discards retained OIDC transaction material.
+   */
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
@@ -514,7 +518,9 @@ interface Grant {
   readonly expiresAt: number;
 }
 
-/** Owns OIDC flow input snapshots, validation, and immutable result values. */
+/**
+ * Captures OIDC callback input before validation derives an immutable result.
+ */
 interface CallbackInputSnapshot {
   readonly code: unknown;
   readonly error: unknown;

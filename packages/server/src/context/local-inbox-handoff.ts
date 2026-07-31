@@ -2,32 +2,56 @@ import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js"
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
-/** Names the delivery labels that local inbox routes can handle. */
+/**
+ * Names the delivery labels that local inbox routes can handle.
+ */
 export type SupportedDeliveryLabel = DeliveryEndpointMessage["label"];
 
-/** Describes one delivery target assigned to a shard. */
+/**
+ * Describes one delivery target assigned to a shard.
+ */
 export interface DeliveryEndpoint {
-  /** Names the delivery action performed for the target. */
+  // prettier-ignore
+
+  /**
+   * Names the delivery action performed for the target.
+   */
   readonly label: SupportedDeliveryLabel;
-  /** Names the target message type. */
+
+  /**
+   * Names the target message type.
+   */
   readonly targetTypeUrl: string;
-  /** Locates the target within its delivery shard set. */
+
+  /**
+   * Locates the target within its delivery shard set.
+   */
   readonly shard: ShardIndex;
 }
 
-/** Describes a delivery route that became eligible after persistence. */
+/**
+ * Describes a delivery route that became eligible after persistence.
+ */
 export interface DeliveryReady extends DeliveryEndpoint {
-  /** Identifies the tenant when this route is tenant-scoped. */
+  // prettier-ignore
+
+  /**
+   * Identifies the tenant when this route is tenant-scoped.
+   */
   readonly tenantId?: string;
 }
 
-/** Observes a delivery route that became eligible after persistence.
+/**
+ * Observes a delivery route that became eligible after persistence.
+ *
  * @param ready Describes the route that is ready to drain.
  * @returns Returns an optional asynchronous observation outcome.
  */
 export type OnDeliveryReady = (ready: DeliveryReady) => unknown;
 
-/** Coordinates readiness notifications while delivery ownership changes hands. */
+/**
+ * Coordinates readiness notifications while delivery ownership changes hands.
+ */
 export class DeliveryReadiness {
   #onReady: OnDeliveryReady;
   readonly #active = new Set<Promise<void>>();
@@ -36,14 +60,18 @@ export class DeliveryReadiness {
   #buffered = new Map<string, DeliveryReady>();
   #invalidTransition = false;
 
-  /** Creates a readiness coordinator.
+  /**
+   * Creates a readiness coordinator.
+   *
    * @param onReady Observes routes made ready before ownership is transferred.
    */
   constructor(onReady: OnDeliveryReady = () => undefined) {
     this.#onReady = onReady;
   }
 
-  /** Sets the observer used before routing takes ownership.
+  /**
+   * Sets the observer used before routing takes ownership.
+   *
    * @param onReady Observes routes that become ready.
    * @returns Returns a function that removes this observer when still active.
    */
@@ -59,7 +87,9 @@ export class DeliveryReadiness {
     };
   }
 
-  /** Acquires readiness ownership for a persisted route.
+  /**
+   * Acquires readiness ownership for a persisted route.
+   *
    * @param ready Describes the route when persistence made it ready.
    * @returns Returns a claim that must be completed or abandoned.
    */
@@ -86,7 +116,9 @@ export class DeliveryReadiness {
     return settledHandoff;
   }
 
-  /** Updates readiness ownership to use configured delivery routes.
+  /**
+   * Updates readiness ownership to use configured delivery routes.
+   *
    * @param scopes Lists the routes that may receive buffered readiness.
    * @param onReady Observes readiness after routed ownership begins.
    * @param options Allows an empty configured route set when `allowEmpty` is true.
@@ -179,14 +211,23 @@ export class DeliveryReadiness {
   }
 }
 
-/** Represents a post-persistence claim held while direct delivery remains active. */
+/**
+ * Represents a post-persistence claim held while direct delivery remains active.
+ */
 export interface DeliveryHandoff {
-  /** Completes the claim after draining the durable message.
+  // prettier-ignore
+
+  /**
+   * Completes the claim after draining the durable message.
+   *
    * @param onDrain Drains the message associated with this claim.
    * @returns A promise that resolves after the claim drains and completes.
    */
   complete(onDrain: () => Promise<void>): Promise<void>;
-  /** Cancels the claim without draining it. */
+
+  /**
+   * Cancels the claim without draining it.
+   */
   abandon(): void;
 }
 
@@ -198,43 +239,84 @@ const settledHandoff: DeliveryHandoff = Object.freeze({
 
 const drainLimit = 8;
 
-/** Configures one bounded attempt to drain a local inbox message. */
+/**
+ * Configures one bounded attempt to drain a local inbox message.
+ */
 export interface LocalInboxDrainOptions {
-  /** Selects the delivery runtime that owns the inbox message. */
+  // prettier-ignore
+
+  /**
+   * Selects the delivery runtime that owns the inbox message.
+   */
   readonly delivery: Delivery;
-  /** Identifies the persisted message to drain. */
+
+  /**
+   * Identifies the persisted message to drain.
+   */
   readonly received: InboxMessage;
-  /** Names the local delivery node acquiring the message. */
+
+  /**
+   * Names the local delivery node acquiring the message.
+   */
   readonly node: string;
-  /** Calls target replay after the delivery runtime acquires a message.
+
+  /**
+   * Calls target replay after the delivery runtime acquires a message.
+   *
    * @param message Contains the acquired inbox message.
    * @returns Resolves after the target replay finishes.
    */
   readonly onReplay: (message: InboxMessage) => Promise<void> | void;
-  /** Explains a replay failure that lacks an Error instance. */
+
+  /**
+   * Explains a replay failure that lacks an Error instance.
+   */
   readonly replayFailureMessage: string;
-  /** Explains a delivery skipped before target replay. */
+
+  /**
+   * Explains a delivery skipped before target replay.
+   */
   readonly skippedMessage: string;
-  /** Explains exhaustion of local drain attempts. */
+
+  /**
+   * Explains exhaustion of local drain attempts.
+   */
   readonly unfinishedMessage: string;
 }
 
-/** Identifies the fields that deduplicate an in-flight inbox handoff. */
+/**
+ * Identifies the fields that deduplicate an in-flight inbox handoff.
+ */
 export interface LocalInboxKeyInput {
-  /** Identifies the inbox target receiving the message. */
+  // prettier-ignore
+
+  /**
+   * Identifies the inbox target receiving the message.
+   */
   readonly inboxId: {
     readonly targetId: string;
     readonly targetTypeUrl: string;
   };
-  /** Identifies the source signal persisted in the inbox. */
+
+  /**
+   * Identifies the source signal persisted in the inbox.
+   */
   readonly signalId: string;
-  /** Names the delivery action for the message. */
+
+  /**
+   * Names the delivery action for the message.
+   */
   readonly label: InboxMessage["label"];
-  /** Locates the message in its delivery shard set. */
+
+  /**
+   * Locates the message in its delivery shard set.
+   */
   readonly shard: InboxMessage["shard"];
 }
 
-/** Coordinates durable local inbox ownership and delivery handoffs. */
+/**
+ * Coordinates durable local inbox ownership and delivery handoffs.
+ */
 export const InboxHandoff: Readonly<{
   ready(endpoint: DeliveryEndpoint, tenantId?: string): DeliveryReady;
   configuredScopes(

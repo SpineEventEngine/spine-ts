@@ -67,31 +67,59 @@ type StateName<Schema extends GenMessage<Message>> = Exclude<
 > &
   string;
 
-/** Represents one typed leaf comparison in an Entity query predicate. */
+/**
+ * Represents one typed leaf comparison in an Entity query predicate.
+ */
 export interface EntityComparisonPredicate<Column extends EntityColumn = EntityColumn> {
-  /** Identifies this predicate as a leaf comparison. */
+  // prettier-ignore
+
+  /**
+   * Identifies this predicate as a leaf comparison.
+   */
   readonly kind: "comparison";
-  /** Identifies the column compared by this predicate. */
+
+  /**
+   * Identifies the column compared by this predicate.
+   */
   readonly column: Column;
-  /** Identifies the comparison operator applied to the column. */
+
+  /**
+   * Identifies the comparison operator applied to the column.
+   */
   readonly operator: EntityColumnOperator<Column>;
-  /** Stores the value compared with the column. */
+
+  /**
+   * Stores the value compared with the column.
+   */
   readonly value: Exclude<EntityColumnValue<Column>, undefined>;
 }
 
-/** Represents a nested conjunction or disjunction in an Entity query predicate. */
+/**
+ * Represents a nested conjunction or disjunction in an Entity query predicate.
+ */
 export interface EntityGroup<Column extends EntityColumn = EntityColumn> {
-  /** Identifies the logical operation that combines the predicates. */
+  // prettier-ignore
+
+  /**
+   * Identifies the logical operation that combines the predicates.
+   */
   readonly kind: "all" | "either";
-  /** Lists the predicates combined by this group. */
+
+  /**
+   * Lists the predicates combined by this group.
+   */
   readonly predicates: readonly EntityPredicate<Column>[];
 }
 
-/** Represents a typed predicate accepted by the Entity query builder. */
+/**
+ * Represents a typed predicate accepted by the Entity query builder.
+ */
 export type EntityPredicate<Column extends EntityColumn = EntityColumn> =
   EntityComparisonPredicate<Column> | EntityGroup<Column>;
 
-/** Builds a typed Entity query for the frozen Spine wire contract. */
+/**
+ * Builds a typed Entity query for the frozen Spine wire contract.
+ */
 export class EntityQueryBuilder<
   Schema extends GenMessage<Message>,
   Columns extends EntityColumnCollection<Schema>,
@@ -105,9 +133,10 @@ export class EntityQueryBuilder<
   readonly #order: { readonly column: EntityColumn; readonly direction: "asc" | "desc" }[] = [];
   #limit: number | undefined;
 
-  /** Creates a builder for one Entity query.
+  /**
+   * Creates a builder for one Entity query.
    *
-   * @param input - Schema, registered columns, and actor context for the query.
+   * @param input Schema, registered columns, and actor context for the query.
    */
   constructor(input: {
     readonly schema: Schema;
@@ -119,9 +148,10 @@ export class EntityQueryBuilder<
     this.#context = clone(ActorContextSchema, input.context);
   }
 
-  /** Adds Entity IDs to the query target.
+  /**
+   * Adds Entity IDs to the query target.
    *
-   * @param ids - Entity IDs to include.
+   * @param ids Entity IDs to include.
    * @returns This builder.
    */
   byId(...ids: readonly unknown[]): this {
@@ -132,9 +162,10 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Adds a typed predicate. Repeated calls are combined with `ALL`.
+  /**
+   * Adds a typed predicate. Repeated calls are combined with `ALL`.
    *
-   * @param predicate - Predicate owned by this builder's registered columns.
+   * @param predicate Predicate owned by this builder's registered columns.
    * @returns This builder.
    */
   where<Predicate extends EntityPredicate>(
@@ -153,9 +184,10 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Adds top-level state fields returned by the server.
+  /**
+   * Adds top-level state fields returned by the server.
    *
-   * @param paths - Generated property names of state fields.
+   * @param paths Generated property names of state fields.
    * @returns This builder.
    */
   mask(...paths: readonly StateName<Schema>[]): this {
@@ -169,10 +201,11 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Adds one ordering clause in caller order.
+  /**
+   * Adds one ordering clause in caller order.
    *
-   * @param column - Ordered column owned by this builder's Entity schema.
-   * @param direction - Sort direction, ascending by default.
+   * @param column Ordered column owned by this builder's Entity schema.
+   * @param direction Sort direction, ascending by default.
    * @returns This builder.
    */
   orderBy<Column extends EntityColumn<Schema>>(
@@ -184,9 +217,10 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Sets a positive result limit that requires ordering.
+  /**
+   * Sets a positive result limit that requires ordering.
    *
-   * @param value - Positive maximum number of returned entities.
+   * @param value Positive maximum number of returned entities.
    * @returns This builder.
    */
   limit(value: number): this {
@@ -197,7 +231,8 @@ export class EntityQueryBuilder<
     return this;
   }
 
-  /** Builds the `spine.client.Query` message.
+  /**
+   * Builds the `spine.client.Query` message.
    *
    * @returns The wire query message.
    */
@@ -262,81 +297,100 @@ export class EntityQueryBuilder<
   }
 }
 
-/** Creates typed predicates and builders for Entity queries. */
+/**
+ * Creates typed predicates and builders for Entity queries.
+ */
 export const EntityQuery: Readonly<{
-  /** Creates an equality predicate for a descriptor-backed Entity column.
+  // prettier-ignore
+
+  /**
+   * Creates an equality predicate for a descriptor-backed Entity column.
    *
-   * @param column - Column to compare.
-   * @param value - Value to match.
+   * @param column Column to compare.
+   * @param value Value to match.
    * @returns Immutable equality predicate.
    */
   eq<Column extends EntityColumn>(
     column: Column,
     value: Exclude<EntityColumnValue<Column>, undefined>,
   ): EntityComparisonPredicate<Column>;
-  /** Creates a greater-than predicate for an ordered Entity column.
+
+  /**
+   * Creates a greater-than predicate for an ordered Entity column.
    *
-   * @param column - Ordered column to compare.
-   * @param value - Lower exclusive bound.
+   * @param column Ordered column to compare.
+   * @param value Lower exclusive bound.
    * @returns Immutable greater-than predicate.
    */
   gt<Column extends EntityColumn>(
     column: "greaterThan" extends EntityColumnOperator<Column> ? Column : never,
     value: Exclude<EntityColumnValue<Column>, undefined>,
   ): EntityComparisonPredicate<Column>;
-  /** Creates a less-than predicate for an ordered Entity column.
+
+  /**
+   * Creates a less-than predicate for an ordered Entity column.
    *
-   * @param column - Ordered column to compare.
-   * @param value - Upper exclusive bound.
+   * @param column Ordered column to compare.
+   * @param value Upper exclusive bound.
    * @returns Immutable less-than predicate.
    */
   lt<Column extends EntityColumn>(
     column: "lessThan" extends EntityColumnOperator<Column> ? Column : never,
     value: Exclude<EntityColumnValue<Column>, undefined>,
   ): EntityComparisonPredicate<Column>;
-  /** Creates a greater-than-or-equal predicate for an ordered Entity column.
+
+  /**
+   * Creates a greater-than-or-equal predicate for an ordered Entity column.
    *
-   * @param column - Ordered column to compare.
-   * @param value - Lower inclusive bound.
+   * @param column Ordered column to compare.
+   * @param value Lower inclusive bound.
    * @returns Immutable inclusive lower-bound predicate.
    */
   ge<Column extends EntityColumn>(
     column: "greaterOrEqual" extends EntityColumnOperator<Column> ? Column : never,
     value: Exclude<EntityColumnValue<Column>, undefined>,
   ): EntityComparisonPredicate<Column>;
-  /** Creates a less-than-or-equal predicate for an ordered Entity column.
+
+  /**
+   * Creates a less-than-or-equal predicate for an ordered Entity column.
    *
-   * @param column - Ordered column to compare.
-   * @param value - Upper inclusive bound.
+   * @param column Ordered column to compare.
+   * @param value Upper inclusive bound.
    * @returns Immutable inclusive upper-bound predicate.
    */
   le<Column extends EntityColumn>(
     column: "lessOrEqual" extends EntityColumnOperator<Column> ? Column : never,
     value: Exclude<EntityColumnValue<Column>, undefined>,
   ): EntityComparisonPredicate<Column>;
-  /** Combines predicates conjunctively.
+
+  /**
+   * Combines predicates conjunctively.
    *
-   * @param first - First predicate in the group.
-   * @param rest - Remaining predicates in the group.
+   * @param first First predicate in the group.
+   * @param rest Remaining predicates in the group.
    * @returns Immutable conjunction predicate.
    */
   all<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
     first: First,
     ...rest: Rest
   ): EntityGroup<PredicateColumn<First | Rest[number]>>;
-  /** Combines predicates disjunctively.
+
+  /**
+   * Combines predicates disjunctively.
    *
-   * @param first - First predicate in the group.
-   * @param rest - Remaining predicates in the group.
+   * @param first First predicate in the group.
+   * @param rest Remaining predicates in the group.
    * @returns Immutable disjunction predicate.
    */
   either<First extends EntityPredicate, Rest extends readonly EntityPredicate[]>(
     first: First,
     ...rest: Rest
   ): EntityGroup<PredicateColumn<First | Rest[number]>>;
-  /** Creates a builder for one Entity schema.
+
+  /**
+   * Creates a builder for one Entity schema.
    *
-   * @param input - Schema, registered columns, and actor context for the query.
+   * @param input Schema, registered columns, and actor context for the query.
    * @returns A mutable query builder.
    */
   select<
@@ -418,7 +472,9 @@ export const EntityQuery: Readonly<{
   },
 });
 
-/** Internal compiler for predicates, descriptors, and wire query messages. */
+/**
+ * Internal compiler for predicates, descriptors, and wire query messages.
+ */
 const EntityQueryCompiler = Object.freeze({
   comparison<Column extends EntityColumn>(
     column: Column,
@@ -549,7 +605,9 @@ type CompiledPredicate =
     }
   | { readonly kind: "group"; readonly filter: CompositeFilter };
 
-/** Validates and compiles Entity query details. */
+/**
+ * Validates and compiles Entity query details.
+ */
 const EntityQueryWire = Object.freeze({
   requirePredicate(value: unknown): EntityPredicate {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {

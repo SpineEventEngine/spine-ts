@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/client-web",
-  "version": "0.0.0",
+  "version": "2.0.0-snapshot.1",
   "private": true,
   "type": "module",
   "description": "Browser-safe Spine client transport kernel.",
@@ -12,7 +12,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "REFERENCE.md"
   ],
   "scripts": {
     "check:dependencies": "node ../../scripts/check-client-web-dependencies.mjs"

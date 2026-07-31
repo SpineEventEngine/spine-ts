@@ -23,6 +23,7 @@ import {
   file_spine_options,
 } from "@spine-event-engine/proto";
 import {
+  EventStore,
   InMemoryStorageFactory,
   InMemoryRecordStorage,
   type RecordSpec,
@@ -688,7 +689,7 @@ describe("BoundedContext assembly", () => {
     ).toThrow("Event subscription requires a built BoundedContext instance.");
   });
 
-  it("does not register event dispatchers removed before build", async () => {
+  it("rejects events whose only dispatcher was removed before build", async () => {
     const observed: string[] = [];
     const dispatcher = createEventDispatcher([ProjectionStateSchema], (event) => {
       observed.push(event.id?.value ?? "missing");
@@ -698,7 +699,9 @@ describe("BoundedContext assembly", () => {
       .removeEventDispatcher(dispatcher)
       .build();
 
-    await context.eventBus().post(createProjectionEvent("event-2"));
+    await expect(context.eventBus().post(createProjectionEvent("event-2"))).rejects.toThrow(
+      /No event schema registered/,
+    );
 
     expect(observed).toEqual([]);
   });
@@ -907,6 +910,58 @@ describe("BoundedContext assembly", () => {
       throw new Error("Expected a generated process-manager produced event.");
     }
     expect(message.typeUrl).toBe(TypeUrls.derive(ProjectionStateSchema));
+  });
+
+  it("keeps producer-only event schemas off external routes while admitting follow-ups", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskProcessManager,
+        stateSchema: ProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignTask",
+            signalSchema: AggregateStateSchema,
+            emittedSchemas: [ProjectionStateSchema],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    const context = await BoundedContext.singleTenant("Tasks")
+      .withGeneratedRegistryRoot(registryRoot)
+      .withStorageFactory(storageFactory)
+      .add(GeneratedTaskProcessManager)
+      .buildAsync();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
+
+    expect(context.eventBus().acceptedEventTypes()).toEqual([]);
+
+    await context.commandBus().post(
+      SignalEnvelopes.command({
+        id: create(CommandIdSchema, { uuid: "command-producer-only" }),
+        context: create(CommandContextSchema, {
+          actorContext: create(ActorContextSchema, {
+            actor: create(UserIdSchema, { value: "user-1" }),
+          }),
+        }),
+        schema: AggregateStateSchema,
+        message: create(AggregateStateSchema, {
+          id: "producer-only",
+          name: "Producer only",
+          archived: false,
+        }),
+      }),
+    );
+
+    await waitForCondition(
+      async () => (await eventStore.read()).length === 1,
+      "producer-only event",
+    );
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { message: { typeUrl: TypeUrls.derive(ProjectionStateSchema) } },
+    ]);
   });
 
   it("requires an explicit generated registry root for entity-class assembly", async () => {

@@ -17,9 +17,8 @@
     { "path": "./packages/storage-rdbms" },
     { "path": "./packages/testing" },
     { "path": "./examples/todo" },
-    { "path": "./examples/project-management" },
-    { "path": "./examples/datastore-orders" },
-    { "path": "./examples/chat/users-model" },
+    { "path": "./examples/projects" },
+    { "path": "./examples/orders" },
     { "path": "./examples/chat/model" },
     { "path": "./examples/chat/app" },
     { "path": "./examples/chat/web" }

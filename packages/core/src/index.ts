@@ -52,60 +52,112 @@ const TRANSITION_RULE_FAILURE_MESSAGE = "Transition validation rule failed.";
 const REJECTION_CONSTRUCTOR = Symbol("RejectionThrowable");
 const REJECTION_THROWABLES = new WeakSet<object>();
 
-/** Standard Protobuf `Any` prefix used when a file has no Spine type URL option. */
+/**
+ * Standard Protobuf `Any` prefix used when a file has no Spine type URL option.
+ */
 export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
 
-/** Protobuf-ES schema shape accepted by the Spine TS type registry. */
+/**
+ * Protobuf-ES schema shape accepted by the Spine TS type registry.
+ */
 export type MessageSchema = GenMessage<Message>;
 
-/** Structured result returned by {@link Validate.message}. */
+/**
+ * Structured result returned by {@link Validate.message}.
+ */
 export type MessageValidationResult =
   | {
-      /** The message satisfied all single-message validation constraints. */
+      // prettier-ignore
+
+      /**
+       * The message satisfied all single-message validation constraints.
+       */
       readonly valid: true;
-      /** Successful validation has no constraint violations. */
+
+      /**
+       * Successful validation has no constraint violations.
+       */
       readonly violations: readonly [];
-      /** Successful validation does not allocate a validation error message. */
+
+      /**
+       * Successful validation does not allocate a validation error message.
+       */
       readonly error: undefined;
     }
   | {
-      /** The message failed validation or the validation runtime failed. */
+      // prettier-ignore
+
+      /**
+       * The message failed validation or the validation runtime failed.
+       */
       readonly valid: false;
-      /** Invalid validation results always carry at least one constraint violation. */
+
+      /**
+       * Invalid validation results always carry at least one constraint violation.
+       */
       readonly violations: readonly [ConstraintViolation, ...ConstraintViolation[]];
-      /** Repo-local Spine validation error message for the violations. */
+
+      /**
+       * Repo-local Spine validation error message for the violations.
+       */
       readonly error: ValidationError;
     };
 
-/** Framework-owned state transition validation request. */
+/**
+ * Framework-owned state transition validation request.
+ */
 export interface TransitionValidationRequest<Schema extends MessageSchema = MessageSchema> {
-  /** Schema shared by the previous and proposed message states. */
+  // prettier-ignore
+
+  /**
+   * Schema shared by the previous and proposed message states.
+   */
   readonly schema: Schema;
-  /** Previous committed state, absent when creating a new state. */
+
+  /**
+   * Previous committed state, absent when creating a new state.
+   */
   readonly previous: MessageShape<Schema> | undefined;
-  /** Proposed next state to validate before commit. */
+
+  /**
+   * Proposed next state to validate before commit.
+   */
   readonly next: MessageShape<Schema>;
 }
 
-/** Rule adapter for stateful validation such as Spine `(set_once)`. */
+/**
+ * Rule adapter for stateful validation such as Spine `(set_once)`.
+ */
 export interface TransitionValidationRule<Schema extends MessageSchema = MessageSchema> {
-  /** Returns transition-only constraint violations for the proposed state change.
+  // prettier-ignore
+
+  /**
+   * Returns transition-only constraint violations for the proposed state change.
    * @param request The previous and proposed state change.
    * @returns The constraint violations found by this rule.
    */
   validateTransition(request: TransitionValidationRequest<Schema>): readonly ConstraintViolation[];
 }
 
-/** Structured result returned by {@link Validate.transition}. */
+/**
+ * Structured result returned by {@link Validate.transition}.
+ */
 export type TransitionValidationResult = MessageValidationResult;
 
-/** Error thrown when a Protobuf message fails Spine single-message validation. */
+/**
+ * Error thrown when a Protobuf message fails Spine single-message validation.
+ */
 export class ValidationException extends Error {
-  /** Constraint violations captured from the structured validation error. */
+  // prettier-ignore
+
+  /**
+   * Constraint violations captured from the structured validation error.
+   */
   readonly violations: readonly ConstraintViolation[];
   readonly #messageData: ValidationError;
 
-  /** Creates an exception from structured Spine validation error data.
+  /**
+   * Creates an exception from structured Spine validation error data.
    * @param messageData The validation error represented by this exception.
    */
   constructor(messageData: ValidationError) {
@@ -118,7 +170,8 @@ export class ValidationException extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
-  /** Returns the structured Spine `ValidationError` message data.
+  /**
+   * Returns the structured Spine `ValidationError` message data.
    * @returns The validation error message.
    */
   asMessage(): ValidationError {
@@ -131,7 +184,9 @@ let instantiateRejection: <Schema extends MessageSchema>(
   messageData: MessageShape<Schema>,
 ) => RejectionThrowable<Schema>;
 
-/** A nominal domain rejection carrying its generated Protobuf message. */
+/**
+ * A nominal domain rejection carrying its generated Protobuf message.
+ */
 export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> extends Error {
   readonly #schema: Schema;
   readonly #messageData: MessageShape<Schema>;
@@ -160,28 +215,32 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
     ) => new RejectionThrowable<CreatedSchema>(schema, messageData, REJECTION_CONSTRUCTOR);
   }
 
-  /** Returns the generated Protobuf-ES schema for the rejected domain signal.
+  /**
+   * Returns the generated Protobuf-ES schema for the rejected domain signal.
    * @returns The rejection schema.
    */
   get schema(): Schema {
     return this.#schema;
   }
 
-  /** Returns a defensive clone of the snapshotted rejection message.
+  /**
+   * Returns a defensive clone of the snapshotted rejection message.
    * @returns The cloned rejection message.
    */
   get messageData(): MessageShape<Schema> {
     return RejectionThrowable.snapshot(this.#schema, this.#messageData);
   }
 
-  /** Returns a defensive clone matching Spine JVM's throwable contract.
+  /**
+   * Returns a defensive clone matching Spine JVM's throwable contract.
    * @returns The cloned rejection message.
    */
   messageThrown(): MessageShape<Schema> {
     return RejectionThrowable.snapshot(this.#schema, this.#messageData);
   }
 
-  /** Creates a nominal throwable from a validated generated rejection message.
+  /**
+   * Creates a nominal throwable from a validated generated rejection message.
    * @param schema The generated rejection schema.
    * @param input The rejection message fields.
    * @returns The validated nominal rejection throwable.
@@ -194,7 +253,8 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
     return instantiateRejection(schema, Validate.check(schema, create(schema, input)));
   }
 
-  /** Checks whether a value is a factory-created domain rejection throwable.
+  /**
+   * Checks whether a value is a factory-created domain rejection throwable.
    * @param value The value to inspect.
    * @returns Whether the value is a trusted rejection throwable.
    */
@@ -218,16 +278,23 @@ export class RejectionThrowable<Schema extends MessageSchema = MessageSchema> ex
   }
 }
 
-/** Owns Spine message and transition validation. */
+/**
+ * Validates Spine messages and proposed state transitions.
+ */
 export const Validate = {
-  /** Creates a repo-local validation error from constraint violations.
+  // prettier-ignore
+
+  /**
+   * Creates a repo-local validation error from constraint violations.
    * @param violations The violations to include.
    * @returns The validation error.
    */
   createError(violations: readonly ConstraintViolation[]): ValidationError {
     return ValidationResults.error(violations);
   },
-  /** Validates one Protobuf message through the Spine TS validation facade.
+
+  /**
+   * Validates one Protobuf message through the Spine TS validation facade.
    * @param schema The message schema.
    * @param message The message to validate.
    * @returns The sanitized validation result.
@@ -248,7 +315,9 @@ export const Validate = {
       ]);
     }
   },
-  /** Validates one Protobuf message and throws for constraint violations.
+
+  /**
+   * Validates one Protobuf message and throws for constraint violations.
    * @param schema The message schema.
    * @param message The message to validate.
    * @returns The validated message.
@@ -261,7 +330,9 @@ export const Validate = {
     if (!result.valid) throw new ValidationException(result.error);
     return message;
   },
-  /** Validates a previous/next state pair with framework-owned transition rules.
+
+  /**
+   * Validates a previous/next state pair with framework-owned transition rules.
    * @param request The state transition.
    * @param rules The rules to apply.
    * @returns The sanitized transition result.
@@ -289,8 +360,12 @@ export const Validate = {
 } as const;
 Object.freeze(Validate);
 
-/** Options for registering a schema in a {@link TypeRegistry}. */
+/**
+ * Options for registering a schema in a {@link TypeRegistry}.
+ */
 export interface RegisterTypeOptions {
+  // prettier-ignore
+
   /**
    * Explicit type URL for precomputed/generated metadata.
    *
@@ -298,92 +373,157 @@ export interface RegisterTypeOptions {
    * schema file's Spine `type_url_prefix` option.
    */
   readonly typeUrl?: string;
-  /** Semantic marker tags from Spine `(is)` or `(every_is)` metadata. */
+
+  /**
+   * Semantic marker tags from Spine `(is)` or `(every_is)` metadata.
+   */
   readonly semanticTags?: readonly string[];
 }
 
-/** Descriptor-backed metadata for a registered Protobuf message schema. */
+/**
+ * Descriptor-backed metadata for a registered Protobuf message schema.
+ */
 export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
-  /** Fully qualified Protobuf message name, without a leading dot. */
+  // prettier-ignore
+
+  /**
+   * Fully qualified Protobuf message name, without a leading dot.
+   */
   readonly fullTypeName: Schema["typeName"];
-  /** Canonical type URL used in `google.protobuf.Any` and Spine routing. */
+
+  /**
+   * Canonical type URL used in `google.protobuf.Any` and Spine routing.
+   */
   readonly typeUrl: string;
-  /** Generated Protobuf-ES schema for this message. */
+
+  /**
+   * Generated Protobuf-ES schema for this message.
+   */
   readonly schema: Schema;
-  /** Alias for the schema as the Protobuf-ES message descriptor. */
+
+  /**
+   * Alias for the schema as the Protobuf-ES message descriptor.
+   */
   readonly descriptor: Schema;
-  /** File descriptor that declared the message. */
+
+  /**
+   * File descriptor that declared the message.
+   */
   readonly fileDescriptor: GenFile;
-  /** Protobuf file name with the `.proto` suffix restored. */
+
+  /**
+   * Protobuf file name with the `.proto` suffix restored.
+   */
   readonly fileName: string;
-  /** Prefix that produced {@link TypeMetadata.typeUrl}. */
+
+  /**
+   * Prefix that produced {@link TypeMetadata.typeUrl}.
+   */
   readonly typeUrlPrefix: string;
-  /** First declared field, preserving Protobuf source declaration order. */
+
+  /**
+   * First declared field, preserving Protobuf source declaration order.
+   */
   readonly firstField: DescField | undefined;
-  /** First declared field name, when the descriptor exposes one. */
+
+  /**
+   * First declared field name, when the descriptor exposes one.
+   */
   readonly firstFieldName: string | undefined;
-  /** Semantic tags explicitly registered for this schema. */
+
+  /**
+   * Semantic tags explicitly registered for this schema.
+   */
   readonly semanticTags: readonly string[];
-  /** Checks whether a file option is set on this schema's file descriptor.
+
+  /**
+   * Checks whether a file option is set on this schema's file descriptor.
    * @param option The file option extension.
    * @returns Whether the option is present.
    */
   hasFileOption<Value>(option: FileOptionExtension<Value>): boolean;
-  /** Reads a file option from this schema's file descriptor.
+
+  /**
+   * Reads a file option from this schema's file descriptor.
    * @param option The file option extension.
    * @returns The extension value.
    */
   getFileOption<Value>(option: FileOptionExtension<Value>): Value;
 }
 
-/** Protobuf extension descriptor whose extendee is `google.protobuf.FileOptions`. */
+/**
+ * Protobuf extension descriptor whose extendee is `google.protobuf.FileOptions`.
+ */
 export type FileOptionExtension<Value = unknown> = GenExtension<FileOptions, Value>;
 
-/** Read-only lookup surface for a registry whose registrations are already fixed. */
+/**
+ * Read-only lookup surface for a registry whose registrations are already fixed.
+ */
 export interface TypeRegistryLookup {
-  /** Finds metadata by fully qualified Protobuf type name.
+  // prettier-ignore
+
+  /**
+   * Finds metadata by fully qualified Protobuf type name.
    * @param fullTypeName The Protobuf type name.
    * @returns Matching metadata, if registered.
    */
   findByFullName(fullTypeName: string): TypeMetadata | undefined;
-  /** Finds metadata by canonical type URL.
+
+  /**
+   * Finds metadata by canonical type URL.
    * @param typeUrl The canonical type URL.
    * @returns Matching metadata, if registered.
    */
   findByTypeUrl(typeUrl: string): TypeMetadata | undefined;
-  /** Finds metadata by generated schema identity.
+
+  /**
+   * Finds metadata by generated schema identity.
    * @param schema The generated message schema.
    * @returns Matching metadata, if registered.
    */
   findBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> | undefined;
-  /** Finds all metadata entries tagged with a semantic marker.
+
+  /**
+   * Finds all metadata entries tagged with a semantic marker.
    * @param semanticTag The semantic marker.
    * @returns The matching metadata entries.
    */
   findBySemanticTag(semanticTag: string): readonly TypeMetadata[];
-  /** Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
+
+  /**
+   * Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
    * @param fullTypeName The Protobuf type name.
    * @returns The registered metadata.
    */
   getByFullName(fullTypeName: string): TypeMetadata;
-  /** Gets metadata by canonical type URL or throws a descriptive error.
+
+  /**
+   * Gets metadata by canonical type URL or throws a descriptive error.
    * @param typeUrl The canonical type URL.
    * @returns The registered metadata.
    */
   getByTypeUrl(typeUrl: string): TypeMetadata;
-  /** Gets metadata by generated schema identity or throws a descriptive error.
+
+  /**
+   * Gets metadata by generated schema identity or throws a descriptive error.
    * @param schema The generated message schema.
    * @returns The registered metadata.
    */
   getBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema>;
-  /** Returns all registered metadata in registration order.
+
+  /**
+   * Returns all registered metadata in registration order.
    * @returns The registered metadata entries.
    */
   list(): readonly TypeMetadata[];
 }
 
-/** Options for deriving a schema type URL. */
+/**
+ * Options for deriving a schema type URL.
+ */
 export interface DeriveTypeUrlOptions {
+  // prettier-ignore
+
   /**
    * Prefix used when the schema file has no Spine `type_url_prefix` option.
    * Trailing `/` separators are removed; empty or whitespace-containing values
@@ -392,8 +532,12 @@ export interface DeriveTypeUrlOptions {
   readonly fallbackPrefix?: string;
 }
 
-/** Options for Spine-aware `google.protobuf.Any` payload packing. */
+/**
+ * Options for Spine-aware `google.protobuf.Any` payload packing.
+ */
 export interface PackAnyOptions {
+  // prettier-ignore
+
   /**
    * Validate the enclosed domain message before serialization.
    *
@@ -403,37 +547,72 @@ export interface PackAnyOptions {
   readonly validate?: boolean;
 }
 
-/** Input for creating a generated Spine `Command` envelope from a domain message. */
+/**
+ * Input for creating a generated Spine `Command` envelope from a domain message.
+ */
 export interface PackCommandInput<
   Schema extends MessageSchema = MessageSchema,
 > extends PackAnyOptions {
-  /** Caller-supplied generated command ID. */
+  // prettier-ignore
+
+  /**
+   * Caller-supplied generated command ID.
+   */
   readonly id: CommandId;
-  /** Caller-supplied generated command context. */
+
+  /**
+   * Caller-supplied generated command context.
+   */
   readonly context: CommandContext;
-  /** Schema of the enclosed domain command message. */
+
+  /**
+   * Schema of the enclosed domain command message.
+   */
   readonly schema: Schema;
-  /** Already-built domain command message to validate and pack. */
+
+  /**
+   * Already-built domain command message to validate and pack.
+   */
   readonly message: MessageShape<Schema>;
 }
 
-/** Input for creating a generated Spine `Event` envelope from a domain message. */
+/**
+ * Input for creating a generated Spine `Event` envelope from a domain message.
+ */
 export interface PackEventInput<
   Schema extends MessageSchema = MessageSchema,
 > extends PackAnyOptions {
-  /** Caller-supplied generated event ID. */
+  // prettier-ignore
+
+  /**
+   * Caller-supplied generated event ID.
+   */
   readonly id: EventId;
-  /** Caller-supplied generated event context. */
+
+  /**
+   * Caller-supplied generated event context.
+   */
   readonly context: EventContext;
-  /** Schema of the enclosed domain event message. */
+
+  /**
+   * Schema of the enclosed domain event message.
+   */
   readonly schema: Schema;
-  /** Already-built domain event message to validate and pack. */
+
+  /**
+   * Already-built domain event message to validate and pack.
+   */
   readonly message: MessageShape<Schema>;
 }
 
-/** Owns canonical Spine type URL derivation and explicit URL validation. */
+/**
+ * Derives canonical Spine type URLs and validates explicit URLs.
+ */
 export const TypeUrls = {
-  /** Calculates the deterministic type URL for a Protobuf-ES message schema.
+  // prettier-ignore
+
+  /**
+   * Calculates the deterministic type URL for a Protobuf-ES message schema.
    * @param schema The message schema.
    * @param options The fallback options.
    * @returns The canonical type URL.
@@ -441,7 +620,9 @@ export const TypeUrls = {
   derive(schema: MessageSchema, options: DeriveTypeUrlOptions = {}): string {
     return `${TypeUrls.prefix(schema, options.fallbackPrefix).replace(/\/+$/u, "")}/${schema.typeName}`;
   },
-  /** Returns the type URL prefix that applies to a schema.
+
+  /**
+   * Returns the type URL prefix that applies to a schema.
    * @param schema The message schema.
    * @param fallbackPrefix The fallback prefix.
    * @returns The canonical prefix.
@@ -454,7 +635,9 @@ export const TypeUrls = {
     }
     return normalizedFallbackPrefix;
   },
-  /** Resolves an explicit or derived type URL for a schema registration.
+
+  /**
+   * Resolves an explicit or derived type URL for a schema registration.
    * @param schema The message schema.
    * @param explicitTypeUrl The explicit type URL.
    * @returns The resolved type URL.
@@ -464,7 +647,9 @@ export const TypeUrls = {
     TypeUrls.validate(schema, explicitTypeUrl);
     return explicitTypeUrl;
   },
-  /** Validates an explicit type URL for a schema registration.
+
+  /**
+   * Validates an explicit type URL for a schema registration.
    * @param schema The message schema.
    * @param typeUrl The type URL to validate.
    */
@@ -480,9 +665,14 @@ export const TypeUrls = {
 } as const;
 Object.freeze(TypeUrls);
 
-/** Owns Spine-aware `google.protobuf.Any` packing and unpacking. */
+/**
+ * Packs and unpacks Spine messages in `google.protobuf.Any` envelopes.
+ */
 export const AnyMessages = {
-  /** Packs a message into `Any`, omitting unknown fields from binary output.
+  // prettier-ignore
+
+  /**
+   * Packs a message into `Any`, omitting unknown fields from binary output.
    * @param schema The message schema.
    * @param message The message to pack.
    * @param options The packing options.
@@ -499,7 +689,9 @@ export const AnyMessages = {
       value: toBinary(schema, message, { writeUnknownFields: false }),
     });
   },
-  /** Unpacks an `Any` when its type URL exactly matches the requested schema.
+
+  /**
+   * Unpacks an `Any` when its type URL exactly matches the requested schema.
    * @param packed The packed message.
    * @param schema The expected schema.
    * @returns The unpacked message, when valid.
@@ -515,7 +707,9 @@ export const AnyMessages = {
       return undefined;
     }
   },
-  /** Unpacks an `Any` when its exact type URL is registered.
+
+  /**
+   * Unpacks an `Any` when its exact type URL is registered.
    * @param registry The schema registry.
    * @param packed The packed message.
    * @returns The unpacked message, when valid.
@@ -532,9 +726,14 @@ export const AnyMessages = {
 } as const;
 Object.freeze(AnyMessages);
 
-/** Owns construction of generated Spine command and event envelopes. */
+/**
+ * Creates generated Spine command and event envelopes.
+ */
 export const SignalEnvelopes = {
-  /** Packs a generated Spine command envelope from caller-supplied data.
+  // prettier-ignore
+
+  /**
+   * Packs a generated Spine command envelope from caller-supplied data.
    * @param input The command envelope input.
    * @returns The packed command.
    */
@@ -545,7 +744,9 @@ export const SignalEnvelopes = {
       context: clone(CommandContextSchema, input.context),
     });
   },
-  /** Packs a generated Spine event envelope from caller-supplied data.
+
+  /**
+   * Packs a generated Spine event envelope from caller-supplied data.
    * @param input The event envelope input.
    * @returns The packed event.
    */
@@ -559,7 +760,9 @@ export const SignalEnvelopes = {
 } as const;
 Object.freeze(SignalEnvelopes);
 
-/** Registry for Protobuf schemas, Spine type URLs, and descriptor metadata. */
+/**
+ * Registry for Protobuf schemas, Spine type URLs, and descriptor metadata.
+ */
 export class TypeRegistry {
   readonly #byFullName = new Map<string, TypeMetadata>();
   readonly #byTypeUrl = new Map<string, TypeMetadata>();
@@ -567,7 +770,8 @@ export class TypeRegistry {
   readonly #bySchema = new WeakMap<object, TypeMetadata>();
   readonly #bySchemaDescriptor = new WeakMap<object, TypeMetadata>();
 
-  /** Creates a registry and optionally registers schemas immediately.
+  /**
+   * Creates a registry and optionally registers schemas immediately.
    * @param schemas The schemas to register.
    */
   constructor(schemas: Iterable<MessageSchema> = []) {
@@ -576,7 +780,8 @@ export class TypeRegistry {
     }
   }
 
-  /** Creates a registry from modules in deterministic dependency-first order.
+  /**
+   * Creates a registry from modules in deterministic dependency-first order.
    * @param modules The modules to compose.
    * @returns The composed registry.
    */
@@ -593,7 +798,8 @@ export class TypeRegistry {
     return new TypeRegistry(schemas);
   }
 
-  /** Creates a registry containing the currently curated Spine schemas.
+  /**
+   * Creates a registry containing the currently curated Spine schemas.
    * @returns The mutable curated registry.
    */
   static spineCore(): TypeRegistry {
@@ -630,7 +836,8 @@ export class TypeRegistry {
     ]);
   }
 
-  /** Registers one schema and returns its immutable metadata.
+  /**
+   * Registers one schema and returns its immutable metadata.
    * @param schema The generated message schema.
    * @param options Optional type URL and semantic tag metadata.
    * @returns The registered schema metadata.
@@ -689,7 +896,8 @@ export class TypeRegistry {
     return metadata;
   }
 
-  /** Finds metadata by fully qualified Protobuf type name.
+  /**
+   * Finds metadata by fully qualified Protobuf type name.
    * @param fullTypeName The Protobuf type name.
    * @returns Matching metadata, if registered.
    */
@@ -697,7 +905,8 @@ export class TypeRegistry {
     return this.#byFullName.get(fullTypeName);
   }
 
-  /** Finds metadata by canonical type URL.
+  /**
+   * Finds metadata by canonical type URL.
    * @param typeUrl The canonical type URL.
    * @returns Matching metadata, if registered.
    */
@@ -705,7 +914,8 @@ export class TypeRegistry {
     return this.#byTypeUrl.get(typeUrl);
   }
 
-  /** Finds metadata by generated schema identity.
+  /**
+   * Finds metadata by generated schema identity.
    * @param schema The generated message schema.
    * @returns Matching metadata, if registered.
    */
@@ -713,7 +923,8 @@ export class TypeRegistry {
     return this.#bySchema.get(schema) as TypeMetadata<Schema> | undefined;
   }
 
-  /** Finds all metadata entries tagged with a semantic marker.
+  /**
+   * Finds all metadata entries tagged with a semantic marker.
    * @param semanticTag The semantic marker.
    * @returns The matching metadata entries.
    */
@@ -721,7 +932,8 @@ export class TypeRegistry {
     return [...(this.#bySemanticTag.get(semanticTag) ?? [])];
   }
 
-  /** Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
+  /**
+   * Gets metadata by fully qualified Protobuf type name or throws a descriptive error.
    * @param fullTypeName The Protobuf type name.
    * @returns The registered metadata.
    */
@@ -735,7 +947,8 @@ export class TypeRegistry {
     return metadata;
   }
 
-  /** Gets metadata by canonical type URL or throws a descriptive error.
+  /**
+   * Gets metadata by canonical type URL or throws a descriptive error.
    * @param typeUrl The canonical type URL.
    * @returns The registered metadata.
    */
@@ -749,7 +962,8 @@ export class TypeRegistry {
     return metadata;
   }
 
-  /** Gets metadata by generated schema identity or throws a descriptive error.
+  /**
+   * Gets metadata by generated schema identity or throws a descriptive error.
    * @param schema The generated message schema.
    * @returns The registered metadata.
    */
@@ -763,7 +977,8 @@ export class TypeRegistry {
     return metadata;
   }
 
-  /** Returns all registered metadata in registration order.
+  /**
+   * Returns all registered metadata in registration order.
    * @returns The registered metadata entries.
    */
   list(): readonly TypeMetadata[] {
@@ -772,7 +987,11 @@ export class TypeRegistry {
 }
 
 const RegistryLookups = {
-  /** Composes modules in deterministic dependency-first order. */
+  // prettier-ignore
+
+  /**
+   * Composes modules in deterministic dependency-first order.
+   */
   compose(
     root: ProtoModule,
     definitions: Map<string, ProtoModule>,
@@ -828,7 +1047,9 @@ const RegistryLookups = {
     }
   },
 
-  /** Compares two module definitions for same-name conflicts. */
+  /**
+   * Compares two module definitions for same-name conflicts.
+   */
   sameModule(left: ProtoModule, right: ProtoModule): boolean {
     if (left === right) {
       return true;
@@ -849,7 +1070,10 @@ const RegistryLookups = {
       )
     );
   },
-  /** Creates immutable descriptor-backed schema metadata. */
+
+  /**
+   * Creates immutable descriptor-backed schema metadata.
+   */
   metadata<Schema extends MessageSchema>(
     schema: Schema,
     typeUrl: string,
@@ -876,7 +1100,10 @@ const RegistryLookups = {
       },
     });
   },
-  /** Creates an immutable registry lookup view. */
+
+  /**
+   * Creates an immutable registry lookup view.
+   */
   lookup(registry: TypeRegistry): TypeRegistryLookup {
     return Object.freeze({
       findByFullName: (fullTypeName: string) => registry.findByFullName(fullTypeName),
@@ -896,7 +1123,9 @@ interface ModuleFrame {
   readonly appendSchemas: boolean;
 }
 
-/** Shared registry for the first curated Spine schema set. */
+/**
+ * Shared registry for the first curated Spine schema set.
+ */
 export const spineCoreRegistry: TypeRegistryLookup = RegistryLookups.lookup(
   TypeRegistry.spineCore(),
 );
@@ -916,7 +1145,9 @@ interface SanitizableConstraintViolation {
     | undefined;
 }
 
-/** Owns private validation-result construction and sanitization. */
+/**
+ * Constructs and sanitizes internal message-validation results.
+ */
 const ValidationResults = {
   from(violations: readonly ConstraintViolation[]): MessageValidationResult {
     if (violations.length === 0)

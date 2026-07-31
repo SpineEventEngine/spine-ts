@@ -38,9 +38,15 @@ import {
   type RemoteShardSession,
 } from "../client/types.js";
 
-/** Holds primitive validation and immutable-value operations for the delivery wire protocol. */
+/**
+ * Holds primitive validation and immutable-value operations for the delivery wire protocol.
+ */
 const DeliveryValues = Object.freeze({
-  /** Determines whether a text value contains non-whitespace characters.
+  // prettier-ignore
+
+  /**
+   * Determines whether a text value contains non-whitespace characters.
+   *
    * @param value Supplies the text value.
    * @returns Whether the value contains text.
    */
@@ -48,7 +54,9 @@ const DeliveryValues = Object.freeze({
     return value.trim().length > 0;
   },
 
-  /** Counts bytes in a UTF-8 text value.
+  /**
+   * Counts bytes in a UTF-8 text value.
+   *
    * @param value Supplies the text value.
    * @returns The UTF-8 byte count.
    */
@@ -56,7 +64,8 @@ const DeliveryValues = Object.freeze({
     return new TextEncoder().encode(value).byteLength;
   },
 
-  /** Freezes an object before returning it.
+  /**
+   * Freezes an object before returning it.
    * @typeParam Value Describes the object type.
    * @param value Supplies the object to freeze.
    * @returns The frozen object.
@@ -65,7 +74,9 @@ const DeliveryValues = Object.freeze({
     return Object.freeze(value);
   },
 
-  /** Validates an integer in an inclusive range.
+  /**
+   * Validates an integer in an inclusive range.
+   *
    * @param value Supplies the number to validate.
    * @param minimum Defines the inclusive lower bound.
    * @param maximum Defines the inclusive upper bound.
@@ -78,7 +89,9 @@ const DeliveryValues = Object.freeze({
     return value;
   },
 
-  /** Validates a finite number in an inclusive range.
+  /**
+   * Validates a finite number in an inclusive range.
+   *
    * @param value Supplies the number to validate.
    * @param minimum Defines the inclusive lower bound.
    * @param maximum Defines the inclusive upper bound.
@@ -111,9 +124,15 @@ type DeliveryMessageCodecApi = Readonly<{
   decodeStatus(value: InboxMessageStatus): InboxMessage["status"];
 }>;
 
-/** Encodes and decodes inbox messages without exposing mutable wire values. */
+/**
+ * Encodes and decodes inbox messages without exposing mutable wire values.
+ */
 const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
-  /** Encodes one bounded, single-shard inbox batch.
+  // prettier-ignore
+
+  /**
+   * Encodes one bounded, single-shard inbox batch.
+   *
    * @param messages Supplies the messages to encode.
    * @returns The encoded messages, their IDs, and their common shard.
    */
@@ -142,7 +161,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     };
   },
 
-  /** Encodes an inbox message for the delivery server.
+  /**
+   * Encodes an inbox message for the delivery server.
+   *
    * @param message Supplies the message to encode.
    * @returns The validated wire message.
    */
@@ -184,7 +205,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     });
   },
 
-  /** Decodes an inbox message and confirms its expected shard.
+  /**
+   * Decodes an inbox message and confirms its expected shard.
+   *
    * @param message Supplies the wire message.
    * @param expectedShard Identifies the requested shard.
    * @returns The detached immutable inbox message.
@@ -230,7 +253,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     });
   },
 
-  /** Validates and returns an inbox message identifier.
+  /**
+   * Validates and returns an inbox message identifier.
+   *
    * @param id Supplies the identifier to encode.
    * @returns The identifier value.
    */
@@ -240,7 +265,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     return id.value;
   },
 
-  /** Copies an inbox message for later exact-snapshot checks.
+  /**
+   * Copies an inbox message for later exact-snapshot checks.
+   *
    * @param value Supplies the message to copy.
    * @returns A detached immutable message.
    */
@@ -274,7 +301,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     });
   },
 
-  /** Parses an inbox target identifier.
+  /**
+   * Parses an inbox target identifier.
+   *
    * @param inbox Supplies the inbox identifier.
    * @returns The type URL and serialized target ID.
    */
@@ -295,7 +324,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     }
   },
 
-  /** Encodes a delivered signal payload.
+  /**
+   * Encodes a delivered signal payload.
+   *
    * @param signal Supplies the optional serialized signal.
    * @returns The wire payload union.
    */
@@ -308,7 +339,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     throw new TypeError("Delivery inbox message payload is invalid.");
   },
 
-  /** Encodes an inbox label.
+  /**
+   * Encodes an inbox label.
+   *
    * @param value Supplies the label.
    * @returns The wire enum value.
    */
@@ -323,7 +356,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     return labels[value];
   },
 
-  /** Encodes an inbox status.
+  /**
+   * Encodes an inbox status.
+   *
    * @param value Supplies the status.
    * @returns The wire enum value.
    */
@@ -338,7 +373,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     return statuses[value];
   },
 
-  /** Decodes a delivered signal payload.
+  /**
+   * Decodes a delivered signal payload.
+   *
    * @param message Supplies the wire message.
    * @returns The immutable serialized signal.
    */
@@ -356,7 +393,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     );
   },
 
-  /** Decodes an inbox label.
+  /**
+   * Decodes an inbox label.
+   *
    * @param value Supplies the wire enum value.
    * @returns The domain label.
    */
@@ -375,7 +414,9 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
     }
   },
 
-  /** Decodes an inbox status.
+  /**
+   * Decodes an inbox status.
+   *
    * @param value Supplies the wire enum value.
    * @returns The domain status.
    */
@@ -421,9 +462,15 @@ type DeliveryShardCodecApi = Readonly<{
   decodeWorker(value: { nodeId?: { value: string } | undefined; value: string }): DeliveryWorkerId;
 }>;
 
-/** Encodes and decodes delivery shards, workers, and exclusive sessions. */
+/**
+ * Encodes and decodes delivery shards, workers, and exclusive sessions.
+ */
 const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
-  /** Decodes an administrative shard observation.
+  // prettier-ignore
+
+  /**
+   * Decodes an administrative shard observation.
+   *
    * @param value Supplies the wire observation.
    * @returns The immutable remote observation.
    */
@@ -440,7 +487,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     });
   },
 
-  /** Decodes an administrative shard update.
+  /**
+   * Decodes an administrative shard update.
+   *
    * @param value Supplies the wire update.
    * @returns The immutable remote observation.
    */
@@ -463,7 +512,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     });
   },
 
-  /** Encodes a shard index.
+  /**
+   * Encodes a shard index.
+   *
    * @param value Supplies the shard index.
    * @returns The wire shard index.
    */
@@ -472,7 +523,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     return create(ShardIndexSchema, { index: value.index, ofTotal: value.ofTotal });
   },
 
-  /** Copies a shard index.
+  /**
+   * Copies a shard index.
+   *
    * @param value Supplies the shard index.
    * @returns The detached shard index.
    */
@@ -480,7 +533,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     return new ShardIndex(value.index, value.ofTotal);
   },
 
-  /** Encodes a delivery worker identifier.
+  /**
+   * Encodes a delivery worker identifier.
+   *
    * @param value Supplies the worker identifier.
    * @returns The wire worker identifier.
    */
@@ -497,7 +552,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     return create(WorkerIdSchema, { nodeId: { value: value.nodeId }, value: value.value });
   },
 
-  /** Decodes a successful exclusive pickup.
+  /**
+   * Decodes a successful exclusive pickup.
+   *
    * @param value Supplies the pickup response.
    * @param expectedShard Identifies the requested shard.
    * @param expectedWorker Identifies the requesting worker.
@@ -527,7 +584,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     });
   },
 
-  /** Validates an already-picked response.
+  /**
+   * Validates an already-picked response.
+   *
    * @param value Supplies the response fields.
    * @param expectedShard Identifies the requested shard.
    */
@@ -550,7 +609,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     DeliveryShardCodec.date(value.whenPicked);
   },
 
-  /** Decodes an expired exclusive session.
+  /**
+   * Decodes an expired exclusive session.
+   *
    * @param value Supplies the expired-session response.
    * @returns The immutable released session.
    */
@@ -571,7 +632,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     });
   },
 
-  /** Decodes a protocol timestamp.
+  /**
+   * Decodes a protocol timestamp.
+   *
    * @param value Supplies the timestamp fields.
    * @returns The decoded date.
    */
@@ -585,7 +648,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     return result;
   },
 
-  /** Decodes a shard status.
+  /**
+   * Decodes a shard status.
+   *
    * @param value Supplies the wire status.
    * @returns The remote observation status.
    */
@@ -600,7 +665,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     }
   },
 
-  /** Decodes a shard index.
+  /**
+   * Decodes a shard index.
+   *
    * @param value Supplies the wire shard index.
    * @returns The validated shard index.
    */
@@ -612,7 +679,9 @@ const DeliveryShardCodec: DeliveryShardCodecApi = Object.freeze({
     }
   },
 
-  /** Decodes a worker identifier.
+  /**
+   * Decodes a worker identifier.
+   *
    * @param value Supplies the wire worker identifier.
    * @returns The immutable worker identifier.
    */
@@ -649,9 +718,15 @@ type DeliveryRequestCodecApi = Readonly<{
   timeout(value: number): number;
 }>;
 
-/** Validates delivery RPC values and prepares call-scoped protocol data. */
+/**
+ * Validates delivery RPC values and prepares call-scoped protocol data.
+ */
 const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
-  /** Encodes an inactivity duration.
+  // prettier-ignore
+
+  /**
+   * Encodes an inactivity duration.
+   *
    * @param value Supplies milliseconds.
    * @returns The protocol duration fields.
    */
@@ -662,7 +737,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     return { seconds: BigInt(Math.floor(value / 1000)), nanos: (value % 1000) * 1_000_000 };
   },
 
-  /** Encodes a date timestamp.
+  /**
+   * Encodes a date timestamp.
+   *
    * @param value Supplies the date.
    * @returns The protocol timestamp fields.
    */
@@ -676,14 +753,18 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     };
   },
 
-  /** Creates a protocol-validation error.
+  /**
+   * Creates a protocol-validation error.
+   *
    * @returns The protocol error.
    */
   protocol(): DeliveryProtocolError {
     return new DeliveryProtocolError();
   },
 
-  /** Creates Connect call options.
+  /**
+   * Creates Connect call options.
+   *
    * @param signal Supplies the optional cancellation signal.
    * @param timeoutMs Supplies the validated timeout.
    * @returns The call options.
@@ -695,7 +776,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     return signal === undefined ? { timeoutMs } : { timeoutMs, signal };
   },
 
-  /** Validates a page size.
+  /**
+   * Validates a page size.
+   *
    * @param value Supplies the page size.
    * @returns The validated page size.
    */
@@ -703,7 +786,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     return DeliveryValues.bounded(value, 1, 1_000, "Delivery page size");
   },
 
-  /** Validates an integer in an inclusive range.
+  /**
+   * Validates an integer in an inclusive range.
+   *
    * @param value Supplies the number to validate.
    * @param minimum Defines the inclusive lower bound.
    * @param maximum Defines the inclusive upper bound.
@@ -714,7 +799,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     return DeliveryValues.bounded(value, minimum, maximum, name);
   },
 
-  /** Normalizes client options to bounded immutable values.
+  /**
+   * Normalizes client options to bounded immutable values.
+   *
    * @param options Supplies the optional client settings.
    * @returns The normalized settings.
    */
@@ -736,7 +823,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     });
   },
 
-  /** Validates a delivery service base URL.
+  /**
+   * Validates a delivery service base URL.
+   *
    * @param value Supplies the URL.
    */
   baseUrl(value: string): void {
@@ -751,7 +840,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
       throw new TypeError("Delivery client base URL is invalid.");
   },
 
-  /** Rejects an oversized RPC request.
+  /**
+   * Rejects an oversized RPC request.
+   *
    * @param schema Supplies the message schema.
    * @param value Supplies the message value.
    */
@@ -763,7 +854,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
       throw new TypeError("Delivery RPC request exceeds the 4 MiB limit.");
   },
 
-  /** Rejects an oversized RPC response when it can be re-encoded.
+  /**
+   * Rejects an oversized RPC response when it can be re-encoded.
+   *
    * @param schema Supplies the message schema.
    * @param value Supplies the message value.
    */
@@ -780,7 +873,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     }
   },
 
-  /** Validates read retry count.
+  /**
+   * Validates read retry count.
+   *
    * @param value Supplies the retry count.
    * @returns The validated count.
    */
@@ -788,7 +883,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     return DeliveryValues.bounded(value, 0, 5, "Delivery read retries");
   },
 
-  /** Validates retry backoff milliseconds.
+  /**
+   * Validates retry backoff milliseconds.
+   *
    * @param value Supplies the backoff.
    * @returns The validated backoff.
    */
@@ -796,7 +893,9 @@ const DeliveryRequestCodec: DeliveryRequestCodecApi = Object.freeze({
     return DeliveryValues.finite(value, 0, 10_000, "Delivery retry backoff");
   },
 
-  /** Validates RPC timeout milliseconds.
+  /**
+   * Validates RPC timeout milliseconds.
+   *
    * @param value Supplies the timeout.
    * @returns The validated timeout.
    */

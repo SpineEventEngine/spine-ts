@@ -85,7 +85,9 @@ type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = Descripto
   | Projection<unknown, Schema, unknown>
   | ProcessManager<unknown, Schema, unknown>;
 
-/** Generated Protobuf-ES state schema carried by a repository entity constructor. */
+/**
+ * Generated Protobuf-ES state schema carried by a repository entity constructor.
+ */
 export type RepositoryStateSchema<EntityType extends RepositoryEntityType> =
   EntityType["prototype"] extends Aggregate<infer Id, infer Schema, infer Version>
     ? [Id, Version] extends [unknown, unknown]
@@ -165,10 +167,11 @@ interface RuntimeRepositoryEntityType {
   readonly name: string;
 }
 
-/** Describes an entity constructor accepted by repository identity metadata.
+/**
+ * Describes an entity constructor accepted by repository identity metadata.
  *
  * @typeParam Instance - The aggregate, projection, or process-manager instance type.
- * @param args - The constructor arguments accepted by the entity class.
+ * @param args The constructor arguments accepted by the entity class.
  * @returns An entity instance.
  */
 export type RepositoryEntityType<
@@ -177,9 +180,16 @@ export type RepositoryEntityType<
   // `any` erases the Entity constructor parameters while preserving its protected static origin.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   typeof Entity<any, DescriptorMessageSchema, any> & {
-    /** Prototype inspected for built-in entity family marker inheritance. */
+    // prettier-ignore
+
+    /**
+     * Prototype inspected for built-in entity family marker inheritance.
+     */
     readonly prototype: Instance;
-    /** Constructor name used in structured diagnostics. */
+
+    /**
+     * Constructor name used in structured diagnostics.
+     */
     readonly name: string;
   };
 
@@ -193,10 +203,18 @@ export type RepositoryEntityType<
 export interface RepositoryOptions<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
 > {
-  /** Entity constructor owned by this repository identity. */
+  // prettier-ignore
+
+  /**
+   * Entity constructor owned by this repository identity.
+   */
   readonly entityType: EntityType;
-  /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
+
+  /**
+   * Generated Protobuf-ES schema for the entity state owned by this repository identity.
+   */
   readonly schema: RepositoryStateSchema<EntityType>;
+
   /**
    * Explicit handler metadata used to register repository command and event routing.
    *
@@ -208,12 +226,22 @@ export interface RepositoryOptions<
    * use `number` version metadata, matching the Stand version shape used by the local runtime.
    */
   readonly handlers?: RepositoryHandlersOptionFor<EntityType>;
-  /** Generated event schemas that aggregate or process-manager handlers may emit. */
+
+  /**
+   * Generated event schemas that aggregate or process-manager handlers may emit.
+   */
   readonly events?: readonly MessageSchema[];
-  /** Retain a state-history row after each successful logical store. Defaults to false. */
+
+  /**
+   * Retain a state-history row after each successful logical store. Defaults to false.
+   */
   readonly stateHistory?: boolean;
-  /** Retain process-manager diagnostic events. Defaults to false; aggregate events are retained. */
+
+  /**
+   * Retain process-manager diagnostic events. Defaults to false; aggregate events are retained.
+   */
   readonly processManagerEventHistory?: boolean;
+
   /**
    * Enables a bounded best-effort, in-process duplicate-dispatch guard.
    *
@@ -234,50 +262,102 @@ export interface RepositoryOptions<
 export interface RepositoryIdentitySnapshot<
   EntityType extends RepositoryEntityType = RepositoryEntityType,
 > {
-  /** Entity constructor owned by the repository. */
+  // prettier-ignore
+
+  /**
+   * Entity constructor owned by the repository.
+   */
   readonly entityType: EntityType;
-  /** Entity family inferred from the constructor's built-in family marker base class. */
+
+  /**
+   * Entity family inferred from the constructor's built-in family marker base class.
+   */
   readonly entityFamily: EntityFamily;
-  /** Generated Protobuf-ES schema for the owned entity state. */
+
+  /**
+   * Generated Protobuf-ES schema for the owned entity state.
+   */
   readonly stateSchema: RepositoryStateSchema<EntityType>;
-  /** Descriptor-derived metadata for the owned entity state. */
+
+  /**
+   * Descriptor-derived metadata for the owned entity state.
+   */
   readonly metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
-  /** Fully qualified Protobuf type name of the owned entity state. */
+
+  /**
+   * Fully qualified Protobuf type name of the owned entity state.
+   */
   readonly stateFullTypeName: RepositoryStateSchema<EntityType>["typeName"];
-  /** Canonical entity ID field copied from descriptor-derived metadata. */
+
+  /**
+   * Canonical entity ID field copied from descriptor-derived metadata.
+   */
   readonly idField: DescriptorFieldMetadata;
 }
 
-/** Public read view of a repository registered with a bounded context. */
+/**
+ * Public read view of a repository registered with a bounded context.
+ */
 export interface RepositoryView {
-  /** Entity constructor owned by the repository. */
+  // prettier-ignore
+
+  /**
+   * Entity constructor owned by the repository.
+   */
   readonly entityType: RepositoryEntityType;
-  /** Entity family inferred from the constructor's built-in family marker base class. */
+
+  /**
+   * Entity family inferred from the constructor's built-in family marker base class.
+   */
   readonly entityFamily: EntityFamily;
-  /** Generated Protobuf-ES schema for the owned entity state. */
+
+  /**
+   * Generated Protobuf-ES schema for the owned entity state.
+   */
   readonly stateSchema: DescriptorMessageSchema;
-  /** Descriptor-derived metadata for the owned entity state. */
+
+  /**
+   * Descriptor-derived metadata for the owned entity state.
+   */
   readonly metadata: EntityMetadata;
-  /** Fully qualified Protobuf type name of the owned entity state. */
+
+  /**
+   * Fully qualified Protobuf type name of the owned entity state.
+   */
   readonly stateFullTypeName: string;
-  /** Canonical entity ID field copied from descriptor-derived metadata. */
+
+  /**
+   * Canonical entity ID field copied from descriptor-derived metadata.
+   */
   readonly idField: DescriptorFieldMetadata;
-  /** Copy-safe immutable identity snapshot for duplicate/conflict checks. */
+
+  /**
+   * Copy-safe immutable identity snapshot for duplicate/conflict checks.
+   */
   readonly snapshot: RepositoryIdentitySnapshot;
 }
 
-/** Machine-readable codes for repository identity failures. */
+/**
+ * Machine-readable codes for repository identity failures.
+ */
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
 
-/** Describes an error raised when repository identity metadata cannot be constructed. */
+/**
+ * Describes an error raised when repository identity metadata cannot be constructed.
+ */
 export class RepositoryIdentityError extends Error {
-  /** Stable code for callers/tests that need structured failure handling. */
+  // prettier-ignore
+
+  /**
+   * Stable code for callers/tests that need structured failure handling.
+   */
   readonly code: RepositoryIdentityErrorCode;
 
-  /** Creates a repository identity error.
+  /**
+   * Creates a repository identity error.
    *
-   * @param code - The stable reason for the failed identity.
-   * @param message - The diagnostic message.
+   * @param code The stable reason for the failed identity.
+   * @param message The diagnostic message.
    */
   constructor(code: RepositoryIdentityErrorCode, message: string) {
     super(message);
@@ -321,9 +401,10 @@ export class Repository<
   readonly #metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
   readonly #routing: RepositoryRouting<RepositoryEntityId<EntityType>>;
 
-  /** Creates repository identity for one entity family and state schema pair.
+  /**
+   * Creates repository identity for one entity family and state schema pair.
    *
-   * @param options - The entity constructor, state schema, and optional routing configuration.
+   * @param options The entity constructor, state schema, and optional routing configuration.
    */
   constructor(options: RepositoryOptions<EntityType>) {
     if (!RepositoryIdentity.isRepositoryOptionsObject(options)) {
@@ -384,6 +465,10 @@ export class Repository<
       options.handlers,
       options.events ?? [],
     );
+    repositoryProducedEventSchemas.set(
+      this,
+      Object.freeze([...this.#routing.producedEventSchemas]),
+    );
     repositoryHistoryConfigurations.set(
       this,
       RepositoryStorage.readHistoryConfiguration(options, this.#entityFamily),
@@ -418,7 +503,8 @@ export class Repository<
     }
   }
 
-  /** Returns the entity constructor owned by this repository identity.
+  /**
+   * Returns the entity constructor owned by this repository identity.
    *
    * @returns The owned entity constructor.
    */
@@ -426,7 +512,8 @@ export class Repository<
     return this.#entityType;
   }
 
-  /** Returns the entity family inferred from its constructor.
+  /**
+   * Returns the entity family inferred from its constructor.
    *
    * @returns The aggregate, projection, or process-manager family.
    */
@@ -434,7 +521,8 @@ export class Repository<
     return this.#entityFamily;
   }
 
-  /** Returns the generated schema for this repository's entity state.
+  /**
+   * Returns the generated schema for this repository's entity state.
    *
    * @returns The owned state schema.
    */
@@ -448,7 +536,7 @@ export class Repository<
    * This JVM-parity switch is for controlled administration/testing, not
    * routine request-time behavior. It never deletes or reconstructs history.
    *
-   * @param enabled - Whether later successful stores append state-history rows.
+   * @param enabled Whether later successful stores append state-history rows.
    */
   setStateHistoryEnabled(enabled: boolean): void {
     if (typeof enabled !== "boolean") {
@@ -457,7 +545,8 @@ export class Repository<
     RepositoryStorage.historyConfiguration(this).stateHistory = enabled;
   }
 
-  /** Returns descriptor-derived metadata for the owned entity state.
+  /**
+   * Returns descriptor-derived metadata for the owned entity state.
    *
    * @returns A metadata view for the owned state.
    */
@@ -465,7 +554,8 @@ export class Repository<
     return this.#metadata;
   }
 
-  /** Returns the fully qualified Protobuf name of the owned entity state.
+  /**
+   * Returns the fully qualified Protobuf name of the owned entity state.
    *
    * @returns The state message type name.
    */
@@ -473,7 +563,8 @@ export class Repository<
     return this.#metadata.fullTypeName;
   }
 
-  /** Returns a copy of the canonical entity ID field metadata.
+  /**
+   * Returns a copy of the canonical entity ID field metadata.
    *
    * @returns The descriptor field used as the entity ID.
    */
@@ -481,7 +572,8 @@ export class Repository<
     return RepositoryIdentity.cloneFieldMetadata(this.#metadata.idField);
   }
 
-  /** Returns a copy-safe identity snapshot for builder duplicate and conflict checks.
+  /**
+   * Returns a copy-safe identity snapshot for builder duplicate and conflict checks.
    *
    * @returns An immutable snapshot of the repository identity.
    */
@@ -495,18 +587,20 @@ export class Repository<
     );
   }
 
-  /** Routes a command to one entity ID without invoking a handler.
+  /**
+   * Routes a command to one entity ID without invoking a handler.
    *
-   * @param command - The command envelope to route.
+   * @param command The command envelope to route.
    * @returns The calculated command route.
    */
   routeCommand(command: Command): RepositoryCommandRoute<RepositoryEntityId<EntityType>> {
     return this.#routing.routeCommand(command);
   }
 
-  /** Routes an event to one or more entity IDs without invoking a handler.
+  /**
+   * Routes an event to one or more entity IDs without invoking a handler.
    *
-   * @param event - The event envelope to route.
+   * @param event The event envelope to route.
    * @returns The calculated event route.
    */
   routeEvent(event: Event): RepositoryEventRoute<RepositoryEntityId<EntityType>> {
@@ -522,27 +616,52 @@ export class Repository<
  */
 export type RepositoryRouteInvocation = "deferred";
 
-/** Command route calculated by a repository. */
+/**
+ * Command route calculated by a repository.
+ */
 export interface RepositoryCommandRoute<Id = unknown> {
-  /** Target entity identifier. */
+  // prettier-ignore
+
+  /**
+   * Target entity identifier.
+   */
   readonly entityId: Id;
-  /** Fully qualified command message type name. */
+
+  /**
+   * Fully qualified command message type name.
+   */
   readonly messageFullTypeName: string;
-  /** Direct repository route calculation does not invoke handlers. */
+
+  /**
+   * Direct repository route calculation does not invoke handlers.
+   */
   readonly invocation: RepositoryRouteInvocation;
 }
 
-/** Event route calculated by a repository. */
+/**
+ * Event route calculated by a repository.
+ */
 export interface RepositoryEventRoute<Id = unknown> {
-  /** Target entity identifiers. */
+  // prettier-ignore
+
+  /**
+   * Target entity identifiers.
+   */
   readonly entityIds: readonly Id[];
-  /** Fully qualified event message type name. */
+
+  /**
+   * Fully qualified event message type name.
+   */
   readonly messageFullTypeName: string;
-  /** Direct repository route calculation does not invoke handlers. */
+
+  /**
+   * Direct repository route calculation does not invoke handlers.
+   */
   readonly invocation: RepositoryRouteInvocation;
 }
 
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
+const repositoryProducedEventSchemas = new WeakMap<RepositoryView, readonly MessageSchema[]>();
 const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
 const repositoryPmInboxTargets = new WeakMap<RepositoryView, ProcessManagerInboxTarget>();
 const repositoryProjectionInboxTargets = new WeakMap<RepositoryView, ProjectionInboxTarget>();
@@ -588,14 +707,23 @@ type ProcessManagerInboxInput = Omit<InboxMessageInput, "whenReceived" | "versio
  * @internal
  */
 export interface ProcessManagerInboxTarget {
-  /** Target process-manager state type URL routed by this replay target. */
+  // prettier-ignore
+
+  /**
+   * Target process-manager state type URL routed by this replay target.
+   */
   readonly targetTypeUrl: string;
-  /** Supported delivery labels configured for this target. */
+
+  /**
+   * Supported delivery labels configured for this target.
+   */
   readonly labels: readonly ProcessManagerInboxLabel[];
-  /** Delivers one durable inbox message under the active delivery tenant.
+
+  /**
+   * Delivers one durable inbox message under the active delivery tenant.
    *
-   * @param message - The durable message to replay.
-   * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @param message The durable message to replay.
+   * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns A promise that resolves after the message is replayed.
    */
   replay(message: ProcessManagerInboxMessage, deliveryTenantId?: string): Promise<void>;
@@ -607,18 +735,23 @@ export interface ProcessManagerInboxTarget {
  * @internal
  */
 export interface ProcessManagerInbox {
-  /** Delivers one durable inbox row through registered process-manager targets.
+  // prettier-ignore
+
+  /**
+   * Delivers one durable inbox row through registered process-manager targets.
    *
-   * @param message - The durable inbox row to replay.
-   * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @param message The durable inbox row to replay.
+   * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns A promise that resolves after the row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
-  /** Writes and locally delivers one durable inbox row.
+
+  /**
+   * Writes and locally delivers one durable inbox row.
    *
-   * @param delivery - The delivery runtime that persists and replays the row.
-   * @param input - The row values to persist.
-   * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @param delivery The delivery runtime that persists and replays the row.
+   * @param input The row values to persist.
+   * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns The persisted inbox row.
    */
   receive(
@@ -626,11 +759,13 @@ export interface ProcessManagerInbox {
     input: ProcessManagerInboxInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage>;
-  /** Writes and locally delivers durable inbox rows in input order.
+
+  /**
+   * Writes and locally delivers durable inbox rows in input order.
    *
-   * @param delivery - The delivery runtime that persists and replays the rows.
-   * @param inputs - The row values to persist.
-   * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @param delivery The delivery runtime that persists and replays the rows.
+   * @param inputs The row values to persist.
+   * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns The persisted inbox rows.
    */
   receiveAll(
@@ -640,7 +775,10 @@ export interface ProcessManagerInbox {
   ): Promise<readonly InboxMessage[]>;
 }
 
-/** @internal Narrow framework-only replay target for projection subscriber inbox handoff. */
+/**
+ *
+ * @internal Narrow framework-only replay target for projection subscriber inbox handoff.
+ */
 type ProjectionInboxMessage = InboxMessage & {
   readonly label: "UPDATE_SUBSCRIBER";
   readonly status: "TO_DELIVER";
@@ -657,12 +795,18 @@ type ProjectionInboxInput = Omit<InboxMessageInput, "whenReceived" | "version"> 
  * @internal
  */
 export interface ProjectionInboxTarget {
-  /** Target projection state type URL routed by this replay target. */
+  // prettier-ignore
+
+  /**
+   * Target projection state type URL routed by this replay target.
+   */
   readonly targetTypeUrl: string;
-  /** Delivers one durable inbox event under the active delivery tenant.
+
+  /**
+   * Delivers one durable inbox event under the active delivery tenant.
    *
-   * @param message - The durable message to replay.
-   * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @param message The durable message to replay.
+   * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns A promise that resolves after the message is replayed.
    */
   replay(message: ProjectionInboxMessage, deliveryTenantId?: string): Promise<void>;
@@ -674,18 +818,23 @@ export interface ProjectionInboxTarget {
  * @internal
  */
 export interface ProjectionInbox {
-  /** Delivers one durable inbox row through registered projection targets.
+  // prettier-ignore
+
+  /**
+   * Delivers one durable inbox row through registered projection targets.
    *
-   * @param message - The durable inbox row to replay.
-   * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @param message The durable inbox row to replay.
+   * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns A promise that resolves after the row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
-  /** Writes and locally delivers one durable inbox row.
+
+  /**
+   * Writes and locally delivers one durable inbox row.
    *
-   * @param delivery - The delivery runtime that persists and replays the row.
-   * @param input - The row values to persist.
-   * @param deliveryTenantId - The tenant resolved by the delivery runtime.
+   * @param delivery The delivery runtime that persists and replays the row.
+   * @param input The row values to persist.
+   * @param deliveryTenantId The tenant resolved by the delivery runtime.
    * @returns The persisted inbox row.
    */
   receive(
@@ -701,49 +850,85 @@ export interface ProjectionInbox {
  * @internal
  */
 export interface RepositoryAccess {
-  /** Determines whether a value is a repository view.
-   * @param repository - The value to inspect.
+  // prettier-ignore
+
+  /**
+   * Determines whether a value is a repository view.
+   *
+   * @param repository The value to inspect.
    * @returns Whether the value belongs to a repository.
    */
   hasInstance(repository: unknown): repository is RepositoryView;
-  /** Returns a copy-safe repository identity snapshot.
-   * @param repository - The repository to inspect.
+
+  /**
+   * Returns a copy-safe repository identity snapshot.
+   *
+   * @param repository The repository to inspect.
    * @returns The repository identity snapshot.
    */
   snapshot(repository: RepositoryView): RepositoryIdentitySnapshot;
-  /** Returns the repository command dispatcher when it has command routing.
-   * @param repository - The repository to inspect.
+
+  /**
+   * Returns schemas for events that the repository can produce.
+   *
+   * @param repository the repository to inspect.
+   * @returns the produced event schemas.
+   */
+  producedEventSchemas(repository: RepositoryView): readonly MessageSchema[];
+
+  /**
+   * Returns the repository command dispatcher when it has command routing.
+   *
+   * @param repository The repository to inspect.
    * @returns The command dispatcher, if present.
    */
   commandDispatcher(repository: RepositoryView): CommandDispatcher | undefined;
-  /** Returns the repository event dispatcher when it has event routing.
-   * @param repository - The repository to inspect.
+
+  /**
+   * Returns the repository event dispatcher when it has event routing.
+   *
+   * @param repository The repository to inspect.
    * @returns The event dispatcher, if present.
    */
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
-  /** Returns the process-manager inbox target configured for a repository.
-   * @param repository - The repository to inspect.
+
+  /**
+   * Returns the process-manager inbox target configured for a repository.
+   *
+   * @param repository The repository to inspect.
    * @returns The inbox target, if present.
    */
   processManagerInboxTarget(repository: RepositoryView): ProcessManagerInboxTarget | undefined;
-  /** Returns the projection inbox target configured for a repository.
-   * @param repository - The repository to inspect.
+
+  /**
+   * Returns the projection inbox target configured for a repository.
+   *
+   * @param repository The repository to inspect.
    * @returns The inbox target, if present.
    */
   projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined;
-  /** Dispatches an event directly to a projection repository.
-   * @param repository - The projection repository to dispatch to.
-   * @param event - The event to dispatch.
+
+  /**
+   * Dispatches an event directly to a projection repository.
+   *
+   * @param repository The projection repository to dispatch to.
+   * @param event The event to dispatch.
    * @returns A promise that resolves after the projection receives the event.
    */
   dispatchProjectionDirect(repository: RepositoryView, event: Event): Promise<void>;
-  /** Binds a built runtime to a repository.
-   * @param repository - The repository receiving runtime services.
-   * @param runtime - The context runtime to bind.
+
+  /**
+   * Binds a built runtime to a repository.
+   *
+   * @param repository The repository receiving runtime services.
+   * @param runtime The context runtime to bind.
    */
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void;
-  /** Clears runtime state and open storage handles for a repository.
-   * @param repository - The repository to detach.
+
+  /**
+   * Clears runtime state and open storage handles for a repository.
+   *
+   * @param repository The repository to detach.
    */
   clearRuntime(repository: RepositoryView): void;
 }
@@ -766,6 +951,16 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     }
 
     return RepositoryIdentity.cloneRepositorySnapshot(snapshot);
+  },
+
+  producedEventSchemas(repository: RepositoryView): readonly MessageSchema[] {
+    const schemas = repositoryProducedEventSchemas.get(repository);
+
+    if (schemas === undefined) {
+      throw new TypeError("Produced event schemas require a Repository instance.");
+    }
+
+    return schemas;
   },
 
   commandDispatcher(repository: RepositoryView): CommandDispatcher | undefined {
@@ -838,6 +1033,7 @@ interface RepositoryRuntime {
   readonly dispatchStored: (event: Event) => Promise<void>;
   readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
   readonly postEventFollowUp: (event: Event) => Promise<void>;
+  readonly registerEventSchema: (schema: MessageSchema) => void;
   readonly onPostCommand: (command: Command) => Promise<void>;
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
@@ -912,7 +1108,9 @@ class AggregateExecutionSupport {
     return Object.freeze([produced]);
   }
 
-  /** Persists the framework delivery journal separately from the aggregate diagnostic journal. */
+  /**
+   * Persists the framework delivery journal separately from the aggregate diagnostic journal.
+   */
   async appendDeliveryEvents(events: readonly Event[]): Promise<void> {
     const store = new EventStore(this.#storageContext, this.#runtime.storageFactory);
     try {
@@ -922,7 +1120,9 @@ class AggregateExecutionSupport {
     }
   }
 
-  /** Store the current aggregate record before its diagnostic and delivery journals. */
+  /**
+   * Store the current aggregate record before its diagnostic and delivery journals.
+   */
   async persistAggregateUpdate(
     loaded: LoadedAggregate,
     entityId: unknown,
@@ -984,7 +1184,9 @@ class AggregateExecutionSupport {
     });
   }
 
-  /** Complete persistence before scheduling best-effort stored-event dispatch. */
+  /**
+   * Complete persistence before scheduling best-effort stored-event dispatch.
+   */
   async persistAggregateAndDispatch(
     loaded: LoadedAggregate,
     entityId: unknown,
@@ -2214,7 +2416,9 @@ class ProcessManagerEventExecution {
   }
 }
 
-/** Internal structural provider seam shared by the memory, Datastore, and MySQL factories. */
+/**
+ * Internal structural provider seam shared by the memory, Datastore, and MySQL factories.
+ */
 interface EntityStorageFactory {
   createEntityStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
@@ -2231,7 +2435,9 @@ interface RoutableId {
   readonly value: string | number | boolean;
 }
 
-/** Internal repository identity operations. */
+/**
+ * Internal repository identity operations.
+ */
 const RepositoryIdentity = {
   createRepositorySnapshot<EntityType extends RepositoryEntityType>(
     entityType: EntityType,
@@ -2449,7 +2655,9 @@ const RepositoryIdentity = {
 };
 Object.freeze(RepositoryIdentity);
 
-/** Internal entity invocation operations. */
+/**
+ * Internal entity invocation operations.
+ */
 const EntityInvocation = {
   isEventEnvelope(signal: unknown): signal is Event {
     return (
@@ -2524,7 +2732,9 @@ const EntityInvocation = {
 };
 Object.freeze(EntityInvocation);
 
-/** Internal repository entities operations. */
+/**
+ * Internal repository entities operations.
+ */
 const RepositoryEntities = {
   repositoryState(entity: object): unknown {
     return (entity as { readonly state: unknown }).state;
@@ -2545,7 +2755,9 @@ const RepositoryEntities = {
 };
 Object.freeze(RepositoryEntities);
 
-/** Internal repository signals operations. */
+/**
+ * Internal repository signals operations.
+ */
 const RepositorySignals = {
   readEventVersion(event: Event): bigint {
     const number = event.context?.version?.number;
@@ -2577,6 +2789,7 @@ const RepositorySignals = {
     entityId: unknown,
     rejection: RejectionThrowable,
   ): void {
+    runtime.registerEventSchema(rejection.schema);
     const metadata = runtime.signalMetadata.eventFromCommand(command, 1, {
       producerId: RepositorySignals.runtimeProducerId(entityId) ?? "Unknown",
     });
@@ -2627,7 +2840,9 @@ const RepositorySignals = {
 };
 Object.freeze(RepositorySignals);
 
-/** Internal repository stand operations. */
+/**
+ * Internal repository stand operations.
+ */
 const RepositoryStand = {
   standUpdateOptions(
     tenantId: string | undefined,
@@ -2661,7 +2876,9 @@ const RepositoryStand = {
 };
 Object.freeze(RepositoryStand);
 
-/** Internal repository tenants operations. */
+/**
+ * Internal repository tenants operations.
+ */
 const RepositoryTenants = {
   processManagerDeliveryContext(
     context: StorageContext,
@@ -2835,7 +3052,9 @@ const RepositoryTenants = {
 };
 Object.freeze(RepositoryTenants);
 
-/** Internal repository handlers operations. */
+/**
+ * Internal repository handlers operations.
+ */
 const RepositoryHandlers = {
   normalizeHandlers(handlersOption: RepositoryHandlersOption): readonly EntityHandlersMetadata[] {
     if (handlersOption === undefined) {
@@ -2916,7 +3135,9 @@ const RepositoryHandlers = {
 };
 Object.freeze(RepositoryHandlers);
 
-/** Internal repository routes operations. */
+/**
+ * Internal repository routes operations.
+ */
 const RepositoryRoutes = {
   createRepositoryRouting<EntityType extends RepositoryEntityType>(
     entityType: EntityType,
@@ -3198,7 +3419,9 @@ const RepositoryRoutes = {
 };
 Object.freeze(RepositoryRoutes);
 
-/** Internal repository storage operations. */
+/**
+ * Internal repository storage operations.
+ */
 const RepositoryStorage = {
   openEntityStorage<I, S extends Message>(
     factory: StorageFactory,
@@ -3305,7 +3528,9 @@ const RepositoryStorage = {
 };
 Object.freeze(RepositoryStorage);
 
-/** Internal repository history internals operations. */
+/**
+ * Internal repository history internals operations.
+ */
 const RepositoryHistoryInternals = {
   bindEntityHistory(
     entity: object,
@@ -3455,7 +3680,9 @@ const RepositoryHistoryInternals = {
 };
 Object.freeze(RepositoryHistoryInternals);
 
-/** Internal dispatch guards operations. */
+/**
+ * Internal dispatch guards operations.
+ */
 const DispatchGuards = {
   async guardedEntityEventDispatch(
     repository: RepositoryView,
@@ -3576,7 +3803,9 @@ const DispatchGuards = {
 };
 Object.freeze(DispatchGuards);
 
-/** Internal inbox messages operations. */
+/**
+ * Internal inbox messages operations.
+ */
 const InboxMessages = {
   inboxTargetId(entityId: unknown): string {
     const primitive = PrimitiveIds.readFinite(entityId) ?? MessageIds.readValue(entityId);
@@ -3649,7 +3878,9 @@ const InboxMessages = {
 };
 Object.freeze(InboxMessages);
 
-/** Internal inbox replay operations. */
+/**
+ * Internal inbox replay operations.
+ */
 const InboxReplay = {
   async replayPmInbox(
     repository: RepositoryView & {
@@ -3948,7 +4179,9 @@ const InboxReplay = {
 };
 Object.freeze(InboxReplay);
 
-/** Internal inbox handoff operations. */
+/**
+ * Internal inbox handoff operations.
+ */
 const InboxHandoff = {
   async handoffProcessManagerCommand(
     repository: RepositoryView & {
@@ -4087,7 +4320,9 @@ const InboxHandoff = {
 };
 Object.freeze(InboxHandoff);
 
-/** Internal repository dispatch operations. */
+/**
+ * Internal repository dispatch operations.
+ */
 const RepositoryDispatch = {
   createRepositoryDispatchers(
     repository: RepositoryView & {
@@ -4254,15 +4489,19 @@ const RepositoryDispatch = {
 };
 Object.freeze(RepositoryDispatch);
 
-/** Defines continuation-aware repository history caches. */
+/**
+ * Defines continuation-aware repository history caches.
+ */
 const repositoryHistory = {
+  // prettier-ignore
+
   /**
    * Creates a cache that extends a repository history only when a caller requests more entries.
    *
    * @typeParam Entry - The history entry type.
-   * @param load - Loads entries before an optional continuation version.
-   * @param versionOf - Reads the optional version carried by an entry.
-   * @param options - Selects contiguous-version and complete-group behavior.
+   * @param load Loads entries before an optional continuation version.
+   * @param versionOf Reads the optional version carried by an entry.
+   * @param options Selects contiguous-version and complete-group behavior.
    * @returns A cache with read and clear operations.
    */
   createCache<Entry>(
@@ -4279,5 +4518,7 @@ const repositoryHistory = {
 
 Object.freeze(repositoryHistory);
 
-/** Defines continuation-aware repository history caches. */
+/**
+ * Defines continuation-aware repository history caches.
+ */
 export const RepositoryHistory: Readonly<typeof repositoryHistory> = repositoryHistory;

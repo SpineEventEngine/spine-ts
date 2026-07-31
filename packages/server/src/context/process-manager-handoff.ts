@@ -10,7 +10,9 @@ import {
   type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
 
-/** Persists and replays delivery rows for process-manager handlers. */
+/**
+ * Persists and replays delivery rows for process-manager handlers.
+ */
 export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProcessManagerInboxTarget>();
@@ -21,7 +23,8 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
   #nextVersion = 0n;
 
-  /** Creates a local process-manager inbox.
+  /**
+   * Creates a local process-manager inbox.
    * @param contextName Names the bounded context that owns this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
    * @param keepTenant Records a tenant before its message is persisted.
@@ -37,7 +40,8 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     this.#keepTenant = keepTenant;
   }
 
-  /** Registers a target that replays process-manager messages.
+  /**
+   * Registers a target that replays process-manager messages.
    * @param target Handles messages for one process-manager type.
    */
   register(target: ProcessManagerInboxTarget): void {
@@ -56,14 +60,16 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     );
   }
 
-  /** Lists endpoints registered for process-manager delivery.
+  /**
+   * Lists endpoints registered for process-manager delivery.
    * @returns Returns immutable endpoint descriptions.
    */
   endpoints(): readonly DeliveryEndpoint[] {
     return Object.freeze([...this.#endpoints.values()].flat());
   }
 
-  /** Dispatches a durable inbox row through its process-manager target.
+  /**
+   * Dispatches a durable inbox row through its process-manager target.
    * @param message Contains the persisted inbox row to replay.
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
    * @returns A promise that resolves after the inbox row is replayed.
@@ -72,7 +78,8 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     return this.#replay(message, deliveryTenantId);
   }
 
-  /** Persists and drains one process-manager inbox message.
+  /**
+   * Persists and drains one process-manager inbox message.
    * @param delivery Stores and drains the inbox row.
    * @param input Describes the message to persist.
    * @param deliveryTenantId Identifies the tenant that owns the message when present.
@@ -90,7 +97,8 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     });
   }
 
-  /** Persists and drains a batch of process-manager inbox messages.
+  /**
+   * Persists and drains a batch of process-manager inbox messages.
    * @param delivery Stores and drains the inbox rows.
    * @param inputs Describe the messages to persist.
    * @param deliveryTenantId Identifies the tenant that owns the messages when present.

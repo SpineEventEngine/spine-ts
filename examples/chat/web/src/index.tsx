@@ -5,9 +5,9 @@ import {
   ChatRoomIdSchema,
   MessageIdSchema,
   type ChatMessageView,
-} from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
-import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/commands_pb.js";
-import { UserIdSchema } from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
+import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/commands_pb.js";
+import { UserIdSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/users_pb.js";
 import {
   SpineClientProvider,
   useEntityQuery,
@@ -43,32 +43,69 @@ import {
   type ReactElement,
 } from "react";
 
-/** Describes application-owned browser session state. Actor data is informational, never a credential. */
+/**
+ * Describes application-owned browser session state. Actor data is informational, never a credential.
+ */
 export type BrowserChatSession =
   | Readonly<{
-      /** Describes the unauthenticated session state. */
+      // prettier-ignore
+
+      /**
+       * Describes the unauthenticated session state.
+       */
       readonly status: "guest";
-      /** Starts application-owned sign-in. @returns Resolves to the resulting session. */
+
+      /**
+       * Starts application-owned sign-in.
+       * @returns Resolves to the resulting session.
+       */
       readonly signIn: () => Promise<BrowserChatSession>;
     }>
   | Readonly<{
-      /** Describes the authenticated session state. */
+      // prettier-ignore
+
+      /**
+       * Describes the authenticated session state.
+       */
       readonly status: "signedIn";
-      /** Identifies the informational actor shown in posted messages. */
+
+      /**
+       * Identifies the informational actor shown in posted messages.
+       */
       readonly actor: string;
-      /** Starts application-owned sign-in. @returns Resolves to the resulting session. */
+
+      /**
+       * Starts application-owned sign-in.
+       * @returns Resolves to the resulting session.
+       */
       readonly signIn: () => Promise<BrowserChatSession>;
     }>;
 
-/** Defines props for the deliberately small browser Chat fixture. */
+/**
+ * Defines props for the deliberately small browser Chat fixture.
+ */
 export interface ChatBrowserAppProps {
-  /** Supplies the application-owned session boundary. */
+  // prettier-ignore
+
+  /**
+   * Supplies the application-owned session boundary.
+   */
   readonly session: BrowserChatSession;
-  /** Supplies the public browser client request. */
+
+  /**
+   * Supplies the public browser client request.
+   */
   readonly request: ClientRequest;
-  /** Identifies the room displayed by this fixture. */
+
+  /**
+   * Identifies the room displayed by this fixture.
+   */
   readonly room: string;
-  /** Creates a message identifier for a new post. @returns Returns the identifier. */
+
+  /**
+   * Creates a message identifier for a new post.
+   * @returns Returns the identifier.
+   */
   readonly createMessageId?: () => string;
 }
 

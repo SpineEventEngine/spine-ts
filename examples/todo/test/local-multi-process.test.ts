@@ -25,9 +25,9 @@ import { TransportTopics, type SignalTransport } from "@spine-event-engine/trans
 import { createZeroMqTransport, ZeroMqConfig } from "@spine-event-engine/transport/zeromq";
 import { describe, expect, it, vi } from "vitest";
 
-import { CreateTaskSchema } from "../generated/spine/example/todo/v1/task_commands_pb.js";
-import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
-import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
+import { CreateTaskSchema } from "../generated/spine/examples/todo/task_commands_pb.js";
+import { TaskIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
 
 const requestTimeoutMs = 2_000;
 const receiveTimeoutMs = 100;

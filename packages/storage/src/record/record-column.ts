@@ -1,8 +1,11 @@
-/** Queryable column calculated from a stored record. */
+/**
+ * Queryable column calculated from a stored record.
+ */
 export class RecordColumn<R extends object, V = unknown> {
   readonly #read: (record: R) => V;
 
-  /** Creates a named column reader.
+  /**
+   * Creates a named column reader.
    * @param name The stable column name.
    * @param read The record value reader.
    * @param valueType The stable provider-visible value type.
@@ -10,7 +13,10 @@ export class RecordColumn<R extends object, V = unknown> {
   constructor(
     readonly name: string,
     read: (record: R) => V,
-    /** Stable provider-visible value-kind descriptor for layout compatibility. */
+
+    /**
+     * Stable provider-visible value-kind descriptor for layout compatibility.
+     */
     readonly valueType: string,
   ) {
     if (valueType.trim().length === 0) {
@@ -19,7 +25,8 @@ export class RecordColumn<R extends object, V = unknown> {
     this.#read = read;
   }
 
-  /** Reads the stored column value from a record snapshot.
+  /**
+   * Reads the stored column value from a record snapshot.
    * @param record The record snapshot.
    * @returns The column value.
    */

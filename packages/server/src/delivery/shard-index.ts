@@ -1,15 +1,26 @@
-/** Zero-based shard index with a stable shard count. */
+/**
+ * Zero-based shard index with a stable shard count.
+ */
 export class ShardIndex {
+  // prettier-ignore
+
   /**
    * Creates a shard index.
    *
-   * @param index - Identifies the zero-based shard position.
-   * @param ofTotal - States the total shards in the shard set.
+   * @param index Identifies the zero-based shard position.
+   * @param ofTotal States the total shards in the shard set.
    */
   constructor(
-    /** Zero-based position of this shard. */
+    // prettier-ignore
+
+    /**
+     * Zero-based position of this shard.
+     */
     readonly index: number,
-    /** Total number of shards in the same shard set. */
+
+    /**
+     * Total number of shards in the same shard set.
+     */
     readonly ofTotal: number,
   ) {
     if (!Number.isInteger(index) || index < 0) {

@@ -14,42 +14,52 @@ import { DeliveryAssembly } from "./assembly.js";
 import { DeliveryConfig, type DeliveryConfiguration } from "./config.js";
 import { DeliveryShutdown } from "./shutdown.js";
 
-/** Construction-time configuration for {@link DeliveryServer}. */
+/**
+ * Construction-time configuration for {@link DeliveryServer}.
+ */
 export interface DeliveryServerOptions {
+  // prettier-ignore
+
   /**
    * Listener host. The explicit option overrides `HOST`; the default is the
    * local-only address `127.0.0.1`. Blank values are rejected.
    */
   readonly host?: string;
+
   /**
    * Listener port. The explicit option overrides `PORT`; the default is `8484`.
    * Accepts integers from `0` through `65535`; zero requests an ephemeral port.
    */
   readonly port?: number;
+
   /**
    * Maximum inbound RPC message size in bytes. The explicit option overrides
    * `MAX_INBOUND_MESSAGE_SIZE`; the default is 4 MiB (`4_194_304`). Accepts
    * positive integers through `2_147_483_647`.
    */
   readonly maxInboundMessageBytes?: number;
+
   /**
    * Automatic stale-pickup timeout in seconds. The explicit option overrides
    * `SHARD_PROCESSING_TIMEOUT`; the default is zero (disabled). Accepts
    * non-negative integers through `2_147_483_647`.
    */
   readonly processingTimeoutSeconds?: number;
+
   /**
    * Maximum retained Inbox records. The explicit option overrides
    * `MAX_RETAINED_MESSAGES`; the default is `10_000`. Accepts integers from 1
    * through `2_147_483_647`.
    */
   readonly maxRetainedMessages?: number;
+
   /**
    * Maximum serialized bytes retained across Inbox records. The explicit option
    * overrides `MAX_RETAINED_BYTES`; the default is 32 MiB (`33_554_432`).
    * Accepts integers from 1 through `2_147_483_647`.
    */
   readonly maxRetainedBytes?: number;
+
   /**
    * Maximum distinct shards retained by messages or pickup sessions. The
    * explicit option overrides `MAX_TRACKED_SHARDS`; the default is `1_000`.
@@ -58,9 +68,15 @@ export interface DeliveryServerOptions {
   readonly maxTrackedShards?: number;
 }
 
-/** A small in-memory Connect listener for the frozen delivery simple-server API. */
+/**
+ * A small in-memory Connect listener for the frozen delivery simple-server API.
+ */
 export class DeliveryServer {
-  /** Configured listener host, resolved and validated during construction. */
+  // prettier-ignore
+
+  /**
+   * Configured listener host, resolved and validated during construction.
+   */
   readonly host: string;
   #port: number;
   readonly #configuration: DeliveryConfiguration;
@@ -192,7 +208,9 @@ export class DeliveryServer {
     }
   }
 
-  /** Waits for a cleartext HTTP/2 listener to bind and reports its address. */
+  /**
+   * Waits for a cleartext HTTP/2 listener to bind and reports its address.
+   */
   #listen(server: http2.Http2Server, host: string, port: number): Promise<AddressInfo> {
     return new Promise((resolve, reject) => {
       const done = () => {
@@ -213,7 +231,9 @@ export class DeliveryServer {
     });
   }
 
-  /** Closes a bound cleartext HTTP/2 listener without changing terminal state. */
+  /**
+   * Closes a bound cleartext HTTP/2 listener without changing terminal state.
+   */
   #closeListener(server: http2.Http2Server): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!server.listening) {

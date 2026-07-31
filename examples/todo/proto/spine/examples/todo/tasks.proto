@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package spine.examples.todo;
+
+import "spine/examples/todo/task_id.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.todo";
+
+// A task and its current state.
+message Task {
+  option (entity).kind = AGGREGATE;
+
+  // Identifies this task in the to-do list.
+  TaskId id = 1 [
+    (required) = true,
+    (validate) = true,
+    (set_once) = true
+  ];
+
+  // Stores the task title.
+  string title = 2 [(required) = true];
+
+  // Indicates whether the task is completed.
+  bool completed = 3;
+}

@@ -1,6 +1,11 @@
-import { create } from "@bufbuild/protobuf";
+import {
+  create,
+  type DescMessage,
+  type DescMethodUnary,
+  type MessageShape,
+} from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
   ExpiredSessionSchema,
@@ -20,9 +25,155 @@ import {
   DeliveryProtocolError,
   RemoteWorkRegistry,
 } from "../src/index.js";
+import { deliveryClientAccess } from "../src/client/client.js";
+import { conditionalPickUp } from "@spine-event-engine/server/internal/conditional-pickup";
 import { transport } from "./shared-fixtures.js";
 
 describe("RemoteWorkRegistry", () => {
+  it("fails closed for missing or altered conditional pickup acknowledgements", async () => {
+    const fake = transport();
+    const shard = ShardIndex.single();
+    const worker = { nodeId: "node", value: "worker" };
+    const reply = create(LiquorPickUpOutcomeSchema, {
+      value: {
+        case: "pickedUp",
+        value: create(ShardPickedUpSchema, {
+          shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+          worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+          whenPicked: { seconds: 1n, nanos: 0 },
+        }),
+      },
+    });
+    const client = DeliveryClient.usingTransport(fake.transport);
+    fake.reply(reply);
+    await expect(
+      deliveryClientAccess.pickUpPending(client, shard, worker, {}),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    const registry = new RemoteWorkRegistry(client);
+    const conditional = conditionalPickUp.for(registry);
+    if (conditional === undefined) throw new Error("Conditional pickup is unavailable.");
+    fake.reply(reply);
+    await expect(conditional(shard, "node")).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    await expect(registry.pickUp(shard, "node")).resolves.toBeUndefined();
+    expect(fake.unary).toHaveBeenCalledTimes(2);
+  });
+
+  it("accepts only an exact successful conditional pickup acknowledgement", async () => {
+    const fake = transport();
+    const shard = ShardIndex.single();
+    const worker = { nodeId: "node", value: "worker" };
+    const reply = create(LiquorPickUpOutcomeSchema, {
+      value: {
+        case: "pickedUp",
+        value: create(ShardPickedUpSchema, {
+          shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+          worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
+          whenPicked: { seconds: 1n, nanos: 0 },
+        }),
+      },
+    });
+    const withHeader = (value: string): Transport => ({
+      ...fake.transport,
+      unary: async <I extends DescMessage, O extends DescMessage>(
+        method: DescMethodUnary<I, O>,
+        signal: AbortSignal | undefined,
+        timeoutMs: number | undefined,
+        header: HeadersInit | undefined,
+        input: MessageShape<I>,
+        contextValues: Parameters<Transport["unary"]>[5],
+      ) => ({
+        ...(await fake.transport.unary(method, signal, timeoutMs, header, input, contextValues)),
+        header: new Headers([["x-spine-delivery-outcome", value]]),
+      }),
+    });
+    fake.reply(reply);
+    await expect(
+      deliveryClientAccess.pickUpPending(
+        DeliveryClient.usingTransport(withHeader("pending-acknowledged")),
+        shard,
+        worker,
+        {},
+      ),
+    ).resolves.toMatchObject({ kind: "EXCLUSIVE" });
+    fake.reply(reply);
+    await expect(
+      deliveryClientAccess.pickUpPending(
+        DeliveryClient.usingTransport(withHeader("altered")),
+        shard,
+        worker,
+        {},
+      ),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+  });
+
+  it("recognizes only the exact conditional no-work outcome", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const shard = ShardIndex.single();
+    const worker = { nodeId: "node", value: "worker" };
+
+    fake.fail(
+      new ConnectError(
+        "No work.",
+        Code.FailedPrecondition,
+        new Headers([["x-spine-delivery-outcome", "no-pending-work"]]),
+      ),
+    );
+    await expect(
+      deliveryClientAccess.pickUpPending(client, shard, worker, {}),
+    ).resolves.toBeUndefined();
+    expect(pickupMode(fake)).toBe("pending");
+
+    fake.fail(new ConnectError("No work.", Code.FailedPrecondition));
+    await expect(
+      deliveryClientAccess.pickUpPending(client, shard, worker, {}),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    fake.fail(
+      new ConnectError(
+        "No work.",
+        Code.FailedPrecondition,
+        new Headers([["x-spine-delivery-outcome", "other"]]),
+      ),
+    );
+    await expect(
+      deliveryClientAccess.pickUpPending(client, shard, worker, {}),
+    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+  });
+
+  it("uses conditional pickup through the work-registry port without quarantining no work", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const registry = new RemoteWorkRegistry(client);
+    const shard = ShardIndex.single();
+    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
+
+    fake.fail(
+      new ConnectError(
+        "No work.",
+        Code.FailedPrecondition,
+        new Headers([["x-spine-delivery-outcome", "no-pending-work"]]),
+      ),
+    );
+    const pickUpPending = conditionalPickUp.for(registry);
+    if (pickUpPending === undefined) throw new Error("Conditional pickup is unavailable.");
+    await expect(pickUpPending(shard, "node")).resolves.toBeUndefined();
+    expect(pickupMode(fake)).toBe("pending");
+
+    fake.reply(
+      create(LiquorPickUpOutcomeSchema, {
+        value: {
+          case: "pickedUp",
+          value: create(ShardPickedUpSchema, {
+            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+            worker,
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
+        },
+      }),
+    );
+    await expect(registry.pickUp(shard, "node")).resolves.toMatchObject({ kind: "EXCLUSIVE" });
+  });
+
   it("keeps pickup blocked through an in-flight or unknown release until its safe resolution", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
@@ -288,3 +439,8 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).toHaveBeenCalledTimes(3);
   });
 });
+
+function pickupMode(fake: ReturnType<typeof transport>): string | null {
+  const calls = fake.unary.mock.calls as unknown as unknown[][];
+  return (calls.at(-1)?.[3] as Headers | undefined)?.get("x-spine-delivery-pickup-mode") ?? null;
+}

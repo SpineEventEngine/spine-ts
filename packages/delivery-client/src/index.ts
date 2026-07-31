@@ -1,4 +1,6 @@
-/** Public facade for the Node delivery-server client. */
+/**
+ * Public facade for the Node delivery-server client.
+ */
 export {
   DeliveryClient,
   DeliveryOutcomeUnknownError,

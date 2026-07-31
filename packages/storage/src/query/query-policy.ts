@@ -1,68 +1,143 @@
-/** Normalized comparison operators understood by storage providers. */
+/**
+ * Normalized comparison operators understood by storage providers.
+ */
 export type NormalizedComparisonOperator =
   "equal" | "greaterThan" | "lessThan" | "greaterOrEqual" | "lessOrEqual";
 
-/** Provider-independent normalized query predicate. */
+/**
+ * Provider-independent normalized query predicate.
+ */
 export type NormalizedQueryPredicate<Id> =
   | Readonly<{
-      /** Identifies the predicate as an explicit ID set. */
+      // prettier-ignore
+
+      /**
+       * Identifies the predicate as an explicit ID set.
+       */
       kind: "ids";
-      /** Lists the IDs selected by the predicate. */
+
+      /**
+       * Lists the IDs selected by the predicate.
+       */
       ids: readonly Id[];
     }>
   | Readonly<{
-      /** Identifies the predicate as a column comparison. */
+      // prettier-ignore
+
+      /**
+       * Identifies the predicate as a column comparison.
+       */
       kind: "comparison";
-      /** Names the compared record column. */
+
+      /**
+       * Names the compared record column.
+       */
       column: string;
-      /** Selects the comparison operator. */
+
+      /**
+       * Selects the comparison operator.
+       */
       operator: NormalizedComparisonOperator;
-      /** Provides the value compared against the column. */
+
+      /**
+       * Provides the value compared against the column.
+       */
       value: unknown;
     }>
   | Readonly<{
-      /** Identifies the predicate as an all-or-either composition. */
+      // prettier-ignore
+
+      /**
+       * Identifies the predicate as an all-or-either composition.
+       */
       kind: "all" | "either";
-      /** Lists the component predicates. */
+
+      /**
+       * Lists the component predicates.
+       */
       predicates: readonly NormalizedQueryPredicate<Id>[];
     }>;
 
-/** Provider-independent normalized query ordering. */
+/**
+ * Provider-independent normalized query ordering.
+ */
 export interface NormalizedQueryOrder {
-  /** Names the column used for ordering. */
+  // prettier-ignore
+
+  /**
+   * Names the column used for ordering.
+   */
   readonly column: string;
-  /** Selects ascending or descending order. */
+
+  /**
+   * Selects ascending or descending order.
+   */
   readonly direction: "asc" | "desc";
 }
 
-/** Provider-independent normalized field mask. */
+/**
+ * Provider-independent normalized field mask.
+ */
 export interface NormalizedQueryMask {
-  /** Lists the record paths retained by the mask. */
+  // prettier-ignore
+
+  /**
+   * Lists the record paths retained by the mask.
+   */
   readonly paths: readonly string[];
 }
 
-/** Canonical query plan accepted at the storage-provider boundary. */
+/**
+ * Canonical query plan accepted at the storage-provider boundary.
+ */
 export interface NormalizedQueryPlan<Id> {
-  /** Defines the optional predicate. */
+  // prettier-ignore
+
+  /**
+   * Defines the optional predicate.
+   */
   readonly predicate?: NormalizedQueryPredicate<Id>;
-  /** Defines the optional ordering. */
+
+  /**
+   * Defines the optional ordering.
+   */
   readonly order?: readonly NormalizedQueryOrder[];
-  /** Defines the optional field mask. */
+
+  /**
+   * Defines the optional field mask.
+   */
   readonly mask?: NormalizedQueryMask;
-  /** Limits matching rows after ordering. */
+
+  /**
+   * Limits matching rows after ordering.
+   */
   readonly limit?: number;
-  /** Maximum provider candidates materialized before semantic evaluation. */
+
+  /**
+   * Maximum provider candidates materialized before semantic evaluation.
+   */
   readonly candidateLimit?: number;
 }
 
-/** Optional normalized query features a storage provider can execute. */
+/**
+ * Optional normalized query features a storage provider can execute.
+ */
 export type StorageQueryFeature = "either" | "nested" | "order" | "mask" | "limit";
 
-/** Explicit query capabilities advertised by a storage provider. */
+/**
+ * Explicit query capabilities advertised by a storage provider.
+ */
 export interface StorageQueryCapabilities {
-  /** Lists supported comparison operators. */
+  // prettier-ignore
+
+  /**
+   * Lists supported comparison operators.
+   */
   readonly comparisons: readonly NormalizedComparisonOperator[];
-  /** Lists supported normalized query features. */
+
+  /**
+   * Lists supported normalized query features.
+   */
   readonly features: readonly StorageQueryFeature[];
 }
 
@@ -77,7 +152,9 @@ const knownComparisons = new Set<NormalizedComparisonOperator>([
 ]);
 const knownFeatures = new Set<StorageQueryFeature>(["either", "nested", "order", "mask", "limit"]);
 
-/** Shared fail-fast validation for normalized plans before provider execution. */
+/**
+ * Shared fail-fast validation for normalized plans before provider execution.
+ */
 export const StorageQueryPolicy: Readonly<{
   validate<Id>(plan: NormalizedQueryPlan<Id>, capabilities: StorageQueryCapabilities): void;
 }> = Object.freeze({
@@ -105,15 +182,23 @@ export const StorageQueryPolicy: Readonly<{
   },
 });
 
-/** Captures normalized features and comparisons required by a validated plan. */
+/**
+ * Captures normalized features and comparisons required by a validated plan.
+ */
 interface QueryRequirements {
   readonly comparisons: Set<NormalizedComparisonOperator>;
   readonly features: Set<StorageQueryFeature>;
 }
 
-/** Validates normalized plan values and accumulates their required capabilities. */
+/**
+ * Validates normalized plan values and accumulates their required capabilities.
+ */
 const QueryPlanValidator = {
-  /** Validates the maximum materialized candidate count. */
+  // prettier-ignore
+
+  /**
+   * Validates the maximum materialized candidate count.
+   */
   validateCandidateLimit(value: unknown): void {
     if (value === undefined) return;
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
@@ -121,7 +206,9 @@ const QueryPlanValidator = {
     }
   },
 
-  /** Validates a normalized predicate tree and records its required capabilities. */
+  /**
+   * Validates a normalized predicate tree and records its required capabilities.
+   */
   validatePredicate(root: unknown, requirements: QueryRequirements): void {
     const pending: { readonly predicate: unknown; readonly depth: number }[] = [
       { predicate: root, depth: 0 },
@@ -206,7 +293,9 @@ const QueryPlanValidator = {
     }
   },
 
-  /** Validates normalized ordering and records the ordering capability. */
+  /**
+   * Validates normalized ordering and records the ordering capability.
+   */
   validateOrder(value: unknown, requirements: QueryRequirements): void {
     if (value === undefined) return;
     if (!Array.isArray(value)) throw new TypeError("query order must be an array.");
@@ -227,7 +316,9 @@ const QueryPlanValidator = {
     requirements.features.add("order");
   },
 
-  /** Validates a normalized field mask and records the mask capability. */
+  /**
+   * Validates a normalized field mask and records the mask capability.
+   */
   validateMask(value: unknown, requirements: QueryRequirements): void {
     if (value === undefined) return;
     const mask = QueryPlanValidator.requireRecord(value, "field mask must be an object.");
@@ -244,7 +335,9 @@ const QueryPlanValidator = {
     requirements.features.add("mask");
   },
 
-  /** Validates a result limit and records the limit capability. */
+  /**
+   * Validates a result limit and records the limit capability.
+   */
   validateLimit(value: unknown, order: unknown, requirements: QueryRequirements): void {
     if (value === undefined) return;
     if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
@@ -256,7 +349,9 @@ const QueryPlanValidator = {
     requirements.features.add("limit");
   },
 
-  /** Requires a non-array object value and returns its properties. */
+  /**
+   * Requires a non-array object value and returns its properties.
+   */
   requireRecord(value: unknown, message: string): Record<string, unknown> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new TypeError(message);
@@ -265,9 +360,15 @@ const QueryPlanValidator = {
   },
 };
 
-/** Validates advertised capabilities and admits normalized query requirements. */
+/**
+ * Validates advertised capabilities and admits normalized query requirements.
+ */
 const QueryCapabilities = {
-  /** Validates advertised comparison operators. */
+  // prettier-ignore
+
+  /**
+   * Validates advertised comparison operators.
+   */
   validateComparisons(value: unknown): ReadonlySet<NormalizedComparisonOperator> {
     if (!Array.isArray(value)) throw new TypeError("comparison capabilities must be an array.");
     const validated: NormalizedComparisonOperator[] = [];
@@ -280,7 +381,9 @@ const QueryCapabilities = {
     return new Set(validated);
   },
 
-  /** Validates advertised normalized query features. */
+  /**
+   * Validates advertised normalized query features.
+   */
   validateFeatures(value: unknown): ReadonlySet<StorageQueryFeature> {
     if (!Array.isArray(value)) throw new TypeError("query features must be an array.");
     const validated: StorageQueryFeature[] = [];
@@ -293,7 +396,9 @@ const QueryCapabilities = {
     return new Set(validated);
   },
 
-  /** Rejects requirements that an advertised provider capability set does not satisfy. */
+  /**
+   * Rejects requirements that an advertised provider capability set does not satisfy.
+   */
   admit(
     requirements: QueryRequirements,
     comparisons: ReadonlySet<NormalizedComparisonOperator>,
@@ -315,7 +420,9 @@ const QueryCapabilities = {
     }
   },
 
-  /** Describes a capability in a provider-rejection message. */
+  /**
+   * Describes a capability in a provider-rejection message.
+   */
   featureDescription(feature: StorageQueryFeature): string {
     if (feature === "either") return "EITHER predicates";
     if (feature === "nested") return "nested predicates";
@@ -324,7 +431,9 @@ const QueryCapabilities = {
     return "limits";
   },
 
-  /** Rejects a missing required feature with its provider-facing description. */
+  /**
+   * Rejects a missing required feature with its provider-facing description.
+   */
   requireFeature(
     features: ReadonlySet<StorageQueryFeature>,
     feature: StorageQueryFeature,

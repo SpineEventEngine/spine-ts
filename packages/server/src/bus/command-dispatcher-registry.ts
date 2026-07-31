@@ -7,12 +7,15 @@ interface RegisteredCommandDispatcher {
   readonly schema: MessageSchema;
 }
 
-/** Internal unicast registry keyed by canonical Spine command type URL. */
+/**
+ * Internal unicast registry keyed by canonical Spine command type URL.
+ */
 export class CommandDispatcherRegistry {
   readonly #dispatchers = new Set<CommandDispatcher>();
   readonly #byTypeUrl = new Map<string, RegisteredCommandDispatcher>();
 
-  /** Registers a dispatcher and all of its distinct command schemas.
+  /**
+   * Registers a dispatcher and all of its distinct command schemas.
    *
    * @param dispatcher the dispatcher to register.
    */
@@ -41,7 +44,8 @@ export class CommandDispatcherRegistry {
     }
   }
 
-  /** Finds the dispatcher registered for a canonical command type URL.
+  /**
+   * Finds the dispatcher registered for a canonical command type URL.
    *
    * @param typeUrl the canonical command type URL.
    * @returns the registration, when one exists.
@@ -50,7 +54,8 @@ export class CommandDispatcherRegistry {
     return this.#byTypeUrl.get(typeUrl);
   }
 
-  /** Lists the canonical command type URLs accepted by this registry.
+  /**
+   * Lists the canonical command type URLs accepted by this registry.
    *
    * @returns the registered type URLs.
    */

@@ -24,7 +24,11 @@ const casRetryLimit = 8;
  * topology around these pickup/renew/release operations.
  */
 export class ShardedWorkRegistry {
-  /** Local registry pickups create renewable leased sessions. */
+  // prettier-ignore
+
+  /**
+   * Local registry pickups create renewable leased sessions.
+   */
   readonly sessionKind = "LEASED" as const;
   readonly #context: StorageContext;
   readonly #leaseMs: number;
@@ -34,7 +38,7 @@ export class ShardedWorkRegistry {
   /**
    * Opens a shard registry over one storage context.
    *
-   * @param options - Supplies durable storage, lease bounds, and an optional clock.
+   * @param options Supplies durable storage, lease bounds, and an optional clock.
    */
   constructor(options: ShardedWorkRegistryOptions) {
     this.#context = ShardRegistryValues.copyStorageContext(options.context);
@@ -56,8 +60,8 @@ export class ShardedWorkRegistry {
    *
    * Invalid caller shard, node, and clock values throw before storage access.
    *
-   * @param shard - Selects the shard to acquire.
-   * @param node - Identifies the worker acquiring the shard.
+   * @param shard Selects the shard to acquire.
+   * @param node Identifies the worker acquiring the shard.
    * @returns The leased session, when the shard is available.
    */
   async pickUp(shard: ShardIndex, node: string): Promise<ShardSession | undefined> {
@@ -107,7 +111,7 @@ export class ShardedWorkRegistry {
   /**
    * Updates one shard session when it remains current.
    *
-   * @param session - Supplies the current shard session.
+   * @param session Supplies the current shard session.
    * @returns The renewed session, when the lease fence remains valid.
    */
   async renew(session: ShardSession): Promise<ShardSession | undefined> {
@@ -159,7 +163,7 @@ export class ShardedWorkRegistry {
   /**
    * Removes one shard session when it remains current.
    *
-   * @param session - Supplies the current shard session.
+   * @param session Supplies the current shard session.
    * @returns Whether the session was released.
    */
   async release(session: ShardSession): Promise<boolean> {
@@ -204,43 +208,79 @@ export class ShardedWorkRegistry {
   }
 }
 
-/** One active shard pickup session. */
+/**
+ * One active shard pickup session.
+ */
 export class ShardSession {
-  /** This local session carries a renewable lease. */
+  // prettier-ignore
+
+  /**
+   * This local session carries a renewable lease.
+   */
   readonly kind = "LEASED" as const;
+
   /**
    * Creates a shard session snapshot.
    *
-   * @param id - Identifies this pickup session.
-   * @param shard - Identifies the held shard.
-   * @param node - Identifies the owning worker node.
-   * @param pickedUpAt - Records when the shard was acquired.
-   * @param expiresAt - Records when the lease expires.
+   * @param id Identifies this pickup session.
+   * @param shard Identifies the held shard.
+   * @param node Identifies the owning worker node.
+   * @param pickedUpAt Records when the shard was acquired.
+   * @param expiresAt Records when the lease expires.
    */
   constructor(
-    /** Unique pickup session identifier. */
+    // prettier-ignore
+
+    /**
+     * Unique pickup session identifier.
+     */
     readonly id: string,
-    /** Shard held by this session. */
+
+    /**
+     * Shard held by this session.
+     */
     readonly shard: ShardIndex,
-    /** Worker node that owns this session. */
+
+    /**
+     * Worker node that owns this session.
+     */
     readonly node: string,
-    /** Time when the shard was picked up. */
+
+    /**
+     * Time when the shard was picked up.
+     */
     readonly pickedUpAt: Date,
-    /** Time when the session lease expires. */
+
+    /**
+     * Time when the session lease expires.
+     */
     readonly expiresAt: Date,
   ) {
     Object.freeze(this);
   }
 }
 
-/** Shard registry construction options. */
+/**
+ * Shard registry construction options.
+ */
 export interface ShardedWorkRegistryOptions {
-  /** Storage context owning the shard registry. */
+  // prettier-ignore
+
+  /**
+   * Storage context owning the shard registry.
+   */
   readonly context: StorageContext;
-  /** Storage factory used for durable session records. */
+
+  /**
+   * Storage factory used for durable session records.
+   */
   readonly storageFactory: StorageFactory;
-  /** Session lease duration in milliseconds, from 1000 to 2147483647 inclusive. */
+
+  /**
+   * Session lease duration in milliseconds, from 1000 to 2147483647 inclusive.
+   */
   readonly leaseMs?: number;
+
   /**
    * Returns the optional clock used for lease expiry decisions.
    *
@@ -264,7 +304,10 @@ interface ShardedWorkRegistryAccess {
   ): boolean;
 }
 
-/** Checks registry storage alignment for the delivery builder. @internal */
+/**
+ * Checks registry storage alignment for the delivery builder.
+ * @internal
+ */
 export const shardedWorkRegistryAccess: ShardedWorkRegistryAccess = Object.freeze({
   matches(
     registry: ShardedWorkRegistry,

@@ -1,4 +1,6 @@
-/** Renders the reference public route; applications own the gateway listener. */
+/**
+ * Renders the reference public route; applications own the gateway listener.
+ */
 export function renderEnvoy(options) {
   const topology = normalize(options);
   return `static_resources:

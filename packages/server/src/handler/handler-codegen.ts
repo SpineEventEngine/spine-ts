@@ -6,34 +6,51 @@ import ts from "typescript";
 import { BuildHandlerAnalyzer } from "./build-time-handler-analyzer.js";
 import { GeneratedRegistryWriter } from "./generated-registry-writer.js";
 
-/** Options for application-local generated handler registry production. */
+/**
+ * Options for application-local generated handler registry production.
+ */
 export interface HandlerCodegenOptions {
-  /** Application root containing its TypeScript project. */
+  // prettier-ignore
+
+  /**
+   * Application root containing its TypeScript project.
+   */
   readonly appRoot: string;
 }
 
-/** Filesystem operations used to stage an application handler registry. */
+/**
+ * Filesystem operations used to stage an application handler registry.
+ */
 export interface HandlerCodegenOperations {
-  /** Creates a directory at the supplied path.
+  // prettier-ignore
+
+  /**
+   * Creates a directory at the supplied path.
    *
-   * @param path - Directory path to create.
+   * @param path Directory path to create.
    */
   readonly mkdir: (path: string) => void;
-  /** Writes source text to the supplied path.
+
+  /**
+   * Writes source text to the supplied path.
    *
-   * @param path - File path to write.
-   * @param source - UTF-8 source text to write.
+   * @param path File path to write.
+   * @param source UTF-8 source text to write.
    */
   readonly write: (path: string, source: string) => void;
-  /** Updates a filesystem entry to use another path.
+
+  /**
+   * Updates a filesystem entry to use another path.
    *
-   * @param from - Existing filesystem entry path.
-   * @param to - Destination filesystem entry path.
+   * @param from Existing filesystem entry path.
+   * @param to Destination filesystem entry path.
    */
   readonly rename: (from: string, to: string) => void;
-  /** Removes the filesystem entry at the supplied path.
+
+  /**
+   * Removes the filesystem entry at the supplied path.
    *
-   * @param path - Filesystem entry path to remove.
+   * @param path Filesystem entry path to remove.
    */
   readonly remove: (path: string) => void;
 }
@@ -53,10 +70,11 @@ const defaultOperations: HandlerCodegenOperations = {
   },
 };
 
-/** Creates and atomically replaces an application's generated handler registry.
+/**
+ * Creates and atomically replaces an application's generated handler registry.
  *
- * @param options - Application root and generation configuration.
- * @param operations - Optional filesystem operations used for generation.
+ * @param options Application root and generation configuration.
+ * @param operations Optional filesystem operations used for generation.
  */
 export function generateHandlerRegistry(
   options: HandlerCodegenOptions,

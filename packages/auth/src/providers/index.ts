@@ -32,68 +32,154 @@ interface PendingJwks {
  * @returns The provider response.
  */
 export type ProviderFetch = (input: string, init?: RequestInit) => Promise<Response>;
-/** Token endpoint client authentication supported by the OIDC adapter. */
+
+/**
+ * Token endpoint client authentication supported by the OIDC adapter.
+ */
 export type OidcClientAuthentication = "client_secret_basic" | "client_secret_post" | "none";
-/** Exact, prevalidated OIDC metadata. */
+
+/**
+ * Exact, prevalidated OIDC metadata.
+ */
 export interface OidcProviderOptions {
-  /** Exact HTTPS issuer expected in discovery and every verified ID token. */
+  // prettier-ignore
+
+  /**
+   * Exact HTTPS issuer expected in discovery and every verified ID token.
+   */
   readonly issuer: string;
-  /** Exact HTTPS endpoint to which the browser is redirected for authorization. */
+
+  /**
+   * Exact HTTPS endpoint to which the browser is redirected for authorization.
+   */
   readonly authorizationEndpoint: string;
-  /** Exact HTTPS endpoint used once to exchange an authorization code. */
+
+  /**
+   * Exact HTTPS endpoint used once to exchange an authorization code.
+   */
   readonly tokenEndpoint: string;
-  /** Exact HTTPS endpoint supplying at most 32 asymmetric signing keys. */
+
+  /**
+   * Exact HTTPS endpoint supplying at most 32 asymmetric signing keys.
+   */
   readonly jwksEndpoint: string;
-  /** OAuth client identifier, which must equal C3's exchange client ID. */
+
+  /**
+   * OAuth client identifier, which must equal C3's exchange client ID.
+   */
   readonly clientId: string;
-  /** Provider secret required by either client-secret authentication mode. */
+
+  /**
+   * Provider secret required by either client-secret authentication mode.
+   */
   readonly clientSecret?: string;
-  /** Token endpoint authentication; defaults to the PKCE-only `none` mode. */
+
+  /**
+   * Token endpoint authentication; defaults to the PKCE-only `none` mode.
+   */
   readonly clientAuthentication?: OidcClientAuthentication;
-  /** Node-compatible HTTP implementation; defaults to global `fetch`. */
+
+  /**
+   * Node-compatible HTTP implementation; defaults to global `fetch`.
+   */
   readonly fetch?: ProviderFetch;
-  /** Finite provider-operation deadline in milliseconds; defaults to 30 seconds. */
+
+  /**
+   * Finite provider-operation deadline in milliseconds; defaults to 30 seconds.
+   */
   readonly timeoutMilliseconds?: number;
-  /** Maximum bytes accepted for each provider response; defaults to 1 MiB. */
+
+  /**
+   * Maximum bytes accepted for each provider response; defaults to 1 MiB.
+   */
   readonly maxResponseBytes?: number;
+
   /**
    * Returns the millisecond Unix clock used for token time checks and JWKS expiry.
    * @returns The current milliseconds.
    */
   readonly clock?: () => number;
 }
-/** Ready-to-use OIDC facts consumed by {@link OidcFlow}. */
+
+/**
+ * Ready-to-use OIDC facts consumed by {@link OidcFlow}.
+ */
 export interface ConfiguredOidcProvider {
-  /** Exact provider authorization endpoint for `OidcFlowOptions`. */
+  // prettier-ignore
+
+  /**
+   * Exact provider authorization endpoint for `OidcFlowOptions`.
+   */
   readonly authorizationEndpoint: string;
-  /** Provider-recommended scopes which applications may deliberately customize. */
+
+  /**
+   * Provider-recommended scopes which applications may deliberately customize.
+   */
   readonly recommendedScopes: readonly string[];
-  /** Verified-identity adapter for `OidcFlowOptions`. */
+
+  /**
+   * Verified-identity adapter for `OidcFlowOptions`.
+   */
   readonly provider: OidcVerifiedIdentityProvider;
 }
-/** Options for GitHub OAuth's fresh authenticated-user adapter. */
+
+/**
+ * Options for GitHub OAuth's fresh authenticated-user adapter.
+ */
 export interface GitHubProviderOptions {
-  /** GitHub OAuth application client identifier. */
+  // prettier-ignore
+
+  /**
+   * GitHub OAuth application client identifier.
+   */
   readonly clientId: string;
-  /** GitHub OAuth application secret retained only by the adapter closure. */
+
+  /**
+   * GitHub OAuth application secret retained only by the adapter closure.
+   */
   readonly clientSecret: string;
-  /** One to 32 required OAuth scopes; defaults to `read:user`. */
+
+  /**
+   * One to 32 required OAuth scopes; defaults to `read:user`.
+   */
   readonly scopes?: readonly string[];
-  /** Node-compatible HTTP implementation; defaults to global `fetch`. */
+
+  /**
+   * Node-compatible HTTP implementation; defaults to global `fetch`.
+   */
   readonly fetch?: ProviderFetch;
-  /** Finite exchange-and-lookup deadline; defaults to 30 seconds. */
+
+  /**
+   * Finite exchange-and-lookup deadline; defaults to 30 seconds.
+   */
   readonly timeoutMilliseconds?: number;
-  /** Maximum bytes accepted for each GitHub response; defaults to 1 MiB. */
+
+  /**
+   * Maximum bytes accepted for each GitHub response; defaults to 1 MiB.
+   */
   readonly maxResponseBytes?: number;
-  /** Exact GitHub REST API date version; defaults to `2022-11-28`. */
+
+  /**
+   * Exact GitHub REST API date version; defaults to `2022-11-28`.
+   */
   readonly apiVersion?: string;
-  /** Public GitHub or GitHub Enterprise browser origin. */
+
+  /**
+   * Public GitHub or GitHub Enterprise browser origin.
+   */
   readonly baseUrl?: string;
-  /** Matching public/enterprise API base, including an enterprise API path. */
+
+  /**
+   * Matching public/enterprise API base, including an enterprise API path.
+   */
   readonly apiBaseUrl?: string;
-  /** Request and retain one verified primary email through GitHub's `user:email` scope. */
+
+  /**
+   * Request and retain one verified primary email through GitHub's `user:email` scope.
+   */
   readonly includeVerifiedPrimaryEmail?: boolean;
 }
+
 /**
  * Fetches and validates OpenID Connect discovery metadata before constructing an adapter.
  * @param options The trusted issuer and bounded discovery settings.
@@ -101,7 +187,11 @@ export interface GitHubProviderOptions {
  */
 export async function discoverOidcProvider(
   options: Omit<OidcProviderOptions, "authorizationEndpoint" | "tokenEndpoint" | "jwksEndpoint"> & {
-    /** Trusted HTTPS discovery URL; defaults under the configured issuer. */
+    // prettier-ignore
+
+    /**
+     * Trusted HTTPS discovery URL; defaults under the configured issuer.
+     */
     readonly discoveryEndpoint?: string;
   },
 ): Promise<ConfiguredOidcProvider | undefined> {
@@ -131,6 +221,7 @@ export async function discoverOidcProvider(
     return undefined;
   }
 }
+
 /**
  * Creates an OIDC authorization-code verifier from explicitly trusted metadata.
  * @param options The trusted OIDC endpoints, client credentials, and bounds.
@@ -284,6 +375,7 @@ export function createOidcProvider(options: OidcProviderOptions): ConfiguredOidc
     provider,
   });
 }
+
 /**
  * Fetches Google's fixed official OpenID Connect configuration.
  * @param options The Google client credentials and bounded provider settings.
@@ -322,6 +414,7 @@ export async function createGoogleProvider(
     })
   );
 }
+
 /**
  * Creates GitHub OAuth code exchange with a fresh `/user` identity lookup.
  * @param options The GitHub client credentials, endpoints, scopes, and bounds.
@@ -465,7 +558,9 @@ export function createGitHubProvider(options: GitHubProviderOptions): Configured
   });
 }
 
-/** Owns provider-response parsing, bounded I/O, and OIDC verification details. */
+/**
+ * Parses provider responses, bounds I/O, and verifies OIDC details.
+ */
 const ProviderValues = Object.freeze({
   async verifyToken(
     token: string,

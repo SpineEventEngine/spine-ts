@@ -1,12 +1,16 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 
-/** A finite FIFO boundary for all state-changing delivery operations. */
+/**
+ * A finite FIFO boundary for all state-changing delivery operations.
+ */
 export class MutationAdmission {
   #pending: { readonly admit: () => void; readonly reject: (error: Error) => void }[] = [];
   #scheduled = false;
   #closed = false;
 
-  /** Closes admission and rejects pending mutations. */
+  /**
+   * Closes admission and rejects pending mutations.
+   */
   close(): void {
     this.#closed = true;
     const error = new ConnectError("Delivery server is closed.", Code.Unavailable);
@@ -14,7 +18,8 @@ export class MutationAdmission {
     this.#pending = [];
   }
 
-  /** Queues one synchronous state mutation.
+  /**
+   * Queues one synchronous state mutation.
    * @param signal Cancels admission before commit.
    * @param commit Performs the linearized mutation.
    * @returns Resolves with the committed value.

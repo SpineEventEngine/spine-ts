@@ -18,6 +18,7 @@ import {
 } from "./inbox.js";
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
 import { DeliveryLeases } from "./delivery-lease.js";
+import { conditionalPickUp } from "./conditional-pickup.js";
 import { DeliveryRetryDecisions, type DeliveryRetryDecision } from "./delivery-retry-decision.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
@@ -36,32 +37,59 @@ import type {
   DeliveryStrategy,
 } from "./delivery-builder.js";
 
-/** Delivery owner for inbox storage and shard registry. */
+/**
+ * Delivery owner for inbox storage and shard registry.
+ */
 export class Delivery {
   readonly #context: StorageContext;
   readonly #leaseMs: number;
   readonly #now: () => Date;
   readonly #storageFactory: StorageFactory;
 
-  /** Immutable storage namespace selected for this delivery. */
+  /**
+   * Immutable storage namespace selected for this delivery.
+   */
   readonly context: StorageContext;
-  /** Immutable storage factory selected for this delivery. */
+
+  /**
+   * Immutable storage factory selected for this delivery.
+   */
   readonly storageFactory: StorageFactory;
-  /** Immutable target-to-shard strategy selected for this delivery. */
+
+  /**
+   * Immutable target-to-shard strategy selected for this delivery.
+   */
   readonly strategy: DeliveryStrategy;
-  /** Node identity selected for finite local runs. */
+
+  /**
+   * Node identity selected for finite local runs.
+   */
   readonly node: string;
-  /** Positive accepted-work bound for one public delivery page. */
+
+  /**
+   * Positive accepted-work bound for one public delivery page.
+   */
   readonly pageSize: number;
-  /** Positive page bound for one public finite local run. */
+
+  /**
+   * Positive page bound for one public finite local run.
+   */
   readonly batchSize: number;
   readonly #monitor: DeliveryMonitor | undefined;
 
-  /** Durable inbox facade. */
+  /**
+   * Durable inbox facade.
+   */
   readonly inbox: DeliveryInbox;
-  /** Internal retained delivery attempt history. */
+
+  /**
+   * Internal retained delivery attempt history.
+   */
   readonly attempts: DeliveryAttempts;
-  /** Storage-backed shard registry. */
+
+  /**
+   * Storage-backed shard registry.
+   */
   readonly shards: DeliveryWorkRegistry;
 
   /**
@@ -245,7 +273,10 @@ export class Delivery {
     const maxFailures = DeliveryValues.requireFailureLimit(controls.maxFailures);
     const fence = deliveryOperations.fence(options.operation);
     fence.requireActive();
-    const session = await scope.shards.pickUp(shard, options.node, options.operation);
+    const conditional = controls.requirePending ? conditionalPickUp.for(scope.shards) : undefined;
+    const session = await (conditional === undefined
+      ? scope.shards.pickUp(shard, options.node, options.operation)
+      : conditional(shard, options.node, options.operation));
     if (session === undefined) {
       return DeliveryRunValues.deliveryDrainOutcome(
         DeliveryRunValues.deliveryRun("SKIPPED", 0, 0, 0, 0, []),
@@ -895,45 +926,94 @@ export class Delivery {
   }
 }
 
-/** Delivery construction options. */
+/**
+ * Delivery construction options.
+ */
 export interface DeliveryOptions {
-  /** Storage context owning delivery data. */
+  // prettier-ignore
+
+  /**
+   * Storage context owning delivery data.
+   */
   readonly context: StorageContext;
-  /** Storage factory used for durable delivery records. */
+
+  /**
+   * Storage factory used for durable delivery records.
+   */
   readonly storageFactory: StorageFactory;
-  /** Optional shard lease duration in milliseconds, at least 1000. */
+
+  /**
+   * Optional shard lease duration in milliseconds, at least 1000.
+   */
   readonly leaseMs?: number;
+
   /**
    * Returns the clock time for delivery timing decisions such as lease and dedup expiry.
    *
    * @returns The current time.
    */
   readonly now?: () => Date;
-  /** Optional public builder-selected work registry. */
+
+  /**
+   * Optional public builder-selected work registry.
+   */
   readonly workRegistry?: DeliveryWorkRegistry;
-  /** Optional server-owned inbox port. */
+
+  /**
+   * Optional server-owned inbox port.
+   */
   readonly inbox?: DeliveryInbox;
-  /** Optional public builder-selected target strategy. */
+
+  /**
+   * Optional public builder-selected target strategy.
+   */
   readonly strategy?: DeliveryStrategy;
-  /** Optional finite-run monitor. */
+
+  /**
+   * Optional finite-run monitor.
+   */
   readonly monitor?: DeliveryMonitor;
-  /** Optional public builder-selected page size. */
+
+  /**
+   * Optional public builder-selected page size.
+   */
   readonly pageSize?: number;
-  /** Optional public builder-selected batch size. */
+
+  /**
+   * Optional public builder-selected batch size.
+   */
   readonly batchSize?: number;
-  /** Optional public builder-selected pickup node. */
+
+  /**
+   * Optional public builder-selected pickup node.
+   */
   readonly node?: string;
 }
 
-/** Options for one direct delivery shard drain. */
+/**
+ * Options for one direct delivery shard drain.
+ */
 export interface DeliveryDrainOptions {
-  /** Worker node name used for shard pickup. */
+  // prettier-ignore
+
+  /**
+   * Worker node name used for shard pickup.
+   */
   readonly node: string;
-  /** Optional positive accepted-work cap for one drain run. */
+
+  /**
+   * Optional positive accepted-work cap for one drain run.
+   */
   readonly limit?: number;
-  /** Framework endpoint callback invoked for each available supported worker row. */
+
+  /**
+   * Framework endpoint callback invoked for each available supported worker row.
+   */
   readonly onMessage: OnDeliveryMessage;
-  /** Optional cancellation and deadline propagated through every port operation. */
+
+  /**
+   * Optional cancellation and deadline propagated through every port operation.
+   */
   readonly operation?: DeliveryOperationOptions;
 }
 
@@ -942,10 +1022,15 @@ interface DeliveryDrainControls {
   readonly maxFailures?: number;
   readonly epoch?: DeliveryEpochSlice;
   readonly onStarted?: () => void;
+  readonly requirePending?: boolean;
 }
 
-/** Provides framework-only access to loop-private delivery controls. */
+/**
+ * Provides framework-only access to loop-private delivery controls.
+ */
 export interface DeliveryAccess {
+  // prettier-ignore
+
   /**
    * Processes one shard through a registered delivery instance.
    *
@@ -961,6 +1046,7 @@ export interface DeliveryAccess {
     options: DeliveryDrainOptions,
     controls: DeliveryDrainControls,
   ): Promise<DeliveryDrainOutcome>;
+
   /**
    * Sets a delivery's private drainer.
    *
@@ -985,7 +1071,9 @@ const singleShardStrategy: DeliveryStrategy = Object.freeze({
   shardFor: () => ShardIndex.single(),
 });
 
-/** Creates public immutable delivery page summaries. */
+/**
+ * Creates public immutable delivery page summaries.
+ */
 const DeliveryPages = Object.freeze({
   fromLoop(run: DeliveryLoopRun): DeliveryPage {
     return Object.freeze({
@@ -998,9 +1086,15 @@ const DeliveryPages = Object.freeze({
   },
 });
 
-/** Provides framework-only access to loop-private delivery controls. */
+/**
+ * Provides framework-only access to loop-private delivery controls.
+ */
 export const deliveryAccess: DeliveryAccess = Object.freeze({
-  /** Processes one shard through a registered delivery instance. */
+  // prettier-ignore
+
+  /**
+   * Processes one shard through a registered delivery instance.
+   */
   drain(
     delivery: Delivery,
     shard: ShardIndex,
@@ -1009,7 +1103,10 @@ export const deliveryAccess: DeliveryAccess = Object.freeze({
   ) {
     return DeliveryValues.requireDeliveryDrainer(delivery)(shard, options, controls);
   },
-  /** Sets a delivery's private drainer. */
+
+  /**
+   * Sets a delivery's private drainer.
+   */
   replace(delivery: Delivery, drainer: DeliveryDrainer) {
     const previous = DeliveryValues.requireDeliveryDrainer(delivery);
     deliveryDrainers.set(delivery, drainer);
@@ -1020,10 +1117,17 @@ export const deliveryAccess: DeliveryAccess = Object.freeze({
   },
 });
 
-/** Options for one exact-message delivery drain. */
+/**
+ * Options for one exact-message delivery drain.
+ */
 export interface DeliveryMessageDrainOptions {
-  /** Worker node name used for shard pickup. */
+  // prettier-ignore
+
+  /**
+   * Worker node name used for shard pickup.
+   */
   readonly node: string;
+
   /**
    * Framework endpoint callback invoked for the exact pending row when it is
    * still available and supported by this worker, at most once.
@@ -1040,13 +1144,22 @@ export interface DeliveryMessageDrainOptions {
  * avoid copying payload bytes that the exhaustion path does not consume.
  */
 export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label" | "status"> {
-  /** Delivery label supported by the direct worker endpoint callback surface. */
+  // prettier-ignore
+
+  /**
+   * Delivery label supported by the direct worker endpoint callback surface.
+   */
   readonly label: "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
-  /** Pending delivery status exposed by the direct worker endpoint callback surface. */
+
+  /**
+   * Pending delivery status exposed by the direct worker endpoint callback surface.
+   */
   readonly status: "TO_DELIVER";
 }
 
-/** One durable inbox row accepted by framework-owned direct worker endpoints. */
+/**
+ * One durable inbox row accepted by framework-owned direct worker endpoints.
+ */
 type DeliveryEndpointLabel = DeliveryEndpointMessage["label"];
 
 /**
@@ -1057,29 +1170,55 @@ type DeliveryEndpointLabel = DeliveryEndpointMessage["label"];
  */
 export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => Promise<void> | void;
 
-/** Simple delivery worker run statistics. */
+/**
+ * Simple delivery worker run statistics.
+ */
 export interface DeliveryRun {
-  /** Whether a shard was picked up and drained or skipped because another worker owns it. */
+  // prettier-ignore
+
+  /**
+   * Whether a shard was picked up and drained or skipped because another worker owns it.
+   */
   readonly status: "DRAINED" | "SKIPPED";
-  /** Number of pending rows read for this run. */
+
+  /**
+   * Number of pending rows read for this run.
+   */
   readonly processed: number;
-  /** Number of rows whose endpoint callback was invoked during this run. */
+
+  /**
+   * Number of rows whose endpoint callback was invoked during this run.
+   */
   readonly accepted: number;
-  /** Number of rows marked delivered after callback success or callback-free exhaustion. */
+
+  /**
+   * Number of rows marked delivered after callback success or callback-free exhaustion.
+   */
   readonly delivered: number;
+
   /**
    * Number of observed endpoint, lease/fencing, status-update, cleanup, or
    * failed exhaustion-time mark observations.
    */
   readonly failed: number;
-  /** Per-message failure observations kept only in the returned run result. */
+
+  /**
+   * Per-message failure observations kept only in the returned run result.
+   */
   readonly failures: readonly DeliveryFailure[];
 }
 
-/** Failure from one message in a direct delivery run. */
+/**
+ * Failure from one message in a direct delivery run.
+ */
 export interface DeliveryFailure {
-  /** Independent supported-row snapshot associated with this failure observation. */
+  // prettier-ignore
+
+  /**
+   * Independent supported-row snapshot associated with this failure observation.
+   */
   readonly message: DeliveryEndpointMessage;
+
   /**
    * Error observed during endpoint callback, lease/fencing, delivery-status
    * update, or framework cleanup work. An exhaustion-time mark failure with
@@ -1109,37 +1248,76 @@ interface DeliveryScope {
   readonly shards: DeliveryWorkRegistry;
 }
 
-/** Describes the cursor used by the package-local delivery loop path. */
+/**
+ * Describes the cursor used by the package-local delivery loop path.
+ */
 export interface DeliveryDrainCursor {
-  /** Identifies the last scanned inbox row, when present. */
+  // prettier-ignore
+
+  /**
+   * Identifies the last scanned inbox row, when present.
+   */
   readonly after?: InboxReadContinuation;
 }
 
-/** Describes internal result metadata used by `DeliveryLoop`. */
+/**
+ * Describes internal result metadata used by `DeliveryLoop`.
+ */
 export interface DeliveryDrainOutcome {
-  /** Contains the public direct-drain result. */
+  // prettier-ignore
+
+  /**
+   * Contains the public direct-drain result.
+   */
   readonly run: DeliveryRun;
-  /** Holds the next resume cursor, when a scan remains. */
+
+  /**
+   * Holds the next resume cursor, when a scan remains.
+   */
   readonly resumeCursor?: DeliveryDrainCursor;
-  /** States whether unavailable rows exhausted the scan. */
+
+  /**
+   * States whether unavailable rows exhausted the scan.
+   */
   readonly exhaustedSkippedScan: boolean;
-  /** Holds admitted-epoch progress, when applicable. */
+
+  /**
+   * Holds admitted-epoch progress, when applicable.
+   */
   readonly epochProgress?: DeliveryEpochProgress;
 }
 
-/** Describes immutable admitted row membership and loop position. */
+/**
+ * Describes immutable admitted row membership and loop position.
+ */
 export interface DeliveryEpochSlice {
-  /** Lists the immutable admitted rows. */
+  // prettier-ignore
+
+  /**
+   * Lists the immutable admitted rows.
+   */
   readonly messages: readonly InboxMessage[];
-  /** Identifies the next admitted row index. */
+
+  /**
+   * Identifies the next admitted row index.
+   */
   readonly next: number;
 }
 
-/** Describes the last safe position in one admitted delivery epoch. */
+/**
+ * Describes the last safe position in one admitted delivery epoch.
+ */
 export interface DeliveryEpochProgress {
-  /** Identifies the next admitted row index. */
+  // prettier-ignore
+
+  /**
+   * Identifies the next admitted row index.
+   */
   readonly next: number;
-  /** States whether all admitted rows are complete. */
+
+  /**
+   * States whether all admitted rows are complete.
+   */
   readonly complete: boolean;
 }
 
@@ -1157,7 +1335,9 @@ interface DrainProgress {
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
 
-/** Mutable cursor state for one bounded pending-message scan. */
+/**
+ * Mutable cursor state for one bounded pending-message scan.
+ */
 class DeliveryScanState {
   #after: InboxReadContinuation | undefined;
   #resumedCursor: boolean;
@@ -1235,7 +1415,9 @@ const defaultShardLeaseMs = 30_000;
 const maxContinuationTextBytes = 16 * 1024;
 const retryDecisions = new DeliveryRetryDecisions({ maxAttempts: deliveryAttemptCapacity });
 
-/** Groups package-local delivery run and lease operations. */
+/**
+ * Groups package-local delivery run and lease operations.
+ */
 const DeliveryRunValues = Object.freeze({
   deliveryRun(
     status: DeliveryRun["status"],
@@ -1466,8 +1648,12 @@ interface DeliveryOperationFence {
   requireActive(): void;
 }
 
-/** Creates package-local delivery operation fences. */
+/**
+ * Creates package-local delivery operation fences.
+ */
 export interface DeliveryOperations {
+  // prettier-ignore
+
   /**
    * Creates an operation fence from optional controls.
    *
@@ -1477,8 +1663,12 @@ export interface DeliveryOperations {
   fence(options: DeliveryOperationOptions | undefined): DeliveryOperationFence;
 }
 
-/** Creates package-local delivery operation fences. */
+/**
+ * Creates package-local delivery operation fences.
+ */
 export const deliveryOperations: DeliveryOperations = Object.freeze({
+  // prettier-ignore
+
   /**
    * Creates one operation fence whose deadline starts at admission.
    *
@@ -1506,7 +1696,9 @@ export const deliveryOperations: DeliveryOperations = Object.freeze({
   },
 });
 
-/** Groups internal operation-control validation. */
+/**
+ * Groups internal operation-control validation.
+ */
 const DeliveryOperationValues = Object.freeze({
   requireTimeout(value: number): number {
     if (!Number.isSafeInteger(value) || value <= 0) {
@@ -1516,7 +1708,9 @@ const DeliveryOperationValues = Object.freeze({
   },
 });
 
-/** Groups package-local delivery value and validation operations. */
+/**
+ * Groups package-local delivery value and validation operations.
+ */
 const DeliverySessionValues = Object.freeze({
   sessionNode(session: DeliveryWorkSession): string {
     return session.kind === "LEASED" ? session.node : "exclusive";
@@ -1618,7 +1812,9 @@ class ActiveWork {
   }
 }
 
-/** Groups package-local delivery message and storage operations. */
+/**
+ * Groups package-local delivery message and storage operations.
+ */
 const DeliveryValues = Object.freeze({
   endpointSnapshot(message: InboxMessage): DeliveryEndpointMessage {
     const label = DeliveryValues.requireEndpointLabel(message.label);

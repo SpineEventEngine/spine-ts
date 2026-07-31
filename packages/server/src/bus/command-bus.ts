@@ -41,7 +41,8 @@ export class CommandBus {
   #acceptedWorkCount = 0;
   #closed: Promise<void> | undefined;
 
-  /** Creates a bus and registers its initial dispatchers.
+  /**
+   * Creates a bus and registers its initial dispatchers.
    *
    * @param dispatchers the dispatchers to register.
    */
@@ -60,7 +61,8 @@ export class CommandBus {
     }
   }
 
-  /** Registers a dispatcher.
+  /**
+   * Registers a dispatcher.
    *
    * @param dispatcher the dispatcher to register.
    * @returns the registered dispatcher.
@@ -70,7 +72,8 @@ export class CommandBus {
     return dispatcher;
   }
 
-  /** Lists command type URLs accepted by registered dispatchers.
+  /**
+   * Lists command type URLs accepted by registered dispatchers.
    *
    * @returns the accepted command type URLs.
    */
@@ -78,7 +81,8 @@ export class CommandBus {
     return this.#registry.acceptedTypeUrls();
   }
 
-  /** Posts a command for asynchronous dispatch.
+  /**
+   * Posts a command for asynchronous dispatch.
    *
    * @param command the command envelope to post.
    * @returns A promise that settles after queued command dispatch completes and may reject.
@@ -176,7 +180,8 @@ export class CommandBus {
   }
 }
 
-/** Provides framework-owned command posting and coordinated close access.
+/**
+ * Provides framework-owned command posting and coordinated close access.
  *
  * @internal
  */

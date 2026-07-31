@@ -25,6 +25,6 @@ seconds.
 
 The fixture uses bounded IPC control/result frames and a disposable in-memory
 removal quarantine. It is test support, not a production supervisor or
-persistence adapter. The topology is TypeScript-to-TypeScript only: live JVM
-interoperability is deliberately deferred to Wave 3. Redis, Hazelcast, durable
-recovery, public-network hardening, and a human admin UI are out of scope.
+persistence adapter. The topology is TypeScript-to-TypeScript only; it does
+not establish live JVM interoperability. Redis, Hazelcast, durable recovery,
+public-network hardening, and a human admin UI are outside this test suite.

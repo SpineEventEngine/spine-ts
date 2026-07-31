@@ -46,7 +46,7 @@ export class Server {
   /**
    * Creates a server builder.
    *
-   * @param options - Configures local network, contexts, resources, and services.
+   * @param options Configures local network, contexts, resources, and services.
    */
   constructor(options: ServerOptions = {}) {
     this.#host = ServerValues.normalizeHost(options.host);
@@ -68,8 +68,8 @@ export class Server {
   /**
    * Creates a local-only server builder for one port.
    *
-   * @param port - Selects the listener port, or zero for an ephemeral port.
-   * @param options - Supplies all server options except the port.
+   * @param port Selects the listener port, or zero for an ephemeral port.
+   * @param options Supplies all server options except the port.
    * @returns A configured server builder.
    */
   static atPort(port: number, options: Omit<ServerOptions, "port"> = {}): Server {
@@ -84,7 +84,7 @@ export class Server {
    * `withStorageFactory(...)` factory is selected. The running server owns and
    * closes added contexts only after intake, sessions, and active work stop.
    *
-   * @param context - Supplies the context or builder to expose.
+   * @param context Supplies the context or builder to expose.
    * @returns This server builder.
    */
   add(context: BoundedContext | BoundedContextBuilder): this {
@@ -95,7 +95,7 @@ export class Server {
   /**
    * Adds a framework closeable owned by this server assembly.
    *
-   * @param resource - Supplies the resource to close after contexts.
+   * @param resource Supplies the resource to close after contexts.
    * @returns This server builder.
    */
   addResource(resource: { close(): unknown }): this {
@@ -402,8 +402,12 @@ interface FailedStartNetwork {
   readonly sessions: Set<http2.ServerHttp2Session>;
 }
 
-/** Options for building a local Spine HTTP/2 service host. */
+/**
+ * Options for building a local Spine HTTP/2 service host.
+ */
 export interface ServerOptions {
+  // prettier-ignore
+
   /**
    * Listener host. Defaults to local-only `127.0.0.1`.
    *
@@ -411,20 +415,26 @@ export interface ServerOptions {
    * process from outside the local machine.
    */
   readonly host?: string;
-  /** Listener port. Defaults to `0`, asking the OS for a free port. */
+
+  /**
+   * Listener port. Defaults to `0`, asking the OS for a free port.
+   */
   readonly port?: number;
+
   /**
    * Maximum uncompressed bytes accepted for one RPC request message.
    * Defaults to 4,194,304 bytes. Must be an integer from 1 through
    * 4,294,967,295.
    */
   readonly readMaxBytes?: number;
+
   /**
    * Maximum uncompressed bytes emitted for one RPC response message.
    * Defaults to 4,194,304 bytes. Must be an integer from 1 through
    * 4,294,967,295.
    */
   readonly writeMaxBytes?: number;
+
   /**
    * Built bounded contexts or builders owned by this server assembly.
    *
@@ -433,20 +443,39 @@ export interface ServerOptions {
    * `withStorageFactory(...)` already selected a more specific local factory.
    */
   readonly contexts?: readonly (BoundedContext | BoundedContextBuilder)[];
-  /** Service-level options for Command, Query, and Subscription routes. */
+
+  /**
+   * Service-level options for Command, Query, and Subscription routes.
+   */
   readonly services?: Omit<SpineServicesOptions, "contexts">;
-  /** Extra framework-owned closeables to close after contexts become safe to close. */
+
+  /**
+   * Extra framework-owned closeables to close after contexts become safe to close.
+   */
   readonly resources?: readonly { close(): unknown }[];
 }
 
-/** Running local Spine service host. */
+/**
+ * Running local Spine service host.
+ */
 export interface RunningServer {
-  /** Host accepted by the listener. */
+  // prettier-ignore
+
+  /**
+   * Host accepted by the listener.
+   */
   readonly host: string;
-  /** Bound listener port. */
+
+  /**
+   * Bound listener port.
+   */
   readonly port: number;
-  /** Base URL for Connect gRPC-compatible clients. */
+
+  /**
+   * Base URL for Connect gRPC-compatible clients.
+   */
   readonly baseUrl: string;
+
   /**
    * Closes intake, delivery, contexts, and owned resources.
    *
@@ -455,6 +484,7 @@ export interface RunningServer {
    * phases until a retry. Sibling servers and process-wide facilities remain
    * available. Concurrent calls share one attempt; later calls retry only
    * unfinished cleanup, preserving stable flattened failure order.
+   *
    * @returns A promise that settles after server-owned cleanup completes.
    */
   close(): Promise<void>;
@@ -560,7 +590,10 @@ interface RunningHttp2ServerOptions {
   readonly port: number;
 }
 
-/** @internal Groups private server assembly, network, and shutdown operations. */
+/**
+ *
+ * @internal Groups private server assembly, network, and shutdown operations.
+ */
 const ServerValues = Object.freeze({
   async buildContexts(
     entries: readonly ServerContext[],

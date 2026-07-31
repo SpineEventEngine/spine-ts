@@ -8,6 +8,37 @@ import { lstatIfPresent } from "./generated-path-safety.mjs";
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaultImportTimeoutMs = 10_000;
 const legacyNamespace = "@spine-" + "ts/";
+const userFacingMarkdownExclusions = new Set([
+  "AGENTS.md",
+  "human-review-1-jul.md",
+  "human-review-22-jul.md",
+]);
+const userFacingMarkdownExcludedPrefixes = ["build-protocol/", "docs/api/reference/"];
+const staleDocumentationPatterns = [
+  ["stale example topology", /examples\/(?:datastore-orders|project-management)\b/gu],
+  ["stale Chat model topology", /examples\/chat\/users-model\b/gu],
+  ["stale Chat model package", /@spine-event-engine\/example-users-model\b/gu],
+  ["stale owned example namespace", /\b(?:type\.)?spine\.example(?:\.[A-Za-z][\w-]*)*\.v1\b/gu],
+  ["placeholder workspace version", /(?<![\d.])0\.0\.0(?![\d.])/gu],
+  ["handwritten Chat validation", /\bmessage-validation(?:\.ts)?\b/gu],
+  ["handwritten Chat rejection companion", /\brejections\.ts\b/gu],
+  ["false Chat multi-model association", /\bChat model declares Users\b/gu],
+  [
+    "misleading private-package registry installation",
+    /\bpnpm\s+(?:add|install)\s+@spine-event-engine\/(?:core|proto|storage(?:-(?:datastore|rdbms))?|transport)\b/gu,
+  ],
+  ["stale missing storage-adapter claim", /\b(?:Datastore|RDBMS)\s+(?:is\s+)?not available\b/gu],
+];
+const executionHistoryTerms = [
+  "T-\\d{4,}[A-Za-z]*",
+  "wave\\s+\\d+[A-Za-z]?",
+  "phase\\s+\\d+",
+  "slice\\s+\\d+",
+  "milestone\\s+(?:[A-Za-z-]*\\d|\\w+)",
+  "candidate",
+  "promotion",
+].join("|");
+const executionHistoryPattern = new RegExp(`\\b(?:${executionHistoryTerms})\\b`, "giu");
 
 function trackedLiveFiles(repoRoot) {
   return execFileSync("git", ["ls-files", "--cached"], {
@@ -183,6 +214,63 @@ function trackedMarkdownFiles(repoRoot) {
     .split("\n")
     .filter(Boolean)
     .sort();
+}
+
+/**
+ * Lists tracked Markdown written for framework readers instead of build history.
+ *
+ * @param repoRoot The repository root.
+ * @returns Sorted repository-relative Markdown paths.
+ */
+export function collectUserFacingMarkdownFiles(repoRoot = defaultRepoRoot) {
+  const paths = new Set();
+  const excludedDirectories = new Set([".git", ".worktrees", "node_modules", "build-protocol"]);
+
+  function visit(directory, prefix = "") {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = `${prefix}${entry.name}`;
+      if (entry.isDirectory()) {
+        if (!excludedDirectories.has(entry.name)) visit(join(directory, entry.name), `${path}/`);
+      } else if (entry.isFile() && path.endsWith(".md")) {
+        paths.add(path);
+      }
+    }
+  }
+
+  visit(repoRoot);
+  return [...paths]
+    .filter(
+      (path) =>
+        !userFacingMarkdownExclusions.has(path) &&
+        !userFacingMarkdownExcludedPrefixes.some((prefix) => path.startsWith(prefix)),
+    )
+    .sort();
+}
+
+/**
+ * Finds historical language and retired topology in reader-facing Markdown.
+ *
+ * @param repoRoot The repository root.
+ * @returns Sorted, line-specific documentation problems.
+ */
+export function collectUserFacingDocumentationProblems(repoRoot = defaultRepoRoot) {
+  const problems = [];
+
+  for (const path of collectUserFacingMarkdownFiles(repoRoot)) {
+    const source = readFileSync(join(repoRoot, path), "utf8");
+    for (const [index, line] of source.split("\n").entries()) {
+      for (const match of line.matchAll(executionHistoryPattern)) {
+        problems.push(`${path}:${index + 1}: internal execution-history term: ${match[0]}`);
+      }
+      for (const [description, pattern] of staleDocumentationPatterns) {
+        for (const match of line.matchAll(pattern)) {
+          problems.push(`${path}:${index + 1}: ${description}: ${match[0]}`);
+        }
+      }
+    }
+  }
+
+  return problems.sort((left, right) => left.localeCompare(right));
 }
 
 function isRelativeFileReference(target) {
@@ -397,6 +485,9 @@ export function runReleaseReadiness(
     ...validateImports(repoRoot, exports, importTimeoutMs),
     ...validateAssetExports(repoRoot, assets),
     ...validateLinks(repoRoot, links),
+    ...collectUserFacingDocumentationProblems(repoRoot).map(
+      (problem) => `Reader documentation: ${problem}`,
+    ),
   ];
 
   console.log(

@@ -35,7 +35,11 @@ export type EnvironmentOwnership = "caller" | "server";
  * @internal
  */
 export interface EnvironmentGeneration {
-  /** Marks values that represent an environment generation. */
+  // prettier-ignore
+
+  /**
+   * Marks values that represent an environment generation.
+   */
   readonly generation: true;
 }
 
@@ -45,9 +49,16 @@ export interface EnvironmentGeneration {
  * @internal
  */
 export interface EnvironmentRegistrationClaim {
-  /** Identifies the reservation within its generation. */
+  // prettier-ignore
+
+  /**
+   * Identifies the reservation within its generation.
+   */
   readonly token: string;
-  /** Identifies the generation that owns the reservation. */
+
+  /**
+   * Identifies the generation that owns the reservation.
+   */
   readonly generation: EnvironmentGeneration;
 }
 
@@ -57,9 +68,16 @@ export interface EnvironmentRegistrationClaim {
  * @internal
  */
 export interface EnvironmentAttachOptions {
-  /** Selects caller or server ownership. */
+  // prettier-ignore
+
+  /**
+   * Selects caller or server ownership.
+   */
   readonly ownership: EnvironmentOwnership;
-  /** Lists context delivery descriptors to attach. */
+
+  /**
+   * Lists context delivery descriptors to attach.
+   */
   readonly descriptors: readonly ContextDeliveryDescriptor[];
 }
 
@@ -104,20 +122,26 @@ export type EnvironmentAttachmentHandle = AttachedEnvironmentRegistration;
  * @internal
  */
 export interface EnvironmentAttachmentsOptions {
+  // prettier-ignore
+
   /**
    * Creates a generation worker when an attachment opens a generation.
    *
    * @returns The worker for the new generation.
    */
   readonly createWorker?: () => EnvironmentGenerationWorker;
+
   /**
    * Calls the retained lifecycle failure reporter.
    *
-   * @param causes - Lists the failures to report.
+   * @param causes Lists the failures to report.
    * @returns A promise that settles after the failures are reported.
    */
   readonly report?: (causes: readonly unknown[]) => Promise<void>;
-  /** Injects transition faults used by lifecycle tests. */
+
+  /**
+   * Injects transition faults used by lifecycle tests.
+   */
   readonly transitionFaults?: {
     readonly onRoutePrepare?: (descriptor: ContextDeliveryDescriptor) => void;
     readonly onScopeTransfer?: (
@@ -159,7 +183,7 @@ export class EnvironmentRegistrations {
   /**
    * Sets the current generation during a safe handoff.
    *
-   * @param generation - Supplies the replacement generation.
+   * @param generation Supplies the replacement generation.
    * @returns The retired generation.
    */
   replace(generation: EnvironmentGeneration): EnvironmentGeneration {
@@ -174,7 +198,7 @@ export class EnvironmentRegistrations {
   /**
    * Creates a registration claim in the current generation.
    *
-   * @param ownership - Selects caller or server ownership.
+   * @param ownership Selects caller or server ownership.
    * @returns The new opaque registration claim.
    */
   claim(ownership: EnvironmentOwnership): EnvironmentRegistrationClaim {
@@ -200,8 +224,7 @@ export class EnvironmentRegistrations {
    * Removes one failed attachment without disturbing sibling claims.
    *
    * @internal
-   *
-   * @param token - Identifies the claim.
+   * @param token Identifies the claim.
    * @returns The remaining claim count.
    */
   remove(token: string): number {
@@ -215,8 +238,7 @@ export class EnvironmentRegistrations {
    * Clears an empty generation after its retirement is safe.
    *
    * @internal
-   *
-   * @param generation - Identifies the generation to clear.
+   * @param generation Identifies the generation to clear.
    */
   clear(generation: EnvironmentGeneration): void {
     if (this.#claims.size > 0) {
@@ -251,7 +273,10 @@ export class EnvironmentAttachments {
   #permanentCloseAdmission: Promise<void> | undefined;
   #permanentlyClosed = false;
 
-  /** Creates an attachment owner. @param options - Optionally supplies lifecycle test seams. */
+  /**
+   * Creates an attachment owner.
+   * @param options Optionally supplies lifecycle test seams.
+   */
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
     this.#report = options.report ?? (() => Promise.resolve());
@@ -262,7 +287,6 @@ export class EnvironmentAttachments {
    * Returns the number of bounded unresolved diagnostics.
    *
    * @internal
-   *
    * @returns The unresolved count.
    */
   get unresolvedReportedDomainCount(): number {
@@ -277,7 +301,6 @@ export class EnvironmentAttachments {
    * Returns the number of live registrations.
    *
    * @internal
-   *
    * @returns The active registration count.
    */
   get activeRegistrationCount(): number {
@@ -288,7 +311,6 @@ export class EnvironmentAttachments {
    * Returns the number of configured delivery owners.
    *
    * @internal
-   *
    * @returns The configured owner count.
    */
   get configuredOwnerCount(): number {
@@ -303,7 +325,6 @@ export class EnvironmentAttachments {
    * Returns the number of configured delivery scopes.
    *
    * @internal
-   *
    * @returns The configured scope count.
    */
   get configuredScopeCount(): number {
@@ -318,7 +339,6 @@ export class EnvironmentAttachments {
    * Checks whether a failed attachment owns unfinished rollback.
    *
    * @internal
-   *
    * @returns Whether rollback remains.
    */
   get failedStartPending(): boolean {
@@ -329,8 +349,7 @@ export class EnvironmentAttachments {
    * Checks whether a rejection owns failed-start rollback retry.
    *
    * @internal
-   *
-   * @param error - Supplies the rejection.
+   * @param error Supplies the rejection.
    * @returns Whether retry is required.
    */
   failedStartRetryPending(error: unknown): boolean {
@@ -342,8 +361,7 @@ export class EnvironmentAttachments {
    * Checks whether detachment made an endpoint safe.
    *
    * @internal
-   *
-   * @param attachment - Identifies the attachment.
+   * @param attachment Identifies the attachment.
    * @returns Whether the endpoint is safe.
    */
   endpointSafe(attachment: EnvironmentAttachmentHandle): boolean {
@@ -364,8 +382,7 @@ export class EnvironmentAttachments {
    * Checks whether an attachment owns rejected detach work.
    *
    * @internal
-   *
-   * @param attachment - Identifies the attachment.
+   * @param attachment Identifies the attachment.
    * @returns Whether detach retry is pending.
    */
   detachRetryPending(attachment: EnvironmentAttachmentHandle): boolean {
@@ -379,7 +396,7 @@ export class EnvironmentAttachments {
   /**
    * Attaches configured descriptors to an environment generation.
    *
-   * @param options - Supplies ownership and descriptors.
+   * @param options Supplies ownership and descriptors.
    * @returns The successful attachment handle.
    */
   attach(options: EnvironmentAttachOptions): Promise<EnvironmentAttachmentHandle> {
@@ -498,7 +515,9 @@ export class EnvironmentAttachments {
     return attachment;
   }
 
-  /** Stops delivery work while preserving a retryable failed stop.
+  /**
+   * Stops delivery work while preserving a retryable failed stop.
+   *
    * @returns A promise that settles after delivery work stops.
    */
   stopDelivery(): Promise<void> {
@@ -583,7 +602,9 @@ export class EnvironmentAttachments {
     return stop.promise;
   }
 
-  /** Retries a previously rejected delivery stop.
+  /**
+   * Retries a previously rejected delivery stop.
+   *
    * @returns A promise that settles after the stop retry completes.
    */
   retryDeliveryStop(): Promise<void> {
@@ -868,7 +889,7 @@ export class EnvironmentAttachments {
   /**
    * Removes one attached registration.
    *
-   * @param attachment - Identifies the attachment to detach.
+   * @param attachment Identifies the attachment to detach.
    * @returns A promise that settles after the attachment detaches.
    */
   detach(attachment: EnvironmentAttachmentHandle): Promise<void> {
@@ -893,7 +914,7 @@ export class EnvironmentAttachments {
   /**
    * Retries rejected detachment for one attachment.
    *
-   * @param attachment - Identifies the attachment to retry.
+   * @param attachment Identifies the attachment to retry.
    * @returns A promise that settles after the detach retry completes.
    */
   retryDetach(attachment: EnvironmentAttachmentHandle): Promise<void> {
@@ -1034,7 +1055,9 @@ export class EnvironmentAttachments {
     }
   }
 
-  /** Retries rollback following a rejected attachment start.
+  /**
+   * Retries rollback following a rejected attachment start.
+   *
    * @returns A promise that settles after failed-start rollback retries.
    */
   retryFailedStart(): Promise<void> {
@@ -2142,9 +2165,9 @@ export class RegistrationReadiness {
   /**
    * Creates readiness buffering for configured descriptors.
    *
-   * @param descriptors - Supplies descriptors and their initial scopes.
-   * @param onPrepare - Converts a readiness notification into a scope.
-   * @param onNotify - Delivers an opened scope to its generation.
+   * @param descriptors Supplies descriptors and their initial scopes.
+   * @param onPrepare Converts a readiness notification into a scope.
+   * @param onNotify Delivers an opened scope to its generation.
    */
   constructor(
     descriptors: readonly {
@@ -2167,8 +2190,8 @@ export class RegistrationReadiness {
   /**
    * Records or forwards one endpoint readiness notification.
    *
-   * @param descriptor - Identifies the reporting descriptor.
-   * @param ready - Supplies the ready endpoint.
+   * @param descriptor Identifies the reporting descriptor.
+   * @param ready Supplies the ready endpoint.
    */
   notify(descriptor: ContextDeliveryDescriptor, ready: DeliveryReady): void {
     if (this.#mode === "failed") {
@@ -2205,7 +2228,9 @@ export class RegistrationReadiness {
     this.#buffer(descriptor, EnvironmentAttachmentValues.cloneReady(scope.ready));
   }
 
-  /** Clears readiness and discards buffered notifications. */
+  /**
+   * Clears readiness and discards buffered notifications.
+   */
   fail(): void {
     this.#mode = "failed";
     this.#buffered.clear();
@@ -2215,7 +2240,7 @@ export class RegistrationReadiness {
   /**
    * Prepares notification buffering for a generation transition.
    *
-   * @param onBuffered - Receives notifications buffered during the transition.
+   * @param onBuffered Receives notifications buffered during the transition.
    */
   prepareTransition(
     onBuffered: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => void,
@@ -2230,8 +2255,8 @@ export class RegistrationReadiness {
   /**
    * Updates every descriptor for a replacement generation.
    *
-   * @param onPrepare - Converts readiness into replacement scopes.
-   * @param onNotify - Delivers opened replacement scopes.
+   * @param onPrepare Converts readiness into replacement scopes.
+   * @param onNotify Delivers opened replacement scopes.
    */
   rebind(
     onPrepare: (descriptor: ContextDeliveryDescriptor, ready: DeliveryReady) => DeliveryRunScope,
@@ -2245,9 +2270,9 @@ export class RegistrationReadiness {
   /**
    * Updates one descriptor for a replacement generation.
    *
-   * @param descriptor - Identifies the descriptor to rebind.
-   * @param onPrepare - Converts readiness into replacement scopes.
-   * @param onNotify - Delivers opened replacement scopes.
+   * @param descriptor Identifies the descriptor to rebind.
+   * @param onPrepare Converts readiness into replacement scopes.
+   * @param onNotify Delivers opened replacement scopes.
    */
   rebindDescriptor(
     descriptor: ContextDeliveryDescriptor,
@@ -2263,7 +2288,7 @@ export class RegistrationReadiness {
   /**
    * Opens readiness and returns initial plus buffered scopes.
    *
-   * @param startup - Supplies scopes recovered during startup.
+   * @param startup Supplies scopes recovered during startup.
    * @returns Immutable scopes to run or notify.
    */
   open(startup: readonly DeliveryRunScope[]): readonly DeliveryRunScope[] {
@@ -2331,7 +2356,10 @@ interface DeliveryRuntimeSnapshot {
   readonly context: StorageContext;
 }
 
-/** Groups immutable registration-assembly operations. @internal */
+/**
+ * Groups immutable registration-assembly operations.
+ * @internal
+ */
 const EnvironmentAttachmentAssembly = Object.freeze({
   environmentClosedError(): Error {
     return new Error("ServerEnvironment is closed.");
@@ -2441,9 +2469,9 @@ const EnvironmentAttachmentAssembly = Object.freeze({
   /**
    * Converts a finite startup settlement into registration-scoped parked evidence.
    *
-   * @param token - Identifies the registration.
-   * @param scopes - Supplies configured startup scopes.
-   * @param settlement - Supplies the finite recovery settlement.
+   * @param token Identifies the registration.
+   * @param scopes Supplies configured startup scopes.
+   * @param settlement Supplies the finite recovery settlement.
    * @returns Parked-obligation evidence for the registration.
    * @internal
    */
@@ -2489,8 +2517,13 @@ const EnvironmentAttachmentAssembly = Object.freeze({
   },
 });
 
-/** Exposes the registration-assembly evidence seam used by direct server tests. @internal */
+/**
+ * Exposes the registration-assembly evidence seam used by direct server tests.
+ * @internal
+ */
 export interface EnvironmentAttachmentAccess {
+  // prettier-ignore
+
   /**
    * Converts a finite startup settlement into registration-scoped parked evidence.
    *
@@ -2506,7 +2539,10 @@ export interface EnvironmentAttachmentAccess {
   ): ParkedDeliveryObligations;
 }
 
-/** Exposes owner-bound registration-assembly test operations. @internal */
+/**
+ * Exposes owner-bound registration-assembly test operations.
+ * @internal
+ */
 export const EnvironmentAttachmentAccess: Readonly<EnvironmentAttachmentAccess> = Object.freeze({
   startupObligations(
     token: string,
@@ -2552,7 +2588,10 @@ interface CurrentAggregationFailure {
   readonly causes: readonly unknown[];
 }
 
-/** @internal Groups private attachment-state, scope, and failure operations. */
+/**
+ *
+ * @internal Groups private attachment-state, scope, and failure operations.
+ */
 const EnvironmentAttachmentValues = Object.freeze({
   explicitRetryError(): Error {
     return new Error("Environment generation rollback requires an explicit retry.");

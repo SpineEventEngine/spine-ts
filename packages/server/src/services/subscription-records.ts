@@ -3,48 +3,100 @@ import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { SubscriptionSchema, type Subscription } from "@spine-event-engine/proto/client";
 import { RecordSpec } from "@spine-event-engine/storage";
 
-/** Durable inactive subscription record persisted by SubscriptionService. */
+/**
+ * Durable inactive subscription record persisted by SubscriptionService.
+ */
 export interface DurableSubscriptionRecord {
-  /** Identifies this subscription record and its storage key. */
+  // prettier-ignore
+
+  /**
+   * Identifies this subscription record and its storage key.
+   */
   readonly id: string;
-  /** Distinguishes state subscriptions from event subscriptions. */
+
+  /**
+   * Distinguishes state subscriptions from event subscriptions.
+   */
   readonly kind: "event" | "state";
-  /** Names the subscribed state or event type URL. */
+
+  /**
+   * Names the subscribed state or event type URL.
+   */
   readonly targetType: string;
-  /** Identifies the tenant that owns the subscription when present. */
+
+  /**
+   * Identifies the tenant that owns the subscription when present.
+   */
   readonly tenantId?: string;
-  /** Preserves the client subscription that created this record. */
+
+  /**
+   * Preserves the client subscription that created this record.
+   */
   readonly subscription: Subscription;
-  /** Gives the Unix time in milliseconds after which activation is rejected. */
+
+  /**
+   * Gives the Unix time in milliseconds after which activation is rejected.
+   */
   readonly expiresAtMs: number;
 }
 
-/** Describes the durable lifecycle state stored for a subscription. */
+/**
+ * Describes the durable lifecycle state stored for a subscription.
+ */
 export type DurableSubscriptionState =
   | {
-      /** Marks a persisted subscription awaiting activation. */
+      // prettier-ignore
+
+      /**
+       * Marks a persisted subscription awaiting activation.
+       */
       readonly type: "inactive";
-      /** Identifies the durable subscription. */
+
+      /**
+       * Identifies the durable subscription.
+       */
       readonly id: string;
-      /** Holds the subscription awaiting activation. */
+
+      /**
+       * Holds the subscription awaiting activation.
+       */
       readonly record: DurableSubscriptionRecord;
     }
   | {
-      /** Marks an activation claim held by one service instance. */
+      // prettier-ignore
+
+      /**
+       * Marks an activation claim held by one service instance.
+       */
       readonly type: "claim";
-      /** Identifies the claimed subscription. */
+
+      /**
+       * Identifies the claimed subscription.
+       */
       readonly id: string;
-      /** Identifies the service instance holding the claim. */
+
+      /**
+       * Identifies the service instance holding the claim.
+       */
       readonly owner: string;
     }
   | {
-      /** Marks a cancellation fence awaiting deletion. */
+      // prettier-ignore
+
+      /**
+       * Marks a cancellation fence awaiting deletion.
+       */
       readonly type: "cancel";
-      /** Identifies the cancelled subscription. */
+
+      /**
+       * Identifies the cancelled subscription.
+       */
       readonly id: string;
     };
 
-/** Storage spec for service-owned inactive subscription records. */
+/**
+ * Storage spec for service-owned inactive subscription records.
+ */
 export const durableSubscriptionRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
   storageKey: "spine.server.Subscription:durable",
@@ -52,7 +104,9 @@ export const durableSubscriptionRecordSpec: RecordSpec<string, Any> = new Record
   extractId: (record) => DurableSubscriptionRecords.readState(record).id,
 });
 
-/** Encodes and decodes service-owned subscription persistence states. */
+/**
+ * Encodes and decodes service-owned subscription persistence states.
+ */
 export const DurableSubscriptionRecords: Readonly<{
   cancel(id: string): Any;
   claim(id: string, owner: string): Any;
@@ -140,7 +194,9 @@ const cancelTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionCancel";
 const durableRecordMaxBytes = 33_554_432;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
-/** Holds validation and wire-format details for durable subscription records. */
+/**
+ * Holds validation and wire-format details for durable subscription records.
+ */
 const SubscriptionRecordValues = Object.freeze({
   readSubscription(encoded: string, recordId: string): Subscription {
     if (!this.hasCanonicalBase64(encoded)) {

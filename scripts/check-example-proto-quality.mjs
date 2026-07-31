@@ -14,6 +14,21 @@ const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const maxSemanticComponents = 4;
 const migrationBaseline = "b1a3dc7b1f21e4f7239014ea56f451941ef7addd";
 const partitions = ["T-0080J", "T-0080K", "T-0080L", "T-0080M", "T-0080N"];
+const frameworkJargon = [
+  "cqrs",
+  "aggregate",
+  "event sourcing",
+  "bounded context",
+  "command bus",
+  "read-side",
+  "projection",
+  "projected",
+  "fixed-topology",
+  "triggering entity",
+  "process-manager",
+  "handled event",
+  "generic update",
+].join("|");
 const baselineFailureCache = new Map();
 
 export function checkExampleProtoQuality(repoRoot = defaultRepoRoot) {
@@ -39,7 +54,8 @@ export function checkExampleProtoQuality(repoRoot = defaultRepoRoot) {
       continue;
     }
     if (provenance.kind === "copied") continue;
-    failures.push(...scanProto(file, readFileSync(join(root, file), "utf8")));
+    const source = readFileSync(join(root, file), "utf8");
+    failures.push(...scanProto(file, source), ...scanExampleProtoContract(file, source));
   }
 
   return [
@@ -169,7 +185,9 @@ function readDebt(root) {
     .entries;
 }
 
-/** Validates exact partitioned debt independently of Git for focused fixtures. */
+/**
+ * Validates exact partitioned debt independently of Git for focused fixtures.
+ */
 export function validateProtoDebtEntries(records, observed, observesBaseline) {
   const entries = [];
   const seen = new Set();
@@ -460,6 +478,55 @@ function scanProto(file, source) {
   }
   parseUntil(undefined);
   return failures;
+}
+
+/**
+ * Enforces the enduring authored-example package, path, prefix, prose, and spacing contract.
+ */
+export function scanExampleProtoContract(file, source) {
+  const failures = [];
+  const domain = /(?:^|\/)examples\/(chat|projects|orders|todo)(?:\/|$)/.exec(file)?.[1];
+  const packageName = /^\s*package\s+([\w.]+)\s*;/m.exec(source)?.[1];
+  if (domain === undefined || packageName !== `spine.examples.${domain}`)
+    failures.push(`${file} namespace spine.examples.<domain>`);
+  if (/(?:^|[/.])v1(?:[/.]|$)/.test(file) || /\b(?:package|import)\b[^;\n]*\bv1\b/.test(source))
+    failures.push(`${file} owned-v1`);
+  const prefix = /type(?:_url)?_prefix\s*\)?\s*=\s*"([^"]+)"/g;
+  for (const match of source.matchAll(prefix))
+    if (match[1] !== `type.spine.examples.${domain ?? ""}`)
+      failures.push(`${file} type-prefix type.spine.examples.<domain>`);
+  if (new RegExp(`\\b(?:${frameworkJargon})\\b`, "i").test(commentText(source)))
+    failures.push(`${file} unrelated-framework-jargon`);
+  const tokens = tokenize(source);
+  for (let index = 1; index < tokens.length; index += 1) {
+    const previous = tokens[index - 1];
+    const token = tokens[index];
+    if (
+      previous.value !== ";" ||
+      token.kind !== "comment" ||
+      optionStatementEndsAt(tokens, index - 1)
+    )
+      continue;
+    const gap = source.slice(previous.end, token.start);
+    if (/^\r?\n[ \t]*$/u.test(gap))
+      failures.push(
+        `${file} comment-separation ${source.slice(0, token.start).split("\n").length}`,
+      );
+  }
+  return failures;
+}
+
+function optionStatementEndsAt(tokens, semicolonIndex) {
+  for (let index = semicolonIndex - 1; index >= 0; index -= 1) {
+    const value = tokens[index].value;
+    if ([";", "{", "}"].includes(value)) return false;
+    if (value === "option") return true;
+  }
+  return false;
+}
+
+function commentText(source) {
+  return [...source.matchAll(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g)].map((match) => match[0]).join("\n");
 }
 
 function namedDeclaration(tokens, index) {

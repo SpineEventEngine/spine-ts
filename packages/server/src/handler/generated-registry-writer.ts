@@ -76,33 +76,61 @@ interface RenderRefs {
   readonly localNames: ReadonlySet<string>;
 }
 
-/** Options for deterministic generated-registry source rendering. */
+/**
+ * Options for deterministic generated-registry source rendering.
+ */
 export interface RegistryRenderOptions {
-  /** Absolute or caller-owned output file used for relative import rendering. */
+  // prettier-ignore
+
+  /**
+   * Absolute or caller-owned output file used for relative import rendering.
+   */
   readonly outputFile: string;
-  /** Type-only module specifier used for the generated registry contract. */
+
+  /**
+   * Type-only module specifier used for the generated registry contract.
+   */
   readonly registryModuleSpecifier?: string;
-  /** Exported constant name for the generated registry object. */
+
+  /**
+   * Exported constant name for the generated registry object.
+   */
   readonly registryName?: string;
 }
 
-/** Options for guarded generated-registry file writing. */
+/**
+ * Options for guarded generated-registry file writing.
+ */
 export interface RegistryWriteOptions extends RegistryRenderOptions {
-  /** Repository root used for Git-ignore and symlink validation. */
+  // prettier-ignore
+
+  /**
+   * Repository root used for Git-ignore and symlink validation.
+   */
   readonly repoRoot: string;
-  /** Explicit generated directory that must own the output file. */
+
+  /**
+   * Explicit generated directory that must own the output file.
+   */
   readonly generatedRoot: string;
-  /** Published output path used for relative imports when writing to staging. */
+
+  /**
+   * Published output path used for relative imports when writing to staging.
+   */
   readonly publishedOutputFile?: string;
 }
 
-/** Build-time writer for version-1 generated handler registry source. */
+/**
+ * Build-time writer for version-1 generated handler registry source.
+ */
 export class GeneratedRegistryWriter {
+  // prettier-ignore
+
   /**
    * Renders generated registry source without writing to disk.
    *
-   * @param analysis - Analyzed entity handlers to render.
-   * @param options - Caller-owned output and registry naming options.
+   * @param analysis Analyzed entity handlers to render.
+   * @param options Caller-owned output and registry naming options.
    * @returns Deterministic generated TypeScript source.
    */
   render(analysis: BuildHandlerAnalysis, options: RegistryRenderOptions): string {
@@ -126,8 +154,8 @@ export class GeneratedRegistryWriter {
   /**
    * Validates and writes generated registry source only when explicitly invoked.
    *
-   * @param analysis - Analyzed entity handlers to render and validate.
-   * @param options - Guarded output location and registry naming options.
+   * @param analysis Analyzed entity handlers to render and validate.
+   * @param options Guarded output location and registry naming options.
    * @returns Generated TypeScript source written to the output file.
    */
   write(analysis: BuildHandlerAnalysis, options: RegistryWriteOptions): string {
@@ -150,7 +178,9 @@ export class GeneratedRegistryWriter {
   }
 }
 
-/** Owns deterministic generated-registry rendering and guarded file-output details. */
+/**
+ * Renders deterministic generated registries and guards file output.
+ */
 const RegistrySource = Object.freeze({
   importNames(refs: RenderRefs): ReadonlySet<string> {
     return new Set([registryTypeName, ...refs.localNames]);

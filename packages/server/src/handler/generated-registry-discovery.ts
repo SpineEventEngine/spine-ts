@@ -12,7 +12,9 @@ const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const registryVersion = 1;
 
-/** Stable error code for generated registry discovery failures. */
+/**
+ * Stable error code for generated registry discovery failures.
+ */
 export type RegistryDiscoveryErrorCode =
   | "MODULE_IMPORT_FAILED"
   | "MISSING_REGISTRY_EXPORT"
@@ -22,32 +24,56 @@ export type RegistryDiscoveryErrorCode =
   | "INVALID_MODULE_REF"
   | "DUPLICATE_REGISTRY_MODULE";
 
-/** Options for loading one or more generated registry modules. */
+/**
+ * Options for loading one or more generated registry modules.
+ */
 export interface GeneratedRegistryDiscoveryOptions {
-  /** Explicit filesystem paths or file: URLs to load. */
+  // prettier-ignore
+
+  /**
+   * Explicit filesystem paths or file: URLs to load.
+   */
   readonly modules: readonly (string | URL)[];
-  /** Export name expected from each generated module. */
+
+  /**
+   * Export name expected from each generated module.
+   */
   readonly exportName?: string;
-  /** Optional retry token used to bypass Node's dynamic import cache for canonical modules. */
+
+  /**
+   * Optional retry token used to bypass Node's dynamic import cache for canonical modules.
+   */
   readonly cacheBust?: string;
 }
 
-/** Error thrown when generated registry discovery or loading fails. */
+/**
+ * Error thrown when generated registry discovery or loading fails.
+ */
 export class GeneratedRegistryDiscoveryError extends Error {
-  /** Stable code for callers/tests that need structured failure handling. */
+  // prettier-ignore
+
+  /**
+   * Stable code for callers/tests that need structured failure handling.
+   */
   readonly code: RegistryDiscoveryErrorCode;
-  /** Normalized imported module identifier. */
+
+  /**
+   * Normalized imported module identifier.
+   */
   readonly moduleId: string;
-  /** Optional underlying import or ingestion error. */
+
+  /**
+   * Optional underlying import or ingestion error.
+   */
   override readonly cause: unknown;
 
   /**
    * Creates a registry discovery error.
    *
-   * @param code - Stable code that identifies the failed operation.
-   * @param message - Human-readable failure description.
-   * @param moduleId - Normalized identifier of the affected module.
-   * @param cause - Underlying import or ingestion failure.
+   * @param code Stable code that identifies the failed operation.
+   * @param message Human-readable failure description.
+   * @param moduleId Normalized identifier of the affected module.
+   * @param cause Underlying import or ingestion failure.
    */
   constructor(
     code: RegistryDiscoveryErrorCode,
@@ -64,39 +90,45 @@ export class GeneratedRegistryDiscoveryError extends Error {
   }
 }
 
-/** Framework-owned runtime loader for generated handler registry modules. */
+/**
+ * Framework-owned runtime loader for generated handler registry modules.
+ */
 export class GeneratedRegistryDiscovery {
   readonly #ingestor: HandlerRegistryIngestor;
 
-  /** Creates a generated-registry loader.
+  /**
+   * Creates a generated-registry loader.
    *
-   * @param ingestor - Adapter that validates and registers loaded metadata.
+   * @param ingestor Adapter that validates and registers loaded metadata.
    */
   constructor(ingestor: HandlerRegistryIngestor = new HandlerRegistryIngestor()) {
     this.#ingestor = ingestor;
   }
 
-  /** Builds the conventional generated registry module path for one package or app root.
+  /**
+   * Builds the conventional generated registry module path for one package or app root.
    *
-   * @param root - Package or application root directory.
+   * @param root Package or application root directory.
    * @returns Absolute path to the conventional registry module.
    */
   static conventionalModulePath(root: string): string {
     return resolve(root, generatedRegistryFile);
   }
 
-  /** Builds the conventional generated registry module URL for one package or app root.
+  /**
+   * Builds the conventional generated registry module URL for one package or app root.
    *
-   * @param root - Package or application root directory.
+   * @param root Package or application root directory.
    * @returns File URL for the conventional registry module.
    */
   static conventionalModuleUrl(root: string): URL {
     return pathToFileURL(GeneratedRegistryDiscovery.conventionalModulePath(root));
   }
 
-  /** Loads generated handler registries from explicit filesystem paths or file URLs.
+  /**
+   * Loads generated handler registries from explicit filesystem paths or file URLs.
    *
-   * @param options - Module references and optional load configuration.
+   * @param options Module references and optional load configuration.
    * @returns Frozen loaded registry values in module order.
    */
   async load(options: GeneratedRegistryDiscoveryOptions): Promise<readonly unknown[]> {
@@ -110,8 +142,8 @@ export class GeneratedRegistryDiscovery {
    *
    * Registration stages all new metadata before mutating the caller-owned registry.
    *
-   * @param options - Module references and optional load configuration.
-   * @param registry - Metadata registry to update, if one already exists.
+   * @param options Module references and optional load configuration.
+   * @param registry Metadata registry to update, if one already exists.
    * @returns Registry containing the loaded generated metadata.
    */
   async register(

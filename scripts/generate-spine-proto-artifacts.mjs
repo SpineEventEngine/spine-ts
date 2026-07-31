@@ -19,7 +19,9 @@ function normalizedRelative(root, path) {
   return relative(root, path).split(sep).join("/");
 }
 
-/** Writes the generated Spine module and versioned manifest from canonical package inputs. */
+/**
+ * Writes the generated Spine module and versioned manifest from canonical package inputs.
+ */
 export function writeSpineProtoArtifacts(repoRoot, generatedRoot, manifestOutput) {
   const packageRoot = join(resolve(repoRoot), "packages/proto");
   const config = JSON.parse(readFileSync(join(packageRoot, "spine-proto.json"), "utf8"));

@@ -4,22 +4,38 @@ import type {
   NormalizedQueryPredicate,
 } from "./query-policy.js";
 
-/** One materialized storage row accepted by the shared normalized evaluator. */
+/**
+ * One materialized storage row accepted by the shared normalized evaluator.
+ */
 export interface NormalizedQueryEntry<Id, Record> {
-  /** Identifies the stored row. */
+  // prettier-ignore
+
+  /**
+   * Identifies the stored row.
+   */
   readonly id: Id;
-  /** Carries the materialized stored record. */
+
+  /**
+   * Carries the materialized stored record.
+   */
   readonly record: Record;
-  /** Maps normalized query columns to row values. */
+
+  /**
+   * Maps normalized query columns to row values.
+   */
   readonly columns: ReadonlyMap<string, unknown>;
 }
 
-/** Raised before evaluating a plan that exceeded its finite candidate budget. */
+/**
+ * Raised before evaluating a plan that exceeded its finite candidate budget.
+ */
 export class QueryCandidateLimitError extends Error {
+  // prettier-ignore
+
   /**
    * Creates a candidate-limit error.
    *
-   * @param candidateLimit - Specifies the exceeded candidate budget.
+   * @param candidateLimit Specifies the exceeded candidate budget.
    */
   constructor(readonly candidateLimit: number) {
     super(`Storage query exceeded the candidate limit of ${String(candidateLimit)}.`);
@@ -27,7 +43,9 @@ export class QueryCandidateLimitError extends Error {
   }
 }
 
-/** Shared complete in-process semantics for one validated normalized query plan. */
+/**
+ * Shared complete in-process semantics for one validated normalized query plan.
+ */
 export const StorageQueryEvaluator: Readonly<{
   evaluate<Id, Record>(
     entries: readonly NormalizedQueryEntry<Id, Record>[],
@@ -48,9 +66,15 @@ export const StorageQueryEvaluator: Readonly<{
   },
 });
 
-/** Matches normalized predicates against materialized storage rows. */
+/**
+ * Matches normalized predicates against materialized storage rows.
+ */
 const QueryPredicateMatcher = {
-  /** Matches a row against one normalized predicate. */
+  // prettier-ignore
+
+  /**
+   * Matches a row against one normalized predicate.
+   */
   matches<Id, Record>(
     entry: NormalizedQueryEntry<Id, Record>,
     predicate: NormalizedQueryPredicate<Id>,
@@ -71,7 +95,9 @@ const QueryPredicateMatcher = {
     }
   },
 
-  /** Evaluates one normalized comparison predicate. */
+  /**
+   * Evaluates one normalized comparison predicate.
+   */
   comparePredicate(
     actual: unknown,
     operator: NormalizedComparisonOperator,
@@ -86,7 +112,9 @@ const QueryPredicateMatcher = {
     return result <= 0;
   },
 
-  /** Compares values using normalized query equality semantics. */
+  /**
+   * Compares values using normalized query equality semantics.
+   */
   equalValues(left: unknown, right: unknown): boolean {
     if (QueryOrdering.isMissing(left) || QueryOrdering.isMissing(right)) {
       return QueryOrdering.isMissing(left) && QueryOrdering.isMissing(right);
@@ -95,9 +123,15 @@ const QueryPredicateMatcher = {
   },
 };
 
-/** Orders normalized query values and materialized rows deterministically. */
+/**
+ * Orders normalized query values and materialized rows deterministically.
+ */
 const QueryOrdering = {
-  /** Compares two rows by requested ordering and stable ID tie-breaker. */
+  // prettier-ignore
+
+  /**
+   * Compares two rows by requested ordering and stable ID tie-breaker.
+   */
   compareEntries<Id, Record>(
     left: NormalizedQueryEntry<Id, Record>,
     right: NormalizedQueryEntry<Id, Record>,
@@ -113,7 +147,9 @@ const QueryOrdering = {
     return QueryOrdering.compareStable(left.id, right.id);
   },
 
-  /** Compares values while placing missing values before present values. */
+  /**
+   * Compares values while placing missing values before present values.
+   */
   compareWithMissing(left: unknown, right: unknown): number {
     if (QueryOrdering.isMissing(left) || QueryOrdering.isMissing(right)) {
       if (QueryOrdering.isMissing(left) && QueryOrdering.isMissing(right)) return 0;
@@ -122,7 +158,9 @@ const QueryOrdering = {
     return QueryOrdering.compareOrdered(left, right);
   },
 
-  /** Compares values supported by normalized query ordering. */
+  /**
+   * Compares values supported by normalized query ordering.
+   */
   compareOrdered(left: unknown, right: unknown): number {
     if (typeof left === "number" && typeof right === "number")
       return QueryOrdering.compareNumber(left, right);
@@ -144,7 +182,9 @@ const QueryOrdering = {
     throw new TypeError("Normalized query ordering value has an unsupported type.");
   },
 
-  /** Compares ordered-message major and minor components. */
+  /**
+   * Compares ordered-message major and minor components.
+   */
   comparePair(
     leftMajor: unknown,
     leftMinor: unknown,
@@ -155,7 +195,9 @@ const QueryOrdering = {
     return major === 0 ? QueryOrdering.compareStable(leftMinor, rightMinor) : major;
   },
 
-  /** Compares values with a deterministic fallback for distinct shapes. */
+  /**
+   * Compares values with a deterministic fallback for distinct shapes.
+   */
   compareStable(left: unknown, right: unknown): number {
     if (QueryOrdering.isMissing(left) || QueryOrdering.isMissing(right))
       return QueryOrdering.compareWithMissing(left, right);
@@ -165,7 +207,9 @@ const QueryOrdering = {
     return QueryOrdering.compareText(QueryOrdering.stableKey(left), QueryOrdering.stableKey(right));
   },
 
-  /** Creates a deterministic value representation for equality and tie-breaking. */
+  /**
+   * Creates a deterministic value representation for equality and tie-breaking.
+   */
   stableKey(value: unknown): string {
     if (value instanceof Uint8Array) return `bytes:${[...value].join(".")}`;
     if (typeof value === "bigint") return `bigint:${value.toString()}`;
@@ -178,7 +222,9 @@ const QueryOrdering = {
       .join(",")}}`;
   },
 
-  /** Identifies ordered Protobuf timestamp and version values. */
+  /**
+   * Identifies ordered Protobuf timestamp and version values.
+   */
   isOrderedMessage(value: unknown): value is {
     readonly $typeName: "google.protobuf.Timestamp" | "spine.core.Version";
     readonly seconds?: bigint;
@@ -194,7 +240,9 @@ const QueryOrdering = {
     );
   },
 
-  /** Compares finite numeric values. */
+  /**
+   * Compares finite numeric values.
+   */
   compareNumber(left: number, right: number): number {
     if (!Number.isFinite(left) || !Number.isFinite(right)) {
       throw new TypeError("Normalized query ordering numbers must be finite.");
@@ -202,12 +250,16 @@ const QueryOrdering = {
     return left < right ? -1 : left > right ? 1 : 0;
   },
 
-  /** Compares text values in code-unit order. */
+  /**
+   * Compares text values in code-unit order.
+   */
   compareText(left: string, right: string): number {
     return left < right ? -1 : left > right ? 1 : 0;
   },
 
-  /** Identifies absent normalized query values. */
+  /**
+   * Identifies absent normalized query values.
+   */
   isMissing(value: unknown): boolean {
     return value === undefined || value === null;
   },

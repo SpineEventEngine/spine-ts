@@ -18,13 +18,14 @@ interface DecoratedHandlerRecord {
   readonly allowImport?: boolean;
 }
 
-/** Describes the standard TypeScript method decorator accepted by Spine handler declarations.
+/**
+ * Describes the standard TypeScript method decorator accepted by Spine handler declarations.
  *
  * @typeParam This - Entity instance that owns the decorated method.
  * @typeParam Parameters - Parameters accepted by the decorated method.
  * @typeParam Return - Result returned by the decorated method.
- * @param value - Decorated method implementation.
- * @param context - Standard TypeScript decorator context.
+ * @param value Decorated method implementation.
+ * @param context Standard TypeScript decorator context.
  */
 export type HandlerMethodDecorator = <
   This extends object,
@@ -35,13 +36,14 @@ export type HandlerMethodDecorator = <
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
 ) => void;
 
-/** Describes an instance method shape accepted by public handler decorators.
+/**
+ * Describes an instance method shape accepted by public handler decorators.
  *
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param this - Entity instance that receives the invocation.
- * @param parameters - Arguments supplied to the handler.
+ * @param this Entity instance that receives the invocation.
+ * @param parameters Arguments supplied to the handler.
  * @returns Handler result.
  */
 export type HandlerMethodValue<
@@ -64,17 +66,19 @@ const handlerDecoratorMetadataKey = Symbol("@spine-event-engine/server.handlerDe
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param value - Decorated method implementation or command schema.
- * @param context - Standard decorator context for bare usage.
+ * @param value Decorated method implementation or command schema.
+ * @param context Standard decorator context for bare usage.
  */
 export function Assign<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
 ): void;
-/** Creates command-assignment decorator metadata or a schema-bearing decorator.
+
+/**
+ * Creates command-assignment decorator metadata or a schema-bearing decorator.
  *
- * @param schemaOrValue - Command schema or decorated method implementation.
- * @param context - Standard decorator context for bare usage.
+ * @param schemaOrValue Command schema or decorated method implementation.
+ * @param context Standard decorator context for bare usage.
  * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
  */
 export function Assign(
@@ -96,17 +100,19 @@ export function Assign(
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param value - Decorated method implementation or command schema.
- * @param context - Standard decorator context for bare usage.
+ * @param value Decorated method implementation or command schema.
+ * @param context Standard decorator context for bare usage.
  */
 export function Command<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
 ): void;
-/** Creates command-reaction decorator metadata or a schema-bearing decorator.
+
+/**
+ * Creates command-reaction decorator metadata or a schema-bearing decorator.
  *
- * @param schemaOrValue - Command schema or decorated method implementation.
- * @param context - Standard decorator context for bare usage.
+ * @param schemaOrValue Command schema or decorated method implementation.
+ * @param context Standard decorator context for bare usage.
  * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
  */
 export function Command(
@@ -127,17 +133,19 @@ export function Command(
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param value - Decorated method implementation or event schema.
- * @param context - Standard decorator context for bare usage.
+ * @param value Decorated method implementation or event schema.
+ * @param context Standard decorator context for bare usage.
  */
 export function Subscribe<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
 ): void;
-/** Creates event-subscription decorator metadata or a schema-bearing decorator.
+
+/**
+ * Creates event-subscription decorator metadata or a schema-bearing decorator.
  *
- * @param schemaOrValue - Event schema or decorated method implementation.
- * @param context - Standard decorator context for bare usage.
+ * @param schemaOrValue Event schema or decorated method implementation.
+ * @param context Standard decorator context for bare usage.
  * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
  */
 export function Subscribe(
@@ -158,17 +166,19 @@ export function Subscribe(
  * @typeParam This - Entity instance that owns the method.
  * @typeParam Parameters - Parameters accepted by the method.
  * @typeParam Return - Result returned by the method.
- * @param value - Decorated method implementation or event schema.
- * @param context - Standard decorator context for bare usage.
+ * @param value Decorated method implementation or event schema.
+ * @param context Standard decorator context for bare usage.
  */
 export function React<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
 ): void;
-/** Creates event-reaction decorator metadata or a schema-bearing decorator.
+
+/**
+ * Creates event-reaction decorator metadata or a schema-bearing decorator.
  *
- * @param schemaOrValue - Event schema or decorated method implementation.
- * @param context - Standard decorator context for bare usage.
+ * @param schemaOrValue Event schema or decorated method implementation.
+ * @param context Standard decorator context for bare usage.
  * @returns A decorator for schema-bearing usage, or `undefined` after bare usage.
  */
 export function React(
@@ -187,8 +197,8 @@ export function React(
  * schema-bearing event application metadata. The optional `allowImport` flag
  * is preserved only as part of that legacy metadata shape.
  *
- * @param schema - Event schema accepted by the decorated method.
- * @param options - Legacy event-application metadata options.
+ * @param schema Event schema accepted by the decorated method.
+ * @param options Legacy event-application metadata options.
  * @returns Decorator that records the application metadata.
  */
 export function Apply(
@@ -214,8 +224,8 @@ export function Apply(
  *
  * @typeParam Instance - Entity instance that owns the handlers.
  * @typeParam StateSchema - Schema that describes the entity state.
- * @param entityType - Entity class whose own decorated methods are read.
- * @param stateSchema - Schema that describes the entity state.
+ * @param entityType Entity class whose own decorated methods are read.
+ * @param stateSchema Schema that describes the entity state.
  * @returns Frozen handler metadata for the decorated methods.
  */
 export function materializeDecoratedEntityHandlers<

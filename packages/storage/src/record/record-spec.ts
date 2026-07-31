@@ -8,7 +8,9 @@ const storageHost = globalThis as typeof globalThis & {
   structuredClone<Value>(value: Value): Value;
 };
 
-/** Declarative specification for one identified Protobuf record type. */
+/**
+ * Declarative specification for one identified Protobuf record type.
+ */
 export class RecordSpec<I, R extends Message> {
   readonly #columns: readonly RecordColumn<R>[];
   readonly #extractId: (record: R) => I;
@@ -25,10 +27,16 @@ export class RecordSpec<I, R extends Message> {
    */
   constructor(input: {
     readonly schema: GenMessage<R>;
-    /** Stable provider-visible identity for this physical record layout. */
+
+    /**
+     * Stable provider-visible identity for this physical record layout.
+     */
     readonly storageKey: string;
     readonly idSchema?: I extends Message ? GenMessage<I> : undefined;
-    /** Stable primitive-ID kind when `idSchema` is not supplied. */
+
+    /**
+     * Stable primitive-ID kind when `idSchema` is not supplied.
+     */
     readonly idKind?: string;
     readonly extractId: (record: R) => I;
     readonly columns?: readonly RecordColumn<R>[];
@@ -62,21 +70,24 @@ export class RecordSpec<I, R extends Message> {
     this.#storageKey = input.storageKey;
   }
 
-  /** Returns the Protobuf schema used to clone, encode, and decode records.
+  /**
+   * Returns the Protobuf schema used to clone, encode, and decode records.
    * @returns The managed record schema.
    */
   get schema(): GenMessage<R> {
     return this.#record;
   }
 
-  /** Returns the stable provider-visible physical layout identity.
+  /**
+   * Returns the stable provider-visible physical layout identity.
    * @returns The record storage key.
    */
   get storageKey(): string {
     return this.#storageKey;
   }
 
-  /** Returns the deterministic provider metadata compatibility descriptor.
+  /**
+   * Returns the deterministic provider metadata compatibility descriptor.
    * @returns The compatibility fingerprint.
    */
   get compatibilityFingerprint(): string {
@@ -87,7 +98,8 @@ export class RecordSpec<I, R extends Message> {
     });
   }
 
-  /** Copies an ID value according to this specification.
+  /**
+   * Copies an ID value according to this specification.
    * @param id The ID to clone.
    * @returns The cloned ID.
    */
@@ -97,7 +109,8 @@ export class RecordSpec<I, R extends Message> {
     return idSchema === undefined ? RecordCloner.value(id) : RecordCloner.message(idSchema, id);
   }
 
-  /** Copies one record value according to this specification.
+  /**
+   * Copies one record value according to this specification.
    * @param record The record to clone.
    * @returns The cloned record.
    */
@@ -105,7 +118,8 @@ export class RecordSpec<I, R extends Message> {
     return RecordCloner.message(this.#record, record);
   }
 
-  /** Gets the identifier from one stored record.
+  /**
+   * Gets the identifier from one stored record.
    * @param record The stored record.
    * @returns The logical record identifier.
    */
@@ -113,7 +127,8 @@ export class RecordSpec<I, R extends Message> {
     return this.#extractId(record);
   }
 
-  /** Creates materialized record values with cloned identifiers and columns.
+  /**
+   * Creates materialized record values with cloned identifiers and columns.
    * @param record The record to materialize.
    * @returns The materialized record values.
    */

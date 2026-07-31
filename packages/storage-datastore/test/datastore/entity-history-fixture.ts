@@ -10,7 +10,9 @@ interface StoredEntity {
   revision: number;
 }
 
-/** One shared in-memory Datastore backend; clients deliberately do not share locks. */
+/**
+ * One shared in-memory Datastore backend; clients deliberately do not share locks.
+ */
 export class HistoryDatastoreBackend {
   readonly entities = new Map<string, StoredEntity>();
   readonly revisions = new Map<string, number>();
@@ -25,7 +27,9 @@ export class HistoryDatastoreBackend {
   }
 }
 
-/** Focused fake for entity-history tests, including optimistic entity-group transactions. */
+/**
+ * Focused fake for entity-history tests, including optimistic entity-group transactions.
+ */
 export class HistoryDatastoreClient {
   readonly KEY = Symbol("key");
   getCalls = 0;

@@ -144,7 +144,8 @@ export class SpineServices {
   readonly #queueLimit: number;
   readonly #subscriptionLimit: number;
 
-  /** Creates service adapters over built bounded contexts.
+  /**
+   * Creates service adapters over built bounded contexts.
    *
    * @param options Configures contexts and subscription bounds.
    */
@@ -204,7 +205,8 @@ export class SpineServices {
     );
   }
 
-  /** Registers CommandService, QueryService, and SubscriptionService routes.
+  /**
+   * Registers CommandService, QueryService, and SubscriptionService routes.
    *
    * @param router Receives the Connect service procedures.
    * @returns Returns the registered router.
@@ -1029,10 +1031,17 @@ export class SpineServices {
   }
 }
 
-/** Options for registering Spine service adapters over built bounded contexts. */
+/**
+ * Options for registering Spine service adapters over built bounded contexts.
+ */
 export interface SpineServicesOptions {
-  /** Contexts exposed by these service adapters. */
+  // prettier-ignore
+
+  /**
+   * Contexts exposed by these service adapters.
+   */
   readonly contexts: readonly BoundedContext[];
+
   /**
    * Milliseconds until a never-activated durable subscription record becomes ineligible for activation.
    *
@@ -1040,12 +1049,14 @@ export interface SpineServicesOptions {
    * positive finite values are floored and must not exceed 2,147,483,647.
    */
   readonly inactiveTtlMs?: number;
+
   /**
    * Maximum queued updates per active subscription before delivery is closed.
    *
    * Defaults to 100. Non-positive or non-finite values are coerced to 1.
    */
   readonly queueLimit?: number;
+
   /**
    * Maximum subscriptions owned by this `SpineServices` instance.
    *
@@ -1237,7 +1248,9 @@ interface SubscriptionStore {
   readonly storageFactory: StorageFactory;
 }
 
-/** Groups non-public service contract, query, and subscription operations. */
+/**
+ * Groups non-public service contract, query, and subscription operations.
+ */
 const ServiceValues = (() => {
   function okStatus(): Status {
     return create(StatusSchema, {
@@ -1764,7 +1777,10 @@ const ServiceValues = (() => {
   const FOREIGN_SUBSCRIPTION_MESSAGE = "Subscription is active in another service instance.";
   const CONCURRENT_CANCELLATION_MESSAGE =
     "Subscription cancellation could not settle concurrent storage changes.";
-  /** Holds bounded request limits for QueryService. */
+
+  /**
+   * Holds bounded request limits for QueryService.
+   */
   const QueryLimits = Object.freeze({
     idCount: 100,
     filterCount: 16,
@@ -1775,7 +1791,9 @@ const ServiceValues = (() => {
     resultCount: 1_000,
   });
 
-  /** Holds bounded request limits for SubscriptionService. */
+  /**
+   * Holds bounded request limits for SubscriptionService.
+   */
   const SubscriptionLimits = Object.freeze({
     idCount: QueryLimits.idCount,
     compositeCount: 8,

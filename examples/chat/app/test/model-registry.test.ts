@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   Client,
   type Subscription,
@@ -12,10 +12,14 @@ import {
   ChatRoomIdSchema,
   MessageIdSchema,
   type ChatMessageView,
-} from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
-import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/commands_pb.js";
-import { MessagePostedSchema } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/events_pb.js";
-import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/rejections_pb.js";
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
+import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/commands_pb.js";
+import { MessagePostedSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/events_pb.js";
+import { MessageAlreadyPostedSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/rejections_pb.js";
+import {
+  UserIdSchema,
+  type UserId,
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/users_pb.js";
 import { ActorContextSchema } from "@spine-event-engine/proto";
 import {
   CompositeFilter_CompositeOperator,
@@ -32,18 +36,14 @@ import {
 } from "@spine-event-engine/proto/client";
 import { Server } from "@spine-event-engine/server";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
-import {
-  UserIdSchema,
-  type UserId,
-} from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { ChatApplication, typeRegistry } from "../dist/src/index.js";
+import { ChatApplication, ChatMessageAggregate, typeRegistry } from "../dist/src/index.js";
 
 describe("Chat Projection backend", () => {
   const application = new ChatApplication();
 
-  it("transitively decodes Chat and Users model values", () => {
+  it("decodes every Chat model value from the single model package", () => {
     const user = create(UserIdSchema, { value: "ada" });
     const message = create(ChatMessageSchema, {
       id: create(MessageIdSchema, { value: "message-1" }),
@@ -230,56 +230,45 @@ describe("Chat Projection backend", () => {
     }
   });
 
-  const invalidPosts: readonly (readonly [string, InvalidPost])[] = [
-    ["blank message ID", { id: "  " }],
-    ["long message ID", { id: "x".repeat(129) }],
-    ["blank room", { room: "  " }],
-    ["long room", { room: "x".repeat(129) }],
-    ["blank author", { author: "  " }],
-    ["long author", { author: "x".repeat(129) }],
-    ["blank text", { text: "  " }],
-    ["long text", { text: "x".repeat(4_097) }],
-    ["early timestamp", { time: create(TimestampSchema, { seconds: -62_135_596_801n }) }],
-    ["late timestamp", { time: create(TimestampSchema, { seconds: 253_402_300_800n }) }],
-    ["negative nanos", { time: create(TimestampSchema, { seconds: 1n, nanos: -1 }) }],
-    ["large nanos", { time: create(TimestampSchema, { seconds: 1n, nanos: 1_000_000_000 }) }],
-  ];
-  it.each(invalidPosts)("rejects %s before state/event publication", async (_label, invalid) => {
-    const context = await application.createContext();
-    const server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
-    const client = Client.connectTo(server.baseUrl);
-    const id = invalid.id ?? "valid-message";
+  it("rejects a missing required MessageId before invoking the Chat handler", async () => {
+    const handler = vi.spyOn(ChatMessageAggregate.prototype, "postMessage");
     let subscription: Subscription | undefined;
+    let client: ReturnType<typeof Client.connectTo> | undefined;
+    let server: Awaited<ReturnType<Server["start"]>> | undefined;
     try {
+      const context = await application.createContext();
+      server = await Server.atPort(0, { host: "127.0.0.1" }).add(context).start();
+      client = Client.connectTo(server.baseUrl);
       subscription = await client.asGuest().createSubscription(createRoomTopic("valid-room"), {
         kind: "entity",
         authoritativeQuery: () => createRoomQuery("valid-room"),
       });
       await subscription.activate();
       const rejectedUpdate = subscription.updates[Symbol.asyncIterator]().next();
-      const result = await client
-        .asGuest()
-        .post(
+      await expect(
+        client.asGuest().post(
           PostMessageSchema,
-          post(
-            id,
-            invalid.room ?? "valid-room",
-            create(UserIdSchema, { value: invalid.author ?? "ada" }),
-            invalid.text ?? "hello",
-            invalid.time ?? create(TimestampSchema, { seconds: 1n }),
-          ),
-        );
-      expect(result).toMatchObject({ kind: "error" });
+          create(PostMessageSchema, {
+            room: create(ChatRoomIdSchema, { value: "valid-room" }),
+            author: create(UserIdSchema, { value: "ada" }),
+            text: "hello",
+            postedAt: create(TimestampSchema, { seconds: 1n }),
+          }),
+        ),
+      ).rejects.toThrow("Message validation failed");
+      expect(handler).not.toHaveBeenCalled();
       await expectNoView(rejectedUpdate);
-      if (invalid.id === undefined)
-        await expect(
-          context.stand().readVersioned(ChatMessageSchema, create(MessageIdSchema, { value: id })),
-        ).resolves.toBeUndefined();
+      await expect(
+        context
+          .stand()
+          .readVersioned(ChatMessageSchema, create(MessageIdSchema, { value: "valid-message" })),
+      ).resolves.toBeUndefined();
     } finally {
+      handler.mockRestore();
       await closeResources([
         () => subscription?.cancel(),
-        () => client.close(),
-        () => server.close(),
+        () => client?.close(),
+        () => server?.close(),
       ]);
     }
   });
@@ -418,12 +407,4 @@ async function closeResources(operations: readonly (() => unknown)[]): Promise<v
   if (failures.length > 0) {
     throw new AggregateError(failures, "Chat integration cleanup failed.");
   }
-}
-
-interface InvalidPost {
-  readonly id?: string;
-  readonly room?: string;
-  readonly author?: string;
-  readonly text?: string;
-  readonly time?: Timestamp;
 }

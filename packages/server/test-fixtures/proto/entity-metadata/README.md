@@ -18,5 +18,4 @@ node scripts/generate-server-test-fixtures.mjs --check
 ```
 
 The fixtures are package-less on purpose. Buf accepts these custom Spine option
-fixtures reliably in this slice only when the test files omit a `package`
-declaration.
+fixtures when the test files omit a `package` declaration.

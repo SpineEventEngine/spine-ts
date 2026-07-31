@@ -1,19 +1,38 @@
-/** Describes the ordered resources closed during delivery-server shutdown. */
+/**
+ * Describes the ordered resources closed during delivery-server shutdown.
+ */
 export interface DeliveryServerShutdownResources {
-  /** Sets Health to no longer serving. */
+  // prettier-ignore
+
+  /**
+   * Sets Health to no longer serving.
+   */
   readonly markNotServing: () => void;
-  /** Closes the shared mutation-admission boundary. */
+
+  /**
+   * Closes the shared mutation-admission boundary.
+   */
   readonly closeAdmission: () => void;
-  /** Closes Admin subscribers and publishing. */
+
+  /**
+   * Closes Admin subscribers and publishing.
+   */
   readonly closeAdmin: () => void;
-  /** Closes the listener and active HTTP/2 sessions.
+
+  /**
+   * Closes the listener and active HTTP/2 sessions.
+   *
    * @returns Completes after the listener closes.
    */
   readonly closeNetwork: () => Promise<void>;
 }
 
-/** Provides the delivery-server terminal shutdown sequence. */
+/**
+ * Provides the delivery-server terminal shutdown sequence.
+ */
 export const DeliveryShutdown: Readonly<{
+  // prettier-ignore
+
   /**
    * Runs the required Health, admission, Admin, listener, and session shutdown order.
    *

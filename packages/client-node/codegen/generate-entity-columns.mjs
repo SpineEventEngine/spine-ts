@@ -6,11 +6,16 @@ import { resolve } from "node:path";
 import process from "node:process";
 import { EntityFieldClassification } from "./entity-field-classification.mjs";
 
-/** Generates typed Entity-column companions from Spine Protobuf input. */
+/**
+ * Generates typed Entity-column companions from Spine Protobuf input.
+ */
 export const EntityColumnGenerator = Object.freeze({
-  /** Resolves Spine option descriptors supplied in the protoc plugin request.
+  // prettier-ignore
+
+  /**
+   * Resolves Spine option descriptors supplied in the protoc plugin request.
    *
-   * @param schema - Plugin schema containing input files and dependencies.
+   * @param schema Plugin schema containing input files and dependencies.
    * @returns The Entity and column option descriptors.
    */
   resolveOptions(schema) {
@@ -52,10 +57,11 @@ export const EntityColumnGenerator = Object.freeze({
     return { entity, column };
   },
 
-  /** Returns top-level queryable Entity messages in an input file.
+  /**
+   * Returns top-level queryable Entity messages in an input file.
    *
-   * @param file - Protobuf file being generated.
-   * @param options - Resolved Spine option descriptors.
+   * @param file Protobuf file being generated.
+   * @param options Resolved Spine option descriptors.
    * @returns Queryable Entity message descriptors.
    */
   entities(file, options) {
@@ -72,19 +78,21 @@ export const EntityColumnGenerator = Object.freeze({
     );
   },
 
-  /** Reports whether a field carries Spine's `(column) = true` option.
+  /**
+   * Reports whether a field carries Spine's `(column) = true` option.
    *
-   * @param field - Candidate Entity state field.
-   * @param options - Resolved Spine option descriptors.
+   * @param field Candidate Entity state field.
+   * @param options Resolved Spine option descriptors.
    * @returns Whether the field is queryable.
    */
   isColumn(field, options) {
     return hasOption(field, options.column) && getOption(field, options.column);
   },
 
-  /** Derives the comparison family for a Protobuf field descriptor.
+  /**
+   * Derives the comparison family for a Protobuf field descriptor.
    *
-   * @param field - Candidate queryable Entity field.
+   * @param field Candidate queryable Entity field.
    * @returns The generated comparison family.
    */
   comparison(field) {
@@ -99,9 +107,10 @@ export const EntityColumnGenerator = Object.freeze({
     return classification.comparison;
   },
 
-  /** Generates deterministic companions for all queryable Entities in a request.
+  /**
+   * Generates deterministic companions for all queryable Entities in a request.
    *
-   * @param schema - Plugin schema used to create generated files.
+   * @param schema Plugin schema used to create generated files.
    * @returns Nothing after emitting zero or more companions.
    */
   generate(schema) {

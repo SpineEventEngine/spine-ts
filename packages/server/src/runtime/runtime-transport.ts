@@ -20,7 +20,8 @@ import {
 } from "./runtime-routing.js";
 import { ServerRuntimeStateError, SingleProcessServerRuntime } from "./runtime.js";
 
-/** Handles a command accepted from transport-backed runtime work.
+/**
+ * Handles a command accepted from transport-backed runtime work.
  *
  * @param command the accepted command envelope.
  * @param route the route that received the command.
@@ -31,7 +32,8 @@ export type CommandRuntimeTransportHandler = (
   route: CommandRuntimeRoutingRoute,
 ) => void | Promise<void>;
 
-/** Handles an event accepted from transport-backed runtime work.
+/**
+ * Handles an event accepted from transport-backed runtime work.
  *
  * @param event the accepted event envelope.
  * @param route the route that received the event.
@@ -42,37 +44,67 @@ export type EventRuntimeTransportHandler = (
   route: EventRuntimeRoutingRoute,
 ) => void | Promise<void>;
 
-/** Input accepted when opening a runtime transport binding. */
+/**
+ * Input accepted when opening a runtime transport binding.
+ */
 export interface RuntimeTransportBindingInput {
-  /** Immutable routing plan that supplies command responders and event subscribers. */
+  // prettier-ignore
+
+  /**
+   * Immutable routing plan that supplies command responders and event subscribers.
+   */
   readonly plan: ServerRuntimeRoutingPlan;
-  /** Adapter-agnostic local signal transport. */
+
+  /**
+   * Adapter-agnostic local signal transport.
+   */
   readonly transport: SignalTransport;
-  /** Runtime queue that owns accepted asynchronous work. */
+
+  /**
+   * Runtime queue that owns accepted asynchronous work.
+   */
   readonly runtime: SingleProcessServerRuntime;
-  /** Callback for valid command envelopes after runtime intake. */
+
+  /**
+   * Callback for valid command envelopes after runtime intake.
+   */
   readonly onCommand: CommandRuntimeTransportHandler;
-  /** Callback for valid event envelopes after runtime intake. */
+
+  /**
+   * Callback for valid event envelopes after runtime intake.
+   */
   readonly onEvent: EventRuntimeTransportHandler;
 }
 
-/** Idempotent close handle returned by a runtime transport binding. */
+/**
+ * Idempotent close handle returned by a runtime transport binding.
+ */
 export interface RuntimeTransportBindingHandle {
+  // prettier-ignore
+
   /**
    * Stops transport intake, closes transport registrations, then closes the bound
    * runtime.
+   *
    * @returns A promise that settles after bindings and the runtime close.
    *
    */
   close(): Promise<void>;
 }
 
-/** Error raised when a publish-style event signal is refused at runtime transport intake. */
+/**
+ * Error raised when a publish-style event signal is refused at runtime transport intake.
+ */
 export class RuntimeTransportEnvelopeError extends Error {
-  /** Structured refusal result with sanitized diagnostics only. */
+  // prettier-ignore
+
+  /**
+   * Structured refusal result with sanitized diagnostics only.
+   */
   readonly result: SignalIntakeFailure;
 
-  /** Creates an error for a refused transport envelope.
+  /**
+   * Creates an error for a refused transport envelope.
    *
    * @param result the sanitized refusal result.
    */
@@ -98,8 +130,13 @@ export class RuntimeTransportEnvelopeError extends Error {
  * drains.
  */
 export const RuntimeTransportBinding: Readonly<{
-  /** Creates the immutable runtime routing plan used by this binding. */
+  // prettier-ignore
+
+  /**
+   * Creates the immutable runtime routing plan used by this binding.
+   */
   plan(input: RoutingPlanInput): ServerRuntimeRoutingPlan;
+
   /**
    * Registers command and event routes with a same-host/local-only supplied
    * transport.
@@ -126,7 +163,8 @@ export const RuntimeTransportBinding: Readonly<{
 
 const failedOpenCleanups = new WeakMap<object, RuntimeTransportBindingHandle>();
 
-/** Provides access to cleanup retained after a failed binding open.
+/**
+ * Provides access to cleanup retained after a failed binding open.
  *
  * @internal
  */

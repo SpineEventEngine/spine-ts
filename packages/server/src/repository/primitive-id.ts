@@ -8,68 +8,101 @@ import {
 import { AnyMessages } from "@spine-event-engine/core";
 import { UserIdSchema } from "@spine-event-engine/proto";
 
-/** Represents a scalar value that may identify an entity. */
+/**
+ * Represents a scalar value that may identify an entity.
+ */
 export type PrimitiveId = string | number | boolean;
 
-/** Packs and reads scalar entity identifiers. */
+/**
+ * Packs and reads scalar entity identifiers.
+ */
 export interface PrimitiveIdCodec {
-  /** Packs an identifier into a Protobuf `Any` value.
+  // prettier-ignore
+
+  /**
+   * Packs an identifier into a Protobuf `Any` value.
    *
-   * @param id - Identifier to pack.
+   * @param id Identifier to pack.
    * @returns Packed identifier.
    */
   pack(id: PrimitiveId): Any;
-  /** Reads a scalar identifier from an unknown value.
+
+  /**
+   * Reads a scalar identifier from an unknown value.
    *
-   * @param value - Value to inspect.
+   * @param value Value to inspect.
    * @returns Scalar identifier, or `undefined` when the value is unsupported.
    */
   read(value: unknown): PrimitiveId | undefined;
-  /** Reads a finite scalar identifier from an unknown value.
+
+  /**
+   * Reads a finite scalar identifier from an unknown value.
    *
-   * @param value - Value to inspect.
+   * @param value Value to inspect.
    * @returns Scalar identifier, or `undefined` when it is unsupported or non-finite.
    */
   readFinite(value: unknown): PrimitiveId | undefined;
-  /** Unpacks a scalar identifier from a Protobuf `Any` value.
+
+  /**
+   * Unpacks a scalar identifier from a Protobuf `Any` value.
    *
-   * @param id - Packed identifier to unpack.
+   * @param id Packed identifier to unpack.
    * @returns Scalar identifier, or `undefined` when it is absent or unsupported.
    */
   unpack(id: Any | undefined): PrimitiveId | undefined;
 }
 
-/** Describes the type name and scalar value of a message-shaped identifier. */
+/**
+ * Describes the type name and scalar value of a message-shaped identifier.
+ */
 export interface MessageId {
-  /** Declares the fully-qualified Protobuf message type name. */
+  // prettier-ignore
+
+  /**
+   * Declares the fully-qualified Protobuf message type name.
+   */
   readonly $typeName: string;
-  /** Holds the scalar identifier value. */
+
+  /**
+   * Holds the scalar identifier value.
+   */
   readonly value: PrimitiveId;
 }
 
-/** Reads and keys message-shaped entity identifiers. */
+/**
+ * Reads and keys message-shaped entity identifiers.
+ */
 export interface MessageIdCodec {
-  /** Reads a message-shaped identifier from an unknown value.
+  // prettier-ignore
+
+  /**
+   * Reads a message-shaped identifier from an unknown value.
    *
-   * @param value - Value to inspect.
+   * @param value Value to inspect.
    * @returns Identifier, or `undefined` when the value is malformed.
    */
   read(value: unknown): MessageId | undefined;
-  /** Reads the scalar value from a message-shaped identifier.
+
+  /**
+   * Reads the scalar value from a message-shaped identifier.
    *
-   * @param value - Value to inspect.
+   * @param value Value to inspect.
    * @returns Scalar identifier, or `undefined` when the value is malformed.
    */
   readValue(value: unknown): PrimitiveId | undefined;
-  /** Creates a stable storage key for a message-shaped identifier.
+
+  /**
+   * Creates a stable storage key for a message-shaped identifier.
    *
-   * @param id - Identifier to encode.
+   * @param id Identifier to encode.
    * @returns Stable key that distinguishes message type and scalar value type.
    */
   key(id: MessageId): string;
 }
 
-/** Provides the default scalar identifier codec. */
+/**
+ * Provides the default scalar identifier codec.
+ */
 export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
   pack(id: PrimitiveId): Any {
     switch (typeof id) {
@@ -106,7 +139,9 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
   },
 });
 
-/** Provides the default message-shaped identifier codec. */
+/**
+ * Provides the default message-shaped identifier codec.
+ */
 export const MessageIds: MessageIdCodec = Object.freeze({
   read(value: unknown): MessageId | undefined {
     return IdValues.message(value);
@@ -128,7 +163,9 @@ export const MessageIds: MessageIdCodec = Object.freeze({
   },
 });
 
-/** Owns the validation and decoding shared by the identifier codecs. */
+/**
+ * Validates and decodes values shared by identifier codecs.
+ */
 const IdValues = Object.freeze({
   primitive(value: unknown): PrimitiveId | undefined {
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {

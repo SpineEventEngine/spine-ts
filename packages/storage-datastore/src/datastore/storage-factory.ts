@@ -16,14 +16,25 @@ import type {
 import { DatastoreRecordStorage } from "./record-storage.js";
 import { DatastoreEntityStorage } from "./entity-history.js";
 
-/** Explicit Google Cloud client settings used to construct a Datastore adapter. */
+/**
+ * Explicit Google Cloud client settings used to construct a Datastore adapter.
+ */
 export type DatastoreStorageOptions = DatastoreOptions;
 
-/** Adapter-local query bound for query paths requiring client-side reconciliation. */
+/**
+ * Adapter-local query bound for query paths requiring client-side reconciliation.
+ */
 export interface DatastoreStorageFactoryInput {
-  /** The caller-owned Datastore client used by created storage handles. */
+  // prettier-ignore
+
+  /**
+   * The caller-owned Datastore client used by created storage handles.
+   */
   readonly client: Datastore;
-  /** Maximum entities reconciled locally by one query; must be a positive finite integer. */
+
+  /**
+   * Maximum entities reconciled locally by one query; must be a positive finite integer.
+   */
   readonly maxClientSideScan?: number;
 }
 
@@ -37,14 +48,28 @@ export interface DatastoreStorageFactoryInput {
  * callers retry. Identical immutable retries are safe; divergent content fails.
  */
 export interface DatastoreEntityStorageHandle<I, S extends Message> {
-  /** Provides current-record persistence for the entity scope. */
+  // prettier-ignore
+
+  /**
+   * Provides current-record persistence for the entity scope.
+   */
   readonly current: EntityRecordStorage<I, S>;
-  /** Provides state-history persistence for the entity scope. */
+
+  /**
+   * Provides state-history persistence for the entity scope.
+   */
   readonly states: EntityStateHistoryPort<I, S>;
-  /** Provides event-history persistence for the entity scope. */
+
+  /**
+   * Provides event-history persistence for the entity scope.
+   */
   readonly events: EntityEventHistoryPort<I>;
-  /** Closes this handle without closing its caller-owned Datastore client. */
+
+  /**
+   * Closes this handle without closing its caller-owned Datastore client.
+   */
   close(): void;
+
   /**
    * Returns whether this handle accepts new operations.
    *
@@ -53,7 +78,9 @@ export interface DatastoreEntityStorageHandle<I, S extends Message> {
   isOpen(): boolean;
 }
 
-/** A Google Cloud Datastore-backed implementation of the Spine TS storage port. */
+/**
+ * A Google Cloud Datastore-backed implementation of the Spine TS storage port.
+ */
 export class DatastoreStorageFactory extends StorageFactory {
   readonly #client: Datastore;
   readonly #maxClientSideScan: number;
@@ -100,7 +127,8 @@ export class DatastoreStorageFactory extends StorageFactory {
     return new DatastoreEntityStorage(input, this.#client);
   }
 
-  /** Creates a Datastore-backed record storage.
+  /**
+   * Creates a Datastore-backed record storage.
    * @param context The storage context.
    * @param recordSpec The record specification.
    * @returns The created record storage.

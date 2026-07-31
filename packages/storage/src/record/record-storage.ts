@@ -9,13 +9,16 @@ import { QueryCandidateLimitError, StorageQueryEvaluator } from "../query/query-
 import { StorageQueryPolicy } from "../query/query-policy.js";
 import type { NormalizedQueryPlan, StorageQueryCapabilities } from "../query/query-policy.js";
 
-/** Common record-oriented storage contract for identified Protobuf messages. */
+/**
+ * Common record-oriented storage contract for identified Protobuf messages.
+ */
 export abstract class RecordStorage<I, R extends Message> implements Storage {
   readonly #context: StorageContext;
   #open = true;
   readonly #recordSpec: RecordSpec<I, R>;
 
-  /** Creates storage for one context and record specification.
+  /**
+   * Creates storage for one context and record specification.
    * @param context The storage and tenant context.
    * @param recordSpec The records managed by this storage.
    */
@@ -24,33 +27,39 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     this.#recordSpec = recordSpec;
   }
 
-  /** Returns the context that scopes this storage and its tenant slices.
+  /**
+   * Returns the context that scopes this storage and its tenant slices.
    * @returns The storage context.
    */
   protected get context(): StorageContext {
     return this.#context;
   }
 
-  /** Returns the declarative record specification for this storage.
+  /**
+   * Returns the declarative record specification for this storage.
    * @returns The managed record specification.
    */
   get recordSpec(): RecordSpec<I, R> {
     return this.#recordSpec;
   }
 
-  /** Closes this record storage. Future operations fail. */
+  /**
+   * Closes this record storage. Future operations fail.
+   */
   close(): void {
     this.#open = false;
   }
 
-  /** Returns whether this record storage still accepts operations.
+  /**
+   * Returns whether this record storage still accepts operations.
    * @returns Whether the storage is open.
    */
   isOpen(): boolean {
     return this.#open;
   }
 
-  /** Deletes one stored record by actual storage slot ID.
+  /**
+   * Deletes one stored record by actual storage slot ID.
    * @param id The storage slot identifier.
    * @returns Whether a record was deleted.
    */
@@ -59,7 +68,8 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return this.deleteRecord(this.#recordSpec.cloneId(id));
   }
 
-  /** Reads one record by actual storage slot ID, optionally applying a mask.
+  /**
+   * Reads one record by actual storage slot ID, optionally applying a mask.
    * @param id The storage slot identifier.
    * @param options The read options.
    * @returns The matching record, if present.
@@ -130,7 +140,8 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     );
   }
 
-  /** Executes one provider-independent normalized query plan.
+  /**
+   * Executes one provider-independent normalized query plan.
    * @param plan The validated normalized plan.
    * @returns The matching records.
    */
@@ -139,7 +150,8 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return entries.map((entry) => entry.record);
   }
 
-  /** Executes a normalized plan and retains actual storage slot IDs.
+  /**
+   * Executes a normalized plan and retains actual storage slot IDs.
    * @param plan The validated normalized plan.
    * @returns The matching storage entries.
    */
@@ -162,7 +174,8 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     );
   }
 
-  /** Writes one record, replacing any previous value with the same ID.
+  /**
+   * Writes one record, replacing any previous value with the same ID.
    * @param record The record to write.
    * @returns Completes when the record is written.
    */
@@ -196,7 +209,8 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     );
   }
 
-  /** Writes records in order, materializing all values before persistence.
+  /**
+   * Writes records in order, materializing all values before persistence.
    * @param records The records to write.
    * @returns Completes when the records are written.
    */
@@ -206,11 +220,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     await this.writeAllRecords(materializedRecords);
   }
 
-  /** Deletes the record at one storage slot.
+  /**
+   * Deletes the record at one storage slot.
    * @param id The storage slot identifier.
    * @returns Whether a record was deleted.
    */
   protected abstract deleteRecord(id: I): Promise<boolean>;
+
   /**
    * Returns stored records together with their actual storage slot IDs.
    *
@@ -226,14 +242,16 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]>;
 
-  /** Returns logical normalized features admitted before provider access.
+  /**
+   * Returns logical normalized features admitted before provider access.
    * @returns The supported query capabilities.
    */
   protected queryCapabilities(): StorageQueryCapabilities {
     return { comparisons: [], features: [] };
   }
 
-  /** Returns provider candidates for a normalized plan; shared evaluation applies the complete plan afterward.
+  /**
+   * Returns provider candidates for a normalized plan; shared evaluation applies the complete plan afterward.
    * @param plan The normalized query plan.
    * @returns The candidate storage entries.
    */
@@ -243,12 +261,16 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     void plan;
     return this.queryRecordEntries({});
   }
-  /** Reads the record at one storage slot.
+
+  /**
+   * Reads the record at one storage slot.
    * @param id The storage slot identifier.
    * @returns The stored record, if present.
    */
   protected abstract readRecord(id: I): Promise<R | undefined>;
-  /** Compares and conditionally replaces the record at one storage slot.
+
+  /**
+   * Compares and conditionally replaces the record at one storage slot.
    * @param id The storage slot identifier.
    * @param expected The expected materialized record.
    * @param next The replacement materialized record, if any.
@@ -259,14 +281,18 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean>;
-  /** Writes materialized records.
+
+  /**
+   * Writes materialized records.
    * @param records The materialized records to write.
    * @returns Completes when the records are written.
    */
   protected abstract writeAllRecords(
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void>;
-  /** Writes one materialized record.
+
+  /**
+   * Writes one materialized record.
    * @param record The materialized record to write.
    * @returns Completes when the record is written.
    */
@@ -289,8 +315,15 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
  * `RecordSpec.idValueIn(...)`.
  */
 export interface RecordEntry<I, R extends Message> {
-  /** Identifies the actual storage slot. */
+  // prettier-ignore
+
+  /**
+   * Identifies the actual storage slot.
+   */
   readonly id: I;
-  /** Holds the stored record value. */
+
+  /**
+   * Holds the stored record value.
+   */
   readonly record: R;
 }

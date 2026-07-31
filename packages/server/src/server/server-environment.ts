@@ -19,8 +19,12 @@ import {
 } from "./environment-attachment.js";
 import { Environment, EnvironmentTests, EnvironmentType } from "./environment.js";
 
-/** Common closeable facility owned by a server environment. */
+/**
+ * Common closeable facility owned by a server environment.
+ */
 export interface ServerEnvironmentCloseable {
+  // prettier-ignore
+
   /**
    * Closes the facility.
    *
@@ -29,15 +33,30 @@ export interface ServerEnvironmentCloseable {
   close(): unknown;
 }
 
-/** Facilities configured for one Node environment type. */
+/**
+ * Facilities configured for one Node environment type.
+ */
 export interface ServerEnvironmentSettings {
-  /** Storage facility selected for server assembly, including server-added context builders. */
+  // prettier-ignore
+
+  /**
+   * Storage facility selected for server assembly, including server-added context builders.
+   */
   readonly storageFactory?: StorageFactory;
-  /** Signal transport facility selected for server assembly. */
+
+  /**
+   * Signal transport facility selected for server assembly.
+   */
   readonly transport?: SignalTransport;
-  /** Optional closeable delivery owner for durable delivery seams. */
+
+  /**
+   * Optional closeable delivery owner for durable delivery seams.
+   */
   readonly delivery?: ServerEnvironmentCloseable;
-  /** Optional tracing factory placeholder for later tracing adapters. */
+
+  /**
+   * Optional tracing factory placeholder for later tracing adapters.
+   */
   readonly tracerFactory?: ServerEnvironmentCloseable;
 }
 
@@ -56,17 +75,36 @@ let resetInProgress: Promise<void> | undefined;
  * Process-wide server facilities for the canonical {@link Environment}.
  */
 export class ServerEnvironment implements ServerEnvironmentCloseable {
-  /** The environment whose settings resolved these facilities. */
+  // prettier-ignore
+
+  /**
+   * The environment whose settings resolved these facilities.
+   */
   readonly environment: Environment;
-  /** Stable identity shared by every server in this singleton lifecycle. */
+
+  /**
+   * Stable identity shared by every server in this singleton lifecycle.
+   */
   readonly nodeId: string;
-  /** Storage facility selected for server assembly, including server-added context builders. */
+
+  /**
+   * Storage facility selected for server assembly, including server-added context builders.
+   */
   readonly storageFactory: StorageFactory;
-  /** Transport facility selected for this environment. */
+
+  /**
+   * Transport facility selected for this environment.
+   */
   readonly transport: SignalTransport;
-  /** Optional closeable delivery owner selected for this environment. */
+
+  /**
+   * Optional closeable delivery owner selected for this environment.
+   */
   readonly delivery: ServerEnvironmentCloseable | undefined;
-  /** Optional tracing factory selected for this environment. */
+
+  /**
+   * Optional tracing factory selected for this environment.
+   */
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 
   readonly #ownedCloseables: readonly unknown[];
@@ -93,7 +131,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   /**
    * Sets facilities for an environment type before first resolution.
    *
-   * @param type - Identifies the environment to configure.
+   * @param type Identifies the environment to configure.
    * @returns A one-use configuration entry point.
    */
   static when(type: EnvironmentType): { use(settings: SettingsInput): void } {
@@ -136,6 +174,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
    * Admission permanently closes the environment and prevents reuse. If it is
    * in use, closure rejects without owned-facility teardown. Failed facility
    * closes are retryable and already closed facilities are not closed again.
+   *
    * @returns A promise that settles after the environment and owned facilities close.
    *
    */
@@ -167,13 +206,18 @@ interface RequiredFacilities {
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 }
 
-/** Provides controlled server-environment lifecycle operations for package owners.
+/**
+ * Provides controlled server-environment lifecycle operations for package owners.
  *
  * @internal
  */
 export const ServerEnvironmentLifecycle: { readonly resetForTest: () => Promise<void> } =
   Object.freeze({
-    /** Resets singleton facilities to deterministic local defaults for the next package test. */
+    // prettier-ignore
+
+    /**
+     * Resets singleton facilities to deterministic local defaults for the next package test.
+     */
     resetForTest(): Promise<void> {
       const current = resetInProgress;
       if (current !== undefined) {
@@ -322,7 +366,10 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
   },
 });
 
-/** @internal Groups private facility-assembly operations for the environment singleton. */
+/**
+ *
+ * @internal Groups private facility-assembly operations for the environment singleton.
+ */
 const ServerEnvironmentValues = Object.freeze({
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
     return Object.freeze([

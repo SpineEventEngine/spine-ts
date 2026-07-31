@@ -69,7 +69,14 @@ describe("spineProtoModule", () => {
     expect(manifest).toMatchObject({
       formatVersion: 1,
       packageName: "@spine-event-engine/proto",
-      packageVersion: "0.0.0",
+      packageVersion: (() => {
+        const packageJson: unknown = JSON.parse(
+          readFileSync(new URL("../../../package.json", import.meta.url), "utf8"),
+        );
+        return packageJson !== null && typeof packageJson === "object"
+          ? (packageJson as Record<string, unknown>).version
+          : undefined;
+      })(),
       dependencies: [],
       moduleExport: "spineProtoModule",
     });

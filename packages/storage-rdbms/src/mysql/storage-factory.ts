@@ -94,7 +94,9 @@ const expectedIndexes = new Map<string, readonly string[]>([
 const expectedForeignKey = ["scope_key", "tenant_key", "slot_key"] as const;
 const expectedNullability = "NO";
 
-/** Verifies the fixed entity-history schema owned by the MySQL factory. */
+/**
+ * Verifies the fixed entity-history schema owned by the MySQL factory.
+ */
 const EntitySchemaVerification = Object.freeze(
   new (class {
     nullability(): string {
@@ -189,15 +191,30 @@ const EntitySchemaVerification = Object.freeze(
   })(),
 );
 
-/** Explicit connection and pool settings for the owned MySQL adapter pool. */
+/**
+ * Explicit connection and pool settings for the owned MySQL adapter pool.
+ */
 export interface MysqlStorageOptions {
-  /** Complete MySQL connection URL, including an explicit database name. */
+  // prettier-ignore
+
+  /**
+   * Complete MySQL connection URL, including an explicit database name.
+   */
   readonly url: string;
-  /** Maximum simultaneous pool connections. */
+
+  /**
+   * Maximum simultaneous pool connections.
+   */
   readonly connectionLimit?: number;
-  /** Milliseconds allowed to establish a new connection. */
+
+  /**
+   * Milliseconds allowed to establish a new connection.
+   */
   readonly connectTimeoutMs?: number;
-  /** TLS material and verification policy supplied without exposing driver settings. */
+
+  /**
+   * TLS material and verification policy supplied without exposing driver settings.
+   */
   readonly tls?: {
     readonly ca?: string;
     readonly cert?: string;
@@ -206,8 +223,12 @@ export interface MysqlStorageOptions {
   };
 }
 
-/** Thrown when the adapter cannot safely use the supplied MySQL configuration. */
+/**
+ * Thrown when the adapter cannot safely use the supplied MySQL configuration.
+ */
 export class MysqlStorageConfigurationError extends Error {
+  // prettier-ignore
+
   /**
    * Creates a configuration error with the validation message.
    * @param message The invalid setting.
@@ -218,17 +239,27 @@ export class MysqlStorageConfigurationError extends Error {
   }
 }
 
-/** Thrown when the adapter cannot connect, initialize, or close without exposing provider details. */
+/**
+ * Thrown when the adapter cannot connect, initialize, or close without exposing provider details.
+ */
 export class MysqlStorageConnectionError extends Error {
-  /** Creates the stable connection-failure error. */
+  // prettier-ignore
+
+  /**
+   * Creates the stable connection-failure error.
+   */
   constructor() {
     super("MySQL storage could not connect, initialize, or close.");
     this.name = "MysqlStorageConnectionError";
   }
 }
 
-/** Thrown when fixed adapter-owned tables do not have the required shape. */
+/**
+ * Thrown when fixed adapter-owned tables do not have the required shape.
+ */
 export class MysqlStorageSchemaError extends Error {
+  // prettier-ignore
+
   /**
    * Creates a schema error with the incompatible detail.
    * @param message The schema detail.
@@ -239,25 +270,39 @@ export class MysqlStorageSchemaError extends Error {
   }
 }
 
-/** Thrown when durable MySQL record data cannot be decoded safely. */
+/**
+ * Thrown when durable MySQL record data cannot be decoded safely.
+ */
 export class MysqlStorageDataError extends Error {
-  /** Creates the stable invalid-data error. */
+  // prettier-ignore
+
+  /**
+   * Creates the stable invalid-data error.
+   */
   constructor() {
     super("MySQL storage data could not be decoded.");
     this.name = "MysqlStorageDataError";
   }
 }
 
-/** Thrown when a record operation cannot complete without exposing provider details. */
+/**
+ * Thrown when a record operation cannot complete without exposing provider details.
+ */
 export class MysqlStorageOperationError extends Error {
-  /** Creates the stable record-operation error. */
+  // prettier-ignore
+
+  /**
+   * Creates the stable record-operation error.
+   */
   constructor() {
     super("MySQL storage record operation could not complete.");
     this.name = "MysqlStorageOperationError";
   }
 }
 
-/** MySQL-backed factory that owns its connection pool and private normalized schema. */
+/**
+ * MySQL-backed factory that owns its connection pool and private normalized schema.
+ */
 export class MysqlStorageFactory extends StorageFactory {
   readonly #pool: Pool;
   readonly #handles = new Set<{ close(): void }>();
@@ -310,7 +355,8 @@ export class MysqlStorageFactory extends StorageFactory {
     }
   }
 
-  /** Closes the owned pool once; every repeated call observes the same completion.
+  /**
+   * Closes the owned pool once; every repeated call observes the same completion.
    * @returns Completes when the pool is closed.
    */
   // eslint-disable-next-line @typescript-eslint/no-misused-promises -- TypeScript allows this async lifecycle override.
@@ -319,7 +365,8 @@ export class MysqlStorageFactory extends StorageFactory {
     return this.#closePromise;
   }
 
-  /** Creates a MySQL-backed record storage.
+  /**
+   * Creates a MySQL-backed record storage.
    * @param context The storage context.
    * @param recordSpec The record specification.
    * @returns The created record storage.
@@ -358,7 +405,9 @@ export class MysqlStorageFactory extends StorageFactory {
     return handle;
   }
 
-  /** Admits entity connections and settles their lifecycle lease exactly once. */
+  /**
+   * Admits entity connections and settles their lifecycle lease exactly once.
+   */
   private entityConnections(): MysqlEntityConnectionProvider {
     const lifecycle = this.#lifecycle;
     const pool = this.#pool;
@@ -791,7 +840,9 @@ interface SqlClause {
 
 type CompiledQuery = SqlClause;
 
-/** Owns MySQL record value comparisons and decoding. */
+/**
+ * Compares and decodes MySQL record values.
+ */
 const MysqlRecords = Object.freeze(
   new (class {
     sameBytes(left: Uint8Array, right: Uint8Array): boolean {
@@ -822,7 +873,9 @@ const MysqlRecords = Object.freeze(
   })(),
 );
 
-/** Owns MySQL record-column encoding and grouping. */
+/**
+ * Encodes and groups MySQL record columns.
+ */
 const MysqlColumns = Object.freeze(
   new (class {
     encodeName(name: string): Uint8Array {
@@ -865,7 +918,9 @@ const MysqlColumns = Object.freeze(
   })(),
 );
 
-/** Compiles bounded MySQL record queries. */
+/**
+ * Compiles bounded MySQL record queries.
+ */
 const MysqlQueries = Object.freeze(
   new (class {
     compile<I>(
@@ -1192,7 +1247,9 @@ ORDER BY ${order.join(", ")}${window.sql}`,
   })(),
 );
 
-/** Validates MySQL storage connection options. */
+/**
+ * Validates MySQL storage connection options.
+ */
 const MysqlOptions = Object.freeze(
   new (class {
     validate(options: MysqlStorageOptions): URL {
@@ -1236,7 +1293,9 @@ const MysqlOptions = Object.freeze(
   })(),
 );
 
-/** Verifies the fixed MySQL record-storage schema. */
+/**
+ * Verifies the fixed MySQL record-storage schema.
+ */
 const RecordSchemaVerification = Object.freeze(
   new (class {
     async verify(connection: PoolConnection): Promise<void> {

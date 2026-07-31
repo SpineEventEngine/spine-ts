@@ -1,8 +1,17 @@
-/** The Node deployment profile selected for this module graph. */
+/**
+ * The Node deployment profile selected for this module graph.
+ */
 export enum EnvironmentType {
-  /** Selects the local development and test profile. */
+  // prettier-ignore
+
+  /**
+   * Selects the local development and test profile.
+   */
   Local = "local",
-  /** Selects the production deployment profile. */
+
+  /**
+   * Selects the production deployment profile.
+   */
   Production = "production",
 }
 
@@ -17,7 +26,11 @@ let resetLocalTest: (() => void) | undefined;
  * environment through individual servers.
  */
 export class Environment {
-  /** The selected Node deployment profile. */
+  // prettier-ignore
+
+  /**
+   * The selected Node deployment profile.
+   */
   readonly type: EnvironmentType;
 
   private constructor(type: EnvironmentType) {
@@ -43,12 +56,17 @@ export class Environment {
   }
 }
 
-/** Provides deterministic environment controls for package tests.
+/**
+ * Provides deterministic environment controls for package tests.
  *
  * @internal
  */
 export const EnvironmentTests: { readonly reset: () => void } = Object.freeze({
-  /** Restores local environment state before the next singleton lookup. */
+  // prettier-ignore
+
+  /**
+   * Restores local environment state before the next singleton lookup.
+   */
   reset(): void {
     resetLocalTest();
   },

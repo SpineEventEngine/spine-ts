@@ -1366,7 +1366,9 @@ describe("ShardedWorkRegistry", () => {
   });
 });
 
-/** These tests construct only the local storage-backed work registry. */
+/**
+ * These tests construct only the local storage-backed work registry.
+ */
 function localShards(delivery: Delivery): ShardedWorkRegistry {
   return delivery.shards as ShardedWorkRegistry;
 }

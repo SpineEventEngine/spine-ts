@@ -15,42 +15,86 @@ import {
   type ReactNode,
 } from "react";
 
-/** A result observed after a request is started by an effect. */
+/**
+ * A result observed after a request is started by an effect.
+ */
 export type RequestObservation<Result> =
   | Readonly<{
-      /** Identifies an idle or loading request. */
+      // prettier-ignore
+
+      /**
+       * Identifies an idle or loading request.
+       */
       readonly status: "idle" | "loading";
     }>
   | Readonly<{
-      /** Identifies a successful request. */
+      // prettier-ignore
+
+      /**
+       * Identifies a successful request.
+       */
       readonly status: "success";
-      /** Holds the request result. */
+
+      /**
+       * Holds the request result.
+       */
       readonly value: Result;
     }>
   | Readonly<{
-      /** Identifies a failed request. */
+      // prettier-ignore
+
+      /**
+       * Identifies a failed request.
+       */
       readonly status: "error";
-      /** Holds the observed failure. */
+
+      /**
+       * Holds the observed failure.
+       */
       readonly error: unknown;
     }>;
 
-/** The current delivery and lifecycle state of one effect-owned subscription. */
+/**
+ * The current delivery and lifecycle state of one effect-owned subscription.
+ */
 export interface SubscriptionObservation {
-  /** Identifies the current subscription connection state. */
+  // prettier-ignore
+
+  /**
+   * Identifies the current subscription connection state.
+   */
   readonly status: "idle" | "connecting" | "connected" | "error";
-  /** Holds the latest delivery, when one exists. */
+
+  /**
+   * Holds the latest delivery, when one exists.
+   */
   readonly delivery: SubscriptionDelivery | undefined;
-  /** Holds the latest lifecycle notice, when one exists. */
+
+  /**
+   * Holds the latest lifecycle notice, when one exists.
+   */
   readonly lifecycle: SubscriptionLifecycle | undefined;
-  /** Holds the latest observation error, when one exists. */
+
+  /**
+   * Holds the latest observation error, when one exists.
+   */
   readonly error: unknown;
 }
 
-/** Properties accepted by the client request provider. */
+/**
+ * Properties accepted by the client request provider.
+ */
 export interface SpineClientProviderProps {
-  /** Supplies the application-owned client request scope. */
+  // prettier-ignore
+
+  /**
+   * Supplies the application-owned client request scope.
+   */
   readonly request: ClientRequest;
-  /** Supplies descendant React content. */
+
+  /**
+   * Supplies descendant React content.
+   */
   readonly children?: ReactNode;
 }
 
@@ -63,7 +107,8 @@ const subscriptionIdle = Object.freeze({
   error: undefined,
 });
 
-/** Renders one application-owned client request scope for descendants.
+/**
+ * Renders one application-owned client request scope for descendants.
  * @param props Supplies the application-owned request scope and descendant content.
  * @returns Returns the provider element.
  */
@@ -72,7 +117,8 @@ export function SpineClientProvider(props: SpineClientProviderProps): ReactEleme
   return createElement(requestContext.Provider, { value: request }, children);
 }
 
-/** Gets the application-owned request scope supplied by the provider.
+/**
+ * Gets the application-owned request scope supplied by the provider.
  * @returns Returns the current request scope.
  */
 export function useSpineClient(): ClientRequest {
@@ -116,7 +162,8 @@ export function useRequest<Result>(
   return state;
 }
 
-/** Starts one raw Entity Query after commit using the provider request scope.
+/**
+ * Starts one raw Entity Query after commit using the provider request scope.
  * @param query Creates the query sent by the effect.
  * @param dependencies Identifies when React must send the query again.
  * @returns Returns the latest query observation.
@@ -167,7 +214,8 @@ export function useEventSubscription(
   return SubscriptionObservers.use(createSubscription, dependencies);
 }
 
-/** Returns the independently delivered lifecycle notification for a subscription observation.
+/**
+ * Returns the independently delivered lifecycle notification for a subscription observation.
  * @param observation Supplies the subscription observation.
  * @returns Returns its latest lifecycle notification.
  */
@@ -177,7 +225,8 @@ export function useSubscriptionLifecycle(
   return observation.lifecycle;
 }
 
-/** Returns the most recently delivered entity/event update or authoritative entity recovery.
+/**
+ * Returns the most recently delivered entity/event update or authoritative entity recovery.
  * @param observation Supplies the subscription observation.
  * @returns Returns its latest delivery.
  */

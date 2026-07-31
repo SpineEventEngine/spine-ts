@@ -1,38 +1,69 @@
 import { Code, ConnectError } from "@connectrpc/connect";
-import type { InboxMessage, ShardIndex, WorkerId } from "@spine-event-engine/proto/delivery";
+import {
+  InboxMessageStatus,
+  type InboxMessage,
+  type ShardIndex,
+  type WorkerId,
+} from "@spine-event-engine/proto/delivery";
 
 import { DeliveryLimits, type DeliveryStateLimits } from "./limits.js";
 import { DeliveryMessages, DeliveryShards, DeliveryWorkers } from "./wire-values.js";
 
-/** Represents retained pickup state for one delivery shard. */
+/**
+ * Represents retained pickup state for one delivery shard.
+ */
 export interface ShardRecord {
-  /** Identifies the tracked shard. */
+  // prettier-ignore
+
+  /**
+   * Identifies the tracked shard.
+   */
   readonly shard: ShardIndex;
-  /** Identifies the current worker when picked. */
+
+  /**
+   * Identifies the current worker when picked.
+   */
   readonly worker: WorkerId | undefined;
-  /** Records the pickup time in milliseconds. */
+
+  /**
+   * Records the pickup time in milliseconds.
+   */
   readonly whenLastPicked: number | undefined;
 }
 
-/** Package-private canonical detached state; a new instance deliberately starts empty. */
+/**
+ * Package-private canonical detached state; a new instance deliberately starts empty.
+ */
 export class InMemoryDeliveryState {
-  /** Stores messages by stable identity. */
+  // prettier-ignore
+
+  /**
+   * Stores messages by stable identity.
+   */
   readonly messages: Map<string, InboxMessage> = new Map<string, InboxMessage>();
-  /** Stores sessions by stable shard identity. */
+
+  /**
+   * Stores sessions by stable shard identity.
+   */
   readonly shards: Map<string, ShardRecord> = new Map<string, ShardRecord>();
   readonly #messageBytes = new Map<string, number>();
   readonly #messageShards = new Map<string, number>();
+  readonly #deliverableShards = new Map<string, number>();
   readonly #limits: DeliveryStateLimits;
   #retainedBytes = 0;
 
-  /** Creates empty state.
+  /**
+   * Creates empty state.
+   *
    * @param limits Configures retained-state limits.
    */
   constructor(limits: Partial<DeliveryStateLimits> = {}) {
     this.#limits = DeliveryLimits.resolve(limits);
   }
 
-  /** Stores a validated batch atomically.
+  /**
+   * Stores a validated batch atomically.
+   *
    * @param messages Supplies encoded messages.
    * @returns Lists newly inserted messages.
    */
@@ -54,7 +85,9 @@ export class InMemoryDeliveryState {
     return inserted;
   }
 
-  /** Deletes a message.
+  /**
+   * Deletes a message.
+   *
    * @param message Identifies the message.
    * @returns Reports whether the message existed.
    */
@@ -66,11 +99,14 @@ export class InMemoryDeliveryState {
     this.#retainedBytes -= this.#messageBytes.get(key) ?? 0;
     this.#messageBytes.delete(key);
     this.#decrementMessageShard(current);
+    this.#decrementDeliverableShard(current);
     this.#pruneReleasedShard(DeliveryShards.key(this.#requiredShard(current)));
     return true;
   }
 
-  /** Finds an active shard session.
+  /**
+   * Finds an active shard session.
+   *
    * @param shard Identifies the shard.
    * @returns Provides the session when active.
    */
@@ -79,7 +115,19 @@ export class InMemoryDeliveryState {
     return record?.worker === undefined ? undefined : record;
   }
 
-  /** Stores a shard pickup session.
+  /**
+   * Determines whether a shard has a retained `TO_DELIVER` message awaiting delivery.
+   *
+   * @param shard Identifies the shard to inspect.
+   * @returns Whether the shard has at least one retained `TO_DELIVER` message.
+   */
+  hasPending(shard: ShardIndex): boolean {
+    return this.#deliverableShards.has(DeliveryShards.key(shard));
+  }
+
+  /**
+   * Stores a shard pickup session.
+   *
    * @param shard Identifies the shard.
    * @param worker Identifies the worker.
    * @param whenPicked Records the pickup time.
@@ -93,7 +141,9 @@ export class InMemoryDeliveryState {
     });
   }
 
-  /** Removes an active shard session.
+  /**
+   * Removes an active shard session.
+   *
    * @param shard Identifies the shard.
    * @returns Provides the former session when active.
    */
@@ -136,12 +186,15 @@ export class InMemoryDeliveryState {
     if (prior !== undefined) {
       this.#retainedBytes -= this.#messageBytes.get(key) ?? 0;
       this.#decrementMessageShard(prior);
+      this.#decrementDeliverableShard(prior);
     }
     this.messages.set(key, DeliveryMessages.copy(message));
     this.#messageBytes.set(key, bytes);
     this.#retainedBytes += bytes;
     const shard = DeliveryShards.key(this.#requiredShard(message));
     this.#messageShards.set(shard, (this.#messageShards.get(shard) ?? 0) + 1);
+    if (message.status === InboxMessageStatus.TO_DELIVER)
+      this.#deliverableShards.set(shard, (this.#deliverableShards.get(shard) ?? 0) + 1);
   }
 
   #decrementMessageShard(message: InboxMessage): void {
@@ -151,6 +204,16 @@ export class InMemoryDeliveryState {
       throw new TypeError("Delivery message shard count is invalid.");
     if (count === 1) this.#messageShards.delete(key);
     else this.#messageShards.set(key, count - 1);
+  }
+
+  #decrementDeliverableShard(message: InboxMessage): void {
+    if (message.status !== InboxMessageStatus.TO_DELIVER) return;
+    const key = DeliveryShards.key(this.#requiredShard(message));
+    const count = this.#deliverableShards.get(key);
+    if (count === undefined || count < 1)
+      throw new TypeError("Delivery deliverable shard count is invalid.");
+    if (count === 1) this.#deliverableShards.delete(key);
+    else this.#deliverableShards.set(key, count - 1);
   }
 
   #ensureShardCapacity(shard: ShardIndex): void {

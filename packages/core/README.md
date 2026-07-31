@@ -1,188 +1,94 @@
 # @spine-event-engine/core
 
-Core runtime metadata APIs for Spine TS.
+`@spine-event-engine/core` provides the small Protobuf utilities shared by a
+Spine TS application. Use it when application code needs to validate a message,
+pack it into `google.protobuf.Any`, create a command or event envelope, or look
+up a generated message schema by its Spine type URL.
 
-The package currently provides descriptor-backed type registry APIs, the first
-validation facade over `@spine-event-engine/validation-ts`, and helpers for
-packing already-built domain messages into Spine command/event envelopes.
+For the detailed contract and integration notes, see
+[REFERENCE documentation for agents](REFERENCE.md).
 
-The type registry slice includes:
+## Use from this source workspace
 
-- deterministic type URL derivation from a schema file's Spine
-  `type_url_prefix` option;
-- fallback type URL derivation using `type.googleapis.com` for files without a
-  Spine prefix option; a Spine file option takes precedence over a custom
-  fallback, while `type.example.test///` otherwise produces the canonical
-  `type.example.test/<full.type.Name>` result, and empty or
-  whitespace-containing custom values reject with `TypeError`;
-- schema registration and lookup by full Protobuf type name, type URL, and
-  schema identity;
-- fail-fast duplicate detection for full names, type URLs, and descriptor
-  identity conflicts;
-- descriptor metadata for the registered schema, declaring file, first field,
-  and file option access; and
-- a read-only default `spineCoreRegistry` lookup view containing the curated
-  Spine schemas exported by `@spine-event-engine/proto`, including the core
-  command/event envelope and actor/tenant/user/version context contracts.
-
-```ts
-import { FieldPathSchema } from "@spine-event-engine/proto";
-import { spineCoreRegistry, TypeUrls } from "@spine-event-engine/core";
-
-const typeUrl = TypeUrls.derive(FieldPathSchema);
-const metadata = spineCoreRegistry.getByTypeUrl(typeUrl);
-
-console.log(metadata.fullTypeName);
+```sh
+pnpm --filter @spine-event-engine/core build
 ```
 
-Use `TypeRegistry.spineCore()` when a caller-owned mutable registry is needed.
-The shared `spineCoreRegistry` intentionally exposes lookup methods only, so
-application code cannot mutate the process-wide curated registry.
+This private snapshot package is not published to an npm registry. Use it from
+this workspace while developing the framework.
 
-Semantic tag lookup is intentionally empty for the copied proto closure because
-no registered schema proves `(is)` or `(every_is)` consumer metadata in a
-TypeScript-friendly form. The registry reports only metadata that the copied
-descriptors establish.
+## Validate a message
 
-## Validation
-
-Framework users validate single Protobuf messages through `@spine-event-engine/core`, not
-through the upstream validation package:
+Use `Validate.check()` when an invalid message should stop the current
+operation. It reads the validation options from the generated schema and throws
+`ValidationException` if a constraint is violated.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { ValidationException, Validate } from "@spine-event-engine/core";
-import { CommandSchema } from "@spine-event-engine/proto";
+import { Validate } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 
-const command = create(CommandSchema, {});
-const result = Validate.message(CommandSchema, command);
-
-if (!result.valid) {
-  const fields = result.violations.map(
-    (violation) => violation.fieldPath?.fieldName.join(".") ?? violation.typeName,
-  );
-  console.warn(`Command failed ${result.violations.length} validation rule(s).`, fields);
-}
-
-try {
-  Validate.check(CommandSchema, command);
-} catch (error) {
-  if (error instanceof ValidationException) {
-    const validationError = error.asMessage();
-    console.warn(
-      `Command rejected with ${validationError.constraintViolation.length} violation(s).`,
-    );
-  }
-}
+const userId = create(UserIdSchema, { value: "ava" });
+Validate.check(UserIdSchema, userId);
 ```
 
-`Validate.message()` returns a structured result with repo-local
-`spine.validation.ConstraintViolation` and `spine.validation.ValidationError`
-message data from `@spine-event-engine/proto`. `Validate.check()` uses the same validation
-path and throws `ValidationException` when violations are present.
-Validation details are safe by default: the facade omits raw invalid
-`fieldValue` data, redacts every upstream or transition-rule placeholder value
-while preserving placeholder keys, and converts upstream validation runtime failures into
-structured repo-local violations.
+Use `Validate.message()` when the caller needs the returned violations instead
+of an exception.
 
-Stateful checks such as Spine `(set_once)` require previous and proposed state.
-They are intentionally separate from single-message validation and use the
-framework-owned `Validate.transition()` seam consumed by current server entity
-transaction validation. Rule-returned violations are sanitized before
-aggregation, and throwing transition rules are isolated into structured
-violations so later rules still run in order.
+## Pack and unpack a message
 
-## Domain Rejections
-
-Generated companions for top-level messages declared in `*rejections.proto`
-files expose a JVM-familiar factory. The factory validates its input before it
-returns a nominal `RejectionThrowable`; its schema and cloned message are then
-available to framework code.
-
-Run `pnpm proto:generate` from the consumer project root before compiling.
-Generated module imports are relative to the consumer source file, not this
-package README. For example, from a source file under `examples/todo/src`:
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
-import { TaskAlreadyDone } from "../generated/spine/example/todo/v1/task_rejections.js";
-
-const id = create(TaskIdSchema, { value: "task-42" });
-
-throw TaskAlreadyDone.create({ id });
-```
-
-`RejectionThrowable` is an `Error`, so it preserves normal stack and name
-behavior. It privately snapshots the validated payload; `messageData` and
-`messageThrown()` return defensive message clones, so callers cannot alter the
-stored rejection by mutating inputs or returned values. Rejection handling and
-event publication remain server-runtime work; this package only owns the
-validated throwable contract.
-
-## Envelope Packing
-
-Use `AnyMessages.pack()` when a caller needs Spine-aware `google.protobuf.Any` values.
-It derives the type URL through `TypeUrls.derive(schema)` and serializes with the
-Protobuf-ES binary writer, so Spine payloads use `type.spine.io/...` instead of
-the default `type.googleapis.com/...` prefix.
+`AnyMessages.pack()` derives the type URL from the schema's Protobuf file and
+validates the message by default. `unpack()` returns `undefined` when the URL
+or payload does not match the requested schema.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
 import { AnyMessages } from "@spine-event-engine/core";
-import { FieldPathSchema } from "@spine-event-engine/proto";
+import { UserIdSchema } from "@spine-event-engine/proto";
 
-const payload = create(FieldPathSchema, { fieldName: ["task", "title"] });
-const any = AnyMessages.pack(FieldPathSchema, payload);
-const unpacked = AnyMessages.unpack(any, FieldPathSchema);
+const userId = create(UserIdSchema, { value: "ava" });
+const packed = AnyMessages.pack(UserIdSchema, userId);
+const unpacked = AnyMessages.unpack(packed, UserIdSchema);
 ```
 
-`AnyMessages.pack()` validates the enclosed message through the core validation facade by
-default and throws `ValidationException` for structured validation failures. Set
-`{ validate: false }` only when the caller has already validated a trusted
-message. Framework-packed payloads omit unknown fields for stable binary output
-inside this helper seam. Protobuf-ES 2.12.1 does not expose deterministic
-map-key ordering, so this package does not claim fully canonical map ordering in
-T-0007b. The helpers do not include packed bytes or payload contents in their
-validation errors, and `AnyMessages.unpack()` returns `undefined` for type URL mismatches
-or malformed payload bytes.
+Only pass `{ validate: false }` for data a trusted caller has already
+validated.
 
-Low-level framework and test-fixture code can use `SignalEnvelopes.command()` and
-`SignalEnvelopes.event()` when it already owns generated Spine envelope IDs and contexts:
+## Build a schema registry
 
-The following block is intentionally a non-executable call-shape fragment. It
-requires caller-owned `commandId` (`CommandId`), `commandContext`
-(`CommandContext`), `eventId` (`EventId`), and `eventContext` (`EventContext`)
-messages from `@spine-event-engine/proto`, plus consumer-generated `CreateTaskSchema` and
-`TaskCreatedSchema` values and their corresponding `payload` and `taskCreated`
-messages.
+Applications normally give model modules to the server, which creates its own
+registry. A standalone integration can create a registry directly.
 
 ```ts
-import { SignalEnvelopes } from "@spine-event-engine/core";
+import { TypeRegistry } from "@spine-event-engine/core";
+import { UserIdSchema } from "@spine-event-engine/proto";
 
-const command = SignalEnvelopes.command({
-  id: commandId,
-  context: commandContext,
-  schema: CreateTaskSchema,
-  message: payload,
-});
-
-const event = SignalEnvelopes.event({
-  id: eventId,
-  context: eventContext,
-  schema: TaskCreatedSchema,
-  message: taskCreated,
-});
+const registry = new TypeRegistry([UserIdSchema]);
+const user = registry.getByFullName("spine.core.UserId");
+console.log(user.typeUrl);
 ```
 
-The caller supplies generated IDs and generated contexts. Ordinary application
-handlers return generated domain messages; the server runtime owns framework
-event envelopes, event IDs, storage records, and fan-out metadata. These
-helpers do not generate UUIDs, timestamps, actor or tenant context, producer
-IDs, versions, origins, system properties, storage records, bus deliveries, or
-transport metadata. The helpers snapshot supplied IDs and contexts before
-embedding them in the returned envelope.
+`spineCoreRegistry` is a read-only registry of the Spine schemas supplied by
+`@spine-event-engine/proto`. Use `TypeRegistry.spineCore()` if registrations
+must be added.
 
-This package does not own runtime buses, entity repositories, storage,
-decorators, handlers, or transport behavior; those responsibilities remain in
-their respective packages.
+## Domain rejections
+
+The model generator creates typed rejection factories for top-level messages in
+an application's `*rejections.proto` files. Application code imports that
+generated companion and throws its factory result. This example is from a
+source file in the Todo model package's `src` directory.
+
+```ts
+// docs-snippet-path: examples/todo/src/index.ts
+import { create } from "@bufbuild/protobuf";
+import { TaskIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskAlreadyDone } from "../generated/spine/examples/todo/task_rejections.js";
+
+const id = create(TaskIdSchema, { value: "task-42" });
+throw TaskAlreadyDone.create({ id });
+```
+
+The generated factory validates the rejection message and returns a
+`RejectionThrowable`. The server package decides how a rejection is handled or
+published.

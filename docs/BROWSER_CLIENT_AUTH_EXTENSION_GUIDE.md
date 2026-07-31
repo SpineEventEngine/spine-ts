@@ -1,13 +1,13 @@
 # Browser client, authentication, and gateway extension guide
 
-This is the authoritative Wave 4 guide for browser access and the standalone
-authentication gateway. It is deliberately useful to both application authors
-and coding agents: it names the public seams, their invariants, and the limits
-that an application must preserve. For the concise package introductions, see
-the linked READMEs; for declarations, use the [API index](api/README.md).
+This guide explains browser access and the standalone authentication gateway.
+It is useful to both application authors and coding agents: it names the public
+seams, their invariants, and the limits that an application must preserve. For
+concise package introductions, see the linked READMEs; for declarations, use
+the [API index](api/README.md).
 
-Wave 4 does not publish packages to npm yet. Publication is deferred for
-reconsideration after all waves.
+The packages are not published to npm yet. This repository's workspace is the
+supported source for the commands and examples below.
 
 ## What owns what
 
@@ -100,8 +100,7 @@ Subscriptions are hints, never authoritative or complete. Duplicate, missing,
 and differently ordered updates are possible. A healthy-looking transport does
 not prove every update arrived. Entity resynchronization restores current
 authoritative state, **not** intermediate history. Event gaps can occur and are
-not replayed in Wave 4. Cross-node subscription propagation is outside Wave 4
-and remains Wave 6.
+not replayed. Cross-node subscription propagation is not provided.
 
 For an entity subscription, provide an `authoritativeQuery`; client-web
 evaluates it only during reconnect, verifies a byte-equivalent Topic target,
@@ -152,9 +151,9 @@ sequenceDiagram
 ```
 
 React support excludes SSR, Suspense, normalized caching, service workers, and
-external state managers in Wave 4. A late result or update from a retired
-generation is ignored. Cancellation is cooperative: a factory that ignores its
-signal can keep its own underlying work alive.
+external state managers. A late result or update from a retired generation is
+ignored. Cancellation is cooperative: a factory that ignores its signal can
+keep its own underlying work alive.
 
 ## Gateway contracts and request facts
 
@@ -439,7 +438,7 @@ errors.
 
 ## Compatibility boundary
 
-The TS runtime acceptance exercises the real Wave 4 topology. JVM evidence is
-only partial static source/descriptor compatibility; complete transitive and
-runtime JVM interoperability is deferred. No Spine JVM project is built or
-executed for this wave.
+The TypeScript runtime checks exercise the real browser-to-gateway topology.
+JVM evidence is limited to static source and descriptor compatibility; this
+repository does not establish complete transitive or runtime JVM
+interoperability. No Spine JVM project is built or executed here.

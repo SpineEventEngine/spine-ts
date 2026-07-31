@@ -9,22 +9,35 @@ import {
   type HandlerRegistrationBuilder,
 } from "./handler-metadata.js";
 
-/** Describes the generated handler registry module shape accepted by the framework ingestor.
+/**
+ * Describes the generated handler registry module shape accepted by the framework ingestor.
  *
  * @internal
  */
 export interface GeneratedHandlerRegistry {
-  /** Generated registry contract version. */
+  // prettier-ignore
+
+  /**
+   * Generated registry contract version.
+   */
   readonly version: 1;
-  /** Entity handler groups declared by the generated module. */
+
+  /**
+   * Entity handler groups declared by the generated module.
+   */
   readonly entities: readonly GeneratedEntityHandlerGroup[];
 }
 
-/** Framework-owned ingestion adapter for generated handler registries. */
+/**
+ * Framework-owned ingestion adapter for generated handler registries.
+ */
 export class HandlerRegistryIngestor {
-  /** Converts generated registry records into canonical entity handler metadata.
+  // prettier-ignore
+
+  /**
+   * Converts generated registry records into canonical entity handler metadata.
    *
-   * @param registry - Generated registry metadata to validate and materialize.
+   * @param registry Generated registry metadata to validate and materialize.
    * @returns Frozen canonical entity-handler metadata.
    */
   ingest(registry: unknown): readonly EntityHandlersMetadata[] {
@@ -34,10 +47,11 @@ export class HandlerRegistryIngestor {
     return Object.freeze(registry.entities.map((entity) => GeneratedRegistry.materialize(entity)));
   }
 
-  /** Registers generated registry records in a caller-owned metadata registry.
+  /**
+   * Registers generated registry records in a caller-owned metadata registry.
    *
-   * @param generated - Generated registry metadata to validate and register.
-   * @param registry - Metadata registry to update.
+   * @param generated Generated registry metadata to validate and register.
+   * @param registry Metadata registry to update.
    * @returns The updated metadata registry.
    */
   register(
@@ -56,7 +70,9 @@ export class HandlerRegistryIngestor {
   }
 }
 
-/** Error code for generated handler registry ingestion failures. */
+/**
+ * Error code for generated handler registry ingestion failures.
+ */
 export type RegistryIngestionErrorCode =
   | "UNSUPPORTED_REGISTRY_VERSION"
   | "UNSUPPORTED_HANDLER_KIND"
@@ -65,16 +81,22 @@ export type RegistryIngestionErrorCode =
   | "MISSING_EMITTED_SCHEMAS"
   | "UNEXPECTED_EMITTED_SCHEMAS";
 
-/** Error thrown when generated handler registry metadata cannot be ingested. */
+/**
+ * Error thrown when generated handler registry metadata cannot be ingested.
+ */
 export class HandlerRegistryIngestionError extends Error {
-  /** Stable code for callers/tests that need structured failure handling. */
+  // prettier-ignore
+
+  /**
+   * Stable code for callers/tests that need structured failure handling.
+   */
   readonly code: RegistryIngestionErrorCode;
 
   /**
    * Creates an ingestion error.
    *
-   * @param code - Stable code that identifies the failed validation.
-   * @param message - Human-readable failure description.
+   * @param code Stable code that identifies the failed validation.
+   * @param message Human-readable failure description.
    */
   constructor(code: RegistryIngestionErrorCode, message: string) {
     super(message);
@@ -84,33 +106,47 @@ export class HandlerRegistryIngestionError extends Error {
   }
 }
 
-/** Describes handler categories supported by generated registry ingestion.
+/**
+ * Describes handler categories supported by generated registry ingestion.
  *
  * @internal
  */
 export type GeneratedHandlerKind =
   "command-assignment" | "command-reaction" | "event-subscription" | "event-reaction";
 
-/** Describes public handler arity recorded by generated registry tooling.
+/**
+ * Describes public handler arity recorded by generated registry tooling.
  *
  * @internal
  */
 export type GeneratedHandlerParameterCount = 1 | 2;
 
-/** Describes a type-erased generated entity group accepted by a top-level registry.
+/**
+ * Describes a type-erased generated entity group accepted by a top-level registry.
  *
  * @internal
  */
 export interface GeneratedEntityHandlerGroup {
-  /** Entity class whose prototype owns the generated handler methods. */
+  // prettier-ignore
+
+  /**
+   * Entity class whose prototype owns the generated handler methods.
+   */
   readonly entityType: EntityClass;
-  /** Generated Protobuf-ES schema for the entity state. */
+
+  /**
+   * Generated Protobuf-ES schema for the entity state.
+   */
   readonly stateSchema: DescriptorMessageSchema;
-  /** Generated handler records in declaration order. */
+
+  /**
+   * Generated handler records in declaration order.
+   */
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
 
-/** Describes generated handler records for one entity class.
+/**
+ * Describes generated handler records for one entity class.
  *
  * @internal
  */
@@ -118,39 +154,71 @@ export interface GeneratedEntityHandlers<
   Instance extends object = object,
   StateSchema extends DescriptorMessageSchema = DescriptorMessageSchema,
 > extends GeneratedEntityHandlerGroup {
-  /** Entity class whose prototype owns the generated handler methods. */
+  // prettier-ignore
+
+  /**
+   * Entity class whose prototype owns the generated handler methods.
+   */
   readonly entityType: EntityClass<Instance>;
-  /** Generated Protobuf-ES schema for the entity state. */
+
+  /**
+   * Generated Protobuf-ES schema for the entity state.
+   */
   readonly stateSchema: StateSchema;
-  /** Generated handler records in declaration order. */
+
+  /**
+   * Generated handler records in declaration order.
+   */
   readonly handlers: readonly GeneratedHandlerRecord<Instance>[];
 }
 
-/** Describes type-erased generated metadata for one decorated handler method.
+/**
+ * Describes type-erased generated metadata for one decorated handler method.
  *
  * @internal
  */
 export interface GeneratedHandlerRecordInput {
-  /** Handler role inferred from the bare decorator. */
+  // prettier-ignore
+
+  /**
+   * Handler role inferred from the bare decorator.
+   */
   readonly kind: GeneratedHandlerKind;
-  /** Entity instance method name selected by generated metadata. */
+
+  /**
+   * Entity instance method name selected by generated metadata.
+   */
   readonly methodName: string;
-  /** Generated Protobuf-ES schema accepted by the handler method. */
+
+  /**
+   * Generated Protobuf-ES schema accepted by the handler method.
+   */
   readonly signalSchema: DescriptorMessageSchema;
-  /** Generated Protobuf-ES schemas emitted by the handler return type. */
+
+  /**
+   * Generated Protobuf-ES schemas emitted by the handler return type.
+   */
   readonly emittedSchemas: readonly DescriptorMessageSchema[];
-  /** Public method arity: `handler(signal)` or `handler(signal, context)`. */
+
+  /**
+   * Public method arity: `handler(signal)` or `handler(signal, context)`.
+   */
   readonly parameterCount: GeneratedHandlerParameterCount;
 }
 
-/** Describes generated metadata for one decorated handler method on a concrete entity class.
+/**
+ * Describes generated metadata for one decorated handler method on a concrete entity class.
  *
  * @internal
  */
 export interface GeneratedHandlerRecord<
   Instance extends object = object,
 > extends GeneratedHandlerRecordInput {
-  /** Entity instance method name selected by generated metadata. */
+  // prettier-ignore
+
+  /**
+   * Entity instance method name selected by generated metadata.
+   */
   readonly methodName: HandlerMethodName<Instance>;
 }
 

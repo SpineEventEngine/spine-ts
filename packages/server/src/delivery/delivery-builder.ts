@@ -20,8 +20,12 @@ const controlledDeliveryRunners = new WeakMap<
   (options: DeliveryControlledRun) => Promise<DeliveryResult>
 >();
 
-/** Provides package-local controls for builder-created deliveries. */
+/**
+ * Provides package-local controls for builder-created deliveries.
+ */
 export interface DeliveryControls {
+  // prettier-ignore
+
   /**
    * Finds controlled execution for one builder-created delivery.
    *
@@ -33,9 +37,15 @@ export interface DeliveryControls {
   ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined;
 }
 
-/** Exposes package-local controls for builder-created deliveries. */
+/**
+ * Exposes package-local controls for builder-created deliveries.
+ */
 export const deliveryControls: DeliveryControls = Object.freeze({
-  /** Finds controlled execution for a builder-created delivery. */
+  // prettier-ignore
+
+  /**
+   * Finds controlled execution for a builder-created delivery.
+   */
   runner(
     delivery: Delivery,
   ): ((options: DeliveryControlledRun) => Promise<DeliveryResult>) | undefined {
@@ -43,10 +53,17 @@ export const deliveryControls: DeliveryControls = Object.freeze({
   },
 });
 
-/** Assigns inbox targets to durable delivery shards. */
+/**
+ * Assigns inbox targets to durable delivery shards.
+ */
 export interface DeliveryStrategy {
-  /** Positive number of shards addressable by this strategy. */
+  // prettier-ignore
+
+  /**
+   * Positive number of shards addressable by this strategy.
+   */
   readonly shardCount: number;
+
   /**
    * Returns the shard for one target identity and type.
    *
@@ -57,9 +74,12 @@ export interface DeliveryStrategy {
   shardFor(targetId: string, targetType: string): ShardIndex;
 }
 
-/** Places every target in one local shard. */
+/**
+ * Places every target in one local shard.
+ */
 export class UniformAcrossAllShards implements DeliveryStrategy {
   static readonly #single = new UniformAcrossAllShards(1);
+
   /**
    * Returns a strategy with the requested positive number of shards.
    *
@@ -79,7 +99,9 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
     return this.#single;
   }
 
-  /** Number of uniformly distributed shards. */
+  /**
+   * Number of uniformly distributed shards.
+   */
   readonly shardCount: number;
 
   private constructor(shards: number) {
@@ -111,14 +133,19 @@ export class UniformAcrossAllShards implements DeliveryStrategy {
   }
 }
 
-/** Observes finite local delivery without owning scheduling or retry policy. */
+/**
+ * Observes finite local delivery without owning scheduling or retry policy.
+ */
 export interface DeliveryMonitor {
+  // prettier-ignore
+
   /**
    * Observes exclusive pickup before page work.
    *
    * @param shard The picked shard.
    */
   onStarted?(shard: ShardIndex): void;
+
   /**
    * Observes a released page.
    *
@@ -126,18 +153,21 @@ export interface DeliveryMonitor {
    * @returns `false` to stop the run, otherwise `undefined`.
    */
   onPage?(page: DeliveryPage): boolean | undefined;
+
   /**
    * Observes a shard owned by another node.
    *
    * @param shard The unavailable shard.
    */
   onSkipped?(shard: ShardIndex): void;
+
   /**
    * Observes a released failed page.
    *
    * @param page The failed page.
    */
   onFailure?(page: DeliveryPage): void;
+
   /**
    * Observes a fulfilled run after all release work.
    *
@@ -146,32 +176,66 @@ export interface DeliveryMonitor {
   onCompleted?(result: DeliveryResult): void;
 }
 
-/** Immutable outcome of one finite local delivery run. */
+/**
+ * Immutable outcome of one finite local delivery run.
+ */
 export interface DeliveryResult {
-  /** Terminal reason for this local run. */
+  // prettier-ignore
+
+  /**
+   * Terminal reason for this local run.
+   */
   readonly status: "COMPLETED" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
-  /** Frozen ordered primitive page summaries, bounded by the configured batch size. */
+
+  /**
+   * Frozen ordered primitive page summaries, bounded by the configured batch size.
+   */
   readonly pages: readonly DeliveryPage[];
 }
 
-/** Immutable primitive summary of one bounded loop page. */
+/**
+ * Immutable primitive summary of one bounded loop page.
+ */
 export interface DeliveryPage {
-  /** Why this bounded page stopped. */
+  // prettier-ignore
+
+  /**
+   * Why this bounded page stopped.
+   */
   readonly status: "IDLE" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
-  /** Pending rows examined. */
+
+  /**
+   * Pending rows examined.
+   */
   readonly processed: number;
-  /** Rows whose endpoint callback ran. */
+
+  /**
+   * Rows whose endpoint callback ran.
+   */
   readonly accepted: number;
-  /** Rows durably marked delivered. */
+
+  /**
+   * Rows durably marked delivered.
+   */
   readonly delivered: number;
-  /** Failures observed without exposing mutable payloads or errors. */
+
+  /**
+   * Failures observed without exposing mutable payloads or errors.
+   */
   readonly failed: number;
 }
 
-/** Options for one finite local delivery run. */
+/**
+ * Options for one finite local delivery run.
+ */
 export interface DeliveryRunOptions {
-  /** Framework endpoint invoked for each available inbox row. */
+  // prettier-ignore
+
+  /**
+   * Framework endpoint invoked for each available inbox row.
+   */
   readonly onMessage: OnDeliveryMessage;
+
   /**
    * Shard to process; defaults to the strategy's only shard when applicable.
    * An explicit shard's `ofTotal` must equal the strategy's resolved `shardCount`.
@@ -179,22 +243,47 @@ export interface DeliveryRunOptions {
   readonly shard?: ShardIndex;
 }
 
-/** Builder-owned public delivery view. */
+/**
+ * Builder-owned public delivery view.
+ */
 export interface Delivery {
-  /** Immutable storage namespace selected for this delivery. */
+  // prettier-ignore
+
+  /**
+   * Immutable storage namespace selected for this delivery.
+   */
   readonly context: StorageContext;
-  /** Storage factory selected for durable delivery records. */
+
+  /**
+   * Storage factory selected for durable delivery records.
+   */
   readonly storageFactory: StorageFactory;
-  /** Target-to-shard strategy selected for inbox writes and runs. */
+
+  /**
+   * Target-to-shard strategy selected for inbox writes and runs.
+   */
   readonly strategy: DeliveryStrategy;
-  /** Node identity used for exclusive shard pickup. */
+
+  /**
+   * Node identity used for exclusive shard pickup.
+   */
   readonly node: string;
-  /** Maximum accepted work per internal delivery page, from 1 through 1000. */
+
+  /**
+   * Maximum accepted work per internal delivery page, from 1 through 1000.
+   */
   readonly pageSize: number;
-  /** Maximum retained page summaries per finite run, from 1 through 1000. */
+
+  /**
+   * Maximum retained page summaries per finite run, from 1 through 1000.
+   */
   readonly batchSize: number;
-  /** Durable inbox facade. */
+
+  /**
+   * Durable inbox facade.
+   */
   readonly inbox: DeliveryInbox;
+
   /**
    * Executes one finite local shard delivery.
    *
@@ -204,7 +293,9 @@ export interface Delivery {
   run(options: DeliveryRunOptions): Promise<DeliveryResult>;
 }
 
-/** Configures and snapshots one public {@link Delivery}. */
+/**
+ * Configures and snapshots one public {@link Delivery}.
+ */
 export class DeliveryBuilder {
   #context: StorageContext | undefined;
   #storageFactory: StorageFactory | undefined;
@@ -227,7 +318,9 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Sets the storage factory.
+  /**
+   * Sets the storage factory.
+   *
    * @param storageFactory The durable storage factory.
    * @returns This builder.
    */
@@ -236,7 +329,9 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Sets the registry used for exclusive shard pickup.
+  /**
+   * Sets the registry used for exclusive shard pickup.
+   *
    * @param workRegistry The shard work registry.
    * @returns This builder.
    */
@@ -245,7 +340,9 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Sets an inbox port instead of the local durable inbox default.
+  /**
+   * Sets an inbox port instead of the local durable inbox default.
+   *
    * @param inbox The inbox port.
    * @returns This builder.
    */
@@ -254,7 +351,9 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Sets the target-to-shard strategy.
+  /**
+   * Sets the target-to-shard strategy.
+   *
    * @param strategy The target strategy.
    * @returns This builder.
    */
@@ -263,7 +362,9 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Sets finite-run observation and cancellation.
+  /**
+   * Sets finite-run observation and cancellation.
+   *
    * @param monitor The run monitor.
    * @returns This builder.
    */
@@ -272,7 +373,9 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Sets the positive accepted-work bound for one page.
+  /**
+   * Sets the positive accepted-work bound for one page.
+   *
    * @param pageSize The positive page size.
    * @returns This builder.
    */
@@ -285,7 +388,9 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Sets the positive number of pages admitted by one local run.
+  /**
+   * Sets the positive number of pages admitted by one local run.
+   *
    * @param batchSize The positive page count.
    * @returns This builder.
    */
@@ -294,7 +399,9 @@ export class DeliveryBuilder {
     return this;
   }
 
-  /** Sets the node identity used for shard pickup.
+  /**
+   * Sets the node identity used for shard pickup.
+   *
    * @param node The non-empty node identity.
    * @returns This builder.
    */
@@ -376,7 +483,9 @@ class BuiltDelivery implements Delivery {
   }
 }
 
-/** Groups immutable delivery configuration operations. */
+/**
+ * Groups immutable delivery configuration operations.
+ */
 const DeliveryValues = Object.freeze({
   requireStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
     if (!Number.isSafeInteger(strategy.shardCount) || strategy.shardCount <= 0) {

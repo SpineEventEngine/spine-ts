@@ -6,7 +6,9 @@ import {
 } from "./delivery-builder.js";
 import type { ShardIndex } from "./shard-index.js";
 
-/** Controls admission for one finite delivery run. */
+/**
+ * Controls admission for one finite delivery run.
+ */
 export class DeliveryRunControl {
   readonly #runControlled: (options: DeliveryControlledRun) => Promise<DeliveryResult>;
 
@@ -54,10 +56,19 @@ export class DeliveryRunControl {
   }
 }
 
-/** Describes one controlled finite delivery request. */
+/**
+ * Describes one controlled finite delivery request.
+ */
 export interface DeliveryControlledRun extends DeliveryRunOptions {
-  /** Identifies the shard to drain. */
+  // prettier-ignore
+
+  /**
+   * Identifies the shard to drain.
+   */
   readonly shard: ShardIndex;
-  /** Cancels the controlled run. */
+
+  /**
+   * Cancels the controlled run.
+   */
   readonly signal: AbortSignal;
 }

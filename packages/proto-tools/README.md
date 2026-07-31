@@ -1,125 +1,73 @@
 # @spine-event-engine/proto-tools
 
-`@spine-event-engine/proto-tools` is build-time tooling for application-owned
-Proto model packages and applications that compose them. It is not a server
-runtime dependency. Its `spine-proto` binary has three commands:
+This package generates TypeScript from application-owned Proto models and
+assembles those models into an application registry. It runs at build time, not
+inside a server process.
 
-```bash
-spine-proto generate # model package only
-spine-proto compose  # application package only
-spine-proto handlers # application package only
-```
+For detailed contracts intended for coding agents, see the
+[REFERENCE.md documentation for agents](REFERENCE.md).
 
-The binary is the primary public API. Programs that need to inspect the same
-version-one files can use the compact root API without reimplementing its path
-and package validation:
+## Create a model package
 
-```ts
-import { ProtoConfig, ProtoManifest } from "@spine-event-engine/proto-tools";
-
-const config = ProtoConfig.read(process.cwd());
-const manifest = ProtoManifest.read(process.cwd());
-const nextManifest = ProtoManifest.create(process.cwd()); // model packages only
-```
-
-`ProtoConfig.read()` returns either model or application configuration selected
-by `mode`. `ProtoManifest.create()` discovers model-owned Proto files unless an
-explicit, package-relative file list is supplied.
-
-## Model packages: `generate`
-
-A model package owns canonical `.proto` files and exports one `ProtoModule`.
-Use separate packages for independently developed bounded contexts, or one
-combined model package for a small application. This configuration is complete:
+A model package owns canonical `.proto` files, generated code, and one exported
+`ProtoModule`. Use separate model packages for independently developed bounded
+contexts; a small application may use one combined model package.
 
 ```json
 {
   "formatVersion": 1,
   "mode": "model",
-  "packageName": "@acme/users-model",
+  "packageName": "@acme/tasks-model",
   "protoRoot": "proto",
   "generatedRoot": "generated",
   "exportRoot": "generated",
   "dependencies": ["@spine-event-engine/proto"],
-  "moduleExport": "usersProtoModule"
+  "moduleExport": "tasksProtoModule"
 }
 ```
 
-`generate` writes ignored Protobuf-ES sources below `generatedRoot`, a root
-`proto-module.ts`, and `spine-proto-manifest.json`. The manifest is
-deterministic: it records the format version, package name/version, sorted
-canonical Proto files, each generated export, direct model dependencies, and
-the module export. Generation stages output and manifest before replacement, so
-failed validation or Buf generation preserves the previous output.
+Run generation from that package directory:
 
-The package must ship `dist`, `proto`, `spine-proto.json`, and
-`spine-proto-manifest.json`, and expose these subpaths:
-
-```json
-{
-  "exports": {
-    ".": {
-      "types": "./dist/generated/proto-module.d.ts",
-      "default": "./dist/generated/proto-module.js"
-    },
-    "./spine-proto-manifest.json": "./spine-proto-manifest.json",
-    "./proto/*": "./proto/*",
-    "./generated/*.js": {
-      "types": "./dist/generated/*.d.ts",
-      "default": "./dist/generated/*.js"
-    }
-  }
-}
+```sh
+spine-proto generate
 ```
 
-For a cross-model import, declare the other package in both `package.json` and
-`dependencies` in `spine-proto.json`, then import its canonical path:
+Generation creates the generated Protobuf-ES sources, a `proto-module.ts`,
+typed rejection companions for owned rejection Proto files, and a deterministic
+`spine-proto-manifest.json`. Do not edit generated output by hand.
 
-```proto
-import "acme/users/v1/users.proto";
+## Compose an application
 
-message Task {
-  acme.users.v1.UserId author = 1;
-}
-```
-
-The dependent model's generated TypeScript imports
-`@acme/users-model/generated/...`; it does not duplicate Users source or
-generated output. Generation rejects undeclared or unowned imports, missing
-manifest/proto exports, graph cycles, unsafe paths or symlink ancestors, and
-duplicate fully qualified generated messages.
-
-## Application packages: `compose` and `handlers`
-
-An application declares direct model roots and a safe source-file destination:
+An application lists its direct model packages and a source location for the
+generated registry.
 
 ```json
 {
   "formatVersion": 1,
   "mode": "application",
-  "modelPackages": ["@acme/chat-model"],
+  "modelPackages": ["@acme/tasks-model"],
   "registryOutput": "src/model-registry.ts"
 }
 ```
 
-`compose` resolves manifests transitively, verifies every dependency, and writes
-the configured registry source. The direct imported module is sufficient:
-`TypeRegistry.from()` follows each module's declared dependencies. Run it after
-model-package changes.
-
-`handlers` discovers decorated application handlers and atomically writes
-`generated/handler/generated-handler-registry.ts`. Run it after changing a
-handler class or its generated command/event/state types, then compile it into
-`dist/generated/handler/` with the rest of the application.
-
-```bash
+```sh
 spine-proto compose
 spine-proto handlers
 tsc -b
 ```
 
-Run these commands in a clean checkout and CI. Do not author generated files by
-hand or use repository-relative aliases in a package intended for publication.
-Spine TS packages are not published to npm yet; the local-tarball acceptance
-test simulates a clean registry consumer, and publication is revisited after
-all waves.
+`compose` follows declared model dependencies transitively. `handlers` creates
+the generated handler registry for decorated application classes. Run both after
+the related model or handler changes.
+
+The public CLI is `spine-proto`. Its programmatic config and manifest readers
+are for tooling that needs the same validated package contracts; application
+code should import generated model modules instead.
+
+```ts
+// docs-snippet-path: packages/proto-tools/src/index.ts
+import { ProtoConfig } from "@spine-event-engine/proto-tools";
+
+const config = ProtoConfig.read(".");
+void config;
+```

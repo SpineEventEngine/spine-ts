@@ -31,8 +31,12 @@ import {
 import { MutationAdmission } from "./mutation-admission.js";
 import { DeliveryMessages, DeliveryShards } from "./wire-values.js";
 
-/** Provides Inbox RPC handler implementations. */
+/**
+ * Provides Inbox RPC handler implementations.
+ */
 export const InboxHandlers: Readonly<{
+  // prettier-ignore
+
   /**
    * Creates Inbox RPC handlers.
    *
@@ -151,16 +155,29 @@ export const InboxHandlers: Readonly<{
   }),
 });
 
-/** Describes a validated Inbox message and its encoded record size. */
+/**
+ * Describes a validated Inbox message and its encoded record size.
+ */
 interface InboxRecord {
-  /** Holds the detached validated Inbox message. */
+  // prettier-ignore
+
+  /**
+   * Holds the detached validated Inbox message.
+   */
   readonly message: InboxMessage;
-  /** Holds the encoded Inbox record size in bytes. */
+
+  /**
+   * Holds the encoded Inbox record size in bytes.
+   */
   readonly bytes: number;
 }
 
-/** Owns Inbox message validation and delivery ordering. */
+/**
+ * Validates Inbox messages and preserves their delivery ordering.
+ */
 const InboxMessages: Readonly<{
+  // prettier-ignore
+
   /**
    * Validates and copies an Inbox message.
    *
@@ -168,6 +185,7 @@ const InboxMessages: Readonly<{
    * @returns The validated detached message and its encoded size.
    */
   required: (message: InboxMessage | undefined) => InboxRecord;
+
   /**
    * Validates an Inbox batch length.
    *
@@ -175,6 +193,7 @@ const InboxMessages: Readonly<{
    * @returns Nothing when the length is valid.
    */
   requiredBatchLength: (length: number) => void;
+
   /**
    * Compares Inbox messages by receive time, version, and UUID.
    *
@@ -183,6 +202,7 @@ const InboxMessages: Readonly<{
    * @returns A sort-order comparison result.
    */
   compare: (left: InboxMessage, right: InboxMessage) => number;
+
   /**
    * Validates an Inbox payload.
    *
@@ -190,6 +210,7 @@ const InboxMessages: Readonly<{
    * @returns Whether the payload has a supported case and valid size.
    */
   validPayload: (message: InboxMessage) => boolean;
+
   /**
    * Validates an Inbox label enum value.
    *
@@ -197,6 +218,7 @@ const InboxMessages: Readonly<{
    * @returns Whether the label is supported.
    */
   validLabel: (label: InboxLabel) => boolean;
+
   /**
    * Validates an Inbox status enum value.
    *
@@ -264,8 +286,12 @@ const InboxMessages: Readonly<{
     status === InboxMessageStatus.TO_CATCH_UP,
 });
 
-/** Owns Inbox shard validation and batch shard consistency. */
+/**
+ * Validates Inbox shard identities and batch consistency.
+ */
 const InboxShards: Readonly<{
+  // prettier-ignore
+
   /**
    * Validates and returns a shard identity.
    *
@@ -273,6 +299,7 @@ const InboxShards: Readonly<{
    * @returns The validated shard identity.
    */
   required: (shard: ShardIndex | undefined) => ShardIndex;
+
   /**
    * Validates a shard identity.
    *
@@ -280,6 +307,7 @@ const InboxShards: Readonly<{
    * @returns Whether the shard identity is valid.
    */
   valid: (shard: ShardIndex) => boolean;
+
   /**
    * Validates that all messages belong to a shard.
    *
@@ -311,8 +339,12 @@ const InboxShards: Readonly<{
   },
 });
 
-/** Owns Inbox timestamp validation and comparisons. */
+/**
+ * Validates and compares Inbox timestamps.
+ */
 const InboxTime: Readonly<{
+  // prettier-ignore
+
   /**
    * Validates a protobuf timestamp.
    *
@@ -320,6 +352,7 @@ const InboxTime: Readonly<{
    * @returns Whether the timestamp is within protobuf bounds.
    */
   valid: (value: { readonly seconds: bigint; readonly nanos: number }) => boolean;
+
   /**
    * Compares a message receive time to a timestamp.
    *
@@ -350,8 +383,12 @@ const InboxTime: Readonly<{
   },
 });
 
-/** Owns Inbox response bounds and RPC error creation. */
+/**
+ * Bounds Inbox responses and creates RPC errors.
+ */
 const InboxResponses: Readonly<{
+  // prettier-ignore
+
   /**
    * Creates a response after enforcing its encoded size limit.
    *
@@ -365,6 +402,7 @@ const InboxResponses: Readonly<{
     initializer: MessageInitShape<Schema>,
     errorMessage?: string,
   ) => MessageShape<Schema>;
+
   /**
    * Creates an invalid-argument RPC error.
    *
@@ -372,6 +410,7 @@ const InboxResponses: Readonly<{
    * @returns The invalid-argument error.
    */
   invalid: (message: string) => ConnectError;
+
   /**
    * Creates a resource-exhausted RPC error.
    *

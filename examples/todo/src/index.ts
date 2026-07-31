@@ -15,7 +15,7 @@ import {
   type CreateTask,
   type RenameTask,
   type ReopenTask,
-} from "../generated/spine/example/todo/v1/task_commands_pb.js";
+} from "../generated/spine/examples/todo/task_commands_pb.js";
 import {
   TaskCreatedSchema,
   TaskCompletedSchema,
@@ -25,26 +25,28 @@ import {
   type TaskCreated,
   type TaskRenamed,
   type TaskReopened,
-} from "../generated/spine/example/todo/v1/task_events_pb.js";
-import { TaskIdSchema, type TaskId } from "../generated/spine/example/todo/v1/task_id_pb.js";
-import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
-import {
-  TaskAlreadyDone,
-  TaskNotDone,
-} from "../generated/spine/example/todo/v1/task_rejections.js";
+} from "../generated/spine/examples/todo/task_events_pb.js";
+import { TaskIdSchema, type TaskId } from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema } from "../generated/spine/examples/todo/task_list_pb.js";
+import { TaskAlreadyDone, TaskNotDone } from "../generated/spine/examples/todo/task_rejections.js";
 import type {
   TaskAlreadyDone as TaskAlreadyDoneMessage,
   TaskNotDone as TaskNotDoneMessage,
-} from "../generated/spine/example/todo/v1/task_rejections_pb.js";
-import { TaskSchema } from "../generated/spine/example/todo/v1/tasks_pb.js";
+} from "../generated/spine/examples/todo/task_rejections_pb.js";
+import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
 
 export { todoProtoModule } from "../generated/proto-module.js";
 
-/** Task aggregate for the create-task example flow. */
+/**
+ * Task aggregate for the create-task example flow.
+ */
 export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
-  /** Creates a task and produces its stored domain event.
+  // prettier-ignore
+
+  /**
+   * Creates a task and produces its stored domain event.
    *
-   * @param command - The command that supplies the task title.
+   * @param command The command that supplies the task title.
    * @returns The event that records the created task.
    */
   @Assign
@@ -67,9 +69,10 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     });
   }
 
-  /** Updates a task title and produces its stored domain event.
+  /**
+   * Updates a task title and produces its stored domain event.
    *
-   * @param command - The command that supplies the replacement title.
+   * @param command The command that supplies the replacement title.
    * @returns The event that records the task rename.
    */
   @Assign
@@ -92,9 +95,10 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     });
   }
 
-  /** Completes a task and produces its stored domain event.
+  /**
+   * Completes a task and produces its stored domain event.
    *
-   * @param command - The command that requests task completion.
+   * @param command The command that requests task completion.
    * @returns The event that records the task completion.
    */
   @Assign
@@ -118,9 +122,10 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
     return create(TaskCompletedSchema, { id });
   }
 
-  /** Marks a task open and produces its stored domain event.
+  /**
+   * Marks a task open and produces its stored domain event.
    *
-   * @param command - The command that requests task reopening.
+   * @param command The command that requests task reopening.
    * @returns The event that records the task reopening.
    */
   @Assign
@@ -145,12 +150,17 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   }
 }
 
-/** Read-side task list projection for visible task queries. */
+/**
+ * Read-side task list projection for visible task queries.
+ */
 export class TaskListProjection extends Projection<string, typeof TaskListSchema, number> {
-  /** Observes a rejection for completing an already complete task.
+  // prettier-ignore
+
+  /**
+   * Observes a rejection for completing an already complete task.
    *
-   * @param rejection - The rejection that identifies the completed task.
-   * @param context - The event context that marks the rejection.
+   * @param rejection The rejection that identifies the completed task.
+   * @param context The event context that marks the rejection.
    */
   @Subscribe
   onTaskAlreadyDone(rejection: TaskAlreadyDoneMessage, context: EventContext): void {
@@ -158,18 +168,20 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     void context.rejection;
   }
 
-  /** Observes a rejection for reopening an open task.
+  /**
+   * Observes a rejection for reopening an open task.
    *
-   * @param rejection - The rejection that identifies the open task.
+   * @param rejection The rejection that identifies the open task.
    */
   @Subscribe
   onTaskNotDone(rejection: TaskNotDoneMessage): void {
     void taskIds.require(rejection.id);
   }
 
-  /** Adds a created task to the read-side list.
+  /**
+   * Adds a created task to the read-side list.
    *
-   * @param event - The event that supplies the new task details.
+   * @param event The event that supplies the new task details.
    */
   @Subscribe
   onTaskCreated(event: TaskCreated): void {
@@ -194,9 +206,10 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     );
   }
 
-  /** Updates an existing task in the read-side list.
+  /**
+   * Updates an existing task in the read-side list.
    *
-   * @param event - The event that supplies the replacement title.
+   * @param event The event that supplies the replacement title.
    */
   @Subscribe
   onTaskRenamed(event: TaskRenamed): void {
@@ -222,9 +235,10 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     );
   }
 
-  /** Marks an existing task completed in the read-side list.
+  /**
+   * Marks an existing task completed in the read-side list.
    *
-   * @param event - The event that identifies the completed task.
+   * @param event The event that identifies the completed task.
    */
   @Subscribe
   onTaskCompleted(event: TaskCompleted): void {
@@ -251,9 +265,10 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     });
   }
 
-  /** Marks an existing task open in the read-side list.
+  /**
+   * Marks an existing task open in the read-side list.
    *
-   * @param event - The event that identifies the reopened task.
+   * @param event The event that identifies the reopened task.
    */
   @Subscribe
   onTaskReopened(event: TaskReopened): void {
@@ -281,7 +296,8 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
   }
 }
 
-/** Creates the in-memory single-tenant Tasks bounded context.
+/**
+ * Creates the in-memory single-tenant Tasks bounded context.
  *
  * @returns The assembled Tasks bounded context.
  */
@@ -293,20 +309,32 @@ export async function createTodoContext(): Promise<BoundedContext> {
     .buildAsync();
 }
 
-/** Options for the standalone to-do example server. */
+/**
+ * Options for the standalone to-do example server.
+ */
 export interface TodoServerOptions {
-  /** Host passed to Node's HTTP/2 listener. Defaults to `127.0.0.1`. */
+  // prettier-ignore
+
+  /**
+   * Host passed to Node's HTTP/2 listener. Defaults to `127.0.0.1`.
+   */
   readonly host?: string;
-  /** Port passed to Node's HTTP/2 listener. Defaults to `8080`; use `0` for a free port. */
+
+  /**
+   * Port passed to Node's HTTP/2 listener. Defaults to `8080`; use `0` for a free port.
+   */
   readonly port?: number;
 }
 
-/** Running standalone to-do example server. */
+/**
+ * Running standalone to-do example server.
+ */
 export type TodoServer = RunningServer;
 
-/** Starts the standalone to-do example server with in-memory storage.
+/**
+ * Starts the standalone to-do example server with in-memory storage.
  *
- * @param options - Optional listener host and port overrides.
+ * @param options Optional listener host and port overrides.
  * @returns The running server, which callers must close when finished.
  */
 export async function startTodoServer(options: TodoServerOptions = {}): Promise<TodoServer> {

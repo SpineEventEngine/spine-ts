@@ -192,227 +192,377 @@ export type {
   ZonedDateTime,
 };
 
-/** Represents a command validation error enum value. */
+/**
+ * Represents a command validation error enum value.
+ */
 export type CommandValidationError = CommandValidationErrorType;
-/** Represents a day-of-week enum value. */
+
+/**
+ * Represents a day-of-week enum value.
+ */
 export type DayOfWeek = DayOfWeekType;
-/** Represents an event validation error enum value. */
+
+/**
+ * Represents an event validation error enum value.
+ */
 export type EventValidationError = EventValidationErrorType;
-/** Represents a language enum value. */
+
+/**
+ * Represents a language enum value.
+ */
 export type Language = LanguageType;
-/** Represents a month enum value. */
+
+/**
+ * Represents a month enum value.
+ */
 export type Month = MonthType;
 
-/** File descriptor for `spine/options.proto`. */
+/**
+ * File descriptor for `spine/options.proto`.
+ */
 export const file_spine_options: GenFile = generatedFileSpineOptions;
 
-/** File descriptor for `spine/base/field_path.proto`. */
+/**
+ * File descriptor for `spine/base/field_path.proto`.
+ */
 export const fieldPathFile: GenFile = fieldPathSource;
 
-/** File descriptor for `spine/core/actor_context.proto`. */
+/**
+ * File descriptor for `spine/core/actor_context.proto`.
+ */
 export const actorContextFile: GenFile = actorContextSource;
 
-/** File descriptor for `spine/core/command.proto`. */
+/**
+ * File descriptor for `spine/core/command.proto`.
+ */
 export const file_spine_core_command: GenFile = commandSource;
 
-/** File descriptor for `spine/core/diagnostics.proto`. */
+/**
+ * File descriptor for `spine/core/diagnostics.proto`.
+ */
 export const file_spine_core_diagnostics: GenFile = diagnosticsSource;
 
-/** File descriptor for `spine/core/enrichment.proto`. */
+/**
+ * File descriptor for `spine/core/enrichment.proto`.
+ */
 export const file_spine_core_enrichment: GenFile = enrichmentSource;
 
-/** File descriptor for `spine/core/event.proto`. */
+/**
+ * File descriptor for `spine/core/event.proto`.
+ */
 export const file_spine_core_event: GenFile = eventSource;
 
-/** File descriptor for `spine/core/tenant_id.proto`. */
+/**
+ * File descriptor for `spine/core/tenant_id.proto`.
+ */
 export const tenantIdFile: GenFile = tenantIdSource;
 
-/** File descriptor for `spine/core/user_id.proto`. */
+/**
+ * File descriptor for `spine/core/user_id.proto`.
+ */
 export const userIdFile: GenFile = userIdSource;
 
-/** File descriptor for `spine/core/version.proto`. */
+/**
+ * File descriptor for `spine/core/version.proto`.
+ */
 export const file_spine_core_version: GenFile = versionSource;
 
-/** File descriptor for `spine/net/email_address.proto`. */
+/**
+ * File descriptor for `spine/net/email_address.proto`.
+ */
 export const emailAddressFile: GenFile = emailAddressSource;
 
-/** File descriptor for `spine/net/internet_domain.proto`. */
+/**
+ * File descriptor for `spine/net/internet_domain.proto`.
+ */
 export const internetDomainFile: GenFile = internetDomainSource;
 
-/** File descriptor for `spine/string/template_string.proto`. */
+/**
+ * File descriptor for `spine/string/template_string.proto`.
+ */
 export const templateStringFile: GenFile = templateStringSource;
 
-/** File descriptor for `spine/time/time.proto`. */
+/**
+ * File descriptor for `spine/time/time.proto`.
+ */
 export const file_spine_time_time: GenFile = timeSource;
 
-/** File descriptor for `spine/ui/language.proto`. */
+/**
+ * File descriptor for `spine/ui/language.proto`.
+ */
 export const file_spine_ui_language: GenFile = languageSource;
 
-/** File descriptor for `spine/validation/validation_error.proto`. */
+/**
+ * File descriptor for `spine/validation/validation_error.proto`.
+ */
 export const validationErrorFile: GenFile = validationErrorSource;
 
-/** Spine custom file option that stores the type URL prefix for file messages. */
+/**
+ * Spine custom file option that stores the type URL prefix for file messages.
+ */
 export const type_url_prefix: GenExtension<FileOptions, string> = generatedTypeUrlPrefix;
 
-/** Spine custom message option that marks entity state metadata. */
+/**
+ * Spine custom message option that marks entity state metadata.
+ */
 export const entity: GenExtension<MessageOptions, EntityOption> = generatedEntity;
 
-/** Spine custom field option that marks queryable entity columns. */
+/**
+ * Spine custom field option that marks queryable entity columns.
+ */
 export const column: GenExtension<FieldOptions, boolean> = generatedColumn;
 
-/** Spine custom field option that marks state fields enforced once per entity lifecycle. */
+/**
+ * Spine custom field option that marks state fields enforced once per entity lifecycle.
+ */
 export const set_once: GenExtension<FieldOptions, boolean> = generatedSetOnce;
 
-/** Spine custom message option that carries semantic marker tags for one message type. */
+/**
+ * Spine custom message option that carries semantic marker tags for one message type.
+ */
 export const is: GenExtension<MessageOptions, IsOption> = generatedIs;
 
-/** Spine custom file option that carries semantic marker tags shared by all file messages. */
+/**
+ * Spine custom file option that carries semantic marker tags shared by all file messages.
+ */
 export const every_is: GenExtension<FileOptions, EveryIsOption> = generatedEveryIs;
 
-/** Enum for `spine.core.CommandValidationError`. */
+/**
+ * Enum for `spine.core.CommandValidationError`.
+ */
 export const CommandValidationError: typeof generatedCommandValidationError =
   generatedCommandValidationError;
 
-/** Enum descriptor for `spine.core.CommandValidationError`. */
+/**
+ * Enum descriptor for `spine.core.CommandValidationError`.
+ */
 export const CommandValidationErrorSchema: GenEnum<CommandValidationErrorType> =
   commandValidationSchema;
 
-/** Enum for `spine.core.EventValidationError`. */
+/**
+ * Enum for `spine.core.EventValidationError`.
+ */
 export const EventValidationError: typeof generatedEventValidationError =
   generatedEventValidationError;
 
-/** Enum descriptor for `spine.core.EventValidationError`. */
+/**
+ * Enum descriptor for `spine.core.EventValidationError`.
+ */
 export const EventValidationErrorSchema: GenEnum<EventValidationErrorType> = eventValidationSchema;
 
-/** Enum for `spine.time.Month`. */
+/**
+ * Enum for `spine.time.Month`.
+ */
 export const Month: typeof generatedMonth = generatedMonth;
 
-/** Enum descriptor for `spine.time.Month`. */
+/**
+ * Enum descriptor for `spine.time.Month`.
+ */
 export const MonthSchema: GenEnum<MonthType> = generatedMonthSchema;
 
-/** Enum for `spine.time.DayOfWeek`. */
+/**
+ * Enum for `spine.time.DayOfWeek`.
+ */
 export const DayOfWeek: typeof generatedDayOfWeek = generatedDayOfWeek;
 
-/** Enum descriptor for `spine.time.DayOfWeek`. */
+/**
+ * Enum descriptor for `spine.time.DayOfWeek`.
+ */
 export const DayOfWeekSchema: GenEnum<DayOfWeekType> = dayOfWeekSchema;
 
-/** Enum for `spine.ui.Language`. */
+/**
+ * Enum for `spine.ui.Language`.
+ */
 export const Language: typeof generatedLanguage = generatedLanguage;
 
-/** Enum descriptor for `spine.ui.Language`. */
+/**
+ * Enum descriptor for `spine.ui.Language`.
+ */
 export const LanguageSchema: GenEnum<LanguageType> = generatedLanguageSchema;
 
-/** Enum for `EntityOption.Kind`. */
+/**
+ * Enum for `EntityOption.Kind`.
+ */
 export const EntityOption_Kind: typeof generatedEntityOptionKind = generatedEntityOptionKind;
 
-/** Enum descriptor for `EntityOption.Kind`. */
+/**
+ * Enum descriptor for `EntityOption.Kind`.
+ */
 export const EntityOption_KindSchema: GenEnum<EntityOption["kind"]> = entityOptionKindSchema;
 
-/** Enum for `EntityOption.Visibility`. */
+/**
+ * Enum for `EntityOption.Visibility`.
+ */
 export const EntityOption_Visibility: typeof generatedEntityOptionVisibility =
   generatedEntityOptionVisibility;
 
-/** Enum descriptor for `EntityOption.Visibility`. */
+/**
+ * Enum descriptor for `EntityOption.Visibility`.
+ */
 export const EntityOption_VisibilitySchema: GenEnum<EntityOption["visibility"]> =
   entityOptionVisibilitySchema;
 
-/** Schema for `spine.base.FieldPath`. */
+/**
+ * Schema for `spine.base.FieldPath`.
+ */
 export const FieldPathSchema: GenMessage<FieldPath> = fieldPathSchema;
 
-/** Schema for `spine.core.ActorContext`. */
+/**
+ * Schema for `spine.core.ActorContext`.
+ */
 export const ActorContextSchema: GenMessage<ActorContext> = generatedActorContextSchema;
 
-/** Schema for `spine.core.CommandId`. */
+/**
+ * Schema for `spine.core.CommandId`.
+ */
 export const CommandIdSchema: GenMessage<CommandId> = generatedCommandIdSchema;
 
-/** Schema for `spine.core.Command`. */
+/**
+ * Schema for `spine.core.Command`.
+ */
 export const CommandSchema: GenMessage<Command> = generatedCommandSchema;
 
-/** Schema for `spine.core.Command.SystemProperties`. */
+/**
+ * Schema for `spine.core.Command.SystemProperties`.
+ */
 export const Command_SystemPropertiesSchema: GenMessage<Command_SystemProperties> =
   commandPropertiesSchema;
 
-/** Schema for `spine.core.CommandContext`. */
+/**
+ * Schema for `spine.core.CommandContext`.
+ */
 export const CommandContextSchema: GenMessage<CommandContext> = generatedCommandContextSchema;
 
-/** Schema for `spine.core.CommandContext.Schedule`. */
+/**
+ * Schema for `spine.core.CommandContext.Schedule`.
+ */
 export const CommandContext_ScheduleSchema: GenMessage<CommandContext_Schedule> =
   commandScheduleSchema;
 
-/** Schema for `spine.core.MessageId`. */
+/**
+ * Schema for `spine.core.MessageId`.
+ */
 export const MessageIdSchema: GenMessage<MessageId> = generatedMessageIdSchema;
 
-/** Schema for `spine.core.Origin`. */
+/**
+ * Schema for `spine.core.Origin`.
+ */
 export const OriginSchema: GenMessage<Origin> = generatedOriginSchema;
 
-/** Schema for `spine.core.Enrichment`. */
+/**
+ * Schema for `spine.core.Enrichment`.
+ */
 export const EnrichmentSchema: GenMessage<Enrichment> = generatedEnrichmentSchema;
 
-/** Schema for `spine.core.Enrichment.Container`. */
+/**
+ * Schema for `spine.core.Enrichment.Container`.
+ */
 export const Enrichment_ContainerSchema: GenMessage<Enrichment_Container> =
   generatedEnrichmentContainerSchema;
 
-/** Schema for `spine.core.EventId`. */
+/**
+ * Schema for `spine.core.EventId`.
+ */
 export const EventIdSchema: GenMessage<EventId> = generatedEventIdSchema;
 
-/** Schema for `spine.core.Event`. */
+/**
+ * Schema for `spine.core.Event`.
+ */
 export const EventSchema: GenMessage<Event> = generatedEventSchema;
 
-/** Schema for `spine.core.EventContext`. */
+/**
+ * Schema for `spine.core.EventContext`.
+ */
 export const EventContextSchema: GenMessage<EventContext> = generatedEventContextSchema;
 
-/** Schema for `spine.core.RejectionEventContext`. */
+/**
+ * Schema for `spine.core.RejectionEventContext`.
+ */
 export const RejectionEventContextSchema: GenMessage<RejectionEventContext> =
   rejectionContextSchema;
 
-/** Schema for `spine.core.TenantId`. */
+/**
+ * Schema for `spine.core.TenantId`.
+ */
 export const TenantIdSchema: GenMessage<TenantId> = generatedTenantIdSchema;
 
-/** Schema for `spine.core.UserId`. */
+/**
+ * Schema for `spine.core.UserId`.
+ */
 export const UserIdSchema: GenMessage<UserId> = generatedUserIdSchema;
 
-/** Schema for `spine.core.Version`. */
+/**
+ * Schema for `spine.core.Version`.
+ */
 export const VersionSchema: GenMessage<Version> = generatedVersionSchema;
 
-/** Schema for `spine.net.EmailAddress`. */
+/**
+ * Schema for `spine.net.EmailAddress`.
+ */
 export const EmailAddressSchema: GenMessage<EmailAddress> = generatedEmailAddressSchema;
 
-/** Schema for `EntityOption`. */
+/**
+ * Schema for `EntityOption`.
+ */
 export const EntityOptionSchema: GenMessage<EntityOption> = generatedEntityOptionSchema;
 
-/** Schema for `EveryIsOption`. */
+/**
+ * Schema for `EveryIsOption`.
+ */
 export const EveryIsOptionSchema: GenMessage<EveryIsOption> = everyIsOptionSchema;
 
-/** Schema for `IsOption`. */
+/**
+ * Schema for `IsOption`.
+ */
 export const IsOptionSchema: GenMessage<IsOption> = generatedIsOptionSchema;
 
-/** Schema for `spine.net.InternetDomain`. */
+/**
+ * Schema for `spine.net.InternetDomain`.
+ */
 export const InternetDomainSchema: GenMessage<InternetDomain> = generatedInternetDomainSchema;
 
-/** Schema for `spine.string.TemplateString`. */
+/**
+ * Schema for `spine.string.TemplateString`.
+ */
 export const TemplateStringSchema: GenMessage<TemplateString> = generatedTemplateStringSchema;
 
-/** Schema for `spine.time.YearMonth`. */
+/**
+ * Schema for `spine.time.YearMonth`.
+ */
 export const YearMonthSchema: GenMessage<YearMonth> = generatedYearMonthSchema;
 
-/** Schema for `spine.time.LocalDate`. */
+/**
+ * Schema for `spine.time.LocalDate`.
+ */
 export const LocalDateSchema: GenMessage<LocalDate> = generatedLocalDateSchema;
 
-/** Schema for `spine.time.LocalTime`. */
+/**
+ * Schema for `spine.time.LocalTime`.
+ */
 export const LocalTimeSchema: GenMessage<LocalTime> = generatedLocalTimeSchema;
 
-/** Schema for `spine.time.LocalDateTime`. */
+/**
+ * Schema for `spine.time.LocalDateTime`.
+ */
 export const LocalDateTimeSchema: GenMessage<LocalDateTime> = localDateTimeSchema;
 
-/** Schema for `spine.time.ZoneId`. */
+/**
+ * Schema for `spine.time.ZoneId`.
+ */
 export const ZoneIdSchema: GenMessage<ZoneId> = generatedZoneIdSchema;
 
-/** Schema for `spine.time.ZonedDateTime`. */
+/**
+ * Schema for `spine.time.ZonedDateTime`.
+ */
 export const ZonedDateTimeSchema: GenMessage<ZonedDateTime> = zonedDateTimeSchema;
 
-/** Schema for `spine.validation.ValidationError`. */
+/**
+ * Schema for `spine.validation.ValidationError`.
+ */
 export const ValidationErrorSchema: GenMessage<ValidationError> = validationErrorSchema;
 
-/** Schema for `spine.validation.ConstraintViolation`. */
+/**
+ * Schema for `spine.validation.ConstraintViolation`.
+ */
 export const ConstraintViolationSchema: GenMessage<ConstraintViolation> =
   generatedConstraintViolationSchema;

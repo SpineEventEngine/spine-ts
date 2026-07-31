@@ -23,13 +23,22 @@ function createFixture() {
 
 function validSource() {
   return [
-    "/** Represents a documented item. */",
+    "/**",
+    " * Represents a documented item.",
+    " */",
     "export interface Item {",
-    "  /** Describes the item name. */",
+    "",
+    "  /**",
+    "   * Describes the item name.",
+    "   */",
     "  readonly name: string;",
     "}",
     "",
-    "/** Creates an item from a name.\n * @param name The item name.\n * @returns The created item.\n */",
+    "/**",
+    " * Creates an item from a name.",
+    " * @param name The item name.",
+    " * @returns The created item.",
+    " */",
     "export function createsItem(name: string): Item {",
     "  return { name };",
     "}",
@@ -61,6 +70,11 @@ function track(repoRoot) {
   run("git", ["commit", "--quiet", "-m", "source"], repoRoot);
 }
 
+function trackForced(repoRoot, paths) {
+  run("git", ["add", "-f", ...paths], repoRoot);
+  run("git", ["commit", "--quiet", "-m", "source"], repoRoot);
+}
+
 function runChecker(repoRoot) {
   return spawnSync(process.execPath, [scriptPath, "--repo-root", repoRoot], { encoding: "utf8" });
 }
@@ -72,11 +86,430 @@ function writeObservedDebt(repoRoot) {
 }
 
 describe("check-tsdoc", () => {
+  it("rejects internal execution chronology in exported production TSDoc", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/history.ts",
+      [
+        "/**",
+        " * Describes a Wave 4 compatibility boundary.",
+        " */",
+        "export interface History { readonly value: string; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("internal-chronology");
+  });
+
   it("accepts documented exported declarations and public members", () => {
     const result = runChecker(createFixture());
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("TSDoc enforcement checks passed.");
+  });
+
+  it("rejects one-line and decorated TSDoc block openers", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/** Represents a one-line item. */",
+        "export interface Item { readonly name: string; }",
+        "",
+        "/** Creates an item.",
+        " * @param name The item name.",
+        " * @returns The created item.",
+        " */",
+        "export function createsItem(name: string): Item { return { name }; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const oneLine = runChecker(repoRoot);
+    expect(oneLine.status).toBe(1);
+    expect(oneLine.stderr).toContain("tsdoc-block-opener");
+
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Represents an item.",
+        " */",
+        "export interface Item { readonly name: string; }",
+        "",
+        "/** Creates an item.",
+        " * @param name The item name.",
+        " * @returns The created item.",
+        " */",
+        "export function createsItem(name: string): Item { return { name }; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const decorated = runChecker(repoRoot);
+    expect(decorated.status).toBe(1);
+    expect(decorated.stderr).toContain("tsdoc-block-opener");
+
+    writeSource(repoRoot, "packages/demo/src/index.ts", validSource());
+    track(repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("rejects missing preceding blank lines and a blank first line", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Represents an item.",
+        " */",
+        "export interface Item {",
+        "/**",
+        " * Describes the item name.",
+        " */",
+        "  readonly name: string;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const adjacent = runChecker(repoRoot);
+    expect(adjacent.status).toBe(1);
+    expect(adjacent.stderr).toContain("missing-tsdoc-blank-line");
+
+    writeSource(repoRoot, "packages/demo/src/index.ts", `\n${validSource()}`);
+    track(repoRoot);
+
+    const blankFirstLine = runChecker(repoRoot);
+    expect(blankFirstLine.status).toBe(1);
+    expect(blankFirstLine.stderr).toContain("blank-first-line");
+
+    writeSource(repoRoot, "packages/demo/src/index.ts", validSource());
+    track(repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("does not let template interpolation hide later invalid TSDoc", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        'const template = `prefix ${"/** not a comment */"} suffix`;',
+        "/**",
+        " * Owns an item.",
+        " */",
+        "export const item = 1;",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("missing-tsdoc-blank-line");
+    expect(result.stderr).toContain("vague-summary");
+  });
+
+  it("rejects hyphenated parameter descriptions and vague summaries", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Owns an item.",
+        " * @param name - The item name.",
+        " * @returns The owned item.",
+        " */",
+        "export function ownsItem(name: string): string { return name; }",
+        "",
+        "/**",
+        " * Consists of item parts.",
+        " */",
+        "export interface Parts {}",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("hyphenated-param");
+    expect(result.stderr).toContain("vague-summary");
+
+    writeSource(repoRoot, "packages/demo/src/index.ts", validSource());
+    track(repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("rejects doubled summary spacing, consecutive blank lines, and inline block tags", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " *  Describes an item with doubled summary spacing.",
+        " */",
+        "const summary = 1;",
+        "",
+        "/**",
+        " * Describes an item with redundant spacing.",
+        " *",
+        " *",
+        " * @internal Internal fixture detail.",
+        " */",
+        "const blanks = 2;",
+        "",
+        "/**",
+        " * Describes an item. @param value The fixture value.",
+        " * @returns The fixture value.",
+        " */",
+        "export function describes(value: string): string { return value; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("tsdoc-summary-spacing");
+    expect(result.stderr).toContain("consecutive-tsdoc-blank-line");
+    expect(result.stderr).toContain("inline-tsdoc-tag");
+  });
+
+  it("allows indentation after the summary line for documentation examples", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Describes an item with an indented example.",
+        " *",
+        " * Example:",
+        " *   const item = 1;",
+        " *   @Decorator()",
+        " *   @assign()",
+        " */",
+        "const item = 1;",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("rejects blank lines between consecutive block tags", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Describes a documented item.",
+        " *",
+        " * @param value The item value.",
+        " *",
+        " * @returns The item value.",
+        " */",
+        "export function describes(value: string): string { return value; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("tsdoc-block-tag-gap");
+  });
+
+  it("allows one summary-to-tag gap while requiring exact block-tag prefixes", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Describes a documented item.",
+        " *",
+        " * @hidden Hidden fixture detail.",
+        " * @customTag General fixture detail.",
+        " */",
+        "const visible = 1;",
+        "",
+        "/**",
+        " * Describes @hidden prose and `@code` without a block tag.",
+        " */",
+        "const prose = 2;",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Describes a malformed tag prefix.",
+        " *  @hidden Hidden fixture detail.",
+        " *@typeParam T Fixture type.",
+        " */",
+        "const malformed = 1;",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("tsdoc-block-tag-spacing");
+  });
+
+  it("rejects literal Placeholder summaries and every forbidden parameter hyphen form", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Placeholder.",
+        " * @param first -Description.",
+        " * @param second -",
+        " * @returns The item.",
+        " */",
+        "export function finds(first: string, second: string): string { return first + second; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("vague-summary");
+    expect(result.stderr).toContain("hyphenated-param");
+
+    writeSource(repoRoot, "packages/demo/src/index.ts", validSource());
+    track(repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("excludes root generated distribution and dependency path segments", () => {
+    const repoRoot = createFixture();
+    writeSource(repoRoot, "generated/layout.ts", "/** One-line generated block. */\n");
+    writeSource(repoRoot, "dist/layout.ts", "/** One-line distribution block. */\n");
+    writeSource(repoRoot, "node_modules/demo/layout.ts", "/** One-line dependency block. */\n");
+    trackForced(repoRoot, ["generated/layout.ts", "dist/layout.ts", "node_modules/demo/layout.ts"]);
+
+    expect(runChecker(repoRoot).status).toBe(0);
+  });
+
+  it("keeps layout failures out of observed debt while writing semantic debt", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      validSource().replace("/**\n * Represents", "/** Represents"),
+    );
+    writeSource(repoRoot, "scripts/layout.mjs", "/** One-line tooling block. */\n");
+    track(repoRoot);
+
+    const written = writeObservedDebt(repoRoot);
+    expect(written.status, written.stderr).toBe(0);
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("packages/demo/src/index.ts");
+    expect(result.stderr).toContain("scripts/layout.mjs");
+    expect(result.stderr).toContain("tsdoc-block-opener");
+  });
+
+  it("keeps duplicate observed failures out of debt and unsuppressed", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/src/index.ts",
+      [
+        "/**",
+        " * Finds an item.",
+        " * @param",
+        " * @param",
+        " * @returns The found item.",
+        " */",
+        "export function finds(value: string): string { return value; }",
+        "",
+      ].join("\n"),
+    );
+    track(repoRoot);
+
+    expect(runChecker(repoRoot).stderr).toContain("duplicate-observed-failure");
+
+    const written = writeObservedDebt(repoRoot);
+    expect(written.status, written.stderr).toBe(0);
+    const entries = JSON.parse(
+      readFileSync(join(repoRoot, "build-protocol/tsdoc-debt/T-0080H.json"), "utf8"),
+    );
+    expect(entries.some((entry) => entry.rule === "duplicate-observed-failure")).toBe(false);
+    expect(runChecker(repoRoot).stderr).toContain("duplicate-observed-failure");
+  });
+
+  it("rejects generated distribution and dependency debt entries as out of scope", () => {
+    for (const file of [
+      "packages/demo/generated/value.ts",
+      "packages/demo/dist/value.ts",
+      "packages/demo/node_modules/dependency/value.ts",
+    ]) {
+      const repoRoot = createFixture();
+      writeDebt(repoRoot, [{ rule: "missing-summary", file, name: "value" }]);
+      track(repoRoot);
+
+      const result = runChecker(repoRoot);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("Out-of-scope TSDoc debt entry");
+    }
+  });
+
+  it("applies layout checks to tracked tests and mjs tooling", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "packages/demo/test/layout.test.ts",
+      "/** One-line test documentation. */\nexport const fixture = 1;\n",
+    );
+    writeSource(
+      repoRoot,
+      "scripts/layout.mjs",
+      "/** One-line tooling documentation. */\nexport const fixture = 1;\n",
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("packages/demo/test/layout.test.ts");
+    expect(result.stderr).toContain("scripts/layout.mjs");
+    expect(result.stderr).toContain("tsdoc-block-opener");
+
+    writeSource(repoRoot, "packages/demo/test/layout.test.ts", "export const fixture = 1;\n");
+    writeSource(repoRoot, "scripts/layout.mjs", "export const fixture = 1;\n");
+    track(repoRoot);
+    expect(runChecker(repoRoot).status).toBe(0);
   });
 
   it("rejects absent comments, incomplete parameter tags, and missing results", () => {
@@ -119,6 +552,27 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("examples/chat/app/src/nested/entry.ts :: value");
     expect(result.stderr).not.toContain("generated/value.ts");
     expect(result.stderr).not.toContain("entry.test.ts");
+  });
+
+  it("excludes the generated Chat registry while checking adjacent handwritten source", () => {
+    const repoRoot = createFixture();
+    writeSource(
+      repoRoot,
+      "examples/chat/app/src/model-registry.ts",
+      "/** One-line generated registry. */\nexport const typeRegistry = 1;\n",
+    );
+    writeSource(
+      repoRoot,
+      "examples/chat/app/src/application.ts",
+      "/** One-line handwritten application. */\nexport const application = 1;\n",
+    );
+    track(repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).not.toContain("model-registry.ts");
+    expect(result.stderr).toContain("examples/chat/app/src/application.ts");
   });
 
   it("requires third-person callable summaries and rejects return tags on bare void callables", () => {
@@ -201,9 +655,13 @@ describe("check-tsdoc", () => {
       repoRoot,
       "packages/demo/src/index.ts",
       [
-        "/** Represents a named demo. */",
+        "/**",
+        " * Represents a named demo.",
+        " */",
         "export class Demo {",
-        "  /** Initializes the demo name.",
+        "",
+        "  /**",
+        "   * Initializes the demo name.",
         "   * @param value The name stored by the demo.",
         "   */",
         "  constructor(readonly value: string) {}",
@@ -219,9 +677,13 @@ describe("check-tsdoc", () => {
       repoRoot,
       "packages/demo/src/index.ts",
       [
-        "/** Represents a named demo. */",
+        "/**",
+        " * Represents a named demo.",
+        " */",
         "export class Demo {",
-        "  /** Initializes the demo name.",
+        "",
+        "  /**",
+        "   * Initializes the demo name.",
         "   * @param value The name stored by the demo.",
         "   * @returns A demo instance.",
         "   */",
@@ -262,20 +724,26 @@ describe("check-tsdoc", () => {
       repoRoot,
       "packages/demo/src/index.ts",
       [
-        "/** Performs work. */",
+        "/**\n * Performs work.\n */",
         "export const performsWork = () => {};",
-        "/** Performs async work.\n * @returns Completes the work asynchronously.\n */",
+        "",
+        "/**\n * Performs async work.\n * @returns Completes the work asynchronously.\n */",
         "export const performsAsyncWork = async (): Promise<void> => {};",
-        "/** Finds a value.\n * @returns The found value.\n */",
+        "",
+        "/**\n * Finds a value.\n * @returns The found value.\n */",
         "export const findsValue = () => 'value';",
-        "/** Groups work operations. */",
+        "",
+        "/**\n * Groups work operations.\n */",
         "export const work = {",
-        "  /** Completes nested work.\n   * @returns Completes the nested work asynchronously.\n   */",
+        "",
+        "  /**\n   * Completes nested work.\n   * @returns Completes the nested work asynchronously.\n   */",
         "  async complete(): Promise<void> {},",
         "};",
-        "/** Represents an asynchronous contract. */",
+        "",
+        "/**\n * Represents an asynchronous contract.\n */",
         "export interface AsyncContract {",
-        "  /** Delivers a value.\n   * @returns Completes delivery asynchronously.\n   */",
+        "",
+        "  /**\n   * Delivers a value.\n   * @returns Completes delivery asynchronously.\n   */",
         "  deliver(): Promise<void>;",
         "}",
         "",
@@ -322,7 +790,7 @@ describe("check-tsdoc", () => {
     writeSource(
       repoRoot,
       "packages/demo/src/thing.ts",
-      "/** Represents a thing. */\nexport class Thing {}\n",
+      "/**\n * Represents a thing.\n */\nexport class Thing {}\n",
     );
     writeSource(repoRoot, "packages/demo/src/index.ts", "export { Thing } from './thing.js';\n");
     track(repoRoot);
@@ -401,12 +869,14 @@ describe("check-tsdoc", () => {
       repoRoot,
       "packages/demo/src/index.ts",
       [
-        "/** Represents a base. */",
+        "/**\n * Represents a base.\n */",
         "export class Base {",
-        "  /** Gets a value.\n   * @returns The value.\n   */",
+        "",
+        "  /**\n   * Gets a value.\n   * @returns The value.\n   */",
         "  get value(): string { return 'value'; }",
         "}",
-        "/** Represents a child. */",
+        "",
+        "/**\n * Represents a child.\n */",
         "export class Child extends Base {}",
         "",
       ].join("\n"),
@@ -561,23 +1031,42 @@ describe("check-tsdoc", () => {
     expect(result.stderr).toContain("Contract.1");
   });
 
-  it("excludes spec and test-directory sources and accepts inheritDoc overrides", () => {
+  it("excludes spec and test-directory files from semantic coverage and accepts inheritDoc overrides", () => {
     const repoRoot = createFixture();
-    writeSource(repoRoot, "packages/demo/src/value.spec.ts", "export const ignored = 1;\n");
-    writeSource(repoRoot, "packages/demo/src/test/value.ts", "export const ignored = 1;\n");
+    writeSource(
+      repoRoot,
+      "packages/demo/src/value.spec.ts",
+      "/** One-line spec documentation. */\nexport const ignored = 1;\n",
+    );
+    writeSource(
+      repoRoot,
+      "packages/demo/src/test/value.ts",
+      "/** One-line test-directory documentation. */\nexport const ignored = 1;\n",
+    );
     writeSource(
       repoRoot,
       "packages/demo/src/index.ts",
       [
-        "/** Represents a base. */",
-        "export class Base {\n/** Gets a value.\n * @returns The value.\n */\nget value(): string { return 'x'; }\n}",
-        "/** Represents a child. */",
-        "export class Child extends Base {\n/** @inheritDoc */\nget value(): string { return 'x'; }\n}",
+        "/**\n * Represents a base.\n */",
+        "export class Base {\n\n/**\n * Gets a value.\n * @returns The value.\n */\nget value(): string { return 'x'; }\n}",
+        "",
+        "/**\n * Represents a child.\n */",
+        "export class Child extends Base {\n\n/**\n * @inheritDoc\n */\nget value(): string { return 'x'; }\n}",
         "",
       ].join("\n"),
     );
     track(repoRoot);
-    expect(runChecker(repoRoot).status).toBe(0);
+    const malformed = runChecker(repoRoot);
+    expect(malformed.status).toBe(1);
+    expect(malformed.stderr).toContain("value.spec.ts");
+    expect(malformed.stderr).toContain("src/test/value.ts");
+    expect(malformed.stderr).toContain("tsdoc-block-opener");
+
+    writeSource(repoRoot, "packages/demo/src/value.spec.ts", "export const ignored = 1;\n");
+    writeSource(repoRoot, "packages/demo/src/test/value.ts", "export const ignored = 1;\n");
+    track(repoRoot);
+    const result = runChecker(repoRoot);
+    expect(result.status, result.stderr).toBe(0);
   });
 
   it("accepts common third-person framework verbs", () => {
@@ -585,7 +1074,7 @@ describe("check-tsdoc", () => {
     writeSource(
       repoRoot,
       "packages/demo/src/index.ts",
-      "/** Dispatches a value.\n * @param value The value.\n */\nexport function dispatches(value: string): void {}\n",
+      "/**\n * Dispatches a value.\n * @param value The value.\n */\nexport function dispatches(value: string): void {}\n",
     );
     track(repoRoot);
     expect(runChecker(repoRoot).status).toBe(0);
@@ -611,21 +1100,25 @@ describe("check-tsdoc", () => {
       validRoot,
       "packages/demo/src/index.ts",
       [
-        "/** Describes a contract. */",
+        "/**\n * Describes a contract.\n */",
         "export interface Contract {",
-        "  /** Finds a value.\n   * @param value The lookup value.\n   * @returns The found value.\n   */",
+        "",
+        "  /**\n   * Finds a value.\n   * @param value The lookup value.\n   * @returns The found value.\n   */",
         "  finds(value: string): string;",
         "}",
-        "/** Implements the documented contract. */",
+        "",
+        "/**\n * Implements the documented contract.\n */",
         "export class Implementation implements Contract {",
-        "  /** @inheritDoc */",
+        "",
+        "  /**\n   * @inheritDoc\n   */",
         "  finds(value: string): string { return value; }",
         "}",
         "",
       ].join("\n"),
     );
     track(validRoot);
-    expect(runChecker(validRoot).status).toBe(0);
+    const valid = runChecker(validRoot);
+    expect(valid.status, valid.stderr).toBe(0);
   });
 
   it("checks default expression exports and recursive object and type-literal APIs", () => {
@@ -663,7 +1156,7 @@ describe("check-tsdoc", () => {
       repoRoot,
       "packages/demo/src/index.ts",
       [
-        "/** Finds a value.\n * @param value The lookup value.\n * @returns The found value.\n */",
+        "/**\n * Finds a value.\n * @param value The lookup value.\n * @returns The found value.\n */",
         "const finds = (value: string): string => value;",
         "export default finds;",
         "",
@@ -930,7 +1423,9 @@ describe("check-tsdoc", () => {
       repoRoot,
       path,
       [
-        "/** Represents an exported transaction owner. */",
+        "/**",
+        " * Represents an exported transaction owner.",
+        " */",
         "export class TransactionOwner {",
         "  protected startTransaction(): void {}",
         "  protected update(value: string): string { return value; }",
@@ -962,19 +1457,29 @@ describe("check-tsdoc", () => {
       repoRoot,
       path,
       [
-        "/** Represents an exported transaction owner. */",
+        "/**",
+        " * Represents an exported transaction owner.",
+        " */",
         "export class TransactionOwner {",
-        "  /** Starts a transaction. */",
+        "",
+        "  /**",
+        "   * Starts a transaction.",
+        "   */",
         "  protected startTransaction(): void {}",
-        "  /** Updates a transaction value.\n   * @param value - Source value.\n   * @returns Updated value.\n   */",
+        "",
+        "  /**\n   * Updates a transaction value.\n   * @param value Source value.\n   * @returns Updated value.\n   */",
         "  protected update(value: string): string { return value; }",
-        "  /** Tries to update a transaction value.\n   * @param value - Source value.\n   * @returns Validation results.\n   */",
+        "",
+        "  /**\n   * Tries to update a transaction value.\n   * @param value Source value.\n   * @returns Validation results.\n   */",
         "  protected tryUpdate(value: string): readonly string[] { return [value]; }",
-        "  /** Updates draft metadata.\n   * @param value - Source metadata.\n   * @returns Updated metadata.\n   */",
+        "",
+        "  /**\n   * Updates draft metadata.\n   * @param value Source metadata.\n   * @returns Updated metadata.\n   */",
         "  protected updateDraftVersionMetadata(value: string): string { return value; }",
-        "  /** Commits a transaction.\n   * @returns Commit result.\n   */",
+        "",
+        "  /**\n   * Commits a transaction.\n   * @returns Commit result.\n   */",
         "  protected commitTransaction(): string { return 'committed'; }",
-        "  /** Rolls back a transaction.\n   * @returns Rollback result.\n   */",
+        "",
+        "  /**\n   * Rolls back a transaction.\n   * @returns Rollback result.\n   */",
         "  protected rollbackTransaction(): string { return 'rolled-back'; }",
         "  private internal(value: string): string { return value; }",
         "}",

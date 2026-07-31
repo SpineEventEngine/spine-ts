@@ -4,7 +4,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
-import { TypeUrls } from "@spine-event-engine/core";
+import { TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import { EventSchema, type Command, type Event, type TenantId } from "@spine-event-engine/proto";
 import { SPI_type, internal_all, internal_type } from "@spine-event-engine/proto";
 import {
@@ -66,32 +66,64 @@ import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 
-/** Tenant isolation mode declared by a bounded context specification. */
+/**
+ * Tenant isolation mode declared by a bounded context specification.
+ */
 export type TenantMode = "single-tenant" | "multitenant";
 
-/** Immutable bounded context name value. */
+/**
+ * Immutable bounded context name value.
+ */
 export interface BoundedContextName {
-  /** Non-empty, non-blank bounded context name that does not start with `__spine/`. */
+  // prettier-ignore
+
+  /**
+   * Non-empty, non-blank bounded context name that does not start with `__spine/`.
+   */
   readonly value: string;
 }
 
-/** Small immutable bounded-context specification snapshot. */
+/**
+ * Small immutable bounded-context specification snapshot.
+ */
 export interface ContextSpecSnapshot {
-  /** Bounded context name value. */
+  // prettier-ignore
+
+  /**
+   * Bounded context name value.
+   */
   readonly name: BoundedContextName;
-  /** Whether the context requires tenant isolation. */
+
+  /**
+   * Whether the context requires tenant isolation.
+   */
   readonly multitenant: boolean;
-  /** Whether the context stores its domain event log. */
+
+  /**
+   * Whether the context stores its domain event log.
+   */
   readonly storesEvents: boolean;
 }
 
-/** Small built bounded-context metadata snapshot. */
+/**
+ * Small built bounded-context metadata snapshot.
+ */
 export interface BoundedContextSnapshot {
-  /** Bounded context name value. */
+  // prettier-ignore
+
+  /**
+   * Bounded context name value.
+   */
   readonly name: BoundedContextName;
-  /** Tenant isolation mode for the built context. */
+
+  /**
+   * Tenant isolation mode for the built context.
+   */
   readonly tenantMode: TenantMode;
-  /** Context specification used to build the context. */
+
+  /**
+   * Context specification used to build the context.
+   */
   readonly spec: ContextSpecSnapshot;
 }
 
@@ -100,35 +132,82 @@ interface SystemPairingSnapshot {
   readonly system: ContextSpecSnapshot;
 }
 
-/** Minimal repository owner marker retained after registration. */
+/**
+ * Minimal repository owner marker retained after registration.
+ */
 interface RepositoryOwner {
-  /** Bounded context name. */
+  // prettier-ignore
+
+  /**
+   * Bounded context name.
+   */
   readonly name: BoundedContextName;
 }
 
-/** Context-owned storage data needed while repositories register. */
+/**
+ * Context-owned storage data needed while repositories register.
+ */
 interface RepositoryRegistration {
-  /** Bounded context name. */
+  // prettier-ignore
+
+  /**
+   * Bounded context name.
+   */
   readonly name: BoundedContextName;
-  /** Storage context derived from the bounded context spec. */
+
+  /**
+   * Storage context derived from the bounded context spec.
+   */
   readonly storageContext: StorageContext;
-  /** Context storage factory. */
+
+  /**
+   * Context storage factory.
+   */
   readonly storageFactory: StorageFactory;
-  /** Context-owned read-side Stand used by framework repository dispatch. */
+
+  /**
+   * Context-owned read-side Stand used by framework repository dispatch.
+   */
   readonly stand: Stand;
-  /** Context-owned local process-manager command inbox handoff. */
+
+  /**
+   * Context-owned local process-manager command inbox handoff.
+   */
   readonly processManagerInbox: ProcessManagerInbox;
-  /** Context-owned local projection subscriber inbox handoff. */
+
+  /**
+   * Context-owned local projection subscriber inbox handoff.
+   */
   readonly projectionInbox: ProjectionInbox;
-  /** Stored-event dispatch callback into the owning context event bus. */
+
+  /**
+   * Stored-event dispatch callback into the owning context event bus.
+   */
   readonly dispatchStored: (event: Event) => Promise<void>;
-  /** Stored-event follow-up dispatch callback into the owning context event bus. */
+
+  /**
+   * Stored-event follow-up dispatch callback into the owning context event bus.
+   */
   readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
-  /** Follow-up event posting callback into the owning context event bus. */
+
+  /**
+   * Follow-up event posting callback into the owning context event bus.
+   */
   readonly postEventFollowUp: (event: Event) => Promise<void>;
-  /** Command posting callback into the owning context command bus. */
+
+  /**
+   * Registers a schema for a framework-produced event before it enters the event bus.
+   */
+  readonly registerEventSchema: (schema: MessageSchema) => void;
+
+  /**
+   * Command posting callback into the owning context command bus.
+   */
   readonly onPostCommand: (command: Command) => Promise<void>;
-  /** Records asynchronous event follow-up failures for diagnostics. */
+
+  /**
+   * Records asynchronous event follow-up failures for diagnostics.
+   */
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
@@ -142,41 +221,71 @@ interface PrjInbox extends ProjectionInbox {
   endpoints(): readonly DeliveryEndpoint[];
 }
 
-/** Selects a tenant-specific delivery startup scope. */
+/**
+ * Selects a tenant-specific delivery startup scope.
+ */
 export interface DeliveryTenantScope {
-  /** Identifies the tenant, or is absent for the single-tenant scope. */
+  // prettier-ignore
+
+  /**
+   * Identifies the tenant, or is absent for the single-tenant scope.
+   */
   readonly tenantId?: string;
 }
 
-/** Gives delivery infrastructure access to one built bounded context. */
+/**
+ * Gives delivery infrastructure access to one built bounded context.
+ */
 export interface ContextDeliveryDescriptor {
-  /** Creates storage used by the context's delivery routes. */
+  // prettier-ignore
+
+  /**
+   * Creates storage used by the context's delivery routes.
+   */
   readonly storageFactory: StorageFactory;
-  /** Lists tenant scopes that existing delivery work may require at startup.
+
+  /**
+   * Lists tenant scopes that existing delivery work may require at startup.
+   *
    * @returns Resolves to immutable tenant delivery scopes.
    */
   startupScopes(): Promise<readonly DeliveryTenantScope[]>;
-  /** Creates the storage context for a delivery scope.
+
+  /**
+   * Creates the storage context for a delivery scope.
+   *
    * @param scope Selects the tenant scope to represent.
    * @returns Returns the matching storage context.
    */
   storageContext(scope: DeliveryTenantScope): StorageContext;
-  /** Lists delivery endpoints registered by the context's local inboxes.
+
+  /**
+   * Lists delivery endpoints registered by the context's local inboxes.
+   *
    * @returns Returns immutable endpoint descriptions.
    */
   endpoints(): readonly DeliveryEndpoint[];
-  /** Dispatches a durable inbox message through its registered target.
+
+  /**
+   * Dispatches a durable inbox message through its registered target.
+   *
    * @param message Contains the delivery message to replay.
    * @param tenantId Identifies the delivery tenant when the context is multitenant.
    * @returns A promise that resolves after the message is replayed.
    */
   replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void>;
-  /** Sets the observer for newly ready delivery routes.
+
+  /**
+   * Sets the observer for newly ready delivery routes.
+   *
    * @param onReady Observes each route made ready by persistence.
    * @returns Returns a function that removes the observer.
    */
   onReady(onReady: OnDeliveryReady): () => void;
-  /** Updates readiness ownership to use configured delivery routes.
+
+  /**
+   * Updates readiness ownership to use configured delivery routes.
+   *
    * @param scopes Lists routes that may receive buffered readiness.
    * @param onReady Observes readiness after routed ownership begins.
    * @param options Allows an empty route set when `allowEmpty` is true.
@@ -199,28 +308,44 @@ interface RegistrationSnapshot {
   readonly snapshot: RepositoryIdentitySnapshot;
 }
 
-/** Post-only command endpoint exposed by a built bounded context. */
+/**
+ * Post-only command endpoint exposed by a built bounded context.
+ */
 export interface CommandEndpoint {
-  /** Lists canonical command message type URLs accepted by this endpoint.
+  // prettier-ignore
+
+  /**
+   * Lists canonical command message type URLs accepted by this endpoint.
+   *
    * @returns Returns immutable command type URLs.
    */
   acceptedCommandTypes(): readonly string[];
 
-  /** Posts a command into the context-owned command bus.
+  /**
+   * Posts a command into the context-owned command bus.
+   *
    * @param command Contains the command to dispatch.
    * @returns A promise that settles after queued command dispatch completes and may reject.
    */
   post(command: Command): Promise<void>;
 }
 
-/** Event endpoint exposed by a built bounded context for accepted-type listing and posting. */
+/**
+ * Event endpoint exposed by a built bounded context for accepted-type listing and posting.
+ */
 export interface EventEndpoint {
-  /** Lists canonical public event message type URLs accepted by this endpoint.
+  // prettier-ignore
+
+  /**
+   * Lists canonical public event message type URLs accepted by this endpoint.
+   *
    * @returns Returns immutable event type URLs.
    */
   acceptedEventTypes(): readonly string[];
 
-  /** Posts an event into the context-owned event bus.
+  /**
+   * Posts an event into the context-owned event bus.
+   *
    * @param event Contains the event to dispatch.
    * @returns A promise that settles after persistence and dispatch complete and may reject.
    */
@@ -234,7 +359,11 @@ export interface EventEndpoint {
  * non-blank `tenantId` and preserve the exact non-blank string supplied.
  */
 export interface ReadCatchUpOptions {
-  /** Tenant slice to rebuild for multitenant contexts. */
+  // prettier-ignore
+
+  /**
+   * Tenant slice to rebuild for multitenant contexts.
+   */
   readonly tenantId?: string;
 }
 
@@ -246,11 +375,21 @@ export interface ReadCatchUpOptions {
  * rows for the selected tenant slice.
  */
 export interface ReadCatchUpResult {
-  /** Number of already-stored events dispatched to at least one projection subscriber. */
+  // prettier-ignore
+
+  /**
+   * Number of already-stored events dispatched to at least one projection subscriber.
+   */
   readonly replayedEventCount: number;
-  /** Number of cleared projection-state rows before replay. */
+
+  /**
+   * Number of cleared projection-state rows before replay.
+   */
   readonly clearedEntityCount: number;
-  /** Unique projection state type URLs cleared once before replay. */
+
+  /**
+   * Unique projection state type URLs cleared once before replay.
+   */
   readonly clearedStateTypes: readonly string[];
 }
 
@@ -263,28 +402,55 @@ type CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
  * posts whose acceptance, storage, or dispatch failed.
  */
 export interface StoredEventDispatchFailure {
-  /** Event snapshot associated with the failure; it may not have reached storage. */
+  // prettier-ignore
+
+  /**
+   * Event snapshot associated with the failure; it may not have reached storage.
+   */
   readonly event: Event;
-  /** Frozen scalar snapshot of the thrown failure. */
+
+  /**
+   * Frozen scalar snapshot of the thrown failure.
+   */
   readonly error: DispatchErrorSnapshot;
 }
 
-/** Copy-safe event follow-up error diagnostic. */
+/**
+ * Copy-safe event follow-up error diagnostic.
+ */
 export interface DispatchErrorSnapshot {
-  /** Error class/name, or a stable label for non-Error throws. */
+  // prettier-ignore
+
+  /**
+   * Error class/name, or a stable label for non-Error throws.
+   */
   readonly name: string;
-  /** Bounded diagnostic message. */
+
+  /**
+   * Bounded diagnostic message.
+   */
   readonly message: string;
-  /** Bounded stack string when the thrown value is an Error with a stack. */
+
+  /**
+   * Bounded stack string when the thrown value is an Error with a stack.
+   */
   readonly stack?: string;
 }
 
-/** Error thrown when a bounded context name cannot be accepted. */
+/**
+ * Error thrown when a bounded context name cannot be accepted.
+ */
 export class BoundedContextNameError extends Error {
-  /** Rejected raw value. */
+  // prettier-ignore
+
+  /**
+   * Rejected raw value.
+   */
   readonly value: unknown;
 
-  /** Creates a deterministic bounded-context name validation error.
+  /**
+   * Creates a deterministic bounded-context name validation error.
+   *
    * @param value Contains the rejected name value.
    */
   constructor(value: unknown) {
@@ -355,7 +521,9 @@ let constructBoundedContextBuilder:
 let constructContextSpec:
   ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => ContextSpec) | undefined;
 
-/** Represents a built bounded context and its command, event, repository, and read-side resources. */
+/**
+ * Represents a built bounded context and its command, event, repository, and read-side resources.
+ */
 export class BoundedContext {
   readonly #snapshot: BoundedContextSnapshot;
   readonly #commandBus: CommandBus;
@@ -372,7 +540,9 @@ export class BoundedContext {
   readonly #stand: Stand;
   #closed: Promise<void> | undefined;
 
-  /** Registers the framework-only construction hook for this module. */
+  /**
+   * Registers the framework-only construction hook for this module.
+   */
   static {
     constructBoundedContext = (
       snapshot,
@@ -394,7 +564,9 @@ export class BoundedContext {
       );
   }
 
-  /** Creates a framework-owned bounded context.
+  /**
+   * Creates a framework-owned bounded context.
+   *
    * @param snapshot Contains the immutable context metadata.
    * @param commandBus Dispatches commands accepted by this context.
    * @param eventBus Dispatches events accepted by this context.
@@ -518,6 +690,9 @@ export class BoundedContext {
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
       dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
       postEventFollowUp: (event) => eventBusAccess.postFollowUp(this.#eventBus, event),
+      registerEventSchema: (schema) => {
+        eventBusAccess.registerSchemas(this.#eventBus, [schema]);
+      },
       onPostCommand: (command) => commandBusAccess.postInternal(this.#commandBus, command),
       recordDispatchFailure: (event, error) => {
         this.#recordDispatchFailure(event, error);
@@ -547,7 +722,9 @@ export class BoundedContext {
     throw error;
   }
 
-  /** Creates a builder for a context without tenant isolation.
+  /**
+   * Creates a builder for a context without tenant isolation.
+   *
    * @param name Names the bounded context.
    * @returns Returns a builder initialized with the supplied name.
    */
@@ -555,7 +732,9 @@ export class BoundedContext {
     return ContextParts.createBoundedContextBuilder(ContextParts.createSpecSnapshot(name, false));
   }
 
-  /** Creates a builder for a tenant-isolated context.
+  /**
+   * Creates a builder for a tenant-isolated context.
+   *
    * @param name Names the bounded context.
    * @returns Returns a builder initialized with the supplied name.
    */
@@ -563,63 +742,81 @@ export class BoundedContext {
     return ContextParts.createBoundedContextBuilder(ContextParts.createSpecSnapshot(name, true));
   }
 
-  /** Returns the bounded context name.
+  /**
+   * Returns the bounded context name.
+   *
    * @returns Returns the immutable context name.
    */
   get name(): BoundedContextName {
     return this.#snapshot.name;
   }
 
-  /** Returns the context's tenant isolation mode.
+  /**
+   * Returns the context's tenant isolation mode.
+   *
    * @returns Returns the configured tenant mode.
    */
   get tenantMode(): TenantMode {
     return this.#snapshot.tenantMode;
   }
 
-  /** Returns whether this context isolates data by tenant.
+  /**
+   * Returns whether this context isolates data by tenant.
+   *
    * @returns Returns true when the context is multitenant.
    */
   get isMultitenant(): boolean {
     return this.#snapshot.tenantMode === "multitenant";
   }
 
-  /** Returns a copy-safe specification used to build this context.
+  /**
+   * Returns a copy-safe specification used to build this context.
+   *
    * @returns Returns the context specification.
    */
   get spec(): ContextSpec {
     return ContextParts.createContextSpec(this.#snapshot.spec);
   }
 
-  /** Returns a copy-safe immutable metadata snapshot.
+  /**
+   * Returns a copy-safe immutable metadata snapshot.
+   *
    * @returns Returns the context metadata snapshot.
    */
   get snapshot(): BoundedContextSnapshot {
     return ContextParts.cloneContextSnapshot(this.#snapshot);
   }
 
-  /** Returns the command endpoint owned by this context.
+  /**
+   * Returns the command endpoint owned by this context.
+   *
    * @returns Returns the context command endpoint.
    */
   commandBus(): CommandEndpoint {
     return this.#commandEndpoint;
   }
 
-  /** Returns the event endpoint owned by this context.
+  /**
+   * Returns the event endpoint owned by this context.
+   *
    * @returns Returns the context event endpoint.
    */
   eventBus(): EventEndpoint {
     return this.#eventEndpoint;
   }
 
-  /** Returns the context-owned read-side Stand.
+  /**
+   * Returns the context-owned read-side Stand.
+   *
    * @returns Returns the read-side state store.
    */
   stand(): Stand {
     return this.#stand;
   }
 
-  /** Lists copy-safe views of repositories registered with this context.
+  /**
+   * Lists copy-safe views of repositories registered with this context.
+   *
    * @returns Returns immutable repository views.
    */
   registeredRepositories(): readonly RepositoryView[] {
@@ -633,6 +830,7 @@ export class BoundedContext {
    *
    * Entries can describe already-stored event dispatch or an independent
    * follow-up post that failed before storage.
+   *
    * @returns Returns immutable failure diagnostics.
    */
   storedEventDispatchFailures(): readonly StoredEventDispatchFailure[] {
@@ -655,6 +853,7 @@ export class BoundedContext {
    * - Delivery jobs, schedulers, inbox lifecycle, retries, and transport
    *   topology;
    * - durable live-traffic catch-up orchestration across processes.
+   *
    * @param options Selects the tenant slice to rebuild.
    * @returns Resolves to replay and clear counts for the selected slice.
    */
@@ -701,6 +900,7 @@ export class BoundedContext {
    * The context attempts every owned close hook; when any hook fails, the
    * returned promise rejects with an `AggregateError` after the remaining hooks
    * have also been attempted.
+   *
    * @returns A promise that settles after all owned resources close.
    */
   close(): Promise<void> {
@@ -760,7 +960,9 @@ export class BoundedContext {
   }
 }
 
-/** Exposes framework-only operations for built contexts and their builders. */
+/**
+ * Exposes framework-only operations for built contexts and their builders.
+ */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   isBuilder(value: unknown): value is BoundedContextBuilder {
     return (
@@ -826,7 +1028,9 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 });
 
-/** Assembles a {@link BoundedContext} from repositories and dispatchers. */
+/**
+ * Assembles a {@link BoundedContext} from repositories and dispatchers.
+ */
 export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
   readonly #commandDispatchers = new Set<CommandDispatcher>();
@@ -836,13 +1040,17 @@ export class BoundedContextBuilder {
   #storageFactory: StorageFactory | undefined;
   #generatedRegistryRoot: string | URL | undefined;
 
-  /** Registers the framework-only construction hook for this module. */
+  /**
+   * Registers the framework-only construction hook for this module.
+   */
   static {
     constructBoundedContextBuilder = (snapshot, token): BoundedContextBuilder =>
       new BoundedContextBuilder(snapshot, token);
   }
 
-  /** Creates a framework-owned context builder.
+  /**
+   * Creates a framework-owned context builder.
+   *
    * @param specSnapshot Contains the initial context specification.
    * @param token Proves framework-controlled construction.
    */
@@ -856,35 +1064,45 @@ export class BoundedContextBuilder {
     Object.freeze(this);
   }
 
-  /** Returns the name configured for the context to build.
+  /**
+   * Returns the name configured for the context to build.
+   *
    * @returns Returns the immutable context name.
    */
   get name(): BoundedContextName {
     return this.#specSnapshot.name;
   }
 
-  /** Returns a copy-safe specification configured for the context.
+  /**
+   * Returns a copy-safe specification configured for the context.
+   *
    * @returns Returns the context specification.
    */
   get spec(): ContextSpec {
     return ContextParts.createContextSpec(this.#specSnapshot);
   }
 
-  /** Returns the tenant isolation mode configured for the context.
+  /**
+   * Returns the tenant isolation mode configured for the context.
+   *
    * @returns Returns the configured tenant mode.
    */
   get tenantMode(): TenantMode {
     return ContextParts.toTenantMode(this.#specSnapshot.multitenant);
   }
 
-  /** Returns whether this builder will create a tenant-isolated context.
+  /**
+   * Returns whether this builder will create a tenant-isolated context.
+   *
    * @returns Returns true when the built context will be multitenant.
    */
   isMultitenant(): boolean {
     return this.#specSnapshot.multitenant;
   }
 
-  /** Adds an entry to the context registration list.
+  /**
+   * Adds an entry to the context registration list.
+   *
    * @param entry Registers a repository or entity class.
    * @returns Returns this builder for further configuration.
    */
@@ -901,7 +1119,9 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Removes a repository from the context registration list.
+  /**
+   * Removes a repository from the context registration list.
+   *
    * @param repository Identifies the repository to remove.
    * @returns Returns this builder for further configuration.
    */
@@ -913,7 +1133,9 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Adds a command dispatcher to the context being built.
+  /**
+   * Adds a command dispatcher to the context being built.
+   *
    * @param dispatcher Dispatches commands accepted by this context.
    * @returns Returns this builder for further configuration.
    */
@@ -922,7 +1144,9 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Removes a command dispatcher from the context being built.
+  /**
+   * Removes a command dispatcher from the context being built.
+   *
    * @param dispatcher Identifies the dispatcher to remove.
    * @returns Returns this builder for further configuration.
    */
@@ -931,7 +1155,9 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Adds an event dispatcher to the context being built.
+  /**
+   * Adds an event dispatcher to the context being built.
+   *
    * @param dispatcher Dispatches events accepted by this context.
    * @returns Returns this builder for further configuration.
    */
@@ -940,7 +1166,9 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Removes an event dispatcher from the context being built.
+  /**
+   * Removes an event dispatcher from the context being built.
+   *
    * @param dispatcher Identifies the dispatcher to remove.
    * @returns Returns this builder for further configuration.
    */
@@ -949,7 +1177,9 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Sets a storage factory for event, repository-state, and Stand storage.
+  /**
+   * Sets a storage factory for event, repository-state, and Stand storage.
+   *
    * @param storageFactory Creates the context's persistent storage.
    * @returns Returns this builder for further configuration.
    */
@@ -958,7 +1188,9 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Sets a trusted compiled application root for generated handler metadata.
+  /**
+   * Sets a trusted compiled application root for generated handler metadata.
+   *
    * @param root Names the compiled package or application root.
    * @returns Returns this builder for further configuration.
    */
@@ -967,7 +1199,9 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Builds a context from explicitly added repositories and dispatchers.
+  /**
+   * Builds a context from explicitly added repositories and dispatchers.
+   *
    * @returns Returns the built context.
    */
   build(): BoundedContext {
@@ -978,7 +1212,9 @@ export class BoundedContextBuilder {
     );
   }
 
-  /** Builds a context after loading generated metadata for added entity classes.
+  /**
+   * Builds a context after loading generated metadata for added entity classes.
+   *
    * @returns Resolves to the built context.
    */
   async buildAsync(): Promise<BoundedContext> {
@@ -1014,6 +1250,10 @@ export class BoundedContextBuilder {
         ...ContextParts.repositoryEventDispatchers(registeredRepositories),
         ...this.#eventDispatchers,
       ]);
+      eventBusAccess.registerSchemas(
+        eventBus,
+        ContextParts.repositoryProducedEventSchemas(registeredRepositories),
+      );
       const stand = new Stand({
         context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
@@ -1066,16 +1306,22 @@ export class BoundedContextBuilder {
   }
 }
 
-/** Represents the immutable specification used by a context builder. */
+/**
+ * Represents the immutable specification used by a context builder.
+ */
 export class ContextSpec {
   readonly #snapshot: ContextSpecSnapshot;
 
-  /** Registers the framework-only construction hook for this module. */
+  /**
+   * Registers the framework-only construction hook for this module.
+   */
   static {
     constructContextSpec = (snapshot, token): ContextSpec => new ContextSpec(snapshot, token);
   }
 
-  /** Creates a framework-owned context specification.
+  /**
+   * Creates a framework-owned context specification.
+   *
    * @param snapshot Contains immutable specification values.
    * @param token Proves framework-controlled construction.
    */
@@ -1088,35 +1334,45 @@ export class ContextSpec {
     Object.freeze(this);
   }
 
-  /** Returns the bounded context name.
+  /**
+   * Returns the bounded context name.
+   *
    * @returns Returns the immutable context name.
    */
   get name(): BoundedContextName {
     return this.#snapshot.name;
   }
 
-  /** Returns whether the context requires tenant isolation.
+  /**
+   * Returns whether the context requires tenant isolation.
+   *
    * @returns Returns true when tenant isolation is required.
    */
   get multitenant(): boolean {
     return this.#snapshot.multitenant;
   }
 
-  /** Returns the tenant mode derived from the multitenant setting.
+  /**
+   * Returns the tenant mode derived from the multitenant setting.
+   *
    * @returns Returns the derived tenant mode.
    */
   get tenantMode(): TenantMode {
     return ContextParts.toTenantMode(this.#snapshot.multitenant);
   }
 
-  /** Returns whether the context specification stores its domain event log.
+  /**
+   * Returns whether the context specification stores its domain event log.
+   *
    * @returns Returns true when the context stores events.
    */
   get storesEvents(): boolean {
     return this.#snapshot.storesEvents;
   }
 
-  /** Returns a copy-safe immutable snapshot of this specification.
+  /**
+   * Returns a copy-safe immutable snapshot of this specification.
+   *
    * @returns Returns the specification snapshot.
    */
   get snapshot(): ContextSpecSnapshot {
@@ -1168,7 +1424,9 @@ class CatchUpReplayError extends Error {
   }
 }
 
-/** Owns private bounded-context assembly, lifecycle, and replay details. */
+/**
+ * Assembles private bounded-context lifecycle and replay details.
+ */
 const ContextParts = Object.freeze({
   requireFrameworkConstructionToken(token: unknown, message: string): void {
     if (token !== frameworkConstructionToken) {
@@ -1606,6 +1864,20 @@ const ContextParts = Object.freeze({
     });
   },
 
+  repositoryProducedEventSchemas(
+    repositories: readonly RepositoryView[],
+  ): readonly MessageSchema[] {
+    const schemas = new Map<string, MessageSchema>();
+
+    for (const repository of repositories) {
+      for (const schema of repositoryAccess.producedEventSchemas(repository)) {
+        schemas.set(TypeUrls.derive(schema), schema);
+      }
+    }
+
+    return Object.freeze([...schemas.values()]);
+  },
+
   closeEventStore(eventStore: EventStore, buildError: unknown): void {
     try {
       eventStore.close();
@@ -1756,6 +2028,7 @@ const ContextParts = Object.freeze({
       dispatchStored: registration.dispatchStored,
       dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
       postEventFollowUp: registration.postEventFollowUp,
+      registerEventSchema: registration.registerEventSchema,
       onPostCommand: registration.onPostCommand,
       recordDispatchFailure: registration.recordDispatchFailure,
     });

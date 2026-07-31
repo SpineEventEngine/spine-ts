@@ -24,8 +24,8 @@ export class EventStore {
   /**
    * Creates an event store for one storage context.
    *
-   * @param context - Specifies the storage context.
-   * @param factory - Creates the backing record storage.
+   * @param context Specifies the storage context.
+   * @param factory Creates the backing record storage.
    */
   constructor(context: StorageContext, factory: StorageFactory) {
     this.#context = context;
@@ -42,7 +42,9 @@ export class EventStore {
     return this.#storage.isOpen();
   }
 
-  /** Closes the underlying event record storage. */
+  /**
+   * Closes the underlying event record storage.
+   */
   close(): void {
     this.#storage.close();
   }
@@ -50,7 +52,7 @@ export class EventStore {
   /**
    * Validates that one generated Spine event can be appended without storing it.
    *
-   * @param event - Supplies the event to validate.
+   * @param event Supplies the event to validate.
    * @returns Completes when the event is accepted.
    */
   async accept(event: Event): Promise<void> {
@@ -64,8 +66,8 @@ export class EventStore {
    * Accepts one event, runs caller acceptance, and appends using one captured
    * storage context.
    *
-   * @param event - Supplies the event to accept.
-   * @param onAccepted - Runs after uniqueness validation and before append.
+   * @param event Supplies the event to accept.
+   * @param onAccepted Runs after uniqueness validation and before append.
    * @returns Resolves to the appended event snapshot.
    */
   async acceptThenAppend(event: Event, onAccepted: OnEventAccepted): Promise<Event> {
@@ -81,7 +83,7 @@ export class EventStore {
   /**
    * Writes one generated Spine event, rejecting missing, blank, or duplicate IDs.
    *
-   * @param event - Supplies the event to append.
+   * @param event Supplies the event to append.
    * @returns Completes when the event is appended.
    */
   async append(event: Event): Promise<void> {
@@ -93,7 +95,7 @@ export class EventStore {
   /**
    * Writes generated Spine events in order, rejecting missing, blank, or duplicate IDs.
    *
-   * @param events - Supplies the events to append.
+   * @param events Supplies the events to append.
    * @returns Completes when the events are appended.
    */
   async appendAll(events: Iterable<Event>): Promise<void> {
@@ -108,7 +110,7 @@ export class EventStore {
   /**
    * Writes generated Spine events and returns a one-shot rollback token.
    *
-   * @param events - Supplies the events to append.
+   * @param events Supplies the events to append.
    * @returns Resolves to the rollback token for this append.
    */
   async appendAllWithRollback(events: Iterable<Event>): Promise<EventRollback> {
@@ -134,7 +136,7 @@ export class EventStore {
   /**
    * Reads persisted events through the underlying record-storage query seam.
    *
-   * @param query - Specifies the record query.
+   * @param query Specifies the record query.
    * @returns Resolves to matching events.
    */
   read(query: RecordQuery<EventId> = {}): Promise<readonly Event[]> {
@@ -196,14 +198,19 @@ export class EventStore {
 /**
  * Accepts an event after `EventStore` prechecks it and before append.
  *
- * @param event - Supplies the validated event snapshot.
+ * @param event Supplies the validated event snapshot.
  * @returns Completes after caller acceptance finishes.
  */
 export type OnEventAccepted = (event: Event) => Promise<void> | void;
 
-/** One-shot rollback token scoped to one successful event-store append. */
+/**
+ * One-shot rollback token scoped to one successful event-store append.
+ */
 export interface EventRollback {
-  /** Deletes the events appended by the operation that created this token.
+  // prettier-ignore
+
+  /**
+   * Deletes the events appended by the operation that created this token.
    * @returns Completes when the events are deleted.
    */
   rollback(): Promise<void>;
@@ -239,9 +246,15 @@ const EventStoreLocks = Object.freeze({
   },
 });
 
-/** Validates event IDs before record-store operations. */
+/**
+ * Validates event IDs before record-store operations.
+ */
 const EventIds = {
-  /** Requires an event to have a non-blank ID. */
+  // prettier-ignore
+
+  /**
+   * Requires an event to have a non-blank ID.
+   */
   require(event: Event): EventId {
     if (event.id === undefined) throw new Error("EventStore requires event.id.");
     if (event.id.value.trim().length === 0) {
@@ -250,7 +263,9 @@ const EventIds = {
     return event.id;
   },
 
-  /** Rejects IDs that already exist in storage. */
+  /**
+   * Rejects IDs that already exist in storage.
+   */
   async rejectStored(
     storage: RecordStorage<EventId, Event>,
     ids: readonly EventId[],
@@ -260,7 +275,9 @@ const EventIds = {
     }
   },
 
-  /** Rejects repeated IDs within one append operation. */
+  /**
+   * Rejects repeated IDs within one append operation.
+   */
   rejectDuplicates(ids: readonly EventId[]): void {
     const seen = new Set<string>();
     for (const id of ids) {
@@ -270,9 +287,15 @@ const EventIds = {
   },
 };
 
-/** Captures tenant-aware event-store contexts and their lock keys. */
+/**
+ * Captures tenant-aware event-store contexts and their lock keys.
+ */
 const EventContexts = {
-  /** Captures one storage context. */
+  // prettier-ignore
+
+  /**
+   * Captures one storage context.
+   */
   snapshot(context: StorageContext): StorageContext {
     if (!context.multitenant) return Object.freeze({ name: context.name, multitenant: false });
     return Object.freeze({
@@ -282,7 +305,9 @@ const EventContexts = {
     });
   },
 
-  /** Captures one context using an event envelope tenant when present. */
+  /**
+   * Captures one context using an event envelope tenant when present.
+   */
   snapshotForEvent(context: StorageContext, event: Event): StorageContext {
     if (!context.multitenant) return EventContexts.snapshot(context);
     return Object.freeze({
@@ -295,7 +320,9 @@ const EventContexts = {
     });
   },
 
-  /** Reads an explicit tenant from an event envelope. */
+  /**
+   * Reads an explicit tenant from an event envelope.
+   */
   readEventTenant(event: Event): string | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
@@ -307,7 +334,9 @@ const EventContexts = {
     }
   },
 
-  /** Converts a typed tenant ID to its storage-scope value. */
+  /**
+   * Converts a typed tenant ID to its storage-scope value.
+   */
   tenantValue(tenantId: TenantId | undefined): string | undefined {
     switch (tenantId?.kind.case) {
       case "value":
@@ -321,7 +350,9 @@ const EventContexts = {
     }
   },
 
-  /** Requires a non-blank tenant ID for a multitenant context. */
+  /**
+   * Requires a non-blank tenant ID for a multitenant context.
+   */
   requireTenantId(name: string, tenantId: string | undefined): string {
     if (tenantId === undefined || tenantId.trim().length === 0) {
       throw new Error(`Multitenant storage "${name}" requires context.tenantId.`);
@@ -329,7 +360,9 @@ const EventContexts = {
     return tenantId;
   },
 
-  /** Creates a deterministic key for a context-scoped append lock. */
+  /**
+   * Creates a deterministic key for a context-scoped append lock.
+   */
   key(context: StorageContext): string {
     return JSON.stringify({
       name: context.name,

@@ -14,9 +14,9 @@ import {
   ChatMessageViewSchema,
   ChatRoomIdSchema,
   MessageIdSchema,
-} from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
-import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/commands_pb.js";
-import { UserIdSchema as ChatUserIdSchema } from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
+import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/commands_pb.js";
+import { UserIdSchema as ChatUserIdSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/users_pb.js";
 import { AnyMessages } from "@spine-event-engine/core";
 import {
   AckSchema,

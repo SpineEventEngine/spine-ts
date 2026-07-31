@@ -8,20 +8,39 @@ import {
 } from "../core/limits.js";
 import type { DeliveryServerOptions } from "./delivery-server.js";
 
-/** Describes the resolved delivery listener and retained-state configuration. */
+/**
+ * Describes the resolved delivery listener and retained-state configuration.
+ */
 export interface DeliveryConfiguration extends DeliveryStateLimits {
-  /** Holds the validated listener host. */
+  // prettier-ignore
+
+  /**
+   * Holds the validated listener host.
+   */
   readonly host: string;
-  /** Holds the validated listener port. */
+
+  /**
+   * Holds the validated listener port.
+   */
   readonly port: number;
-  /** Holds the maximum inbound RPC message size in bytes. */
+
+  /**
+   * Holds the maximum inbound RPC message size in bytes.
+   */
   readonly maxInboundMessageBytes: number;
-  /** Holds the automatic Shard processing timeout in milliseconds. */
+
+  /**
+   * Holds the automatic Shard processing timeout in milliseconds.
+   */
   readonly processingTimeoutMs: number;
 }
 
-/** Provides delivery listener configuration resolution. */
+/**
+ * Provides delivery listener configuration resolution.
+ */
 export const DeliveryConfig: Readonly<{
+  // prettier-ignore
+
   /**
    * Resolves delivery configuration from explicit options, environment, and defaults.
    *
@@ -29,6 +48,7 @@ export const DeliveryConfig: Readonly<{
    * @returns The frozen validated delivery configuration.
    */
   resolve: (options?: DeliveryServerOptions) => DeliveryConfiguration;
+
   /**
    * Resolves and validates a bounded numeric option.
    *
@@ -48,6 +68,7 @@ export const DeliveryConfig: Readonly<{
     maximum: number,
     name: string,
   ) => number;
+
   /**
    * Parses an environment numeric option or returns its default.
    *

@@ -11,7 +11,9 @@ import {
 
 const projectionLabels = ["UPDATE_SUBSCRIBER"] as const;
 
-/** Persists and replays delivery rows for projection subscribers. */
+/**
+ * Persists and replays delivery rows for projection subscribers.
+ */
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProjectionInboxTarget>();
@@ -21,7 +23,8 @@ export class LocalProjectionInbox implements ProjectionInbox {
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
 
-  /** Creates a local projection inbox.
+  /**
+   * Creates a local projection inbox.
    * @param contextName Names the bounded context that owns this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
    * @param keepTenant Records a tenant before its message is persisted.
@@ -37,7 +40,8 @@ export class LocalProjectionInbox implements ProjectionInbox {
     this.#keepTenant = keepTenant;
   }
 
-  /** Registers a target that replays projection messages.
+  /**
+   * Registers a target that replays projection messages.
    * @param target Handles messages for one projection type.
    */
   register(target: ProjectionInboxTarget): void {
@@ -54,14 +58,16 @@ export class LocalProjectionInbox implements ProjectionInbox {
     );
   }
 
-  /** Lists endpoints registered for projection delivery.
+  /**
+   * Lists endpoints registered for projection delivery.
    * @returns Returns immutable endpoint descriptions.
    */
   endpoints(): readonly DeliveryEndpoint[] {
     return Object.freeze([...this.#endpoints.values()].flat());
   }
 
-  /** Dispatches a durable inbox row through its projection target.
+  /**
+   * Dispatches a durable inbox row through its projection target.
    * @param message Contains the persisted inbox row to replay.
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
    * @returns A promise that resolves after the inbox row is replayed.
@@ -70,7 +76,8 @@ export class LocalProjectionInbox implements ProjectionInbox {
     return this.#replay(message, deliveryTenantId);
   }
 
-  /** Persists and drains one projection inbox message.
+  /**
+   * Persists and drains one projection inbox message.
    * @param delivery Stores and drains the inbox row.
    * @param input Describes the message to persist.
    * @param deliveryTenantId Identifies the tenant that owns the message when present.

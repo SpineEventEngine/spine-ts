@@ -1,14 +1,21 @@
 import { ServerEnvironmentLifecycle } from "../server/server-environment.js";
 
-/** Provides deterministic server-environment cleanup for package tests. */
+/**
+ * Provides deterministic server-environment cleanup for package tests.
+ */
 export const ServerTests: { readonly resetEnvironment: () => Promise<void> } = Object.freeze({
-  /** Resets shared server facilities before the next test creates a server. */
+  // prettier-ignore
+
+  /**
+   * Resets shared server facilities before the next test creates a server.
+   */
   resetEnvironment(): Promise<void> {
     return ServerEnvironmentLifecycle.resetForTest();
   },
 });
 
-/** Supplies the package-testing reset operation as an explicit short value.
+/**
+ * Supplies the package-testing reset operation as an explicit short value.
  *
  * @internal
  */

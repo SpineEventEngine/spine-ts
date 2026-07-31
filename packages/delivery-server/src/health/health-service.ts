@@ -12,11 +12,17 @@ const known = new Set([
   "spine.delivery.AdminService",
 ]);
 
-/** Provides Delivery health handler implementations. */
+/**
+ * Provides Delivery health handler implementations.
+ */
 export const HealthHandlers: Readonly<{
   create(serving: () => boolean): ServiceImpl<typeof Health>;
 }> = Object.freeze({
-  /** Creates health handlers.
+  // prettier-ignore
+
+  /**
+   * Creates health handlers.
+   *
    * @param serving Reports whether the server accepts traffic.
    * @returns Provides Connect health handlers.
    */

@@ -13,9 +13,14 @@ interface IncomingRequestDecoder {
   decode(input: IncomingRequestInput): IncomingRequest | undefined;
 }
 
-/** Decodes the public request envelopes accepted by authentication gateways. */
+/**
+ * Decodes the public request envelopes accepted by authentication gateways.
+ */
 export const IncomingRequests: Readonly<IncomingRequestDecoder> = Object.freeze({
-  /** Decodes one known wire envelope and omits malformed data.
+  // prettier-ignore
+
+  /**
+   * Decodes one known wire envelope and omits malformed data.
    * @param input Supplies the wire envelope and its transport context.
    * @returns Returns decoded request facts or `undefined` for malformed input.
    */

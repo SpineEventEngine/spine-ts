@@ -34,12 +34,12 @@ import {
   FilterSchema,
   Filter_Operator,
 } from "../../../../../packages/proto/dist/src/client/index.js";
-import { PostMessageSchema } from "../../../model/dist/generated/spine/example/chat/v1/commands_pb.js";
+import { PostMessageSchema } from "../../../model/dist/generated/spine/examples/chat/commands_pb.js";
 import {
   ChatMessageViewSchema,
   ChatRoomIdSchema,
   MessageIdSchema,
-} from "../../../model/dist/generated/spine/example/chat/v1/chat_pb.js";
+} from "../../../model/dist/generated/spine/examples/chat/chat_pb.js";
 
 import { startTopology } from "./harness.mjs";
 

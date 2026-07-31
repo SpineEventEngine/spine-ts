@@ -1494,7 +1494,9 @@ function createDelivery(storageFactory: StorageFactory = new InMemoryStorageFact
   });
 }
 
-/** These tests construct only the local inbox implementation. */
+/**
+ * These tests construct only the local inbox implementation.
+ */
 function localInbox(delivery: Delivery): Inbox {
   return delivery.inbox as Inbox;
 }

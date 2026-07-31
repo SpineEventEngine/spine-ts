@@ -1,9 +1,12 @@
 import type { StorageContext } from "./storage.js";
 
 const storageScopes = {
-  /** Creates a length-delimited storage scope.
-   * @param context - Supplies the bounded-context and tenant scope.
-   * @param storageKey - Supplies the physical record layout identity.
+  // prettier-ignore
+
+  /**
+   * Creates a length-delimited storage scope.
+   * @param context Supplies the bounded-context and tenant scope.
+   * @param storageKey Supplies the physical record layout identity.
    * @returns The canonical storage scope key.
    */
   canonical(context: StorageContext, storageKey: string): string {
@@ -15,8 +18,9 @@ const storageScopes = {
     return values.map((value) => `${String(storageScopes.utf8Length(value))}:${value}`).join(":");
   },
 
-  /** Returns a required multitenant tenant scope.
-   * @param context - Supplies the multitenant storage context.
+  /**
+   * Returns a required multitenant tenant scope.
+   * @param context Supplies the multitenant storage context.
    * @returns The encoded tenant scope.
    */
   tenant(context: StorageContext): string {
@@ -26,8 +30,9 @@ const storageScopes = {
     return `tenant:${context.tenantId}`;
   },
 
-  /** Returns a UTF-8 byte count without allocating an encoded copy.
-   * @param value - Supplies the text to measure.
+  /**
+   * Returns a UTF-8 byte count without allocating an encoded copy.
+   * @param value Supplies the text to measure.
    * @returns The UTF-8 byte length.
    */
   utf8Length(value: string): number {
@@ -42,5 +47,8 @@ const storageScopes = {
   },
 };
 type StorageScopesOwner = Readonly<typeof storageScopes>;
-/** Encodes durable scope identities shared by in-memory storage adapters. */
+
+/**
+ * Encodes durable scope identities shared by in-memory storage adapters.
+ */
 export const StorageScopes: StorageScopesOwner = Object.freeze(storageScopes);

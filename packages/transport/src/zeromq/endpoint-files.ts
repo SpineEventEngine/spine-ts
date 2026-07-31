@@ -1,7 +1,11 @@
 import { unlink } from "node:fs/promises";
 
-/** Manages filesystem entries created for local IPC endpoints. */
+/**
+ * Manages filesystem entries created for local IPC endpoints.
+ */
 export const EndpointFiles = {
+  // prettier-ignore
+
   /**
    * Removes an endpoint file when it exists.
    *

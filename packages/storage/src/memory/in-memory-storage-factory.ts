@@ -10,13 +10,16 @@ import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
 import { MemoryEntityStorageFactory, type EntityStorageInput } from "./in-memory-entity-history.js";
 
-/** In-memory factory for record storages and framework delegates such as the event store. */
+/**
+ * In-memory factory for record storages and framework delegates such as the event store.
+ */
 export class InMemoryStorageFactory extends StorageFactory {
   readonly #backend: InMemoryStorageBackend;
   readonly #entities: MemoryEntityStorageFactory;
 
-  /** Creates a factory with a fresh backend, or deliberately shares one.
-   * @param backend - Selects the backend to own or share.
+  /**
+   * Creates a factory with a fresh backend, or deliberately shares one.
+   * @param backend Selects the backend to own or share.
    */
   constructor(backend: InMemoryStorageBackend = new InMemoryStorageBackend()) {
     super();
@@ -29,7 +32,7 @@ export class InMemoryStorageFactory extends StorageFactory {
    *
    * This is deliberately not exported from the root storage API. Provider
    * adapters expose the same structural method for the server runtime.
-   * @param input - Supplies the internal entity storage configuration.
+   * @param input Supplies the internal entity storage configuration.
    * @returns The created internal entity storage.
    */
   createEntityStorage(input: unknown): unknown {
@@ -37,7 +40,8 @@ export class InMemoryStorageFactory extends StorageFactory {
     return this.#entities.create(input as EntityStorageInput<unknown, Message>);
   }
 
-  /** Creates an in-memory record storage.
+  /**
+   * Creates an in-memory record storage.
    * @param context The storage context.
    * @param recordSpec The record specification.
    * @returns The created record storage.

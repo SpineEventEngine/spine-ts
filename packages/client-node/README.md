@@ -1,54 +1,88 @@
 # @spine-event-engine/client-node
 
-Node transport factory and descriptor-backed Entity query foundations for Spine.
+Use this package from a Node.js application that sends Spine commands, reads
+queries, or maintains subscriptions. It creates the Node HTTP/2 transport; the
+same request and subscription API is shared with the browser client.
 
-Browser/gateway behavior is documented in the
-[browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+For detailed public contracts and limits, read the [reference for
+agents](REFERENCE.md).
 
-`Client.connectTo(url)` supplies a Node HTTP/2 transport to the shared
-`@spine-event-engine/client-web` kernel and owns that session. `Client.usingTransport(transport)`
-uses a caller-owned transport. Node is responsible only for that native
-transport and request-ID source; request scopes, protocol operations, and
-subscription lifecycle belong to the shared client.
+The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+explains the gateway boundary shared by Node and browser clients.
+
+## Connect to an application gateway
+
+Create one client for the process or application component that owns the
+connection. A client created with `connectTo()` owns and closes its HTTP/2
+session.
 
 ```ts
+import { create } from "@bufbuild/protobuf";
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { Client } from "@spine-event-engine/client-node";
-import { CreateTaskSchema } from "@example/tasks-proto/task_commands_pb";
+import { PostMessageSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/commands_pb.js";
+import {
+  ChatRoomIdSchema,
+  MessageIdSchema,
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
+import { UserIdSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/users_pb.js";
 
 const client = Client.connectTo("http://127.0.0.1:8080", { tenant: "tasks" });
-await client.onBehalfOf("alice").post(CreateTaskSchema, { title: "Read client results" });
+const request = client.onBehalfOf("alice");
+const result = await request.post(
+  PostMessageSchema,
+  create(PostMessageSchema, {
+    id: create(MessageIdSchema, { value: "message-1" }),
+    room: create(ChatRoomIdSchema, { value: "general" }),
+    author: create(UserIdSchema, { value: "alice" }),
+    text: "Hello, Chat.",
+    postedAt: timestampFromDate(new Date()),
+  }),
+);
+if (result.kind === "rejection") console.log(result.rejection);
 await client.close();
 ```
 
-The public protocol verbs are `post`, `send`, `createSubscription`, `activate`,
-and `cancel`. `send()` accepts a built Spine `Query`; `createSubscription()`
-accepts a Spine `Topic`, returns an inactive handle, and `activate()` starts its
-wire stream. Entity-column generation remains Node-only on the `./codegen`
-subpath.
+The URL is an application gateway URL. It is not an instruction to expose a
+Spine server directly to the internet.
 
-## Entity queries
+Node subscriptions use the same `createSubscription`, `activate`, and `cancel`
+API as the browser client; see the [client-web reference](../client-web/REFERENCE.md)
+for its lifecycle and recovery limits.
 
-The generated companion defines the only application columns accepted by an
-Entity query. Generated code imports `GeneratedEntityColumns` from the
-Node-only codegen subpath, while application code registers the definition and
-uses `EntityQuery` for both predicates and compilation.
+## Query entities by declared columns
 
-```ts
-import { EntityColumn, EntityQuery } from "@spine-event-engine/client-node";
-import { TaskViewColumnDefinition } from "@example/tasks-model/task_view_columns_pb";
-import { TaskViewSchema } from "@example/tasks-model/task_view_pb";
+Generate entity columns from the model package, register them once, and build
+queries with those declared columns. The `./codegen` entry point is for model
+generation; applications use the generated definition and `EntityQuery`.
+`limit()` requires an ordering. Only generated columns for the selected Entity
+may be used in its predicates.
 
-const columns = EntityColumn.register(TaskViewSchema, TaskViewColumnDefinition);
-const owner = "alice";
-const query = EntityQuery.select({ schema: TaskViewSchema, columns, context })
-  .where(EntityQuery.all(EntityQuery.eq(columns.owner, owner), EntityQuery.ge(columns.priority, 1)))
-  .orderBy(columns.priority, "desc")
-  .limit(20)
-  .build();
+Generate those definitions in a model package with the Node code-generation
+plugin, then import the resulting declaration from that model:
+
+```sh
+protoc --spine-entity-columns_out=generated proto/spine/examples/chat/chat.proto
 ```
 
-`limit()` requires at least one `orderBy()` clause. Columns are immutable and
-bound to their registered schema, so predicates cannot be reused for a
-different Entity target. `EntityQuery` supports `eq`, `gt`, `lt`, `ge`, `le`,
-`all`, and `either`; it packs declared values and the `version`, `archived`,
-and `deleted` system columns into the Spine wire query.
+```ts
+import { Client, EntityColumn, EntityQuery } from "@spine-event-engine/client-node";
+import { create } from "@bufbuild/protobuf";
+import { ActorContextSchema } from "@spine-event-engine/proto";
+import { TaskListColumnDefinition } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_list_columns.js";
+import { TaskListSchema } from "@spine-event-engine/example-todo/generated/spine/examples/todo/task_list_pb.js";
+
+const columns = EntityColumn.register(TaskListSchema, TaskListColumnDefinition);
+const query = EntityQuery.select({
+  schema: TaskListSchema,
+  columns,
+  context: create(ActorContextSchema, { actor: { value: "alice" } }),
+})
+  .orderBy(columns.openTaskCount, "desc")
+  .limit(20)
+  .build();
+const client = Client.connectTo("http://127.0.0.1:8080");
+const response = await client.asGuest().send(query);
+console.log(response.message.length);
+await client.close();
+```

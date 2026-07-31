@@ -209,7 +209,7 @@ TypeScript implication: make record storage the only mandatory database adapter 
 `InMemoryRecordStorage`:
 
 - Wraps `MultitenantStorage<TenantRecords<I, R>>`.
-- Stores records per current tenant slice when the `ContextSpec` is multitenant.
+- Stores records for the current tenant scope when the `ContextSpec` is multitenant.
 - Writes `RecordWithColumns` by ID.
 - Reads and indexes via `TenantRecords`.
 
@@ -431,15 +431,15 @@ TypeScript implication: define tracing as a pluggable SPI and provide an OpenTel
 
 Local source versions:
 
-| Repo | Version source | Version | Runtime relevance |
-| --- | --- | --- | --- |
-| `core-jvm` | `/private/tmp/spine-research/core-jvm/version.gradle.kts` | `2.0.0-SNAPSHOT.381` | Primary server, storage, validation consumption, tracing SPI. |
-| `base` | `/private/tmp/spine-research/base/version.gradle.kts` | `2.0.0-SNAPSHOT.421` | Protobuf options, base types, `Time`, `Environment`, common utilities. |
-| `time` | `/private/tmp/spine-research/time/version.gradle.kts` | `2.0.0-SNAPSHOT.242` | Date/time Protobuf types, converters, `(when)` option. |
-| `validation` | `/private/tmp/spine-research/validation/version.gradle.kts` | `2.0.0-SNAPSHOT.446` | Validation runtime, generated-code contracts, validator registry/SPI. |
-| `logging` | `/private/tmp/spine-research/logging/version.gradle.kts` | `2.0.0-SNAPSHOT.417` | Logging facade, backends, scoped context. |
-| `change` | `/private/tmp/spine-research/change/version.gradle.kts` | `2.0.0-SNAPSHOT.206` | Protobuf-based change types; relevant for generated model/runtime type parity. |
-| `reflect` | `/private/tmp/spine-research/reflect/version.gradle.kts` | `2.0.0-SNAPSHOT.200` | JVM reflection helpers; TS should replace with descriptor metadata and static registries. |
+| Repo         | Version source                                              | Version              | Runtime relevance                                                                         |
+| ------------ | ----------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------- |
+| `core-jvm`   | `/private/tmp/spine-research/core-jvm/version.gradle.kts`   | `2.0.0-SNAPSHOT.381` | Primary server, storage, validation consumption, tracing SPI.                             |
+| `base`       | `/private/tmp/spine-research/base/version.gradle.kts`       | `2.0.0-SNAPSHOT.421` | Protobuf options, base types, `Time`, `Environment`, common utilities.                    |
+| `time`       | `/private/tmp/spine-research/time/version.gradle.kts`       | `2.0.0-SNAPSHOT.242` | Date/time Protobuf types, converters, `(when)` option.                                    |
+| `validation` | `/private/tmp/spine-research/validation/version.gradle.kts` | `2.0.0-SNAPSHOT.446` | Validation runtime, generated-code contracts, validator registry/SPI.                     |
+| `logging`    | `/private/tmp/spine-research/logging/version.gradle.kts`    | `2.0.0-SNAPSHOT.417` | Logging facade, backends, scoped context.                                                 |
+| `change`     | `/private/tmp/spine-research/change/version.gradle.kts`     | `2.0.0-SNAPSHOT.206` | Protobuf-based change types; relevant for generated model/runtime type parity.            |
+| `reflect`    | `/private/tmp/spine-research/reflect/version.gradle.kts`    | `2.0.0-SNAPSHOT.200` | JVM reflection helpers; TS should replace with descriptor metadata and static registries. |
 
 Notes:
 

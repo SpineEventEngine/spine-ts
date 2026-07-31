@@ -4,59 +4,129 @@ import { isAbsolute, join, normalize, sep } from "node:path";
 import { RegistryDependency } from "./model/registry-dependency.js";
 import { NpmPackageName } from "./model/npm-package-name.js";
 
-/** Version shared by the configuration and published manifest JSON documents. */
+/**
+ * Version shared by the configuration and published manifest JSON documents.
+ */
 export const manifestFormatVersion = 1;
 
-/** Configures an independently published Proto model package. */
+/**
+ * Configures an independently published Proto model package.
+ */
 export interface ModelConfig {
-  /** Declares the version of this configuration contract. */
+  // prettier-ignore
+
+  /**
+   * Declares the version of this configuration contract.
+   */
   readonly formatVersion: 1;
-  /** Selects an independently published model package. */
+
+  /**
+   * Selects an independently published model package.
+   */
   readonly mode: "model";
-  /** Names the owning npm package. */
+
+  /**
+   * Names the owning npm package.
+   */
   readonly packageName: string;
-  /** Locates the package-contained canonical Proto sources. */
+
+  /**
+   * Locates the package-contained canonical Proto sources.
+   */
   readonly protoRoot: string;
-  /** Locates the package-contained generated TypeScript files. */
+
+  /**
+   * Locates the package-contained generated TypeScript files.
+   */
   readonly generatedRoot: string;
-  /** Names the generated import subpath root. */
+
+  /**
+   * Names the generated import subpath root.
+   */
   readonly exportRoot: string;
-  /** Lists direct model packages from the npm registry. */
+
+  /**
+   * Lists direct model packages from the npm registry.
+   */
   readonly dependencies: readonly string[];
-  /** Names the generated model-module export. */
+
+  /**
+   * Names the generated model-module export.
+   */
   readonly moduleExport: string;
 }
 
-/** Configures an application that composes published Proto model packages. */
+/**
+ * Configures an application that composes published Proto model packages.
+ */
 export interface ApplicationConfig {
-  /** Declares the version of this configuration contract. */
+  // prettier-ignore
+
+  /**
+   * Declares the version of this configuration contract.
+   */
   readonly formatVersion: 1;
-  /** Selects application model composition. */
+
+  /**
+   * Selects application model composition.
+   */
   readonly mode: "application";
-  /** Lists direct model packages from the npm registry. */
+
+  /**
+   * Lists direct model packages from the npm registry.
+   */
   readonly modelPackages: readonly string[];
-  /** Locates the generated package registry source file. */
+
+  /**
+   * Locates the generated package registry source file.
+   */
   readonly registryOutput: string;
 }
 
-/** Version-one model or application configuration selected by mode. */
+/**
+ * Version-one model or application configuration selected by mode.
+ */
 export type SpineProtoConfig = ModelConfig | ApplicationConfig;
 
-/** Describes the Proto sources and generated exports owned by a model package. */
+/**
+ * Describes the Proto sources and generated exports owned by a model package.
+ */
 export interface ProtoManifest {
-  /** Declares the version of this manifest contract. */
+  // prettier-ignore
+
+  /**
+   * Declares the version of this manifest contract.
+   */
   readonly formatVersion: 1;
-  /** Names the package that owns every listed Proto source. */
+
+  /**
+   * Names the package that owns every listed Proto source.
+   */
   readonly packageName: string;
-  /** States the declared version from the owning package.json file. */
+
+  /**
+   * States the declared version from the owning package.json file.
+   */
   readonly packageVersion: string;
-  /** Lists canonical package-relative Proto paths owned by the package. */
+
+  /**
+   * Lists canonical package-relative Proto paths owned by the package.
+   */
   readonly protoFiles: readonly string[];
-  /** Maps each Proto path to its generated package-relative import subpath. */
+
+  /**
+   * Maps each Proto path to its generated package-relative import subpath.
+   */
   readonly generatedExports: Readonly<Record<string, string>>;
-  /** Lists direct model-package dependencies. */
+
+  /**
+   * Lists direct model-package dependencies.
+   */
   readonly dependencies: readonly string[];
-  /** Names the generated ProtoModule export. */
+
+  /**
+   * Names the generated ProtoModule export.
+   */
   readonly moduleExport: string;
 }
 
@@ -108,16 +178,24 @@ const reservedBindings = new Set([
   "yield",
 ]);
 
-/** Reports invalid contained Proto package contracts. */
+/**
+ * Reports invalid contained Proto package contracts.
+ */
 const ProtoPackageErrors: Readonly<{ fail(name: string, message: string): never }> = Object.freeze({
   fail(name: string, message: string): never {
     throw new Error(`spine-proto: ${name}: ${message}`);
   },
 });
 
-/** Reads, validates, and creates contained Proto package contracts. */
+/**
+ * Reads, validates, and creates contained Proto package contracts.
+ */
 const ProtoPackage = Object.freeze({
-  /** Reads and validates versioned `spine-proto.json` package configuration. */
+  // prettier-ignore
+
+  /**
+   * Reads and validates versioned `spine-proto.json` package configuration.
+   */
   configFromPackage(packageRoot: string): SpineProtoConfig {
     const packageJson = ProtoPackage.readPackage(packageRoot);
     const config = ProtoPackage.objectValue(
@@ -231,7 +309,9 @@ const ProtoPackage = Object.freeze({
     };
   },
 
-  /** Validates a deterministic manifest shipped by a model package. */
+  /**
+   * Validates a deterministic manifest shipped by a model package.
+   */
   manifestFromPackage(
     packageRoot: string,
     manifestPath: string = join(packageRoot, "spine-proto-manifest.json"),
@@ -268,7 +348,9 @@ const ProtoPackage = Object.freeze({
     return manifest;
   },
 
-  /** Builds a deterministic manifest from a model package's owned Proto paths. */
+  /**
+   * Builds a deterministic manifest from a model package's owned Proto paths.
+   */
   manifestForPackage(packageRoot: string, ownedProtoFiles?: readonly string[]): ProtoManifest {
     const config = ProtoPackage.configFromPackage(packageRoot);
     if (config.mode !== "model")
@@ -617,16 +699,24 @@ const ProtoPackage = Object.freeze({
   },
 });
 
-/** Provides access to the versioned Proto package configuration. */
+/**
+ * Provides access to the versioned Proto package configuration.
+ */
 export const ProtoConfig: Readonly<{
-  /** Reads and validates `spine-proto.json` at a package root.
+  // prettier-ignore
+
+  /**
+   * Reads and validates `spine-proto.json` at a package root.
    *
    * @param packageRoot The package root that contains the configuration.
    * @returns The validated model or application configuration.
    */
   read(packageRoot: string): SpineProtoConfig;
 }> = Object.freeze({
-  /** Reads and validates `spine-proto.json` at a package root.
+  // prettier-ignore
+
+  /**
+   * Reads and validates `spine-proto.json` at a package root.
    *
    * @param packageRoot The package root that contains the configuration.
    * @returns The validated model or application configuration.
@@ -636,16 +726,23 @@ export const ProtoConfig: Readonly<{
   },
 });
 
-/** Provides access to deterministic Proto package manifests. */
+/**
+ * Provides access to deterministic Proto package manifests.
+ */
 export const ProtoManifest: Readonly<{
-  /** Reads and validates a package manifest.
+  // prettier-ignore
+
+  /**
+   * Reads and validates a package manifest.
    *
    * @param packageRoot The package root that owns the manifest.
    * @param manifestPath The optional manifest path within the package root.
    * @returns The validated manifest.
    */
   read(packageRoot: string, manifestPath?: string): ProtoManifest;
-  /** Creates a deterministic manifest from package-owned Proto paths.
+
+  /**
+   * Creates a deterministic manifest from package-owned Proto paths.
    *
    * @param packageRoot The model package root.
    * @param ownedProtoFiles Optional explicit package-relative Proto paths.
@@ -653,7 +750,10 @@ export const ProtoManifest: Readonly<{
    */
   create(packageRoot: string, ownedProtoFiles?: readonly string[]): ProtoManifest;
 }> = Object.freeze({
-  /** Reads and validates a package manifest.
+  // prettier-ignore
+
+  /**
+   * Reads and validates a package manifest.
    *
    * @param packageRoot The package root that owns the manifest.
    * @param manifestPath The optional manifest path within the package root.
@@ -666,7 +766,8 @@ export const ProtoManifest: Readonly<{
     return ProtoPackage.manifestFromPackage(packageRoot, manifestPath);
   },
 
-  /** Creates a deterministic manifest from package-owned Proto paths.
+  /**
+   * Creates a deterministic manifest from package-owned Proto paths.
    *
    * @param packageRoot The model package root.
    * @param ownedProtoFiles Optional explicit package-relative Proto paths.

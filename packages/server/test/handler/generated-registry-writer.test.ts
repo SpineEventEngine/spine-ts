@@ -34,10 +34,10 @@ describe("generated registry writer", () => {
           '"@spine-event-engine/server/internal/generated-handler-registry";',
         'import { TaskAggregate } from "../../src/task-aggregate.js";',
         'import { TaskProjection } from "../../src/task-projection.js";',
-        'import { CreateTaskSchema, RenameTaskSchema } from "../spine/example/todo/v1/task_commands_pb.js";',
+        'import { CreateTaskSchema, RenameTaskSchema } from "../spine/examples/todo/task_commands_pb.js";',
         "import { TaskCompletedSchema, TaskCreatedSchema, TaskRenamedSchema } " +
-          'from "../spine/example/todo/v1/task_events_pb.js";',
-        'import { TaskSchema } from "../spine/example/todo/v1/tasks_pb.js";',
+          'from "../spine/examples/todo/task_events_pb.js";',
+        'import { TaskSchema } from "../spine/examples/todo/tasks_pb.js";',
         "",
         "export const generatedHandlerRegistry: GeneratedHandlerRegistry = {",
         "  version: 1,",
@@ -665,17 +665,17 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
       {
         className: "TaskAggregate",
         sourceFile: join(repoRoot, "examples/todo/src/task-aggregate.ts"),
-        stateSchema: schema("../generated/spine/example/todo/v1/tasks_pb.js", "TaskSchema"),
+        stateSchema: schema("../generated/spine/examples/todo/tasks_pb.js", "TaskSchema"),
         handlers: [
           {
             kind: "command-assignment",
             methodName: "createTask",
             signalSchema: schema(
-              "../generated/spine/example/todo/v1/task_commands_pb.js",
+              "../generated/spine/examples/todo/task_commands_pb.js",
               "CreateTaskSchema",
             ),
             emittedSchemas: [
-              schema("../generated/spine/example/todo/v1/task_events_pb.js", "TaskCreatedSchema"),
+              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
             ],
             parameterCount: 1,
           },
@@ -683,11 +683,11 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
             kind: "command-reaction",
             methodName: "renameTask",
             signalSchema: schema(
-              "../generated/spine/example/todo/v1/task_events_pb.js",
+              "../generated/spine/examples/todo/task_events_pb.js",
               "TaskCreatedSchema",
             ),
             emittedSchemas: [
-              schema("../generated/spine/example/todo/v1/task_commands_pb.js", "RenameTaskSchema"),
+              schema("../generated/spine/examples/todo/task_commands_pb.js", "RenameTaskSchema"),
             ],
             parameterCount: 2,
           },
@@ -696,13 +696,13 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
       {
         className: "TaskProjection",
         sourceFile: join(repoRoot, "examples/todo/src/task-projection.ts"),
-        stateSchema: schema("../generated/spine/example/todo/v1/tasks_pb.js", "TaskSchema"),
+        stateSchema: schema("../generated/spine/examples/todo/tasks_pb.js", "TaskSchema"),
         handlers: [
           {
             kind: "event-subscription",
             methodName: "onTaskCreated",
             signalSchema: schema(
-              "../generated/spine/example/todo/v1/task_events_pb.js",
+              "../generated/spine/examples/todo/task_events_pb.js",
               "TaskCreatedSchema",
             ),
             emittedSchemas: [],
@@ -712,12 +712,12 @@ function analysis(repoRoot: string): BuildHandlerAnalysis {
             kind: "event-reaction",
             methodName: "onTaskRenamed",
             signalSchema: schema(
-              "../generated/spine/example/todo/v1/task_events_pb.js",
+              "../generated/spine/examples/todo/task_events_pb.js",
               "TaskRenamedSchema",
             ),
             emittedSchemas: [
-              schema("../generated/spine/example/todo/v1/task_events_pb.js", "TaskCompletedSchema"),
-              schema("../generated/spine/example/todo/v1/task_events_pb.js", "TaskCreatedSchema"),
+              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCompletedSchema"),
+              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
             ],
             parameterCount: 2,
           },

@@ -6,22 +6,22 @@ For the end-to-end browser/authentication extension contract, including the
 exact trust-boundary limitations that TypeDoc declarations cannot convey, see
 the [browser client and gateway guide](../BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
 
-Current status: the generated TypeDoc reference contains the curated
+The generated TypeDoc reference contains the curated
 `@spine-event-engine/proto` root API for copied Spine contracts, the `@spine-event-engine/core`
-metadata/type registry and validation facade APIs, the first `@spine-event-engine/server`
+metadata/type registry and validation facade APIs, the `@spine-event-engine/server`
 descriptor-derived entity metadata, the browser-safe injected-transport
 `@spine-event-engine/client-web` protocol kernel (with explicit gRPC-Web and
 Connect factories plus synchronous per-call metadata), the
 `@spine-event-engine/client-node` Node transport factory and descriptor-backed query helpers,
 context-owned `Repository` registration,
-set-once transition validation, explicit handler metadata APIs, the first
-command/event bus exports, the first server runtime lifecycle/async queue
+set-once transition validation, explicit handler metadata APIs,
+command/event bus exports, the server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
 command/query/subscription services with durable inactive subscription recovery
 over the same storage factory, a small local `Server` lifecycle owner for real
-Connect/gRPC-compatible services, the first `@spine-event-engine/transport`
-contracts, the first `@spine-event-engine/storage` contracts, and the minimal
+Connect/gRPC-compatible services, `@spine-event-engine/transport`
+contracts, `@spine-event-engine/storage` contracts, and the minimal
 `@spine-event-engine/testing` BlackBox test boundary, optional Datastore storage, and
 the MySQL-first RDBMS storage factory/errors/options.
 
@@ -97,10 +97,10 @@ creation and reading remain on the `ProtoManifest` API.
 Core exports include deterministic type URL derivation, registry and metadata
 types, the default registry for the curated Spine schema set, single-message
 validation result/check helpers, `ValidationException`, structured
-`ValidationError` creation, the initial transition-validation seam,
+`ValidationError` creation, the transition-validation seam,
 `RejectionThrowable`, `RejectionThrowable.create()`, and
 `RejectionThrowable.is()`. Generated rejection companions create validated
-throwables through this factory contract. Repository command execution now
+throwables through this factory contract. Repository command execution
 recognizes them only through the guard after rollback and schedules a regular
 rejection event for independent EventBus posting. Build-time analysis
 accepts descriptor-verified top-level rejection inputs for event-consuming
@@ -170,12 +170,12 @@ the context-owned repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Built contexts also create the
-first internal system-pairing metadata and a framework-owned tenant index:
+internal system-pairing metadata and a framework-owned tenant index:
 single-tenant contexts use a constant index, and multitenant contexts persist
 tenant IDs through the configured storage factory. These internals are not part
 of the end-user `BoundedContext` API. The full system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
-broader JVM production runtime remain outside the current public surface.
+broader JVM production runtime remain outside this public surface.
 Repositories with authentic
 explicit handler metadata still expose route-only `routeCommand()` /
 `routeEvent()` calculations, and built contexts install internal repository
@@ -189,10 +189,10 @@ event redispatch failures are observable through the copy-safe
 `storedEventDispatchFailures()` diagnostic snapshot on the owning
 `BoundedContext`. Generated entity-class assembly creates default repositories
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
-slice does not invoke query handlers, run durable delivery catch-up, expose a
+implementation does not invoke query handlers, run durable delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
 handoffs are framework-owned process-manager command replay, live
-process-manager event replay, and live projection subscriber replay. The current
+process-manager event replay, and live projection subscriber replay. The
 local runtime writes the inbox row, drains the local shard immediately, requires
 tenant-safe replay in multitenant contexts, and resolves only after that
 received row is marked delivered. Process-manager event rows use
@@ -216,14 +216,14 @@ the cleanup error; that error is not promised frozen, bounded, or stack-free. It
 is not a public
 monitor/action, scheduler/backoff, dead-letter, production-topology, catch-up,
 or adapter policy. Broader inbox lifecycle management and transport topology
-are outside the initial release; no future policy is committed.
+are not provided by this API.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
 process-manager event routing reads the first event message field, state is
 loaded/created and stored through `Stand`, and returned domain commands/events
 are wrapped only after the current transaction and state write succeed.
-`BoundedContext.catchUpReadSide(options?)` is the current framework-owned
+`BoundedContext.catchUpReadSide(options?)` is the framework-owned
 read-side catch-up boundary. It clears registered projection rows through
 `Stand.clear()`, reads only already-stored events, and replays each event only
 to registered projection subscribers whose dispatcher declares that event
@@ -292,7 +292,7 @@ and diagnostic event journal, then store returned domain events in the framework
 event store before queueing them for event-bus delivery without appending them
 again. Process-manager repositories
 also participate in those adapters: command assignees are invoked from the
-command bus through a durable process-manager inbox handoff. The current local
+command bus through a durable process-manager inbox handoff. The local
 runtime drains that inbox immediately, requires tenant-safe replay in
 multitenant contexts, and resolves only after the received inbox row is marked
 delivered. Live projection subscribers use the same local handoff shape with
@@ -312,7 +312,7 @@ caches, catch-up, or transport startup. Built bounded contexts use repository
 metadata to register known state types with their direct read-side `Stand`.
 `Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
 `StandReadResult`, `StandUpdateOptions`, `StandSubscribeOptions`,
-`StandUpdate`, `StandSubscription`, and `StandStateTypeError` form the first
+`StandUpdate`, `StandSubscription`, and `StandStateTypeError` form the
 direct read-side entity-state API. A stand registers known generated state
 schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
@@ -329,7 +329,7 @@ while single-tenant stands reject tenant options.
 `StandUpdate.previousState` is a copy-safe cloned snapshot of the stored state
 before the update, omitted when no prior state existed, so subscribers may
 retain or mutate it after delivery.
-`SpineServices` adapts built-context command buses and stands to the first real
+`SpineServices` adapts built-context command buses and stands to the real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing
@@ -362,7 +362,7 @@ fields, including nested message fields; missing ID filters match all IDs.
 Filtered topics deliver matching new states and emit `no_longer_matching` when
 the previous state matched but the new state does not. `Topic.field_mask` is
 applied to delivered states, not to `no_longer_matching` updates. Event topics
-support `include_all = true` in this runtime slice and stream wire-level
+support `include_all = true` in this runtime implementation and stream wire-level
 `event_updates` with cloned framework `Event` envelopes. Application handlers
 continue to receive generated domain event messages; framework envelopes remain
 service/runtime data. Client rejection updates redact rejected-command payload
@@ -373,7 +373,7 @@ instance over the same storage factory can activate a previously returned ID.
 Activation compare-and-sets the exact inactive row to a unique-owner claim and
 retains that claim while the local stream is active. Single-tenant subscriptions reject tenant
 options; multitenant subscriptions require `tenantId`; state and event
-delivery are scoped to that tenant slice. Unknown, canceled, expired,
+delivery are scoped to that tenant scope. Unknown, canceled, expired,
 malformed, inconsistent, and already active IDs complete without updates.
 Cancellation of a missing, unknown, already-canceled, or already-cleaned
 subscription returns OK only after admission to the bounded unknown-removal
@@ -420,7 +420,7 @@ closes context transport intake and drains accepted work, then detaches and
 quiesces environment delivery before closing contexts and explicit resources.
 Shared facilities remain open when a server closes. Network or context-intake
 close failure is a hard gate: delivery detach and dependency cleanup do not begin
-until a later `close()` retry completes that phase. After the hard gate,
+until a later `close()` retry completes that step. After the hard gate,
 remaining phases are attempted in order; failures are combined, and a later
 close retries only unfinished cleanup. The API deliberately hides ZeroMQ, IPC
 endpoint names, worker/process supervision, durable scheduling, and Java-style
@@ -460,7 +460,7 @@ its cardinality and requires an explicit run shard. The returned public view has
 no constructor, direct drain, exact-message drain, attempt history, or shard
 registry. A public finite `Delivery.run()` observes pages, normal already-owned
 pickup, failures, and completion without adding a production scheduler, retry
-policy, catch-up facility, or remote topology. This slice persists inbox messages and shard
+policy, catch-up facility, or remote topology. This implementation persists inbox messages and shard
 lease records through `StorageFactory` / `RecordStorage`, deduplicates live
 inbox writes durably by `(signalId, inboxId)` through small internal guard
 records, and keeps shard ordering metadata on each message with receive time
@@ -515,12 +515,12 @@ claim compare-and-set using the storage clock as abandoned-work recovery. If a
 stale owner continues after losing renewal, endpoint callback side effects are
 at-least-once/replay-safe: later final fencing can prevent stale finalization,
 but it cannot uninvoke a callback that already ran. Broader production
-supervision, cancellation, and retry-monitor policy are outside the initial
-release; no future policy is committed.
+supervision, cancellation, and retry-monitor policy are not provided by this
+API.
 The package does not expose a raw worker callback API; framework-owned replay
 stays behind validated endpoints. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still starve
-renewal; this slice treats that as an in-process trust-boundary limitation rather
+renewal; this implementation treats that as an in-process trust-boundary limitation rather
 than timer-protected preemption.
 `InboxReadOptions.limit` remains the page-size control for a single ordered
 inbox read and must be positive and at most `1000`.
@@ -533,13 +533,13 @@ rows, or caller snapshots that do not match the stored message;
 already-delivered matching rows are returned idempotently. Built contexts use
 this storage boundary internally for process-manager command rows,
 process-manager event reaction rows, and live projection subscriber rows. This
-slice does not run process-wide transport-backed scheduler workers, retry
+implementation does not run process-wide transport-backed scheduler workers, retry
 monitors, conveyor/stations, generic repository delivery, projection catch-up
 through inbox storage, broad production lifecycle, transport retries, example
 app work, or production read-side catch-up workers.
 Event import and aggregate importers are removed from the active plan by
 upstream ADR 0001 D1. Aggregate
-`@React` handlers are ordinary generated reactor handlers with current
+`@React` handlers are ordinary generated reactor handlers with
 transaction semantics, not event-sourcing import/applier work.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
@@ -553,7 +553,7 @@ validation exports include `validateEntityStateTransition()`,
 `EntityStateTransitionValidationResult` for built-in `(set_once)` checks derived
 from descriptor metadata and shaped through the core transition validation
 facade. Repeated, map-valued, and explicit optional `(set_once)` fields are
-unsupported in this slice and fail closed with field-specific validation
+unsupported here and fail closed with field-specific validation
 violations. The transaction kernel exports `EntityTransaction`,
 `createEntityTransaction()`, typed draft/commit/rollback result contracts,
 version metadata contracts, lifecycle flags, status/mutator/helper operation
@@ -561,7 +561,7 @@ types, `EntityTransactionStateError`, and
 `DraftStateError`. This public surface is an in-memory,
 framework-owned draft/result boundary over one entity state. It is intentionally
 not a storage-backed transaction API, repository unit of work, async-local
-transaction context, dispatch phase, or lifecycle-event emitter. It is a
+transaction context, dispatch step, or lifecycle-event emitter. It is a
 framework-owned compatibility seam, not an end-user manual-transaction API.
 Application handlers must not start, commit, roll back, or otherwise control
 transactions manually. Lifecycle
@@ -672,7 +672,7 @@ frozen copy-safe metadata for event subscribers, event reactors, and event
 applications grouped by event type. Subscriber and reactor lookups preserve
 Spine fan-out semantics and do not reject multiple receivers for the same event
 type. Domestic/external event classification and integration-broker
-wanted-event publication remain outside the current surface because TypeScript
+wanted-event publication remain outside this surface because TypeScript
 handler metadata has no external-event marker. It is not an event bus, integration
 broker, import bus, event store, delivery mechanism, stand, subscription
 service, command-result subscription, dispatcher, router, event posting API,
@@ -683,10 +683,12 @@ Bus exports include `CommandBus`, `CommandDispatcher`, `EventBus`, and
 queues accepted work asynchronously, and routes by enclosed message type URL to
 exactly one registered dispatcher, rejecting duplicate dispatcher registration
 for a command message type. `EventBus` accepts generated Spine `Event`
-envelopes and uses `EventStore.acceptThenAppend()` to precheck event identity,
+envelopes whose schemas are known through a registered repository producer or
+dispatcher. It uses `EventStore.acceptThenAppend()` to precheck event identity,
 run matching dispatcher `accept()` hooks, and append with one captured storage
 context. It then calls `dispatch()` in deterministic registration order. Events
-with no registered dispatcher are stored and resolve. If the identity precheck
+with no matching dispatcher are stored and resolve when their schema is known.
+If the identity precheck
 or dispatcher acceptance fails, the event is not stored by the bus. If append
 fails, no `dispatch()` method runs, but dispatcher `accept()` hooks may already
 have run. If dispatch rejects, earlier dispatchers may already have run, later
@@ -761,7 +763,7 @@ or end-user envelope APIs.
 It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
 does not reintroduce `@Apply`, and does not expose manual transaction-control
 APIs.
-Semantic tags now flow into runtime routing topics in this slice:
+Semantic tags flow into runtime routing topics in this implementation:
 command topics copy command-assignee entity tags, and event topics copy the
 deduplicated union of receiver entity tags. Broader handler materialization and
 application-owned semantic-tag registration remain outside this runtime
@@ -772,7 +774,7 @@ The public runtime closure smoke path composes these exports with
 `createRoutingPlan()` to prove the metadata and lifecycle
 interfaces fit together. That composition produces context-scoped metadata,
 command/event readiness views, immutable runtime-routing plans, and
-deterministic runtime state only. The public `Server` export added later is a
+deterministic runtime state only. The public `Server` export is a
 separate local HTTP/2 service host over `SpineServices`; it does not broaden the
 runtime-routing plan into service routing, command/event/import bus behavior,
 handler invocation, read-side execution, transport lifecycle, validation,
@@ -831,7 +833,7 @@ check before row access.
 handles for one logical backing store; `next: undefined` is a conditional
 delete, and `false` means the expected value did not match so no mutation was
 applied. `EventStore` is a framework delegate over
-`RecordStorage<EventId, Event>` and is storage-only in this slice: it persists
+`RecordStorage<EventId, Event>` and is storage-only here: it persists
 and reads generated Spine events, rejects missing, blank, or duplicate event
 IDs on the local append path, and can run `OnEventAccepted` between precheck
 and append with one captured storage context. It does not dispatch events,
@@ -865,7 +867,7 @@ then exposes only the
 strings, multipart frames, and native binding types remain absent from the root
 API; remote transport, broker topology, process supervision, worker
 registration handshakes, delivery retries, and broad health checks are outside
-the initial release. The adapter provides no exactly-once, durable-redelivery,
+this API. The adapter provides no exactly-once, durable-redelivery,
 retry, restart, or remote-delivery guarantee. For transport topics marked
 `command` or `event`, the private adapter uses generated Buf Protobuf binary;
 the reserved `query`, `subscription`, and `system` kinds have no Protobuf wire
@@ -919,7 +921,7 @@ the sandbox. `requestTimeoutMs` defaults to 2,000 milliseconds and accepts only
 integers from 1 through 2,147,483,647; invalid values fail before filesystem or
 socket work. It bounds request/reply send and receive but does not actively
 cancel an already-sent request, while `receiveTimeoutMs` remains the separate
-background-worker setting. Runtime transport tests now include a native
+background-worker setting. Runtime transport tests include a native
 ZeroMQ-backed command and event callback proof through the public
 `SignalTransport` contract.
 

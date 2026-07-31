@@ -57,7 +57,9 @@ interface SizedRevisionMetadata {
   readonly size: number;
 }
 
-/** Compile-only negative declaration fixtures for intentionally absent APIs. */
+/**
+ * Compile-only negative declaration fixtures for intentionally absent APIs.
+ */
 function verifyHistoryDeclarationAbsence(projection: TestProjection): void {
   // @ts-expect-error Projection deliberately has no event-history API.
   // eslint-disable-next-line @typescript-eslint/no-unsafe-call

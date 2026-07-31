@@ -4,9 +4,9 @@ import {
   ChatMessageViewSchema,
   ChatRoomIdSchema,
   MessageIdSchema,
-} from "@spine-event-engine/example-chat-model/generated/spine/example/chat/v1/chat_pb.js";
+} from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
 import { AnyMessages } from "@spine-event-engine/core";
-import { UserIdSchema } from "@spine-event-engine/example-chat-users-model/generated/spine/example/users/v1/users_pb.js";
+import { UserIdSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/users_pb.js";
 import { createRoot } from "react-dom/client";
 
 import { ChatBrowserApp, type BrowserChatSession } from "./index.js";

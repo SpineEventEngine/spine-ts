@@ -17,8 +17,12 @@ import type {
   SessionResolver,
 } from "../index.js";
 
-/** Clock used by signed sessions; values are Unix epoch milliseconds. */
+/**
+ * Clock used by signed sessions; values are Unix epoch milliseconds.
+ */
 export interface SignedSessionClock {
+  // prettier-ignore
+
   /**
    * Returns a safe Unix epoch millisecond in the Protobuf Timestamp range.
    * Invalid values and exceptions fail closed.
@@ -26,35 +30,66 @@ export interface SignedSessionClock {
    */
   now(): number;
 }
+
 /**
  * Creates 16 random bytes for a JWT ID.
  * @param length The required 16-byte length.
  * @returns The generated identifier bytes.
  */
 export type SignedSessionRandom = (length: 16) => Uint8Array;
-/** An active P-256 signing key. */
+
+/**
+ * An active P-256 signing key.
+ */
 export interface SignedSessionSigningKey {
-  /** Non-empty local key ID of at most 256 characters. */
+  // prettier-ignore
+
+  /**
+   * Non-empty local key ID of at most 256 characters.
+   */
   readonly kid: string;
-  /** Caller-owned P-256 private `KeyObject`; the strategy imports an owned copy. */
+
+  /**
+   * Caller-owned P-256 private `KeyObject`; the strategy imports an owned copy.
+   */
   readonly privateKey: KeyObject;
 }
-/** A P-256 public key retained for tokens issued before rotation. */
+
+/**
+ * A P-256 public key retained for tokens issued before rotation.
+ */
 export interface SignedSessionVerificationKey {
-  /** Non-empty local key ID of at most 256 characters. */
+  // prettier-ignore
+
+  /**
+   * Non-empty local key ID of at most 256 characters.
+   */
   readonly kid: string;
-  /** Caller-owned P-256 public `KeyObject`; the strategy imports an owned copy. */
+
+  /**
+   * Caller-owned P-256 public `KeyObject`; the strategy imports an owned copy.
+   */
   readonly publicKey: KeyObject;
 }
-/** Optional application-owned, durable token revocation capability. */
+
+/**
+ * Optional application-owned, durable token revocation capability.
+ */
 export interface SignedTokenRevocation {
-  /** Discriminator which makes immediate revocation support explicit. */
+  // prettier-ignore
+
+  /**
+   * Discriminator which makes immediate revocation support explicit.
+   */
   readonly kind: "supported";
-  /** Checks whether the exact 16-byte token ID is revoked.
+
+  /**
+   * Checks whether the exact 16-byte token ID is revoked.
    * @param jti The token identifier to check.
    * @returns Whether the token is revoked.
    */
   isRevoked(jti: string): Promise<boolean>;
+
   /**
    * Stores the exact token ID through its Protobuf Timestamp expiry.
    * The application owns persistence, cleanup, availability, and atomicity.
@@ -64,40 +99,85 @@ export interface SignedTokenRevocation {
    */
   revoke(jti: string, expiresAt: Timestamp): Promise<void>;
 }
-/** Finite configuration for locally-issued ES256 bearer sessions. */
+
+/**
+ * Finite configuration for locally-issued ES256 bearer sessions.
+ */
 export interface SignedSessionsOptions {
-  /** Exact non-empty token issuer, at most 256 characters. */
+  // prettier-ignore
+
+  /**
+   * Exact non-empty token issuer, at most 256 characters.
+   */
   readonly issuer: string;
-  /** Exact non-empty single token audience, at most 256 characters. */
+
+  /**
+   * Exact non-empty single token audience, at most 256 characters.
+   */
   readonly audience: string;
-  /** Initial active P-256 signing key. */
+
+  /**
+   * Initial active P-256 signing key.
+   */
   readonly activeKey: SignedSessionSigningKey;
+
   /**
    * Initially retired P-256 verification keys; defaults to none.
    * Each is retained for `ttlSeconds + clockSkewSeconds` after construction.
    */
   readonly retiredKeys?: readonly SignedSessionVerificationKey[];
-  /** Optional application-owned immediate-revocation capability; defaults to expiry-only. */
+
+  /**
+   * Optional application-owned immediate-revocation capability; defaults to expiry-only.
+   */
   readonly revocation?: SignedTokenRevocation;
-  /** Unix-millisecond clock; defaults to `Date.now`. */
+
+  /**
+   * Unix-millisecond clock; defaults to `Date.now`.
+   */
   readonly clock?: SignedSessionClock;
-  /** Random callback called with 16 and required to return 16 bytes; defaults to Node crypto. */
+
+  /**
+   * Random callback called with 16 and required to return 16 bytes; defaults to Node crypto.
+   */
   readonly randomBytes?: SignedSessionRandom;
-  /** Positive safe token lifetime in seconds; defaults to 28,800. */
+
+  /**
+   * Positive safe token lifetime in seconds; defaults to 28,800.
+   */
   readonly ttlSeconds?: number;
-  /** Non-negative safe temporal tolerance in seconds; defaults to 60. */
+
+  /**
+   * Non-negative safe temporal tolerance in seconds; defaults to 60.
+   */
   readonly clockSkewSeconds?: number;
-  /** Positive safe input and output token character bound; defaults to 8,192. */
+
+  /**
+   * Positive safe input and output token character bound; defaults to 8,192.
+   */
   readonly maxTokenCharacters?: number;
-  /** Positive safe active-plus-retired key bound; defaults to 16. */
+
+  /**
+   * Positive safe active-plus-retired key bound; defaults to 16.
+   */
   readonly maxKeys?: number;
-  /** Positive safe principal-ID character bound; defaults to 256. */
+
+  /**
+   * Positive safe principal-ID character bound; defaults to 256.
+   */
   readonly maxPrincipalIdCharacters?: number;
-  /** Non-negative safe attribute count bound; defaults to 32. */
+
+  /**
+   * Non-negative safe attribute count bound; defaults to 32.
+   */
   readonly maxAttributes?: number;
-  /** Non-negative safe total attribute name/value character bound; defaults to 4,096. */
+
+  /**
+   * Non-negative safe total attribute name/value character bound; defaults to 4,096.
+   */
   readonly maxAttributeCharacters?: number;
 }
+
 /**
  * Result of issuing a signed session.
  *
@@ -106,20 +186,38 @@ export interface SignedSessionsOptions {
  */
 export type SignedSessionIssueResult =
   | {
-      /** Identifies successful token issuance. */
+      // prettier-ignore
+
+      /**
+       * Identifies successful token issuance.
+       */
       readonly kind: "issued";
-      /** Provides the issued bearer credential. */
+
+      /**
+       * Provides the issued bearer credential.
+       */
       readonly credential: BearerCredential;
-      /** Provides the session represented by the credential. */
+
+      /**
+       * Provides the session represented by the credential.
+       */
       readonly session: ResolvedSession;
     }
   | {
-      /** Identifies rejected token issuance. */
+      // prettier-ignore
+
+      /**
+       * Identifies rejected token issuance.
+       */
       readonly kind: "rejected";
-      /** Explains why token issuance was rejected. */
+
+      /**
+       * Explains why token issuance was rejected.
+       */
       readonly reason:
         "closed" | "clock-failure" | "entropy-failure" | "principal-invalid" | "signing-failure";
     };
+
 /**
  * Result of atomically changing the active signing key.
  *
@@ -127,16 +225,28 @@ export type SignedSessionIssueResult =
  */
 export type SignedSessionRotationResult =
   | {
-      /** Identifies successful signing-key rotation. */
+      // prettier-ignore
+
+      /**
+       * Identifies successful signing-key rotation.
+       */
       readonly kind: "rotated";
     }
   | {
-      /** Identifies rejected signing-key rotation. */
+      // prettier-ignore
+
+      /**
+       * Identifies rejected signing-key rotation.
+       */
       readonly kind: "rejected";
-      /** Explains why signing-key rotation was rejected. */
+
+      /**
+       * Explains why signing-key rotation was rejected.
+       */
       readonly reason:
         "closed" | "clock-failure" | "invalid-key" | "duplicate-key" | "key-capacity-exceeded";
     };
+
 /**
  * Enumeration-safe result of a signed-session logout.
  *
@@ -144,7 +254,11 @@ export type SignedSessionRotationResult =
  * `unavailable` means the configured revocation store failed.
  */
 export interface SignedSessionLogoutResult {
-  /** Reports the immediate-revocation outcome. */
+  // prettier-ignore
+
+  /**
+   * Reports the immediate-revocation outcome.
+   */
   readonly kind: "revoked" | "expiryOnly" | "unavailable";
 }
 
@@ -193,7 +307,8 @@ export class SignedSessions implements SessionResolver {
   #revocation: SignedTokenRevocation | undefined;
   #closed = false;
 
-  /** Creates signed sessions with copied finite configuration and P-256 keys.
+  /**
+   * Creates signed sessions with copied finite configuration and P-256 keys.
    * @param options The issuer, key ring, limits, clock, entropy, and revocation settings.
    */
   constructor(options: SignedSessionsOptions) {
@@ -247,7 +362,8 @@ export class SignedSessions implements SessionResolver {
     }
   }
 
-  /** Creates one compact ES256 bearer token inside configured identity bounds.
+  /**
+   * Creates one compact ES256 bearer token inside configured identity bounds.
    * @param principal The authenticated principal to encode.
    * @returns The issuance outcome and, when accepted, credential and session.
    */
@@ -413,6 +529,7 @@ export class SignedSessions implements SessionResolver {
       return this.#closed ? { kind: "expiryOnly" } : { kind: "unavailable" };
     }
   }
+
   /**
    * Closes the resolver and clears active, verification-key, and revocation references.
    * Node `KeyObject` memory cannot be explicitly zeroed.
@@ -545,7 +662,9 @@ export class SignedSessions implements SessionResolver {
   }
 }
 
-/** Owns finite signed-session validation, serialization, and result values. */
+/**
+ * Validates, serializes, and constructs finite signed-session values.
+ */
 const SignedSessionValues = Object.freeze({
   rejected(reason: IssueRejectionReason): SignedSessionIssueResult {
     return { kind: "rejected", reason };

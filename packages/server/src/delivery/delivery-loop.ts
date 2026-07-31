@@ -14,7 +14,9 @@ import type { InboxMessage, InboxReadContinuation } from "./inbox.js";
 import type { ShardIndex } from "./shard-index.js";
 import type { DeliveryOperationOptions } from "./delivery-ports.js";
 
-/** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
+/**
+ * Small local repeat loop around the direct `Delivery.drain()` worker boundary.
+ */
 export class DeliveryLoop {
   readonly #delivery: Delivery;
   readonly #shard: ShardIndex;
@@ -79,12 +81,16 @@ export class DeliveryLoop {
     return running;
   }
 
-  /** Stops future drain starts without interrupting a current `Delivery.drain()`. */
+  /**
+   * Stops future drain starts without interrupting a current `Delivery.drain()`.
+   */
   stop(): void {
     this.#stopped = true;
   }
 
-  /** Closes the loop after its current drain, if any, finishes.
+  /**
+   * Closes the loop after its current drain, if any, finishes.
+   *
    * @returns A promise that settles after the active run finishes and may reject.
    */
   async close(): Promise<void> {
@@ -222,6 +228,7 @@ export class DeliveryLoop {
           ? {}
           : { resume: this.#resume }),
         ...(this.#onStarted === undefined ? {} : { onStarted: this.#onStarted }),
+        ...(this.#completeAdmittedEmptyEpoch ? { requirePending: true } : {}),
       },
     );
   }
@@ -260,74 +267,151 @@ interface TerminalTransition {
   readonly completedEpoch: boolean;
 }
 
-/** Delivery loop construction options. */
+/**
+ * Delivery loop construction options.
+ */
 export interface DeliveryLoopOptions {
-  /** Delivery owner whose `drain()` method provides the durable worker boundary. */
+  // prettier-ignore
+
+  /**
+   * Delivery owner whose `drain()` method provides the durable worker boundary.
+   */
   readonly delivery: Delivery;
-  /** Shard to drain repeatedly. */
+
+  /**
+   * Shard to drain repeatedly.
+   */
   readonly shard: ShardIndex;
-  /** Worker node name used for shard pickup. */
+
+  /**
+   * Worker node name used for shard pickup.
+   */
   readonly node: string;
-  /** Optional positive accepted-work cap for each drain. */
+
+  /**
+   * Optional positive accepted-work cap for each drain.
+   */
   readonly limit?: number;
+
   /**
    * Maximum failed observations before the loop stops. Successful exhaustion
    * marking consumes no failure budget; a failed exhaustion-time mark and
    * existing failures do. Defaults to one; capped at 1000.
    */
   readonly maxFailures?: number;
-  /** Framework endpoint callback invoked for each available supported worker row. */
+
+  /**
+   * Framework endpoint callback invoked for each available supported worker row.
+   */
   readonly onMessage: OnDeliveryMessage;
-  /** Optional operation cancellation/deadline propagated to every drain port call. */
+
+  /**
+   * Optional operation cancellation/deadline propagated to every drain port call.
+   */
   readonly operation?: DeliveryOperationOptions;
-  /** Observes successful shard pickup for package-owned work. */
+
+  /**
+   * Observes successful shard pickup for package-owned work.
+   */
   readonly onStarted?: () => void;
-  /** Completes an admitted empty epoch without acquiring shard ownership. */
+
+  /**
+   * Completes an admitted empty epoch without acquiring shard ownership.
+   */
   readonly completeAdmittedEmptyEpoch?: boolean;
 }
 
-/** Delivery loop stop reason. */
+/**
+ * Delivery loop stop reason.
+ */
 export type DeliveryLoopStatus = "IDLE" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
 
-/** Aggregate statistics for one delivery loop run. */
+/**
+ * Aggregate statistics for one delivery loop run.
+ */
 export interface DeliveryLoopRun {
-  /** Why the loop stopped. */
+  // prettier-ignore
+
+  /**
+   * Why the loop stopped.
+   */
   readonly status: DeliveryLoopStatus;
-  /** Number of `Delivery.drain()` calls started by this loop run. */
+
+  /**
+   * Number of `Delivery.drain()` calls started by this loop run.
+   */
   readonly runs: number;
-  /** Number of pending rows read across all drains. */
+
+  /**
+   * Number of pending rows read across all drains.
+   */
   readonly processed: number;
-  /** Number of rows accepted for endpoint work across all drains. */
+
+  /**
+   * Number of rows accepted for endpoint work across all drains.
+   */
   readonly accepted: number;
-  /** Number of rows delivered across all drains. Unsupported labels are skipped pending. */
+
+  /**
+   * Number of rows delivered across all drains. Unsupported labels are skipped pending.
+   */
   readonly delivered: number;
+
   /**
    * Number of observed endpoint, lease/fencing, status-update, cleanup, or
    * failed exhaustion-time mark observations.
    */
   readonly failed: number;
-  /** Per-message failure observations retained only in the returned run result. */
+
+  /**
+   * Per-message failure observations retained only in the returned run result.
+   */
   readonly failures: readonly DeliveryFailure[];
 }
 
-/** Describes the last safely completed drain for the admitted epoch. */
+/**
+ * Describes the last safely completed drain for the admitted epoch.
+ */
 export interface DeliveryLoopProgress {
-  /** Counts completed drains. */
+  // prettier-ignore
+
+  /**
+   * Counts completed drains.
+   */
   readonly runs: number;
-  /** Counts examined inbox rows. */
+
+  /**
+   * Counts examined inbox rows.
+   */
   readonly processed: number;
-  /** Counts callback-accepted rows. */
+
+  /**
+   * Counts callback-accepted rows.
+   */
   readonly accepted: number;
-  /** Counts durably delivered rows. */
+
+  /**
+   * Counts durably delivered rows.
+   */
   readonly delivered: number;
-  /** Counts failed observations. */
+
+  /**
+   * Counts failed observations.
+   */
   readonly failed: number;
-  /** Lists retained failure facts. */
+
+  /**
+   * Lists retained failure facts.
+   */
   readonly failures: readonly DeliveryFailure[];
 }
 
-/** Provides package-local loop evidence access. */
+/**
+ * Provides package-local loop evidence access.
+ */
 export interface DeliveryLoopAccess {
+  // prettier-ignore
+
   /**
    * Reads the latest safe progress from a loop.
    *
@@ -343,9 +427,15 @@ interface DeliveryLoopInternals {
 
 const deliveryLoopInternals = new WeakMap<DeliveryLoop, DeliveryLoopInternals>();
 
-/** Provides package-local loop evidence access. */
+/**
+ * Provides package-local loop evidence access.
+ */
 export const deliveryLoopAccess: DeliveryLoopAccess = Object.freeze({
-  /** Reads the latest safe progress from a loop. */
+  // prettier-ignore
+
+  /**
+   * Reads the latest safe progress from a loop.
+   */
   progress(loop: DeliveryLoop) {
     const internals = deliveryLoopInternals.get(loop);
     if (internals === undefined) {
@@ -476,7 +566,9 @@ class DeliveryAdmissionSweep {
   }
 }
 
-/** Groups immutable loop result, snapshot, and validation operations. */
+/**
+ * Groups immutable loop result, snapshot, and validation operations.
+ */
 const DeliveryLoopValues = Object.freeze({
   continue(resumableScanRuns: number): ContinueTransition {
     return Object.freeze({ kind: "CONTINUE", resumableScanRuns });

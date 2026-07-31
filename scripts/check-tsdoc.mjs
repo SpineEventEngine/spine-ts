@@ -116,7 +116,23 @@ const callableVerbs = new Set([
   "throws",
   "unpacks",
 ]);
-const sourceExtension = /\.(?:cts|mts|ts|tsx)$/;
+const semanticSourceExtension = /\.(?:cts|mts|ts|tsx)$/;
+const handwrittenSourceExtension = /\.(?:cts|mts|ts|tsx|js|jsx|mjs|cjs)$/;
+const internalChronologyPattern =
+  /\b(?:T-\d{4,}[A-Za-z]*|wave\s+\d+[A-Za-z]?|phase\s+\d+|slice\s+\d+|milestone\s+\w+)\b/iu;
+const generatedTsdocTargets = new Set(["examples/chat/app/src/model-registry.ts"]);
+const layoutRules = new Set([
+  "blank-first-line",
+  "tsdoc-block-tag-gap",
+  "tsdoc-block-tag-spacing",
+  "consecutive-tsdoc-blank-line",
+  "hyphenated-param",
+  "inline-tsdoc-tag",
+  "missing-tsdoc-blank-line",
+  "tsdoc-summary-spacing",
+  "tsdoc-block-opener",
+  "vague-summary",
+]);
 const remediationPartitions = [
   "T-0080D",
   "T-0080E",
@@ -161,8 +177,10 @@ function scanTsdoc(root) {
     const sourcePath = join(root, file);
     try {
       const resolved = realpathSync(sourcePath);
-      if (isConfined(root, resolved)) confined.push({ file, sourcePath });
-      else failures.push({ rule: "path-confinement", file, name: "source" });
+      if (isConfined(root, resolved)) {
+        scanBlockLayout(readFileSync(resolved, "utf8"), file, failures);
+        if (isSemanticSource(file)) confined.push({ file, sourcePath: resolved });
+      } else failures.push({ rule: "path-confinement", file, name: "source" });
     } catch {
       failures.push({ rule: "path-confinement", file, name: "source" });
     }
@@ -200,9 +218,12 @@ function isConfined(root, candidate) {
 function applyDebt(root, failures) {
   const debt = readDebt(root);
   if (debt.size === 0) return failures;
-  const observed = new Set(failures.map(failureKey));
+  const eligibleFailures = failures.filter(isDebtEligibleFailure);
+  const observed = new Set(eligibleFailures.map(failureKey));
   const stale = [...debt].filter((entry) => !observed.has(entry));
-  const newFailures = failures.filter((failure) => !debt.has(failureKey(failure)));
+  const newFailures = failures.filter(
+    (failure) => !isDebtEligibleFailure(failure) || !debt.has(failureKey(failure)),
+  );
   return [
     ...newFailures,
     ...stale.map(parseDebtKey).map((failure) => ({ ...failure, rule: "stale-debt" })),
@@ -239,7 +260,7 @@ function readDebt(root) {
       ) {
         throw new Error(`Malformed TSDoc debt entry: ${relative(root, partition)}`);
       }
-      if (!isAuthoredSource(value.file) || value.file.includes("..") || value.file.includes("\\")) {
+      if (!isDebtEligibleFailure(value) || value.file.includes("..") || value.file.includes("\\")) {
         throw new Error(`Out-of-scope TSDoc debt entry: ${relative(root, partition)}`);
       }
       if (debtPartition(value.file) !== filename.replace(/\.json$/, "")) {
@@ -263,8 +284,8 @@ function debtPartition(file) {
   if (/^examples\/chat\/(?:app|web)\//.test(file)) return "T-0080K";
   if (/^examples\/chat\/(?:model|users-model)\//.test(file)) return "T-0080J";
   if (/^examples\/todo\//.test(file)) return "T-0080L";
-  if (/^examples\/project-management\//.test(file)) return "T-0080M";
-  if (/^examples\/datastore-orders\//.test(file)) return "T-0080N";
+  if (/^examples\/projects\//.test(file)) return "T-0080M";
+  if (/^examples\/orders\//.test(file)) return "T-0080N";
   throw new Error(`No TSDoc debt partition owns ${file}`);
 }
 
@@ -301,9 +322,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
 function writeDebt(repoRoot) {
   const root = realpathSync(resolve(repoRoot));
   const debtRoot = join(root, "build-protocol", "tsdoc-debt");
-  const sourceFailures = rejectDuplicateFailures(scanTsdoc(root)).filter(
-    (failure) => failure.rule !== "duplicate-observed-failure",
-  );
+  const sourceFailures = rejectDuplicateFailures(scanTsdoc(root)).filter(isDebtEligibleFailure);
   const partitions = new Map();
   for (const failure of sourceFailures) {
     const partition = debtPartition(failure.file);
@@ -334,16 +353,181 @@ function trackedSourceFiles(root) {
     maxBuffer: 64 * 1024 * 1024,
   });
   if (result.status !== 0) throw new Error(`git ls-files failed: ${result.stderr}`);
-  return result.stdout.split("\0").filter(isAuthoredSource);
+  return result.stdout.split("\0").filter(isHandwrittenSource);
 }
 
-function isAuthoredSource(file) {
-  if (!sourceExtension.test(file) || /\.(?:test|spec)\.(?:cts|mts|ts|tsx)$/.test(file))
-    return false;
-  if (/(?:^|\/)(?:test|tests|__tests__)(?:\/|$)/.test(file)) return false;
-  if (file.includes("/generated/") || file.includes("/dist/") || file.includes("/node_modules/"))
-    return false;
-  return /^packages\/[^/]+\/src\//.test(file) || /^examples\/.+\/src\//.test(file);
+function isHandwrittenSource(file) {
+  if (!handwrittenSourceExtension.test(file)) return false;
+  if (generatedTsdocTargets.has(file)) return false;
+  if (hasExcludedPathSegment(file)) return false;
+  return !file.startsWith("packages/proto/proto/");
+}
+
+function isSemanticSource(file) {
+  return (
+    isHandwrittenSource(file) &&
+    semanticSourceExtension.test(file) &&
+    !/\.(?:test|spec)\.(?:cts|mts|ts|tsx)$/.test(file) &&
+    !/(?:^|\/)(?:test|tests|__tests__)(?:\/|$)/.test(file) &&
+    (/^packages\/[^/]+\/src\//.test(file) || /^examples\/.+\/src\//.test(file))
+  );
+}
+
+function hasExcludedPathSegment(file) {
+  return /(?:^|\/)(?:generated|dist|node_modules)(?:\/|$)/u.test(file);
+}
+
+function isDebtEligibleFailure(failure) {
+  return (
+    failure.rule !== "duplicate-observed-failure" &&
+    isSemanticSource(failure.file) &&
+    !layoutRules.has(failure.rule)
+  );
+}
+
+function scanBlockLayout(source, file, failures) {
+  if (/^(?:[ \t]*\r?\n)/u.test(source))
+    failures.push({ rule: "blank-first-line", file, name: "source" });
+  for (const { start, block } of tsdocBlocks(source, file)) {
+    const lineStart = source.lastIndexOf("\n", start - 1) + 1;
+    const lineEnd = source.indexOf("\n", start);
+    const opener = source.slice(lineStart, lineEnd < 0 ? source.length : lineEnd).trim();
+    const name = `block@${lineNumber(source, start)}`;
+    if (opener !== "/**") failures.push({ rule: "tsdoc-block-opener", file, name });
+    if (start !== 0 && !hasBlankPrecedingLine(source, lineStart))
+      failures.push({ rule: "missing-tsdoc-blank-line", file, name });
+    if (hasHyphenatedParam(block)) failures.push({ rule: "hyphenated-param", file, name });
+    if (hasDoubledSummarySpacing(block))
+      failures.push({ rule: "tsdoc-summary-spacing", file, name });
+    if (hasConsecutiveBlankDocLines(block))
+      failures.push({ rule: "consecutive-tsdoc-blank-line", file, name });
+    if (hasBlockTagGap(block)) failures.push({ rule: "tsdoc-block-tag-gap", file, name });
+    if (hasMalformedBlockTagSpacing(block))
+      failures.push({ rule: "tsdoc-block-tag-spacing", file, name });
+    if (hasInlineBlockTag(block)) failures.push({ rule: "inline-tsdoc-tag", file, name });
+    const summary = blockSummary(block);
+    if (summary !== undefined && (isPlaceholder(summary) || isVagueSummary(summary)))
+      failures.push({ rule: "vague-summary", file, name });
+    if (/^packages\/[^/]+\/src\//.test(file) && internalChronologyPattern.test(block))
+      failures.push({ rule: "internal-chronology", file, name });
+  }
+}
+
+function tsdocBlocks(source, file) {
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const blocks = new Map();
+  const visit = (node) => {
+    for (const documentation of ts.getJSDocCommentsAndTags(node)) {
+      if (!ts.isJSDoc(documentation)) continue;
+      const start = documentation.getStart(sourceFile, false);
+      blocks.set(start, { start, block: source.slice(start, documentation.getEnd()) });
+    }
+    for (const range of ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []) {
+      const block = source.slice(range.pos, range.end);
+      if (block.startsWith("/**")) blocks.set(range.pos, { start: range.pos, block });
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return [...blocks.values()].sort((left, right) => left.start - right.start);
+}
+
+function lineNumber(source, index) {
+  return source.slice(0, index).split("\n").length;
+}
+
+function hasBlankPrecedingLine(source, lineStart) {
+  const previousLineEnd = lineStart - 1;
+  const previousLineStart = source.lastIndexOf("\n", previousLineEnd - 1) + 1;
+  return /^[ \t]*\r?$/u.test(source.slice(previousLineStart, previousLineEnd));
+}
+
+function hasHyphenatedParam(block) {
+  return /@param\s+(?:\[[^\]]+\]|[\w.$-]+)\s+-\s*/u.test(block);
+}
+
+function hasDoubledSummarySpacing(block) {
+  const summary = blockDocLines(block).find((line) => {
+    const text = docLineText(line);
+    return text !== "" && !text.startsWith("@");
+  });
+  return summary !== undefined && /^\s*\*\s{2,}\S/u.test(summary);
+}
+
+function hasConsecutiveBlankDocLines(block) {
+  return /\r?\n\s*\*\s*\r?\n\s*\*\s*(?=\r?\n)/u.test(block);
+}
+
+function hasBlockTagGap(block) {
+  const lines = blockDocLines(block);
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!isBlankDocLine(lines[index])) continue;
+    const previous = nearestDocLine(lines, index, -1);
+    const next = nearestDocLine(lines, index, 1);
+    if (
+      previous !== undefined &&
+      next !== undefined &&
+      isBlockTagLine(previous) &&
+      isBlockTagLine(next)
+    )
+      return true;
+  }
+  return false;
+}
+
+function hasMalformedBlockTagSpacing(block) {
+  return blockDocLines(block).some(
+    (line) => isBlockTagLine(line) && !/^\s*\* @[\p{L}_][\w-]*/u.test(line),
+  );
+}
+
+function hasInlineBlockTag(block) {
+  return blockDocLines(block).some((line) => {
+    const text = docLineText(line);
+    return (
+      !text.startsWith("@") && /\S\s+@(?:param|returns|internal|throws|typeParam)\b/u.test(text)
+    );
+  });
+}
+
+function isBlankDocLine(line) {
+  return /^\s*\*\s*$/u.test(line);
+}
+
+function nearestDocLine(lines, start, direction) {
+  for (let index = start + direction; index >= 0 && index < lines.length; index += direction) {
+    if (!isBlankDocLine(lines[index])) return lines[index];
+  }
+  return undefined;
+}
+
+function isBlockTagLine(line) {
+  return /^\s*\*(?:@|[ \t]{1,2}@)[\p{L}_][\w-]*/u.test(line);
+}
+
+function blockDocLines(block) {
+  return block.split(/\r?\n/u).slice(1, -1);
+}
+
+function docLineText(line) {
+  return line.replace(/^\s*\*?\s?/u, "").trim();
+}
+
+function blockSummary(block) {
+  return block
+    .split(/\r?\n/u)
+    .slice(1)
+    .map((line) =>
+      line
+        .replace(/\*\/\s*$/u, "")
+        .replace(/^\s*\*?\s?/u, "")
+        .trim(),
+    )
+    .find((line) => line !== "" && !line.startsWith("@"));
+}
+
+function isVagueSummary(summary) {
+  return /^(?:owns|consists)\b/iu.test(summary);
 }
 
 function visitSource(source, file, checker, failures) {
@@ -1031,7 +1215,7 @@ function isPlaceholder(summary) {
   const normalized = summary.toLowerCase().replace(/[^a-z]/g, "");
   return (
     normalized.length === 0 ||
-    ["todo", "fixme", "tbd", "description", "comment"].includes(normalized) ||
+    ["todo", "fixme", "tbd", "description", "comment", "placeholder"].includes(normalized) ||
     /^(.)\1+$/.test(normalized)
   );
 }

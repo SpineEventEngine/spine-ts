@@ -16,7 +16,9 @@ export interface QueryProviderConformanceAdapter {
   readonly beforeRead?: () => void | Promise<void>;
 }
 
-/** Shared result and pre-provider policy fixture for every Wave 1 query adapter. */
+/**
+ * Shared result and pre-provider policy fixture for every Wave 1 query adapter.
+ */
 export async function assertQueryProviderConformance(
   adapter: QueryProviderConformanceAdapter,
 ): Promise<void> {

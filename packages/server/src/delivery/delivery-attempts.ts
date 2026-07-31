@@ -16,13 +16,18 @@ import { ShardIndex } from "./shard-index.js";
 const attemptTypeUrl = "type.spine-ts.dev/server/delivery/DeliveryAttemptRecord";
 const casRetryLimit = 8;
 const defaultReadLimit = 1_000;
-/** Limits the retained delivery-failure attempts for one inbox message. */
+
+/**
+ * Limits the retained delivery-failure attempts for one inbox message.
+ */
 export const deliveryAttemptCapacity = 100;
 const maxStoredRecordBytes = 512 * 1024;
 const maxTextBytes = 16 * 1024;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
-/** Internal durable history of supported delivery endpoint failures. */
+/**
+ * Internal durable history of supported delivery endpoint failures.
+ */
 export class DeliveryAttempts {
   readonly #context: StorageContext;
   readonly #storageFactory: StorageFactory;
@@ -30,7 +35,7 @@ export class DeliveryAttempts {
   /**
    * Opens attempt storage from one delivery storage context and factory.
    *
-   * @param options - Supplies the owning context and durable storage factory.
+   * @param options Supplies the owning context and durable storage factory.
    */
   constructor(options: DeliveryAttemptsOptions) {
     this.#context = DeliveryAttemptValues.storageContextSnapshot(options.context);
@@ -41,7 +46,7 @@ export class DeliveryAttempts {
   /**
    * Reads retained attempts in deterministic storage order.
    *
-   * @param options - Limits the read to an optional shard and bounded page size.
+   * @param options Limits the read to an optional shard and bounded page size.
    * @returns The retained attempts in storage order.
    */
   async read(options: DeliveryAttemptReadOptions = {}): Promise<readonly DeliveryAttempt[]> {
@@ -75,7 +80,7 @@ export class DeliveryAttempts {
   /**
    * Returns retained attempts for one exact inbox message.
    *
-   * @param messageId - Identifies the message whose attempts are summarized.
+   * @param messageId Identifies the message whose attempts are summarized.
    * @returns The ordered attempt history and its latest state.
    */
   async summarize(messageId: InboxMessageId): Promise<DeliveryAttemptSummary> {
@@ -93,7 +98,7 @@ export class DeliveryAttempts {
   /**
    * Records one supported endpoint failure attempt.
    *
-   * @param input - Supplies the sanitized failed-delivery details.
+   * @param input Supplies the sanitized failed-delivery details.
    * @returns A promise that resolves after the failure attempt is recorded.
    */
   async recordFailure(input: DeliveryAttemptInput): Promise<void> {
@@ -133,66 +138,142 @@ export class DeliveryAttempts {
   }
 }
 
-/** Delivery attempt storage construction options. */
+/**
+ * Delivery attempt storage construction options.
+ */
 export interface DeliveryAttemptsOptions {
-  /** Storage context owning delivery data. */
+  // prettier-ignore
+
+  /**
+   * Storage context owning delivery data.
+   */
   readonly context: StorageContext;
-  /** Storage factory used for durable delivery records. */
+
+  /**
+   * Storage factory used for durable delivery records.
+   */
   readonly storageFactory: StorageFactory;
 }
 
-/** Read filter for retained delivery attempts. */
+/**
+ * Read filter for retained delivery attempts.
+ */
 export interface DeliveryAttemptReadOptions {
-  /** Optional shard to read. */
+  // prettier-ignore
+
+  /**
+   * Optional shard to read.
+   */
   readonly shard?: ShardIndex;
-  /** Optional bounded page size. Defaults to 1000. */
+
+  /**
+   * Optional bounded page size. Defaults to 1000.
+   */
   readonly limit?: number;
 }
 
-/** One retained, sanitized delivery endpoint attempt. */
+/**
+ * One retained, sanitized delivery endpoint attempt.
+ */
 export interface DeliveryAttempt {
-  /** Durable inbox message identity. */
+  // prettier-ignore
+
+  /**
+   * Durable inbox message identity.
+   */
   readonly messageId: InboxMessageId;
-  /** Target inbox identity. */
+
+  /**
+   * Target inbox identity.
+   */
   readonly inboxId: InboxId;
-  /** Original signal identity. */
+
+  /**
+   * Original signal identity.
+   */
   readonly signalId: string;
-  /** Supported endpoint label. */
+
+  /**
+   * Supported endpoint label.
+   */
   readonly label: DeliveryEndpointMessage["label"];
-  /** Delivery shard. */
+
+  /**
+   * Delivery shard.
+   */
   readonly shard: ShardIndex;
-  /** Worker node that attempted delivery. */
+
+  /**
+   * Worker node that attempted delivery.
+   */
   readonly node: string;
-  /** Time the framework recorded the failed attempt. */
+
+  /**
+   * Time the framework recorded the failed attempt.
+   */
   readonly attemptedAt: Date;
-  /** Whether endpoint callback work had been accepted. */
+
+  /**
+   * Whether endpoint callback work had been accepted.
+   */
   readonly accepted: boolean;
-  /** Stable framework stage where the failure was observed. */
+
+  /**
+   * Stable framework stage where the failure was observed.
+   */
   readonly stage: DeliveryFailureStage;
-  /** Stable bounded reason for retry policy. */
+
+  /**
+   * Stable bounded reason for retry policy.
+   */
   readonly reason: DeliveryFailureReason;
 }
 
-/** Internal exact-message view over retained delivery attempts. */
+/**
+ * Internal exact-message view over retained delivery attempts.
+ */
 export interface DeliveryAttemptSummary {
-  /** Retained attempts for the message in ascending attempt sequence. */
+  // prettier-ignore
+
+  /**
+   * Retained attempts for the message in ascending attempt sequence.
+   */
   readonly attempts: readonly DeliveryAttempt[];
-  /** Number of retained attempts for the message. */
+
+  /**
+   * Number of retained attempts for the message.
+   */
   readonly count: number;
-  /** Latest retained attempt by sequence, when present. */
+
+  /**
+   * Latest retained attempt by sequence, when present.
+   */
   readonly latestAttempt: DeliveryAttempt | undefined;
-  /** Latest retained failure stage, when present. */
+
+  /**
+   * Latest retained failure stage, when present.
+   */
   readonly latestStage: DeliveryFailureStage | undefined;
-  /** Latest retained failure reason, when present. */
+
+  /**
+   * Latest retained failure reason, when present.
+   */
   readonly latestReason: DeliveryFailureReason | undefined;
-  /** Latest retained accepted flag, when present. */
+
+  /**
+   * Latest retained accepted flag, when present.
+   */
   readonly latestAccepted: boolean | undefined;
 }
 
-/** Stable delivery failure stage retained for retry policy. */
+/**
+ * Stable delivery failure stage retained for retry policy.
+ */
 export type DeliveryFailureStage = "CLAIM" | "LEASE" | "ENDPOINT" | "CLEANUP" | "STATUS_UPDATE";
 
-/** Stable delivery failure reason retained for retry policy. */
+/**
+ * Stable delivery failure reason retained for retry policy.
+ */
 export type DeliveryFailureReason =
   | "CLAIM_FAILED"
   | "LEASE_INACTIVE"
@@ -200,19 +281,40 @@ export type DeliveryFailureReason =
   | "CLEANUP_FAILED"
   | "STATUS_UPDATE_FAILED";
 
-/** Internal input for recording one failed supported endpoint attempt. */
+/**
+ * Internal input for recording one failed supported endpoint attempt.
+ */
 export interface DeliveryAttemptInput {
-  /** Supported endpoint message snapshot. */
+  // prettier-ignore
+
+  /**
+   * Supported endpoint message snapshot.
+   */
   readonly message: DeliveryEndpointMessage;
-  /** Worker node that attempted delivery. */
+
+  /**
+   * Worker node that attempted delivery.
+   */
   readonly node: string;
-  /** Time the framework records the failed attempt. */
+
+  /**
+   * Time the framework records the failed attempt.
+   */
   readonly attemptedAt: Date;
-  /** Whether endpoint callback work had been accepted. */
+
+  /**
+   * Whether endpoint callback work had been accepted.
+   */
   readonly accepted: boolean;
-  /** Stable framework stage where the failure was observed. */
+
+  /**
+   * Stable framework stage where the failure was observed.
+   */
   readonly stage: DeliveryFailureStage;
-  /** Stable bounded reason for retry policy. */
+
+  /**
+   * Stable bounded reason for retry policy.
+   */
   readonly reason: DeliveryFailureReason;
 }
 

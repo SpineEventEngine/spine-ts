@@ -32,80 +32,156 @@ import {
   type Topic,
 } from "@spine-event-engine/proto/client";
 
-/** A valid application-level command outcome. */
+/**
+ * A valid application-level command outcome.
+ */
 export type ClientOutcome =
   | Readonly<{
-      /** Identifies a successful command. */
+      // prettier-ignore
+
+      /**
+       * Identifies a successful command.
+       */
       readonly kind: "ok";
     }>
   | Readonly<{
-      /** Identifies a command that produced an application error. */
+      // prettier-ignore
+
+      /**
+       * Identifies a command that produced an application error.
+       */
       readonly kind: "error";
-      /** Carries the application error message. */
+
+      /**
+       * Carries the application error message.
+       */
       readonly error: Message;
     }>
   | Readonly<{
-      /** Identifies a command rejected by application rules. */
+      // prettier-ignore
+
+      /**
+       * Identifies a command rejected by application rules.
+       */
       readonly kind: "rejection";
-      /** Carries the rejection message. */
+
+      /**
+       * Carries the rejection message.
+       */
       readonly rejection: Message;
     }>;
 
-/** Options shared by client operations. */
+/**
+ * Options shared by client operations.
+ */
 export interface ClientOperationOptions {
-  /** Cancels the operation when aborted. */
+  // prettier-ignore
+
+  /**
+   * Cancels the operation when aborted.
+   */
   readonly signal?: AbortSignal;
 }
 
-/** Immutable context selected when a client is created. */
+/**
+ * Immutable context selected when a client is created.
+ */
 export interface ClientOptions {
-  /** Selects the tenant for all client requests. */
+  // prettier-ignore
+
+  /**
+   * Selects the tenant for all client requests.
+   */
   readonly tenant?: string | TenantId;
-  /** Selects the time zone for all client requests. */
+
+  /**
+   * Selects the time zone for all client requests.
+   */
   readonly zoneId?: string | ZoneId;
-  /** Configures runtime behavior for created subscriptions. */
+
+  /**
+   * Configures runtime behavior for created subscriptions.
+   */
   readonly subscriptions?: SubscriptionRuntimeOptions;
-  /** Updates application credentials before one reconnect attempt.
+
+  /**
+   * Updates application credentials before one reconnect attempt.
    * @param signal Cancels the refresh when the reconnect attempt ends.
    * @returns Completes after the application refresh ends.
    */
   readonly onReauthenticateBeforeReconnect?: (signal: AbortSignal) => Promise<void>;
 }
 
-/** Bounded queues, retry policy, and scheduling for subscription recovery. */
+/**
+ * Bounded queues, retry policy, and scheduling for subscription recovery.
+ */
 export interface SubscriptionRuntimeOptions {
-  /** Limits queued updates by count. */
+  // prettier-ignore
+
+  /**
+   * Limits queued updates by count.
+   */
   readonly updateBufferCapacity?: number;
-  /** Limits queued updates by serialized byte size. */
+
+  /**
+   * Limits queued updates by serialized byte size.
+   */
   readonly updateBufferByteCapacity?: number;
-  /** Limits queued lifecycle notices by count. */
+
+  /**
+   * Limits queued lifecycle notices by count.
+   */
   readonly lifecycleBufferCapacity?: number;
-  /** Configures bounded reconnect retries. */
+
+  /**
+   * Configures bounded reconnect retries.
+   */
   readonly retryPolicy?: SubscriptionRetryPolicy;
-  /** Supplies clock and wait behavior for retries. */
+
+  /**
+   * Supplies clock and wait behavior for retries.
+   */
   readonly scheduler?: SubscriptionScheduler;
 }
 
-/** Finite retry settings for retries after the initial subscription attempt. */
+/**
+ * Finite retry settings for retries after the initial subscription attempt.
+ */
 export interface SubscriptionRetryPolicy {
-  /** Limits retry attempts after the initial connection. */
+  // prettier-ignore
+
+  /**
+   * Limits retry attempts after the initial connection.
+   */
   readonly maxAttempts: number;
-  /** Limits total retry duration in milliseconds. */
+
+  /**
+   * Limits total retry duration in milliseconds.
+   */
   readonly maxElapsedMs: number;
-  /** Calculates the delay before a retry.
+
+  /**
+   * Calculates the delay before a retry.
    * @param attempt Identifies the retry attempt starting at one.
    * @returns Returns the delay in milliseconds.
    */
   delayMs(attempt: number): number;
 }
 
-/** Clock and abortable-wait seam used by deterministic reconnect scheduling. */
+/**
+ * Clock and abortable-wait seam used by deterministic reconnect scheduling.
+ */
 export interface SubscriptionScheduler {
-  /** Returns the current scheduler time in milliseconds.
+  // prettier-ignore
+
+  /**
+   * Returns the current scheduler time in milliseconds.
    * @returns Returns the current time.
    */
   now(): number;
-  /** Waits for a retry delay unless cancelled.
+
+  /**
+   * Waits for a retry delay unless cancelled.
    * @param delayMs Supplies the delay in milliseconds.
    * @param signal Cancels the wait.
    * @returns Completes when the delay ends or rejects on cancellation.
@@ -113,119 +189,241 @@ export interface SubscriptionScheduler {
   wait(delayMs: number, signal: AbortSignal): Promise<void>;
 }
 
-/** An event subscription does not perform authoritative state recovery. */
+/**
+ * An event subscription does not perform authoritative state recovery.
+ */
 export interface EventSubscriptionOptions extends ClientOperationOptions {
-  /** Identifies this as an event subscription. */
+  // prettier-ignore
+
+  /**
+   * Identifies this as an event subscription.
+   */
   readonly kind: "event";
 }
 
-/** An entity subscription supplies the query used for later authoritative recovery. */
+/**
+ * An entity subscription supplies the query used for later authoritative recovery.
+ */
 export interface EntitySubscriptionOptions extends ClientOperationOptions {
-  /** Identifies this as an entity subscription. */
+  // prettier-ignore
+
+  /**
+   * Identifies this as an entity subscription.
+   */
   readonly kind: "entity";
-  /** Builds the query used after a possible update gap.
+
+  /**
+   * Builds the query used after a possible update gap.
    * @returns Returns the authoritative entity query.
    */
   readonly authoritativeQuery: () => Query | { build(): Query };
 }
 
-/** Explicit kind and recovery information required to create a subscription. */
+/**
+ * Explicit kind and recovery information required to create a subscription.
+ */
 export type CreateSubscriptionOptions = EventSubscriptionOptions | EntitySubscriptionOptions;
 
-/** A delivered raw wire update or an authoritative entity recovery result. */
+/**
+ * A delivered raw wire update or an authoritative entity recovery result.
+ */
 export type SubscriptionDelivery =
   | Readonly<{
-      /** Identifies a live subscription update. */
+      // prettier-ignore
+
+      /**
+       * Identifies a live subscription update.
+       */
       readonly kind: "update";
-      /** Carries the live update. */
+
+      /**
+       * Carries the live update.
+       */
       readonly update: SubscriptionUpdate;
     }>
   | Readonly<{
-      /** Identifies an authoritative recovery response. */
+      // prettier-ignore
+
+      /**
+       * Identifies an authoritative recovery response.
+       */
       readonly kind: "resynchronization";
-      /** Carries the recovered query response. */
+
+      /**
+       * Carries the recovered query response.
+       */
       readonly response: QueryResponse;
     }>;
 
-/** A lifecycle state emitted independently for one logical subscription. */
+/**
+ * A lifecycle state emitted independently for one logical subscription.
+ */
 export type SubscriptionLifecycleState =
   "connecting" | "connected" | "resynchronizing" | "gapPossible" | "failed" | "closed";
 
-/** Describes one lifecycle transition for a logical subscription. */
+/**
+ * Describes one lifecycle transition for a logical subscription.
+ */
 export type SubscriptionLifecycle =
-  /** A generation is starting; `attempt` counts retries after its initial attempt. */
+  // prettier-ignore
+
+  /**
+   * A generation is starting; `attempt` counts retries after its initial attempt.
+   */
   | Readonly<{
-      /** Identifies initial connection. */
+      // prettier-ignore
+
+      /**
+       * Identifies initial connection.
+       */
       readonly state: "connecting";
-      /** Identifies this logical subscription generation. */
+
+      /**
+       * Identifies this logical subscription generation.
+       */
       readonly generation: number;
-      /** Counts retries after the initial attempt. */
+
+      /**
+       * Counts retries after the initial attempt.
+       */
       readonly attempt: number;
     }>
-  /** A non-terminal lifecycle transition, identified by its generation. */
+
+  /**
+   * A non-terminal lifecycle transition, identified by its generation.
+   */
   | Readonly<{
-      /** Identifies a non-terminal lifecycle transition. */
+      // prettier-ignore
+
+      /**
+       * Identifies a non-terminal lifecycle transition.
+       */
       readonly state: "connected" | "resynchronizing" | "gapPossible";
-      /** Identifies this logical subscription generation. */
+
+      /**
+       * Identifies this logical subscription generation.
+       */
       readonly generation: number;
     }>
-  /** A terminal cancellation for a generation. */
+
+  /**
+   * A terminal cancellation for a generation.
+   */
   | Readonly<{
-      /** Identifies normal lifecycle closure. */ readonly state: "closed";
-      /** Identifies this logical subscription generation. */ readonly generation: number;
+      // prettier-ignore
+
+      /**
+       * Identifies normal lifecycle closure.
+       */ readonly state: "closed";
+
+      /**
+       * Identifies this logical subscription generation.
+       */ readonly generation: number;
     }>
-  /** A terminal failure for a generation, carrying its exact failure object. */
+
+  /**
+   * A terminal failure for a generation, carrying its exact failure object.
+   */
   | Readonly<{
-      /** Identifies terminal lifecycle failure. */ readonly state: "failed";
-      /** Identifies this logical subscription generation. */ readonly generation: number;
-      /** Carries the terminal failure. */ readonly error: Error;
+      // prettier-ignore
+
+      /**
+       * Identifies terminal lifecycle failure.
+       */ readonly state: "failed";
+
+      /**
+       * Identifies this logical subscription generation.
+       */ readonly generation: number;
+
+      /**
+       * Carries the terminal failure.
+       */ readonly error: Error;
     }>;
 
-/** Returns fresh application-owned request metadata synchronously for one outbound call.
+/**
+ * Returns fresh application-owned request metadata synchronously for one outbound call.
  * @returns Returns headers for the outbound call.
  */
 export type OnRequestMetadata = () => HeadersInit;
 
-/** Browser factory options, including an optional per-call metadata supplier. */
+/**
+ * Browser factory options, including an optional per-call metadata supplier.
+ */
 export interface BrowserClientOptions extends ClientOptions {
-  /** Supplies request metadata for each browser transport call. */
+  // prettier-ignore
+
+  /**
+   * Supplies request metadata for each browser transport call.
+   */
   readonly onRequestMetadata?: OnRequestMetadata;
-  /** Browser Fetch credential mode for this explicit protocol transport. */
+
+  /**
+   * Browser Fetch credential mode for this explicit protocol transport.
+   */
   readonly credentials?: RequestCredentials;
 }
 
-/** Transport and request-ID source injected by an application or platform adapter. */
+/**
+ * Transport and request-ID source injected by an application or platform adapter.
+ */
 export interface ClientTransport {
-  /** Carries the Connect transport used for RPC calls. */
+  // prettier-ignore
+
+  /**
+   * Carries the Connect transport used for RPC calls.
+   */
   readonly transport: Transport;
-  /** Creates a non-empty identifier for each outbound command.
+
+  /**
+   * Creates a non-empty identifier for each outbound command.
    * @returns Returns the new request identifier.
    */
   createRequestId(): string;
-  /** Closes a platform transport owned by this client after work settles. */
+
+  /**
+   * Closes a platform transport owned by this client after work settles.
+   */
   close?(): void;
 }
 
-/** A manually activated protocol subscription. */
+/**
+ * A manually activated protocol subscription.
+ */
 export interface Subscription {
-  /** Raw updates and authoritative entity recovery results for one consumer. */
+  // prettier-ignore
+
+  /**
+   * Raw updates and authoritative entity recovery results for one consumer.
+   */
   readonly updates: AsyncIterable<SubscriptionDelivery>;
-  /** Independent lifecycle notices for one consumer. */
+
+  /**
+   * Independent lifecycle notices for one consumer.
+   */
   readonly lifecycle: AsyncIterable<SubscriptionLifecycle>;
-  /** Starts the remote subscription and makes its updates available for iteration.
+
+  /**
+   * Starts the remote subscription and makes its updates available for iteration.
    * @param options Supplies cancellation options for activation.
    * @returns Completes after remote activation ends.
    */
   activate(options?: ClientOperationOptions): Promise<void>;
-  /** Cancels local iteration and performs one bounded remote cancellation.
+
+  /**
+   * Cancels local iteration and performs one bounded remote cancellation.
    * @returns Completes after remote cancellation ends.
    */
   cancel(): Promise<void>;
 }
 
-/** Thrown for a service response that violates the frozen wire contract. */
+/**
+ * Thrown for a service response that violates the frozen wire contract.
+ */
 export class ClientProtocolError extends Error {
-  /** Creates an error for an invalid wire response.
+  // prettier-ignore
+
+  /**
+   * Creates an error for an invalid wire response.
    * @param message Explains the protocol violation.
    */
   constructor(message: string) {
@@ -234,13 +432,19 @@ export class ClientProtocolError extends Error {
   }
 }
 
-/** Internal marker selecting the terminal overflow path without inspecting error text. */
+/**
+ * Internal marker selecting the terminal overflow path without inspecting error text.
+ */
 class SubscriptionBufferOverflowError extends ClientProtocolError {}
 
-/** Internal marker for a transport stream that ended without terminal cancellation. */
+/**
+ * Internal marker for a transport stream that ended without terminal cancellation.
+ */
 class SubscriptionStreamEndedError extends ClientProtocolError {}
 
-/** Browser-safe Spine client whose transport and ID source are supplied by the caller. */
+/**
+ * Browser-safe Spine client whose transport and ID source are supplied by the caller.
+ */
 export class Client {
   readonly #owner: ClientOwner;
   readonly #tenant: TenantId | undefined;
@@ -260,7 +464,8 @@ export class Client {
     this.#subscriptions = BrowserClientValues.subscriptionRuntimeOptions(options.subscriptions);
   }
 
-  /** Creates a client from an injected transport and request-ID source.
+  /**
+   * Creates a client from an injected transport and request-ID source.
    * @param source Supplies the transport and request-ID source.
    * @param options Supplies immutable client options.
    * @returns Returns the created client.
@@ -269,7 +474,8 @@ export class Client {
     return new Client(source, options);
   }
 
-  /** Creates a browser client that always uses the gRPC-Web protocol.
+  /**
+   * Creates a browser client that always uses the gRPC-Web protocol.
    * @param baseUrl Supplies the gateway base URL.
    * @param options Supplies browser client options.
    * @returns Returns the created client.
@@ -304,14 +510,16 @@ export class Client {
     );
   }
 
-  /** Creates an immutable request scope for the guest actor.
+  /**
+   * Creates an immutable request scope for the guest actor.
    * @returns Returns the guest request scope.
    */
   asGuest(): ClientRequest {
     return new Request(this.#owner, this.#tenant, this.#zoneId, this.#subscriptions, "guest");
   }
 
-  /** Creates an immutable request scope for one actor.
+  /**
+   * Creates an immutable request scope for one actor.
    * @param user Identifies the actor for requests in the scope.
    * @returns Returns the actor request scope.
    */
@@ -320,7 +528,8 @@ export class Client {
     return new Request(this.#owner, this.#tenant, this.#zoneId, this.#subscriptions, user);
   }
 
-  /** Closes the client by requesting open-work cancellation, awaiting subscription cleanup, and closing its transport.
+  /**
+   * Closes the client by requesting open-work cancellation, awaiting subscription cleanup, and closing its transport.
    * @returns Completes after subscription cleanup and transport closure.
    */
   close(): Promise<void> {
@@ -328,9 +537,14 @@ export class Client {
   }
 }
 
-/** Immutable actor scope for one client lifecycle owner. */
+/**
+ * Immutable actor scope for one client lifecycle owner.
+ */
 export interface ClientRequest {
-  /** Posts a command and returns its validated application-level outcome.
+  // prettier-ignore
+
+  /**
+   * Posts a command and returns its validated application-level outcome.
    * @param schema Supplies the command message schema.
    * @param message Supplies the command message.
    * @param options Supplies cancellation options.
@@ -341,13 +555,17 @@ export interface ClientRequest {
     message: MessageShape<Schema>,
     options?: ClientOperationOptions,
   ): Promise<ClientOutcome>;
-  /** Sends a query after applying this scope's immutable actor context.
+
+  /**
+   * Sends a query after applying this scope's immutable actor context.
    * @param query Supplies a query or its builder.
    * @param options Supplies cancellation options.
    * @returns Returns the query response.
    */
   send(query: Query | { build(): Query }, options?: ClientOperationOptions): Promise<QueryResponse>;
-  /** Creates an inactive topic subscription owned by this client lifecycle.
+
+  /**
+   * Creates an inactive topic subscription owned by this client lifecycle.
    * @param topic Supplies the subscription topic.
    * @param options Supplies the subscription kind and recovery options.
    * @returns Returns the inactive subscription.
@@ -555,9 +773,15 @@ class TopicSubscription implements Subscription {
   readonly #owner: ClientOwner;
   readonly #topic: Topic;
   readonly #signal: AbortSignal;
-  /** Subscription kind and optional authoritative Entity recovery query. */
+
+  /**
+   * Subscription kind and optional authoritative Entity recovery query.
+   */
   readonly #options: CreateSubscriptionOptions;
-  /** Validated bounded-queue, retry, and scheduler settings. */
+
+  /**
+   * Validated bounded-queue, retry, and scheduler settings.
+   */
   readonly #runtime: RequiredSubscriptionRuntimeOptions;
   readonly #updates: BoundedChannel<SubscriptionDelivery>;
   readonly #lifecycle: BoundedChannel<SubscriptionLifecycle>;
@@ -1003,7 +1227,9 @@ const ClientTerminalValues = Object.freeze({
     return new Error("operation aborted.");
   },
 
-  /** Cancels a wire accepted after its local subscription has already terminated. */
+  /**
+   * Cancels a wire accepted after its local subscription has already terminated.
+   */
   cancelLateSubscription(pending: Promise<WireSubscription>, transport: Transport): void {
     void pending
       .then((subscription) => ClientTerminalValues.cancelWire(transport, subscription))
@@ -1039,7 +1265,9 @@ interface RequiredSubscriptionRuntimeOptions {
   readonly scheduler: SubscriptionScheduler;
 }
 
-/** Owns browser-client request, subscription, and immutable wire values. */
+/**
+ * Builds browser-client request, subscription, and immutable wire values.
+ */
 const BrowserClientValues = Object.freeze({
   subscriptionRuntimeOptions(
     options: SubscriptionRuntimeOptions | undefined,
@@ -1187,7 +1415,9 @@ const BrowserClientValues = Object.freeze({
       return undefined;
     }
 
-    /** Ends after already accepted values have been consumed. */
+    /**
+     * Ends after already accepted values have been consumed.
+     */
     close(): void {
       this.#closed = true;
       if (this.#values.length === 0 && this.#error === undefined) {
@@ -1196,7 +1426,9 @@ const BrowserClientValues = Object.freeze({
       }
     }
 
-    /** Discards buffered values for explicit local cancellation. */
+    /**
+     * Discards buffered values for explicit local cancellation.
+     */
     discard(): void {
       this.#closed = true;
       this.#values.length = 0;

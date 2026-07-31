@@ -34,13 +34,15 @@ import {
   file_spine_options,
 } from "@spine-event-engine/proto";
 import type { UserId } from "@spine-event-engine/proto";
-import { TaskListSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_list_pb.js";
-import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections.js";
+import { TaskListSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_list_pb.js";
+import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import {
   type TaskAlreadyDone as TaskAlreadyDoneMessage,
   TaskAlreadyDoneSchema,
-} from "../../../../examples/todo/generated/spine/example/todo/v1/task_rejections_pb.js";
-import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
+} from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
+import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
+import * as TodoEvents from "../../../../examples/todo/generated/spine/examples/todo/task_events_pb.js";
+import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generated/spine/examples/todo/tasks_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -102,17 +104,17 @@ type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCom
   name: string;
 };
 
-type TaskId = Message<"spine.example.todo.v1.TaskId"> & {
+type TaskId = Message<"spine.examples.todo.TaskId"> & {
   value: string;
 };
 
-type Task = Message<"spine.example.todo.v1.Task"> & {
+type Task = Message<"spine.examples.todo.Task"> & {
   id?: TaskId;
   title: string;
   completed: boolean;
 };
 
-type TaskCreated = Message<"spine.example.todo.v1.TaskCreated"> & {
+type TaskCreated = Message<"spine.examples.todo.TaskCreated"> & {
   id?: TaskId;
   title: string;
 };
@@ -176,30 +178,9 @@ const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
-const fileTaskIdFixture = fileDesc(
-  "CiNzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza19pZC5wcm90bxIVc3BpbmUuZXhhbXBsZS50b2Rv" +
-    "LnYxIh0KBlRhc2tJZBITCgV2YWx1ZRgBIAEoCUIEoIUkAUIbqo0kF3R5cGUuc3BpbmUuZXhhbXBs" +
-    "ZS50b2RvYgZwcm90bzM",
-  [file_spine_options],
-);
-const fileTaskFixture = fileDesc(
-  "CiFzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza3MucHJvdG8SFXNwaW5lLmV4YW1wbGUudG9kby52" +
-    "MSJvCgRUYXNrEjcKAmlkGAEgASgLMh0uc3BpbmUuZXhhbXBsZS50b2RvLnYxLlRhc2tJZEIMoIUk" +
-    "AeiFJAGAhiQBEhMKBXRpdGxlGAIgASgJQgSghSQBEhEKCWNvbXBsZXRlZBgDIAEoCDoG+ookAggB" +
-    "QhuqjSQXdHlwZS5zcGluZS5leGFtcGxlLnRvZG9iBnByb3RvMw",
-  [fileTaskIdFixture, file_spine_options],
-);
-const fileTaskEventsFixture = fileDesc(
-  "CidzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza19ldmVudHMucHJvdG8SFXNwaW5lLmV4YW1wbGUu" +
-    "dG9kby52MSJXCgtUYXNrQ3JlYXRlZBIzCgJpZBgBIAEoCzIdLnNwaW5lLmV4YW1wbGUudG9kby52" +
-    "MS5UYXNrSWRCCKCFJAHohSQBEhMKBXRpdGxlGAIgASgJQgSghSQBIlcKC1Rhc2tSZW5hbWVkEjMK" +
-    "AmlkGAEgASgLMh0uc3BpbmUuZXhhbXBsZS50b2RvLnYxLlRhc2tJZEIIoIUkAeiFJAESEwoFdGl0" +
-    "bGUYAiABKAlCBKCFJAEiRAoNVGFza0NvbXBsZXRlZBIzCgJpZBgBIAEoCzIdLnNwaW5lLmV4YW1w" +
-    "bGUudG9kby52MS5UYXNrSWRCCKCFJAHohSQBIkMKDFRhc2tSZW9wZW5lZBIzCgJpZBgBIAEoCzId" +
-    "LnNwaW5lLmV4YW1wbGUudG9kby52MS5UYXNrSWRCCKCFJAHohSQBQhuqjSQXdHlwZS5zcGluZS5l" +
-    "eGFtcGxlLnRvZG9iBnByb3RvMw",
-  [fileTaskIdFixture, file_spine_options],
-);
+const fileTaskIdFixture = TodoIdSchema.file;
+const fileTaskFixture = TodoTaskSchema.file;
+const fileTaskEventsFixture = TodoEvents.TaskCreatedSchema.file;
 const fileNumberRouteFixture = fileDesc(
   Buffer.from(
     toBinary(
@@ -1343,6 +1324,12 @@ class SplitRouteProcessManager extends ProcessManager<
 }
 
 describe("repository signal routing", () => {
+  it("uses the current Todo descriptor type names in routing fixtures", () => {
+    expect(TaskIdSchema.typeName).toBe("spine.examples.todo.TaskId");
+    expect(TaskSchema.typeName).toBe("spine.examples.todo.Task");
+    expect(TaskCreatedSchema.typeName).toBe("spine.examples.todo.TaskCreated");
+  });
+
   it("derives stable current-record identity from every supported ID representation", () => {
     const descriptor = entityStorageDescriptor(
       { name: "Tasks", multitenant: false },
@@ -6061,6 +6048,7 @@ function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskP
     entityType: ExecutingTaskProjection,
     schema: ProjectionStateSchema,
     handlers,
+    events: [NumberRouteEventSchema],
   });
 }
 
@@ -6295,6 +6283,7 @@ function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> 
     entityType: ExecutingTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
+    events: [AggregateStateSchema, TaskAlreadyDoneSchema],
   });
 }
 
@@ -6307,7 +6296,7 @@ function createManagedRepository(): Repository<typeof ManagedTaskAggregate> {
     entityType: ManagedTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema],
+    events: [AggregateStateSchema, TaskAlreadyDoneSchema],
   });
 }
 
@@ -6348,7 +6337,7 @@ function createGeneratedTwoArgAggregateRepository(): Repository<typeof Generated
     entityType: GeneratedTwoArgAggregate,
     schema: AggregateStateSchema,
     handlers,
-    events: [AggregateStateSchema],
+    events: [AggregateStateSchema, TaskAlreadyDoneSchema],
   });
 }
 
@@ -6662,6 +6651,7 @@ function createProcessManagerAssignRepository(): Repository<typeof RoutingProces
     entityType: RoutingProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
+    events: [ProjectionStateSchema, TaskAlreadyDoneSchema],
   });
 }
 
@@ -7479,7 +7469,9 @@ async function waitForFailure(
   return context.storedEventDispatchFailures();
 }
 
-/** Test-only view of the shared current-record and diagnostic-event storage seam. */
+/**
+ * Test-only view of the shared current-record and diagnostic-event storage seam.
+ */
 class CurrentRecordTestStorage<S extends Message = Message> {
   readonly #factory: InMemoryStorageFactory;
   readonly #input: EntityStorageInput<unknown, S>;

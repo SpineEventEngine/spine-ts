@@ -28,15 +28,27 @@ import {
 export interface StateTransitionRequest<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
 > {
-  /** Generated Protobuf-ES schema describing the entity state. */
+  // prettier-ignore
+
+  /**
+   * Generated Protobuf-ES schema describing the entity state.
+   */
   readonly schema: Schema;
-  /** Previous committed entity state, absent when creating the entity state. */
+
+  /**
+   * Previous committed entity state, absent when creating the entity state.
+   */
   readonly previous: MessageShape<Schema> | undefined;
-  /** Proposed next entity state to validate before commit. */
+
+  /**
+   * Proposed next entity state to validate before commit.
+   */
   readonly next: MessageShape<Schema>;
 }
 
-/** Structured, sanitized result returned by {@link validateEntityStateTransition}. */
+/**
+ * Structured, sanitized result returned by {@link validateEntityStateTransition}.
+ */
 export type StateTransitionResult = TransitionValidationResult;
 
 const transitionRulesBySchema = new WeakMap<
@@ -51,11 +63,11 @@ const transitionRulesBySchema = new WeakMap<
  * delegates result shaping to `@spine-event-engine/core` `Validate.transition()`, and does
  * not instantiate entities, dispatch handlers, touch repositories, or perform
  * runtime I/O. Repeated, map-valued, and explicit optional `(set_once)` fields
- * are unsupported in this slice and fail closed with field-specific violations.
+ * are rejected with field-specific violations.
  * Non-entity schemas still fail through `DescriptorMetadataError` from
  * `describeEntityMetadata()`.
  *
- * @param request - Schema and previous/next state values to validate.
+ * @param request Schema and previous/next state values to validate.
  * @returns Sanitized validation result with any set-once violations.
  */
 export function validateEntityStateTransition<Schema extends DescriptorMessageSchema>(
@@ -77,7 +89,9 @@ interface FieldPropertyReadResult {
   readonly value?: unknown;
 }
 
-/** Owns descriptor-backed, fail-closed state transition validation. */
+/**
+ * Performs descriptor-backed, fail-closed state transition validation.
+ */
 const StateTransitions = Object.freeze({
   rules<Schema extends DescriptorMessageSchema>(
     schema: Schema,

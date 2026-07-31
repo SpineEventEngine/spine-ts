@@ -44,11 +44,11 @@ import {
   CreateTaskSchema,
   RenameTaskSchema,
   ReopenTaskSchema,
-} from "../generated/spine/example/todo/v1/task_commands_pb.js";
-import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
-import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
-import { TaskAlreadyDoneSchema } from "../generated/spine/example/todo/v1/task_rejections_pb.js";
-import { TaskSchema, type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
+} from "../generated/spine/examples/todo/task_commands_pb.js";
+import { TaskIdSchema } from "../generated/spine/examples/todo/task_id_pb.js";
+import { TaskListSchema, type TaskList } from "../generated/spine/examples/todo/task_list_pb.js";
+import { TaskAlreadyDoneSchema } from "../generated/spine/examples/todo/task_rejections_pb.js";
+import { TaskSchema, type Task } from "../generated/spine/examples/todo/tasks_pb.js";
 
 type TodoModule = typeof import("../dist/src/index.js");
 

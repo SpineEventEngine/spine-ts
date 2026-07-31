@@ -7,34 +7,65 @@ import {
   validateEntityStateTransition,
 } from "./entity-transition-validation.js";
 
-/** Lifecycle flags carried by an entity transaction draft and result. */
+/**
+ * Lifecycle flags carried by an entity transaction draft and result.
+ */
 export interface EntityTransactionLifecycleFlags {
-  /** Whether the draft entity state is archived. */
+  // prettier-ignore
+
+  /**
+   * Whether the draft entity state is archived.
+   */
   readonly archived: boolean;
-  /** Whether the draft entity state is deleted. */
+
+  /**
+   * Whether the draft entity state is deleted.
+   */
   readonly deleted: boolean;
 }
 
-/** Explicit version metadata carried by an entity transaction draft. */
+/**
+ * Explicit version metadata carried by an entity transaction draft.
+ */
 export interface EntityTransactionVersionMetadata<Version = unknown> {
-  /** Caller-supplied previous committed version metadata. */
+  // prettier-ignore
+
+  /**
+   * Caller-supplied previous committed version metadata.
+   */
   readonly previous: Version;
-  /** Caller-supplied draft version metadata. */
+
+  /**
+   * Caller-supplied draft version metadata.
+   */
   readonly draft: Version;
 }
 
-/** Explicit version metadata returned by an accepted commit. */
+/**
+ * Explicit version metadata returned by an accepted commit.
+ */
 export interface CommittedVersionMetadata<Version = unknown> {
-  /** Caller-supplied previous committed version metadata. */
+  // prettier-ignore
+
+  /**
+   * Caller-supplied previous committed version metadata.
+   */
   readonly previous: Version;
-  /** Draft metadata accepted by the commit boundary. */
+
+  /**
+   * Draft metadata accepted by the commit boundary.
+   */
   readonly committed: Version;
 }
 
-/** Visible lifecycle status of an entity transaction. */
+/**
+ * Visible lifecycle status of an entity transaction.
+ */
 export type EntityTransactionStatus = "active" | "committed" | "rolled-back";
 
-/** Transaction operation guarded by active-status checks. */
+/**
+ * Transaction operation guarded by active-status checks.
+ */
 export type EntityTransactionOperation =
   | "archive"
   | "commit"
@@ -47,12 +78,15 @@ export type EntityTransactionOperation =
   | "update"
   | "updateVersionMetadata";
 
-/** Draft lifecycle reason that prevents active-only entity state mutation. */
+/**
+ * Draft lifecycle reason that prevents active-only entity state mutation.
+ */
 export type DraftStateReason = "archived" | "deleted";
 
-/** Updates an entity-state draft in place.
+/**
+ * Updates an entity-state draft in place.
  *
- * @param draft - Live or scratch state draft to mutate synchronously.
+ * @param draft Live or scratch state draft to mutate synchronously.
  */
 export type EntityTransactionMutator<Schema extends DescriptorMessageSchema> = (
   draft: MessageShape<Schema>,
@@ -60,62 +94,124 @@ export type EntityTransactionMutator<Schema extends DescriptorMessageSchema> = (
 
 const noConstraintViolations: readonly ConstraintViolation[] = Object.freeze([]);
 
-/** Options for creating an {@link EntityTransaction}. */
+/**
+ * Options for creating an {@link EntityTransaction}.
+ */
 export interface EntityTransactionOptions<
   Schema extends DescriptorMessageSchema,
   Version = unknown,
 > {
-  /** Generated Protobuf-ES schema describing the entity state. */
+  // prettier-ignore
+
+  /**
+   * Generated Protobuf-ES schema describing the entity state.
+   */
   readonly schema: Schema;
-  /** Previous committed entity state, absent for creation transactions. */
+
+  /**
+   * Previous committed entity state, absent for creation transactions.
+   */
   readonly previous: MessageShape<Schema> | undefined;
-  /** Initial draft state. Defaults to a clone of `previous`, or an empty state for creations. */
+
+  /**
+   * Initial draft state. Defaults to a clone of `previous`, or an empty state for creations.
+   */
   readonly draft?: MessageShape<Schema>;
-  /** Explicit version metadata to carry through draft, commit, and rollback results. */
+
+  /**
+   * Explicit version metadata to carry through draft, commit, and rollback results.
+   */
   readonly version: EntityTransactionVersionMetadata<Version>;
-  /** Draft lifecycle flags. Defaults to active, not deleted. */
+
+  /**
+   * Draft lifecycle flags. Defaults to active, not deleted.
+   */
   readonly lifecycle?: Partial<EntityTransactionLifecycleFlags>;
 }
 
-/** Result returned when a transaction commit is accepted. */
+/**
+ * Result returned when a transaction commit is accepted.
+ */
 export interface EntityTransactionAcceptedCommit<
   Schema extends DescriptorMessageSchema,
   Version = unknown,
 > {
-  /** Commit result discriminator. */
+  // prettier-ignore
+
+  /**
+   * Commit result discriminator.
+   */
   readonly status: "accepted";
-  /** Previous committed state snapshot. */
+
+  /**
+   * Previous committed state snapshot.
+   */
   readonly previous: MessageShape<Schema> | undefined;
-  /** Accepted next state snapshot. */
+
+  /**
+   * Accepted next state snapshot.
+   */
   readonly next: MessageShape<Schema>;
-  /** Accepted commit version metadata. */
+
+  /**
+   * Accepted commit version metadata.
+   */
   readonly version: CommittedVersionMetadata<Version>;
-  /** Lifecycle flags accepted with the committed state. */
+
+  /**
+   * Lifecycle flags accepted with the committed state.
+   */
   readonly lifecycle: EntityTransactionLifecycleFlags;
-  /** Successful transition validation result. */
+
+  /**
+   * Successful transition validation result.
+   */
   readonly validation: StateTransitionResult & { readonly valid: true };
 }
 
-/** Result returned when a transaction commit is rejected by validation. */
+/**
+ * Result returned when a transaction commit is rejected by validation.
+ */
 export interface EntityTransactionRejectedCommit<
   Schema extends DescriptorMessageSchema,
   Version = unknown,
 > {
-  /** Commit result discriminator. */
+  // prettier-ignore
+
+  /**
+   * Commit result discriminator.
+   */
   readonly status: "rejected";
-  /** Previous committed state snapshot. */
+
+  /**
+   * Previous committed state snapshot.
+   */
   readonly previous: MessageShape<Schema> | undefined;
-  /** Rejected draft state snapshot. */
+
+  /**
+   * Rejected draft state snapshot.
+   */
   readonly next: MessageShape<Schema>;
-  /** Draft version metadata that was not accepted. */
+
+  /**
+   * Draft version metadata that was not accepted.
+   */
   readonly version: EntityTransactionVersionMetadata<Version>;
-  /** Lifecycle flags that were not accepted. */
+
+  /**
+   * Lifecycle flags that were not accepted.
+   */
   readonly lifecycle: EntityTransactionLifecycleFlags;
-  /** Failed transition validation result with validator violations. */
+
+  /**
+   * Failed transition validation result with validator violations.
+   */
   readonly validation: StateTransitionResult & { readonly valid: false };
 }
 
-/** Structured result returned by {@link EntityTransaction.commit}. */
+/**
+ * Structured result returned by {@link EntityTransaction.commit}.
+ */
 export type EntityTransactionCommitResult<
   Schema extends DescriptorMessageSchema,
   Version = unknown,
@@ -123,35 +219,62 @@ export type EntityTransactionCommitResult<
   | EntityTransactionAcceptedCommit<Schema, Version>
   | EntityTransactionRejectedCommit<Schema, Version>;
 
-/** Structured result returned by {@link EntityTransaction.rollback}. */
+/**
+ * Structured result returned by {@link EntityTransaction.rollback}.
+ */
 export interface EntityTransactionRollbackResult<
   Schema extends DescriptorMessageSchema,
   Version = unknown,
 > {
-  /** Rollback result discriminator. */
+  // prettier-ignore
+
+  /**
+   * Rollback result discriminator.
+   */
   readonly status: "rolled-back";
-  /** Previous committed state snapshot. */
+
+  /**
+   * Previous committed state snapshot.
+   */
   readonly previous: MessageShape<Schema> | undefined;
-  /** Draft state snapshot that was discarded. */
+
+  /**
+   * Draft state snapshot that was discarded.
+   */
   readonly draft: MessageShape<Schema>;
-  /** Draft version metadata that was discarded. */
+
+  /**
+   * Draft version metadata that was discarded.
+   */
   readonly version: EntityTransactionVersionMetadata<Version>;
-  /** Lifecycle flags that were discarded. */
+
+  /**
+   * Lifecycle flags that were discarded.
+   */
   readonly lifecycle: EntityTransactionLifecycleFlags;
 }
 
-/** Error thrown when transaction methods are called after commit or rollback. */
+/**
+ * Error thrown when transaction methods are called after commit or rollback.
+ */
 export class EntityTransactionStateError extends Error {
-  /** Transaction status that rejected the operation. */
+  // prettier-ignore
+
+  /**
+   * Transaction status that rejected the operation.
+   */
   readonly status: EntityTransactionStatus;
 
-  /** Operation rejected by the transaction status. */
+  /**
+   * Operation rejected by the transaction status.
+   */
   readonly operation: EntityTransactionOperation;
 
-  /** Creates a deterministic closed-transaction error.
+  /**
+   * Creates a deterministic closed-transaction error.
    *
-   * @param status - Status that made the operation unavailable.
-   * @param operation - Operation that was rejected.
+   * @param status Status that made the operation unavailable.
+   * @param operation Operation that was rejected.
    */
   constructor(status: EntityTransactionStatus, operation: EntityTransactionOperation) {
     super(`Cannot ${operation} an entity transaction with status "${status}".`);
@@ -170,12 +293,17 @@ export class EntityTransactionStateError extends Error {
  * include entity state payloads, IDs, or previous/draft values.
  */
 export class DraftStateError extends Error {
-  /** Draft lifecycle reason that rejected active-only mutation. */
+  // prettier-ignore
+
+  /**
+   * Draft lifecycle reason that rejected active-only mutation.
+   */
   readonly reason: DraftStateReason;
 
-  /** Creates a deterministic draft lifecycle guard error.
+  /**
+   * Creates a deterministic draft lifecycle guard error.
    *
-   * @param reason - Draft lifecycle reason that prevented mutation.
+   * @param reason Draft lifecycle reason that prevented mutation.
    */
   constructor(reason: DraftStateReason) {
     super(`Cannot mutate active entity state while the draft is ${reason}.`);
@@ -200,9 +328,10 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
   #version: EntityTransactionVersionMetadata<Version>;
   #lifecycle: EntityTransactionLifecycleFlags;
 
-  /** Creates a transaction over previous state and a buffered draft.
+  /**
+   * Creates a transaction over previous state and a buffered draft.
    *
-   * @param options - State, version, and lifecycle inputs for the transaction.
+   * @param options State, version, and lifecycle inputs for the transaction.
    */
   constructor(options: EntityTransactionOptions<Schema, Version>) {
     this.#schema = options.schema;
@@ -224,7 +353,8 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
     };
   }
 
-  /** Gets the current lifecycle status of the transaction.
+  /**
+   * Gets the current lifecycle status of the transaction.
    *
    * @returns The active, committed, or rolled-back status.
    */
@@ -232,7 +362,8 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
     return this.#status;
   }
 
-  /** Gets the previous committed state snapshot, absent for creation transactions.
+  /**
+   * Gets the previous committed state snapshot, absent for creation transactions.
    *
    * @returns A cloned prior state, if one exists.
    */
@@ -242,7 +373,8 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
       : TransactionDrafts.clone(this.#schema, this.#previous);
   }
 
-  /** Gets the current draft state snapshot.
+  /**
+   * Gets the current draft state snapshot.
    *
    * @returns A cloned draft state.
    */
@@ -250,7 +382,8 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
     return TransactionDrafts.clone(this.#schema, this.#draft);
   }
 
-  /** Gets explicit version metadata carried by the current draft.
+  /**
+   * Gets explicit version metadata carried by the current draft.
    *
    * @returns The previous and draft version metadata.
    */
@@ -258,7 +391,8 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
     return { previous: this.#version.previous, draft: this.#version.draft };
   }
 
-  /** Gets lifecycle flags carried by the current draft.
+  /**
+   * Gets lifecycle flags carried by the current draft.
    *
    * @returns The current archived and deleted flags.
    */
@@ -291,7 +425,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
    * live draft. If a synchronous mutator throws after changing the draft, its
    * partial changes remain visible.
    *
-   * @param mutator - Synchronous operation that changes the live draft.
+   * @param mutator Synchronous operation that changes the live draft.
    * @returns A cloned snapshot of the changed draft.
    */
   update(mutator: EntityTransactionMutator<Schema>): MessageShape<Schema> {
@@ -316,7 +450,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
    * thrown by the mutator propagate and leave the live draft unchanged.
    * Mutators must complete synchronously; returned thenables are rejected.
    *
-   * @param mutator - Synchronous operation that changes a scratch draft.
+   * @param mutator Synchronous operation that changes a scratch draft.
    * @returns An empty frozen list when applied, or validation violations.
    */
   tryUpdate(mutator: EntityTransactionMutator<Schema>): readonly ConstraintViolation[] {
@@ -404,7 +538,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
    * metadata, or event versions. It preserves the transaction's `Version`
    * generic and returns a snapshot of the previous/draft metadata pair.
    *
-   * @param draft - Replacement caller-owned draft version metadata.
+   * @param draft Replacement caller-owned draft version metadata.
    * @returns The updated previous and draft metadata.
    */
   updateVersionMetadata(draft: Version): EntityTransactionVersionMetadata<Version> {
@@ -524,7 +658,9 @@ class AsyncMutatorError extends TypeError {
   }
 }
 
-/** Owns cloning, synchronous mutation, and immutable validation snapshots for transactions. */
+/**
+ * Clones transaction state, applies synchronous mutation, and captures immutable validation snapshots.
+ */
 const TransactionDrafts = Object.freeze({
   clone<Schema extends DescriptorMessageSchema>(
     schema: Schema,
@@ -569,9 +705,10 @@ const TransactionDrafts = Object.freeze({
   },
 });
 
-/** Creates a transaction with inferred schema state typing.
+/**
+ * Creates a transaction with inferred schema state typing.
  *
- * @param options - State, version, and lifecycle inputs for the transaction.
+ * @param options State, version, and lifecycle inputs for the transaction.
  * @returns A new isolated entity transaction.
  */
 export function createEntityTransaction<Schema extends DescriptorMessageSchema, Version = unknown>(

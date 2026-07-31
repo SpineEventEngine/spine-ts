@@ -7,7 +7,6 @@ const root = new URL("..", import.meta.url).pathname;
 const familyPackages = [
   ["app", "@spine-event-engine/example-chat-app"],
   ["model", "@spine-event-engine/example-chat-model"],
-  ["users-model", "@spine-event-engine/example-chat-users-model"],
   ["web", "@spine-event-engine/example-chat-web"],
 ];
 
@@ -51,7 +50,7 @@ describe("Chat family workspace migration", () => {
     expect(familyReadme).toContain(
       "[browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)",
     );
-    expect(familyReadme).toContain("The app directly depends on `users-model` and `model`");
+    expect(familyReadme).toContain("The app directly depends on the single `model` package");
     expect(references.map(({ path }) => path)).toEqual(
       expect.arrayContaining(familyPackages.map(([directory]) => `./examples/chat/${directory}`)),
     );
@@ -62,8 +61,32 @@ describe("Chat family workspace migration", () => {
       expect(JSON.parse(readFileSync(packagePath, "utf8")).name).toBe(packageName);
     }
 
+    expect(existsSync(join(root, "examples/chat/users-model"))).toBe(false);
+
     for (const legacyPath of ["examples/chat-model", "examples/chat-web", "examples/users-model"]) {
       expect(existsSync(join(root, legacyPath))).toBe(false);
     }
+  });
+});
+
+describe("authored example contract migration", () => {
+  const examples = [
+    ["todo", "todo"],
+    ["projects", "projects"],
+    ["orders", "orders"],
+    ["chat/model", "chat"],
+  ];
+
+  it("keeps every owned example Proto under its final plural namespace without v1", () => {
+    for (const [directory, domain] of examples) {
+      const protoRoot = join(root, "examples", directory, "proto", "spine", "examples", domain);
+      expect(existsSync(protoRoot)).toBe(true);
+      for (const file of ["package spine.example", "type.spine.example", "/v1/"])
+        expect(
+          readFileSync(join(root, "examples", directory, "spine-proto-manifest.json"), "utf8"),
+        ).not.toContain(file);
+    }
+    expect(existsSync(join(root, "examples/project-management"))).toBe(false);
+    expect(existsSync(join(root, "examples/datastore-orders"))).toBe(false);
   });
 });

@@ -49,7 +49,9 @@ test("uses the explicit Connect browser client for resolver composition, Post, a
     if (request.url().endsWith("/spine.auth.AuthenticationService/ResolveContext"))
       resolverRequestHeaders.push(request.headers());
   });
-  await expect(page.evaluate(() => window.resolveContext())).resolves.toMatchObject({ actor: "ada" });
+  await expect(page.evaluate(() => window.resolveContext())).resolves.toMatchObject({
+    actor: "ada",
+  });
   expect(resolverRequestHeaders).toContainEqual(
     expect.objectContaining({
       "connect-protocol-version": "1",

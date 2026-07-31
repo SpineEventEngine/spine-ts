@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/delivery-server",
-  "version": "0.0.0",
+  "version": "2.0.0-snapshot.1",
   "private": true,
   "type": "module",
   "description": "In-memory delivery server core and standalone Node HTTP/2 lifecycle.",
@@ -15,7 +15,8 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "REFERENCE.md"
   ],
   "dependencies": {
     "@bufbuild/protobuf": "2.12.1",

@@ -2,33 +2,57 @@ import path from "node:path";
 
 import type * as ZeroMq from "zeromq";
 
-/** Defines the native ZeroMQ module surface used by the adapter. */
+/**
+ * Defines the native ZeroMQ module surface used by the adapter.
+ */
 export type ZeroMqNativeModule = typeof ZeroMq;
 
-/** Defines the supported scope for ZeroMQ transport endpoints. */
+/**
+ * Defines the supported scope for ZeroMQ transport endpoints.
+ */
 export type ZeroMqTransportScope = "local-ipc";
 
-/** Defines caller-supplied local IPC configuration. */
+/**
+ * Defines caller-supplied local IPC configuration.
+ */
 export interface ZeroMqConfigInput {
-  /** Specifies the absolute directory that contains local IPC endpoints. */
+  // prettier-ignore
+
+  /**
+   * Specifies the absolute directory that contains local IPC endpoints.
+   */
   readonly ipcDirectory: string;
 
-  /** Specifies an optional identity used to distinguish this adapter. */
+  /**
+   * Specifies an optional identity used to distinguish this adapter.
+   */
   readonly adapterIdentity?: string;
 }
 
-/** Defines validated configuration for the local ZeroMQ adapter. */
+/**
+ * Defines validated configuration for the local ZeroMQ adapter.
+ */
 export class ZeroMqConfig {
-  /** Identifies the local transport scope. */
+  // prettier-ignore
+
+  /**
+   * Identifies the local transport scope.
+   */
   readonly transportScope: ZeroMqTransportScope;
 
-  /** Identifies the normalized directory that contains IPC endpoints. */
+  /**
+   * Identifies the normalized directory that contains IPC endpoints.
+   */
   readonly ipcDirectory: string;
 
-  /** Identifies this adapter instance for local IPC use. */
+  /**
+   * Identifies this adapter instance for local IPC use.
+   */
   readonly adapterIdentity: string;
 
-  /** Identifies the required native package. */
+  /**
+   * Identifies the required native package.
+   */
   readonly nativePackageName = "zeromq" as const;
 
   private constructor(ipcDirectory: string, adapterIdentity: string) {

@@ -1,6 +1,6 @@
 /**
  * Provider-only entity persistence SPI. This subpath is intentionally not part
- * of the end-user storage root; T-0070D/R adapters import it directly.
+ * of the end-user storage root; storage adapters import it directly.
  */
 export type {
   EntityEventHistoryPort,

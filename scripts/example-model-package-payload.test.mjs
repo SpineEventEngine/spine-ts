@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -7,16 +7,15 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = new URL("..", import.meta.url).pathname;
 
 const packages = [
-  "@spine-event-engine/example-project-management",
-  "@spine-event-engine/example-datastore-orders",
-  "@spine-event-engine/example-chat-users-model",
-  "@spine-event-engine/example-chat-model",
+  { name: "@spine-event-engine/example-project-management", path: "examples/projects" },
+  { name: "@spine-event-engine/example-datastore-orders", path: "examples/orders" },
+  { name: "@spine-event-engine/example-chat-model", path: "examples/chat/model" },
 ];
 
 describe("application model package payloads", () => {
   it.each(packages)(
-    "includes an independently executable clean:generated-dist for %s",
-    (packageName) => {
+    "includes an independently executable clean:generated-dist for $name",
+    ({ name: packageName, path }) => {
       const destination = mkdtempSync(join(tmpdir(), "spine-model-package-"));
       execFileSync(
         "pnpm",
@@ -35,7 +34,9 @@ describe("application model package payloads", () => {
       );
       const archive = join(
         destination,
-        `${packageName.replace("@spine-event-engine/", "spine-event-engine-")}-0.0.0.tgz`,
+        `${packageName.replace("@spine-event-engine/", "spine-event-engine-")}-${
+          JSON.parse(readFileSync(join(repositoryRoot, path, "package.json"), "utf8")).version
+        }.tgz`,
       );
       execFileSync("tar", ["-xzf", archive, "-C", destination], { stdio: "pipe" });
 

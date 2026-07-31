@@ -1,17 +1,19 @@
 # @spine-event-engine/client-react
 
-`@spine-event-engine/client-react` observes an application-owned public
-`@spine-event-engine/client-web` request scope in React. React is a peer
-dependency. This package owns neither a cache nor request construction, SSR,
-Suspense, service workers, or an external state manager.
+Use this optional React adapter to observe work started through an
+application-owned `@spine-event-engine/client-web` request scope. It does not
+create clients, define queries, cache data, or provide an authentication system.
 
-For the full browser subscription/reconnect limits and gateway/session
-integration, see the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+For detailed hook lifecycles and error behavior, read the [reference for
+agents](REFERENCE.md).
 
-## Query observation
+The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+explains the subscription and authentication limits inherited from the browser client.
 
-Create the browser client and request scope outside render, then provide the
-stable scope. A query starts in an effect, so rendering itself starts no RPC.
+## Provide a request scope
+
+Create the browser client outside rendering, select an actor scope, and provide
+that stable scope to React descendants.
 
 ```ts
 import { createElement } from "react";
@@ -19,58 +21,56 @@ import { Client } from "@spine-event-engine/client-web";
 import { SpineClientProvider, useEntityQuery } from "@spine-event-engine/client-react";
 
 const client = Client.forGrpcWeb("https://api.example.test");
-const request = client.asGuest();
+const request = client.onBehalfOf("alice");
 
-function MessageList() {
-  const result = useEntityQuery(() => buildMessageQuery(), []);
+function Tasks() {
+  const result = useEntityQuery(() => buildTaskQuery(), []);
   return createElement("output", undefined, result.status);
 }
 
 function App() {
-  return createElement(SpineClientProvider, { request }, createElement(MessageList));
+  return createElement(SpineClientProvider, { request }, createElement(Tasks));
 }
 
-declare function buildMessageQuery(): Parameters<typeof request.send>[0];
+declare function buildTaskQuery(): Parameters<typeof request.send>[0];
 void App;
 ```
 
-`useEntityQuery` forwards each effect generation's `AbortSignal` to the public
-`request.send(query, { signal })` call. For a generic `useRequest` factory,
-accept and forward its required signal to the cancellable operation. Cancellation
-is cooperative: a factory that does not forward the signal can continue its
-underlying work, though a retired generation never publishes its result. As
-with every hook dependency list, callers remain responsible for supplying the
-dependencies that make their factory stable.
+`use...` names are reserved for this React adapter because each one is a React
+hook. Application code otherwise uses the client verbs such as `post`, `send`,
+`createSubscription`, `activate`, and `cancel`.
 
-## Subscription observation
+## Observe a subscription
 
-The subscription factory runs after commit. It must call only the public
-client-web API. Entity recovery is authoritative: client-web evaluates the
-provided `authoritativeQuery` after reconnect and emits a `resynchronization`
-delivery. Event subscriptions instead publish `gapPossible`; that notice is
-not event-history completeness evidence.
+An Entity subscription needs an authoritative query for reconnect recovery.
+The hook starts and cancels it after React commits the component.
 
 ```ts
+// docs-snippet-path: examples/chat/web/src/index.tsx
+import { create } from "@bufbuild/protobuf";
+import { TypeUrls } from "@spine-event-engine/core";
 import { useEntitySubscription, useSubscriptionDelivery } from "@spine-event-engine/client-react";
-import type { ClientRequest } from "@spine-event-engine/client-web";
+import {
+  QueryIdSchema,
+  QuerySchema,
+  TargetSchema,
+  TopicIdSchema,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
+import { ChatMessageViewSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
 
-declare const messageTopic: Parameters<ClientRequest["createSubscription"]>[0];
-declare const authoritativeMessageQuery: Extract<
-  Parameters<ClientRequest["createSubscription"]>[1],
-  { kind: "entity" }
->["authoritativeQuery"];
+const target = create(TargetSchema, {
+  type: TypeUrls.derive(ChatMessageViewSchema),
+  criterion: { case: "includeAll", value: true },
+});
+const query = create(QuerySchema, { id: create(QueryIdSchema, { value: "messages" }), target });
+const topic = create(TopicSchema, { id: create(TopicIdSchema, { value: "messages" }), target });
 
-function Updates() {
-  const observation = useEntitySubscription(messageTopic, authoritativeMessageQuery, []);
+function TaskUpdates() {
+  const observation = useEntitySubscription(topic, () => query, []);
   const delivery = useSubscriptionDelivery(observation);
   return `${observation.status}:${delivery?.kind ?? "none"}`;
 }
 
-void Updates;
+void TaskUpdates;
 ```
-
-Unmounting retires the hook generation and invokes bounded, idempotent
-`cancel()` cleanup. A late request result, subscription factory result,
-activation completion, delivery, lifecycle notice, or iterator failure from a
-retired generation is not published. React Strict Mode mount/unmount/remount
-therefore activates at most once for each still-live generation.

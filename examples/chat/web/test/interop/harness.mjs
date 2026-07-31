@@ -46,7 +46,9 @@ const run = promisify(execFile);
 const image =
   "envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb";
 
-/** Starts only test-owned processes and always closes them in reverse dependency order. */
+/**
+ * Starts only test-owned processes and always closes them in reverse dependency order.
+ */
 export async function startTopology({ lifecycle = {} } = {}) {
   const runCommand = lifecycle.run ?? run;
   const application = new ChatApplication();

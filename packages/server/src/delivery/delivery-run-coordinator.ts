@@ -9,7 +9,9 @@ import {
 } from "./delivery-worker.js";
 import { ShardIndex } from "./shard-index.js";
 
-/** Serializes finite worker starts for one delivery generation. */
+/**
+ * Serializes finite worker starts for one delivery generation.
+ */
 export class DeliveryRunCoordinator {
   readonly #worker: DeliveryRunWorker;
   readonly #configured = new Map<string, DeliveryRunScope>();
@@ -447,28 +449,53 @@ interface RetirementFailure {
   readonly causes: readonly unknown[];
 }
 
-/** Identifies one generation-local runtime owner. */
+/**
+ * Identifies one generation-local runtime owner.
+ */
 export interface DeliveryRunOwner {
-  /** Holds the stable owner key. */
+  // prettier-ignore
+
+  /**
+   * Holds the stable owner key.
+   */
   readonly key: string;
 }
 
-/** Describes owner-qualified readiness admitted for one generation. */
+/**
+ * Describes owner-qualified readiness admitted for one generation.
+ */
 export interface DeliveryRunScope {
-  /** Identifies the scope owner. */
+  // prettier-ignore
+
+  /**
+   * Identifies the scope owner.
+   */
   readonly owner: DeliveryRunOwner;
-  /** Holds the canonical readiness facts. */
+
+  /**
+   * Holds the canonical readiness facts.
+   */
   readonly ready: DeliveryReady;
 }
 
-/** Describes a finite worker obligation for one canonical scope union. */
+/**
+ * Describes a finite worker obligation for one canonical scope union.
+ */
 export interface DeliveryRunObligation extends DeliveryWorkerObligation {
-  /** Lists the admitted canonical scopes. */
+  // prettier-ignore
+
+  /**
+   * Lists the admitted canonical scopes.
+   */
   readonly scopes: readonly DeliveryRunScope[];
 }
 
-/** Defines the generation worker seam used by the bounded run coordinator. */
+/**
+ * Defines the generation worker seam used by the bounded run coordinator.
+ */
 export interface DeliveryRunWorker {
+  // prettier-ignore
+
   /**
    * Starts the requested shards for one obligation.
    *
@@ -480,43 +507,81 @@ export interface DeliveryRunWorker {
     obligation: DeliveryRunObligation,
     shards: readonly ShardIndex[],
   ): Promise<DeliveryWorkerEvidence>;
-  /** Stops loop admission irreversibly. */
+
+  /**
+   * Stops loop admission irreversibly.
+   */
   stop(): void;
-  /** Awaits active work without interrupting it.
+
+  /**
+   * Awaits active work without interrupting it.
+   *
    * @returns A promise that resolves after active work settles.
    */
   awaitSettled(): Promise<void>;
+
   /**
    * Closes after a completed stop and proven settlement. Permanently closes every
    * worker start entry before settling, even when inert-resource cleanup fails.
+   *
    * @returns A promise that settles after the worker retires.
    */
   retire(): Promise<void>;
 }
 
-/** Describes the latest bounded disposition for one configured canonical scope. */
+/**
+ * Describes the latest bounded disposition for one configured canonical scope.
+ */
 export interface DeliveryScopeSettlement {
-  /** Holds the configured scope. */
+  // prettier-ignore
+
+  /**
+   * Holds the configured scope.
+   */
   readonly scope: DeliveryRunScope;
-  /** Names the latest scope disposition. */
+
+  /**
+   * Names the latest scope disposition.
+   */
   readonly disposition: "IDLE" | "PARKED" | "REJECTED" | "STOPPED";
-  /** Holds the rejection cause, when present. */
+
+  /**
+   * Holds the rejection cause, when present.
+   */
   readonly cause?: unknown;
-  /** Holds the last safe loop progress, when present. */
+
+  /**
+   * Holds the last safe loop progress, when present.
+   */
   readonly progress?: DeliveryLoopProgress;
 }
 
-/** Describes bounded generation evidence retained by the coordinator. */
+/**
+ * Describes bounded generation evidence retained by the coordinator.
+ */
 export interface DeliveryRunSettlement {
-  /** Lists settled configured scopes. */
+  // prettier-ignore
+
+  /**
+   * Lists settled configured scopes.
+   */
   readonly scopes: readonly DeliveryScopeSettlement[];
-  /** Lists scopes still pending admission. */
+
+  /**
+   * Lists scopes still pending admission.
+   */
   readonly pending: readonly DeliveryRunScope[];
 }
 
-/** Reports retirement that failed before quiescence. */
+/**
+ * Reports retirement that failed before quiescence.
+ */
 export class DeliveryRunQuiescenceError extends Error {
-  /** Holds the failure that prevented quiescence. */
+  // prettier-ignore
+
+  /**
+   * Holds the failure that prevented quiescence.
+   */
   override readonly cause: unknown;
 
   /**
@@ -531,8 +596,12 @@ export class DeliveryRunQuiescenceError extends Error {
   }
 }
 
-/** Adapts workers for package-owned delivery generations. */
+/**
+ * Adapts workers for package-owned delivery generations.
+ */
 export interface DeliveryRunWorkers {
+  // prettier-ignore
+
   /**
    * Creates a generation coordinator seam for one worker.
    *
@@ -542,9 +611,15 @@ export interface DeliveryRunWorkers {
   worker(worker: DeliveryWorker): DeliveryRunWorker;
 }
 
-/** Adapts workers for package-owned delivery generations. */
+/**
+ * Adapts workers for package-owned delivery generations.
+ */
 export const deliveryRunWorkers: DeliveryRunWorkers = Object.freeze({
-  /** Adapts one worker to the generation coordinator seam. */
+  // prettier-ignore
+
+  /**
+   * Adapts one worker to the generation coordinator seam.
+   */
   worker(worker: DeliveryWorker): DeliveryRunWorker {
     return Object.freeze({
       start(obligation: DeliveryRunObligation, shards: readonly ShardIndex[]) {
@@ -563,7 +638,9 @@ export const deliveryRunWorkers: DeliveryRunWorkers = Object.freeze({
   },
 });
 
-/** Groups internal coordinator snapshot, settlement, and validation operations. */
+/**
+ * Groups internal coordinator snapshot, settlement, and validation operations.
+ */
 const DeliveryRunValues = Object.freeze({
   obligation(scopes: readonly DeliveryRunScope[]): DeliveryRunObligation {
     return Object.freeze({

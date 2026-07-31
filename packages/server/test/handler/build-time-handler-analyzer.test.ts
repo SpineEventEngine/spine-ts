@@ -19,17 +19,17 @@ describe("build-time handler analyzer", () => {
       {
         className: "TaskAggregate",
         sourceFile: "src/task.ts",
-        stateSchema: schema("../generated/spine/example/todo/v1/tasks_pb.js", "TaskSchema"),
+        stateSchema: schema("../generated/spine/examples/todo/tasks_pb.js", "TaskSchema"),
         handlers: [
           {
             kind: "command-assignment",
             methodName: "createTask",
             signalSchema: schema(
-              "../generated/spine/example/todo/v1/task_commands_pb.js",
+              "../generated/spine/examples/todo/task_commands_pb.js",
               "CreateTaskSchema",
             ),
             emittedSchemas: [
-              schema("../generated/spine/example/todo/v1/task_events_pb.js", "TaskCreatedSchema"),
+              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCreatedSchema"),
             ],
             parameterCount: 1,
           },
@@ -37,11 +37,11 @@ describe("build-time handler analyzer", () => {
             kind: "command-reaction",
             methodName: "renameAgain",
             signalSchema: schema(
-              "../generated/spine/example/todo/v1/task_events_pb.js",
+              "../generated/spine/examples/todo/task_events_pb.js",
               "TaskCreatedSchema",
             ),
             emittedSchemas: [
-              schema("../generated/spine/example/todo/v1/task_commands_pb.js", "RenameTaskSchema"),
+              schema("../generated/spine/examples/todo/task_commands_pb.js", "RenameTaskSchema"),
             ],
             parameterCount: 2,
           },
@@ -49,12 +49,12 @@ describe("build-time handler analyzer", () => {
             kind: "event-reaction",
             methodName: "reactToCreated",
             signalSchema: schema(
-              "../generated/spine/example/todo/v1/task_events_pb.js",
+              "../generated/spine/examples/todo/task_events_pb.js",
               "TaskCreatedSchema",
             ),
             emittedSchemas: [
-              schema("../generated/spine/example/todo/v1/task_events_pb.js", "TaskRenamedSchema"),
-              schema("../generated/spine/example/todo/v1/task_events_pb.js", "TaskCompletedSchema"),
+              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskRenamedSchema"),
+              schema("../generated/spine/examples/todo/task_events_pb.js", "TaskCompletedSchema"),
             ],
             parameterCount: 1,
           },
@@ -62,7 +62,7 @@ describe("build-time handler analyzer", () => {
             kind: "event-subscription",
             methodName: "onRenamed",
             signalSchema: schema(
-              "../generated/spine/example/todo/v1/task_events_pb.js",
+              "../generated/spine/examples/todo/task_events_pb.js",
               "TaskRenamedSchema",
             ),
             emittedSchemas: [],
@@ -78,14 +78,14 @@ describe("build-time handler analyzer", () => {
       programWithSources("src/neutral-command.ts", {
         "src/neutral-command.ts": neutralCommandSource,
         "generated/domain_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_commands.proto",
+          "spine/examples/todo/task_commands.proto",
           "CreateTask",
         ),
         "generated/events_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_events.proto",
+          "spine/examples/todo/task_events.proto",
           "TaskCreated",
         ),
-        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
       }),
     );
 
@@ -104,11 +104,11 @@ describe("build-time handler analyzer", () => {
       programWithSources("src/neutral-event.ts", {
         "src/neutral-event.ts": neutralEventSource,
         "generated/domain_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_events.proto",
+          "spine/examples/todo/task_events.proto",
           "TaskCreated",
         ),
         "generated/task_list_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_list.proto",
+          "spine/examples/todo/task_list.proto",
           "TaskList",
         ),
       }),
@@ -217,16 +217,16 @@ describe("build-time handler analyzer", () => {
             import { type ForgedRejection } from "../generated/mismatched_rejections_pb.js";`,
         ),
         "generated/nested_rejections_pb.ts": generatedNestedModule(
-          "spine/example/todo/v1/nested_rejections.proto",
+          "spine/examples/todo/nested_rejections.proto",
           "Container",
           "TaskAlreadyDone",
         ),
         "generated/mismatched_rejections_pb.ts": generatedModuleWithDescriptorMessages(
-          "spine/example/todo/v1/mismatched_rejections.proto",
+          "spine/examples/todo/mismatched_rejections.proto",
           [{ exportName: "ForgedRejection", descriptorName: "DifferentRejection" }],
         ),
         "generated/task_list_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_list.proto",
+          "spine/examples/todo/task_list.proto",
           "TaskList",
         ),
       }),
@@ -243,14 +243,14 @@ describe("build-time handler analyzer", () => {
       programWithSources("src/misleading.ts", {
         "src/misleading.ts": misleadingCommandPathSource,
         "generated/commands_pb.ts": generatedModule(
-          "spine/example/todo/v1/audit.proto",
+          "spine/examples/todo/audit.proto",
           "CreateTask",
         ),
         "generated/events_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_events.proto",
+          "spine/examples/todo/task_events.proto",
           "TaskCreated",
         ),
-        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
       }),
     );
 
@@ -267,10 +267,10 @@ describe("build-time handler analyzer", () => {
         "src/mixed-descriptors.ts": mixedDescriptorSource,
         "generated/domain_pb.ts": generatedModuleWithMixedDescriptors(),
         "generated/events_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_events.proto",
+          "spine/examples/todo/task_events.proto",
           "TaskCreated",
         ),
-        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
       }),
     );
 
@@ -286,14 +286,14 @@ describe("build-time handler analyzer", () => {
       programWithSources("src/forged.ts", {
         "src/forged.ts": forgedDescriptorSource,
         "generated/commands_pb.ts": generatedModuleWithDescriptorMessages(
-          "spine/example/todo/v1/task_commands.proto",
+          "spine/examples/todo/task_commands.proto",
           [{ exportName: "CreateTask", descriptorName: "RenameTask" }],
         ),
         "generated/events_pb.ts": generatedModuleWithDescriptorMessages(
-          "spine/example/todo/v1/task_events.proto",
+          "spine/examples/todo/task_events.proto",
           [{ exportName: "TaskCreated", descriptorName: "TaskRenamed" }],
         ),
-        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
       }),
     );
 
@@ -317,10 +317,10 @@ describe("build-time handler analyzer", () => {
         "generated/missing_pb.ts": generatedModuleWithoutDescriptor("CreateTask"),
         "generated/malformed_pb.ts": generatedModuleWithMalformedDescriptor("RenameTask"),
         "generated/events_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_events.proto",
+          "spine/examples/todo/task_events.proto",
           "TaskCreated",
         ),
-        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
       }),
     );
 
@@ -340,14 +340,14 @@ describe("build-time handler analyzer", () => {
       programWithSources("src/neutral-state.ts", {
         "src/neutral-state.ts": neutralStateSource,
         "generated/commands_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_commands.proto",
+          "spine/examples/todo/task_commands.proto",
           "CreateTask",
         ),
         "generated/events_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_events.proto",
+          "spine/examples/todo/task_events.proto",
           "TaskCreated",
         ),
-        "generated/state_pb.ts": generatedModule("spine/example/todo/v1/task_state.proto", "Task"),
+        "generated/state_pb.ts": generatedModule("spine/examples/todo/task_state.proto", "Task"),
       }),
     );
 
@@ -366,14 +366,14 @@ describe("build-time handler analyzer", () => {
           "export declare const CreateTaskSchema: unknown;",
         ].join("\n"),
         "generated/domain_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_commands.proto",
+          "spine/examples/todo/task_commands.proto",
           "CreateTask",
         ),
         "generated/events_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_events.proto",
+          "spine/examples/todo/task_events.proto",
           "TaskCreated",
         ),
-        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+        "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
       }),
     );
 
@@ -538,7 +538,7 @@ describe("build-time handler analyzer", () => {
       programWithSources("src/type-schema.ts", {
         "src/type-schema.ts": typeOnlySchemaSource,
         "generated/commands_pb.ts": generatedModule(
-          "spine/example/todo/v1/task_commands.proto",
+          "spine/examples/todo/task_commands.proto",
           "CreateTask",
         ),
         "generated/events_pb.ts": [
@@ -683,40 +683,37 @@ describe("build-time handler analyzer", () => {
 function programWithSource(fileName: string, source: string): ts.Program {
   return programWithSources(fileName, {
     [fileName]: source,
-    "generated/audit_pb.ts": generatedModule("spine/example/todo/v1/audit.proto", "AuditRecord"),
+    "generated/audit_pb.ts": generatedModule("spine/examples/todo/audit.proto", "AuditRecord"),
     "generated/commands_pb.ts": generatedModule(
-      "spine/example/todo/v1/task_commands.proto",
+      "spine/examples/todo/task_commands.proto",
       "CreateTask",
       "RenameTask",
       "MissingSchemaCommand",
     ),
     "generated/events_pb.ts": generatedModule(
-      "spine/example/todo/v1/task_events.proto",
+      "spine/examples/todo/task_events.proto",
       "TaskCreated",
       "TaskRenamed",
     ),
     "generated/rejections_pb.ts": generatedModule(
-      "spine/example/todo/v1/task_rejections.proto",
+      "spine/examples/todo/task_rejections.proto",
       "TaskAlreadyDone",
     ),
-    "generated/task_list_pb.ts": generatedModule(
-      "spine/example/todo/v1/task_list.proto",
-      "TaskList",
-    ),
-    "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
-    "generated/spine/example/todo/v1/task_commands_pb.ts": generatedModule(
-      "spine/example/todo/v1/task_commands.proto",
+    "generated/task_list_pb.ts": generatedModule("spine/examples/todo/task_list.proto", "TaskList"),
+    "generated/task_pb.ts": generatedModule("spine/examples/todo/tasks.proto", "Task"),
+    "generated/spine/examples/todo/task_commands_pb.ts": generatedModule(
+      "spine/examples/todo/task_commands.proto",
       "CreateTask",
       "RenameTask",
     ),
-    "generated/spine/example/todo/v1/task_events_pb.ts": generatedModule(
-      "spine/example/todo/v1/task_events.proto",
+    "generated/spine/examples/todo/task_events_pb.ts": generatedModule(
+      "spine/examples/todo/task_events.proto",
       "TaskCompleted",
       "TaskCreated",
       "TaskRenamed",
     ),
-    "generated/spine/example/todo/v1/tasks_pb.ts": generatedModule(
-      "spine/example/todo/v1/tasks.proto",
+    "generated/spine/examples/todo/tasks_pb.ts": generatedModule(
+      "spine/examples/todo/tasks.proto",
       "Task",
     ),
   });
@@ -845,10 +842,10 @@ function generatedNestedModule(protoSource: string, parent: string, nested: stri
 }
 
 function generatedModuleWithMixedDescriptors(): string {
-  const commandDescriptor = fileDescriptor("spine/example/todo/v1/task_commands.proto", [
+  const commandDescriptor = fileDescriptor("spine/examples/todo/task_commands.proto", [
     { descriptorName: "CreateTask" },
   ]);
-  const neutralDescriptor = fileDescriptor("spine/example/todo/v1/audit.proto", [
+  const neutralDescriptor = fileDescriptor("spine/examples/todo/audit.proto", [
     { descriptorName: "AuditRecord" },
   ]);
 
@@ -879,9 +876,9 @@ function fileDescriptor(
 const validTaskSource = `
   import { Aggregate, Assign as HandleCommand, Command, Subscribe } from "@spine-event-engine/server";
   import * as server from "@spine-event-engine/server";
-  import { TaskSchema } from "../generated/spine/example/todo/v1/tasks_pb.js";
-  import { type CreateTask, type RenameTask } from "../generated/spine/example/todo/v1/task_commands_pb.js";
-  import * as events from "../generated/spine/example/todo/v1/task_events_pb.js";
+  import { TaskSchema } from "../generated/spine/examples/todo/tasks_pb.js";
+  import { type CreateTask, type RenameTask } from "../generated/spine/examples/todo/task_commands_pb.js";
+  import * as events from "../generated/spine/examples/todo/task_events_pb.js";
 
   export class TaskAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
     @HandleCommand

@@ -8,6 +8,8 @@ import {
   collectLegacyNamespaceReferences,
   collectMarkdownRelativeLinks,
   collectRuntimeExportSpecifiers,
+  collectUserFacingDocumentationProblems,
+  collectUserFacingMarkdownFiles,
   runReleaseReadiness,
 } from "./check-release-readiness.mjs";
 
@@ -219,6 +221,7 @@ describe("check-release-readiness", () => {
   it("collects supported inline and reference-definition targets outside code", () => {
     withTempRepository((repoRoot) => {
       mkdirSync(join(repoRoot, "docs"), { recursive: true });
+      mkdirSync(join(repoRoot, "docs", "api", "reference"), { recursive: true });
       writeFileSync(
         join(repoRoot, "docs", "README.md"),
         [
@@ -290,6 +293,84 @@ describe("check-release-readiness", () => {
       expect(failure.message).toContain(
         "Escaping Markdown link: docs/README.md -> ../../outside.md",
       );
+    });
+  });
+
+  it("discovers reader documentation while excluding protocol and protected records", () => {
+    withTempRepository((repoRoot) => {
+      mkdirSync(join(repoRoot, "docs"), { recursive: true });
+      mkdirSync(join(repoRoot, "docs", "api", "reference"), { recursive: true });
+      mkdirSync(join(repoRoot, "build-protocol"), { recursive: true });
+      writeFileSync(join(repoRoot, "README.md"), "# Reader\n");
+      writeFileSync(join(repoRoot, "docs", "GUIDE.md"), "# Guide\n");
+      writeFileSync(join(repoRoot, "docs", "DRAFT.md"), "# Draft\n");
+      writeFileSync(join(repoRoot, "docs", "api", "reference", "generated.md"), "# Generated\n");
+      writeFileSync(join(repoRoot, "build-protocol", "TASK.md"), "# Internal\n");
+      writeFileSync(join(repoRoot, "human-review-1-jul.md"), "# Protected\n");
+      execFileSync(
+        "git",
+        ["add", "README.md", "docs/GUIDE.md", "build-protocol/TASK.md", "human-review-1-jul.md"],
+        { cwd: repoRoot },
+      );
+
+      expect(collectUserFacingMarkdownFiles(repoRoot)).toEqual([
+        "README.md",
+        "docs/DRAFT.md",
+        "docs/GUIDE.md",
+      ]);
+    });
+  });
+
+  it("reports internal history and stale example topology in reader documentation", () => {
+    withTempRepository((repoRoot) => {
+      mkdirSync(join(repoRoot, "docs"), { recursive: true });
+      writeFileSync(
+        join(repoRoot, "docs", "GUIDE.md"),
+        "Wave 4 moved examples/datastore-orders, T-0007b, and spine.example.orders.v1.\n",
+      );
+      execFileSync("git", ["add", "docs/GUIDE.md"], { cwd: repoRoot });
+
+      expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([
+        "docs/GUIDE.md:1: internal execution-history term: T-0007b",
+        "docs/GUIDE.md:1: internal execution-history term: Wave 4",
+        "docs/GUIDE.md:1: stale example topology: examples/datastore-orders",
+        "docs/GUIDE.md:1: stale owned example namespace: spine.example.orders.v1",
+      ]);
+    });
+  });
+
+  it("reports false Chat ownership and private-package registry installation", () => {
+    withTempRepository((repoRoot) => {
+      writeFileSync(
+        join(repoRoot, "README.md"),
+        "The Chat model declares Users. Run `pnpm add @spine-event-engine/core`.\n",
+      );
+      execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
+      expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([
+        "README.md:1: false Chat multi-model association: Chat model declares Users",
+        "README.md:1: misleading private-package registry installation: pnpm add @spine-event-engine/core",
+      ]);
+    });
+  });
+
+  it("accepts an IPv4 listen address without treating it as a placeholder version", () => {
+    withTempRepository((repoRoot) => {
+      writeFileSync(join(repoRoot, "README.md"), "Listen on `0.0.0.0`.\n");
+      execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
+
+      expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([]);
+    });
+  });
+
+  it("accepts behavioral ordering and ordinary model vocabulary", () => {
+    withTempRepository((repoRoot) => {
+      writeFileSync(
+        join(repoRoot, "README.md"),
+        "Uses the first declared field, then later dispatches Users and Tasks through values.slice().\n",
+      );
+      execFileSync("git", ["add", "README.md"], { cwd: repoRoot });
+
+      expect(collectUserFacingDocumentationProblems(repoRoot)).toEqual([]);
     });
   });
 

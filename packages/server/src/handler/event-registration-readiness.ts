@@ -14,82 +14,155 @@ import { ReadinessMetadata } from "./registration-readiness-metadata.js";
 const eventRegistrationReadinessToken = Symbol("eventRegistrationReadinessToken");
 const authenticEventRegistrationReadiness = new WeakSet<object>();
 
-/** Event subscriber entry exposed by event registration readiness lookups. */
+/**
+ * Event subscriber entry exposed by event registration readiness lookups.
+ */
 export interface EventRegistrationSubscriberMetadata {
-  /** Fully qualified event message type name subscribed to by one entity handler. */
+  // prettier-ignore
+
+  /**
+   * Fully qualified event message type name subscribed to by one entity handler.
+   */
   readonly eventFullTypeName: string;
-  /** Entity handler metadata object that declared the event subscriber. */
+
+  /**
+   * Entity handler metadata object that declared the event subscriber.
+   */
   readonly entityHandlers: EntityHandlersMetadata;
-  /** Entity class that owns the event subscriber method. */
+
+  /**
+   * Entity class that owns the event subscriber method.
+   */
   readonly entityType: EntityClass;
-  /** Descriptor-derived entity metadata for the subscriber state type. */
+
+  /**
+   * Descriptor-derived entity metadata for the subscriber state type.
+   */
   readonly entity: EntityMetadata;
-  /** Event subscription handler metadata declared by the entity. */
+
+  /**
+   * Event subscription handler metadata declared by the entity.
+   */
   readonly handler: EventSubscriptionHandlerMetadata;
-  /** Original registered handler entry from the handler metadata registry. */
+
+  /**
+   * Original registered handler entry from the handler metadata registry.
+   */
   readonly registeredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata>;
 }
 
-/** Event reactor entry exposed by event registration readiness lookups. */
+/**
+ * Event reactor entry exposed by event registration readiness lookups.
+ */
 export interface EventRegistrationReactorMetadata {
-  /** Fully qualified event message type name reacted to by one entity handler. */
+  // prettier-ignore
+
+  /**
+   * Fully qualified event message type name reacted to by one entity handler.
+   */
   readonly eventFullTypeName: string;
-  /** Entity handler metadata object that declared the event reactor. */
+
+  /**
+   * Entity handler metadata object that declared the event reactor.
+   */
   readonly entityHandlers: EntityHandlersMetadata;
-  /** Entity class that owns the event reactor method. */
+
+  /**
+   * Entity class that owns the event reactor method.
+   */
   readonly entityType: EntityClass;
-  /** Descriptor-derived entity metadata for the reactor state type. */
+
+  /**
+   * Descriptor-derived entity metadata for the reactor state type.
+   */
   readonly entity: EntityMetadata;
-  /** Event reaction handler metadata declared by the entity. */
+
+  /**
+   * Event reaction handler metadata declared by the entity.
+   */
   readonly handler: EventReactionHandlerMetadata;
-  /** Original registered handler entry from the handler metadata registry. */
+
+  /**
+   * Original registered handler entry from the handler metadata registry.
+   */
   readonly registeredHandler: RegisteredHandlerMetadata<EventReactionHandlerMetadata>;
 }
 
-/** Event applier entry exposed by event registration readiness lookups. */
+/**
+ * Event applier entry exposed by event registration readiness lookups.
+ */
 export interface EventRegistrationApplicationMetadata {
-  /** Fully qualified event message type name applied by one entity handler. */
+  // prettier-ignore
+
+  /**
+   * Fully qualified event message type name applied by one entity handler.
+   */
   readonly eventFullTypeName: string;
-  /** Entity state full type name that owns the event applier. */
+
+  /**
+   * Entity state full type name that owns the event applier.
+   */
   readonly stateTypeName: string;
-  /** Entity handler metadata object that declared the event applier. */
+
+  /**
+   * Entity handler metadata object that declared the event applier.
+   */
   readonly entityHandlers: EntityHandlersMetadata;
-  /** Entity class that owns the event applier method. */
+
+  /**
+   * Entity class that owns the event applier method.
+   */
   readonly entityType: EntityClass;
-  /** Descriptor-derived entity metadata for the applier state type. */
+
+  /**
+   * Descriptor-derived entity metadata for the applier state type.
+   */
   readonly entity: EntityMetadata;
-  /** Event application handler metadata declared by the entity. */
+
+  /**
+   * Event application handler metadata declared by the entity.
+   */
   readonly handler: EventApplicationHandlerMetadata;
-  /** Original registered handler entry from the handler metadata registry. */
+
+  /**
+   * Original registered handler entry from the handler metadata registry.
+   */
   readonly registeredHandler: RegisteredHandlerMetadata<EventApplicationHandlerMetadata>;
 }
 
-/** Read-only event registration readiness lookup surface. */
+/**
+ * Read-only event registration readiness lookup surface.
+ */
 export interface EventRegistrationReadinessLookup {
+  // prettier-ignore
+
   /**
    * Returns registered event message type names in deterministic order.
    *
    * @returns A fresh frozen list of event message type names.
    */
   eventTypeNames(): readonly string[];
+
   /**
    * Finds subscriber metadata for an event message type in registry order.
    *
-   * @param eventTypeName - Fully qualified event message type name.
+   * @param eventTypeName Fully qualified event message type name.
    * @returns A fresh frozen list of subscriber metadata.
    */
   findEventSubscribers(eventTypeName: string): readonly EventRegistrationSubscriberMetadata[];
+
   /**
    * Finds reactor metadata for an event message type in registry order.
    *
-   * @param eventTypeName - Fully qualified event message type name.
+   * @param eventTypeName Fully qualified event message type name.
    * @returns A fresh frozen list of reactor metadata.
    */
   findEventReactors(eventTypeName: string): readonly EventRegistrationReactorMetadata[];
+
   /**
    * Finds applier metadata for an event message type in registry order.
    *
-   * @param eventTypeName - Fully qualified event message type name.
+   * @param eventTypeName Fully qualified event message type name.
    * @returns A fresh frozen list of applier metadata.
    */
   findEventApplications(eventTypeName: string): readonly EventRegistrationApplicationMetadata[];
@@ -146,7 +219,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
   /**
    * Builds readiness from an already validated handler metadata registry lookup.
    *
-   * @param registry - Source of entity handler metadata.
+   * @param registry Source of entity handler metadata.
    * @returns Frozen event registration readiness.
    */
   static fromRegistry(registry: HandlerMetadataRegistryLookup): EventRegistrationReadiness {
@@ -206,7 +279,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
    * Duplicate event application validation is intentionally delegated to
    * `HandlerMetadataRegistry`. Subscriber and reactor fan-out is retained.
    *
-   * @param entityHandlers - Entity handler metadata to validate and index.
+   * @param entityHandlers Entity handler metadata to validate and index.
    * @returns Frozen event registration readiness.
    */
   static fromEntityHandlers(
@@ -227,7 +300,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
   /**
    * Finds subscriber metadata for an event message type in registry order.
    *
-   * @param eventTypeName - Fully qualified event message type name.
+   * @param eventTypeName Fully qualified event message type name.
    * @returns A fresh frozen list of subscriber metadata.
    */
   findEventSubscribers(eventTypeName: string): readonly EventRegistrationSubscriberMetadata[] {
@@ -241,7 +314,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
   /**
    * Finds reactor metadata for an event message type in registry order.
    *
-   * @param eventTypeName - Fully qualified event message type name.
+   * @param eventTypeName Fully qualified event message type name.
    * @returns A fresh frozen list of reactor metadata.
    */
   findEventReactors(eventTypeName: string): readonly EventRegistrationReactorMetadata[] {
@@ -255,7 +328,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
   /**
    * Finds applier metadata for an event message type in registry order.
    *
-   * @param eventTypeName - Fully qualified event message type name.
+   * @param eventTypeName Fully qualified event message type name.
    * @returns A fresh frozen list of applier metadata.
    */
   findEventApplications(eventTypeName: string): readonly EventRegistrationApplicationMetadata[] {
@@ -265,10 +338,11 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
       ),
     );
   }
+
   /**
    * Checks whether a value was created by this module's readiness factories.
    *
-   * @param value - Value to test for readiness authenticity.
+   * @param value Value to test for readiness authenticity.
    * @returns `true` when the value is an authentic event registration readiness instance.
    */
   static isAuthentic(value: unknown): value is EventRegistrationReadiness {

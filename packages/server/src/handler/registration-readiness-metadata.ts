@@ -14,22 +14,44 @@ import { HandlerMetadataValues } from "./handler-metadata.js";
 const semanticTagError =
   "Registration readiness entity semanticTags must be a dense array of non-empty strings.";
 
-/** Frozen fields shared by a readiness entry and its registered handler. */
+/**
+ * Frozen fields shared by a readiness entry and its registered handler.
+ */
 export interface ReadinessMetadataFields<Handler extends HandlerMetadata> {
-  /** Entity handler metadata that declared the handler. */
+  // prettier-ignore
+
+  /**
+   * Entity handler metadata that declared the handler.
+   */
   readonly entityHandlers: EntityHandlersMetadata;
-  /** Entity class that owns the handler method. */
+
+  /**
+   * Entity class that owns the handler method.
+   */
   readonly entityType: EntityClass;
-  /** Descriptor-derived metadata for the entity state. */
+
+  /**
+   * Descriptor-derived metadata for the entity state.
+   */
   readonly entity: EntityMetadata;
-  /** Handler metadata used by the readiness entry. */
+
+  /**
+   * Handler metadata used by the readiness entry.
+   */
   readonly handler: Handler;
-  /** Registered handler metadata used to create the entry. */
+
+  /**
+   * Registered handler metadata used to create the entry.
+   */
   readonly registeredHandler: RegisteredHandlerMetadata<Handler>;
 }
 
-/** Creates frozen readiness metadata without sharing mutable caller-owned records. */
+/**
+ * Creates frozen readiness metadata without sharing mutable caller-owned records.
+ */
 class ReadinessMetadataOwner {
+  // prettier-ignore
+
   /**
    * Compares fully qualified Protobuf type names in lexical order.
    *
@@ -272,7 +294,9 @@ class ReadinessMetadataOwner {
   }
 }
 
-/** Creates frozen readiness metadata without sharing mutable caller-owned records. */
+/**
+ * Creates frozen readiness metadata without sharing mutable caller-owned records.
+ */
 export const ReadinessMetadata: Readonly<ReadinessMetadataOwner> = Object.freeze(
   new ReadinessMetadataOwner(),
 );

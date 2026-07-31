@@ -321,12 +321,9 @@ const tasks = BoundedContext.singleTenant("Tasks", { runtime })
   .add(TaskAggregate)
   .add(TaskProjectionRepository)
   .addCommandFilter(authzFilter)
-  .systemSettings(settings => settings.disableCommandLog().forgetEvents());
+  .systemSettings((settings) => settings.disableCommandLog().forgetEvents());
 
-const server = Server.atPort(50051, { runtime })
-  .add(tasks)
-  .include(healthService)
-  .build();
+const server = Server.atPort(50051, { runtime }).add(tasks).include(healthService).build();
 
 await server.start();
 ```

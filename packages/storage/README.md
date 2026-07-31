@@ -1,142 +1,68 @@
 # @spine-event-engine/storage
 
-Small JVM-like storage seam for Spine TS runtime records. Its root API is
-independent of `@spine-event-engine/server`; server runtime code composes this seam rather
-than widening it with delivery or service behavior.
+`@spine-event-engine/storage` defines the storage API used by Spine TS and
+includes an in-memory implementation for local development and tests. Use it
+when an application needs a small record store, or when an adapter needs to
+implement the same storage contract for a durable provider.
 
-The package owns the current storage layer:
+For detailed query, lifecycle, and adapter notes, see
+[REFERENCE documentation for agents](REFERENCE.md).
 
-- `StorageFactory.createRecordStorage(context, spec)` is the one mandatory
-  adapter method;
-- `RecordSpec` describes identified Protobuf records and query columns;
-- `RecordStorage` stores, reads, deletes, and queries those records;
-- `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
-  adapter. Each factory created without an `InMemoryStorageBackend` owns an
-  isolated process-local backend; independently constructed factories share
-  only when they receive the same explicit backend token. Compatible opens in
-  one backend return independently closeable handles over the same logical
-  records;
-- `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
+## Use from this source workspace
 
-`EventStore` is storage-only in this task. It persists and reads `Event`
-records and rejects missing, blank, or duplicate event IDs for one
-factory/context append path, but it does not implement event-bus dispatch,
-delivery queues, subscriber fan-out, or retry behavior.
-`acceptThenAppend(event, onAccepted)` lets bus code keep the event precheck,
-caller acceptance, and append on one captured storage context without making the
-store own dispatch.
+```sh
+pnpm --filter @spine-event-engine/storage build
+```
 
-One `RecordSpec` cannot declare the same `RecordColumn` name twice. Its
-constructor rejects duplicate names before any storage adapter receives the
-specification.
+This private snapshot package is not published to an npm registry. Use it from
+this workspace while developing the framework.
 
-The package stays independent of `@spine-event-engine/server`. Storage scoping uses a
-small structural `StorageContext` with `name`, `multitenant`, and optional
-`tenantId`.
+## Store a Protobuf record in memory
 
-## Shared entity records and diagnostic history
-
-The provider-only entity-history SPI supplies the shared contract that later
-repository and provider work uses for entity persistence. `EntityRecord<I, S>`
-is the one latest-state shape for Aggregate, Projection, and Process Manager
-storage: it contains the canonical ID, Protobuf state, version, and
-archived/deleted lifecycle flags. `EntityRecordStorage` reads and writes that
-latest record.
-
-`EntityStateHistoryPort` and `EntityEventHistoryPort` are immutable history
-ports for repository/adapters. Reads are asynchronous and newest-first;
-`startingFromVersion` is an exclusive continuation boundary. State history
-also supports `stateAt`. Identical writes for the same state `(entity ID,
-version)` or event ID are retries and are no-ops; different content for that
-identity is rejected. State history exposes application-managed `trim` and
-time-based `truncate`; diagnostic event history exposes time-based `truncate`
-only. Maintenance is bounded and resumable, does not expose a generic cursor,
-and is close-aware. A state trim serializes with appends for that entity; a
-truncate processes its selected rows, so an eligible concurrent append is left
-for a later invocation.
-
-`entityStorageKey(stateType, purpose)` creates the closed `current`,
-`state-history`, and `event-history` physical purposes. Adapters scope these
-records by the canonical context, tenant, and purpose key and reject an
-incompatible compatibility fingerprint before accessing rows. The three
-purposes are separate and cannot share rows. `MemoryEntityStorageFactory`
-is the adapter-conformance foundation, not a durable provider.
-
-Repositories configure state/event history through the framework runtime; the
-diagnostic event journal is never an event-sourcing or reconstruction store:
-latest entity state remains the restoration source.
-
-## Query Model
-
-`StorageQueryPolicy.validate(plan, capabilities)` is the canonical normalized
-query boundary for adapters. A provider advertises comparison operators and
-optional `either`, nested-predicate, ordering, mask, and limit features. The
-shared policy rejects malformed or unsupported plans before provider execution;
-`RecordStorage.queryPlan()` then applies the shared complete evaluator for
-nested predicates, repeated ordering, the stable ID tie-breaker, masks, and
-limits. Application query construction remains in `@spine-event-engine/client-node`.
-Framework callers may set `candidateLimit` to bound provider materialization
-independently of the semantic result limit. Providers fetch at most one
-sentinel row beyond that bound, and `RecordStorage` raises
-`QueryCandidateLimitError` before evaluation when it is exceeded.
-
-`RecordStorage` queries are intentionally small and deterministic:
-
-- exact ID filters;
-- exact column filters;
-- sorting by `id`, stored columns, or simple dotted record paths;
-- stable continuations after sorted row keys;
-- non-negative offsets after sorting;
-- positive limits;
-- simple field masks applied to cloned results.
-
-Stored records are cloned on write and read. Generated clone methods are used
-first when available, then Protobuf-ES `clone(schema, message)`, and finally
-`structuredClone()` for non-message values such as stored column data.
-
-## In-Memory Adapter
+Create a `RecordSpec` to describe the record's schema, identity, and searchable
+columns. Pass it to an `InMemoryStorageFactory` with the storage context.
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
 
-const factory = new InMemoryStorageFactory();
-const spec = new RecordSpec({
-  schema: EventSchema,
-  storageKey: "EventSchema:legacy",
-  idSchema: EventIdSchema,
-  extractId: (event) => {
-    if (event.id === undefined) {
-      throw new Error("Expected event.id.");
-    }
-
-    return event.id;
-  },
-  columns: [new RecordColumn("typeUrl", (event) => event.message?.typeUrl, "string")],
-});
-const storage = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
-
-await storage.write(
-  create(EventSchema, {
-    id: create(EventIdSchema, { value: "event-1" }),
+const records = new InMemoryStorageFactory().createRecordStorage(
+  { name: "Users", multitenant: false },
+  new RecordSpec<string, StringValue>({
+    schema: StringValueSchema,
+    storageKey: "users.Name",
+    idKind: "string",
+    extractId: (user) => user.value,
+    columns: [new RecordColumn<StringValue, string>("value", (user) => user.value, "string")],
   }),
 );
+
+await records.write(create(StringValueSchema, { value: "ava" }));
+const user = await records.read("ava");
+const users = await records.query({
+  filters: [{ column: "value", value: "ava" }],
+  sort: [{ field: "value", direction: "asc" }],
+  limit: 20,
+});
 ```
 
-`InMemoryRecordStorage` keeps deterministic per-tenant slices when the context
-is multitenant. Every `InMemoryStorageFactory` created without an
-`InMemoryStorageBackend` owns a fresh, isolated in-memory backend. Pass the
-same root-exported `InMemoryStorageBackend` token to independently constructed
-record or adapter entity factories only when they must deliberately share
-compatible canonical scopes. The shared backend rejects an incompatible
-fingerprint before access, and closing one factory does not clear rows used by
-its siblings. The adapter is not durable across restarts. Custom adapters must
-make repeated `createRecordStorage(context, spec)` calls observe the same
-logical records while returning independently closeable storage handles.
+`InMemoryStorageFactory` creates a fresh backend by default. Pass the same
+`InMemoryStorageBackend` to separate factories only when they intentionally
+need to share rows. Query named columns, sort them, and limit the result; the
+column names come from the `RecordSpec`.
 
-Every `RecordSpec` requires a stable, nonblank `storageKey` and exactly one ID
-descriptor: a Protobuf `idSchema` or a nonblank primitive `idKind`. Each
-`RecordColumn` also requires a nonblank `valueType` descriptor. These declared
-descriptors are inputs to the compatibility fingerprint, so adapters reject an
-incompatible layout before accessing rows.
+The storage API clones data at its boundaries. For the base factory and the
+in-memory implementation, closing a factory prevents new record handles while
+existing handles remain usable. Closing a record handle invalidates that
+handle's later operations. Other adapters can close live handles; see their
+[Datastore reference](../storage-datastore/REFERENCE.md) and
+[MySQL reference](../storage-rdbms/REFERENCE.md) before choosing shutdown
+behavior.
+
+## Choose a durable adapter
+
+`@spine-event-engine/storage-datastore` provides Google Cloud Datastore
+storage. `@spine-event-engine/storage-rdbms` provides MySQL storage. Configure
+those packages in application code and pass the resulting factory to the Spine
+server; this package does not choose a database.

@@ -1,14 +1,27 @@
-/** Informational session facts returned by an application gateway; never credentials. */
+/**
+ * Informational session facts returned by an application gateway; never credentials.
+ */
 export interface BrowserSessionContext {
-  /** Holds the resolved actor identifier. */
+  // prettier-ignore
+
+  /**
+   * Holds the resolved actor identifier.
+   */
   readonly actor?: string;
-  /** Holds the resolved tenant identifier. */
+
+  /**
+   * Holds the resolved tenant identifier.
+   */
   readonly tenant?: string;
-  /** Holds the session expiry time. */
+
+  /**
+   * Holds the session expiry time.
+   */
   readonly expiresAt?: Date;
 }
 
-/** Resolves finite, abortable application-owned reauthentication context.
+/**
+ * Resolves finite, abortable application-owned reauthentication context.
  * @param request Supplies the cancellation signal for reauthentication.
  * @returns Resolves to the latest informational context, if available.
  */
@@ -16,21 +29,38 @@ export type OnBrowserSessionContext = (
   request: Readonly<{ signal: AbortSignal }>,
 ) => Promise<BrowserSessionContext | undefined>;
 
-/** Shared bounded HTTP configuration for an application-owned browser session. */
+/**
+ * Shared bounded HTTP configuration for an application-owned browser session.
+ */
 export interface BrowserSessionOptions {
-  /** Supplies the browser-compatible fetch implementation. */
+  // prettier-ignore
+
+  /**
+   * Supplies the browser-compatible fetch implementation.
+   */
   readonly fetch?: typeof globalThis.fetch;
-  /** A positive request deadline in milliseconds, capped at one minute. */
+
+  /**
+   * A positive request deadline in milliseconds, capped at one minute.
+   */
   readonly maxRequestMs?: number;
 }
 
-/** Construction options for an in-memory bearer session. */
+/**
+ * Construction options for an in-memory bearer session.
+ */
 export interface BearerBrowserSessionOptions extends BrowserSessionOptions {
-  /** Supplies the memory-only bearer token. */
+  // prettier-ignore
+
+  /**
+   * Supplies the memory-only bearer token.
+   */
   readonly token: string;
 }
 
-/** Browser-managed cookie or memory-only bearer session resource. */
+/**
+ * Browser-managed cookie or memory-only bearer session resource.
+ */
 export class BrowserSession {
   readonly #fetch: typeof globalThis.fetch;
   readonly #maxRequestMs: number;
@@ -54,14 +84,16 @@ export class BrowserSession {
     this.#bearer = bearer;
   }
 
-  /** Gets the browser Fetch credential mode selected by this immutable session.
+  /**
+   * Gets the browser Fetch credential mode selected by this immutable session.
    * @returns Returns the selected credential mode.
    */
   get credentials(): "include" | "omit" {
     return this.#credentials;
   }
 
-  /** Creates a browser-managed cookie session. Cookies never enter JavaScript metadata.
+  /**
+   * Creates a browser-managed cookie session. Cookies never enter JavaScript metadata.
    * @param options Configures fetch and the request deadline.
    * @returns Returns the new cookie session.
    */
@@ -69,7 +101,8 @@ export class BrowserSession {
     return new BrowserSession("include", undefined, options);
   }
 
-  /** Creates a memory-only bearer session. The token is never persisted by this resource.
+  /**
+   * Creates a memory-only bearer session. The token is never persisted by this resource.
    * @param options Supplies the bearer token and session configuration.
    * @returns Returns the new bearer session.
    */
@@ -77,7 +110,8 @@ export class BrowserSession {
     return new BrowserSession("omit", BrowserSessionValues.requiredToken(options.token), options);
   }
 
-  /** Gets the latest application gateway facts, which are informational and never credentials.
+  /**
+   * Gets the latest application gateway facts, which are informational and never credentials.
    * @returns Returns a copied context, if one is available.
    */
   get context(): BrowserSessionContext | undefined {
@@ -86,7 +120,8 @@ export class BrowserSession {
       : BrowserSessionValues.copyContext(this.#context);
   }
 
-  /** Creates metadata for one request without exposing cookie values.
+  /**
+   * Creates metadata for one request without exposing cookie values.
    * @returns Returns the request metadata.
    */
   requestMetadata(): Headers {
@@ -95,7 +130,8 @@ export class BrowserSession {
     return headers;
   }
 
-  /** Updates the memory-only bearer value.
+  /**
+   * Updates the memory-only bearer value.
    * @param token Supplies the new bearer token.
    */
   replaceBearer(token: string): void {
@@ -105,7 +141,9 @@ export class BrowserSession {
     this.#bearer = BrowserSessionValues.requiredToken(token);
   }
 
-  /** Removes the memory-only bearer value. Cookie sessions remain browser-managed. */
+  /**
+   * Removes the memory-only bearer value. Cookie sessions remain browser-managed.
+   */
   clearBearer(): void {
     this.#bearer = undefined;
   }
@@ -136,7 +174,8 @@ export class BrowserSession {
     });
   }
 
-  /** Updates informational context before a reconnect without treating it as credentials.
+  /**
+   * Updates informational context before a reconnect without treating it as credentials.
    * @param onContext Resolves the latest application context.
    * @param options Supplies optional cancellation.
    * @returns Completes after the latest context is retained.
@@ -153,7 +192,8 @@ export class BrowserSession {
     this.#context = context === undefined ? undefined : BrowserSessionValues.freezeContext(context);
   }
 
-  /** Closes session-owned HTTP or reauthentication work and clears memory-only credentials.
+  /**
+   * Closes session-owned HTTP or reauthentication work and clears memory-only credentials.
    * @returns Completes after cancellation is requested.
    */
   close(): Promise<void> {

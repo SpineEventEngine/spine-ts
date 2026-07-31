@@ -8,14 +8,17 @@ import {
   type RemoteShardObservation,
 } from "./types.js";
 
-/** Buffers one bounded, reconnecting remote shard-observation stream. */
+/**
+ * Buffers one bounded, reconnecting remote shard-observation stream.
+ */
 export class ShardObservationStream implements DeliveryShardObservationStream {
   readonly #values: RemoteShardObservation[] = [];
   readonly #waiters: ((result: IteratorResult<RemoteShardObservation>) => void)[] = [];
   #error: Error | undefined;
   #done = false;
 
-  /** Creates and begins an observation stream.
+  /**
+   * Creates and begins an observation stream.
    * @param config Supplies bounded transport, decoding, and cleanup operations.
    */
   constructor(
@@ -38,7 +41,8 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
     void this.#pump();
   }
 
-  /** Cancels this stream and releases its local resources.
+  /**
+   * Cancels this stream and releases its local resources.
    */
   cancel(): void {
     if (this.#done) return;
@@ -46,7 +50,8 @@ export class ShardObservationStream implements DeliveryShardObservationStream {
     this.#finish();
   }
 
-  /** Returns this stream's async iterator.
+  /**
+   * Returns this stream's async iterator.
    * @returns An iterator that yields detached observations.
    */
   [Symbol.asyncIterator](): AsyncIterator<RemoteShardObservation> {

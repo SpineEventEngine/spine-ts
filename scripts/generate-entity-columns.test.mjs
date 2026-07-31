@@ -140,9 +140,9 @@ describe("Entity column companion generator", () => {
       typesInFile: () => [entity, column],
       files: [
         {
-          name: "spine/example/todo/v1/task_list",
+          name: "spine/examples/todo/task_list",
           proto: {
-            name: "spine/example/todo/v1/task_list.proto",
+            name: "spine/examples/todo/task_list.proto",
             dependency: ["spine/options.proto"],
           },
           messages: [AggregateStateSchema, ProjectionStateSchema, ProcessManagerStateSchema],
@@ -154,7 +154,7 @@ describe("Entity column companion generator", () => {
       },
     });
 
-    expect(generatedFiles).toEqual(["spine/example/todo/v1/task_list_columns.ts"]);
+    expect(generatedFiles).toEqual(["spine/examples/todo/task_list_columns.ts"]);
     expect(output.imports).toContainEqual({
       from: "@spine-event-engine/client-node/codegen",
       name: "GeneratedEntityColumns",

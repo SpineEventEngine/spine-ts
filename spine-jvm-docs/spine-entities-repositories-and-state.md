@@ -105,7 +105,7 @@ A `Transaction`:
 - exposes a builder/draft initialized from current state.
 - buffers state, version, and lifecycle changes.
 - propagates one or more phases, rolling back on errors/rejections/unhandled exceptions.
-- increments versions through phase-specific `VersionIncrement`.
+- increments versions through operation-specific `VersionIncrement`.
 - commits by validating and applying state/version/lifecycle changes to the entity.
 - emits `EntityRecordChange` to a `TransactionListener`.
 - releases itself after commit or rollback.
@@ -340,7 +340,7 @@ Sources: `ProcessManager.java`; `ProcessManagerRepository.java`.
 Process manager behavior:
 
 - State changes happen in command handlers, event/rejection reactors, or commanding methods through the transaction builder.
-- Versions increment sequentially per handled command/event phase.
+- Versions increment sequentially for each handled command or event.
 - Repositories require at least one command handler, event reactor, rejection reactor, or commanding method.
 - Event routing default is customized to first message field.
 - Command routing default is first command field unless customized.

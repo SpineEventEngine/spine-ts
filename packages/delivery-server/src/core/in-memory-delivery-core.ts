@@ -6,33 +6,63 @@ import { InMemoryDeliveryState } from "./in-memory-delivery-state.js";
 import { MutationAdmission } from "./mutation-admission.js";
 import { ShardHandlers } from "./shard-service.js";
 
-/** Configures the listener-free in-memory delivery core. */
+/**
+ * Configures the listener-free in-memory delivery core.
+ */
 export interface DeliveryCoreOptions {
-  /** Automatic pickup expiry; zero disables automatic stale takeover. */
+  // prettier-ignore
+
+  /**
+   * Automatic pickup expiry; zero disables automatic stale takeover.
+   */
   readonly processingTimeoutMs?: number;
-  /** Returns a deterministic wall-clock value in Unix milliseconds.
+
+  /**
+   * Returns a deterministic wall-clock value in Unix milliseconds.
    *
    * @returns Provides the current Unix time in milliseconds.
    */
   readonly now?: () => number;
-  /** Maximum retained records; integer from 1 through 2,147,483,647. */
+
+  /**
+   * Maximum retained records; integer from 1 through 2,147,483,647.
+   */
   readonly maxRetainedMessages?: number;
-  /** Maximum retained serialized record bytes; integer from 1 through 2,147,483,647. */
+
+  /**
+   * Maximum retained serialized record bytes; integer from 1 through 2,147,483,647.
+   */
   readonly maxRetainedBytes?: number;
-  /** Maximum tracked shards; integer from 1 through 1,000. */
+
+  /**
+   * Maximum tracked shards; integer from 1 through 1,000.
+   */
   readonly maxTrackedShards?: number;
 }
 
-/** Provides handler implementations for caller-owned Connect router registration. */
+/**
+ * Provides handler implementations for caller-owned Connect router registration.
+ */
 export interface DeliveryCore {
-  /** Serves Inbox RPCs. */
+  // prettier-ignore
+
+  /**
+   * Serves Inbox RPCs.
+   */
   readonly inbox: ServiceImpl<typeof InboxService>;
-  /** Serves Shard RPCs. */
+
+  /**
+   * Serves Shard RPCs.
+   */
   readonly shards: ServiceImpl<typeof ShardService>;
 }
 
-/** Creates listener-free in-memory delivery cores. */
+/**
+ * Creates listener-free in-memory delivery cores.
+ */
 export const InMemoryDelivery: Readonly<{
+  // prettier-ignore
+
   /**
    * Creates an empty Inbox and Shard core.
    *
@@ -42,6 +72,8 @@ export const InMemoryDelivery: Readonly<{
    */
   create(options?: DeliveryCoreOptions): DeliveryCore;
 }> = Object.freeze({
+  // prettier-ignore
+
   /**
    * Creates an empty Inbox and Shard core.
    *

@@ -52,7 +52,7 @@ subscription update latency.
 
 ## Suggested files
 
-`examples/project-management/` with `src/`, generated proto/registry output,
+`examples/projects/` with `src/`, generated proto/registry output,
 `test/load-smoke.test.ts`, `test/load-stress.test.ts`, a scenario runner, and a
 README documenting setup, limits, metrics, and interpretation. Keep the load
 runner separate from domain handlers so the example remains a black-box client.

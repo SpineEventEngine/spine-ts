@@ -40,9 +40,16 @@ import type {
  * supplied bounds must be positive safe integers.
  */
 export interface SubscriptionRelayLimits {
-  /** Limits the number of queued updates. */
+  // prettier-ignore
+
+  /**
+   * Limits the number of queued updates.
+   */
   readonly maxMessages?: number;
-  /** Limits the total queued update bytes. */
+
+  /**
+   * Limits the total queued update bytes.
+   */
   readonly maxBytes?: number;
 }
 
@@ -51,7 +58,9 @@ const relayDefaults: Required<SubscriptionRelayLimits> = {
   maxBytes: 1_048_576,
 };
 
-/** A bounded asynchronous FIFO relay between one private backend stream and one public Connect stream. */
+/**
+ * A bounded asynchronous FIFO relay between one private backend stream and one public Connect stream.
+ */
 export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate> {
   readonly #limits: Required<SubscriptionRelayLimits>;
   readonly #queue: Uint8Array[] = [];
@@ -63,7 +72,8 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
   #terminal: unknown;
   #closed = false;
 
-  /** Creates a bounded FIFO relay.
+  /**
+   * Creates a bounded FIFO relay.
    * @param limits The optional message and byte bounds.
    */
   constructor(limits: SubscriptionRelayLimits = {}) {
@@ -110,19 +120,23 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
     }
   }
 
-  /** Starts graceful FIFO drain; later cancellation or failure supersedes it and purges queued bytes. */
+  /**
+   * Starts graceful FIFO drain; later cancellation or failure supersedes it and purges queued bytes.
+   */
   close(): void {
     this.#finish();
   }
 
-  /** Throws queued and future consumers, purging bytes.
+  /**
+   * Throws queued and future consumers, purging bytes.
    * @param reason The terminal failure reason.
    */
   fail(reason: unknown): void {
     this.#finish(reason);
   }
 
-  /** Returns the public iterator; `return()` cancels it and purges queued bytes, while `throw()` fails it.
+  /**
+   * Returns the public iterator; `return()` cancels it and purges queued bytes, while `throw()` fails it.
    * @returns The single public update iterator.
    */
   [Symbol.asyncIterator](): AsyncIterator<SubscriptionUpdate> {
@@ -192,7 +206,9 @@ export class SubscriptionUpdateRelay implements AsyncIterable<SubscriptionUpdate
   }
 }
 
-/** Owns relay rejection completion values. */
+/**
+ * Creates completed native-relay rejection values.
+ */
 const NativeRelayValues = Object.freeze({
   rejectedRelayPromise(reason: unknown): Promise<never> {
     return Promise.resolve().then(() => {
@@ -209,14 +225,16 @@ const NativeRelayValues = Object.freeze({
 export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForwarder {
   readonly #transport: Transport;
 
-  /** Creates a native adapter over one Connect transport.
+  /**
+   * Creates a native adapter over one Connect transport.
    * @param transport The native Connect transport.
    */
   constructor(transport: Transport) {
     this.#transport = transport;
   }
 
-  /** Sends an admitted Post or Read envelope through its matching native descriptor.
+  /**
+   * Sends an admitted Post or Read envelope through its matching native descriptor.
    * @param request The admitted unary request envelope.
    * @returns The encoded native response.
    */
@@ -245,7 +263,8 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     throw new ConnectError("unsupported native unary operation", Code.Unimplemented);
   }
 
-  /** Creates a native subscription with the supplied admitted cancellation signal.
+  /**
+   * Creates a native subscription with the supplied admitted cancellation signal.
    * @param request The admitted subscription topic.
    * @param signal The admitted cancellation signal.
    * @returns The private backend subscription envelope.
@@ -261,7 +280,8 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     return { kind: "backend-subscription-envelope", bytes: toBinary(SubscriptionSchema, result) };
   }
 
-  /** Streams native Activate updates through the supplied asynchronous public-update sink.
+  /**
+   * Streams native Activate updates through the supplied asynchronous public-update sink.
    * @param request The public and private subscription envelopes plus update sink.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native activation ends.
@@ -285,7 +305,8 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
       });
   }
 
-  /** Cancels the native subscription represented by the private backend envelope.
+  /**
+   * Cancels the native subscription represented by the private backend envelope.
    * @param request The public and private subscription envelopes.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native cancellation ends.
@@ -303,7 +324,8 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
     );
   }
 
-  /** Performs mandatory native cancellation/disposal compensation for a private envelope.
+  /**
+   * Performs mandatory native cancellation/disposal compensation for a private envelope.
    * @param envelope The private backend subscription envelope.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native disposal ends.
@@ -319,41 +341,78 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   }
 }
 
-/** Application-owned extractor of browser credentials and allowlisted request facts from Connect context. */
+/**
+ * Application-owned extractor of browser credentials and allowlisted request facts from Connect context.
+ */
 export interface NativeGatewayRequestContext {
-  /** Reads credentials for the gateway only; they are never forwarded to native services.
+  // prettier-ignore
+
+  /**
+   * Reads credentials for the gateway only; they are never forwarded to native services.
    * @param context The incoming Connect handler context.
    * @returns The extracted request credential.
    */
   credential(context: HandlerContext): RequestCredential;
-  /** Reads the allowlisted authorization and diagnostic transport view for the gateway only.
+
+  /**
+   * Reads the allowlisted authorization and diagnostic transport view for the gateway only.
    * @param context The incoming Connect handler context.
    * @returns The allowed transport facts.
    */
   transport(context: HandlerContext): TransportRequestContext;
 }
 
-/** B4 Connect services. Each handler delegates to the reviewed B2/B3 gateway boundary. */
+/**
+ * B4 Connect services. Each handler delegates to the reviewed B2/B3 gateway boundary.
+ */
 export interface NativeGatewayServices {
-  /** Connect AuthenticationService implementation for informational context resolution. */
+  // prettier-ignore
+
+  /**
+   * Connect AuthenticationService implementation for informational context resolution.
+   */
   readonly authentication: ServiceImpl<typeof AuthenticationService>;
-  /** Connect CommandService implementation whose Post handler delegates to the B2 unary gateway. */
+
+  /**
+   * Connect CommandService implementation whose Post handler delegates to the B2 unary gateway.
+   */
   readonly command: ServiceImpl<typeof CommandService>;
-  /** Connect QueryService implementation whose Read handler delegates to the B2 unary gateway. */
+
+  /**
+   * Connect QueryService implementation whose Read handler delegates to the B2 unary gateway.
+   */
   readonly query: ServiceImpl<typeof QueryService>;
-  /** Connect SubscriptionService implementation whose handlers delegate to the B3 subscription gateway. */
+
+  /**
+   * Connect SubscriptionService implementation whose handlers delegate to the B3 subscription gateway.
+   */
   readonly subscription: ServiceImpl<typeof SubscriptionService>;
 }
 
-/** Named options for {@link createNativeGatewayServices}. */
+/**
+ * Named options for {@link createNativeGatewayServices}.
+ */
 export interface NativeGatewayServicesOptions {
-  /** B2 Post/Read boundary. */
+  // prettier-ignore
+
+  /**
+   * B2 Post/Read boundary.
+   */
   readonly unary: UnaryGateway;
-  /** B3 Subscribe/Activate/Cancel boundary. */
+
+  /**
+   * B3 Subscribe/Activate/Cancel boundary.
+   */
   readonly subscriptions: SubscriptionGateway;
-  /** Application-owned context extractor. */
+
+  /**
+   * Application-owned context extractor.
+   */
   readonly requests: NativeGatewayRequestContext;
-  /** Optional public relay bounds. */
+
+  /**
+   * Optional public relay bounds.
+   */
   readonly relay?: SubscriptionRelayLimits;
 }
 
@@ -415,7 +474,9 @@ export function createNativeGatewayServices(
   };
 }
 
-/** Owns native Connect gateway conversion, response, and error values. */
+/**
+ * Converts native Connect gateway inputs, responses, and errors.
+ */
 const NativeGatewayValues = Object.freeze({
   async resolveContext(
     options: NativeGatewayServicesOptions,

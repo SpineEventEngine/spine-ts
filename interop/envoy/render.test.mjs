@@ -17,8 +17,14 @@ test("renders a bounded grpc-web gateway-only listener", () => {
   assert.match(rendered, /name: envoy\.filters\.http\.grpc_web/);
   assert.match(rendered, /allow_origin_string_match:[\s\S]*https:\/\/chat\.example\.test/);
   assert.match(rendered, /allow_credentials: true/);
-  assert.match(rendered, /allow_headers: content-type,x-grpc-web,grpc-timeout,connect-protocol-version,connect-timeout-ms,authorization,x-user-agent,x-spine-csrf/);
-  assert.match(rendered, /Connect application\/json and application\/proto requests pass through unchanged/);
+  assert.match(
+    rendered,
+    /allow_headers: content-type,x-grpc-web,grpc-timeout,connect-protocol-version,connect-timeout-ms,authorization,x-user-agent,x-spine-csrf/,
+  );
+  assert.match(
+    rendered,
+    /Connect application\/json and application\/proto requests pass through unchanged/,
+  );
   assert.match(rendered, /type: LOGICAL_DNS/);
   assert.match(rendered, /envoy\.extensions\.upstreams\.http\.v3\.HttpProtocolOptions/);
   assert.match(rendered, /max_request_headers_kb: 16/);
@@ -27,7 +33,10 @@ test("renders a bounded grpc-web gateway-only listener", () => {
   assert.match(rendered, /\/spine\.auth\.AuthenticationService\/ResolveContext/);
   assert.match(rendered, /\/spine\.client\.QueryService\/Read/);
   assert.match(rendered, /\/spine\.client\.SubscriptionService\/Activate/);
-  assert.match(rendered, /SubscriptionService\/Activate \}\n {26}route: \{ cluster: gateway, timeout: 0s \}/);
+  assert.match(
+    rendered,
+    /SubscriptionService\/Activate \}\n {26}route: \{ cluster: gateway, timeout: 0s \}/,
+  );
   assert.doesNotMatch(rendered, /backend/);
 });
 

@@ -5,6 +5,6 @@
   "protoRoot": "proto",
   "generatedRoot": "generated",
   "exportRoot": "generated",
-  "dependencies": ["@spine-event-engine/proto", "@spine-event-engine/example-chat-users-model"],
+  "dependencies": ["@spine-event-engine/proto"],
   "moduleExport": "chatProtoModule"
 }

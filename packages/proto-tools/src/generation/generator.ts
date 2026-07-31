@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import type { SpawnSyncReturns } from "node:child_process";
 
@@ -21,9 +22,14 @@ import { readManifestAt } from "../io/manifest-reader.js";
 import { ModelGraph } from "../model/model-graph.js";
 import { ManifestFile, type ManifestFileOperations } from "../io/atomic-manifest.js";
 
-/** Bounded seams used to test failure handling while retaining real Buf integration. */
+/**
+ * Bounded seams used to test failure handling while retaining real Buf integration.
+ */
 export interface GenerationOperations {
-  /** Executes Buf for the staged model sources.
+  // prettier-ignore
+
+  /**
+   * Executes Buf for the staged model sources.
    *
    * @param moduleRoot The temporary Buf module root.
    * @param output The temporary generated-output directory.
@@ -38,7 +44,9 @@ export interface GenerationOperations {
     packageName: string,
     runner?: SubprocessRunner,
   ) => void;
-  /** Updates generated imports that belong to direct model dependencies.
+
+  /**
+   * Updates generated imports that belong to direct model dependencies.
    *
    * @param output The generated-output directory.
    * @param owners The package that owns each Proto path.
@@ -51,7 +59,9 @@ export interface GenerationOperations {
     >,
     currentPackage: string,
   ) => void;
-  /** Writes the generated module descriptor.
+
+  /**
+   * Writes the generated module descriptor.
    *
    * @param output The generated-output directory.
    * @param exportName The generated module export name.
@@ -64,52 +74,78 @@ export interface GenerationOperations {
     packageName: string,
     dependencies: readonly { readonly name: string; readonly moduleExport: string }[],
   ) => void;
-  /** Applies a filesystem rename during publication, backup, or rollback.
+
+  /**
+   * Applies a filesystem rename during publication, backup, or rollback.
    *
    * @param from The current source path.
    * @param to The destination path.
    */
   readonly rename?: (from: string, to: string) => void;
-  /** Overrides manifest publication filesystem operations for tests. */
+
+  /**
+   * Overrides manifest publication filesystem operations for tests.
+   */
   readonly manifestOperations?: Partial<ManifestFileOperations>;
-  /** Runs a subprocess for Buf generation or validation. */
+
+  /**
+   * Runs a subprocess for Buf generation or validation.
+   */
   readonly runProcess?: SubprocessRunner;
-  /** Overrides generation-claim filesystem operations for tests. */
+
+  /**
+   * Overrides generation-claim filesystem operations for tests.
+   */
   readonly lockOperations?: Partial<GenerationLockOperations>;
 }
 
-/** Bounded lock seams for deterministic ownership and cleanup tests. */
+/**
+ * Bounded lock seams for deterministic ownership and cleanup tests.
+ */
 export interface GenerationLockOperations {
-  /** Creates a lock file with its owner content.
+  // prettier-ignore
+
+  /**
+   * Creates a lock file with its owner content.
    *
    * @param path The unique lock-file path.
    * @param content The serialized owner metadata.
    */
   readonly create: (path: string, content: string) => void;
-  /** Lists the entries in a package directory.
+
+  /**
+   * Lists the entries in a package directory.
    *
    * @param directory The package directory to inspect.
    * @returns The directory entry names.
    */
   readonly list: (directory: string) => readonly string[];
-  /** Reads the content of a lock file.
+
+  /**
+   * Reads the content of a lock file.
    *
    * @param path The lock-file path.
    * @returns The serialized owner metadata.
    */
   readonly read: (path: string) => string;
-  /** Inspects the kind of a lock-file entry.
+
+  /**
+   * Inspects the kind of a lock-file entry.
    *
    * @param path The lock-file path.
    * @returns Whether the entry is regular, symbolic, or another kind.
    */
   readonly inspect: (path: string) => "regular" | "symlink" | "other";
-  /** Removes a lock file.
+
+  /**
+   * Removes a lock file.
    *
    * @param path The lock-file path.
    */
   readonly remove: (path: string) => void;
-  /** Determines whether a lock owner is still running.
+
+  /**
+   * Determines whether a lock owner is still running.
    *
    * @param pid The candidate process identifier.
    * @returns The liveness result for the candidate process.
@@ -117,10 +153,13 @@ export interface GenerationLockOperations {
   readonly liveness: (pid: number) => ClaimLiveness;
 }
 
-/** Result of a bounded generation-claim liveness probe. */
+/**
+ * Result of a bounded generation-claim liveness probe.
+ */
 export type ClaimLiveness = "alive" | "dead" | "indeterminate";
 
-/** Executes the packaged Buf executable in a synchronous subprocess.
+/**
+ * Executes the packaged Buf executable in a synchronous subprocess.
  *
  * @param command The executable path.
  * @param arguments_ The command-line arguments.
@@ -141,9 +180,15 @@ export type SubprocessRunner = (
 const bufTimeoutMs = 300_000;
 const bufMaxBuffer = 1_048_576;
 
-/** Bounded seams for atomic application-registry publication failures. */
+/**
+ * Bounded seams for atomic application-registry publication failures.
+ */
 export interface CompositionOperations {
-  /** Overrides registry publication filesystem operations for tests. */
+  // prettier-ignore
+
+  /**
+   * Overrides registry publication filesystem operations for tests.
+   */
   readonly registryOperations?: Partial<ManifestFileOperations>;
 }
 
@@ -169,7 +214,9 @@ const defaultLockOperations: GenerationLockOperations = {
   liveness: (pid) => protoGeneration.claimLiveness(pid),
 };
 
-/** Reports Proto artifact generation failures. */
+/**
+ * Reports Proto artifact generation failures.
+ */
 const ProtoGenerationErrors: Readonly<{ fail(owner: string, message: string): never }> =
   Object.freeze({
     fail(owner: string, message: string): never {
@@ -177,9 +224,14 @@ const ProtoGenerationErrors: Readonly<{ fail(owner: string, message: string): ne
     },
   });
 
-/** Generates and composes deterministic Protobuf package artifacts. */
+/**
+ * Generates and composes deterministic Protobuf package artifacts.
+ */
 const protoGeneration = Object.freeze({
-  /** Builds a model package's owned Protobuf-ES sources and module descriptor.
+  // prettier-ignore
+
+  /**
+   * Builds a model package's owned Protobuf-ES sources and module descriptor.
    *
    * @param packageRoot The root of the model package to generate.
    * @param operations Optional bounded filesystem and process seams for tests.
@@ -217,6 +269,7 @@ const protoGeneration = Object.freeze({
           config.packageName,
           operations.runProcess,
         );
+        protoGeneration.assertRejectionRuntimeDependency(packageRoot, config.packageName, output);
         (operations.rewriteImports ?? protoGeneration.rewriteDependencyImports)(
           output,
           graph.protoOwners,
@@ -326,7 +379,8 @@ const protoGeneration = Object.freeze({
     }
   },
 
-  /** Returns a signal-zero probe result without treating unknown process errors as death.
+  /**
+   * Returns a signal-zero probe result without treating unknown process errors as death.
    *
    * @param pid The process identifier to probe.
    * @param probe The signal-zero probe to run.
@@ -345,7 +399,8 @@ const protoGeneration = Object.freeze({
     }
   },
 
-  /** Writes the explicit, deterministic application model registry.
+  /**
+   * Writes the explicit, deterministic application model registry.
    *
    * @param packageRoot The root of the application package to compose.
    * @param operations Optional bounded manifest publication seams for tests.
@@ -388,6 +443,31 @@ const protoGeneration = Object.freeze({
       mkdirSync(dirname(target), { recursive: true });
       copyFileSync(source, target);
     }
+  },
+
+  assertRejectionRuntimeDependency(packageRoot: string, packageName: string, output: string): void {
+    if (!protoGeneration.files(output).some((file) => file.endsWith("rejections.ts"))) return;
+    let dependencies: unknown;
+    try {
+      const packageJson: unknown = JSON.parse(
+        readFileSync(join(packageRoot, "package.json"), "utf8"),
+      );
+      dependencies =
+        packageJson !== null && typeof packageJson === "object"
+          ? (packageJson as Record<string, unknown>).dependencies
+          : undefined;
+    } catch {
+      ProtoGenerationErrors.fail(packageName, "cannot read package runtime dependencies");
+    }
+    if (
+      dependencies === null ||
+      typeof dependencies !== "object" ||
+      typeof (dependencies as Record<string, unknown>)["@spine-event-engine/core"] !== "string"
+    )
+      ProtoGenerationErrors.fail(
+        packageName,
+        "rejection generation requires direct runtime dependency @spine-event-engine/core",
+      );
   },
 
   copyDependencySources(
@@ -445,6 +525,12 @@ const protoGeneration = Object.freeze({
       spawnSync(command, arguments_, options),
   ): void {
     const protocGenEs = protoGeneration.resolveTool("@bufbuild/protoc-gen-es/bin/protoc-gen-es");
+    const rejectionGenerator = fileURLToPath(
+      new URL(
+        import.meta.url.endsWith(".ts") ? "./rejection-generator.ts" : "./rejection-generator.js",
+        import.meta.url,
+      ),
+    );
     writeFileSync(join(moduleRoot, "buf.yaml"), "version: v2\nmodules:\n  - path: .\n", "utf8");
     writeFileSync(
       join(moduleRoot, "buf.gen.yaml"),
@@ -452,6 +538,13 @@ const protoGeneration = Object.freeze({
         "version: v2",
         "plugins:",
         `  - local: ${protocGenEs}`,
+        "    out: output",
+        "    opt:",
+        "      - target=ts",
+        "      - import_extension=js",
+        "  - local:",
+        `      - ${process.execPath}`,
+        `      - ${rejectionGenerator}`,
         "    out: output",
         "    opt:",
         "      - target=ts",
@@ -658,22 +751,31 @@ const protoGeneration = Object.freeze({
   },
 });
 
-/** Generates and composes deterministic Protobuf package artifacts. */
+/**
+ * Generates and composes deterministic Protobuf package artifacts.
+ */
 export const ProtoGeneration: Readonly<{
-  /** Generates a model package's Protobuf-ES sources and module descriptor.
+  // prettier-ignore
+
+  /**
+   * Generates a model package's Protobuf-ES sources and module descriptor.
    *
    * @param packageRoot The root of the model package to generate.
    * @param operations Optional bounded filesystem and process seams for tests.
    */
   generate(packageRoot: string, operations?: GenerationOperations): void;
-  /** Determines the liveness of a generation-claim owner.
+
+  /**
+   * Determines the liveness of a generation-claim owner.
    *
    * @param pid The process identifier to probe.
    * @param probe The optional signal-zero probe to run.
    * @returns Whether the claim owner is alive, dead, or indeterminate.
    */
   claimLiveness(pid: number, probe?: (candidate: number) => unknown): ClaimLiveness;
-  /** Composes an application's deterministic model registry.
+
+  /**
+   * Composes an application's deterministic model registry.
    *
    * @param packageRoot The root of the application package to compose.
    * @param operations Optional bounded manifest publication seams for tests.

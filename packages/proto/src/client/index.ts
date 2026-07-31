@@ -1,4 +1,6 @@
-/** Curated client wire contracts from the frozen Spine JVM client API. */
+/**
+ * Curated client wire contracts from the frozen Spine JVM client API.
+ */
 export * from "../../generated/spine/client/command_service_pb.js";
 export * from "../../generated/spine/client/entities_pb.js";
 export * from "../../generated/spine/client/filters_pb.js";

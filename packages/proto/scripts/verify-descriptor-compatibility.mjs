@@ -49,13 +49,25 @@ export function normalizedDescriptorDigest(descriptorSet) {
 export function buildDescriptorSet(root = repoRoot) {
   const temporaryDirectory = mkdtempSync(join(tmpdir(), "spine-descriptor-set-"));
   const outputPath = join(temporaryDirectory, "frozen.binpb");
-  const localBuf = join(root, "node_modules", ".bin", process.platform === "win32" ? "buf.cmd" : "buf");
+  const localBuf = join(
+    root,
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? "buf.cmd" : "buf",
+  );
   const executable = existsSync(localBuf) ? localBuf : "buf";
 
   try {
     const result = spawnSync(
       executable,
-      ["build", "packages/proto/proto", "--as-file-descriptor-set", "--exclude-source-info", "-o", outputPath],
+      [
+        "build",
+        "packages/proto/proto",
+        "--as-file-descriptor-set",
+        "--exclude-source-info",
+        "-o",
+        outputPath,
+      ],
       { cwd: root, encoding: "utf8" },
     );
 
@@ -74,7 +86,10 @@ export function buildDescriptorSet(root = repoRoot) {
 
 export function verifyFrozenDescriptorCompatibility(root = repoRoot) {
   const descriptorSet = buildDescriptorSet(root);
-  const expectedDigest = readFileSync(resolve(root, "packages/proto/proto/frozen-descriptor-set.sha256"), "utf8")
+  const expectedDigest = readFileSync(
+    resolve(root, "packages/proto/proto/frozen-descriptor-set.sha256"),
+    "utf8",
+  )
     .trim()
     .split(/\s+/u)[0];
   const actualDigest = normalizedDescriptorDigest(descriptorSet);

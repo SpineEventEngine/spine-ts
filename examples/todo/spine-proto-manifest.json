@@ -1,22 +1,22 @@
 {
   "formatVersion": 1,
   "packageName": "@spine-event-engine/example-todo",
-  "packageVersion": "0.0.0",
+  "packageVersion": "2.0.0-snapshot.1",
   "protoFiles": [
-    "spine/example/todo/v1/task_commands.proto",
-    "spine/example/todo/v1/task_events.proto",
-    "spine/example/todo/v1/task_id.proto",
-    "spine/example/todo/v1/task_list.proto",
-    "spine/example/todo/v1/task_rejections.proto",
-    "spine/example/todo/v1/tasks.proto"
+    "spine/examples/todo/task_commands.proto",
+    "spine/examples/todo/task_events.proto",
+    "spine/examples/todo/task_id.proto",
+    "spine/examples/todo/task_list.proto",
+    "spine/examples/todo/task_rejections.proto",
+    "spine/examples/todo/tasks.proto"
   ],
   "generatedExports": {
-    "spine/example/todo/v1/task_commands.proto": "generated/spine/example/todo/v1/task_commands_pb.js",
-    "spine/example/todo/v1/task_events.proto": "generated/spine/example/todo/v1/task_events_pb.js",
-    "spine/example/todo/v1/task_id.proto": "generated/spine/example/todo/v1/task_id_pb.js",
-    "spine/example/todo/v1/task_list.proto": "generated/spine/example/todo/v1/task_list_pb.js",
-    "spine/example/todo/v1/task_rejections.proto": "generated/spine/example/todo/v1/task_rejections_pb.js",
-    "spine/example/todo/v1/tasks.proto": "generated/spine/example/todo/v1/tasks_pb.js"
+    "spine/examples/todo/task_commands.proto": "generated/spine/examples/todo/task_commands_pb.js",
+    "spine/examples/todo/task_events.proto": "generated/spine/examples/todo/task_events_pb.js",
+    "spine/examples/todo/task_id.proto": "generated/spine/examples/todo/task_id_pb.js",
+    "spine/examples/todo/task_list.proto": "generated/spine/examples/todo/task_list_pb.js",
+    "spine/examples/todo/task_rejections.proto": "generated/spine/examples/todo/task_rejections_pb.js",
+    "spine/examples/todo/tasks.proto": "generated/spine/examples/todo/tasks_pb.js"
   },
   "dependencies": [
     "@spine-event-engine/proto"

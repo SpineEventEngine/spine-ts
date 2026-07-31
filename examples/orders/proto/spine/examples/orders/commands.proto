@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package spine.examples.orders;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.orders";
+
+// Requests a new order for a SKU.
+message CreateOrder {
+  // The new order identifier.
+  string id = 1 [(required) = true];
+
+  // The ordered SKU identifier.
+  string sku_id = 2 [(required) = true];
+}
+
+// Requests registration of a SKU.
+message RegisterSku {
+  // The new SKU identifier.
+  string id = 1 [(required) = true];
+
+  // A name shown for the SKU.
+  string display_name = 2 [(required) = true];
+}

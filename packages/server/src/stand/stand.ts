@@ -15,58 +15,119 @@ import type {
 } from "@spine-event-engine/storage/internal/entity-history";
 import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
 
-/** Options for constructing a direct read-side Stand. */
+/**
+ * Options for constructing a direct read-side Stand.
+ */
 export interface StandOptions {
-  /** Base storage context owned by the enclosing bounded context. */
+  // prettier-ignore
+
+  /**
+   * Base storage context owned by the enclosing bounded context.
+   */
   readonly context: StorageContext;
-  /** Storage factory used for read-side state records. */
+
+  /**
+   * Storage factory used for read-side state records.
+   */
   readonly storageFactory: StorageFactory;
 }
 
-/** Options for registering an entity state schema with the Stand. */
+/**
+ * Options for registering an entity state schema with the Stand.
+ */
 export interface StandRegisterOptions {
-  /** Generated local property name for the entity ID field. Defaults to the schema's first field. */
+  // prettier-ignore
+
+  /**
+   * Generated local property name for the entity ID field. Defaults to the schema's first field.
+   */
   readonly idField?: string;
-  /** Queryable columns materialized for this state type. */
+
+  /**
+   * Queryable columns materialized for this state type.
+   */
   readonly columns?: readonly RecordColumn<Message>[];
 }
 
-/** Tenant and version metadata accepted when recording an entity state update. */
+/**
+ * Tenant and version metadata accepted when recording an entity state update.
+ */
 export interface StandUpdateOptions {
-  /** Tenant slice for multitenant stands. */
+  // prettier-ignore
+
+  /**
+   * Tenant slice for multitenant stands.
+   */
   readonly tenantId?: string;
-  /** Version persisted with the updated state. */
+
+  /**
+   * Version persisted with the updated state.
+   */
   readonly version?: Version;
-  /** Durable entity lifecycle. Internal repository callers supply this from the entity transaction. */
+
+  /**
+   * Durable entity lifecycle. Internal repository callers supply this from the entity transaction.
+   */
   readonly lifecycle?: { readonly archived: boolean; readonly deleted: boolean };
 }
 
-/** Tenant metadata accepted when reading one entity state. */
+/**
+ * Tenant metadata accepted when reading one entity state.
+ */
 export interface StandReadOptions {
-  /** Tenant slice for multitenant stands. */
+  // prettier-ignore
+
+  /**
+   * Tenant slice for multitenant stands.
+   */
   readonly tenantId?: string;
 }
 
-/** Stored state plus metadata returned by versioned Stand reads. */
+/**
+ * Stored state plus metadata returned by versioned Stand reads.
+ */
 export interface StandReadResult<Schema extends MessageSchema = MessageSchema> {
-  /** Latest entity state. */
+  // prettier-ignore
+
+  /**
+   * Latest entity state.
+   */
   readonly state: MessageShape<Schema>;
-  /** Durable version supplied with the latest update. */
+
+  /**
+   * Durable version supplied with the latest update.
+   */
   readonly version?: Version;
 }
 
-/** Tenant metadata accepted when subscribing to entity updates. */
+/**
+ * Tenant metadata accepted when subscribing to entity updates.
+ */
 export interface StandSubscribeOptions {
-  /** Tenant slice for multitenant stands. */
+  // prettier-ignore
+
+  /**
+   * Tenant slice for multitenant stands.
+   */
   readonly tenantId?: string;
 }
 
-/** Direct in-process entity state update delivered by the Stand. */
+/**
+ * Direct in-process entity state update delivered by the Stand.
+ */
 export interface StandUpdate<Schema extends MessageSchema = MessageSchema> {
-  /** Type URL of the entity state schema. */
+  // prettier-ignore
+
+  /**
+   * Type URL of the entity state schema.
+   */
   readonly typeUrl: string;
-  /** Entity ID extracted from the state. */
+
+  /**
+   * Entity ID extracted from the state.
+   */
   readonly id: unknown;
+
   /**
    * Cloned snapshot of the stored state before this update.
    *
@@ -74,33 +135,61 @@ export interface StandUpdate<Schema extends MessageSchema = MessageSchema> {
    * mutate after delivery.
    */
   readonly previousState?: MessageShape<Schema>;
-  /** Updated entity state. */
+
+  /**
+   * Updated entity state.
+   */
   readonly state: MessageShape<Schema>;
-  /** Version associated with the updated state when supplied. */
+
+  /**
+   * Version associated with the updated state when supplied.
+   */
   readonly version?: Version;
-  /** Tenant slice for multitenant stands. */
+
+  /**
+   * Tenant slice for multitenant stands.
+   */
   readonly tenantId?: string;
 }
 
-/** Explicit cleanup handle returned by direct Stand subscriptions. */
+/**
+ * Explicit cleanup handle returned by direct Stand subscriptions.
+ */
 export interface StandSubscription {
-  /** Whether this subscription has already been unsubscribed. */
+  // prettier-ignore
+
+  /**
+   * Whether this subscription has already been unsubscribed.
+   */
   readonly closed: boolean;
-  /** Stops future deliveries. Safe to call more than once. */
+
+  /**
+   * Stops future deliveries. Safe to call more than once.
+   */
   unsubscribe(): void;
 }
 
-/** Error thrown when direct Stand access targets an unregistered state type. */
+/**
+ * Error thrown when direct Stand access targets an unregistered state type.
+ */
 export class StandStateTypeError extends Error {
-  /** Rejected state type URL. */
+  // prettier-ignore
+
+  /**
+   * Rejected state type URL.
+   */
   readonly typeUrl: string;
-  /** Stand operation that required a known state type. */
+
+  /**
+   * Stand operation that required a known state type.
+   */
   readonly operation: string;
 
-  /** Creates an error for an operation targeting an unknown state type.
+  /**
+   * Creates an error for an operation targeting an unknown state type.
    *
-   * @param typeUrl - The rejected state type URL.
-   * @param operation - The operation requiring a registered state type.
+   * @param typeUrl The rejected state type URL.
+   * @param operation The operation requiring a registered state type.
    */
   constructor(typeUrl: string, operation: string) {
     super(`Stand cannot ${operation} unknown entity state type "${typeUrl}".`);
@@ -142,9 +231,10 @@ export class Stand {
   #closed = false;
   #closedPromise: Promise<void> | undefined;
 
-  /** Creates a direct read-side Stand.
+  /**
+   * Creates a direct read-side Stand.
    *
-   * @param options - The storage context and factory used for state records.
+   * @param options The storage context and factory used for state records.
    */
   constructor(options: StandOptions) {
     this.#context = Stand.#cloneContext(options.context);
@@ -155,10 +245,11 @@ export class Stand {
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
   }
 
-  /** Registers one entity state schema. Re-registering the same schema is idempotent.
+  /**
+   * Registers one entity state schema. Re-registering the same schema is idempotent.
    *
-   * @param schema - The entity state schema to register.
-   * @param options - The ID field and materialized columns for the state type.
+   * @param schema The entity state schema to register.
+   * @param options The ID field and materialized columns for the state type.
    */
   register(schema: MessageSchema, options: StandRegisterOptions = {}): void {
     this.#requireOpen();
@@ -193,7 +284,8 @@ export class Stand {
     );
   }
 
-  /** Returns known state type URLs in registration order.
+  /**
+   * Returns known state type URLs in registration order.
    *
    * @returns The registered state type URLs.
    */
@@ -202,11 +294,12 @@ export class Stand {
     return Object.freeze([...this.#registrations.keys()]);
   }
 
-  /** Reads the latest state for one entity ID.
+  /**
+   * Reads the latest state for one entity ID.
    *
-   * @param schema - The registered entity state schema.
-   * @param id - The entity ID to read.
-   * @param options - The tenant slice to read.
+   * @param schema The registered entity state schema.
+   * @param id The entity ID to read.
+   * @param options The tenant slice to read.
    * @returns The latest state, or undefined when no live record exists.
    */
   async read<Schema extends MessageSchema>(
@@ -219,11 +312,12 @@ export class Stand {
     return result?.state;
   }
 
-  /** Reads the latest state and its supplied version metadata for one entity ID.
+  /**
+   * Reads the latest state and its supplied version metadata for one entity ID.
    *
-   * @param schema - The registered entity state schema.
-   * @param id - The entity ID to read.
-   * @param options - The tenant slice to read.
+   * @param schema The registered entity state schema.
+   * @param id The entity ID to read.
+   * @param options The tenant slice to read.
    * @returns The current state and version, or undefined when no live record exists.
    */
   async readVersioned<Schema extends MessageSchema>(
@@ -248,10 +342,11 @@ export class Stand {
     }
   }
 
-  /** Reads all latest states and version metadata in storage query order.
+  /**
+   * Reads all latest states and version metadata in storage query order.
    *
-   * @param schema - The registered entity state schema.
-   * @param options - The tenant slice to read.
+   * @param schema The registered entity state schema.
+   * @param options The tenant slice to read.
    * @returns The current states and versions in query order.
    */
   async readAllVersioned<Schema extends MessageSchema>(
@@ -261,11 +356,12 @@ export class Stand {
     return this.queryVersioned(schema, {}, options);
   }
 
-  /** Finds latest states and version metadata in storage query order.
+  /**
+   * Finds latest states and version metadata in storage query order.
    *
-   * @param schema - The registered entity state schema.
-   * @param query - The legacy record query to apply.
-   * @param options - The tenant slice to read.
+   * @param schema The registered entity state schema.
+   * @param query The legacy record query to apply.
+   * @param options The tenant slice to read.
    * @returns The matching current states and versions.
    */
   async queryVersioned<Schema extends MessageSchema>(
@@ -292,11 +388,12 @@ export class Stand {
     }
   }
 
-  /** Finds latest states through a normalized plan and retains versions.
+  /**
+   * Finds latest states through a normalized plan and retains versions.
    *
-   * @param schema - The registered entity state schema.
-   * @param plan - The normalized storage query plan to apply.
-   * @param options - The tenant slice to read.
+   * @param schema The registered entity state schema.
+   * @param plan The normalized storage query plan to apply.
+   * @param options The tenant slice to read.
    * @returns The matching current states and versions.
    */
   async queryPlanVersioned<Schema extends MessageSchema>(
@@ -328,8 +425,8 @@ export class Stand {
    * `BoundedContext.catchUpReadSide()` uses this to reset one projection state
    * type before replay for the selected tenant slice.
    *
-   * @param schema - The registered entity state schema to clear.
-   * @param options - The tenant slice to clear.
+   * @param schema The registered entity state schema to clear.
+   * @param options The tenant slice to clear.
    * @returns The number of state records marked deleted.
    */
   async clear(schema: MessageSchema, options: StandReadOptions = {}): Promise<number> {
@@ -355,11 +452,12 @@ export class Stand {
     }
   }
 
-  /** Records one latest entity state and delivers an update to matching subscribers.
+  /**
+   * Records one latest entity state and delivers an update to matching subscribers.
    *
-   * @param schema - The registered entity state schema.
-   * @param state - The latest entity state to store.
-   * @param options - The tenant, version, and lifecycle metadata to store.
+   * @param schema The registered entity state schema.
+   * @param state The latest entity state to store.
+   * @param options The tenant, version, and lifecycle metadata to store.
    * @returns A promise that resolves after the state update is stored.
    */
   async update<Schema extends MessageSchema>(
@@ -427,7 +525,9 @@ export class Stand {
     }
   }
 
-  /** Repository-only full current-record read, including lifecycle metadata. */
+  /**
+   * Repository-only full current-record read, including lifecycle metadata.
+   */
   async #readCurrent<Schema extends MessageSchema>(
     schema: Schema,
     id: unknown,
@@ -450,11 +550,12 @@ export class Stand {
     }
   }
 
-  /** Subscribes to in-process updates for one registered state schema.
+  /**
+   * Subscribes to in-process updates for one registered state schema.
    *
-   * @param schema - The registered entity state schema.
-   * @param callback - The function receiving matching state updates.
-   * @param options - The tenant slice to subscribe to.
+   * @param schema The registered entity state schema.
+   * @param callback The function receiving matching state updates.
+   * @param options The tenant slice to subscribe to.
    * @returns A handle that stops future callback delivery.
    */
   subscribe<Schema extends MessageSchema>(
@@ -488,6 +589,7 @@ export class Stand {
    * Close is idempotent. New operations are rejected once close begins, and the
    * close promise waits for already accepted direct reads/updates to finish
    * before clearing subscriptions and version metadata.
+   *
    * @returns A promise that settles after the stand closes.
    *
    */

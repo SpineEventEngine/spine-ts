@@ -1,29 +1,23 @@
-# T-0046 Datastore remediation plan
-
-Status: implementation and live emulator verification complete; closure
-re-review is in progress.
+# Datastore adapter design and verification
 
 ## Purpose
 
-This plan captures review findings discovered after the first implementation of
-`@spine-event-engine/storage-datastore`, the JVM comparison at
+This guide records the supported behavior of
+`@spine-event-engine/storage-datastore`, informed by a JVM comparison at
 `gcloud-jvm` commit `f4ade19d8bf7666447f068607426475cda485afe`, and the
-questions raised during review. It supersedes the query, identity, emulator,
-documentation, and example-coverage portions of the earlier implementation
-plan. The package remains Firestore in Datastore mode only.
+query, identity, emulator, documentation, and example-coverage work. The
+package remains Firestore in Datastore mode only.
 
 ## Scope separation
 
-The adapter package is the production deliverable. The datastore-orders app is
+The adapter package is the production deliverable. The Orders app is
 a test-oriented application that proves generic storage composition and gRPC
-load behavior; it is not itself an adapter behavior. Its separate load-runner
-lifecycle defect was fixed after the example was retained in this task.
-Project-management changes remained outside T-0046 and were completed in their
-prerequisite task, T-0048, before this remediation resumed.
+load behavior; it is not itself an adapter behavior. Its load runner follows
+the same cancellation and cleanup rules as other local examples.
 
-## Approved decisions and execution order
+## Supported behavior
 
-1. **Finite query materialization.** V1 translates ID/column filters and order
+1. **Finite query materialization.** The adapter translates ID/column filters and order
    to Datastore, always fetches with a fixed `maxClientSideScan + 1` sentinel,
    and performs typed continuation, deterministic ID tie-breaking, offset, and
    requested-limit reconciliation once locally. A sentinel response throws
@@ -32,12 +26,8 @@ prerequisite task, T-0048, before this remediation resumed.
 2. **Indexed bigint.** The adapter accepts only exact signed 64-bit Datastore
    integers (`-2^63` through `2^63 - 1`) for indexed bigint values and rejects
    out-of-range values before any RPC.
-3. **Example cancellation.** The datastore-orders load-runner cancellation and
-   cleanup repair was completed as T-0046's final example-quality slice.
-4. **Prerequisite scope.** The project-management runner and broad
-   coverage-policy correction remained in T-0048. That prerequisite completed,
-   merged, passed post-merge verification, and pushed before T-0046 remediation
-   resumed; T-0046 then applied the established mechanism to datastore-orders.
+3. **Example cancellation.** The Orders load runner passes a per-user abort
+   signal to every RPC and bounds cleanup of subscription iterators.
 
 ## Non-negotiable corrections
 
@@ -81,7 +71,7 @@ JVM reference: ID lookups build Datastore `Key` objects in `DsLookupByIds`;
 
 ### C. Bounded query execution
 
-The approved v1 policy is implemented with a positive finite
+The query policy is implemented with a positive finite
 `maxClientSideScan` configuration, defaulting to `1000`. ID constraints become
 Datastore key filters; supported column equality filters and requested order
 become provider filters and orders. The provider request always has the fixed
@@ -133,29 +123,23 @@ This is not a comparison with JVM documentation. JVM was consulted only as a
 behavioral reference. The TypeScript package requires its own complete,
 validated TypeDoc and user-facing documentation.
 
-### G. Orders example load-runner (completed separate concern)
+### G. Orders example load runner
 
-The load runner is not Datastore persistence code. It was added in the same
-task as an acceptance/performance specimen, so its resource handling affects
-whether that specimen can be trusted.
+The load runner is not Datastore persistence code. It is an
+acceptance/performance specimen, so its resource handling affects whether that
+specimen can be trusted.
 
-The example was retained and repaired. Every command, query, and subscription
+Every command, query, and subscription
 RPC receives a per-user abort signal; timeout aborts the underlying request,
 not merely the awaiting promise. Transport-observed tests prove timed-out unary
 calls leave no active work in the shared HTTP/2 pool. The runner source is
 directly instrumented, and the obsolete broad source exclusions were removed.
-This completed example-quality concern remains separate from adapter
-persistence correctness.
+This example concern remains separate from adapter persistence correctness.
 
-## Completed delivery sequence
+## Verification
 
-1. Recorded the approved query policy and scope disposition for the orders
-   runner and project-management changes.
-2. Wrote focused failing tests for A–D, then implemented the smallest adapter
-   corrections.
-3. Added emulator tests for E and verified them against Firestore in Datastore
-   mode.
-4. Completed F and ran TypeDoc/API checks.
-5. Completed G under its own acceptance criteria.
-6. Ran canonical and closure re-reviews; the remaining residuals are being
-   resolved before final repository verification and commit.
+The adapter is exercised through focused codec, query, transaction, lifecycle,
+and emulator tests. The emulator checks Firestore in Datastore mode, while a
+credential-gated cloud smoke check remains separate because it needs explicit
+project credentials. TypeDoc/API checks and the package README document the
+public construction, ownership, and failure contracts.

@@ -66,7 +66,9 @@ export type {
   RemovalQuarantineRecord,
 } from "./types.js";
 
-/** Provides a Node client for the frozen delivery-server gRPC API. */
+/**
+ * Provides a Node client for the frozen delivery-server gRPC API.
+ */
 export class DeliveryClient {
   readonly #inbox: ReturnType<typeof createClient<typeof InboxService>>;
   readonly #shards: ReturnType<typeof createClient<typeof ShardService>>;
@@ -103,16 +105,21 @@ export class DeliveryClient {
     this.#shards = createClient(ShardService, transport);
     this.#admin = createClient(AdminService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
+    deliveryClientPickups.set(this, (shardIndex, workerId, options) =>
+      this.#pickUp(shardIndex, workerId, options, true),
+    );
   }
 
-  /** Gets the bounded page size configured for this client.
+  /**
+   * Gets the bounded page size configured for this client.
    * @returns The maximum number of messages requested by default.
    */
   get pageSize(): number {
     return this.#pageSize;
   }
 
-  /** Creates a client over a caller-owned standard Connect transport.
+  /**
+   * Creates a client over a caller-owned standard Connect transport.
    * @param transport Sends requests to the remote delivery service.
    * @param options Configures bounded reads and observations.
    * @returns A client that never closes the supplied transport.
@@ -150,7 +157,8 @@ export class DeliveryClient {
     );
   }
 
-  /** Reads validated detached Admin observations.
+  /**
+   * Reads validated detached Admin observations.
    * @param options Bounds or cancels the read.
    * @returns Detached observations that callers may safely mutate.
    */
@@ -169,7 +177,8 @@ export class DeliveryClient {
     );
   }
 
-  /** Starts an ACK-gated bounded Admin shard-update observation stream.
+  /**
+   * Starts an ACK-gated bounded Admin shard-update observation stream.
    * @param options Bounds or cancels stream setup and lifetime.
    * @returns A cancellable stream of detached shard observations.
    */
@@ -208,7 +217,8 @@ export class DeliveryClient {
     });
   }
 
-  /** Finds and decodes one inbox message.
+  /**
+   * Finds and decodes one inbox message.
    * @param id Identifies the inbox message and its shard.
    * @param options Bounds or cancels the safe read.
    * @returns The detached message, or `undefined` when absent.
@@ -268,7 +278,8 @@ export class DeliveryClient {
     );
   }
 
-  /** Finds and decodes the newest pending message in a shard.
+  /**
+   * Finds and decodes the newest pending message in a shard.
    * @param shardIndex Identifies the shard to inspect.
    * @param options Bounds or cancels the safe read.
    * @returns The detached newest message, or `undefined` when absent.
@@ -288,7 +299,8 @@ export class DeliveryClient {
       : DeliveryMessageCodec.decode(response.message, shardIndex);
   }
 
-  /** Writes one message with exactly one delivery-server RPC attempt.
+  /**
+   * Writes one message with exactly one delivery-server RPC attempt.
    * @param message Supplies the message to write.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server accepts the message.
@@ -302,7 +314,8 @@ export class DeliveryClient {
     );
   }
 
-  /** Removes one message with exactly one delivery-server RPC attempt.
+  /**
+   * Removes one message with exactly one delivery-server RPC attempt.
    * @param message Supplies the message to remove.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server removes the message.
@@ -316,7 +329,8 @@ export class DeliveryClient {
     );
   }
 
-  /** Writes one bounded same-shard batch with exactly one delivery-server RPC attempt.
+  /**
+   * Writes one bounded same-shard batch with exactly one delivery-server RPC attempt.
    * @param messages Supplies the messages to write.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server accepts the batch.
@@ -333,7 +347,8 @@ export class DeliveryClient {
     );
   }
 
-  /** Removes one bounded same-shard batch with exactly one delivery-server RPC attempt.
+  /**
+   * Removes one bounded same-shard batch with exactly one delivery-server RPC attempt.
    * @param messages Supplies the messages to remove.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server removes the batch.
@@ -350,7 +365,8 @@ export class DeliveryClient {
     );
   }
 
-  /** Acquires a shard once.
+  /**
+   * Acquires a shard once.
    * @param shardIndex Identifies the shard to acquire.
    * @param workerId Identifies the worker requesting exclusive ownership.
    * @param options Bounds or cancels the mutation.
@@ -361,31 +377,71 @@ export class DeliveryClient {
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<RemoteShardSession | undefined> {
+    return this.#pickUp(shardIndex, workerId, options, false);
+  }
+
+  async #pickUp(
+    shardIndex: ShardIndex,
+    workerId: DeliveryWorkerId,
+    options: DeliveryMutationOptions,
+    requirePending: boolean,
+  ): Promise<RemoteShardSession | undefined> {
     const requestedShard = DeliveryShardCodec.encode(shardIndex);
     const requestedWorker = DeliveryShardCodec.encodeWorker(workerId);
+    let responseHeader: Headers | undefined;
     const response = await this.#mutation(
       "PICK_UP_SHARD",
       [DeliveryShardCodec.snapshot(shardIndex)],
       options,
-      (signal, timeoutMs) => {
+      async (signal, timeoutMs) => {
         const request = create(PickUpShardSchema, {
           shard: requestedShard,
           worker: requestedWorker,
         });
         DeliveryRequestCodec.requestBytes(PickUpShardSchema, request);
-        return this.#shards.pickShard(request, DeliveryRequestCodec.callOptions(signal, timeoutMs));
+        try {
+          return {
+            kind: "PICKED" as const,
+            value: await this.#shards.pickShard(request, {
+              ...DeliveryRequestCodec.callOptions(signal, timeoutMs),
+              ...(requirePending
+                ? { headers: new Headers([["x-spine-delivery-pickup-mode", "pending"]]) }
+                : {}),
+              ...(requirePending
+                ? {
+                    onHeader: (headers: Headers) => {
+                      responseHeader = headers;
+                    },
+                  }
+                : {}),
+            }),
+          };
+        } catch (error) {
+          if (requirePending && DeliveryClient.#isNoPendingWork(error))
+            return { kind: "NO_WORK" as const };
+          throw error;
+        }
       },
     );
-    DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response);
-    if (response.value.case === "alreadyPickedUp") {
-      DeliveryShardCodec.validatePicked(response.value.value, shardIndex);
+    if (response.kind === "NO_WORK") return undefined;
+    if (
+      requirePending &&
+      responseHeader?.get("x-spine-delivery-outcome") !== "pending-acknowledged"
+    )
+      throw new DeliveryOutcomeUnknownError("PICK_UP_SHARD", [
+        DeliveryShardCodec.snapshot(shardIndex),
+      ]);
+    DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response.value);
+    if (response.value.value.case === "alreadyPickedUp") {
+      DeliveryShardCodec.validatePicked(response.value.value.value, shardIndex);
       return undefined;
     }
-    if (response.value.case !== "pickedUp") throw DeliveryRequestCodec.protocol();
-    return DeliveryShardCodec.decodePicked(response.value.value, shardIndex, workerId);
+    if (response.value.value.case !== "pickedUp") throw DeliveryRequestCodec.protocol();
+    return DeliveryShardCodec.decodePicked(response.value.value.value, shardIndex, workerId);
   }
 
-  /** Performs one exclusive shard-session release.
+  /**
+   * Performs one exclusive shard-session release.
    * @param value Supplies the session to release.
    * @param options Bounds or cancels the mutation.
    * @returns A promise that completes after the delivery server releases the session.
@@ -410,7 +466,8 @@ export class DeliveryClient {
     );
   }
 
-  /** Performs releases for sessions inactive for a positive duration.
+  /**
+   * Performs releases for sessions inactive for a positive duration.
    * @param inactivityMs Supplies the minimum inactivity in milliseconds.
    * @param options Bounds or cancels the mutation.
    * @returns Detached sessions released by the remote service.
@@ -534,4 +591,44 @@ export class DeliveryClient {
     if (!(error instanceof ConnectError)) return true;
     return error.code === Code.Unavailable || error.code === Code.DeadlineExceeded;
   }
+
+  static #isNoPendingWork(error: unknown): boolean {
+    return (
+      error instanceof ConnectError &&
+      error.code === Code.FailedPrecondition &&
+      error.metadata.get("x-spine-delivery-outcome") === "no-pending-work"
+    );
+  }
 }
+
+const deliveryClientPickups = new WeakMap<
+  DeliveryClient,
+  (
+    shardIndex: ShardIndex,
+    workerId: DeliveryWorkerId,
+    options: DeliveryMutationOptions,
+  ) => Promise<RemoteShardSession | undefined>
+>();
+
+/**
+ * Provides package-internal conditional pickup without extending the public client API.
+ */
+export const deliveryClientAccess: Readonly<{
+  pickUpPending: (
+    client: DeliveryClient,
+    shardIndex: ShardIndex,
+    workerId: DeliveryWorkerId,
+    options: DeliveryMutationOptions,
+  ) => Promise<RemoteShardSession | undefined>;
+}> = Object.freeze({
+  pickUpPending(
+    client: DeliveryClient,
+    shardIndex: ShardIndex,
+    workerId: DeliveryWorkerId,
+    options: DeliveryMutationOptions,
+  ): Promise<RemoteShardSession | undefined> {
+    const pickUp = deliveryClientPickups.get(client);
+    if (pickUp === undefined) throw new TypeError("Delivery client pickup access is unavailable.");
+    return pickUp(shardIndex, workerId, options);
+  },
+});

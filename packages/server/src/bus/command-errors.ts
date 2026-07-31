@@ -6,12 +6,19 @@ import {
   type ValidationError,
 } from "@spine-event-engine/proto";
 
-/** Error raised when a command envelope payload fails command-bus validation. */
+/**
+ * Error raised when a command envelope payload fails command-bus validation.
+ */
 export class CommandValidationError extends Error {
-  /** Structured payload validation details from the command-bus boundary. */
+  // prettier-ignore
+
+  /**
+   * Structured payload validation details from the command-bus boundary.
+   */
   readonly validationError: ValidationError;
 
-  /** Creates a command-bus validation error with structured details.
+  /**
+   * Creates a command-bus validation error with structured details.
    *
    * @param validationError the structured payload validation details.
    */
@@ -22,7 +29,8 @@ export class CommandValidationError extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 
-  /** Creates a validation error for payloads that cannot be unpacked as the registered type.
+  /**
+   * Creates a validation error for payloads that cannot be unpacked as the registered type.
    *
    * @returns the invalid-payload error.
    */

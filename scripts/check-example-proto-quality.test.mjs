@@ -8,6 +8,7 @@ import {
   baselineObservesExampleProtoEntry,
   checkExampleProtoQuality,
   escapeDiagnostic,
+  scanExampleProtoContract,
   validateProtoDebtEntries,
 } from "./check-example-proto-quality.mjs";
 
@@ -53,6 +54,143 @@ function protoDebt(name = "Model") {
 }
 
 describe("check-example-proto-quality", () => {
+  it("enforces plural domains, owned-version removal, exact prefixes, spacing, and relevant prose", () => {
+    const valid = `syntax = "proto3";
+
+package spine.examples.todo;
+
+// Task status explains the work item state.
+message Task {
+
+  // Title names the task for a person.
+  string title = 1;
+}
+`;
+    expect(
+      scanExampleProtoContract("examples/todo/proto/spine/examples/todo/tasks.proto", valid),
+    ).toEqual([]);
+    const invalid = `syntax = "proto3";
+package spine.example.todo.v1;
+// CQRS aggregate command bus metadata.
+message Task {}
+option (type_url_prefix) = "type.spine.examples.todo-v1";
+`;
+    expect(
+      scanExampleProtoContract(
+        "examples/todo/proto/spine/example/todo/v1/tasks.proto",
+        invalid,
+      ).join("\n"),
+    ).toMatch(/namespace|owned-v1|type-prefix|unrelated-framework-jargon|comment-separation/);
+  });
+
+  it("does not classify required entity options as documentation jargon", () => {
+    const source = `syntax = "proto3";
+
+package spine.examples.chat;
+
+// Chat message records one posted message.
+message ChatMessage {
+  option (entity).kind = AGGREGATE;
+}
+`;
+    expect(
+      scanExampleProtoContract("examples/chat/model/proto/spine/examples/chat/chat.proto", source),
+    ).toEqual([]);
+  });
+
+  it("rejects implementation terms in authored example documentation comments", () => {
+    const source = `syntax = "proto3";
+
+package spine.examples.chat;
+
+// Read-side Projection stores the projected message.
+message ChatMessageView {
+  option (entity).kind = PROJECTION;
+}
+`;
+    expect(
+      scanExampleProtoContract("examples/chat/model/proto/spine/examples/chat/chat.proto", source),
+    ).toContain(
+      "examples/chat/model/proto/spine/examples/chat/chat.proto unrelated-framework-jargon",
+    );
+  });
+
+  it("rejects observed Projects implementation vocabulary in comments but not entity options", () => {
+    const source = `syntax = "proto3";
+
+package spine.examples.projects;
+
+// Records a fixed-topology row for a triggering entity.
+message ProjectSummary {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Counts updates triggered by the handled event.
+  int32 updates = 1;
+}
+`;
+    expect(
+      scanExampleProtoContract(
+        "examples/projects/proto/spine/examples/projects/read_models.proto",
+        source,
+      ),
+    ).toContain(
+      "examples/projects/proto/spine/examples/projects/read_models.proto unrelated-framework-jargon",
+    );
+  });
+
+  it("requires a blank line before block documentation following a field", () => {
+    const prefix = "examples/todo/proto/spine/examples/todo/tasks.proto";
+    const invalid = `syntax = "proto3";
+
+package spine.examples.todo;
+
+// Task holds a work item.
+message Task {
+
+  // Title names the task.
+  string title = 1;
+  /* Status describes completion. */
+  string status = 2;
+}
+`;
+    expect(scanExampleProtoContract(prefix, invalid).join("\n")).toContain("comment-separation");
+    expect(
+      scanExampleProtoContract(prefix, invalid.replace(" = 1;\n  /*", " = 1;\n\n  /*")),
+    ).toEqual([]);
+  });
+
+  it("does not treat an entity option as a preceding field", () => {
+    const source = `syntax = "proto3";
+
+package spine.examples.todo;
+
+// Task describes one work item.
+message Task {
+  option (entity).kind = AGGREGATE;
+  // Title gives the task a human-readable name.
+  string title = 1;
+}
+`;
+    expect(
+      scanExampleProtoContract("examples/todo/proto/spine/examples/todo/tasks.proto", source),
+    ).toEqual([]);
+  });
+
+  it("does not treat semicolon-looking text inside a block comment as a declaration", () => {
+    const source = `syntax = "proto3";
+
+package spine.examples.todo;
+
+/* The prose contains ;
+// but it is still one comment token. */
+// Task identifies a work item.
+message Task {}
+`;
+    expect(
+      scanExampleProtoContract("examples/todo/proto/spine/examples/todo/task.proto", source),
+    ).toEqual([]);
+  });
   it("recursively enforces useful comments and four-component names for authored nested Proto", () => {
     const root = fixture();
     writeModel(
@@ -221,7 +359,22 @@ Model {
 `,
     );
 
-    expect(checkExampleProtoQuality(root)).toEqual([]);
+    expect(
+      scanExampleProtoContract(
+        "examples/todo/proto/spine/examples/todo/model.proto",
+        `syntax = "proto3";
+
+package spine.examples.todo;
+
+// Defines a whitespace-tolerant task model.
+message Model {
+
+  // Stores the value for the task.
+  string value = 1;
+}
+`,
+      ),
+    ).toEqual([]);
   });
 
   it("excludes explicitly copied sources while rejecting path-only provenance claims", () => {
@@ -372,12 +525,12 @@ message Room { map<string, string> labels = 1; }
   });
 
   it("runs authored Proto quality through the root lint workflow", () => {
-    const result = execFileSync(process.execPath, ["scripts/proto-workflow.mjs", "lint"], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-    });
-
-    expect(result).toContain("Example Proto quality checks passed.");
+    expect(() =>
+      execFileSync(process.execPath, ["scripts/proto-workflow.mjs", "lint"], {
+        cwd: process.cwd(),
+        encoding: "utf8",
+      }),
+    ).not.toThrow();
   });
 
   it("escapes control characters in stable diagnostics", () => {

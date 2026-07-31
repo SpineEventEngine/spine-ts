@@ -2039,8 +2039,8 @@ function structurePartition(file) {
   if (/^examples\/chat\/(?:app|web)\//.test(file)) return "T-0080K";
   if (/^examples\/chat\/(?:model|users-model)\//.test(file)) return "T-0080J";
   if (/^examples\/todo\//.test(file)) return "T-0080L";
-  if (/^examples\/project-management\//.test(file)) return "T-0080M";
-  if (/^examples\/datastore-orders\//.test(file)) return "T-0080N";
+  if (/^examples\/projects\//.test(file)) return "T-0080M";
+  if (/^examples\/orders\//.test(file)) return "T-0080N";
   throw new Error(`No TypeScript structure partition owns ${file}`);
 }
 
@@ -2168,7 +2168,9 @@ function movedChatBaselinePath(file) {
     .replace(/^examples\/chat\/app\//, "examples/chat/")
     .replace(/^examples\/chat\/web\//, "examples/chat-web/")
     .replace(/^examples\/chat\/model\//, "examples/chat-model/")
-    .replace(/^examples\/chat\/users-model\//, "examples/users-model/");
+    .replace(/^examples\/chat\/users-model\//, "examples/users-model/")
+    .replace(/^examples\/projects\//, "examples/project-management/")
+    .replace(/^examples\/orders\//, "examples/datastore-orders/");
 }
 
 export function baselineObservesStructureEntry(entry, source) {

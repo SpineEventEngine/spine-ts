@@ -15,12 +15,12 @@ describe("Todo Proto model package", () => {
     expect(todoProtoModule.name).toBe("@spine-event-engine/example-todo");
     expect(todoProtoModule.dependencies).toHaveLength(1);
     expect(manifest.protoFiles).toEqual([
-      "spine/example/todo/v1/task_commands.proto",
-      "spine/example/todo/v1/task_events.proto",
-      "spine/example/todo/v1/task_id.proto",
-      "spine/example/todo/v1/task_list.proto",
-      "spine/example/todo/v1/task_rejections.proto",
-      "spine/example/todo/v1/tasks.proto",
+      "spine/examples/todo/task_commands.proto",
+      "spine/examples/todo/task_events.proto",
+      "spine/examples/todo/task_id.proto",
+      "spine/examples/todo/task_list.proto",
+      "spine/examples/todo/task_rejections.proto",
+      "spine/examples/todo/tasks.proto",
     ]);
     expect(Object.keys(manifest.generatedExports)).toEqual(manifest.protoFiles);
     expect(existsSync(join(todoRoot.pathname, "generated/spine/options_pb.ts"))).toBe(false);

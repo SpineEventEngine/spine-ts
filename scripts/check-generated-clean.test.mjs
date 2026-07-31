@@ -94,9 +94,8 @@ describe("check-generated-clean", () => {
     expect(generatedTargetsForCheck().map((target) => target.displayPath)).toEqual([
       "packages/proto/generated",
       "examples/todo/generated",
-      "examples/project-management/generated",
-      "examples/datastore-orders/generated",
-      "examples/chat/users-model/generated",
+      "examples/projects/generated",
+      "examples/orders/generated",
       "examples/chat/model/generated",
       "examples/chat/app/generated",
     ]);

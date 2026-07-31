@@ -8,18 +8,18 @@ Source citations that start with `/private/tmp/spine-research` refer to local re
 
 ## Source Baseline
 
-| Repository | Version or role | Commit used |
-| --- | --- | --- |
-| `SpineEventEngine/core-jvm` | `2.0.0-SNAPSHOT.381`, primary source | `6bf4118c8c76` |
-| `SpineEventEngine/base` | `2.0.0-SNAPSHOT.421` | `43b55858c410` |
-| `SpineEventEngine/time` | `2.0.0-SNAPSHOT.242` | `0d0251c1495f` |
-| `SpineEventEngine/validation` | 2.0.0-series validation runtime and options | `6aec69016818` |
-| `SpineEventEngine/logging` | `2.0.0-SNAPSHOT.417` | `badfaa9aa49c` |
-| `SpineEventEngine/change` | `2.0.0-SNAPSHOT.206` | `53fe7029a189` |
-| `SpineEventEngine/reflect` | `2.0.0-SNAPSHOT.200` | `980720d676e5` |
+| Repository                         | Version or role                                           | Commit used    |
+| ---------------------------------- | --------------------------------------------------------- | -------------- |
+| `SpineEventEngine/core-jvm`        | `2.0.0-SNAPSHOT.381`, primary source                      | `6bf4118c8c76` |
+| `SpineEventEngine/base`            | `2.0.0-SNAPSHOT.421`                                      | `43b55858c410` |
+| `SpineEventEngine/time`            | `2.0.0-SNAPSHOT.242`                                      | `0d0251c1495f` |
+| `SpineEventEngine/validation`      | 2.0.0-series validation runtime and options               | `6aec69016818` |
+| `SpineEventEngine/logging`         | `2.0.0-SNAPSHOT.417`                                      | `badfaa9aa49c` |
+| `SpineEventEngine/change`          | `2.0.0-SNAPSHOT.206`                                      | `53fe7029a189` |
+| `SpineEventEngine/reflect`         | `2.0.0-SNAPSHOT.200`                                      | `980720d676e5` |
 | `spine-examples/server-quickstart` | application-structure sample, not source of 2.x API truth | `2b2d52433540` |
-| `spine-examples/todo-list` | application-structure sample, mostly 1.x-era API | `f9dcc2d510f3` |
-| `spine-examples/hello-validation` | validation example sample | `e536e1a95bc0` |
+| `spine-examples/todo-list`         | application-structure sample, mostly 1.x-era API          | `f9dcc2d510f3` |
+| `spine-examples/hello-validation`  | validation example sample                                 | `e536e1a95bc0` |
 
 ## Reading Order
 

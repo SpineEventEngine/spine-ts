@@ -31,8 +31,8 @@ export class EnvironmentDeliveryRecords {
   /**
    * Registers scopes once while retaining their first configured order.
    *
-   * @param token - Identifies the owning environment attachment.
-   * @param scopes - Supplies the scopes to retain.
+   * @param token Identifies the owning environment attachment.
+   * @param scopes Supplies the scopes to retain.
    */
   register(token: string, scopes: readonly DeliveryRunScope[]): void {
     const registered = this.#registrations.get(token) ?? new Map<string, DeliveryRunScope>();
@@ -63,7 +63,7 @@ export class EnvironmentDeliveryRecords {
   /**
    * Records one coordinator settlement against its configured owner.
    *
-   * @param settlement - Supplies the completed scope outcome.
+   * @param settlement Supplies the completed scope outcome.
    */
   observe(settlement: DeliveryScopeSettlement): void {
     const tokens = this.#tokensFor(settlement.scope);
@@ -99,7 +99,7 @@ export class EnvironmentDeliveryRecords {
   /**
    * Returns records owned by one attachment.
    *
-   * @param token - Identifies the attachment.
+   * @param token Identifies the attachment.
    * @returns Immutable records retained for the attachment.
    */
   registrationRecords(token: string): readonly ParkedDeliveryObligationRecord[] {
@@ -111,7 +111,7 @@ export class EnvironmentDeliveryRecords {
   /**
    * Returns configured scopes for an attachment in stable order.
    *
-   * @param token - Identifies the attachment.
+   * @param token Identifies the attachment.
    * @returns Immutable configured scopes.
    */
   configuredScopes(token: string): readonly DeliveryRunScope[] {
@@ -121,7 +121,7 @@ export class EnvironmentDeliveryRecords {
   /**
    * Returns scopes still pending or represented by parked records for each attachment.
    *
-   * @param pending - Supplies scopes still active in the coordinator.
+   * @param pending Supplies scopes still active in the coordinator.
    * @returns A stable attachment-to-scope snapshot.
    */
   retainedScopeSnapshot(
@@ -150,7 +150,7 @@ export class EnvironmentDeliveryRecords {
   /**
    * Records and removes one attachment's ownership atomically.
    *
-   * @param token - Identifies the attachment to detach.
+   * @param token Identifies the attachment to detach.
    * @returns Reportable failures released by the detach.
    */
   detach(token: string): readonly unknown[] {
@@ -184,7 +184,7 @@ export class EnvironmentDeliveryRecords {
   /**
    * Removes failed-start ownership while retaining reported generation evidence.
    *
-   * @param token - Identifies the failed attachment.
+   * @param token Identifies the failed attachment.
    * @returns Reportable failures released by rollback.
    */
   rollback(token: string): readonly unknown[] {
@@ -286,7 +286,9 @@ export class EnvironmentDeliveryRecords {
   }
 }
 
-/** @internal Groups canonical delivery-scope identity encoding for one environment generation. */
+/**
+ * @internal Groups canonical delivery-scope identity encoding for one environment generation.
+ */
 const EnvironmentScopeValues = Object.freeze({
   key(scope: DeliveryRunScope): string {
     return JSON.stringify([

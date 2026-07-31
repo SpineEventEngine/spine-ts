@@ -1,4 +1,7 @@
-/** Tracks finite unresolved delivery obligations for one package. @internal */
+/**
+ * Tracks finite unresolved delivery obligations for one package.
+ * @internal
+ */
 export class ParkedDeliveryObligations {
   readonly #configured = new Map<string, ConfiguredObligation>();
   readonly #records = new Map<string, MutableRecord>();
@@ -7,7 +10,7 @@ export class ParkedDeliveryObligations {
   /**
    * Creates a table from the bounded generation and registration obligations.
    *
-   * @param options - Supplies the configured obligation domains.
+   * @param options Supplies the configured obligation domains.
    */
   constructor(options: ParkedDeliveryObligationOptions) {
     for (const registration of options.registrations) {
@@ -46,11 +49,11 @@ export class ParkedDeliveryObligations {
   /**
    * Records one unresolved obligation with its current failure cause.
    *
-   * @param owner - Identifies the obligation owner.
-   * @param obligation - Names the configured obligation.
-   * @param units - Selects the unresolved units.
-   * @param cause - Captures the representative failure.
-   * @param occurrences - Adds the number of observed failures.
+   * @param owner Identifies the obligation owner.
+   * @param obligation Names the configured obligation.
+   * @param units Selects the unresolved units.
+   * @param cause Captures the representative failure.
+   * @param occurrences Adds the number of observed failures.
    */
   park(
     owner: ParkedOwner,
@@ -69,9 +72,9 @@ export class ParkedDeliveryObligations {
   /**
    * Records a failed fulfillment after resolving the selected units.
    *
-   * @param owner - Identifies the obligation owner.
-   * @param obligation - Names the configured obligation.
-   * @param units - Selects the resolved units.
+   * @param owner Identifies the obligation owner.
+   * @param obligation Names the configured obligation.
+   * @param units Selects the resolved units.
    */
   parkFulfilledFailed(owner: ParkedOwner, obligation: string, units: readonly string[]): void {
     const configured = this.#configuredObligation(owner, obligation, units);
@@ -82,9 +85,9 @@ export class ParkedDeliveryObligations {
   /**
    * Records a shared unresolved obligation.
    *
-   * @param units - Selects the unresolved units.
-   * @param cause - Captures the representative failure.
-   * @param occurrences - Adds the number of observed failures.
+   * @param units Selects the unresolved units.
+   * @param cause Captures the representative failure.
+   * @param occurrences Adds the number of observed failures.
    */
   parkShared(units: readonly string[], cause: unknown, occurrences = 1): void {
     ParkedObligationValues.requireOccurrences(occurrences);
@@ -95,11 +98,11 @@ export class ParkedDeliveryObligations {
   }
 
   /**
-   * Updates one live registration's configured unit domain in stable order. @internal
-   *
-   * @param token - Identifies the registration to extend.
-   * @param obligation - Names the configured obligation.
-   * @param units - Supplies the new units.
+   * Updates one live registration's configured unit domain in stable order.
+   * @internal
+   * @param token Identifies the registration to extend.
+   * @param obligation Names the configured obligation.
+   * @param units Supplies the new units.
    */
   extendRegistration(token: string, obligation: string, units: readonly string[]): void {
     this.#extendConfigured(ParkedObligationValues.registrationOwner(token), obligation, units);
@@ -113,7 +116,7 @@ export class ParkedDeliveryObligations {
   /**
    * Returns one unreported representative cause for each selected obligation.
    *
-   * @param selections - Select the obligation units to report.
+   * @param selections Select the obligation units to report.
    * @returns The representative causes that were newly reported.
    */
   report(selections: readonly ParkedDeliveryObligationSelection[]): readonly unknown[] {
@@ -129,9 +132,9 @@ export class ParkedDeliveryObligations {
   /**
    * Updates selected obligation units as fulfilled.
    *
-   * @param owner - Identifies the obligation owner.
-   * @param obligation - Names the configured obligation.
-   * @param units - Selects the fulfilled units.
+   * @param owner Identifies the obligation owner.
+   * @param obligation Names the configured obligation.
+   * @param units Selects the fulfilled units.
    */
   fulfilled(owner: ParkedOwner, obligation: string, units: readonly string[]): void {
     const configured = this.#configuredObligation(owner, obligation, units);
@@ -141,7 +144,7 @@ export class ParkedDeliveryObligations {
   /**
    * Removes a registration and reclassifies its parked obligations.
    *
-   * @param token - Identifies the removed registration.
+   * @param token Identifies the removed registration.
    */
   removeRegistration(token: string): void {
     const plan = this.#reclassificationPlan(token);
@@ -352,67 +355,143 @@ export class ParkedDeliveryObligations {
   }
 }
 
-/** Identifies the owner of a canonical parked delivery obligation. @internal */
+/**
+ * Identifies the owner of a canonical parked delivery obligation.
+ * @internal
+ */
 export type ParkedOwner =
   | {
-      /** Identifies generation-owned obligations. */
+      // prettier-ignore
+
+      /**
+       * Identifies generation-owned obligations.
+       */
       readonly kind: "generation";
     }
   | {
-      /** Identifies registration-owned obligations. */
+      // prettier-ignore
+
+      /**
+       * Identifies registration-owned obligations.
+       */
       readonly kind: "registration";
-      /** Identifies the owning registration. */
+
+      /**
+       * Identifies the owning registration.
+       */
       readonly token: string;
     }
   | {
-      /** Identifies obligations shared by all registrations. */
+      // prettier-ignore
+
+      /**
+       * Identifies obligations shared by all registrations.
+       */
       readonly kind: "shared";
     };
 
-/** Describes one configured canonical obligation. @internal */
+/**
+ * Describes one configured canonical obligation.
+ * @internal
+ */
 export interface ParkedConfiguredObligation {
-  /** Identifies the configured obligation. */
+  // prettier-ignore
+
+  /**
+   * Identifies the configured obligation.
+   */
   readonly key: string;
-  /** Lists its bounded eligible units. */
+
+  /**
+   * Lists its bounded eligible units.
+   */
   readonly units: readonly string[];
 }
 
-/** Defines configuration that bounds parked delivery records. @internal */
+/**
+ * Defines configuration that bounds parked delivery records.
+ * @internal
+ */
 export interface ParkedDeliveryObligationOptions {
-  /** Supplies live registration obligation domains. */
+  // prettier-ignore
+
+  /**
+   * Supplies live registration obligation domains.
+   */
   readonly registrations: readonly {
     readonly token: string;
     readonly obligations: readonly ParkedConfiguredObligation[];
   }[];
-  /** Supplies the generation obligation domain. */
+
+  /**
+   * Supplies the generation obligation domain.
+   */
   readonly generation: readonly ParkedConfiguredObligation[];
 }
 
-/** Selects package-local record units eligible for reporting. @internal */
+/**
+ * Selects package-local record units eligible for reporting.
+ * @internal
+ */
 export interface ParkedDeliveryObligationSelection {
-  /** Identifies the selected owner. */
+  // prettier-ignore
+
+  /**
+   * Identifies the selected owner.
+   */
   readonly owner: ParkedOwner;
-  /** Names the selected obligation. */
+
+  /**
+   * Names the selected obligation.
+   */
   readonly obligation: string;
-  /** Selects reportable units. */
+
+  /**
+   * Selects reportable units.
+   */
   readonly units: readonly string[];
 }
 
-/** Describes an immutable inspection result for lifecycle consumers. @internal */
+/**
+ * Describes an immutable inspection result for lifecycle consumers.
+ * @internal
+ */
 export interface ParkedDeliveryObligationRecord {
-  /** Identifies the record owner. */
+  // prettier-ignore
+
+  /**
+   * Identifies the record owner.
+   */
   readonly owner: ParkedOwner;
-  /** Names the unresolved obligation. */
+
+  /**
+   * Names the unresolved obligation.
+   */
   readonly obligation: string;
-  /** Lists its unresolved units. */
+
+  /**
+   * Lists its unresolved units.
+   */
   readonly units: readonly string[];
-  /** Holds one representative failure cause. */
+
+  /**
+   * Holds one representative failure cause.
+   */
   readonly cause: unknown;
-  /** States whether a representative cause is present. */
+
+  /**
+   * States whether a representative cause is present.
+   */
   readonly hasCause: boolean;
-  /** Counts observed failures without overflow. */
+
+  /**
+   * Counts observed failures without overflow.
+   */
   readonly occurrences: number;
-  /** States whether a cause was reported since its latest resolution. */
+
+  /**
+   * States whether a cause was reported since its latest resolution.
+   */
   readonly reportedSinceResolution: boolean;
 }
 

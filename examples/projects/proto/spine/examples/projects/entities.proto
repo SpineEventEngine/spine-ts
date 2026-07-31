@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package spine.examples.projects;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.projects";
+
+// A project with its name.
+message Project {
+  option (entity).kind = AGGREGATE;
+
+  // Uniquely identifies this project.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // A name for the project.
+  string name = 2 [(required) = true];
+}
+
+// A task in a project.
+message Task {
+  option (entity).kind = AGGREGATE;
+
+  // Uniquely identifies this task.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The project containing the task.
+  string project_id = 2 [(required) = true];
+}
+
+// A person enrolled in the workspace.
+message Person {
+  option (entity).kind = AGGREGATE;
+
+  // Uniquely identifies this person.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // A name for the person.
+  string display_name = 2 [(required) = true];
+}

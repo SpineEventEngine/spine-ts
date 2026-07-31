@@ -1,21 +1,22 @@
 {
   "formatVersion": 1,
   "packageName": "@spine-event-engine/example-chat-model",
-  "packageVersion": "0.0.0",
+  "packageVersion": "2.0.0-snapshot.1",
   "protoFiles": [
-    "spine/example/chat/v1/chat.proto",
-    "spine/example/chat/v1/commands.proto",
-    "spine/example/chat/v1/events.proto",
-    "spine/example/chat/v1/rejections.proto"
+    "spine/examples/chat/chat.proto",
+    "spine/examples/chat/commands.proto",
+    "spine/examples/chat/events.proto",
+    "spine/examples/chat/rejections.proto",
+    "spine/examples/chat/users.proto"
   ],
   "generatedExports": {
-    "spine/example/chat/v1/chat.proto": "generated/spine/example/chat/v1/chat_pb.js",
-    "spine/example/chat/v1/commands.proto": "generated/spine/example/chat/v1/commands_pb.js",
-    "spine/example/chat/v1/events.proto": "generated/spine/example/chat/v1/events_pb.js",
-    "spine/example/chat/v1/rejections.proto": "generated/spine/example/chat/v1/rejections_pb.js"
+    "spine/examples/chat/chat.proto": "generated/spine/examples/chat/chat_pb.js",
+    "spine/examples/chat/commands.proto": "generated/spine/examples/chat/commands_pb.js",
+    "spine/examples/chat/events.proto": "generated/spine/examples/chat/events_pb.js",
+    "spine/examples/chat/rejections.proto": "generated/spine/examples/chat/rejections_pb.js",
+    "spine/examples/chat/users.proto": "generated/spine/examples/chat/users_pb.js"
   },
   "dependencies": [
-    "@spine-event-engine/example-chat-users-model",
     "@spine-event-engine/proto"
   ],
   "moduleExport": "chatProtoModule"

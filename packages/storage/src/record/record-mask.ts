@@ -1,15 +1,22 @@
-/** Represents dotted record paths retained by a masked read. */
+/**
+ * Represents dotted record paths retained by a masked read.
+ */
 export type RecordMask = readonly string[];
 
 interface MaskNode {
   readonly children: Map<string, MaskNode>;
 }
 
-/** Provides record-mask operations. */
+/**
+ * Provides record-mask operations.
+ */
 export const RecordMask: Readonly<{
   apply<R>(record: R, mask: RecordMask | undefined): R;
 }> = Object.freeze({
-  /** Applies a simple field mask to a cloned record.
+  // prettier-ignore
+
+  /**
+   * Applies a simple field mask to a cloned record.
    * @param record The cloned record to prune.
    * @param mask The paths to retain.
    * @returns The pruned record.
@@ -25,7 +32,9 @@ export const RecordMask: Readonly<{
   },
 });
 
-/** Builds and applies the tree used by one record-mask operation. */
+/**
+ * Builds and applies the tree used by one record-mask operation.
+ */
 const MaskTree = Object.freeze({
   create(mask: RecordMask): MaskNode {
     const root = this.node();

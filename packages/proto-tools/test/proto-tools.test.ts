@@ -166,6 +166,134 @@ function generatedOutput(_: string, output: string): void {
   writeFileSync(join(output, "model_pb.ts"), "export {};\n");
 }
 
+function generatedRejectionOutput(_: string, output: string): void {
+  mkdirSync(output, { recursive: true });
+  writeFileSync(join(output, "model_rejections.ts"), "export {};\n");
+}
+
+it("configures every model generation with the packaged rejection companion plugin", () => {
+  const model = packageDirectory("@example/rejections");
+  const commands: string[][] = [];
+  let template = "";
+  try {
+    writeJson(model, "spine-proto.json", modelConfig("@example/rejections"));
+    mkdirSync(join(model, "proto"));
+    writeFileSync(join(model, "proto", "task.proto"), 'syntax = "proto3"; message Task {}\n');
+    const runProcess: NonNullable<GenerationOperations["runProcess"]> = (
+      command,
+      arguments_,
+      options,
+    ) => {
+      commands.push([command, ...arguments_]);
+      if (arguments_[0] === "generate") {
+        template = readFileSync(join(options.cwd, "buf.gen.yaml"), "utf8");
+        const output = join(options.cwd, "output");
+        mkdirSync(output, { recursive: true });
+        writeFileSync(join(output, "task_pb.ts"), "export {};\n");
+      }
+      return { status: 0, signal: null, stdout: "", stderr: "", pid: 1, output: [] };
+    };
+    generateModel(model, { runProcess });
+
+    expect(template).toMatch(/rejection-generator\.(?:ts|js)/u);
+    expect(template).toContain("@bufbuild/protoc-gen-es");
+    expect(commands).toHaveLength(2);
+  } finally {
+    rmSync(model, { force: true, recursive: true });
+  }
+});
+
+it("rejects a rejection-owning model that does not declare the throwable runtime directly", () => {
+  const model = packageDirectory("@example/missing-core");
+  writeJson(model, "spine-proto.json", modelConfig("@example/missing-core"));
+  mkdirSync(join(model, "proto"));
+  writeFileSync(
+    join(model, "proto/task_rejections.proto"),
+    'syntax = "proto3"; message TaskRejected {}\n',
+  );
+  mkdirSync(join(model, "src/generated"), { recursive: true });
+  writeFileSync(join(model, "src/generated/prior.ts"), "prior output\n");
+  writeFileSync(join(model, "spine-proto-manifest.json"), "prior manifest\n");
+
+  expect(() => {
+    generateModel(model);
+  }).toThrow(
+    "spine-proto: @example/missing-core: rejection generation requires direct runtime dependency " +
+      "@spine-event-engine/core",
+  );
+  expect(readFileSync(join(model, "src/generated/prior.ts"), "utf8")).toBe("prior output\n");
+  expect(readFileSync(join(model, "spine-proto-manifest.json"), "utf8")).toBe("prior manifest\n");
+  expect(existsSync(join(model, "src/generated/task_rejections.ts"))).toBe(false);
+  expect(
+    readdirSync(join(model, "src")).some((name) =>
+      /^\.generated\.stage-|^\.generated\..+\.backup$/u.test(name),
+    ),
+  ).toBe(false);
+});
+
+it.each([
+  ["malformed package JSON", "{", "cannot read package runtime dependencies"],
+  ["a null package JSON value", "null", "rejection generation requires direct runtime dependency"],
+  [
+    "a primitive package JSON value",
+    "7",
+    "rejection generation requires direct runtime dependency",
+  ],
+  [
+    "null dependencies",
+    '{"dependencies":null}',
+    "rejection generation requires direct runtime dependency",
+  ],
+  [
+    "primitive dependencies",
+    '{"dependencies":7}',
+    "rejection generation requires direct runtime dependency",
+  ],
+  [
+    "a non-string throwable dependency",
+    '{"dependencies":{"@spine-event-engine/core":7}}',
+    "rejection generation requires direct runtime dependency",
+  ],
+])("fails closed for %s after generation has begun", (_name, packageJson, message) => {
+  const model = packageDirectory("@example/runtime-dependency-shape");
+  writeJson(model, "spine-proto.json", modelConfig("@example/runtime-dependency-shape"));
+  mkdirSync(join(model, "proto"));
+  writeFileSync(
+    join(model, "proto/task_rejections.proto"),
+    'syntax = "proto3"; message TaskRejected {}\n',
+  );
+
+  expect(() => {
+    generateModel(model, {
+      runBuf: (_root, output) => {
+        generatedRejectionOutput("", output);
+        writeFileSync(join(model, "package.json"), packageJson);
+      },
+    });
+  }).toThrow(`spine-proto: @example/runtime-dependency-shape: ${message}`);
+});
+
+it("does not generate a companion for frozen delivery rejection sources", () => {
+  const model = packageDirectory("@example/delivery-rejections");
+  writeJson(model, "package.json", {
+    name: "@example/delivery-rejections",
+    version: "1.0.0",
+    exports: {
+      "./generated/*.js": { types: "./dist/generated/*.d.ts", default: "./dist/generated/*.js" },
+    },
+  });
+  writeJson(model, "spine-proto.json", modelConfig("@example/delivery-rejections"));
+  mkdirSync(join(model, "proto/spine/delivery"), { recursive: true });
+  writeFileSync(
+    join(model, "proto/spine/delivery/rejections.proto"),
+    'syntax = "proto3"; package spine.delivery; message DeliveryRejected {}\n',
+  );
+
+  generateModel(model);
+
+  expect(existsSync(join(model, "src/generated/spine/delivery/rejections.ts"))).toBe(false);
+});
+
 function packedHandlerTarballs(): readonly string[] {
   const destination = mkdtempSync(join(tmpdir(), "spine-handler-tarballs-"));
   const packages = [
@@ -175,7 +303,6 @@ function packedHandlerTarballs(): readonly string[] {
     "packages/core",
     "packages/storage",
     "packages/transport",
-    "examples/chat/users-model",
     "examples/chat/model",
   ];
   for (const packagePath of packages) {

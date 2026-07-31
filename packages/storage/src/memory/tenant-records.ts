@@ -9,14 +9,17 @@ import type {
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordEntry } from "../record/record-storage.js";
 
-/** Record slice owned by one tenant of an in-memory record storage. */
+/**
+ * Record slice owned by one tenant of an in-memory record storage.
+ */
 export class TenantRecords<I, R extends Message> {
   readonly #records = new Map<string, StoredEntry<I, R>>();
 
-  /** Compares and replaces an expected materialized record in this tenant slice.
-   * @param id - Identifies the storage slot to compare and replace.
-   * @param expected - Specifies the materialized record required at the slot.
-   * @param next - Specifies the replacement record, or removes the slot when absent.
+  /**
+   * Compares and replaces an expected materialized record in this tenant slice.
+   * @param id Identifies the storage slot to compare and replace.
+   * @param expected Specifies the materialized record required at the slot.
+   * @param next Specifies the replacement record, or removes the slot when absent.
    * @returns Whether the expected record matched and the mutation was applied.
    */
   compareAndSet(
@@ -43,33 +46,37 @@ export class TenantRecords<I, R extends Message> {
     return true;
   }
 
-  /** Removes one storage slot from this tenant slice.
-   * @param id - Identifies the storage slot to remove.
+  /**
+   * Removes one storage slot from this tenant slice.
+   * @param id Identifies the storage slot to remove.
    * @returns Whether a record occupied the slot.
    */
   delete(id: I): boolean {
     return this.#records.delete(StoredValues.key(id));
   }
 
-  /** Returns materialized records matching a tenant-scoped query.
-   * @param spec - Supplies record identity cloning and materialized columns.
-   * @param query - Specifies filters, ordering, continuation, and windowing.
+  /**
+   * Returns materialized records matching a tenant-scoped query.
+   * @param spec Supplies record identity cloning and materialized columns.
+   * @param query Specifies filters, ordering, continuation, and windowing.
    * @returns The matching logical record entries in query order.
    */
   queryEntries(spec: RecordSpec<I, R>, query: RecordQuery<I>): readonly RecordEntry<I, R>[] {
     return TenantRecordQuery.entries(this.#records.values(), spec, query);
   }
 
-  /** Reads one record from this tenant slice.
-   * @param id - Identifies the storage slot to read.
+  /**
+   * Reads one record from this tenant slice.
+   * @param id Identifies the storage slot to read.
    * @returns The stored record, or undefined when the slot is empty.
    */
   read(id: I): R | undefined {
     return this.#records.get(StoredValues.key(id))?.stored.record;
   }
 
-  /** Stores one materialized record in this tenant slice.
-   * @param record - Supplies the materialized record and storage identity.
+  /**
+   * Stores one materialized record in this tenant slice.
+   * @param record Supplies the materialized record and storage identity.
    */
   write(record: StoredRecord<I, R>): void {
     this.#records.set(StoredValues.key(record.id), {
@@ -78,8 +85,9 @@ export class TenantRecords<I, R extends Message> {
     });
   }
 
-  /** Stores all materialized records in this tenant slice.
-   * @param records - Supplies the materialized records to store.
+  /**
+   * Stores all materialized records in this tenant slice.
+   * @param records Supplies the materialized records to store.
    */
   writeAll(records: readonly StoredRecord<I, R>[]): void {
     for (const record of records) {
@@ -95,9 +103,15 @@ interface StoredEntry<I, R extends Message> {
   readonly stored: StoredRecord<I, R>;
 }
 
-/** Owns equality for materialized records held by a tenant slice. */
+/**
+ * Compares materialized records held within one tenant slice.
+ */
 const StoredRecords = {
-  /** Determines whether two materialized records represent the same stored value. */
+  // prettier-ignore
+
+  /**
+   * Determines whether two materialized records represent the same stored value.
+   */
   equal<I, R extends Message>(
     left: StoredRecord<I, R> | undefined,
     right: StoredRecord<I, R> | undefined,
@@ -107,9 +121,15 @@ const StoredRecords = {
   },
 };
 
-/** Owns filtering, ordering, continuation, and windowing for tenant records. */
+/**
+ * Filters, orders, continues, and windows records for a tenant query.
+ */
 const TenantRecordQuery = {
-  /** Produces logical entries for one tenant-scoped query. */
+  // prettier-ignore
+
+  /**
+   * Produces logical entries for one tenant-scoped query.
+   */
   entries<I, R extends Message>(
     entries: Iterable<StoredEntry<I, R>>,
     spec: RecordSpec<I, R>,
@@ -126,7 +146,9 @@ const TenantRecordQuery = {
     }));
   },
 
-  /** Applies offset and limit after filtering, ordering, and continuation. */
+  /**
+   * Applies offset and limit after filtering, ordering, and continuation.
+   */
   applyWindow<T>(
     records: readonly T[],
     offset: number | undefined,
@@ -136,7 +158,9 @@ const TenantRecordQuery = {
     return records.slice(start, limit === undefined ? undefined : start + limit);
   },
 
-  /** Removes entries at or before a keyset continuation. */
+  /**
+   * Removes entries at or before a keyset continuation.
+   */
   continueAfter<I, R extends Message>(
     records: readonly StoredEntry<I, R>[],
     orders: readonly RecordOrder[],
@@ -149,7 +173,9 @@ const TenantRecordQuery = {
         );
   },
 
-  /** Orders entries by requested fields and storage-slot identity. */
+  /**
+   * Orders entries by requested fields and storage-slot identity.
+   */
   compareEntries<I, R extends Message>(
     left: StoredEntry<I, R>,
     right: StoredEntry<I, R>,
@@ -165,7 +191,9 @@ const TenantRecordQuery = {
     return StoredValues.compare(left.slotId, right.slotId);
   },
 
-  /** Orders an entry relative to one keyset continuation. */
+  /**
+   * Orders an entry relative to one keyset continuation.
+   */
   compareToContinuation<I, R extends Message>(
     entry: StoredEntry<I, R>,
     orders: readonly RecordOrder[],
@@ -183,7 +211,9 @@ const TenantRecordQuery = {
     return StoredValues.compare(entry.slotId, after.id);
   },
 
-  /** Matches one entry against ID and column filters. */
+  /**
+   * Matches one entry against ID and column filters.
+   */
   matches<I, R extends Message>(
     spec: RecordSpec<I, R>,
     entry: StoredEntry<I, R>,
@@ -195,7 +225,9 @@ const TenantRecordQuery = {
     );
   },
 
-  /** Matches materialized values against all requested column filters. */
+  /**
+   * Matches materialized values against all requested column filters.
+   */
   matchesFilters<I, R extends Message>(
     entry: StoredRecord<I, R>,
     filters: readonly RecordFilter[] | undefined,
@@ -208,7 +240,9 @@ const TenantRecordQuery = {
     });
   },
 
-  /** Matches an entry's storage slot against requested logical IDs. */
+  /**
+   * Matches an entry's storage slot against requested logical IDs.
+   */
   matchesIds<I, R extends Message>(
     spec: RecordSpec<I, R>,
     entry: StoredEntry<I, R>,
@@ -218,7 +252,9 @@ const TenantRecordQuery = {
     return ids.some((id) => StoredValues.key(spec.cloneId(id)) === StoredValues.key(entry.slotId));
   },
 
-  /** Resolves an ID, materialized column, or record path value. */
+  /**
+   * Resolves an ID, materialized column, or record path value.
+   */
   resolveValue<I, R extends Message>(entry: StoredRecord<I, R>, field: string): unknown {
     if (field === "id") return entry.id;
     return entry.columns.has(field)
@@ -227,20 +263,32 @@ const TenantRecordQuery = {
   },
 };
 
-/** Owns canonical keys and deterministic comparison for stored values. */
+/**
+ * Produces canonical keys and deterministic comparisons for stored values.
+ */
 const StoredValues = {
-  /** Creates a canonical value key. */
+  // prettier-ignore
+
+  /**
+   * Creates a canonical value key.
+   */
   key(value: unknown): string {
     return StoredValues.encode(StoredValues.normalize(value));
   },
-  /** Compares values with the storage ordering rules. */
+
+  /**
+   * Compares values with the storage ordering rules.
+   */
   compare(left: unknown, right: unknown): number {
     return StoredValues.compareNormalized(
       StoredValues.normalize(left),
       StoredValues.normalize(right),
     );
   },
-  /** Reads a dot-separated path from an object value. */
+
+  /**
+   * Reads a dot-separated path from an object value.
+   */
   readPath(value: unknown, path: string): unknown {
     let current = value;
     for (const segment of path.split(".").filter((part) => part.length > 0)) {
@@ -249,7 +297,10 @@ const StoredValues = {
     }
     return current;
   },
-  /** Compares normalized values of the same or distinct kinds. */
+
+  /**
+   * Compares normalized values of the same or distinct kinds.
+   */
   compareNormalized(left: NormalizedValue, right: NormalizedValue): number {
     const leftKind = StoredValues.kind(left);
     const rightKind = StoredValues.kind(right);
@@ -283,19 +334,28 @@ const StoredValues = {
         return StoredValues.compareObjects(left as NormalizedObject, right as NormalizedObject);
     }
   },
-  /** Compares numbers while placing NaN after other numbers. */
+
+  /**
+   * Compares numbers while placing NaN after other numbers.
+   */
   compareNumbers(left: number, right: number): number {
     if (Number.isNaN(left) || Number.isNaN(right))
       return Number.isNaN(left) && Number.isNaN(right) ? 0 : Number.isNaN(left) ? 1 : -1;
     return left < right ? -1 : left > right ? 1 : 0;
   },
-  /** Compares encoded bigint payloads numerically. */
+
+  /**
+   * Compares encoded bigint payloads numerically.
+   */
   compareBigInts(left: string, right: string): number {
     const l = BigInt(left);
     const r = BigInt(right);
     return l < r ? -1 : l > r ? 1 : 0;
   },
-  /** Compares lists lexicographically. */
+
+  /**
+   * Compares lists lexicographically.
+   */
   compareLists<T>(left: readonly T[], right: readonly T[]): number {
     for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
       const comparison =
@@ -309,7 +369,10 @@ const StoredValues = {
     }
     return StoredValues.compareNumbers(left.length, right.length);
   },
-  /** Compares normalized objects by keys and then values. */
+
+  /**
+   * Compares normalized objects by keys and then values.
+   */
   compareObjects(left: NormalizedObject, right: NormalizedObject): number {
     const leftKeys = Object.keys(left);
     const keyComparison = StoredValues.compareLists(leftKeys, Object.keys(right));
@@ -320,11 +383,17 @@ const StoredValues = {
     }
     return 0;
   },
-  /** Compares strings in code-unit order. */
+
+  /**
+   * Compares strings in code-unit order.
+   */
   compareText(left: string, right: string): number {
     return left < right ? -1 : left > right ? 1 : 0;
   },
-  /** Normalizes a value for canonical storage comparison. */
+
+  /**
+   * Normalizes a value for canonical storage comparison.
+   */
   normalize(value: unknown): NormalizedValue {
     if (typeof value === "bigint") return StoredValues.tagged("bigint", value.toString());
     if (value instanceof Uint8Array) return StoredValues.tagged("bytes", [...value]);
@@ -348,11 +417,17 @@ const StoredValues = {
         return result;
       }, StoredValues.emptyObject());
   },
-  /** Encodes a normalized value without type collisions. */
+
+  /**
+   * Encodes a normalized value without type collisions.
+   */
   encode(value: NormalizedValue): string {
     return JSON.stringify(StoredValues.encoded(value));
   },
-  /** Converts a normalized value to its tagged JSON representation. */
+
+  /**
+   * Converts a normalized value to its tagged JSON representation.
+   */
   encoded(value: NormalizedValue): EncodedValue {
     const kind = StoredValues.kind(value);
     switch (kind) {
@@ -391,7 +466,10 @@ const StoredValues = {
         ];
     }
   },
-  /** Identifies a normalized value kind. */
+
+  /**
+   * Identifies a normalized value kind.
+   */
   kind(value: NormalizedValue): ValueKind {
     if (value === undefined) return "undefined";
     if (value === null) return "null";
@@ -402,7 +480,10 @@ const StoredValues = {
     const tag = StoredValues.tag(value);
     return tag ?? "object";
   },
-  /** Creates a frozen tagged normalized value. */
+
+  /**
+   * Creates a frozen tagged normalized value.
+   */
   tagged<K extends TaggedValueKind, P>(kind: K, payload: P): NormalizedTaggedValue<K, P> {
     const tagged = Object.create(null) as NormalizedTaggedValue<K, P>;
     Object.defineProperties(tagged, {
@@ -411,16 +492,25 @@ const StoredValues = {
     });
     return Object.freeze(tagged);
   },
-  /** Reads a recognized normalized tag. */
+
+  /**
+   * Reads a recognized normalized tag.
+   */
   tag(value: object): TaggedValueKind | undefined {
     const tag = (value as Partial<NormalizedTaggedValue<TaggedValueKind, unknown>>)[normalizedKind];
     return tag === "bigint" || tag === "bytes" ? tag : undefined;
   },
-  /** Creates an object with no prototype for normalized fields. */
+
+  /**
+   * Creates an object with no prototype for normalized fields.
+   */
   emptyObject(): NormalizedObject {
     return Object.create(null) as NormalizedObject;
   },
-  /** Reads a tagged normalized payload. */
+
+  /**
+   * Reads a tagged normalized payload.
+   */
   payload<P>(value: NormalizedTaggedValue<TaggedValueKind, P>): P {
     return value[normalizedPayload];
   },

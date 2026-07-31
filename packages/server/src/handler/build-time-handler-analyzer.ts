@@ -12,49 +12,102 @@ import type {
   GeneratedHandlerParameterCount,
 } from "./generated-handler-registry.js";
 
-/** Build-time analysis result for bare decorated entity handler methods. */
+/**
+ * Build-time analysis result for bare decorated entity handler methods.
+ */
 export interface BuildHandlerAnalysis {
-  /** Entity groups in source-file and class declaration order. */
+  // prettier-ignore
+
+  /**
+   * Entity groups in source-file and class declaration order.
+   */
   readonly entities: readonly BuildEntityHandlers[];
-  /** Deterministic diagnostics for unsupported handler declarations. */
+
+  /**
+   * Deterministic diagnostics for unsupported handler declarations.
+   */
   readonly diagnostics: readonly BuildHandlerDiagnostic[];
 }
 
-/** Build-time entity group shaped for later generated registry rendering. */
+/**
+ * Build-time entity group shaped for later generated registry rendering.
+ */
 export interface BuildEntityHandlers {
-  /** Entity class declaration name. */
+  // prettier-ignore
+
+  /**
+   * Entity class declaration name.
+   */
   readonly className: string;
-  /** Source file where the entity class is declared. */
+
+  /**
+   * Source file where the entity class is declared.
+   */
   readonly sourceFile: string;
-  /** Importable generated schema reference for entity state. */
+
+  /**
+   * Importable generated schema reference for entity state.
+   */
   readonly stateSchema: SchemaReference;
-  /** Analyzed bare-decorator handler records. */
+
+  /**
+   * Analyzed bare-decorator handler records.
+   */
   readonly handlers: readonly BuildHandlerRecord[];
 }
 
-/** Importable generated schema reference used by later source rendering. */
+/**
+ * Importable generated schema reference used by later source rendering.
+ */
 export interface SchemaReference {
-  /** Module specifier exactly as declared by analyzed source. */
+  // prettier-ignore
+
+  /**
+   * Module specifier exactly as declared by analyzed source.
+   */
   readonly moduleSpecifier: string;
-  /** Generated schema export name in that module. */
+
+  /**
+   * Generated schema export name in that module.
+   */
   readonly exportName: string;
 }
 
-/** Build-time handler record before generated source rendering. */
+/**
+ * Build-time handler record before generated source rendering.
+ */
 export interface BuildHandlerRecord {
-  /** Handler role inferred from the bare decorator. */
+  // prettier-ignore
+
+  /**
+   * Handler role inferred from the bare decorator.
+   */
   readonly kind: GeneratedHandlerKind;
-  /** String method name selected by the generated metadata. */
+
+  /**
+   * String method name selected by the generated metadata.
+   */
   readonly methodName: string;
-  /** Generated schema accepted by the first handler parameter. */
+
+  /**
+   * Generated schema accepted by the first handler parameter.
+   */
   readonly signalSchema: SchemaReference;
-  /** Generated schemas emitted by the handler return type. */
+
+  /**
+   * Generated schemas emitted by the handler return type.
+   */
   readonly emittedSchemas: readonly SchemaReference[];
-  /** Public method arity: `handler(signal)` or `handler(signal, context)`. */
+
+  /**
+   * Public method arity: `handler(signal)` or `handler(signal, context)`.
+   */
   readonly parameterCount: GeneratedHandlerParameterCount;
 }
 
-/** Stable diagnostic codes emitted by build-time handler analysis. */
+/**
+ * Stable diagnostic codes emitted by build-time handler analysis.
+ */
 export type BuildHandlerDiagnosticCode =
   | "APPLY_DECORATOR"
   | "FRAMEWORK_ENVELOPE_RETURN"
@@ -74,43 +127,75 @@ export type BuildHandlerDiagnosticCode =
   | "UNSUPPORTED_ENTITY_EXPORT"
   | "UNSUPPORTED_RETURN_TYPE";
 
-/** One build-time analyzer diagnostic. */
+/**
+ * One build-time analyzer diagnostic.
+ */
 export interface BuildHandlerDiagnostic {
-  /** Stable machine-readable diagnostic code. */
+  // prettier-ignore
+
+  /**
+   * Stable machine-readable diagnostic code.
+   */
   readonly code: BuildHandlerDiagnosticCode;
-  /** Source file where the diagnostic was found. */
+
+  /**
+   * Source file where the diagnostic was found.
+   */
   readonly sourceFile: string;
-  /** One-based source line. */
+
+  /**
+   * One-based source line.
+   */
   readonly line: number;
-  /** One-based source column. */
+
+  /**
+   * One-based source column.
+   */
   readonly column: number;
-  /** Human-readable diagnostic message. */
+
+  /**
+   * Human-readable diagnostic message.
+   */
   readonly message: string;
-  /** Entity class name when available. */
+
+  /**
+   * Entity class name when available.
+   */
   readonly className?: string;
-  /** Handler method name when available. */
+
+  /**
+   * Handler method name when available.
+   */
   readonly methodName?: string;
 }
 
-/** Inspects configured TypeScript source files for bare Spine handler decorators. */
+/**
+ * Inspects configured TypeScript source files for bare Spine handler decorators.
+ */
 export interface BuildHandlerAnalyzer {
+  // prettier-ignore
+
   /**
    * Inspects source files and returns entity handler records with deterministic diagnostics.
    *
-   * @param program - TypeScript program that owns the source files and diagnostics.
-   * @param sourceFiles - Application source files to inspect; defaults to program files.
+   * @param program TypeScript program that owns the source files and diagnostics.
+   * @param sourceFiles Application source files to inspect; defaults to program files.
    * @returns Entity handler records and deterministic diagnostics.
    */
   analyze(program: ts.Program, sourceFiles?: readonly ts.SourceFile[]): BuildHandlerAnalysis;
 }
 
-/** Provides build-time analysis for bare Spine handler decorators. */
+/**
+ * Provides build-time analysis for bare Spine handler decorators.
+ */
 export const BuildHandlerAnalyzer: BuildHandlerAnalyzer = Object.freeze({
+  // prettier-ignore
+
   /**
    * Inspects source files and returns entity handler records with deterministic diagnostics.
    *
-   * @param program - TypeScript program that owns the source files and diagnostics.
-   * @param sourceFiles - Application source files to inspect; defaults to program files.
+   * @param program TypeScript program that owns the source files and diagnostics.
+   * @param sourceFiles Application source files to inspect; defaults to program files.
    * @returns Entity handler records and deterministic diagnostics.
    */
   analyze(

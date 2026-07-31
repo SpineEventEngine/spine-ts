@@ -13,22 +13,44 @@ import { ShardHandlers } from "../core/shard-service.js";
 import { DEFAULT_DELIVERY_STATE_LIMITS } from "../core/limits.js";
 import type { DeliveryConfiguration } from "./config.js";
 
-/** Groups handlers and shutdown boundaries that share delivery runtime state. */
+/**
+ * Groups handlers and shutdown boundaries that share delivery runtime state.
+ */
 export interface DeliveryAssembly {
-  /** Provides Inbox handlers backed by the shared delivery state. */
+  // prettier-ignore
+
+  /**
+   * Provides Inbox handlers backed by the shared delivery state.
+   */
   readonly inbox: ServiceImpl<typeof InboxService>;
-  /** Provides Shard handlers backed by the shared delivery state. */
+
+  /**
+   * Provides Shard handlers backed by the shared delivery state.
+   */
   readonly shards: ServiceImpl<typeof ShardService>;
-  /** Provides Admin handlers backed by the shared delivery state. */
+
+  /**
+   * Provides Admin handlers backed by the shared delivery state.
+   */
   readonly admin: ServiceImpl<typeof AdminService>;
-  /** Closes the shared mutation-admission boundary. */
+
+  /**
+   * Closes the shared mutation-admission boundary.
+   */
   closeAdmission(): void;
-  /** Closes the shared Admin publisher. */
+
+  /**
+   * Closes the shared Admin publisher.
+   */
   closeAdmin(): void;
 }
 
-/** Provides assembly construction for the delivery RPC handlers. */
+/**
+ * Provides assembly construction for the delivery RPC handlers.
+ */
 export const DeliveryAssembly: Readonly<{
+  // prettier-ignore
+
   /**
    * Creates delivery handlers with one shared state and admission boundary.
    *

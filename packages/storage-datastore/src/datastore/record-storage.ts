@@ -22,7 +22,9 @@ const maxCasAttempts = 3;
 const casRetryDelayMs = 100;
 const wrappedReadOptions = { wrapNumbers: true } as const;
 
-/** Private flat Datastore-entity codec for one record storage handle. */
+/**
+ * Private flat Datastore-entity codec for one record storage handle.
+ */
 class FlatEntityCodec<I, R extends Message> {
   readonly #kind: string;
 
@@ -124,7 +126,9 @@ class FlatEntityCodec<I, R extends Message> {
   }
 }
 
-/** Private initial handle for the Datastore adapter. */
+/**
+ * Private initial handle for the Datastore adapter.
+ */
 export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   readonly #codec: FlatEntityCodec<I, R>;
 
@@ -146,7 +150,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     this.#codec = new FlatEntityCodec(context, recordSpec, maxClientSideScan);
   }
 
-  /** Deletes the record at one storage slot.
+  /**
+   * Deletes the record at one storage slot.
    * @param id The storage slot identifier.
    * @returns Whether a record was deleted.
    */
@@ -162,7 +167,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     return true;
   }
 
-  /** Returns records matching a query.
+  /**
+   * Returns records matching a query.
    * @param _query The record query.
    * @returns The matching storage entries.
    */
@@ -193,7 +199,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     return LocalQueryResults.apply(entries, _query);
   }
 
-  /** Returns the supported Datastore query capabilities.
+  /**
+   * Returns the supported Datastore query capabilities.
    * @returns The supported query capabilities.
    */
   protected override queryCapabilities(): StorageQueryCapabilities {
@@ -203,7 +210,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     };
   }
 
-  /** Returns candidate records for a normalized query plan.
+  /**
+   * Returns candidate records for a normalized query plan.
    * @param plan The normalized query plan.
    * @returns The candidate storage entries.
    */
@@ -234,7 +242,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     }));
   }
 
-  /** Reads the record at one storage slot.
+  /**
+   * Reads the record at one storage slot.
    * @param id The storage slot identifier.
    * @returns The stored record, if present.
    */
@@ -246,7 +255,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     return entity === undefined ? undefined : this.#codec.decode(entity);
   }
 
-  /** Compares and conditionally replaces the record at one storage slot.
+  /**
+   * Compares and conditionally replaces the record at one storage slot.
    * @param id The storage slot identifier.
    * @param expected The expected materialized record.
    * @param next The replacement materialized record, if any.
@@ -307,7 +317,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     }
   }
 
-  /** Writes materialized records.
+  /**
+   * Writes materialized records.
    * @param records The materialized records to write.
    * @returns Completes when the records are written.
    */
@@ -328,7 +339,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     }
   }
 
-  /** Writes one materialized record.
+  /**
+   * Writes one materialized record.
    * @param record The materialized record to write.
    * @returns Completes when the record is written.
    */
@@ -344,18 +356,29 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
 
 type QueryableValue = string | number | boolean | bigint | null;
 
-/** Converts values between Spine records and the Datastore provider representation. */
-/** Converts values between Spine records and the Datastore provider representation. */
+/**
+ * Converts values between Spine records and the Datastore provider representation.
+ */
+
+/**
+ * Converts values between Spine records and the Datastore provider representation.
+ */
 const RecordValues = Object.freeze(
   new (class {
-    /** Tests whether a value is supported by a Datastore indexed property. */
+    // prettier-ignore
+
+    /**
+     * Tests whether a value is supported by a Datastore indexed property.
+     */
     queryable(value: unknown): value is QueryableValue {
       if (typeof value === "bigint") return value >= -(1n << 63n) && value <= (1n << 63n) - 1n;
       if (typeof value === "number") return Number.isFinite(value);
       return value === null || ["string", "boolean"].includes(typeof value);
     }
 
-    /** Encodes one queryable local value for the Datastore provider. */
+    /**
+     * Encodes one queryable local value for the Datastore provider.
+     */
     provider(value: unknown, label: string): unknown {
       if (typeof value === "bigint") {
         if (!this.queryable(value))
@@ -370,7 +393,9 @@ const RecordValues = Object.freeze(
       return value;
     }
 
-    /** Decodes a Datastore property to the type retained in a record column. */
+    /**
+     * Decodes a Datastore property to the type retained in a record column.
+     */
     local(value: unknown, type: unknown): unknown {
       if (type === "bigint") {
         if (typeof value === "bigint") return value;
@@ -386,17 +411,23 @@ const RecordValues = Object.freeze(
       return value;
     }
 
-    /** Compares canonical local values for equality. */
+    /**
+     * Compares canonical local values for equality.
+     */
     equal(left: unknown, right: unknown): boolean {
       return CanonicalValue.equal(left, right);
     }
 
-    /** Compares canonical local values for ordering. */
+    /**
+     * Compares canonical local values for ordering.
+     */
     compare(left: unknown, right: unknown): number {
       return CanonicalValue.compare(left, right);
     }
 
-    /** Compares two persisted payload byte arrays. */
+    /**
+     * Compares two persisted payload byte arrays.
+     */
     payloadEqual(left: unknown, right: unknown): boolean {
       return (
         left instanceof Uint8Array &&
@@ -408,8 +439,12 @@ const RecordValues = Object.freeze(
   })(),
 );
 
-/** Raised when a query would exceed the adapter's configured finite client-side scan budget. */
+/**
+ * Raised when a query would exceed the adapter's configured finite client-side scan budget.
+ */
 export class DatastoreQueryLimitError extends Error {
+  // prettier-ignore
+
   /**
    * Creates the scan-budget error.
    *
@@ -425,11 +460,20 @@ interface QueriedEntry<I, R extends Message> extends RecordEntry<I, R> {
   readonly columns: ReadonlyMap<string, unknown>;
 }
 
-/** Translates safe normalized record queries to Datastore query operations. */
-/** Translates safe normalized record queries to Datastore query operations. */
+/**
+ * Translates safe normalized record queries to Datastore query operations.
+ */
+
+/**
+ * Translates safe normalized record queries to Datastore query operations.
+ */
 const DatastoreQueryPushdown = Object.freeze(
   new (class {
-    /** Translates the legacy record-query surface. */
+    // prettier-ignore
+
+    /**
+     * Translates the legacy record-query surface.
+     */
     translate<I>(
       query: ReturnType<Datastore["createQuery"]>,
       recordQuery: RecordQuery<I>,
@@ -467,7 +511,9 @@ const DatastoreQueryPushdown = Object.freeze(
       query.order("__key__");
     }
 
-    /** Applies the all-or-nothing legal portion of a normalized query plan. */
+    /**
+     * Applies the all-or-nothing legal portion of a normalized query plan.
+     */
     plan<I>(
       query: ReturnType<Datastore["createQuery"]>,
       plan: NormalizedQueryPlan<I>,
@@ -486,7 +532,9 @@ const DatastoreQueryPushdown = Object.freeze(
       }
     }
 
-    /** Returns the predicate only when every clause satisfies provider restrictions. */
+    /**
+     * Returns the predicate only when every clause satisfies provider restrictions.
+     */
     legal<I>(plan: NormalizedQueryPlan<I>): NormalizedQueryPredicate<I> | undefined {
       const predicate = plan.predicate;
       if (predicate === undefined) return undefined;
@@ -512,7 +560,9 @@ const DatastoreQueryPushdown = Object.freeze(
       return predicate;
     }
 
-    /** Adds one already-legal normalized predicate to the provider query. */
+    /**
+     * Adds one already-legal normalized predicate to the provider query.
+     */
     predicate<I>(
       query: ReturnType<Datastore["createQuery"]>,
       predicate: NormalizedQueryPredicate<I>,
@@ -555,11 +605,20 @@ const DatastoreQueryPushdown = Object.freeze(
   })(),
 );
 
-/** Applies record-query filtering, ordering, continuation, and paging locally. */
-/** Applies record-query filtering, ordering, continuation, and paging locally. */
+/**
+ * Applies record-query filtering, ordering, continuation, and paging locally.
+ */
+
+/**
+ * Applies record-query filtering, ordering, continuation, and paging locally.
+ */
 const LocalQueryResults = Object.freeze(
   new (class {
-    /** Applies one legacy record query to materialized candidate entries. */
+    // prettier-ignore
+
+    /**
+     * Applies one legacy record query to materialized candidate entries.
+     */
     apply<I, R extends Message>(
       entries: readonly QueriedEntry<I, R>[],
       query: RecordQuery<I>,
@@ -578,7 +637,9 @@ const LocalQueryResults = Object.freeze(
       return continued.slice(start, end).map(({ id, record }) => ({ id, record }));
     }
 
-    /** Tests whether a candidate satisfies the ID and equality filters. */
+    /**
+     * Tests whether a candidate satisfies the ID and equality filters.
+     */
     matches<I, R extends Message>(entry: QueriedEntry<I, R>, query: RecordQuery<I>): boolean {
       return (
         (query.ids === undefined ||
@@ -592,7 +653,9 @@ const LocalQueryResults = Object.freeze(
       );
     }
 
-    /** Orders candidates by requested sort fields and canonical ID tie-breaker. */
+    /**
+     * Orders candidates by requested sort fields and canonical ID tie-breaker.
+     */
     order<I, R extends Message>(
       left: QueriedEntry<I, R>,
       right: QueriedEntry<I, R>,
@@ -608,7 +671,9 @@ const LocalQueryResults = Object.freeze(
       return RecordValues.compare(left.id, right.id);
     }
 
-    /** Compares a candidate with a normalized continuation cursor. */
+    /**
+     * Compares a candidate with a normalized continuation cursor.
+     */
     continuation<I, R extends Message>(
       entry: QueriedEntry<I, R>,
       orders: readonly NonNullable<RecordQuery<I>["sort"]>[number][],
@@ -627,25 +692,38 @@ const LocalQueryResults = Object.freeze(
       return RecordValues.compare(entry.id, after.id);
     }
 
-    /** Obtains an ID or indexed column value from a candidate. */
+    /**
+     * Obtains an ID or indexed column value from a candidate.
+     */
     value<I, R extends Message>(entry: QueriedEntry<I, R>, field: string): unknown {
       return field === "id" ? entry.id : entry.columns.get(field);
     }
   })(),
 );
 
-/** Protects transaction failures and coordinates bounded CAS retries. */
-/** Protects transaction failures and coordinates bounded CAS retries. */
+/**
+ * Protects transaction failures and coordinates bounded CAS retries.
+ */
+
+/**
+ * Protects transaction failures and coordinates bounded CAS retries.
+ */
 const DatastoreTransactions = Object.freeze(
   new (class {
-    /** Redacts credential-like errors while preserving safe provider failures. */
+    // prettier-ignore
+
+    /**
+     * Redacts credential-like errors while preserving safe provider failures.
+     */
     redact(error: unknown): Error {
       if (error instanceof Error && !/(credential|payload|secret)/i.test(error.message))
         return error;
       return new Error("Datastore transaction failed.");
     }
 
-    /** Identifies a safe-to-retry Datastore transaction conflict. */
+    /**
+     * Identifies a safe-to-retry Datastore transaction conflict.
+     */
     retry(error: unknown): boolean {
       return (
         error instanceof Error &&
@@ -654,7 +732,9 @@ const DatastoreTransactions = Object.freeze(
       );
     }
 
-    /** Waits using exponential jitter before a bounded CAS retry. */
+    /**
+     * Waits using exponential jitter before a bounded CAS retry.
+     */
     async wait(attempt: number): Promise<void> {
       const exponentialDelay = casRetryDelayMs * 2 ** attempt;
       const jitter = Math.floor(Math.random() * exponentialDelay);
@@ -663,11 +743,20 @@ const DatastoreTransactions = Object.freeze(
   })(),
 );
 
-/** Validates Datastore read and query response shapes. */
-/** Validates Datastore read and query response shapes. */
+/**
+ * Validates Datastore read and query response shapes.
+ */
+
+/**
+ * Validates Datastore read and query response shapes.
+ */
 const DatastoreResults = Object.freeze(
   new (class {
-    /** Extracts the optional first entity from a Datastore read response. */
+    // prettier-ignore
+
+    /**
+     * Extracts the optional first entity from a Datastore read response.
+     */
     first(response: unknown): Record<string | symbol, unknown> | undefined {
       if (!Array.isArray(response))
         throw new Error("Datastore returned an invalid entity response.");
@@ -675,7 +764,9 @@ const DatastoreResults = Object.freeze(
       return entity === undefined ? undefined : this.entity(entity);
     }
 
-    /** Extracts entity rows from a Datastore query response. */
+    /**
+     * Extracts entity rows from a Datastore query response.
+     */
     entities(response: unknown): readonly Record<string | symbol, unknown>[] {
       if (!Array.isArray(response) || !Array.isArray(response[0])) {
         throw new Error("Datastore returned an invalid query response.");
@@ -683,7 +774,9 @@ const DatastoreResults = Object.freeze(
       return (response[0] as unknown[]).map((value) => this.entity(value));
     }
 
-    /** Validates one provider entity object. */
+    /**
+     * Validates one provider entity object.
+     */
     entity(value: unknown): Record<string | symbol, unknown> {
       if (typeof value !== "object" || value === null) {
         throw new Error("Datastore returned an invalid entity response.");

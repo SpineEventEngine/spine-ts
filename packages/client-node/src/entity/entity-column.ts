@@ -9,27 +9,44 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { column, entity, EntityOption_Kind, type Version } from "@spine-event-engine/proto";
 import { EntityFieldClassification } from "../../codegen/entity-field-classification.mjs";
 
-/** Operators available for every Entity column. */
+/**
+ * Operators available for every Entity column.
+ */
 export type EntityEqualityOperator = "equal";
 
-/** Operators available for naturally ordered Entity column values. */
+/**
+ * Operators available for naturally ordered Entity column values.
+ */
 export type EntityOrderingOperator =
   EntityEqualityOperator | "greaterThan" | "lessThan" | "greaterOrEqual" | "lessOrEqual";
 
-/** Comparison family derived from a column's Protobuf field descriptor. */
+/**
+ * Comparison family derived from a column's Protobuf field descriptor.
+ */
 export type EntityComparison = "equality" | "ordering";
 
-/** Runtime value category derived from a column's Protobuf field descriptor. */
+/**
+ * Runtime value category derived from a column's Protobuf field descriptor.
+ */
 export type EntityColumnValueKind =
   "bigint" | "boolean" | "bytes" | "enum" | "message" | "number" | "string";
 
-/** Represents one generated column declaration paired with its descriptor. */
+/**
+ * Represents one generated column declaration paired with its descriptor.
+ */
 export interface EntityColumnDefinitionEntry<
   Comparison extends EntityComparison = EntityComparison,
 > {
-  /** Identifies the generated Protobuf field declared as a column. */
+  // prettier-ignore
+
+  /**
+   * Identifies the generated Protobuf field declared as a column.
+   */
   readonly field: DescField;
-  /** Identifies the comparison family supported by the field. */
+
+  /**
+   * Identifies the comparison family supported by the field.
+   */
   readonly comparison: Comparison;
 }
 
@@ -62,7 +79,9 @@ type SupportedEntryConstraint<
   Entries extends EntityColumnEntries,
 > = Exclude<keyof Entries, SupportedStateFieldName<Schema>> extends never ? unknown : never;
 
-/** Brands generated column definitions for nominal type safety. */
+/**
+ * Brands generated column definitions for nominal type safety.
+ */
 declare const generatedDefinitionBrand: unique symbol;
 
 /**
@@ -75,18 +94,31 @@ export interface EntityColumnDefinition<
   Schema extends GenMessage<Message>,
   Entries extends EntityColumnEntries,
 > {
-  /** Brands metadata with its owning schema and generated entries. */
+  // prettier-ignore
+
+  /**
+   * Brands metadata with its owning schema and generated entries.
+   */
   readonly [generatedDefinitionBrand]: readonly [Schema, Entries];
-  /** Stores exact generated entries, validated again during registration. @internal */
+
+  /**
+   * Stores exact generated entries, validated again during registration.
+   * @internal
+   */
   readonly entries: Entries;
 }
 
-/** Creates immutable Entity-column metadata emitted by the companion generator. */
+/**
+ * Creates immutable Entity-column metadata emitted by the companion generator.
+ */
 export const GeneratedEntityColumns: Readonly<{
-  /** Creates immutable metadata for one generated Entity schema.
+  // prettier-ignore
+
+  /**
+   * Creates immutable metadata for one generated Entity schema.
    *
-   * @param schema - Generated Protobuf schema that owns the declared fields.
-   * @param entries - Generated field descriptors and their comparison families.
+   * @param schema Generated Protobuf schema that owns the declared fields.
+   * @param entries Generated field descriptors and their comparison families.
    * @returns Metadata accepted by {@link EntityColumn.register}.
    */
   define<Schema extends GenMessage<Message>, const Entries extends EntityColumnEntries>(
@@ -118,7 +150,9 @@ type OperatorsFor<Entry> =
     ? EntityOrderingOperator
     : EntityEqualityOperator;
 
-/** Represents the typed column collection returned for one generated Entity definition. */
+/**
+ * Represents the typed column collection returned for one generated Entity definition.
+ */
 export type EntityColumns<
   Schema extends GenMessage<Message>,
   Entries extends EntityColumnEntries,
@@ -131,20 +165,34 @@ export type EntityColumns<
       OperatorsFor<Entries[Name]>
     >;
   } & {
-    /** Identifies the Entity version system column. */
+    // prettier-ignore
+
+    /**
+     * Identifies the Entity version system column.
+     */
     readonly version: EntityColumn<Schema, "version", Version>;
-    /** Identifies the Entity archived system column. */
+
+    /**
+     * Identifies the Entity archived system column.
+     */
     readonly archived: EntityColumn<Schema, "archived", boolean, EntityEqualityOperator>;
-    /** Identifies the Entity deleted system column. */
+
+    /**
+     * Identifies the Entity deleted system column.
+     */
     readonly deleted: EntityColumn<Schema, "deleted", boolean, EntityEqualityOperator>;
   }
 >;
 
-/** Extracts the value type carried by an Entity column. */
+/**
+ * Extracts the value type carried by an Entity column.
+ */
 export type EntityColumnValue<Column extends EntityColumn> =
   Column extends EntityColumn<GenMessage<Message>, string, infer Value> ? Value : never;
 
-/** Extracts the legal operator union carried by an Entity column. */
+/**
+ * Extracts the legal operator union carried by an Entity column.
+ */
 export type EntityColumnOperator<Column extends EntityColumn> =
   Column extends EntityColumn<GenMessage<Message>, string, unknown, infer Operator>
     ? Operator
@@ -198,23 +246,49 @@ export class EntityColumn<
 > {
   declare private readonly entityColumnBrand: [Value, Operator];
 
-  /** Generated Protobuf schema that owns this column. */
+  /**
+   * Generated Protobuf schema that owns this column.
+   */
   readonly schema: Schema;
-  /** Protobuf field name, or the canonical system-column name. */
+
+  /**
+   * Protobuf field name, or the canonical system-column name.
+   */
   readonly name: string;
-  /** Protobuf-ES property name, or the canonical system-column name. */
+
+  /**
+   * Protobuf-ES property name, or the canonical system-column name.
+   */
   readonly localName: Name;
-  /** Whether the column came from the state descriptor or Entity storage metadata. */
+
+  /**
+   * Whether the column came from the state descriptor or Entity storage metadata.
+   */
   readonly source: "declared" | "system";
-  /** Exact declared field descriptor; system columns have no state field. */
+
+  /**
+   * Exact declared field descriptor; system columns have no state field.
+   */
   readonly descriptor: DescField | undefined;
-  /** Runtime value category derived from the descriptor. */
+
+  /**
+   * Runtime value category derived from the descriptor.
+   */
   readonly valueKind: EntityColumnValueKind;
-  /** Fully qualified message type for message-valued columns. */
+
+  /**
+   * Fully qualified message type for message-valued columns.
+   */
   readonly messageType: string | undefined;
-  /** Supported comparison family. */
+
+  /**
+   * Supported comparison family.
+   */
   readonly comparison: EntityComparison;
-  /** Exact operator set accepted for this column. */
+
+  /**
+   * Exact operator set accepted for this column.
+   */
   readonly operators: readonly Operator[];
 
   private constructor(
@@ -246,10 +320,11 @@ export class EntityColumn<
     Object.freeze(this);
   }
 
-  /** Registers generated Entity-column metadata for a schema.
+  /**
+   * Registers generated Entity-column metadata for a schema.
    *
-   * @param schema - Generated Entity schema that owns the metadata.
-   * @param definition - Immutable generated field metadata.
+   * @param schema Generated Entity schema that owns the metadata.
+   * @param definition Immutable generated field metadata.
    * @returns Stable immutable columns for the Entity schema.
    */
   static register<Schema extends GenMessage<Message>, const Entries extends EntityColumnEntries>(
@@ -327,9 +402,15 @@ type RuntimeMetadata = Readonly<{
   comparison: EntityComparison;
 }>;
 
-/** Internal descriptor facts used while generated column metadata is registered. */
+/**
+ * Internal descriptor facts used while generated column metadata is registered.
+ */
 const EntityColumnFacts = Object.freeze({
-  /** Validates that a schema declares one supported Entity kind. */
+  // prettier-ignore
+
+  /**
+   * Validates that a schema declares one supported Entity kind.
+   */
   validateSchema(schema: GenMessage<Message>, captured: CapturedDefinitionFacts | undefined): void {
     const entityKind =
       captured?.schema === schema
@@ -346,7 +427,9 @@ const EntityColumnFacts = Object.freeze({
     }
   },
 
-  /** Validates and describes every declared generated column. */
+  /**
+   * Validates and describes every declared generated column.
+   */
   validateDefinition(
     schema: GenMessage<Message>,
     definition: EntityColumnDefinition<GenMessage<Message>, EntityColumnEntries>,
@@ -396,7 +479,9 @@ const EntityColumnFacts = Object.freeze({
     return result;
   },
 
-  /** Derives runtime metadata from one validated descriptor. */
+  /**
+   * Derives runtime metadata from one validated descriptor.
+   */
   describeField(field: CapturedFieldFacts): RuntimeMetadata {
     const metadata = field.classification;
     if (!metadata.supported && metadata.reason === "singular") {
@@ -410,7 +495,9 @@ const EntityColumnFacts = Object.freeze({
     return metadata;
   },
 
-  /** Captures immutable facts from one generated definition. */
+  /**
+   * Captures immutable facts from one generated definition.
+   */
   captureDefinition(
     schema: GenMessage<Message>,
     entries: EntityColumnEntries,
@@ -432,7 +519,9 @@ const EntityColumnFacts = Object.freeze({
     });
   },
 
-  /** Captures immutable facts from one generated field descriptor. */
+  /**
+   * Captures immutable facts from one generated field descriptor.
+   */
   captureField(field: DescField): CapturedFieldFacts {
     return Object.freeze({
       field,
@@ -444,7 +533,9 @@ const EntityColumnFacts = Object.freeze({
     });
   },
 
-  /** Deeply freezes a descriptor graph without freezing typed-array views. */
+  /**
+   * Deeply freezes a descriptor graph without freezing typed-array views.
+   */
   deepFreeze(root: object): void {
     const pending: object[] = [root];
     const visited = new WeakSet<object>();
@@ -467,12 +558,16 @@ const EntityColumnFacts = Object.freeze({
     }
   },
 
-  /** Checks whether a value can participate in a descriptor graph. */
+  /**
+   * Checks whether a value can participate in a descriptor graph.
+   */
   isObject(value: unknown): value is object {
     return (typeof value === "object" && value !== null) || typeof value === "function";
   },
 
-  /** Returns the supported operator set for a comparison family. */
+  /**
+   * Returns the supported operator set for a comparison family.
+   */
   operatorsFor(comparison: EntityComparison): typeof equalityOperators | typeof orderingOperators {
     return comparison === "ordering" ? orderingOperators : equalityOperators;
   },

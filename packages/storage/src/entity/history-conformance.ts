@@ -8,33 +8,53 @@ import type { EntityRecordStorage } from "./entity-record.js";
 import type { EntityStorageInput } from "../memory/in-memory-entity-history.js";
 import { RecordColumn } from "../record/record-column.js";
 
-/** Adapter-neutral bundle used by storage adapters to run entity-history conformance. */
+/**
+ * Adapter-neutral bundle used by storage adapters to run entity-history conformance.
+ */
 export interface EntityStorageConformance<I, S extends Message> {
-  /** Provides latest-state record storage. */
+  // prettier-ignore
+
+  /**
+   * Provides latest-state record storage.
+   */
   readonly current: EntityRecordStorage<I, S>;
-  /** Provides retained entity event history. */
+
+  /**
+   * Provides retained entity event history.
+   */
   readonly events: EntityEventHistoryPort<I>;
-  /** Provides retained entity state history. */
+
+  /**
+   * Provides retained entity state history.
+   */
   readonly states: EntityStateHistoryPort<I, S>;
-  /** Closes the provider handle when it owns closeable resources. */
+
+  /**
+   * Closes the provider handle when it owns closeable resources.
+   */
   close?(): void;
 }
 
-/** Provider factory accepted by the reusable entity history conformance runner. */
+/**
+ * Provider factory accepted by the reusable entity history conformance runner.
+ */
 export interface EntityHistoryConformanceAdapter {
+  // prettier-ignore
+
   /**
    * Creates storage for one entity-history conformance scope.
    *
-   * @param input - Specifies the scope and entity storage metadata.
+   * @param input Specifies the scope and entity storage metadata.
    * @returns Returns the created conformance storage bundle.
    */
   readonly create: (
     input: EntityStorageInput<string, StringValue>,
   ) => EntityStorageConformance<string, StringValue>;
+
   /**
    * Creates a handle for the same durable scope after a provider handle has been closed.
    *
-   * @param input - Specifies the original scope and entity storage metadata.
+   * @param input Specifies the original scope and entity storage metadata.
    * @returns Returns the reopened conformance storage bundle.
    */
   readonly reopen: (
@@ -42,15 +62,19 @@ export interface EntityHistoryConformanceAdapter {
   ) => EntityStorageConformance<string, StringValue>;
 }
 
-/** Runs reusable entity-history provider conformance checks. */
+/**
+ * Runs reusable entity-history provider conformance checks.
+ */
 export const EntityHistoryConformance: Readonly<{
   checkCurrentQueries(adapter: EntityHistoryConformanceAdapter): Promise<void>;
   check(adapter: EntityHistoryConformanceAdapter): Promise<void>;
 }> = Object.freeze({
+  // prettier-ignore
+
   /**
    * Checks the reusable latest-state query contract shared by entity providers.
    *
-   * @param adapter - Supplies the provider under conformance test.
+   * @param adapter Supplies the provider under conformance test.
    */
   async checkCurrentQueries(adapter: EntityHistoryConformanceAdapter): Promise<void> {
     await EntityHistoryFixture.prepareCurrentQueries(adapter);
@@ -59,7 +83,7 @@ export const EntityHistoryConformance: Readonly<{
   /**
    * Checks framework-agnostic entity-history behavior through ordinary assertions.
    *
-   * @param adapter - Supplies the provider under conformance test.
+   * @param adapter Supplies the provider under conformance test.
    */
   async check(adapter: EntityHistoryConformanceAdapter): Promise<void> {
     const storage = await EntityHistoryFixture.prepareCurrentQueries(adapter);
@@ -124,9 +148,15 @@ export const EntityHistoryConformance: Readonly<{
   },
 });
 
-/** Prepares the shared latest-state fixture used by provider conformance checks. */
+/**
+ * Prepares the shared latest-state fixture used by provider conformance checks.
+ */
 const EntityHistoryFixture = {
-  /** Prepares and verifies a latest-state query fixture. */
+  // prettier-ignore
+
+  /**
+   * Prepares and verifies a latest-state query fixture.
+   */
   async prepareCurrentQueries(
     adapter: EntityHistoryConformanceAdapter,
   ): Promise<EntityStorageConformance<string, StringValue>> {
@@ -242,17 +272,25 @@ const EntityHistoryFixture = {
   },
 };
 
-/** Performs assertion operations for entity-history conformance checks. */
+/**
+ * Performs assertion operations for entity-history conformance checks.
+ */
 const ConformanceAssertions: {
   assert(condition: unknown, message: string): asserts condition;
   assertRejects(operation: () => Promise<unknown>, message: string): Promise<void>;
 } = {
-  /** Requires a conformance condition to hold. */
+  // prettier-ignore
+
+  /**
+   * Requires a conformance condition to hold.
+   */
   assert(condition: unknown, message: string): asserts condition {
     if (!condition) throw new Error(`Entity storage conformance failed: ${message}`);
   },
 
-  /** Requires an asynchronous operation to reject. */
+  /**
+   * Requires an asynchronous operation to reject.
+   */
   async assertRejects(operation: () => Promise<unknown>, message: string): Promise<void> {
     try {
       await operation();

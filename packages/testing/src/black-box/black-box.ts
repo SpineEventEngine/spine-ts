@@ -30,24 +30,43 @@ import {
 } from "@spine-event-engine/server";
 import { randomUUID } from "node:crypto";
 
-/** Fixed configuration for one runner-neutral BlackBox session. */
+/**
+ * Fixed configuration for one runner-neutral BlackBox session.
+ */
 export interface BlackBoxOptions {
-  /** Fixed tenant for this BlackBox; required only by multitenant contexts. */
+  // prettier-ignore
+
+  /**
+   * Fixed tenant for this BlackBox; required only by multitenant contexts.
+   */
   readonly tenant?: string | TenantId;
-  /** Fixed IANA time zone for every operation in this BlackBox. */
+
+  /**
+   * Fixed IANA time zone for every operation in this BlackBox.
+   */
   readonly zoneId?: string | ZoneId;
-  /** Maximum time an eventual read may wait, as a positive integer. Defaults to 500 milliseconds. */
+
+  /**
+   * Maximum time an eventual read may wait, as a positive integer. Defaults to 500 milliseconds.
+   */
   readonly timeoutMs?: number;
-  /** Delay between eventual read attempts, as a positive integer. Defaults to 5 milliseconds. */
+
+  /**
+   * Delay between eventual read attempts, as a positive integer. Defaults to 5 milliseconds.
+   */
   readonly intervalMs?: number;
 }
 
-/** Stable error thrown when an eventual read cannot satisfy its predicate. */
+/**
+ * Stable error thrown when an eventual read cannot satisfy its predicate.
+ */
 export class BlackBoxTimeoutError extends Error {
+  // prettier-ignore
+
   /**
    * Creates a timeout error.
    *
-   * @param timeoutMs - The elapsed wait limit in milliseconds.
+   * @param timeoutMs The elapsed wait limit in milliseconds.
    */
   constructor(timeoutMs: number) {
     super(`BlackBox eventually timed out after ${timeoutMs.toString()} milliseconds.`);
@@ -55,22 +74,32 @@ export class BlackBoxTimeoutError extends Error {
   }
 }
 
-/** Stable error thrown when an operation is attempted after BlackBox close begins. */
+/**
+ * Stable error thrown when an operation is attempted after BlackBox close begins.
+ */
 export class BlackBoxClosedError extends Error {
-  /** Creates a closed error. */
+  // prettier-ignore
+
+  /**
+   * Creates a closed error.
+   */
   constructor() {
     super("BlackBox is closed.");
     this.name = "BlackBoxClosedError";
   }
 }
 
-/** One immutable actor scope within a BlackBox. */
+/**
+ * One immutable actor scope within a BlackBox.
+ */
 export interface BlackBoxScope extends ClientRequest {
+  // prettier-ignore
+
   /**
    * Posts a direct domain event through this actor scope.
    *
-   * @param schema - The schema of the event message.
-   * @param message - The event message to post.
+   * @param schema The schema of the event message.
+   * @param message The event message to post.
    * @returns A promise that resolves after the event is posted.
    */
   postEvent<Schema extends GenMessage<Message>>(
@@ -90,7 +119,9 @@ interface BlackBoxInternal {
   onRelease(handle: { cancel(): Promise<void> }): void;
 }
 
-/** A runner-neutral public-client test facade over one local bounded context. */
+/**
+ * A runner-neutral public-client test facade over one local bounded context.
+ */
 export class BlackBox {
   readonly #context: BoundedContext;
   readonly #server: RunningServer;
@@ -132,8 +163,8 @@ export class BlackBox {
   /**
    * Starts an ephemeral local server and public client for a context or builder.
    *
-   * @param contextOrBuilder - The bounded context or builder to exercise.
-   * @param options - The tenant, zone, and eventual-wait options.
+   * @param contextOrBuilder The bounded context or builder to exercise.
+   * @param options The tenant, zone, and eventual-wait options.
    * @returns A ready BlackBox.
    */
   static async from(
@@ -170,7 +201,7 @@ export class BlackBox {
   /**
    * Creates an immutable scope for one actor.
    *
-   * @param actor - The actor identifier for requests and direct events.
+   * @param actor The actor identifier for requests and direct events.
    * @returns An immutable actor request scope.
    */
   onBehalfOf(actor: string): BlackBoxScope {
@@ -181,9 +212,9 @@ export class BlackBox {
   /**
    * Reads repeatedly until the predicate accepts or the bounded wait expires.
    *
-   * @param read - The value-producing operation to retry.
-   * @param accept - The predicate that accepts a produced value.
-   * @param options - Optional wait limits for this operation.
+   * @param read The value-producing operation to retry.
+   * @param accept The predicate that accepts a produced value.
+   * @param options Optional wait limits for this operation.
    * @returns The first accepted value.
    */
   async eventually<Value>(
@@ -280,15 +311,24 @@ export class BlackBox {
   }
 }
 
-/** Holds internal operations without exposing them through the BlackBox facade. */
+/**
+ * Holds internal operations without exposing them through the BlackBox facade.
+ */
 const BlackBoxAccess = (() => {
   const values = new WeakMap<BlackBox, BlackBoxInternal>();
   return Object.freeze({
-    /** Associates internal operations with a BlackBox. */
+    // prettier-ignore
+
+    /**
+     * Associates internal operations with a BlackBox.
+     */
     set(blackBox: BlackBox, internals: BlackBoxInternal): void {
       values.set(blackBox, internals);
     },
-    /** Obtains the internal operations for a BlackBox. */
+
+    /**
+     * Obtains the internal operations for a BlackBox.
+     */
     get(blackBox: BlackBox): BlackBoxInternal {
       const internals = values.get(blackBox);
       if (internals === undefined) throw new Error("BlackBox internals are unavailable.");
@@ -297,41 +337,51 @@ const BlackBoxAccess = (() => {
   });
 })();
 
-/** Internal operations exposed only through the unexported test-access module. */
+/**
+ * Internal operations exposed only through the unexported test-access module.
+ */
 export interface BlackBoxTestAccess {
+  // prettier-ignore
+
   /**
    * Creates a BlackBox with supplied closeable resources.
    *
-   * @param resources - The test client, server, and optional subscriptions.
+   * @param resources The test client, server, and optional subscriptions.
    * @returns A BlackBox that owns the supplied resources.
    */
   create(resources: BlackBoxTestResources): BlackBox;
+
   /**
    * Returns a generic subscription-like handle for lifecycle regression tests.
    *
-   * @param blackBox - The BlackBox that owns the handle.
-   * @param handle - The cancelable async handle to track.
+   * @param blackBox The BlackBox that owns the handle.
+   * @param handle The cancelable async handle to track.
    * @returns The tracked handle.
    */
   track(
     blackBox: BlackBox,
     handle: BlackBoxTestHandle,
   ): AsyncIterable<unknown> & { cancel(): Promise<void> };
+
   /**
    * Opens a BlackBox through supplied lifecycle seams for startup regression tests.
    *
-   * @param resources - The test startup and connection operations.
+   * @param resources The test startup and connection operations.
    * @returns A BlackBox created through the supplied operations.
    */
   open(resources: BlackBoxTestStartup): Promise<BlackBox>;
 }
 
-/** Provides internal-only lifecycle seams for BlackBox regression tests. */
+/**
+ * Provides internal-only lifecycle seams for BlackBox regression tests.
+ */
 export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
+  // prettier-ignore
+
   /**
    * Creates a BlackBox with supplied closeable resources.
    *
-   * @param resources - The test client, server, and optional subscriptions.
+   * @param resources The test client, server, and optional subscriptions.
    * @returns A BlackBox that owns the supplied resources.
    */
   create(resources: BlackBoxTestResources): BlackBox {
@@ -345,11 +395,12 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
       BlackBoxAccess.get(blackBox).track(subscription);
     return blackBox;
   },
+
   /**
    * Returns a generic subscription-like handle for lifecycle regression tests.
    *
-   * @param blackBox - The BlackBox that owns the handle.
-   * @param handle - The cancelable async handle to track.
+   * @param blackBox The BlackBox that owns the handle.
+   * @param handle The cancelable async handle to track.
    * @returns The tracked handle.
    */
   track(
@@ -361,10 +412,11 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
     });
     return BlackBoxAccess.get(blackBox).track(tracked);
   },
+
   /**
    * Opens a BlackBox through supplied lifecycle seams for startup regression tests.
    *
-   * @param resources - The test startup and connection operations.
+   * @param resources The test startup and connection operations.
    * @returns A BlackBox created through the supplied operations.
    */
   open(resources: BlackBoxTestStartup): Promise<BlackBox> {
@@ -377,9 +429,15 @@ export const BlackBoxTestAccess: BlackBoxTestAccess = Object.freeze({
   },
 });
 
-/** Owns BlackBox construction and compensating startup cleanup. */
+/**
+ * Constructs BlackBox instances and compensates for failed startup.
+ */
 const BlackBoxLifecycle = Object.freeze({
-  /** Opens the server and client before constructing a BlackBox. */
+  // prettier-ignore
+
+  /**
+   * Opens the server and client before constructing a BlackBox.
+   */
   async open(
     context: BoundedContext,
     options: NormalizedBlackBoxOptions,
@@ -406,7 +464,10 @@ const BlackBoxLifecycle = Object.freeze({
       throw new AggregateError(failures, "BlackBox startup cleanup failed.");
     }
   },
-  /** Instantiates a BlackBox through its deliberately private constructor. */
+
+  /**
+   * Instantiates a BlackBox through its deliberately private constructor.
+   */
   instantiate(
     context: BoundedContext,
     server: RunningServer,
@@ -423,18 +484,34 @@ const BlackBoxLifecycle = Object.freeze({
   },
 });
 
-/** Internal resources accepted by the BlackBox lifecycle test seam. */
+/**
+ * Internal resources accepted by the BlackBox lifecycle test seam.
+ */
 export interface BlackBoxTestResources {
-  /** Closes the test client. */
+  // prettier-ignore
+
+  /**
+   * Closes the test client.
+   */
   readonly client: { close(): Promise<void> };
-  /** Closes the test server. */
+
+  /**
+   * Closes the test server.
+   */
   readonly server: { close(): Promise<void> };
-  /** Lists subscriptions to close with the BlackBox. */
+
+  /**
+   * Lists subscriptions to close with the BlackBox.
+   */
   readonly subscriptions?: readonly { cancel(): Promise<void> }[];
 }
 
-/** Internal async handle accepted by the BlackBox lifecycle test seam. */
+/**
+ * Internal async handle accepted by the BlackBox lifecycle test seam.
+ */
 export type BlackBoxTestHandle = {
+  // prettier-ignore
+
   /**
    * Cancels the tracked handle.
    *
@@ -443,18 +520,23 @@ export type BlackBoxTestHandle = {
   cancel(): Promise<void>;
 } & AsyncIterable<unknown>;
 
-/** Internal startup operations accepted by the BlackBox lifecycle test seam. */
+/**
+ * Internal startup operations accepted by the BlackBox lifecycle test seam.
+ */
 export interface BlackBoxTestStartup {
+  // prettier-ignore
+
   /**
    * Starts the test server.
    *
    * @returns A closeable test server.
    */
   readonly start: () => Promise<{ close(): Promise<void> }>;
+
   /**
    * Connects the test client to the started server.
    *
-   * @param server - The server returned by start.
+   * @param server The server returned by start.
    * @returns A closeable test client.
    */
   readonly connect: (server: { close(): Promise<void> }) => { close(): Promise<void> };
@@ -652,9 +734,15 @@ interface NormalizedBlackBoxOptions {
   readonly intervalMs: number;
 }
 
-/** Normalizes BlackBox configuration and validates its tenant and timing rules. */
+/**
+ * Normalizes BlackBox configuration and validates its tenant and timing rules.
+ */
 const BlackBoxOptionsValues = Object.freeze({
-  /** Normalizes options for one context. */
+  // prettier-ignore
+
+  /**
+   * Normalizes options for one context.
+   */
   normalize(
     context: BoundedContext | BoundedContextBuilder,
     options: BlackBoxOptions,
@@ -673,11 +761,17 @@ const BlackBoxOptionsValues = Object.freeze({
       intervalMs: this.positiveInteger(options.intervalMs ?? 5, "intervalMs"),
     });
   },
-  /** Clones an optional tenant message. */
+
+  /**
+   * Clones an optional tenant message.
+   */
   cloneTenant(value: TenantId | undefined): TenantId | undefined {
     return value === undefined ? undefined : clone(TenantIdSchema, value);
   },
-  /** Creates default normalized options for internal test seams. */
+
+  /**
+   * Creates default normalized options for internal test seams.
+   */
   defaults(): NormalizedBlackBoxOptions {
     return Object.freeze({
       tenant: undefined,
@@ -686,7 +780,10 @@ const BlackBoxOptionsValues = Object.freeze({
       intervalMs: 5,
     });
   },
-  /** Converts a tenant option to its message form. */
+
+  /**
+   * Converts a tenant option to its message form.
+   */
   tenant(value: string | TenantId | undefined): TenantId | undefined {
     if (value === undefined) return undefined;
     if (typeof value !== "string") {
@@ -697,7 +794,10 @@ const BlackBoxOptionsValues = Object.freeze({
     if (value.length === 0) throw new TypeError("BlackBox tenant must not be empty.");
     return create(TenantIdSchema, { kind: { case: "value", value } });
   },
-  /** Converts a zone option to its message form. */
+
+  /**
+   * Converts a zone option to its message form.
+   */
   zoneId(value: string | ZoneId | undefined): ZoneId {
     if (typeof value !== "string" && value !== undefined) {
       if (value.value.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
@@ -707,7 +807,10 @@ const BlackBoxOptionsValues = Object.freeze({
     if (zone.length === 0) throw new TypeError("BlackBox zoneId must not be empty.");
     return create(ZoneIdSchema, { value: zone });
   },
-  /** Validates a positive whole-number duration. */
+
+  /**
+   * Validates a positive whole-number duration.
+   */
   positiveInteger(value: number, name: "timeoutMs" | "intervalMs"): number {
     if (!Number.isInteger(value) || value <= 0)
       throw new TypeError(`BlackBox ${name} must be a positive integer.`);
@@ -715,13 +818,22 @@ const BlackBoxOptionsValues = Object.freeze({
   },
 });
 
-/** Supplies time values and cancellable delays for BlackBox operations. */
+/**
+ * Supplies time values and cancellable delays for BlackBox operations.
+ */
 const BlackBoxClock = Object.freeze({
-  /** Creates the current Protobuf timestamp. */
+  // prettier-ignore
+
+  /**
+   * Creates the current Protobuf timestamp.
+   */
   timestamp() {
     return create(TimestampSchema, { seconds: BigInt(Math.floor(Date.now() / 1_000)) });
   },
-  /** Waits for a delay or rejects when the supplied signal aborts. */
+
+  /**
+   * Waits for a delay or rejects when the supplied signal aborts.
+   */
   wait(milliseconds: number, signal: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
       const abort = () => {
@@ -737,9 +849,15 @@ const BlackBoxClock = Object.freeze({
   },
 });
 
-/** Collects rejected results while preserving their settlement order. */
+/**
+ * Collects rejected results while preserving their settlement order.
+ */
 const BlackBoxFailures = Object.freeze({
-  /** Returns reasons from rejected promises. */
+  // prettier-ignore
+
+  /**
+   * Returns reasons from rejected promises.
+   */
   rejected(results: readonly PromiseSettledResult<unknown>[]): unknown[] {
     const failures: unknown[] = [];
     for (const result of results) {

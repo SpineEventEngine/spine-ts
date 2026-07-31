@@ -20,6 +20,8 @@ export type ServerRuntimeState = "created" | "running" | "closing" | "closed";
  * Explicit lifecycle contract for server-owned runtime parts.
  */
 export interface ServerRuntimeLifecycle {
+  // prettier-ignore
+
   /**
    * Current deterministic lifecycle state.
    */
@@ -30,6 +32,7 @@ export interface ServerRuntimeLifecycle {
    *
    * Calling `start()` on an already running runtime is a no-op. Calling it while
    * closing or after close rejects with `ServerRuntimeStateError`.
+   *
    * @returns A promise that resolves after runtime work admission starts.
    */
   start(): Promise<void>;
@@ -41,6 +44,7 @@ export interface ServerRuntimeLifecycle {
    * `closed`; later calls return the same close outcome. Calling `close()` from
    * active runtime work rejects with `ServerRuntimeStateError` and state
    * `"running-work"`.
+   *
    * @returns A promise that settles after accepted runtime work drains and closes.
    */
   close(): Promise<void>;
@@ -64,7 +68,9 @@ export type ServerRuntimeWork = () => void | Promise<void>;
  */
 export type ServerRuntimeStateOperation = "start" | "enqueue" | "close";
 
-/** Runtime condition that rejected a lifecycle operation. */
+/**
+ * Runtime condition that rejected a lifecycle operation.
+ */
 export type ServerRuntimeRejectedState = ServerRuntimeState | "running-work";
 
 /**
@@ -76,6 +82,8 @@ export type RuntimeStateErrorCode = "INVALID_RUNTIME_STATE";
  * Error raised when a lifecycle operation is not valid in the current state.
  */
 export class ServerRuntimeStateError extends Error {
+  // prettier-ignore
+
   /**
    * Stable taxonomy for invalid runtime lifecycle operations.
    */
@@ -91,7 +99,8 @@ export class ServerRuntimeStateError extends Error {
    */
   readonly state: ServerRuntimeRejectedState;
 
-  /** Creates an error for a rejected runtime operation.
+  /**
+   * Creates an error for a rejected runtime operation.
    *
    * @param operation the rejected operation.
    * @param state the state that rejected it.
@@ -122,7 +131,8 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
   #tail: Promise<void> = Promise.resolve();
   #closePromise: Promise<void> | undefined;
 
-  /** Creates an idle single-process runtime.
+  /**
+   * Creates an idle single-process runtime.
    *
    */
   constructor() {
@@ -130,7 +140,8 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     runtimeDrainers.set(this, () => this.#drain());
   }
 
-  /** Returns the current lifecycle state.
+  /**
+   * Returns the current lifecycle state.
    *
    * @returns the lifecycle state.
    */
@@ -138,7 +149,9 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     return this.#state;
   }
 
-  /** Starts accepting runtime work.
+  /**
+   * Starts accepting runtime work.
+   *
    * @returns A promise that resolves after runtime work admission starts.
    */
   start(): Promise<void> {
@@ -196,7 +209,9 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     return completion;
   }
 
-  /** Closes the runtime after accepted work drains.
+  /**
+   * Closes the runtime after accepted work drains.
+   *
    * @returns A promise that settles after the runtime closes.
    */
   close(): Promise<void> {
@@ -250,7 +265,8 @@ const followUpEnqueuers = new WeakMap<
 >();
 const runtimeDrainers = new WeakMap<SingleProcessServerRuntime, () => Promise<void>>();
 
-/** Provides package-owned authority for framework follow-up work.
+/**
+ * Provides package-owned authority for framework follow-up work.
  *
  * @internal
  */
@@ -283,7 +299,9 @@ interface RuntimeWorkFrame {
 
 const runtimeWork = new AsyncLocalStorage<RuntimeWorkFrame>();
 
-/** Private runtime state and execution helpers. */
+/**
+ * Private runtime state and execution helpers.
+ */
 const RuntimeValues = Object.freeze({
   formatStateError(
     operation: ServerRuntimeStateOperation,

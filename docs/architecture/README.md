@@ -1,6 +1,6 @@
 # Architecture Notes
 
-Current status: the implemented initial release includes delivery/inbox
+This architecture includes delivery/inbox
 processing, command/query/subscription services, same-host ZeroMQ transport
 for multi-process use, and a `Server` lifecycle owner that starts and closes
 those pieces together. It does not claim production deployment supervision,
@@ -10,25 +10,25 @@ Architecture documentation starts from the build protocol and specification docu
 
 ## Proto Contract Boundary
 
-The `proto/` tree now contains the first verbatim copied Spine contract
-closures. `@spine-event-engine/proto` compiles those contracts and exposes a curated root
+The `proto/` tree contains verbatim copied Spine contract closures.
+`@spine-event-engine/proto` compiles those contracts and exposes a curated root
 API with Protobuf-ES schemas, descriptors, message types, enum descriptors, enum
 values, and custom options. This boundary is intentionally contract-only:
 
-- generated schemas are available for later metadata and validation tasks;
+- generated schemas support metadata and validation;
 - copied source provenance is verified by `proto/spine-sources.json`;
 - canonical `Command`, `Event`, `Ack`, `Response`, `ActorContext`,
   `TenantId`, `UserId`, `Version`, diagnostics, enrichment, Spine client query,
   subscription, and service contracts, and transitive time/net/UI support
   contracts are available without hand-written TypeScript shapes; and
 - buses, transport, and entity runtime behavior remain out of scope for this
-  package boundary. Runtime signal metadata now lives in the server/runtime
-  slice rather than the proto package.
+  package boundary. Runtime signal metadata belongs to the server/runtime
+  layer rather than the proto package.
 
 ## Core Metadata Registry
 
-`@spine-event-engine/core` owns runtime lookup policy over generated schemas. The first
-registry slice consumes curated exports from `@spine-event-engine/proto`, derives type
+`@spine-event-engine/core` owns runtime lookup policy over generated schemas. Its
+registry consumes curated exports from `@spine-event-engine/proto`, derives type
 URLs from descriptor file options, and exposes immutable metadata by full type
 name, type URL, and schema identity.
 
@@ -42,25 +42,25 @@ conflicting descriptor identities. This intentionally differs from the JVM
 `TypeDictionary.Builder` overwrite behavior because silent replacement would
 corrupt later routing and validation decisions.
 
-Descriptor-backed metadata currently includes:
+Descriptor-backed metadata includes:
 
 - full Protobuf type name and canonical type URL;
 - generated schema/message descriptor;
 - declaring file descriptor and file name;
 - first declared field, preserving descriptor declaration order; and
-- file option helpers for later validation/runtime tasks.
+- file option helpers for validation and runtime code.
 
 Semantic tag lookup is available as an API shape, but this core registry still
-does not register tags. The current copied proto set defines the Spine `(is)`
+does not register tags. The copied proto set defines the Spine `(is)`
 and `(every_is)` options; descriptor-derived entity metadata preserves them,
-and server runtime routing now copies those tags into command and event
+and server runtime routing copies those tags into command and event
 transport topics.
 
 ## Core Validation Facade
 
 `@spine-event-engine/core` owns the validation interface exposed to framework users.
 Single-message validation is delegated to
-`@spine-event-engine/validation-ts@2.0.0-snapshot.4`, pinned by D-0029, but
+`@spine-event-engine/validation-ts@2.0.0-snapshot.4`, but
 callers use `Validate.message()` and `Validate.check()` from core. This keeps the
 experimental upstream API and generated upstream validation error types behind a
 framework seam.
@@ -84,7 +84,7 @@ such as `(set_once)` need both previous and proposed state. The
 structured result shape and remains the sanitizer for server-owned built-in
 entity rules. Rule-returned violations are sanitized before aggregation, and
 throwing transition rules are isolated into structured transition-rule failures
-so later rules still run deterministically.
+so remaining rules still run deterministically.
 
 ## Core Envelope Construction
 
@@ -98,8 +98,7 @@ standard `type.googleapis.com/...` prefix rather than the Spine
 Framework-packed payloads pass `writeUnknownFields: false` to the Protobuf-ES
 binary writer. This gives the helper stable behavior for messages that carry
 retained unknown fields. Protobuf-ES 2.12.1 does not expose deterministic
-map-key ordering, so T-0007b does not claim fully canonical map ordering and
-leaves any broader canonical serialization policy to a later task.
+map-key ordering. It does not claim fully canonical map ordering.
 
 `AnyMessages.unpack()` performs exact type URL matching against the requested schema
 before binary decoding and returns `undefined` on decode failure, keeping type
@@ -117,28 +116,25 @@ The helpers deliberately do not own runtime policy. They do not generate UUIDs,
 timestamps, actor or tenant context, event producer IDs, entity versions,
 origins, command system properties, storage records, acknowledgements, delivery
 state, bus dispatch, handler registration, or transport metadata. Those
-responsibilities belong to the server/runtime layers that own the current
-workflow.
+responsibilities belong to the server/runtime layers that own the workflow.
 
 ## Server Entity Metadata
 
-`@spine-event-engine/server` now owns the first descriptor-derived entity metadata layer,
-following D-0034, the first explicit handler metadata layer, following D-0035,
-the caller-owned handler registry, following D-0036, the first standard
-decorator adapter, following D-0037, and built-in set-once transition
-validation, following D-0038. It also owns the first thin entity-family marker
+`@spine-event-engine/server` owns descriptor-derived entity metadata, explicit
+handler metadata, a caller-owned handler registry, a standard decorator adapter,
+and built-in set-once transition validation. It also owns thin entity-family marker
 classes over the transactional entity shell. The package consumes curated
 option exports from `@spine-event-engine/proto` and delegates transition result shaping
 to `@spine-event-engine/core`.
 
-Current server metadata is pure and deterministic:
+Server metadata is pure and deterministic:
 
 - `(entity).kind` is normalized to server-facing entity kinds;
 - `(entity).visibility` preserves explicit values and applies Spine defaults
   (`full` for projections, `none` for aggregates/process managers/generic
   entities);
 - the first declared field becomes both the canonical entity ID field and the
-  first-field routing hint for later handler/repository tasks;
+  first-field routing hint for handler and repository code;
 - fields marked `(column) = true` are surfaced in descriptor order only for
   projections and process managers, `(set_once) = true` fields are surfaced for
   every entity kind, and
@@ -148,7 +144,7 @@ Current server metadata is pure and deterministic:
 
 The entity extractor throws typed `DescriptorMetadataError` failures for non-entity
 schemas, unknown entity kinds, repeated/map column declarations, empty semantic
-tag values, and other unsupported combinations in this slice. Aggregate and
+tag values, and other unsupported combinations in this implementation. Aggregate and
 generic entity column declarations are ignored to match the source option
 contract.
 
@@ -156,7 +152,7 @@ Server-owned transition validation currently compares descriptor-derived
 `(set_once)` fields through the core transition facade and Protobuf-ES
 canonicalization for scalar, enum, bytes, and singular message values. Repeated,
 map-valued, and explicit optional `(set_once)` fields are intentionally
-unsupported in this slice, matching the JVM generation boundary; they fail
+unsupported here, matching the JVM generation boundary; they fail
 closed with field-specific violations and no raw previous/next value leakage.
 
 `EntityHandlers.define()` is the low-level explicit metadata constructor that
@@ -179,16 +175,16 @@ handlers are own prototype data methods declared with normal class method
 syntax; accessors, `constructor`, inherited methods, and instance fields are
 rejected without invoking user code.
 
-`HandlerMetadataRegistry` is the first caller-owned lookup and duplicate-policy
+`HandlerMetadataRegistry` is a caller-owned lookup and duplicate-policy
 layer over explicit `EntityHandlersMetadata`. It registers existing metadata
 objects, keeps deterministic frozen listing/lookup arrays in registration and
 handler declaration order, and indexes handlers by entity state full type name,
-handler kind, and command/event message full type name. The first duplicate
+handler kind, and command/event message full type name. Its duplicate
 policy rejects one ambiguous command assignment per command message full type
 name and one ambiguous event application per entity state full type name plus
 event message full type name. Command reactions, event subscriptions, and event
 reactions intentionally allow multiple handlers for the same message type so
-later runtime fan-out remains possible.
+runtime fan-out remains possible.
 
 The standard decorator adapter is metadata-only syntax over the same explicit
 contract. Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the
@@ -204,7 +200,7 @@ for framework tests, generated-registry ingestion, and legacy non-decorator
 migration tooling. The adapter does not use legacy `emitDecoratorMetadata`,
 `reflect-metadata`, parameter decorators, or a process-wide handler registry.
 
-`validateEntityStateTransition()` is the first high-level server validation API
+`validateEntityStateTransition()` is the high-level server validation API
 over previous and proposed entity state. It calls `describeEntityMetadata()` to
 derive the schema's descriptor-ordered `(set_once)` fields, allows creation
 transitions where `previous === undefined` to initialize supported set-once
@@ -215,7 +211,7 @@ set-once rule remains private; callers receive the core
 `TransitionValidationResult` shape with repo-local `spine.validation.*`
 messages, field paths, and no raw previous/next values.
 
-`Entity` is the first common OOP entity state shell. It binds a caller-supplied
+`Entity` is the common OOP entity state shell. It binds a caller-supplied
 ID to one descriptor-backed Protobuf-ES state schema, derives and caches
 `EntityMetadata`, snapshots state on construction and read access, snapshots
 caller-owned plain version metadata without computing increments, and exposes
@@ -244,20 +240,20 @@ lifecycle events, Java builders, automatic version increments, transaction
 listeners, recent history, async-local/global transaction state, and
 entity-family-specific aggregate/projection/process-manager behavior.
 
-`Aggregate`, `Projection`, and `ProcessManager` are now public abstract entity
+`Aggregate`, `Projection`, and `ProcessManager` are public abstract entity
 family markers. Each extends `TransactionalEntity<Id, Schema, Version>` and
 adds only a stable readonly `entityFamily` property typed by the exported
 `EntityFamily` union. This follows the JVM family shape only as far as the
-current TypeScript runtime can support safely: JVM `Projection` directly
+TypeScript runtime supports safely: JVM `Projection` directly
 extends `TransactionalEntity`, while JVM aggregate and process-manager behavior
 is mostly supplied by assignee, dispatch, event-history, repository, querying,
-and bounded-context collaborators that this slice has not implemented. The
+and bounded-context collaborators that this implementation has not implemented. The
 TypeScript family classes therefore do not expose public transaction mutators,
 repository hooks, dispatch APIs, command posting, query clients, aggregate event
 history, snapshots, process workflow execution, idempotency guards, lifecycle
 events, handler invocation, or async-local/global transaction state.
 
-`Repository` is now the entity ownership and context-owned registration seam.
+`Repository` is the entity ownership and context-owned registration seam.
 It accepts one entity constructor and one
 descriptor-backed state schema, infers the family from a declared ES class
 constructor whose constructor and instance prototype chains reach `Aggregate`,
@@ -278,8 +274,8 @@ repository state schemas with their owned direct `Stand`, so the read side can
 reject unknown state types before service adapters execute queries or
 subscriptions.
 This follows the JVM `Repository` identity surface (`entityClass()`,
-`idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
-step. When authentic explicit handler metadata is supplied, repositories now
+`idClass()`, and `entityStateType()`) plus a context-owned lifecycle step.
+When authentic explicit handler metadata is supplied, repositories
 calculate command/event routes and bounded-context assembly registers internal
 dispatcher adapters for those routes. Aggregate repositories can then load or
 create one aggregate, invoke one assignee in a framework-owned transaction,
@@ -290,7 +286,7 @@ event-bus delivery without a second append. The TypeScript seam still omits publ
 entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC server
 lifecycle, and transport.
 
-`EntityTransaction` is the first server-owned draft/result commit boundary over
+`EntityTransaction` is the server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or
 `rolled-back`). The compatibility contract is intentionally small and
@@ -323,11 +319,11 @@ async-local transaction state, or start transport.
 
 ## Server Bounded-Context Shell
 
-`@spine-event-engine/server` now exposes the first bounded-context assembly shell for
+`@spine-event-engine/server` exposes a bounded-context assembly shell for
 server metadata. It follows the Spine JVM entry points closely while keeping
-the implementation boundary deliberately smaller than the eventual runtime.
+the implementation boundary deliberately small.
 
-Current bounded-context scope is intentionally limited to a small assembly
+Bounded-context scope is intentionally limited to a small assembly
 surface:
 
 - `BoundedContext.singleTenant(name)` and
@@ -352,13 +348,13 @@ surface:
   endpoint, an event listing/posting `eventBus()` endpoint backed by internally
   owned buses, plus a context-owned direct `stand()`.
 
-This keeps the TypeScript API JVM-familiar without pretending that later
+This keeps the TypeScript API JVM-familiar without pretending that broader
 runtime collaborators already exist. Application code does not subclass
 `BoundedContext` or directly instantiate shell classes. Runtime constructor
 guards also reject direct JavaScript escape hatches so callers cannot bypass
 name validation or the builder-only build path by passing ad hoc objects.
 
-The current `Stand` slice is intentionally direct and storage-backed. It owns
+`Stand` is intentionally direct and storage-backed. It owns
 known generated state schemas, latest-state `RecordStorage`, direct
 read/update methods, versioned point reads, storage-backed queries through
 `Stand.queryVersioned()`, storage-order list reads through
@@ -370,7 +366,7 @@ contexts may update it internally when repository event dispatch invokes
 projection subscribers, but application code still does not receive a
 repository read/write-side storage API. It does not run catch-up from events or
 provide a client query DSL. `SpineServices` adapts this direct read side and
-the context command bus to the first real Connect/Node `CommandService`,
+the context command bus to the Connect/Node `CommandService`,
 `QueryService`, and `SubscriptionService` routes. Projection-state
 `QueryService.Read` calls with `Target.include_all = true` are satisfied through
 `Stand.queryVersioned()` over the stand's `RecordStorage.queryEntries()` path.
@@ -426,14 +422,14 @@ fields, including nested message fields. Missing ID filters match all IDs.
 Filtered delivery compares previous and new Stand state: matching new states
 are delivered, and matched-to-unmatched transitions emit `no_longer_matching`.
 Topic masks are applied only to delivered states. Event topics support
-`include_all = true` in this runtime slice and stream wire-level
+`include_all = true` in this runtime implementation and stream wire-level
 `event_updates` with cloned framework `Event` envelopes for matching event
 message type URLs. Application handlers remain on generated domain event
 messages; framework envelopes stay inside service/runtime data. Client
 rejection updates redact rejected-command payload forms and throwable stack;
 internal generated handlers retain full defensive context. Single-tenant
 subscriptions reject tenant options; multitenant subscriptions require
-`tenantId`; state and event delivery are scoped to that tenant slice. Activation
+`tenantId`; state and event delivery are scoped to that tenant scope. Activation
 and cancellation are keyed by subscription ID: unknown, canceled, expired, and
 already-active activations complete without updates; confirmed absence returns
 `OK`, concurrent same-ID cancellation within one `SpineServices` instance
@@ -441,18 +437,18 @@ shares one exact outcome, and foreign active ownership returns `ABORTED`.
 Cleanup is idempotent across cancel, stream
 finalization, inactive expiry, and queue-limit closure. Direct Stand subscriber
 sets, active service delivery handles, queued updates, Stand version metadata,
-and in-memory storage adapter backing data are local process state; this slice
+and in-memory storage adapter backing data are local process state; this implementation
 does not persist subscription positions, replay missed updates, coordinate
 cross-process stream ownership, or recover active subscriptions after restart.
 
-The current command service error contract remains intentionally small.
+The command service error contract remains intentionally small.
 `CommandBus` validates each accepted command payload with the existing core
 facade before dispatcher callbacks run, including custom
 `addCommandDispatcher()` routes. For repository-backed aggregate dispatchers,
 that still means validation happens before route calculation, latest persisted
 state load, traceability event-journal append, latest-state write, or
 stored-event dispatch.
-Repository command execution now recognizes only core-branded domain rejection
+Repository command execution recognizes only core-branded domain rejection
 throwables. Aggregate direct-state transactions and process-manager command
 transactions roll back before one versionless rejection event is scheduled
 through the regular EventBus follow-up path. That event carries the rejection
@@ -466,7 +462,7 @@ payload and other event metadata. A handled process-manager rejection completes
 its inbox row, while ordinary and forged errors keep the existing technical
 failure and retry behavior. Build-time analysis accepts descriptor-verified
 top-level rejection inputs for event-consuming handlers, but not assignment
-inputs or normal emitted values. Generated rejection throwables are now the
+inputs or normal emitted values. Generated rejection throwables are the
 sole domain-rule failure model used by services and the to-do example.
 `CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
 message `Command payload validation failed.`, and packed
@@ -486,14 +482,14 @@ validation failures remain internal and are sanitized as `COMMAND_POST_ERROR`;
 ordinary generated-registry aggregate loading uses the latest persisted state.
 Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
-The following runtime pieces remain outside the verified local/example slice:
+The following runtime pieces are not available in the verified local/example configuration:
 
 - visibility/type-supplier registration and lifecycle callbacks over the
   repository identity seam;
 - query/subscription execution over repository routes. A limited local
-  read-side catch-up slice now exists on
+  read-side catch-up support exists on
   `BoundedContext.catchUpReadSide(options?)`: it clears registered projection
-  state rows for one tenant slice, replays already-stored events only to
+  state rows for one tenant scope, replays already-stored events only to
   matching projection subscribers through the same EventBus runtime queue as
   live intake, does not re-append events, and excludes production delivery
   worker orchestration, inbox lifecycle, retries, and cross-process catch-up
@@ -511,28 +507,27 @@ The following runtime pieces remain outside the verified local/example slice:
   hardening, and broader production server verification; and
 - remote/multi-host transport topology, broker topology/process supervision,
   retry monitors/workers, production delivery policy, and transport-backed
-  worker topology beyond the current framework-owned local delivery loop.
+  worker topology beyond the framework-owned local delivery loop.
 
-## Server Runtime Closure
+## Server Runtime
 
-T-0010 closes the first single-process runtime slice as an assembly seam rather
-than a server graph. Its verified public composition is:
+The single-process runtime is an assembly seam rather than a server graph. Its
+public composition is:
 
 - build a `BoundedContext` through the existing builder, optionally collecting
   dispatchers and a storage factory;
 - derive command and event registration-readiness metadata from existing
   `HandlerMetadataRegistry` entries; and
-- post executable commands/events through the first small `CommandBus` and
+- post executable commands/events through the small `CommandBus` and
   `EventBus` seams when a caller already owns dispatchers and an `EventStore`;
 - optionally use `SingleProcessServerRuntime` directly where a caller needs the
-  current lifecycle/queue kernel.
+  lifecycle/queue kernel.
 
-T-0011.6 and T-0011.7 then close the metadata-only runtime-routing/transport
-foundation layer. That later closure derives an immutable runtime-routing plan
-from the built context plus command and event readiness using
+The metadata-only runtime-routing/transport foundation derives an immutable
+runtime-routing plan from the built context plus command and event readiness using
 `createRoutingPlan()`.
 
-This is intentionally enough for later runtime tasks to share vocabulary and
+This gives runtime code shared vocabulary and
 tests around "context metadata plus lifecycle plus readiness." It is not an
 equivalent of Spine JVM `Server` or a running JVM-style `BoundedContext`.
 The readiness views remain metadata-only and do not dispatch or invoke
@@ -544,7 +539,7 @@ message type names/type URLs plus stable receiver-group and local route/worker
 identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
-route. `RuntimeTransportBinding` is the first executable transport bridge over
+route. `RuntimeTransportBinding` is the executable transport bridge over
 that plan: it registers command routes through `SignalTransport.respond()`,
 event routes through `SignalTransport.subscribe()`, checks incoming generated
 Spine command/event envelope shape and enclosed message type URL, parses
@@ -552,11 +547,11 @@ accepted envelopes into clean generated messages before enqueue, and queues
 accepted callbacks through `SingleProcessServerRuntime`. Its close handle is
 idempotent, stops binding intake before unregistering transport handles, attempts
 every transport registration close even after one rejects, and closes the
-runtime after transport registrations. The package root now exports a small
+runtime after transport registrations. The package root exports a small
 executable bus layer, direct Stand, repository-backed handler invocation through
 built contexts, command payload validation and rejection/Ack mapping through
 `SpineServices`, the `SpineServices` route registrar, and this local runtime
-transport binding. The package now also exports `Server` as a small HTTP/2
+transport binding. The package also exports `Server` as a small HTTP/2
 owner over `SpineServices`: it defaults to `127.0.0.1`, returns
 `host`/`port`/`baseUrl`, and builds its service routing once when `start()` is
 called. `Environment` and `ServerEnvironment` are one lazy process singleton
@@ -573,10 +568,10 @@ the process explicitly calls `ServerEnvironment.instance().close()`. Failed
 close attempts are retryable without rerunning close hooks that already
 succeeded. It still does not export a production transport endpoint runner,
 integration broker, durable retry owner, process supervisor, event storage
-policy beyond current seams, retained active-stream/update replay storage, or
+policy beyond existing seams, retained active-stream/update replay storage, or
 worker topology as part of this closure.
 
-The same local runtime boundary now owns a narrow generated-signal metadata
+The same local runtime boundary owns a narrow generated-signal metadata
 policy through `SignalMetadata`. Repository-produced follow-up commands/events
 share one policy for command/event IDs, timestamps, actor/tenant command
 context, event origin chains, primitive producer IDs, and validated int32
@@ -588,8 +583,8 @@ not introduced, and the seam does not discover handlers, load generated
 registries, materialize application handlers, or widen into transport,
 storage, tracing, or application-owned handler APIs.
 
-The architectural consequence is that later work must add the remaining
-collaborators as explicit tasks at their own seams. Event intake and broader
+The architectural consequence is that remaining collaborators need explicit
+seams. Event intake and broader
 transport integration can consume the existing readiness views and
 runtime-routing plan, but must still design event-side validation, filtering,
 storage-before-dispatch, dispatch outcomes, delivery, and integration behavior
@@ -597,12 +592,14 @@ separately.
 
 ## Storage Boundary
 
-`@spine-event-engine/storage` now owns a smaller record-storage seam. The package exports
+`@spine-event-engine/storage` owns a record-storage seam. The package exports
 `StorageFactory` with one mandatory adapter method,
 `createRecordStorage(context, spec)`, plus `RecordStorage`, `RecordSpec`,
 `RecordColumn`, query/mask contracts, and an in-memory implementation. It does
 not implement repositories, transactions, buses, delivery workers, service
-APIs, ZeroMQ transport, or production database adapters.
+APIs or delivery workers. Datastore and MySQL RDBMS adapters implement this
+contract in their own packages; choosing and operating either adapter remains
+application deployment work, not a production deployment guarantee.
 
 `RecordSpec` binds one generated Protobuf record schema, optional generated ID
 schema, ID extraction, and deterministic query columns. `RecordStorage` stores
@@ -617,7 +614,7 @@ tenant scoping for multitenant storages.
 `EventStore` is a higher-level framework delegate over
 `RecordStorage<EventId, Event>`. It is intentionally created directly by
 framework code rather than by `StorageFactory`, so the foundational storage
-package stays independent of the event layer. In this slice `EventStore`
+package stays independent of the event layer. Here `EventStore`
 remains storage-only: it persists and reads generated Spine events, and
 `EventBus` calls `EventStore.acceptThenAppend()` so event identity fails closed
 before custom dispatcher code sees the event and append uses the same captured
@@ -625,7 +622,7 @@ storage context. `EventStore` rejects missing, blank, or duplicate event IDs on
 the local append path, but still does not dispatch on its own, manage delivery
 attempts, fan out to subscribers, or implement retry/bus behavior.
 
-`InMemoryStorageFactory` and `InMemoryRecordStorage` are the first
+`InMemoryStorageFactory` and `InMemoryRecordStorage` are
 test/development adapter. They are process-local, share backing records by
 factory, context name, tenant mode, tenant ID, and `RecordSpec` instance,
 return independently closeable handles, and clone stored values so later caller
@@ -635,7 +632,7 @@ preserves byte arrays used by packed Protobuf `Any` payloads.
 Aggregate latest-state, optional state history, and traceability event-journal
 storage use the shared entity-storage provider seam. Aggregate loading uses the
 latest persisted state; it never reconstructs state by snapshot-plus-replay.
-The framework now persists durable inbox rows through `RecordStorage`,
+The framework persists durable inbox rows through `RecordStorage`,
 keeps live deduplication guards beside those rows, coordinates shard ownership
 with durable shard leases, and uses bounded internal replay for local
 framework-owned shard draining. A replay run picks up, renews, and releases its
@@ -652,7 +649,7 @@ never reaches callbacks or returned failures. Successful callbacks mark rows
 `DELIVERED`; endpoint failures remain pending for later runs only when
 framework-owned cleanup succeeds. Cleanup, validation, lease/fencing, and
 delivery-status failures are reported without an immediate retry or recovery
-guarantee in this slice. The delivery subsystem also retains internal
+guarantee here. The delivery subsystem also retains internal
 sanitized attempt records for supported endpoint failures, storing only
 message/inbox/shard identity, label, node, attempted time, accepted flag, and a
 stable failure stage/reason. Retained attempts do not store raw `Any.value`
@@ -689,16 +686,16 @@ abandoned-work recovery. If a stale owner continues running after losing
 renewal, endpoint callback side effects are at-least-once/replay-safe: later
 final fencing can prevent stale finalization, but it cannot uninvoke a callback
 that already ran. Broader production supervision, cancellation, and
-retry-monitor policy remains future work. The framework repeats
+retry-monitor policy is not provided. The framework repeats
 one-shard replay until
 idle, skipped, stopped, paused after a bounded skipped-only scan streak, or a
 configured failure bound. A later internal run resumes from a saved cursor and
 safely resets it if earlier pending rows disappeared. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still
-starve renewal; this slice treats that as an in-process trust-boundary
+starve renewal; this implementation treats that as an in-process trust-boundary
 limitation rather than timer-protected preemption. The package does not expose
 a raw worker callback API; framework-owned replay stays behind validated
-endpoints. Local posting handoffs now cover command rows,
+endpoints. Local posting handoffs cover command rows,
 projection subscriber rows, and process-manager event rows. Command
 handlers and projection subscribers wait for the exact received row to replay;
 framework-owned replay validates the row label and pending `TO_DELIVER` status
@@ -710,21 +707,23 @@ process-manager state type URL, and the routed process-manager ID target, then
 replays that exact row. Process-manager replay validates the row label, pending
 `TO_DELIVER` status, tenant context, payload/schema, target type URL, and routed
 target ID before handler code.
-Bounded contexts now create internal system-pairing metadata and a
+Bounded contexts create internal system-pairing metadata and a
 tenant index. Single-tenant indexes are constant and reject tenant recording;
 multitenant indexes persist tenant IDs through the configured storage factory.
 Raw system contexts and tenant indexes remain internal framework details.
-Durable catch-up storage/projection catch-up through inbox storage,
-transport-backed worker supervision, production delivery policy, retry monitor
-hierarchies, diagnostics, repository storage policy, read-side projection
-stores, and durable production storage adapters remain open production gaps.
+Datastore and MySQL RDBMS packages provide durable storage adapters. They do
+not by themselves establish production deployment or supervision guarantees.
+Durable projection catch-up through inbox storage, transport-backed worker
+supervision, production delivery policy, retry-monitor hierarchies,
+diagnostics, repository storage policy, and read-side projection stores remain
+open production gaps.
 
 ## Transport Boundary
 
-`@spine-event-engine/transport` now owns the first adapter-agnostic routing contract for
+`@spine-event-engine/transport` owns an adapter-agnostic routing contract for
 local multi-process work. The package does not import `@spine-event-engine/server`
 runtime code or expose ZeroMQ through its root API. It defines immutable value
-objects and interfaces that later adapters can implement:
+objects and interfaces that adapters can implement:
 
 - `TransportSignalKind` names framework-level signal families (`command`,
   `event`, `query`, `subscription`, and `system`);
@@ -736,16 +735,16 @@ objects and interfaces that later adapters can implement:
   descriptors from a topic, a logical subscriber ID, and a transport delivery
   mode; and
 - `SignalTransport` plus publish/request handler contracts define the minimal
-  adapter seam for later runtime integration and graceful async close behavior.
+  adapter seam for runtime integration and graceful async close behavior.
 
 The boundary is intentionally smaller than a bus implementation. It does not
 choose durable delivery, retry loops or timers, process supervision, readiness
 probes over IPC, repository dispatch, storage lifecycle, read-side execution
 policy, participant lifecycle, worker registrations, delivery attempts/results,
-or retry classification. Those decisions remain in later transport and runtime
-tasks.
+or retry classification. Those decisions remain application transport and runtime
+policy.
 
-The transport package now pins the maintained official `zeromq@6.5.0` line for
+The transport package pins the maintained official `zeromq@6.5.0` line for
 the local IPC adapter. The package root stays adapter-neutral, while the
 `@spine-event-engine/transport/zeromq` subpath exposes exactly
 `ZeroMqConfig`, `ZeroMqConfigInput`, `createZeroMqTransport`,
@@ -770,10 +769,8 @@ checks. The workspace explicitly approves the `zeromq` install script in pnpm
 configuration, so dependency restoration must run in an environment that
 permits native package build/install scripts. Managed sandboxes may reject
 ZeroMQ `ipc://` binds with `EPERM`, so live local IPC tests can require native
-IPC filesystem/socket permissions outside the sandbox. Per D-0007, this
-initial-release adapter path is limited to same-host IPC; remote and multi-host
-transport are excluded. That exclusion makes no commitment about a future
-transport or contract.
+IPC filesystem/socket permissions outside the sandbox. This adapter path is
+limited to same-host IPC; remote and multi-host transport are excluded.
 
 The ZeroMQ adapter uses generated Buf Protobuf binary for `command` and `event`
 envelopes, dispatching by the transport topic's signal kind. Its reserved

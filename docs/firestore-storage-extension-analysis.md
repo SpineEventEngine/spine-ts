@@ -1,7 +1,5 @@
 # Firestore-compatible storage extension
 
-Status: implementation plan accepted for execution
-
 ## Reference and scope
 
 The requested compatibility target is the JVM Datastore/Firestore module in
@@ -44,19 +42,19 @@ Mapping proposal:
 
 ## Compatibility matrix
 
-| JVM pattern                                                    | TS decision                                                                                                                                                                                                                                                             |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DatastoreStorageFactory` is an injected `StorageFactory`      | Historical T-0046 proposal: apps could pass it to `withStorageFactory()` or the then-proposed `ServerEnvironment.production()`. The current T-0055 API instead configures `ServerEnvironment.when(EnvironmentType.Production).use(...)`; core packages never import it. |
-| Caller supplies `Datastore`; builder exposes provider settings | Primary constructor accepts an injected Node `Datastore` client. `DatastoreStorageFactory.create(options)` creates a client from explicit Google client options, including project, credentials, key file, endpoint, and namespace settings.                            |
-| Namespace conversion isolates tenants                          | `StorageContext.tenantId` selects namespace only for multitenant storage; missing/blank tenant IDs fail before RPC. A configured namespace is a prefix/default, never concatenated into document keys.                                                                  |
-| Record type has a kind/layout and indexed columns              | One flat entity per record in the first release. Kind naming and metadata are private adapter details. `RecordSpec` columns map to indexed properties; no entity-group/custom-layout API is added until a TS port requires it.                                          |
-| Optional transaction setting per record                        | Every TS `compareAndSet` is transactional because the existing port promises cross-handle atomic CAS. Normal reads/writes use direct API calls; no generic transaction API leaks into storage.                                                                          |
-| Docker/Testcontainers emulator tests                           | The opt-in integration suite requires an already-running Datastore-mode emulator through `DATASTORE_EMULATOR_HOST`; unit tests use a narrow client fake. Current CI integration is not claimed.                                                                         |
-| Explicit service-account remote client                         | Production uses explicit client options or an injected client; ADC remains a documented client-library option, never an implicit module policy.                                                                                                                         |
+| JVM pattern                                                    | TS decision                                                                                                                                                                                                                                  |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DatastoreStorageFactory` is an injected `StorageFactory`      | Applications pass it to `withStorageFactory()` or configure it through `ServerEnvironment.when(EnvironmentType.Production).use(...)`; core packages never import it.                                                                         |
+| Caller supplies `Datastore`; builder exposes provider settings | Primary constructor accepts an injected Node `Datastore` client. `DatastoreStorageFactory.create(options)` creates a client from explicit Google client options, including project, credentials, key file, endpoint, and namespace settings. |
+| Namespace conversion isolates tenants                          | `StorageContext.tenantId` selects namespace only for multitenant storage; missing/blank tenant IDs fail before RPC. A configured namespace is a prefix/default, never concatenated into document keys.                                       |
+| Record type has a kind/layout and indexed columns              | One flat entity per record in the first release. Kind naming and metadata are private adapter details. `RecordSpec` columns map to indexed properties; no entity-group/custom-layout API is added until a TS port requires it.               |
+| Optional transaction setting per record                        | Every TS `compareAndSet` is transactional because the existing port promises cross-handle atomic CAS. Normal reads/writes use direct API calls; no generic transaction API leaks into storage.                                               |
+| Docker/Testcontainers emulator tests                           | The opt-in integration suite requires an already-running Datastore-mode emulator through `DATASTORE_EMULATOR_HOST`; unit tests use a narrow client fake. Current CI integration is not claimed.                                              |
+| Explicit service-account remote client                         | Production uses explicit client options or an injected client; ADC remains a documented client-library option, never an implicit module policy.                                                                                              |
 
-## Detailed implementation plan
+## Adapter design
 
-### Phase 1 — package and provider boundary
+### Package and provider boundary
 
 1. Add `packages/storage-datastore` to the pnpm workspace and root TypeScript
    references. Add the official `@google-cloud/datastore` dependency only to
@@ -70,7 +68,7 @@ Mapping proposal:
    `InMemoryStorageFactory` without changing handlers, aggregates, or server
    APIs.
 
-### Phase 2 — deterministic entity codec
+### Deterministic entity codec
 
 1. Implement private kind, namespace, key, payload, and column codecs.
 2. Encode only supported primitive/indexable column values; reject undefined,
@@ -82,7 +80,7 @@ Mapping proposal:
 4. Test codec determinism, tenant separation, key collision resistance,
    column mapping, and malformed-data failures without an emulator.
 
-### Phase 3 — `RecordStorage` behavior
+### `RecordStorage` behavior
 
 1. Implement read, write, delete, and independently opened-handle visibility.
 2. Implement query translation, stable tie-breaking by key, continuation
@@ -93,7 +91,7 @@ Mapping proposal:
 4. Implement bounded `writeAll` with documented group size and deterministic
    input materialization. Do not claim all-or-nothing semantics across groups.
 
-### Phase 4 — emulator and cloud verification
+### Emulator and cloud verification
 
 1. Add an opt-in emulator test command that requires `DATASTORE_EMULATOR_HOST`
    pointing at an already-running Firestore emulator in Datastore mode. Each
@@ -109,7 +107,7 @@ Mapping proposal:
 4. Document emulator limitations: it does not prove production composite
    indexes, transaction limits, or all concurrency/consistency behavior.
 
-### Phase 5 — docs, review, and release evidence
+### Documentation and verification
 
 1. Document credentials, injected clients, explicit Google options, ADC,
    emulator variables, index deployment, tenant namespace behavior, limits,

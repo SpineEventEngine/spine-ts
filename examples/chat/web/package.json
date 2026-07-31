@@ -1,6 +1,6 @@
 {
   "name": "@spine-event-engine/example-chat-web",
-  "version": "0.0.0",
+  "version": "2.0.0-snapshot.1",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -12,7 +12,6 @@
     "@spine-event-engine/client-web": "workspace:*",
     "@spine-event-engine/core": "workspace:*",
     "@spine-event-engine/proto": "workspace:*",
-    "@spine-event-engine/example-chat-users-model": "workspace:*",
     "react": "19.2.8"
   },
   "devDependencies": {

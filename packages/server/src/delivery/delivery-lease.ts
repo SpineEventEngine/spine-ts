@@ -1,18 +1,26 @@
-/** Smallest supported worker and shard lease duration in milliseconds. */
+/**
+ * Smallest supported worker and shard lease duration in milliseconds.
+ */
 export const minDeliveryLeaseMs = 1_000;
 
-/** Largest supported worker and shard lease duration in milliseconds. */
+/**
+ * Largest supported worker and shard lease duration in milliseconds.
+ */
 export const maxDeliveryLeaseMs = 2_147_483_647;
 
-/** Validates delivery and shard lease durations. */
+/**
+ * Validates delivery and shard lease durations.
+ */
 export const DeliveryLeases: Readonly<{
   requireMs(owner: "Delivery" | "ShardedWorkRegistry", value: unknown): number;
 }> = Object.freeze({
+  // prettier-ignore
+
   /**
    * Validates one delivery or shard lease duration.
    *
-   * @param owner - Names the component that owns the lease.
-   * @param value - Supplies the requested lease duration.
+   * @param owner Names the component that owns the lease.
+   * @param value Supplies the requested lease duration.
    * @returns The validated lease duration in milliseconds.
    */
   requireMs(owner: "Delivery" | "ShardedWorkRegistry", value: unknown): number {

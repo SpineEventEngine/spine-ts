@@ -19,105 +19,228 @@ import {
 import { ReadinessMetadata } from "../handler/registration-readiness-metadata.js";
 const deterministicValidationErrorTag = Symbol("runtimeRoutingDeterministicValidation");
 
-/** Input accepted by {@link createRoutingPlan}. */
+/**
+ * Input accepted by {@link createRoutingPlan}.
+ */
 export interface RoutingPlanInput {
-  /** Built bounded-context metadata shell that owns the routing plan. */
+  // prettier-ignore
+
+  /**
+   * Built bounded-context metadata shell that owns the routing plan.
+   */
   readonly context: BoundedContext;
-  /** Optional command readiness used to derive command routing. */
+
+  /**
+   * Optional command readiness used to derive command routing.
+   */
   readonly commands?: CommandRegistrationReadiness;
-  /** Optional event readiness used to derive event routing. */
+
+  /**
+   * Optional event readiness used to derive event routing.
+   */
   readonly events?: EventRegistrationReadiness;
 }
 
-/** Explicit deferred routing seam for unsupported runtime signal kinds. */
+/**
+ * Explicit deferred routing seam for unsupported runtime signal kinds.
+ */
 export interface DeferredRoutingSeam {
-  /** Signal kind intentionally deferred in this slice. */
+  // prettier-ignore
+
+  /**
+   * Signal kind intentionally deferred in this slice.
+   */
   readonly signalKind: "query" | "subscription" | "system";
-  /** Stable status for deferred runtime seams. */
+
+  /**
+   * Stable status for deferred runtime seams.
+   */
   readonly status: "deferred";
-  /** Human-readable reason kept deliberately narrow and deterministic. */
+
+  /**
+   * Human-readable reason kept deliberately narrow and deterministic.
+   */
   readonly reason: string;
 }
 
-/** Sanitized message descriptor exposed by public routing routes. */
+/**
+ * Sanitized message descriptor exposed by public routing routes.
+ */
 export interface RouteMessage {
-  /** Fully qualified message type name owned by the route. */
+  // prettier-ignore
+
+  /**
+   * Fully qualified message type name owned by the route.
+   */
   readonly fullTypeName: string;
-  /** Canonical transport type URL for the routed message. */
+
+  /**
+   * Canonical transport type URL for the routed message.
+   */
   readonly typeUrl: string;
 }
 
 interface RouteRef {
-  /** Topic routing key that matches one entry in the plan's top-level topics array. */
+  // prettier-ignore
+
+  /**
+   * Topic routing key that matches one entry in the plan's top-level topics array.
+   */
   readonly topicRoutingKey: string;
-  /** Subscription descriptor key that matches one top-level subscription entry. */
+
+  /**
+   * Subscription descriptor key that matches one top-level subscription entry.
+   */
   readonly subscriptionDescriptorKey: string;
 }
 
-/** Stable public command route descriptor. */
+/**
+ * Stable public command route descriptor.
+ */
 export interface CommandRuntimeRoutingRoute extends RouteRef {
-  /** Planner-local stable route identifier. */
+  // prettier-ignore
+
+  /**
+   * Planner-local stable route identifier.
+   */
   readonly routeId: string;
-  /** Stable public receiver group marker. */
+
+  /**
+   * Stable public receiver group marker.
+   */
   readonly receiverGroup: "command-assignee";
-  /** Planner-local worker identity shared by command routes in this plan. */
+
+  /**
+   * Planner-local worker identity shared by command routes in this plan.
+   */
   readonly workerId: string;
-  /** Sanitized message descriptor for the routed command. */
+
+  /**
+   * Sanitized message descriptor for the routed command.
+   */
   readonly message: RouteMessage;
 }
 
-/** Command routing plan derived from command readiness. */
+/**
+ * Command routing plan derived from command readiness.
+ */
 export interface CommandRuntimeRoutingPlan {
-  /** Deterministic command topics. */
+  // prettier-ignore
+
+  /**
+   * Deterministic command topics.
+   */
   readonly topics: readonly TransportTopic<"command">[];
-  /** Deterministic competing-consumer subscriptions for the command worker. */
+
+  /**
+   * Deterministic competing-consumer subscriptions for the command worker.
+   */
   readonly subscriptions: readonly TransportSubscription<"command">[];
-  /** Planner-local worker ids referenced by command routes. */
+
+  /**
+   * Planner-local worker ids referenced by command routes.
+   */
   readonly workerIds: readonly string[];
-  /** Sanitized command routes. */
+
+  /**
+   * Sanitized command routes.
+   */
   readonly routes: readonly CommandRuntimeRoutingRoute[];
 }
 
-/** Stable event receiver groups exposed by the runtime planner. */
+/**
+ * Stable event receiver groups exposed by the runtime planner.
+ */
 export type EventRuntimeReceiverGroup = "application" | "reactor" | "subscriber";
 
-/** Stable public event route descriptor. */
+/**
+ * Stable public event route descriptor.
+ */
 export interface EventRuntimeRoutingRoute extends RouteRef {
-  /** Planner-local stable route identifier. */
+  // prettier-ignore
+
+  /**
+   * Planner-local stable route identifier.
+   */
   readonly routeId: string;
-  /** Stable public receiver group marker. */
+
+  /**
+   * Stable public receiver group marker.
+   */
   readonly receiverGroup: EventRuntimeReceiverGroup;
-  /** Planner-local worker identity unique within this plan. */
+
+  /**
+   * Planner-local worker identity unique within this plan.
+   */
   readonly workerId: string;
-  /** Sanitized message descriptor for the routed event. */
+
+  /**
+   * Sanitized message descriptor for the routed event.
+   */
   readonly message: RouteMessage;
 }
 
-/** Event routing plan derived from event readiness. */
+/**
+ * Event routing plan derived from event readiness.
+ */
 export interface EventRuntimeRoutingPlan {
-  /** Deterministic event topics. */
+  // prettier-ignore
+
+  /**
+   * Deterministic event topics.
+   */
   readonly topics: readonly TransportTopic<"event">[];
-  /** Deterministic fan-out subscriptions across all event receiver groups. */
+
+  /**
+   * Deterministic fan-out subscriptions across all event receiver groups.
+   */
   readonly subscriptions: readonly TransportSubscription<"event">[];
-  /** Planner-local worker ids referenced by event routes. */
+
+  /**
+   * Planner-local worker ids referenced by event routes.
+   */
   readonly workerIds: readonly string[];
-  /** Sanitized subscriber fan-out routes. */
+
+  /**
+   * Sanitized subscriber fan-out routes.
+   */
   readonly subscriberRoutes: readonly EventRuntimeRoutingRoute[];
-  /** Sanitized reactor fan-out routes. */
+
+  /**
+   * Sanitized reactor fan-out routes.
+   */
   readonly reactorRoutes: readonly EventRuntimeRoutingRoute[];
-  /** Sanitized event-application fan-out routes. */
+
+  /**
+   * Sanitized event-application fan-out routes.
+   */
   readonly applicationRoutes: readonly EventRuntimeRoutingRoute[];
 }
 
-/** Immutable runtime routing plan derived from server metadata only. */
+/**
+ * Immutable runtime routing plan derived from server metadata only.
+ */
 export interface ServerRuntimeRoutingPlan {
-  /** Copy-safe built bounded-context metadata that owns the routing plan. */
+  // prettier-ignore
+
+  /**
+   * Copy-safe built bounded-context metadata that owns the routing plan.
+   */
   readonly context: BoundedContextSnapshot;
-  /** Command routing metadata derived from command readiness. */
+
+  /**
+   * Command routing metadata derived from command readiness.
+   */
   readonly commands: CommandRuntimeRoutingPlan;
-  /** Event routing metadata derived from event readiness. */
+
+  /**
+   * Event routing metadata derived from event readiness.
+   */
   readonly events: EventRuntimeRoutingPlan;
-  /** Explicit deferred seams for unsupported signal kinds. */
+
+  /**
+   * Explicit deferred seams for unsupported signal kinds.
+   */
   readonly deferred: readonly DeferredRoutingSeam[];
 }
 
@@ -162,7 +285,8 @@ class DeterministicValidationError extends TypeError {
   readonly [deterministicValidationErrorTag] = true;
 }
 
-/** Creates an immutable runtime routing plan from bounded-context and readiness metadata.
+/**
+ * Creates an immutable runtime routing plan from bounded-context and readiness metadata.
  *
  * @param input the context and optional readiness metadata.
  * @returns the immutable routing plan.
@@ -171,7 +295,8 @@ export function createRoutingPlan(input: RoutingPlanInput): ServerRuntimeRouting
   return RuntimeRoutingPlans.createRoutingPlan(input);
 }
 
-/** Creates transport intake routes for all signal types accepted by a built context.
+/**
+ * Creates transport intake routes for all signal types accepted by a built context.
  *
  * @param context the built context to inspect.
  * @returns the immutable routing plan.
@@ -181,7 +306,11 @@ export function createContextRoutingPlan(context: BoundedContext): ServerRuntime
 }
 
 const RuntimeRoutingPlans = Object.freeze({
-  /** Creates an immutable runtime routing plan from bounded-context and readiness metadata. */
+  // prettier-ignore
+
+  /**
+   * Creates an immutable runtime routing plan from bounded-context and readiness metadata.
+   */
   createRoutingPlan(input: RoutingPlanInput): ServerRuntimeRoutingPlan {
     const context = RuntimeRoutingPlans.validateContext(input);
     const contextSnapshot = context.snapshot;

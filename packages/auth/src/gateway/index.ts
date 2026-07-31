@@ -26,24 +26,51 @@ import type {
 } from "../index.js";
 import { IncomingRequests } from "../request/index.js";
 
-/** Owned request bytes and canonical operation identity accepted by the B2 gateway. */
+/**
+ * Owned request bytes and canonical operation identity accepted by the B2 gateway.
+ */
 export interface UnaryGatewayRequest {
-  /** Identifies the requested gRPC service. */
+  // prettier-ignore
+
+  /**
+   * Identifies the requested gRPC service.
+   */
   readonly service: string;
-  /** Identifies the requested gRPC method. */
+
+  /**
+   * Identifies the requested gRPC method.
+   */
   readonly method: string;
-  /** Holds the owned request bytes. */
+
+  /**
+   * Holds the owned request bytes.
+   */
   readonly value: Uint8Array;
-  /** Holds the credential resolved by the gateway. */
+
+  /**
+   * Holds the credential resolved by the gateway.
+   */
   readonly credential: RequestCredential;
-  /** Holds the allowlisted request transport facts. */
+
+  /**
+   * Holds the allowlisted request transport facts.
+   */
   readonly transport: TransportRequestContext;
-  /** Downstream cancellation capability forwarded only to the admitted native effect. */
+
+  /**
+   * Downstream cancellation capability forwarded only to the admitted native effect.
+   */
   readonly signal?: AbortSignal;
 }
-/** B4-mappable forwarding boundary; credentials and transport extras are never supplied. */
+
+/**
+ * B4-mappable forwarding boundary; credentials and transport extras are never supplied.
+ */
 export interface UnaryForwarder {
-  /** Routes an authorized request to its backend service.
+  // prettier-ignore
+
+  /**
+   * Routes an authorized request to its backend service.
    * @param request Holds the canonical request forwarded to the backend.
    * @returns Resolves to the backend response bytes.
    */
@@ -54,24 +81,52 @@ export interface UnaryForwarder {
     readonly signal?: AbortSignal;
   }): Promise<Uint8Array>;
 }
-/** Gateway collaborators and finite byte ownership limit. */
+
+/**
+ * Gateway collaborators and finite byte ownership limit.
+ */
 export interface UnaryGatewayOptions {
-  /** Fixed application registry used only to decode command content for policy and context collaborators. */
+  // prettier-ignore
+
+  /**
+   * Fixed application registry used only to decode command content for policy and context collaborators.
+   */
   readonly registry?: TypeRegistryLookup;
-  /** Limits the number of request bytes accepted by the gateway. */
+
+  /**
+   * Limits the number of request bytes accepted by the gateway.
+   */
   readonly maxRequestBytes: number;
-  /** Resolves application sessions from incoming credentials. */
+
+  /**
+   * Resolves application sessions from incoming credentials.
+   */
   readonly sessions: SessionResolver;
-  /** Authorizes a principal for each decoded request. */
+
+  /**
+   * Authorizes a principal for each decoded request.
+   */
   readonly authorize: AuthorizationPolicy["authorize"];
-  /** Resolves the trusted actor context for an authorized request. */
+
+  /**
+   * Resolves the trusted actor context for an authorized request.
+   */
   readonly contexts: ContextResolver;
-  /** Provides trusted timestamps for context resolution. */
+
+  /**
+   * Provides trusted timestamps for context resolution.
+   */
   readonly clock: Clock;
-  /** Forwards authorized bytes to the backend service. */
+
+  /**
+   * Forwards authorized bytes to the backend service.
+   */
   readonly forward: UnaryForwarder["forward"];
 }
-/** Transport-neutral B4-mappable rejection reasons. */
+
+/**
+ * Transport-neutral B4-mappable rejection reasons.
+ */
 export type UnaryGatewayRejection =
   | "request-too-large"
   | "unknown-operation"
@@ -79,24 +134,48 @@ export type UnaryGatewayRejection =
   | "unauthenticated"
   | "forbidden"
   | "context-stale";
-/** Forwarded/resolved bytes or a B4-mappable rejection. */
+
+/**
+ * Forwarded/resolved bytes or a B4-mappable rejection.
+ */
 export type UnaryGatewayResult =
   | {
-      /** Identifies a backend-forwarded result. */
+      // prettier-ignore
+
+      /**
+       * Identifies a backend-forwarded result.
+       */
       readonly kind: "forwarded";
-      /** Holds the backend response bytes. */
+
+      /**
+       * Holds the backend response bytes.
+       */
       readonly value: Uint8Array;
     }
   | {
-      /** Identifies a resolved trusted-context result. */
+      // prettier-ignore
+
+      /**
+       * Identifies a resolved trusted-context result.
+       */
       readonly kind: "resolved";
-      /** Holds the encoded trusted context. */
+
+      /**
+       * Holds the encoded trusted context.
+       */
       readonly value: Uint8Array;
     }
   | {
-      /** Identifies a rejected request. */
+      // prettier-ignore
+
+      /**
+       * Identifies a rejected request.
+       */
       readonly kind: "rejected";
-      /** Explains why the request was rejected. */
+
+      /**
+       * Explains why the request was rejected.
+       */
       readonly reason: UnaryGatewayRejection;
     };
 
@@ -118,10 +197,14 @@ type Operation =
     };
 type ForwardOperation = Exclude<Operation, { readonly kind: "resolve-context" }>;
 
-/** Transport-neutral B2 unary authentication and context-replacement pipeline. */
+/**
+ * Transport-neutral B2 unary authentication and context-replacement pipeline.
+ */
 export class UnaryGateway {
   readonly #options: UnaryGatewayOptions;
-  /** Creates a unary authentication gateway.
+
+  /**
+   * Creates a unary authentication gateway.
    * @param options Configures session, authorization, context, and forwarding collaborators.
    */
   constructor(options: UnaryGatewayOptions) {
@@ -129,7 +212,9 @@ export class UnaryGateway {
       throw new RangeError("maxRequestBytes must be a finite non-negative integer");
     this.#options = Object.freeze({ ...options });
   }
-  /** Handles one authenticated unary request.
+
+  /**
+   * Handles one authenticated unary request.
    * @param request Supplies owned request bytes, credential, and transport facts.
    * @returns Resolves to forwarded bytes, a trusted context, or a rejection.
    */

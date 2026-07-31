@@ -1,4 +1,6 @@
-/** Generated-code-only helpers for descriptor-backed Entity metadata. */
+/**
+ * Generated-code-only helpers for descriptor-backed Entity metadata.
+ */
 export { GeneratedEntityColumns } from "../entity/entity-column.js";
 export type {
   EntityColumnDefinition,

@@ -15,7 +15,8 @@ import type {
 } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
 
-import { DeliveryClient } from "../client/client.js";
+import { conditionalPickUp } from "@spine-event-engine/server/internal/conditional-pickup";
+import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
 import {
   DeliveryOutcomeUnknownError,
   DeliveryPagingError,
@@ -29,12 +30,21 @@ import {
 } from "../client/types.js";
 import { DeliveryMessageCodec, DeliveryRequestCodec, DeliveryShardCodec } from "../wire/codec.js";
 
-/** Adapts a delivery-server client to the server-owned inbox port. */
+/**
+ * Adapts a delivery-server client to the server-owned inbox port.
+ */
 export class RemoteInbox implements DeliveryInbox {
-  /** Remote inbox work requires an exclusive remote shard session. */
+  // prettier-ignore
+
+  /**
+   * Remote inbox work requires an exclusive remote shard session.
+   */
   readonly sessionKind = "EXCLUSIVE" as const;
   private readonly quarantine: RemovalQuarantine;
-  /** Creates a remote inbox with durable removal recovery.
+
+  /**
+   * Creates a remote inbox with durable removal recovery.
+   *
    * @param client Sends inbox calls to the delivery server.
    * @param quarantine Persists recovery state before callback admission and removal.
    */
@@ -47,7 +57,9 @@ export class RemoteInbox implements DeliveryInbox {
     Object.freeze(this);
   }
 
-  /** Writes a new inbox message.
+  /**
+   * Writes a new inbox message.
+   *
    * @param input Supplies the message fields excluding its generated identity.
    * @param options Bounds or cancels the remote mutation.
    * @returns The written message result.
@@ -61,7 +73,9 @@ export class RemoteInbox implements DeliveryInbox {
     return RemoteValues.freeze({ outcome: "WRITTEN" as const, message });
   }
 
-  /** Reads a bounded page of messages from one shard.
+  /**
+   * Reads a bounded page of messages from one shard.
+   *
    * @param shardIndex Identifies the shard to read.
    * @param options Supplies paging, status filtering, and call bounds.
    * @returns Detached messages in safely continued remote order.
@@ -109,7 +123,9 @@ export class RemoteInbox implements DeliveryInbox {
     return Object.freeze(result);
   }
 
-  /** Reads one message by its remote identity.
+  /**
+   * Reads one message by its remote identity.
+   *
    * @param id Identifies the message and shard.
    * @param options Bounds or cancels the remote read.
    * @returns The detached message, or `undefined` when it is absent.
@@ -121,7 +137,9 @@ export class RemoteInbox implements DeliveryInbox {
     return this.client.findOne(id, options);
   }
 
-  /** Creates exclusive work after durable admission.
+  /**
+   * Creates exclusive work after durable admission.
+   *
    * @param message Supplies the expected message snapshot.
    * @param session Supplies the exclusive shard session.
    * @param options Bounds or cancels remote reads and removals.
@@ -200,21 +218,36 @@ class RemoteInboxWork implements DeliveryInboxWork {
   }
 }
 
-/** Adapts remote exclusive shard sessions to the server work registry. */
+/**
+ * Adapts remote exclusive shard sessions to the server work registry.
+ */
 export class RemoteWorkRegistry implements DeliveryWorkRegistry {
-  /** Frozen remote pickup produces non-renewable exclusive sessions. */
+  // prettier-ignore
+
+  /**
+   * Frozen remote pickup produces non-renewable exclusive sessions.
+   */
   readonly sessionKind = "EXCLUSIVE" as const;
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
   readonly #sessionsByShard = new Map<string, Set<ExclusiveDeliveryWorkSession>>();
   readonly #releasesInFlight = new Set<string>();
   readonly #quarantined = new Set<string>();
-  /** Creates a registry backed by the supplied delivery client.
+
+  /**
+   * Creates a registry backed by the supplied delivery client.
+   *
    * @param client Sends shard operations to the delivery server.
    */
   constructor(private readonly client: DeliveryClient) {
+    conditionalPickUp.register(this, (shard, node, options) =>
+      this.#pickUp(shard, node, options, true),
+    );
     Object.freeze(this);
   }
-  /** Acquires a shard for the supplied application node.
+
+  /**
+   * Acquires a shard for the supplied application node.
+   *
    * @param shardIndex Identifies the shard to acquire.
    * @param node Identifies the application node requesting work.
    * @param options Bounds or cancels the remote mutation.
@@ -225,11 +258,31 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     node: string,
     options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    return this.#pickUp(shardIndex, node, options, false);
+  }
+
+  async #pickUp(
+    shardIndex: ShardIndex,
+    node: string,
+    options: DeliveryOperationOptions | undefined,
+    requirePending: boolean,
+  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
     const key = RemoteValues.shardKey(shardIndex);
     if (this.#quarantined.has(key)) return undefined;
     let remote: RemoteShardSession | undefined;
     try {
-      remote = await this.client.pickUp(shardIndex, RemoteValues.workerFor(node), options);
+      const operation = {
+        ...(options?.signal === undefined ? {} : { signal: options.signal }),
+        ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
+      };
+      remote = requirePending
+        ? await deliveryClientAccess.pickUpPending(
+            this.client,
+            shardIndex,
+            RemoteValues.workerFor(node),
+            operation,
+          )
+        : await this.client.pickUp(shardIndex, RemoteValues.workerFor(node), operation);
     } catch (error) {
       if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
       throw error;
@@ -246,7 +299,9 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     return session;
   }
 
-  /** Removes a previously acquired exclusive session.
+  /**
+   * Removes a previously acquired exclusive session.
+   *
    * @param session Supplies the local session to release.
    * @param options Bounds or cancels the remote mutation.
    * @returns Whether this registry released a known session.
@@ -272,12 +327,14 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
       this.#releasesInFlight.delete(key);
     }
   }
+
   /**
    * Applies a validated Admin observation to local remote-session state.
    *
    * A `PICKED` observation cannot prove ownership because the frozen wire
    * omits a session identity. Only `NOT_PICKED` invalidates stale sessions and
    * clears unknown-mutation quarantine for a fresh pickup.
+   *
    * @param observation Supplies the detached remote shard observation.
    */
   reconcile(observation: RemoteShardObservation): void {
@@ -308,7 +365,9 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
   }
 }
 
-/** Groups immutable remote-adapter value operations. */
+/**
+ * Groups immutable remote-adapter value operations.
+ */
 const RemoteValues = Object.freeze({
   receiveMessage(input: InboxMessageInput): InboxMessage {
     const message = DeliveryMessageCodec.snapshot({

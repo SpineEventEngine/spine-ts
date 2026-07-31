@@ -1,4 +1,6 @@
-/** Owns ordered close operations and retains failed operations for a later retry. */
+/**
+ * Closes resources in order and retains failures for a later retry.
+ */
 export class RetryableCloseGroup {
   readonly #closeables: readonly unknown[];
   readonly #message: string;
@@ -7,15 +9,17 @@ export class RetryableCloseGroup {
   /**
    * Creates a retryable close sequence.
    *
-   * @param closeables - Supplies resources to close in order.
-   * @param message - Describes a combined close failure.
+   * @param closeables Supplies resources to close in order.
+   * @param message Describes a combined close failure.
    */
   constructor(closeables: readonly unknown[], message: string) {
     this.#closeables = closeables;
     this.#message = message;
   }
 
-  /** Closes each remaining resource and aggregates any failures.
+  /**
+   * Closes each remaining resource and aggregates any failures.
+   *
    * @returns A promise that settles after each remaining resource is attempted.
    */
   async close(): Promise<void> {
@@ -56,11 +60,13 @@ export class RetryableCloseGroup {
  */
 export const CloseErrors: { readonly collect: (error: unknown, errors: unknown[]) => void } =
   Object.freeze({
+    // prettier-ignore
+
     /**
      * Appends leaf close failures in stable aggregate order.
      *
-     * @param error - Supplies a direct or aggregate close failure.
-     * @param errors - Receives flattened leaf failures.
+     * @param error Supplies a direct or aggregate close failure.
+     * @param errors Receives flattened leaf failures.
      */
     collect(error: unknown, errors: unknown[]): void {
       const ancestors = new Set<AggregateError>();
@@ -106,7 +112,10 @@ type AggregateTraversalFrame =
   | { readonly type: "visit"; readonly error: unknown }
   | { readonly type: "leave"; readonly aggregate: AggregateError };
 
-/** @internal Groups private close-operation reflection used by retryable shutdown. */
+/**
+ *
+ * @internal Groups private close-operation reflection used by retryable shutdown.
+ */
 const RetryableCloseValues = Object.freeze({
   closeMethod(closeable: unknown): (() => unknown) | undefined {
     if (typeof closeable !== "object" || closeable === null) {

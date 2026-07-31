@@ -22,8 +22,12 @@ import type {
 import type { ZeroMqConfig } from "./adapter-config.js";
 import { EndpointFiles } from "./endpoint-files.js";
 
-/** Optional tuning for the adapter-scoped local IPC transport. */
+/**
+ * Optional tuning for the adapter-scoped local IPC transport.
+ */
 export interface ZeroMqTransportOptions {
+  // prettier-ignore
+
   /**
    * Milliseconds used for bounded request/reply sends and receives.
    *
@@ -31,12 +35,19 @@ export interface ZeroMqTransportOptions {
    * 2,147,483,647.
    */
   readonly requestTimeoutMs?: number;
-  /** Milliseconds used by background worker sockets while waiting for messages. */
+
+  /**
+   * Milliseconds used by background worker sockets while waiting for messages.
+   */
   readonly receiveTimeoutMs?: number;
 }
 
 interface InternalTransportOptions extends ZeroMqTransportOptions {
-  /** @internal Adapter-private hook for background loop failures. */
+  // prettier-ignore
+
+  /**
+   * @internal Adapter-private hook for background loop failures.
+   */
   readonly onBackgroundFailure?: (error: Error) => void;
 }
 
@@ -83,8 +94,12 @@ interface IpcPathWalk {
   readonly missingComponents: readonly string[];
 }
 
-/** Exposes package-private native socket and filesystem operations for tests. */
+/**
+ * Exposes package-private native socket and filesystem operations for tests.
+ */
 export const zeroMqSocketAccess = {
+  // prettier-ignore
+
   /**
    * Binds a publisher to an IPC address.
    *
@@ -95,6 +110,7 @@ export const zeroMqSocketAccess = {
   async bindPublisher(socket: Publisher, address: string): Promise<void> {
     await socket.bind(address);
   },
+
   /**
    * Binds a replier to an IPC address.
    *
@@ -105,6 +121,7 @@ export const zeroMqSocketAccess = {
   async bindReply(socket: Reply, address: string): Promise<void> {
     await socket.bind(address);
   },
+
   /**
    * Closes a native socket.
    *
@@ -113,6 +130,7 @@ export const zeroMqSocketAccess = {
   close(socket: Socket): void {
     socket.close();
   },
+
   /**
    * Connects a receiver to an IPC address.
    *
@@ -122,6 +140,7 @@ export const zeroMqSocketAccess = {
   connect(socket: Subscriber | Request, address: string): void {
     socket.connect(address);
   },
+
   /**
    * Creates one private IPC directory component.
    *
@@ -131,6 +150,7 @@ export const zeroMqSocketAccess = {
   async createIpcDirectoryComponent(directory: string): Promise<void> {
     await mkdir(directory, { mode: privateDirectoryMode });
   },
+
   /**
    * Prepares and identifies a private IPC directory.
    *
@@ -140,6 +160,7 @@ export const zeroMqSocketAccess = {
   async prepareIpcDirectory(ipcDirectory: string): Promise<PreparedIpcDirectory> {
     return await IpcDirectories.prepare(ipcDirectory);
   },
+
   /**
    * Verifies a prepared IPC directory.
    *
@@ -149,6 +170,7 @@ export const zeroMqSocketAccess = {
   async recheckIpcDirectory(prepared: PreparedIpcDirectory): Promise<void> {
     await IpcDirectories.recheck(prepared);
   },
+
   /**
    * Sends frames through a publisher.
    *
@@ -159,6 +181,7 @@ export const zeroMqSocketAccess = {
   async sendPublisher(socket: Publisher, frames: MessageLike[]): Promise<void> {
     await socket.send(frames);
   },
+
   /**
    * Sends frames through a requester.
    *
@@ -171,9 +194,15 @@ export const zeroMqSocketAccess = {
   },
 };
 
-/** Owns construction of adapter-scoped signal transports. */
+/**
+ * Creates signal transports scoped to one validated ZeroMQ adapter configuration.
+ */
 const ZeroMqTransport = {
-  /** Creates a transport from validated local IPC configuration. */
+  // prettier-ignore
+
+  /**
+   * Creates a transport from validated local IPC configuration.
+   */
   create(config: ZeroMqConfig, options: ZeroMqTransportOptions = {}): SignalTransport {
     return new ZeroMqSignalTransport(config, options);
   },
@@ -664,9 +693,15 @@ class ZeroMqSignalTransport implements SignalTransport {
   }
 }
 
-/** Owns adapter timeout normalization. */
+/**
+ * Normalizes timeout values accepted by the ZeroMQ adapter.
+ */
 const ZeroMqTimeouts = {
-  /** Returns a supported request timeout. */
+  // prettier-ignore
+
+  /**
+   * Returns a supported request timeout.
+   */
   request(value: number | undefined): number {
     if (value === undefined) {
       return defaultRequestTimeoutMs;
@@ -781,9 +816,15 @@ type ReplyEnvelope =
   | { readonly status: "accepted"; readonly envelope: unknown }
   | { readonly status: "failed"; readonly message: string };
 
-/** Owns deterministic IPC endpoint derivation. */
+/**
+ * Derives deterministic IPC endpoints for transport routing topics.
+ */
 const ZeroMqEndpoints = {
-  /** Derives an endpoint for one routing topic and channel. */
+  // prettier-ignore
+
+  /**
+   * Derives an endpoint for one routing topic and channel.
+   */
   for(
     config: ZeroMqConfig,
     canonicalDirectory: string,
@@ -806,9 +847,15 @@ const ZeroMqEndpoints = {
   },
 };
 
-/** Owns multipart frame and reply encoding. */
+/**
+ * Encodes multipart transport frames and replies for ZeroMQ exchange.
+ */
 const ZeroMqFrames = {
-  /** Encodes one transport envelope into its wire frame. */
+  // prettier-ignore
+
+  /**
+   * Encodes one transport envelope into its wire frame.
+   */
   encodeEnvelope(topic: TransportTopic, envelope: unknown): Buffer {
     switch (topic.signalKind) {
       case "command":
@@ -824,7 +871,9 @@ const ZeroMqFrames = {
     }
   },
 
-  /** Decodes one transport envelope wire frame. */
+  /**
+   * Decodes one transport envelope wire frame.
+   */
   decodeEnvelope(topic: TransportTopic, frame: Buffer | undefined): unknown {
     if (frame === undefined) {
       throw new Error("ZeroMQ transport received an incomplete envelope.");
@@ -842,7 +891,9 @@ const ZeroMqFrames = {
     }
   },
 
-  /** Rejects reply values that cannot use the adapter reply encoding. */
+  /**
+   * Rejects reply values that cannot use the adapter reply encoding.
+   */
   rejectGeneratedProtoReply(envelope: unknown): void {
     if (isMessage(envelope)) {
       throw new Error("ZeroMQ transport cannot encode generated Protobuf replies.");
@@ -850,9 +901,15 @@ const ZeroMqFrames = {
   },
 };
 
-/** Owns secure preparation and revalidation of IPC directories. */
+/**
+ * Prepares and revalidates secure directories used for IPC sockets.
+ */
 const IpcDirectories = {
-  /** Creates and identifies a secure IPC directory. */
+  // prettier-ignore
+
+  /**
+   * Creates and identifies a secure IPC directory.
+   */
   async prepare(ipcDirectory: string): Promise<PreparedIpcDirectory> {
     const plan = await IpcDirectories.inspect(ipcDirectory);
     const completedPath = await IpcDirectories.createSuffix(
@@ -862,7 +919,9 @@ const IpcDirectories = {
     return await IpcDirectories.finalize(completedPath);
   },
 
-  /** Inspects the existing portion of an IPC path. */
+  /**
+   * Inspects the existing portion of an IPC path.
+   */
   async inspect(ipcDirectory: string): Promise<IpcPathPlan> {
     const parsed = path.parse(ipcDirectory);
     const components = ipcDirectory
@@ -881,7 +940,9 @@ const IpcDirectories = {
     };
   },
 
-  /** Finds the first missing IPC path component. */
+  /**
+   * Finds the first missing IPC path component.
+   */
   async walk(root: string, components: readonly string[]): Promise<IpcPathWalk> {
     let existingPath = root;
 
@@ -909,7 +970,9 @@ const IpcDirectories = {
     return { existingPath, missingComponents: [] };
   },
 
-  /** Validates one existing IPC path component. */
+  /**
+   * Validates one existing IPC path component.
+   */
   async validateEntry(
     candidate: string,
     isFinal: boolean,
@@ -930,7 +993,9 @@ const IpcDirectories = {
     }
   },
 
-  /** Creates the missing secure IPC path suffix. */
+  /**
+   * Creates the missing secure IPC path suffix.
+   */
   async createSuffix(anchorPath: string, missingComponents: readonly string[]): Promise<string> {
     let completedPath = anchorPath;
     for (const component of missingComponents) {
@@ -951,7 +1016,9 @@ const IpcDirectories = {
     return completedPath;
   },
 
-  /** Validates and identifies the final IPC directory. */
+  /**
+   * Validates and identifies the final IPC directory.
+   */
   async finalize(completedPath: string): Promise<PreparedIpcDirectory> {
     const canonicalCompletedPath = await realpath(completedPath);
     if (canonicalCompletedPath !== completedPath) {
@@ -969,7 +1036,9 @@ const IpcDirectories = {
     });
   },
 
-  /** Revalidates an IPC directory immediately before native socket work. */
+  /**
+   * Revalidates an IPC directory immediately before native socket work.
+   */
   async recheck(prepared: PreparedIpcDirectory): Promise<void> {
     const canonicalPath = await realpath(prepared.path);
     if (canonicalPath !== prepared.path) {
@@ -992,7 +1061,9 @@ const IpcDirectories = {
     }
   },
 
-  /** Validates a POSIX ancestor symlink. */
+  /**
+   * Validates a POSIX ancestor symlink.
+   */
   async validatePosixAlias(aliasPath: string, aliasUid: bigint): Promise<void> {
     const parent = await stat(path.dirname(aliasPath), { bigint: true });
     if (aliasUid !== 0n || parent.uid !== 0n || (parent.mode & posixWriteMask) !== 0n) {
@@ -1002,7 +1073,9 @@ const IpcDirectories = {
     }
   },
 
-  /** Requires final-directory ownership and permissions. */
+  /**
+   * Requires final-directory ownership and permissions.
+   */
   requirePrivateFinalDirectory(entry: {
     readonly dev: bigint;
     readonly ino: bigint;
@@ -1027,7 +1100,9 @@ const IpcDirectories = {
     }
   },
 
-  /** Requires two filesystem identities to match. */
+  /**
+   * Requires two filesystem identities to match.
+   */
   requireMatchingIdentity(
     actual: { readonly dev: bigint; readonly ino: bigint },
     expected: { readonly dev: bigint; readonly ino: bigint },
@@ -1038,7 +1113,9 @@ const IpcDirectories = {
     }
   },
 
-  /** Tests an unknown error for a Node error code. */
+  /**
+   * Tests an unknown error for a Node error code.
+   */
   hasErrorCode(error: unknown, code: string): boolean {
     return (
       error instanceof Error &&
@@ -1048,9 +1125,15 @@ const IpcDirectories = {
   },
 };
 
-/** Owns recoverable native receive and cleanup error handling. */
+/**
+ * Handles recoverable native receive and cleanup errors.
+ */
 const ZeroMqReceives = {
-  /** Receives frames while treating expected socket stops as idle. */
+  // prettier-ignore
+
+  /**
+   * Receives frames while treating expected socket stops as idle.
+   */
   async receiveFrames(
     socket: Subscriber | Reply,
   ): Promise<
@@ -1071,9 +1154,15 @@ const ZeroMqReceives = {
   },
 };
 
-/** Owns reply and route-frame encoding. */
+/**
+ * Encodes ZeroMQ reply and route frames.
+ */
 const ZeroMqReplyFrames = {
-  /** Encodes a successful reply. */
+  // prettier-ignore
+
+  /**
+   * Encodes a successful reply.
+   */
   encodeReplySuccess(envelope: unknown): MessageLike {
     return serialize({
       status: "accepted",
@@ -1081,7 +1170,9 @@ const ZeroMqReplyFrames = {
     } satisfies ReplyEnvelope);
   },
 
-  /** Encodes a failed reply. */
+  /**
+   * Encodes a failed reply.
+   */
   encodeReplyFailure(message: string): MessageLike {
     return serialize({
       status: "failed",
@@ -1089,7 +1180,9 @@ const ZeroMqReplyFrames = {
     } satisfies ReplyEnvelope);
   },
 
-  /** Decodes a reply frame. */
+  /**
+   * Decodes a reply frame.
+   */
   decodeReply(frame: Buffer | undefined): ReplyEnvelope {
     if (frame === undefined) {
       throw new Error("ZeroMQ transport received an incomplete envelope.");
@@ -1104,7 +1197,9 @@ const ZeroMqReplyFrames = {
     throw new Error("ZeroMQ transport received a malformed reply.");
   },
 
-  /** Recognizes a serialized reply shape. */
+  /**
+   * Recognizes a serialized reply shape.
+   */
   isReplyEnvelope(value: unknown): value is ReplyEnvelope {
     if (value === null || typeof value !== "object" || !("status" in value)) {
       return false;
@@ -1121,7 +1216,9 @@ const ZeroMqReplyFrames = {
     );
   },
 
-  /** Reads a required route frame. */
+  /**
+   * Reads a required route frame.
+   */
   readRoute(frame: Buffer | undefined): string {
     if (frame === undefined) {
       throw new Error("ZeroMQ transport received an incomplete route.");
@@ -1131,9 +1228,15 @@ const ZeroMqReplyFrames = {
   },
 };
 
-/** Owns recoverable native socket and cleanup errors. */
+/**
+ * Creates recoverable native socket and cleanup errors.
+ */
 const ZeroMqCleanup = {
-  /** Recognizes normal native socket stop errors. */
+  // prettier-ignore
+
+  /**
+   * Recognizes normal native socket stop errors.
+   */
   isExpectedReceiveStop(error: unknown): boolean {
     if (!(error instanceof Error)) {
       return false;
@@ -1142,7 +1245,9 @@ const ZeroMqCleanup = {
     return /closed|timed out|EAGAIN|EBADF|ETERM/iu.test(error.message);
   },
 
-  /** Converts an unknown failure to an Error. */
+  /**
+   * Converts an unknown failure to an Error.
+   */
   error(error: unknown): Error {
     if (error instanceof Error) {
       return error;
@@ -1151,7 +1256,9 @@ const ZeroMqCleanup = {
     return new Error(String(error));
   },
 
-  /** Captures one cleanup failure without stopping later cleanup. */
+  /**
+   * Captures one cleanup failure without stopping later cleanup.
+   */
   async capture(cleanup: () => void | Promise<void>, failures: unknown[]): Promise<void> {
     try {
       await cleanup();
@@ -1160,7 +1267,9 @@ const ZeroMqCleanup = {
     }
   },
 
-  /** Returns the one failure or aggregates multiple failures. */
+  /**
+   * Returns the one failure or aggregates multiple failures.
+   */
   failure(failures: readonly unknown[], message: string): Error {
     const [failure] = failures;
     if (failures.length === 1 && failure !== undefined) {

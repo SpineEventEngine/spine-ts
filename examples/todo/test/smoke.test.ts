@@ -7,7 +7,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import { describe, expect, it } from "vitest";
 
-import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
+import { TaskListSchema } from "../generated/spine/examples/todo/task_list_pb.js";
 import { SmokeTaskLists } from "../src/smoke-task-lists.js";
 
 describe("to-do smoke row inspection", () => {

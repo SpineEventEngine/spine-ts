@@ -10,7 +10,9 @@ interface CanonicalValueCodec {
   compare(left: unknown, right: unknown): number;
 }
 
-/** Canonical value identity compatible with generic in-memory storage semantics. */
+/**
+ * Canonical value identity compatible with generic in-memory storage semantics.
+ */
 export const CanonicalValue: CanonicalValueCodec = Object.freeze({
   encode(value: unknown): string {
     return JSON.stringify(CanonicalValues.encode(value));
@@ -33,9 +35,15 @@ export const CanonicalValue: CanonicalValueCodec = Object.freeze({
   },
 });
 
-/** Encodes and validates the tagged canonical value representation. */
+/**
+ * Encodes and validates the tagged canonical value representation.
+ */
 const CanonicalValues = Object.freeze({
-  /** Encodes one supported value into its tagged JSON-safe representation. */
+  // prettier-ignore
+
+  /**
+   * Encodes one supported value into its tagged JSON-safe representation.
+   */
   encode(value: unknown): EncodedValue {
     const kind = this.kind(value);
     switch (kind) {
@@ -63,7 +71,9 @@ const CanonicalValues = Object.freeze({
     }
   },
 
-  /** Decodes and validates one tagged canonical value representation. */
+  /**
+   * Decodes and validates one tagged canonical value representation.
+   */
   decode(value: unknown): unknown {
     if (!Array.isArray(value) || typeof value[0] !== "string") {
       throw new Error("invalid encoded value");
@@ -117,7 +127,9 @@ const CanonicalValues = Object.freeze({
     }
   },
 
-  /** Identifies the supported canonical kind of a value. */
+  /**
+   * Identifies the supported canonical kind of a value.
+   */
   kind(value: unknown): ValueKind {
     if (value === undefined) return "undefined";
     if (value === null) return "null";
@@ -131,18 +143,24 @@ const CanonicalValues = Object.freeze({
     throw new Error("Datastore record identifier has an unsupported value type.");
   },
 
-  /** Ensures a tagged representation has its required arity. */
+  /**
+   * Ensures a tagged representation has its required arity.
+   */
   length(value: readonly unknown[], length: number): void {
     if (value.length !== length) throw new Error("invalid encoded value");
   },
 
-  /** Ensures a scalar encoded value has its declared primitive type. */
+  /**
+   * Ensures a scalar encoded value has its declared primitive type.
+   */
   type(value: unknown, type: "boolean" | "string"): boolean | string {
     if (typeof value !== type) throw new Error("invalid encoded value");
     return value as boolean | string;
   },
 
-  /** Ensures a byte payload is a sequence of unsigned octets. */
+  /**
+   * Ensures a byte payload is a sequence of unsigned octets.
+   */
   bytes(value: unknown): number[] {
     if (
       !Array.isArray(value) ||
@@ -155,7 +173,9 @@ const CanonicalValues = Object.freeze({
     return value as number[];
   },
 
-  /** Decodes a canonical numeric string including its non-finite forms. */
+  /**
+   * Decodes a canonical numeric string including its non-finite forms.
+   */
   number(value: unknown): number {
     if (typeof value !== "string") throw new Error("invalid encoded value");
     if (value === "NaN") return Number.NaN;
@@ -164,7 +184,9 @@ const CanonicalValues = Object.freeze({
     return decoded;
   },
 
-  /** Decodes a canonical arbitrary-precision integer string. */
+  /**
+   * Decodes a canonical arbitrary-precision integer string.
+   */
   bigint(value: unknown): bigint {
     if (typeof value !== "string") throw new Error("invalid encoded value");
     const decoded = BigInt(value);
@@ -173,9 +195,15 @@ const CanonicalValues = Object.freeze({
   },
 });
 
-/** Compares supported canonical values using the storage ordering. */
+/**
+ * Compares supported canonical values using the storage ordering.
+ */
 const CanonicalOrder = Object.freeze({
-  /** Compares two values, including their canonical kinds. */
+  // prettier-ignore
+
+  /**
+   * Compares two values, including their canonical kinds.
+   */
   compare(left: unknown, right: unknown): number {
     const leftKind = CanonicalValues.kind(left);
     const rightKind = CanonicalValues.kind(right);
@@ -201,7 +229,9 @@ const CanonicalOrder = Object.freeze({
     }
   },
 
-  /** Compares object key sets and then their corresponding values. */
+  /**
+   * Compares object key sets and then their corresponding values.
+   */
   object(left: object, right: object): number {
     const leftKeys = Object.keys(left).sort();
     const rightKeys = Object.keys(right).sort();
@@ -214,7 +244,9 @@ const CanonicalOrder = Object.freeze({
     return 0;
   },
 
-  /** Compares arrays and byte sequences lexicographically. */
+  /**
+   * Compares arrays and byte sequences lexicographically.
+   */
   list(left: ArrayLike<unknown>, right: ArrayLike<unknown>): number {
     for (let index = 0; index < Math.min(left.length, right.length); index += 1) {
       const comparison = this.compare(left[index], right[index]);
@@ -223,7 +255,9 @@ const CanonicalOrder = Object.freeze({
     return this.number(left.length, right.length);
   },
 
-  /** Compares JavaScript numbers with a stable NaN ordering. */
+  /**
+   * Compares JavaScript numbers with a stable NaN ordering.
+   */
   number(left: number, right: number): number {
     if (Number.isNaN(left) || Number.isNaN(right)) {
       return Number.isNaN(left) === Number.isNaN(right) ? 0 : Number.isNaN(left) ? 1 : -1;
@@ -231,12 +265,16 @@ const CanonicalOrder = Object.freeze({
     return left < right ? -1 : left > right ? 1 : 0;
   },
 
-  /** Compares arbitrary-precision integers. */
+  /**
+   * Compares arbitrary-precision integers.
+   */
   bigint(left: bigint, right: bigint): number {
     return left < right ? -1 : left > right ? 1 : 0;
   },
 
-  /** Compares text using code-unit order. */
+  /**
+   * Compares text using code-unit order.
+   */
   text(left: string, right: string): number {
     return left < right ? -1 : left > right ? 1 : 0;
   },

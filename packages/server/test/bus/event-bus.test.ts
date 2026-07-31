@@ -18,11 +18,28 @@ import {
   InMemoryStorageFactory,
   type OnEventAccepted,
 } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EventBus, type EventDispatcher } from "../../src/index.js";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+const validationChecks = vi.hoisted(() => vi.fn());
+
+vi.mock("@spine-event-engine/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@spine-event-engine/core")>();
+
+  return {
+    ...actual,
+    Validate: {
+      ...actual.Validate,
+      check: (...args: Parameters<typeof actual.Validate.check>) => {
+        validationChecks(...args);
+        return actual.Validate.check(...args);
+      },
+    },
+  };
+});
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -34,6 +51,11 @@ type AggregateState = Message<"AggregateState"> & {
   id: string;
   name: string;
   archived: boolean;
+};
+
+type ValidatedTaskEvent = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+  id: string;
+  name: string;
 };
 
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
@@ -64,8 +86,24 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileValidationRefusalFixture = fileDesc(
+  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+  [file_spine_options],
+);
+const ValidatedTaskEventSchema = messageDesc(
+  fileValidationRefusalFixture,
+  1,
+) as GenMessage<ValidatedTaskEvent>;
 
 describe("EventBus", () => {
+  afterEach(() => {
+    validationChecks.mockReset();
+  });
+
   it("appends events to EventStore before dispatching them", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
@@ -113,7 +151,7 @@ describe("EventBus", () => {
     expect(observed).toEqual(["after-post", "first:event-2", "second:event-2"]);
   });
 
-  it("stores events without a registered dispatcher and resolves", async () => {
+  it("rejects fresh events without a registered schema before storing them", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
       new InMemoryStorageFactory(),
@@ -121,8 +159,21 @@ describe("EventBus", () => {
     const bus = new EventBus(store);
     const event = createProjectionEvent("event-3");
 
-    await expect(bus.post(event)).resolves.toBeUndefined();
-    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-3" } }]);
+    await expect(bus.post(event)).rejects.toThrow(/No event schema registered/);
+    await expect(store.read()).resolves.toEqual([]);
+  });
+
+  it("stores valid events registered without a dispatcher", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+
+    eventBusAccess.registerSchemas(bus, [ProjectionStateSchema]);
+
+    await expect(bus.post(createProjectionEvent("event-schema-only"))).resolves.toBeUndefined();
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
   });
 
   it("rejects events without a message", async () => {
@@ -274,6 +325,170 @@ describe("EventBus", () => {
 
     expect(observed).toEqual(["accept:event-accepted", "dispatch:event-accepted"]);
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-accepted" } }]);
+  });
+
+  it("rejects invalid events before every normal event intake boundary", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ValidatedTaskEventSchema],
+        accept: () => {
+          observed.push("accept");
+          return Promise.resolve();
+        },
+        dispatch: () => {
+          observed.push("dispatch");
+          return Promise.resolve();
+        },
+      },
+    ]);
+    const typeUrl = TypeUrls.derive(ValidatedTaskEventSchema);
+    eventBusAccess.subscribe(bus, typeUrl, {
+      onEvent: () => {
+        observed.push("subscriber");
+      },
+    });
+
+    await expect(bus.post(createValidatedEvent("event-invalid-post", ""))).rejects.toThrow();
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    validationChecks.mockClear();
+
+    let followUp!: Promise<void>;
+    await eventBusAccess.runExclusive(bus, () => {
+      followUp = eventBusAccess.postFollowUp(
+        bus,
+        createValidatedEvent("event-invalid-follow-up", ""),
+      );
+    });
+    await expect(followUp).rejects.toThrow();
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    validationChecks.mockClear();
+
+    await expect(
+      eventBusAccess.postStored(bus, createValidatedEvent("event-invalid-stored", "")),
+    ).rejects.toThrow();
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    validationChecks.mockClear();
+
+    let storedFollowUp!: Promise<void>;
+    await eventBusAccess.runExclusive(bus, () => {
+      storedFollowUp = eventBusAccess.postStoredFollowUp(
+        bus,
+        createValidatedEvent("event-invalid-stored-follow-up", ""),
+      );
+    });
+    await expect(storedFollowUp).rejects.toThrow();
+
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual([]);
+    await expect(store.read()).resolves.toEqual([]);
+  });
+
+  it("validates each admitted event once at every intake boundary", async () => {
+    const observed: string[] = [];
+    const store = {
+      acceptThenAppend: async (event: Event, onAccepted: OnEventAccepted) => {
+        observed.push(`store:${event.id?.value ?? "missing"}`);
+        await onAccepted(event);
+        observed.push(`append:${event.id?.value ?? "missing"}`);
+        return event;
+      },
+    } as unknown as EventStore;
+    validationChecks.mockImplementation(() => {
+      observed.push("validate");
+    });
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ValidatedTaskEventSchema],
+        accept: () => {
+          observed.push("accept");
+          return Promise.resolve();
+        },
+        dispatch: () => {
+          observed.push("dispatch");
+          return Promise.resolve();
+        },
+      },
+    ]);
+
+    await bus.post(createValidatedEvent("event-valid-post", "name"));
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual([
+      "store:event-valid-post",
+      "validate",
+      "accept",
+      "append:event-valid-post",
+      "dispatch",
+    ]);
+
+    validationChecks.mockClear();
+    observed.length = 0;
+    let followUp!: Promise<void>;
+    await eventBusAccess.runExclusive(bus, () => {
+      followUp = eventBusAccess.postFollowUp(
+        bus,
+        createValidatedEvent("event-valid-follow-up", "name"),
+      );
+    });
+    await followUp;
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual([
+      "store:event-valid-follow-up",
+      "validate",
+      "accept",
+      "append:event-valid-follow-up",
+      "dispatch",
+    ]);
+
+    validationChecks.mockClear();
+    observed.length = 0;
+    await eventBusAccess.postStored(bus, createValidatedEvent("event-valid-stored", "name"));
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual(["validate", "accept", "dispatch"]);
+
+    validationChecks.mockClear();
+    observed.length = 0;
+    let storedFollowUp!: Promise<void>;
+    await eventBusAccess.runExclusive(bus, () => {
+      storedFollowUp = eventBusAccess.postStoredFollowUp(
+        bus,
+        createValidatedEvent("event-valid-stored-follow-up", "name"),
+      );
+    });
+    await storedFollowUp;
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual(["validate", "accept", "dispatch"]);
+  });
+
+  it("validates an admitted event once before storing and dispatching it", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ValidatedTaskEventSchema],
+        accept: () => {
+          observed.push("accept");
+          return Promise.resolve();
+        },
+        dispatch: () => {
+          observed.push("dispatch");
+          return Promise.resolve();
+        },
+      },
+    ]);
+
+    await bus.post(createValidatedEvent("event-valid", "name"));
+
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual(["accept", "dispatch"]);
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-valid" } }]);
   });
 
   it("can retry registering a dispatcher after message schema collection fails", async () => {
@@ -759,6 +974,19 @@ function createProjectionEvent(id: string) {
       name: "Task",
       priority: 1,
     }),
+  });
+}
+
+function createValidatedEvent(id: string, name: string) {
+  return SignalEnvelopes.event({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema, {
+      producerId: AnyMessages.pack(UserIdSchema, create(UserIdSchema, { value: "aggregate-1" })),
+      version: create(VersionSchema, { number: 1 }),
+    }),
+    schema: ValidatedTaskEventSchema,
+    message: create(ValidatedTaskEventSchema, { id: "task-1", name }),
+    validate: false,
   });
 }
 

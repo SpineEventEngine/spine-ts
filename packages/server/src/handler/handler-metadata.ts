@@ -1,8 +1,12 @@
 import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import { describeEntityMetadata } from "../entity/entity-metadata.js";
 
-/** Entity class value accepted by explicit handler metadata registration. */
+/**
+ * Entity class value accepted by explicit handler metadata registration.
+ */
 export interface EntityClass<Instance extends object = object> {
+  // prettier-ignore
+
   /**
    * Prototype inspected for explicitly named handler methods. Registered names
    * must refer to own prototype data methods declared with normal class method
@@ -12,7 +16,9 @@ export interface EntityClass<Instance extends object = object> {
   readonly prototype: Instance;
 }
 
-/** Public handler metadata categories produced by explicit registration. */
+/**
+ * Public handler metadata categories produced by explicit registration.
+ */
 export type HandlerKind =
   | "command-assignment"
   | "command-reaction"
@@ -20,7 +26,9 @@ export type HandlerKind =
   | "event-reaction"
   | "event-application";
 
-/** Public handler method arity recorded in canonical metadata. */
+/**
+ * Public handler method arity recorded in canonical metadata.
+ */
 export type HandlerParameterCount = 1 | 2;
 
 /**
@@ -40,12 +48,20 @@ export type HandlerMethodName<Instance extends object> = Extract<
   string
 >;
 
-/** Error code for explicit handler metadata registration failures. */
+/**
+ * Error code for explicit handler metadata registration failures.
+ */
 export type HandlerMetadataErrorCode = "UNKNOWN_HANDLER_METHOD" | "INVALID_PARAMETER_COUNT";
 
-/** Error thrown when explicit handler metadata cannot be defined. */
+/**
+ * Error thrown when explicit handler metadata cannot be defined.
+ */
 export class HandlerMetadataError extends Error {
-  /** Stable code for callers/tests that need structured failure handling. */
+  // prettier-ignore
+
+  /**
+   * Stable code for callers/tests that need structured failure handling.
+   */
   readonly code: HandlerMetadataErrorCode;
 
   /**
@@ -62,66 +78,109 @@ export class HandlerMetadataError extends Error {
   }
 }
 
-/** Common fields shared by every explicit handler metadata record. */
+/**
+ * Common fields shared by every explicit handler metadata record.
+ */
 export interface BaseHandlerMetadata<
   Kind extends HandlerKind = HandlerKind,
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
 > {
-  /** Handler role in Spine's command/event model. */
+  // prettier-ignore
+
+  /**
+   * Handler role in Spine's command/event model.
+   */
   readonly kind: Kind;
-  /** Generated Protobuf-ES schema accepted by the handler method. */
+
+  /**
+   * Generated Protobuf-ES schema accepted by the handler method.
+   */
   readonly schema: Schema;
-  /** Alias for the schema as the descriptor-bearing message declaration. */
+
+  /**
+   * Alias for the schema as the descriptor-bearing message declaration.
+   */
   readonly descriptor: Schema;
-  /** Fully qualified Protobuf type name handled by the method. */
+
+  /**
+   * Fully qualified Protobuf type name handled by the method.
+   */
   readonly messageFullTypeName: Schema["typeName"];
-  /** Entity instance method name selected by explicit registration. */
+
+  /**
+   * Entity instance method name selected by explicit registration.
+   */
   readonly methodName: MethodName;
-  /** Public method arity: `handler(signal)` or `handler(signal, context)`. */
+
+  /**
+   * Public method arity: `handler(signal)` or `handler(signal, context)`.
+   */
   readonly parameterCount: HandlerParameterCount;
 }
 
-/** Metadata for a command assignee method. */
+/**
+ * Metadata for a command assignee method.
+ */
 export type CommandAssignmentHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
 > = BaseHandlerMetadata<"command-assignment", Schema, MethodName>;
 
-/** Metadata for a command-reacting method. */
+/**
+ * Metadata for a command-reacting method.
+ */
 export type CommandReactionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
 > = BaseHandlerMetadata<"command-reaction", Schema, MethodName>;
 
-/** Metadata for an event subscription method. */
+/**
+ * Metadata for an event subscription method.
+ */
 export type EventSubscriptionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
 > = BaseHandlerMetadata<"event-subscription", Schema, MethodName>;
 
-/** Metadata for an event reactor method. */
+/**
+ * Metadata for an event reactor method.
+ */
 export type EventReactionHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
 > = BaseHandlerMetadata<"event-reaction", Schema, MethodName>;
 
-/** Options accepted by event applier registration. */
+/**
+ * Options accepted by event applier registration.
+ */
 export interface EventApplicationOptions {
-  /** Legacy compatibility flag preserved on schema-bearing event appliers. */
+  // prettier-ignore
+
+  /**
+   * Legacy compatibility flag preserved on schema-bearing event appliers.
+   */
   readonly allowImport?: boolean;
 }
 
-/** Metadata for an event applier method. */
+/**
+ * Metadata for an event applier method.
+ */
 export interface EventApplicationHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
 > extends BaseHandlerMetadata<"event-application", Schema, MethodName> {
-  /** Legacy compatibility flag preserved on schema-bearing event appliers. */
+  // prettier-ignore
+
+  /**
+   * Legacy compatibility flag preserved on schema-bearing event appliers.
+   */
   readonly allowImport: boolean;
 }
 
-/** Union of all explicit handler metadata records. */
+/**
+ * Union of all explicit handler metadata records.
+ */
 export type HandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
@@ -139,6 +198,8 @@ export type HandlerMetadata<
  * validate that the selected name is an own prototype data method.
  */
 export interface HandlerRegistrationBuilder<Instance extends object> {
+  // prettier-ignore
+
   /**
    * Registers a command assignee method.
    *
@@ -202,36 +263,71 @@ export interface HandlerRegistrationBuilder<Instance extends object> {
   ): EventApplicationHandlerMetadata<Schema, HandlerMethodName<Instance>>;
 }
 
-/** Frozen handler metadata for one explicitly registered entity class. */
+/**
+ * Frozen handler metadata for one explicitly registered entity class.
+ */
 export interface EntityHandlersMetadata<
   Instance extends object = object,
   StateSchema extends DescriptorMessageSchema = DescriptorMessageSchema,
 > {
-  /** Entity class whose prototype owns the registered methods. */
+  // prettier-ignore
+
+  /**
+   * Entity class whose prototype owns the registered methods.
+   */
   readonly entityType: EntityClass<Instance>;
-  /** Descriptor-derived state metadata from `describeEntityMetadata()`. */
+
+  /**
+   * Descriptor-derived state metadata from `describeEntityMetadata()`.
+   */
   readonly entity: EntityMetadata<StateSchema>;
-  /** All handlers in declaration order. */
+
+  /**
+   * All handlers in declaration order.
+   */
   readonly handlers: readonly HandlerMetadata[];
-  /** Command assignees in declaration order. */
+
+  /**
+   * Command assignees in declaration order.
+   */
   readonly commandAssignments: readonly CommandAssignmentHandlerMetadata[];
-  /** Command reactors in declaration order. */
+
+  /**
+   * Command reactors in declaration order.
+   */
   readonly commandReactions: readonly CommandReactionHandlerMetadata[];
-  /** Event subscribers in declaration order. */
+
+  /**
+   * Event subscribers in declaration order.
+   */
   readonly eventSubscriptions: readonly EventSubscriptionHandlerMetadata[];
-  /** Event reactors in declaration order. */
+
+  /**
+   * Event reactors in declaration order.
+   */
   readonly eventReactions: readonly EventReactionHandlerMetadata[];
-  /** Event appliers in declaration order. */
+
+  /**
+   * Event appliers in declaration order.
+   */
   readonly eventApplications: readonly EventApplicationHandlerMetadata[];
 }
 
-/** Error code for handler metadata registry validation failures. */
+/**
+ * Error code for handler metadata registry validation failures.
+ */
 export type HandlerRegistryErrorCode =
   "DUPLICATE_COMMAND_ASSIGNMENT" | "DUPLICATE_EVENT_APPLICATION";
 
-/** Error thrown when a caller-owned handler metadata registry rejects metadata. */
+/**
+ * Error thrown when a caller-owned handler metadata registry rejects metadata.
+ */
 export class HandlerMetadataRegistryError extends Error {
-  /** Stable code for callers/tests that need structured failure handling. */
+  // prettier-ignore
+
+  /**
+   * Stable code for callers/tests that need structured failure handling.
+   */
   readonly code: HandlerRegistryErrorCode;
 
   /**
@@ -248,32 +344,53 @@ export class HandlerMetadataRegistryError extends Error {
   }
 }
 
-/** A handler metadata record paired with the entity metadata that declared it. */
+/**
+ * A handler metadata record paired with the entity metadata that declared it.
+ */
 export interface RegisteredHandlerMetadata<Handler extends HandlerMetadata = HandlerMetadata> {
-  /** Entity handler metadata object registered by the caller. */
+  // prettier-ignore
+
+  /**
+   * Entity handler metadata object registered by the caller.
+   */
   readonly entityHandlers: EntityHandlersMetadata;
-  /** Entity class that owns the registered handler method. */
+
+  /**
+   * Entity class that owns the registered handler method.
+   */
   readonly entityType: EntityClass;
-  /** Descriptor-derived entity metadata for the handler's state type. */
+
+  /**
+   * Descriptor-derived entity metadata for the handler's state type.
+   */
   readonly entity: EntityMetadata;
-  /** Handler metadata record declared for the entity. */
+
+  /**
+   * Handler metadata record declared for the entity.
+   */
   readonly handler: Handler;
 }
 
-/** Read-only lookup surface for already registered handler metadata. */
+/**
+ * Read-only lookup surface for already registered handler metadata.
+ */
 export interface HandlerMetadataRegistryLookup {
+  // prettier-ignore
+
   /**
    * Returns registered entity handler metadata in registration order.
    *
    * @returns A fresh frozen metadata list.
    */
   listEntityHandlers(): readonly EntityHandlersMetadata[];
+
   /**
    * Returns registered handler entries in registration and declaration order.
    *
    * @returns A fresh frozen registered-handler list.
    */
   listHandlers(): readonly RegisteredHandlerMetadata[];
+
   /**
    * Finds entity handler metadata by state type name.
    *
@@ -281,6 +398,7 @@ export interface HandlerMetadataRegistryLookup {
    * @returns Matching metadata in registration order.
    */
   findByState(stateTypeName: string): readonly EntityHandlersMetadata[];
+
   /**
    * Finds handler entries by handler role.
    *
@@ -290,6 +408,7 @@ export interface HandlerMetadataRegistryLookup {
   findHandlersByKind<Kind extends HandlerKind>(
     kind: Kind,
   ): readonly RegisteredHandlerMetadata<Extract<HandlerMetadata, { readonly kind: Kind }>>[];
+
   /**
    * Finds handler entries by message type name.
    *
@@ -297,6 +416,7 @@ export interface HandlerMetadataRegistryLookup {
    * @returns Matching entries in registration and declaration order.
    */
   findByMessage(messageTypeName: string): readonly RegisteredHandlerMetadata[];
+
   /**
    * Finds the unique command assignment for a command type.
    *
@@ -306,6 +426,7 @@ export interface HandlerMetadataRegistryLookup {
   findCommandAssignment(
     commandTypeName: string,
   ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined;
+
   /**
    * Finds the unique event applier for a state and event type.
    *
@@ -319,7 +440,9 @@ export interface HandlerMetadataRegistryLookup {
   ): RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined;
 }
 
-/** Caller-owned registry for lookup-only handler metadata and duplicate validation. */
+/**
+ * Caller-owned registry for lookup-only handler metadata and duplicate validation.
+ */
 export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   readonly #entityHandlers: EntityHandlersMetadata[] = [];
   readonly #handlerEntries: RegisteredHandlerMetadata[] = [];
@@ -543,19 +666,37 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   }
 }
 
-/** Framework-owned arity override for generated handler metadata ingestion. @internal */
+/**
+ * Framework-owned arity override for generated handler metadata ingestion.
+ * @internal
+ */
 export interface HandlerArity {
-  /** Handler role whose public arity is being preserved. */
+  // prettier-ignore
+
+  /**
+   * Handler role whose public arity is being preserved.
+   */
   readonly kind: Exclude<HandlerKind, "event-application">;
-  /** Entity instance method name selected by generated metadata. */
+
+  /**
+   * Entity instance method name selected by generated metadata.
+   */
   readonly methodName: string;
-  /** Public method arity: `handler(signal)` or `handler(signal, context)`. */
+
+  /**
+   * Public method arity: `handler(signal)` or `handler(signal, context)`.
+   */
   readonly parameterCount: HandlerParameterCount;
-  /** Generated Protobuf-ES schemas emitted by the handler return type. */
+
+  /**
+   * Generated Protobuf-ES schemas emitted by the handler return type.
+   */
   readonly emittedSchemas?: readonly DescriptorMessageSchema[];
 }
 
-/** Builds and validates metadata for one entity class. */
+/**
+ * Builds and validates metadata for one entity class.
+ */
 class EntityHandlersOwner {
   readonly #authentic = new WeakSet<EntityHandlersMetadata>();
   readonly #emittedSchemas = new WeakMap<HandlerMetadata, readonly DescriptorMessageSchema[]>();
@@ -802,13 +943,20 @@ class EntityHandlersOwner {
   }
 }
 
-/** Internal metadata authority for handler registration, generated metadata, and cloning. @internal */
+/**
+ * Internal metadata authority for handler registration, generated metadata, and cloning.
+ * @internal
+ */
 export const HandlerMetadataValues: Readonly<EntityHandlersOwner> = Object.freeze(
   new EntityHandlersOwner(),
 );
 
-/** Defines explicit handler metadata for one entity class. */
+/**
+ * Defines explicit handler metadata for one entity class.
+ */
 interface EntityHandlerDefinitions {
+  // prettier-ignore
+
   /**
    * Creates handler metadata without invoking entity methods.
    *
@@ -826,7 +974,9 @@ interface EntityHandlerDefinitions {
   ): EntityHandlersMetadata<Instance, StateSchema>;
 }
 
-/** Defines metadata for explicitly registered entity handlers. */
+/**
+ * Defines metadata for explicitly registered entity handlers.
+ */
 export const EntityHandlers: Readonly<EntityHandlerDefinitions> = Object.freeze({
   define<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,

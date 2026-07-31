@@ -1,0 +1,357 @@
+syntax = "proto3";
+
+package spine.examples.projects;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.projects";
+
+// A summary of one project.
+message ProjectSummary {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the summarized project.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // The project's name.
+  string name = 2;
+}
+
+// A list of tasks in one project.
+message TaskList {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project that owns this list.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies a task in this list.
+  string name = 2;
+}
+
+// Counts tasks by their current status.
+message StatusCounters {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project whose tasks are counted.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies a task included in these counts.
+  string name = 2;
+}
+
+// Counts tasks by their assigned priority.
+message PriorityCounters {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project whose priorities are counted.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies a task included in these counts.
+  string name = 2;
+}
+
+// Summarizes work assigned to one person.
+message AssigneeWorkload {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project containing this work.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies an assigned task.
+  string name = 2;
+}
+
+// A chronological project activity entry.
+message ActivityFeed {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the activity entry.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the recorded activity.
+  string name = 2;
+}
+
+// A project record available to one tenant.
+message TenantView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the tenant record.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the available project.
+  string name = 2;
+}
+
+// A project record available to one user.
+message UserView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the user record.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the available project.
+  string name = 2;
+}
+
+// A task scheduled for a due date.
+message DueDateView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project containing this task.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies the scheduled task.
+  string name = 2;
+}
+
+// An assignment of a task to a person.
+message AssignmentView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project containing this assignment.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies the assigned task.
+  string name = 2;
+}
+
+// A record of a project's lifecycle change.
+message ProjectLifecycleView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the lifecycle record.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the affected project.
+  string name = 2;
+}
+
+// A dependency between two project tasks.
+message TaskDependencyView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project containing this dependency.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies the dependent task.
+  string name = 2;
+}
+
+// An audit entry for project work.
+message AuditView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the audit entry.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the recorded work.
+  string name = 2;
+}
+
+// A change delivered to interested project members.
+message SubscriptionFanoutView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the delivered change.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the affected project.
+  string name = 2;
+}
+
+// A record of completed project cleanup.
+message CleanupView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the cleanup record.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the cleaned project.
+  string name = 2;
+}
+
+// An index entry for a project.
+message ProjectIndex {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the indexed project.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the indexed project.
+  string name = 2;
+}
+
+// An index entry for a project task.
+message TaskIndex {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project containing this task.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies the indexed task.
+  string name = 2;
+}
+
+// An index entry for a project member.
+message PersonIndex {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the indexed person.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the indexed person.
+  string name = 2;
+}
+
+// A view of available project capacity.
+message CapacityView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the capacity record.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Names the available resource.
+  string name = 2;
+}
+
+// A view of project progress.
+message ProgressView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // Identifies the project whose progress is shown.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Identifies the measured task.
+  string name = 2;
+}
+
+// Tracks assignments that need attention.
+message AssignmentManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this assignment tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes to task assignments.
+  int32 updates = 2;
+}
+
+// Tracks approaching task due dates.
+message DueDateManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this due-date tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes to task due dates.
+  int32 updates = 2;
+}
+
+// Tracks changes to task status.
+message StatusManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this status tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes to task status.
+  int32 updates = 2;
+}
+
+// Tracks notifications sent about project work.
+message NotificationManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this notification tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes to project notifications.
+  int32 updates = 2;
+}
+
+// Tracks changes to assigned work.
+message WorkloadManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this workload tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes to assigned workloads.
+  int32 updates = 2;
+}
+
+// Tracks project lifecycle changes.
+message ProjectLifecycleManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this lifecycle tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes to project lifecycles.
+  int32 updates = 2;
+}
+
+// Tracks dependencies between project tasks.
+message TaskDependencyManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this dependency tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes to task dependencies.
+  int32 updates = 2;
+}
+
+// Tracks audit entries for project work.
+message AuditManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this audit tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes to project audits.
+  int32 updates = 2;
+}
+
+// Tracks delivered project changes.
+message SubscriptionFanoutManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this delivery tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts changes delivered to members.
+  int32 updates = 2;
+}
+
+// Tracks completed project cleanup.
+message CleanupManager {
+  option (entity).kind = PROCESS_MANAGER;
+
+  // Identifies this cleanup tracker.
+  string id = 1 [(required) = true, (set_once) = true];
+
+  // Counts completed cleanup activities.
+  int32 updates = 2;
+}
