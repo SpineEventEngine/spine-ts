@@ -126,3 +126,8 @@ Status: Accepted
 - The pre-integration full repository gate passed 3,246 tests with 90.01%
   branch coverage. The remaining gate is verification after synchronizing with
   current `main`.
+- Back-merge disposition: the only conflict combined the reviewed
+  documentation-audience command with the reviewed single-TypeDoc verification
+  profile. Its focused metadata test and the full 182-test integration
+  preflight pass. This deterministic composition correction does not reopen a
+  specialist lane.

@@ -190,9 +190,9 @@ function packageNameAt(packageRoot) {
   return typeof name === "string" ? name : undefined;
 }
 
-function resolveBufExecutable() {
+function resolveBufExecutable(root = repoRoot) {
   const executable = process.platform === "win32" ? "buf.cmd" : "buf";
-  const localBuf = join(repoRoot, "node_modules", ".bin", executable);
+  const localBuf = join(root, "node_modules", ".bin", executable);
 
   return existsSync(localBuf) ? localBuf : executable;
 }
@@ -683,7 +683,9 @@ function createTargetStage(target, root = repoRoot) {
 
 export function stageGeneratedTargets(options = {}) {
   const root = options.repoRoot ?? repoRoot;
-  const run = options.runCommand ?? runCommand;
+  const run =
+    options.runCommand ??
+    ((label, executable, args) => runCommandIn(label, executable, args, root));
   const stagedTargets = [];
 
   try {
@@ -700,7 +702,7 @@ export function stageGeneratedTargets(options = {}) {
 
       stagedTargets.push(stagedTarget);
 
-      const generateStatus = run(`buf generate ${target.displayPath}`, resolveBufExecutable(), [
+      const generateStatus = run(`buf generate ${target.displayPath}`, resolveBufExecutable(root), [
         "generate",
         "--template",
         stagedTarget.stagedTemplatePath,
@@ -788,7 +790,7 @@ function stageModel(target, root, options = {}, stagedTargets = []) {
       const template = writeStagedTemplate(target, output, stageRoot, root);
       const companionStatus = run(
         `${target.moduleName} companion generation`,
-        resolveBufExecutable(),
+        resolveBufExecutable(root),
         ["generate", "--template", template],
         root,
       );
