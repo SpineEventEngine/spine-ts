@@ -1,0 +1,13 @@
+syntax = "proto3";
+package spine.examples.messageboard;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.messageboard";
+
+// Identifies a MessageBoard user.
+message UserId {
+
+  // The identifier assigned to the user.
+  string value = 1 [(required) = true];
+}

@@ -120,7 +120,7 @@ const semanticSourceExtension = /\.(?:cts|mts|ts|tsx)$/;
 const handwrittenSourceExtension = /\.(?:cts|mts|ts|tsx|js|jsx|mjs|cjs)$/;
 const internalChronologyPattern =
   /\b(?:T-\d{4,}[A-Za-z]*|wave\s+\d+[A-Za-z]?|phase\s+\d+|slice\s+\d+|milestone\s+\w+)\b/iu;
-const generatedTsdocTargets = new Set(["examples/chat/app/src/model-registry.ts"]);
+const generatedTsdocTargets = new Set(["examples/message-board/app/src/model-registry.ts"]);
 const layoutRules = new Set([
   "blank-first-line",
   "tsdoc-block-tag-gap",
@@ -281,8 +281,8 @@ function debtPartition(file) {
   if (/^packages\/server\//.test(file)) return "T-0080F";
   if (/^packages\/(?:auth|client-web|client-react)\//.test(file)) return "T-0080G";
   if (/^packages\//.test(file)) return "T-0080H";
-  if (/^examples\/chat\/(?:app|web)\//.test(file)) return "T-0080K";
-  if (/^examples\/chat\/(?:model|users-model)\//.test(file)) return "T-0080J";
+  if (/^examples\/message-board\/(?:app|web)\//.test(file)) return "T-0080K";
+  if (/^examples\/message-board\/model\//.test(file)) return "T-0080J";
   if (/^examples\/todo\//.test(file)) return "T-0080L";
   if (/^examples\/projects\//.test(file)) return "T-0080M";
   if (/^examples\/orders\//.test(file)) return "T-0080N";

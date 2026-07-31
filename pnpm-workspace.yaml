@@ -5,6 +5,7 @@ packages:
 confirmModulesPurge: false
 engineStrict: true
 enableGlobalVirtualStore: false
+linkWorkspacePackages: true
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - js-yaml@4.3.0

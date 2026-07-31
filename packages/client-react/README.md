@@ -53,7 +53,7 @@ An Entity subscription needs an authoritative query for reconnect recovery.
 The hook starts and cancels it after React commits the component.
 
 ```ts
-// docs-snippet-path: examples/chat/web/src/index.tsx
+// docs-snippet-path: examples/message-board/web/src/index.tsx
 import { create } from "@bufbuild/protobuf";
 import { TypeUrls } from "@spine-event-engine/core";
 import { useEntitySubscription, useSubscriptionDelivery } from "@spine-event-engine/client-react";
@@ -64,10 +64,10 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { ChatMessageViewSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
+import { BoardMessageViewSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 
 const target = create(TargetSchema, {
-  type: TypeUrls.derive(ChatMessageViewSchema),
+  type: TypeUrls.derive(BoardMessageViewSchema),
   criterion: { case: "includeAll", value: true },
 });
 const query = create(QuerySchema, { id: create(QueryIdSchema, { value: "messages" }), target });
@@ -93,5 +93,5 @@ a possible gap.
 ## 🔗 Learn more
 
 - [Browser client](../client-web/README.md)
-- [Chat web example](../../examples/chat/web/README.md)
+- [MessageBoard web example](../../examples/message-board/web/README.md)
 - [Reference for coding agents](REFERENCE.md)

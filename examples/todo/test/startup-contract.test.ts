@@ -25,15 +25,17 @@ describe("example executable commands", () => {
   );
 });
 
-describe("Chat app manifest", () => {
-  it("keeps the composed Chat model versioned while runtime packages use their established declarations", async () => {
-    const manifest = JSON.parse(await readFile("examples/chat/app/package.json", "utf8")) as {
+describe("MessageBoard app manifest", () => {
+  it("keeps the composed MessageBoard model versioned while runtime packages use their established declarations", async () => {
+    const manifest = JSON.parse(
+      await readFile("examples/message-board/app/package.json", "utf8"),
+    ) as {
       readonly dependencies: Readonly<Record<string, string>>;
       readonly devDependencies?: Readonly<Record<string, string>>;
       readonly scripts: Readonly<Record<string, string>>;
     };
 
-    expect(manifest.dependencies["@spine-event-engine/example-chat-model"]).toBe(
+    expect(manifest.dependencies["@spine-event-engine/example-message-board-model"]).toBe(
       "2.0.0-snapshot.1",
     );
     expect(manifest.dependencies["@connectrpc/connect-node"]).toBe("2.1.2");
@@ -44,8 +46,10 @@ describe("Chat app manifest", () => {
     expect(manifest.scripts.start).toContain("typecheck:build");
   });
 
-  it("makes the Chat web start command own workspace preparation", async () => {
-    const manifest = JSON.parse(await readFile("examples/chat/web/package.json", "utf8")) as {
+  it("makes the MessageBoard web start command own workspace preparation", async () => {
+    const manifest = JSON.parse(
+      await readFile("examples/message-board/web/package.json", "utf8"),
+    ) as {
       readonly scripts: Readonly<Record<string, string>>;
     };
 

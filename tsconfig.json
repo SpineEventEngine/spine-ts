@@ -19,8 +19,8 @@
     { "path": "./examples/todo" },
     { "path": "./examples/projects" },
     { "path": "./examples/orders" },
-    { "path": "./examples/chat/model" },
-    { "path": "./examples/chat/app" },
-    { "path": "./examples/chat/web" }
+    { "path": "./examples/message-board/model" },
+    { "path": "./examples/message-board/app" },
+    { "path": "./examples/message-board/web" }
   ]
 }

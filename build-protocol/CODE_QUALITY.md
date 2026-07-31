@@ -157,7 +157,7 @@ frozen sources are excluded.
 Authored example Proto uses meaningful domain documentation with a blank line
 between a field or declaration and its following documentation block. Its
 package is `spine.examples.<domain>` and its type URL prefix is
-`type.spine.examples.<domain>`, where `<domain>` is exactly `chat`, `projects`,
+`type.spine.examples.<domain>`, where `<domain>` is exactly `messageboard`, `projects`,
 `orders`, or `todo`. Authored example paths, packages, and imports contain no
 `v1` component. Manifest-declared frozen copied Proto sources remain exempt and
 unchanged.

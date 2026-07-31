@@ -45,7 +45,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["examples/chat/web/test/interop/**/*.mjs"],
+    files: ["examples/message-board/web/test/interop/**/*.mjs"],
     languageOptions: {
       globals: {
         AbortController: "readonly",

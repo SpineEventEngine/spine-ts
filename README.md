@@ -42,7 +42,7 @@ read models, and notify clients through typed Protobuf contracts.
 - Google Cloud Datastore and MySQL adapters for application-selected
   persistence.
 
-## 🚀 Try the Chat application
+## 🚀 Try the MessageBoard application
 
 Install the workspace dependencies:
 
@@ -50,23 +50,23 @@ Install the workspace dependencies:
 pnpm install --frozen-lockfile
 ```
 
-Start the Chat server in one terminal:
+Start the MessageBoard server in one terminal:
 
 ```bash
-pnpm --dir examples/chat/app start
+pnpm --dir examples/message-board/app start
 ```
 
 Start its React UI in another terminal:
 
 ```bash
-pnpm --dir examples/chat/web start
+pnpm --dir examples/message-board/web start
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The example uses
 in-memory storage and a local development identity, so it is safe to explore
 without cloud credentials.
 
-See the [Chat guide](examples/chat/README.md) for a beginner walkthrough.
+See the [MessageBoard guide](examples/message-board/README.md) for a beginner walkthrough.
 
 ## 📦 Workspace map
 
@@ -94,7 +94,7 @@ Start with these packages:
 ## 🎓 Documentation
 
 - [End-user guide](docs/USER_GUIDE.md)
-- [Chat example](examples/chat/README.md)
+- [MessageBoard example](examples/message-board/README.md)
 - [Browser authentication and extension guide](docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Generated API documentation](docs/api/README.md)
 - [Reference for coding agents](REFERENCE.md)

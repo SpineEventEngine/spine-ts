@@ -1,0 +1,14 @@
+syntax = "proto3";
+package spine.examples.messageboard;
+
+import "spine/examples/messageboard/message_board.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.messageboard";
+
+// Rejects a post for an already-posted MessageBoard message.
+message MessageAlreadyPosted {
+
+  // Identifies the MessageBoard message that was already posted.
+  MessageId id = 1 [(required) = true, (validate) = true];
+}

@@ -1,0 +1,69 @@
+syntax = "proto3";
+package spine.examples.messageboard;
+
+import "google/protobuf/timestamp.proto";
+import "spine/examples/messageboard/user.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.examples.messageboard";
+
+// Identifies a board that contains messages.
+message BoardId {
+
+  // The identifier assigned to the board.
+  string value = 1 [(required) = true];
+}
+
+// Identifies a message on a board.
+message MessageId {
+
+  // The identifier assigned to the message.
+  string value = 1 [(required) = true];
+}
+
+// A message posted on a board.
+message BoardMessage {
+  option (entity).kind = AGGREGATE;
+
+  // The identifier assigned to this message.
+  MessageId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+
+  // The board that contains the message.
+  BoardId board = 2 [(required) = true, (validate) = true];
+
+  // The account that posted the message.
+  UserId author = 3 [(required) = true, (validate) = true];
+
+  // The username shown beside the message.
+  string username = 4 [(required) = true];
+
+  // The text written in this message.
+  string text = 5 [(required) = true];
+
+  // The time at which the message was posted.
+  google.protobuf.Timestamp posted_at = 6 [(required) = true];
+}
+
+// A message displayed on a board.
+message BoardMessageView {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  // The identifier assigned to this message.
+  MessageId id = 1 [(required) = true, (validate) = true, (set_once) = true];
+
+  // The board that contains the message.
+  BoardId board = 2 [(required) = true, (validate) = true, (column) = true];
+
+  // The account that posted the message.
+  UserId author = 3 [(required) = true, (validate) = true, (column) = true];
+
+  // The username shown beside the message.
+  string username = 4 [(required) = true];
+
+  // The text written in this message.
+  string text = 5 [(required) = true];
+
+  // The time at which the message was posted.
+  google.protobuf.Timestamp posted_at = 6 [(required) = true, (column) = true];
+}

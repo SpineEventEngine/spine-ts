@@ -26,9 +26,9 @@ const productionReadmes = productionPackages.map((directory) => `${directory}/RE
 const workspacePackageDirectories = new Map(
   [
     ...productionPackages,
-    "examples/chat/app",
-    "examples/chat/model",
-    "examples/chat/web",
+    "examples/message-board/app",
+    "examples/message-board/model",
+    "examples/message-board/web",
     "examples/orders",
     "examples/projects",
     "examples/todo",
@@ -46,7 +46,7 @@ const defaultDocuments = [
   "docs/USER_GUIDE.md",
   "docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md",
   ...productionReadmes,
-  "examples/chat/README.md",
+  "examples/message-board/README.md",
 ];
 const documents =
   process.env.SPINE_TS_SNIPPET_DOCUMENTS?.split(",").filter(Boolean) ?? defaultDocuments;
@@ -214,8 +214,8 @@ function checkBrowserGuide() {
     "packages/client-web/README.md",
     "packages/client-node/README.md",
     "packages/client-react/README.md",
-    "examples/chat/README.md",
-    "examples/chat/web/README.md",
+    "examples/message-board/README.md",
+    "examples/message-board/web/README.md",
     "interop/envoy/README.md",
   ];
   for (const path of links) {

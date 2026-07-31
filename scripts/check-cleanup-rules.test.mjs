@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { baselineObservesStructureEntry } from "./check-cleanup-rules.mjs";
+import { baselineObservesStructureEntry, movedChatBaselinePath } from "./check-cleanup-rules.mjs";
 
 const scriptPath = new URL("./check-cleanup-rules.mjs", import.meta.url).pathname;
 
@@ -144,6 +144,17 @@ function trackManyVirtualFiles(repoRoot) {
 }
 
 describe("check-cleanup-rules", () => {
+  it("maps each MessageBoard family to its immutable Chat baseline family", () => {
+    expect(movedChatBaselinePath("examples/message-board/app/src/index.ts")).toBe(
+      "examples/chat/src/index.ts",
+    );
+    expect(movedChatBaselinePath("examples/message-board/web/src/index.tsx")).toBe(
+      "examples/chat-web/src/index.tsx",
+    );
+    expect(movedChatBaselinePath("examples/message-board/model/src/index.ts")).toBe(
+      "examples/chat-model/src/index.ts",
+    );
+  });
   it("accepts package source when generated output is ignored and tests live outside src", () => {
     const repoRoot = createFixture();
     mkdirSync(join(repoRoot, "packages/demo/test"), { recursive: true });

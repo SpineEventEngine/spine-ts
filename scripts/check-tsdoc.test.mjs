@@ -537,33 +537,41 @@ describe("check-tsdoc", () => {
 
   it("checks nested example source while excluding generated and tests", () => {
     const repoRoot = createFixture();
-    writeSource(repoRoot, "examples/chat/app/src/nested/entry.ts", "export const value = 1;\n");
     writeSource(
       repoRoot,
-      "examples/chat/app/src/generated/value.ts",
+      "examples/message-board/app/src/nested/entry.ts",
+      "export const value = 1;\n",
+    );
+    writeSource(
+      repoRoot,
+      "examples/message-board/app/src/generated/value.ts",
       "export const ignored = 1;\n",
     );
-    writeSource(repoRoot, "examples/chat/app/src/entry.test.ts", "export const ignored = 1;\n");
+    writeSource(
+      repoRoot,
+      "examples/message-board/app/src/entry.test.ts",
+      "export const ignored = 1;\n",
+    );
     track(repoRoot);
 
     const result = runChecker(repoRoot);
 
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("examples/chat/app/src/nested/entry.ts :: value");
+    expect(result.stderr).toContain("examples/message-board/app/src/nested/entry.ts :: value");
     expect(result.stderr).not.toContain("generated/value.ts");
     expect(result.stderr).not.toContain("entry.test.ts");
   });
 
-  it("excludes the generated Chat registry while checking adjacent handwritten source", () => {
+  it("excludes the generated MessageBoard registry while checking adjacent handwritten source", () => {
     const repoRoot = createFixture();
     writeSource(
       repoRoot,
-      "examples/chat/app/src/model-registry.ts",
+      "examples/message-board/app/src/model-registry.ts",
       "/** One-line generated registry. */\nexport const typeRegistry = 1;\n",
     );
     writeSource(
       repoRoot,
-      "examples/chat/app/src/application.ts",
+      "examples/message-board/app/src/application.ts",
       "/** One-line handwritten application. */\nexport const application = 1;\n",
     );
     track(repoRoot);
@@ -572,7 +580,7 @@ describe("check-tsdoc", () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr).not.toContain("model-registry.ts");
-    expect(result.stderr).toContain("examples/chat/app/src/application.ts");
+    expect(result.stderr).toContain("examples/message-board/app/src/application.ts");
   });
 
   it("requires third-person callable summaries and rejects return tags on bare void callables", () => {

@@ -7,7 +7,7 @@ import {
   cleanupStagedTargets,
   atomicGeneratedTargets,
   generatedTargets,
-  stageChatRegistry,
+  stageMessageBoardRegistry,
   stageGeneratedTargets,
 } from "./proto-workflow.mjs";
 
@@ -165,12 +165,13 @@ function compareGeneratedOutput(currentRoot, expectedRoot) {
   return { missing, unexpected, changed };
 }
 
-export function chatRegistryIsFresh(target, staged) {
+export function messageBoardRegistryIsFresh(target, staged) {
   return readFileSync(target, "utf8") === readFileSync(staged, "utf8");
 }
 
-export function checkChatRegistryFresh(chatRegistry) {
-  return chatRegistry === undefined || chatRegistryIsFresh(chatRegistry.target, chatRegistry.staged)
+export function checkMessageBoardRegistryFresh(messageBoardRegistry) {
+  return messageBoardRegistry === undefined ||
+    messageBoardRegistryIsFresh(messageBoardRegistry.target, messageBoardRegistry.staged)
     ? 0
     : 1;
 }
@@ -205,7 +206,7 @@ function main() {
   }
   let targets = generatedTargetsForCheck(expectedGeneratedRoot);
   let staged = { stagedTargets: [], status: 0 };
-  let chatRegistry;
+  let messageBoardRegistry;
 
   try {
     staged =
@@ -223,9 +224,9 @@ function main() {
         stagedTarget.stagedOutputRoot,
       ]),
     );
-    chatRegistry =
+    messageBoardRegistry =
       expectedGeneratedRoot === undefined && !currentOutput
-        ? stageChatRegistry(repoRoot)
+        ? stageMessageBoardRegistry(repoRoot)
         : undefined;
     for (const target of targets) {
       const trackedResult = runCommand(repoRoot, "tracked generated output check", "git", [
@@ -322,9 +323,9 @@ function main() {
       }
     }
 
-    if (checkChatRegistryFresh(chatRegistry) !== 0) {
-      console.error("Generated Chat model registry is stale.");
-      console.error(`Registry: ${relative(repoRoot, chatRegistry.target)}`);
+    if (checkMessageBoardRegistryFresh(messageBoardRegistry) !== 0) {
+      console.error("Generated MessageBoard model registry is stale.");
+      console.error(`Registry: ${relative(repoRoot, messageBoardRegistry.target)}`);
       return 1;
     }
 
@@ -336,9 +337,9 @@ function main() {
     return 0;
   } finally {
     cleanupStagedTargets(staged.stagedTargets);
-    if (chatRegistry !== undefined) {
-      rmSync(chatRegistry.stageRoot, { recursive: true, force: true });
-      rmSync(chatRegistry.fileStageRoot, { recursive: true, force: true });
+    if (messageBoardRegistry !== undefined) {
+      rmSync(messageBoardRegistry.stageRoot, { recursive: true, force: true });
+      rmSync(messageBoardRegistry.fileStageRoot, { recursive: true, force: true });
     }
   }
 }

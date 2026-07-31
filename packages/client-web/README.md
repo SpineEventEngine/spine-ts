@@ -57,12 +57,12 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-event-engine/proto/client";
-import { ChatMessageViewSchema } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/chat_pb.js";
+import { BoardMessageViewSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 
 const client = Client.forGrpcWeb("https://api.example.test");
 const request = client.onBehalfOf("alice");
 const target = create(TargetSchema, {
-  type: TypeUrls.derive(ChatMessageViewSchema),
+  type: TypeUrls.derive(BoardMessageViewSchema),
   criterion: { case: "includeAll", value: true },
 });
 const query = create(QuerySchema, { id: create(QueryIdSchema, { value: "messages" }), target });
@@ -84,6 +84,12 @@ await client.close();
 
 Commands are not retried. Pass an `AbortSignal` when application code needs to
 cancel an admitted call.
+
+Command validation belongs to the server. The browser client serializes the
+submitted Proto value without enforcing its validation options locally, then
+returns the server's `error` outcome. This lets a form display the same
+validation messages as every other client instead of maintaining browser-only
+rules.
 
 ## 🔄 Handle reconnects
 

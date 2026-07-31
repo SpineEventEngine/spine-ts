@@ -168,9 +168,9 @@ describe("package metadata", () => {
 
     expect(typeof rootPackage.version).toBe("string");
     expect(workspacePackages.map((workspacePackage) => workspacePackage.path)).toEqual([
-      "examples/chat/app",
-      "examples/chat/model",
-      "examples/chat/web",
+      "examples/message-board/app",
+      "examples/message-board/model",
+      "examples/message-board/web",
       "examples/orders",
       "examples/projects",
       "examples/todo",

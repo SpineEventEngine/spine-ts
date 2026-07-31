@@ -8,7 +8,7 @@ This reference is for agents and other automated tools that need the exact publi
 
 `ClientOptions` select tenant, zone, bounded subscription settings, and an optional `onReauthenticateBeforeReconnect` callback. `BrowserClientOptions` also accept per-call synchronous metadata and Fetch credential mode. Metadata is application-owned; the client does not log it. `asGuest()` and `onBehalfOf(user)` return immutable request scopes. An empty actor is rejected.
 
-`post(schema, value, options)` returns `ClientOutcome`: `ok`, `error` with an application error message, or `rejection` with a rejection message. Commands are never retried. `send(query, options)` returns the raw validated `QueryResponse`. Caller cancellation and `client.close()` abort admitted work; transport, deadline, and wire-contract failures remain errors.
+`post(schema, value, options)` returns `ClientOutcome`: `ok`, `error` with an application error message, or `rejection` with a rejection message. Command-envelope packing deliberately skips client-side Proto validation so the authoritative server can return its configured validation details. Commands are never retried. `send(query, options)` returns the raw validated `QueryResponse`. Caller cancellation and `client.close()` abort admitted work; transport, deadline, and wire-contract failures remain errors.
 
 ## Browser sessions
 

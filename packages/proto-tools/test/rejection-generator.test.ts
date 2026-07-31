@@ -30,7 +30,7 @@ describe("generated rejection documentation", () => {
     let generated = 0;
     const schema = {
       files: [
-        { proto: { name: "chat.proto" }, messages: [], name: "chat" },
+        { proto: { name: "message_board.proto" }, messages: [], name: "chat" },
         { proto: { name: "spine/delivery/rejections.proto" }, messages: [], name: "delivery" },
         {
           proto: { name: "chat/rejections.proto" },

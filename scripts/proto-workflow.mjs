@@ -49,17 +49,17 @@ export const modelAtomicTargets = [
     handlerProjectPath: "examples/orders/tsconfig.json",
   },
   {
-    displayPath: "examples/chat/model/generated",
-    packagePath: "examples/chat/model",
-    moduleName: "Chat",
-    handlerProjectPath: "examples/chat/app/tsconfig.json",
-    handlerGeneratedPath: "examples/chat/app/generated",
+    displayPath: "examples/message-board/model/generated",
+    packagePath: "examples/message-board/model",
+    moduleName: "MessageBoard",
+    handlerProjectPath: "examples/message-board/app/tsconfig.json",
+    handlerGeneratedPath: "examples/message-board/app/generated",
   },
 ];
 export const atomicGeneratedTargets = [
   ...generatedTargets,
   ...modelAtomicTargets,
-  { displayPath: "examples/chat/app/generated" },
+  { displayPath: "examples/message-board/app/generated" },
 ];
 
 export function main(argv = process.argv.slice(2)) {
@@ -375,7 +375,7 @@ function validatePublicationJournal(root, journal) {
   ]);
   const allowedFiles = new Set([
     ...allowedManifests,
-    join(root, "examples/chat/app/src/model-registry.ts"),
+    join(root, "examples/message-board/app/src/model-registry.ts"),
   ]);
   if (!Array.isArray(files) || new Set(files.map((entry) => entry?.target)).size !== files.length)
     throw new Error("invalid publication journal");
@@ -935,8 +935,8 @@ export function cleanupStagedTargets(stagedTargets) {
   removeStagedTargets(stagedTargets);
 }
 
-export function stageChatRegistry(root, options = {}) {
-  const liveRoot = join(root, "examples/chat/app");
+export function stageMessageBoardRegistry(root, options = {}) {
+  const liveRoot = join(root, "examples/message-board/app");
   if (!existsSync(join(liveRoot, "spine-proto.json"))) return undefined;
   const stageRoot = mkdtempSync(join(liveRoot, ".generated-"));
   let fileStageRoot;
@@ -954,12 +954,12 @@ export function stageChatRegistry(root, options = {}) {
       options.runBootstrapCommand,
     );
     const status = run(
-      "Chat model registry composition",
+      "MessageBoard model registry composition",
       process.execPath,
       [executable, "compose"],
       stageRoot,
     );
-    if (status !== 0) throw new Error("Chat model registry composition failed");
+    if (status !== 0) throw new Error("MessageBoard model registry composition failed");
     const rendered = join(stageRoot, "src/model-registry.ts");
     if (!existsSync(rendered)) throw new Error("Chat staged registry is missing");
     const target = join(liveRoot, "src/model-registry.ts");
@@ -992,7 +992,7 @@ export function generateTargets(options = {}) {
   let status = 1;
   let primaryFailure = false;
   let staged;
-  let chatRegistry;
+  let messageBoardRegistry;
   try {
     recoverPublication(root, { ...defaultPublicationOperations, ...options.publicationOperations });
     const prepareStatus = prepareGeneratedOutput(root);
@@ -1005,7 +1005,10 @@ export function generateTargets(options = {}) {
         primaryFailure = true;
         status = staged.status;
       } else {
-        chatRegistry = stageChatRegistry(root, { ...options, retainBootstrap: true });
+        messageBoardRegistry = stageMessageBoardRegistry(root, {
+          ...options,
+          retainBootstrap: true,
+        });
         const spineTarget = staged.stagedTargets.find(
           (candidate) => candidate.target.displayPath === "packages/proto/generated",
         );
@@ -1037,16 +1040,16 @@ export function generateTargets(options = {}) {
             });
           }
         }
-        if (chatRegistry !== undefined) {
+        if (messageBoardRegistry !== undefined) {
           publicationFiles.push({
-            target: chatRegistry.target,
-            staged: chatRegistry.staged,
+            target: messageBoardRegistry.target,
+            staged: messageBoardRegistry.staged,
             backup: join(
-              dirname(chatRegistry.target),
-              `.${basename(chatRegistry.target)}.backup-${randomUUID()}`,
+              dirname(messageBoardRegistry.target),
+              `.${basename(messageBoardRegistry.target)}.backup-${randomUUID()}`,
             ),
-            hadPrevious: existsSync(chatRegistry.target),
-            contents: readFileSync(chatRegistry.staged, "utf8"),
+            hadPrevious: existsSync(messageBoardRegistry.target),
+            contents: readFileSync(messageBoardRegistry.staged, "utf8"),
           });
         }
         publishGeneratedTargets(staged.stagedTargets, root, {
@@ -1058,10 +1061,10 @@ export function generateTargets(options = {}) {
     }
   } catch (error) {
     primaryFailure = true;
-    if (chatRegistry !== undefined) {
-      rmSync(chatRegistry.stageRoot, { recursive: true, force: true });
-      rmSync(chatRegistry.fileStageRoot, { recursive: true, force: true });
-      chatRegistry = undefined;
+    if (messageBoardRegistry !== undefined) {
+      rmSync(messageBoardRegistry.stageRoot, { recursive: true, force: true });
+      rmSync(messageBoardRegistry.fileStageRoot, { recursive: true, force: true });
+      messageBoardRegistry = undefined;
     }
     console.error(
       `Failed to publish generated output: ${
@@ -1075,9 +1078,9 @@ export function generateTargets(options = {}) {
       primaryFailure = true;
       status = 1;
     }
-    if (chatRegistry !== undefined) {
-      rmSync(chatRegistry.stageRoot, { recursive: true, force: true });
-      rmSync(chatRegistry.fileStageRoot, { recursive: true, force: true });
+    if (messageBoardRegistry !== undefined) {
+      rmSync(messageBoardRegistry.stageRoot, { recursive: true, force: true });
+      rmSync(messageBoardRegistry.fileStageRoot, { recursive: true, force: true });
     }
     try {
       releaseWorkflowLock(lock);

@@ -330,7 +330,7 @@ describe("packed external model consumer", () => {
       writeModelTsconfig(users);
       mkdirSync(join(users, "proto/external/users/v1"), { recursive: true });
       writeFileSync(
-        join(users, "proto/external/users/v1/users.proto"),
+        join(users, "proto/external/users/v1/user.proto"),
         'syntax = "proto3"; package external.users.v1; message UserId { string value = 1; }\n',
       );
       const usersTarballs = join(root, "users-tarballs");
@@ -359,17 +359,17 @@ describe("packed external model consumer", () => {
         modelConfig(
           "@external/chat-model",
           ["@spine-event-engine/proto", "@external/users-model"],
-          "chatProtoModule",
+          "messageBoardProtoModule",
         ),
       );
       writeModelTsconfig(chat);
       mkdirSync(join(chat, "proto/external/chat/v1"), { recursive: true });
       writeFileSync(
-        join(chat, "proto/external/chat/v1/chat.proto"),
+        join(chat, "proto/external/chat/v1/message_board.proto"),
         [
           'syntax = "proto3";',
           "package external.chat.v1;",
-          'import "external/users/v1/users.proto";',
+          'import "external/users/v1/user.proto";',
           "message Chat { external.users.v1.UserId author = 1; string text = 2; }",
           "",
         ].join("\n"),
@@ -400,8 +400,8 @@ describe("packed external model consumer", () => {
       expect(companionSource).not.toContain("NestedDetail");
       expect(companionSource.match(/export const TaskRejected/g)).toHaveLength(1);
       expect(companionSource.match(/export const TaskBlocked/g)).toHaveLength(1);
-      expect(existsSync(join(chat, "generated/external/users/v1/users_pb.ts"))).toBe(false);
-      expect(existsSync(join(chat, "dist/generated/external/users/v1/users_pb.js"))).toBe(false);
+      expect(existsSync(join(chat, "generated/external/users/v1/user_pb.ts"))).toBe(false);
+      expect(existsSync(join(chat, "dist/generated/external/users/v1/user_pb.js"))).toBe(false);
 
       const app = join(root, "chat-app");
       mkdirSync(app);
@@ -449,8 +449,8 @@ describe("packed external model consumer", () => {
           'import { create } from "@bufbuild/protobuf";',
           'import { AnyMessages } from "@spine-event-engine/core";',
           'import { CommandIdSchema } from "@spine-event-engine/proto";',
-          'import { UserIdSchema } from "@external/users-model/generated/external/users/v1/users_pb.js";',
-          'import { ChatSchema } from "@external/chat-model/generated/external/chat/v1/chat_pb.js";',
+          'import { UserIdSchema } from "@external/users-model/generated/external/users/v1/user_pb.js";',
+          'import { ChatSchema } from "@external/chat-model/generated/external/chat/v1/message_board_pb.js";',
           'import { TaskRejected } from "@external/chat-model/generated/external/chat/v1/task_rejections.js";',
           'import { typeRegistry } from "./model-registry.js";',
           "",
