@@ -1,15 +1,19 @@
 # Project-management load example
 
+Prerequisites: Node 24 LTS or newer and pnpm. Install once with
+`pnpm install --frozen-lockfile` from the repository root.
+
 This runnable local specimen exercises generated Spine TS handlers through the
 real gRPC-compatible `CreateProject`, query, and `ProjectSummary` subscription
 services. Its fixed registration topology is three aggregates (`Project`,
 `Task`, and `Person`), twenty projections, and ten process managers, for
 thirty-three repositories.
 
-Build the generated types, handler registry, and runnable package first:
+After `pnpm install --frozen-lockfile` from the repository root, run the
+complete one-shot local demonstration:
 
 ```bash
-pnpm typecheck:build
+SPINE_PROJECT_LOAD_USERS=10 pnpm --dir examples/projects run load
 ```
 
 Run the focused nine-test suite, including Proto-package, topology, and load
@@ -22,8 +26,9 @@ pnpm vitest run \
   examples/projects/test/load-runner.test.ts
 ```
 
-The load-runner suite includes a real 10-user loopback smoke scenario. Run the
-same local scenario at one of the supported independent-user levels:
+The command owns workspace generation/build preparation, prints one JSON result,
+closes its listener and sessions, then exits. The load-runner suite includes a
+real 10-user loopback smoke scenario. Choose another supported level with:
 
 ```bash
 SPINE_PROJECT_LOAD_USERS=10 pnpm --dir examples/projects run load

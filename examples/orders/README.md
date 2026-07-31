@@ -1,5 +1,8 @@
 # Datastore orders load example
 
+Prerequisites: Node 24 LTS or newer and pnpm. Install once with
+`pnpm install --frozen-lockfile` from the repository root.
+
 This generated-Protobuf example composes its domain with a caller-provided
 `StorageFactory`: `createDatastoreOrdersContext` and
 `startDatastoreOrdersServer` are provider-neutral. For Datastore-specific
@@ -9,10 +12,11 @@ entrypoint; domain handlers do not depend on provider types.
 The fixed topology has two aggregates (`Order` and `Sku`), ten projections, and
 two process managers: 14 repositories in total.
 
-Build the workspace first:
+After `pnpm install --frozen-lockfile` from the repository root, run the
+complete in-memory local demonstration:
 
 ```bash
-pnpm typecheck:build
+SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run load
 ```
 
 Run the complete three-file, 11-test example suite:
@@ -21,7 +25,9 @@ Run the complete three-file, 11-test example suite:
 pnpm --config.verify-deps-before-run=false exec vitest run examples/orders/test/proto-module.test.ts examples/orders/test/topology.test.ts examples/orders/test/load-runner.test.ts
 ```
 
-The load script accepts only 10, 100, or 1,000 independent users:
+The command owns workspace generation/build preparation, prints one JSON result,
+closes its listener and sessions, then exits. The load script accepts only 10,
+100, or 1,000 independent users:
 
 ```bash
 SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run load

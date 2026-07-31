@@ -16,6 +16,8 @@ const pickups = new WeakMap<DeliveryWorkRegistry, OnConditionalPickUp>();
  * Provides framework-private conditional pickup for registries that support it.
  */
 export const conditionalPickUp: Readonly<{
+  // prettier-ignore
+
   /**
    * Records a registry's conditional pickup implementation.
    *

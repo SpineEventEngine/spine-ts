@@ -1,15 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  generateRejectionCompanions,
-  rejectionTSDoc,
-} from "../src/generation/rejection-generator.js";
+import { RejectionGenerator } from "../src/generation/rejection-generator.js";
 import type { Schema } from "@bufbuild/protoplugin";
 
 describe("generated rejection documentation", () => {
   it("renders leading Proto prose as a deterministic safe S1-compatible TSDoc block", () => {
     expect(
-      rejectionTSDoc(
+      RejectionGenerator.tsDoc(
         "Rejects an attempt.\n@param value - text\n@internal\nNever closes */ a comment.",
       ),
     ).toBe(
@@ -18,11 +15,13 @@ describe("generated rejection documentation", () => {
   });
 
   it("uses a deterministic summary when the Proto message has no leading comment", () => {
-    expect(rejectionTSDoc(undefined)).toBe("/**\n * Creates this rejection throwable.\n */\n");
+    expect(RejectionGenerator.tsDoc(undefined)).toBe(
+      "/**\n * Creates this rejection throwable.\n */\n",
+    );
   });
 
   it("uses the deterministic summary when a leading Proto comment has no prose", () => {
-    expect(rejectionTSDoc("\n// \n\r\n")).toBe(
+    expect(RejectionGenerator.tsDoc("\n// \n\r\n")).toBe(
       "/**\n * Creates this rejection throwable.\n */\n",
     );
   });
@@ -45,7 +44,7 @@ describe("generated rejection documentation", () => {
       },
     } as unknown as Schema;
 
-    generateRejectionCompanions(schema);
+    RejectionGenerator.generateCompanions(schema);
 
     expect(generated).toBe(0);
   });
@@ -78,7 +77,7 @@ describe("generated rejection documentation", () => {
       generateFile: () => output,
     } as unknown as Schema;
 
-    generateRejectionCompanions(schema);
+    RejectionGenerator.generateCompanions(schema);
 
     expect(printed).toEqual([
       expect.stringContaining("export const TaskRejected: { readonly create"),

@@ -7,15 +7,7 @@ Connect/Node `CommandService`, `QueryService`, and `SubscriptionService` routes.
 ## Run it
 
 Prerequisites: Node 24 or newer and pnpm. From the repository root, install
-workspace dependencies once with `pnpm install`, then generate and build:
-
-```bash
-pnpm typecheck:build
-```
-
-The build regenerates the ignored Protobuf and handler-registry artifacts under
-`examples/todo/generated/` and compiles the runnable package under
-`examples/todo/dist/`.
+workspace dependencies once with `pnpm install --frozen-lockfile`.
 
 In terminal one, start the local server:
 
@@ -23,7 +15,8 @@ In terminal one, start the local server:
 pnpm --filter @spine-event-engine/example-todo start
 ```
 
-It listens on `http://127.0.0.1:8080`. In terminal two, post one generated
+It regenerates and compiles the workspace, then prints its readiness line only
+after binding `http://127.0.0.1:8080`. In terminal two, post one generated
 `CreateTask` command and wait for its projected `TaskList` row:
 
 ```bash
@@ -31,7 +24,7 @@ pnpm --filter @spine-event-engine/example-todo smoke
 ```
 
 Set `SPINE_TODO_BASE_URL` when the server uses another local address. Stop the
-server with `Ctrl-C` when finished.
+server with `Ctrl-C`; `SIGINT` and `SIGTERM` each close the listener once.
 
 ## Focused tests
 

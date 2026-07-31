@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "load": "node dist/scripts/load.mjs",
+    "load": "pnpm -C ../.. typecheck:build && node dist/scripts/load.mjs",
     "proto:generate": "spine-proto generate",
     "clean:generated-dist": "node scripts/clean-generated-dist.mjs",
     "prepack": "pnpm clean:generated-dist && tsc -b"

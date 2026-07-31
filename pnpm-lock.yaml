@@ -71,6 +71,12 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@connectrpc/connect':
+        specifier: 2.1.2
+        version: 2.1.2(@bufbuild/protobuf@2.12.1)
+      '@connectrpc/connect-node':
+        specifier: 2.1.2
+        version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/auth':
         specifier: workspace:*
         version: link:../../../packages/auth
@@ -93,9 +99,6 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/storage
     devDependencies:
-      '@connectrpc/connect':
-        specifier: 2.1.2
-        version: 2.1.2(@bufbuild/protobuf@2.12.1)
       '@spine-event-engine/proto-tools':
         specifier: 2.0.0-snapshot.1
         version: link:../../../packages/proto-tools

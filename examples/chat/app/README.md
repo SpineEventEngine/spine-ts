@@ -1,5 +1,24 @@
 # Runnable Chat
 
+Prerequisites: Node 24 LTS or newer and pnpm. This package exports the Chat
+application library; its `start` command is a private local-example CLI.
+
+For the local two-process demonstration, start this complete server topology
+from the repository root after `pnpm install --frozen-lockfile`:
+
+```sh
+pnpm --dir examples/chat/app start
+```
+
+The command owns workspace generation/build preparation, binds the browser
+gateway only on `127.0.0.1:8090`, and prints readiness only after bind. It
+composes a native in-memory Chat backend on an internal ephemeral loopback port
+with the application authorization gateway. Only Vite's exact default origin
+`http://127.0.0.1:5173` receives Connect CORS headers. `Ctrl-C` or `SIGTERM`
+closes gateway intake, subscription bindings, and backend resources. The local
+bearer fixture is non-secret, loopback-only, and never logged; it makes no
+production authentication claim.
+
 For the browser, authentication-gateway, and Envoy extension path used by this
 example, see the [browser client and gateway guide](../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
 
