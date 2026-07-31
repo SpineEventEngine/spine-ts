@@ -1,6 +1,6 @@
 # T-0085: Faster autonomous development protocol
 
-Status: Verifying
+Status: Ready to integrate
 
 ## Classification And Scope
 
@@ -57,6 +57,16 @@ Status: Verifying
   beginner-facing document changed, so those audience checks are N/A.
 - Coverage inspection is N/A before implementation because no production code
   changes; the release profile must still prove the unchanged global threshold.
+
+## Final Acceptance Evidence
+
+- `pnpm verify:release` passed after review convergence in one invocation.
+- Tests: 167 files and 3,235 tests passed; 3 files and 25 tests retained their
+  established skips.
+- Coverage: 90.04% branches, 93.73% statements, 93.85% functions, and 94.54%
+  lines.
+- All build, tooling typecheck, lint, cleanup, TSDoc, formatting, TypeDoc/API,
+  Buf lint, generated-output, and release-readiness gates passed.
 
 ## Implementation Record
 

@@ -55,6 +55,8 @@
   shared deterministic gates and 75 focused tests.
 - Documentation contract, performance/reliability, and maintainability
   re-reviews are clean. Review is converged.
+- Post-convergence `pnpm verify:release` passed: 3,235 tests and 90.04% branch
+  coverage, with all release gates clean.
 
 ## Implementation supplied for review
 
