@@ -1,152 +1,91 @@
-# Chat example family
+# Chat — A complete Spine TS web application
 
-Prerequisites: Node 24 LTS or newer and pnpm. Install once with
-`pnpm install --frozen-lockfile` from the repository root.
+Chat is the easiest place to see Spine TS from browser to database boundary.
+You can post a message in React, send a real Spine command, and read the
+resulting Projection through the browser gateway.
 
-This is the repository's end-to-end Chat example. Start here when you want a
-small Spine application with commands, Projection reads, browser delivery, and
-an authentication gateway. It is one three-package workspace family, not three
-published npm packages:
+## 💡 What will you learn?
 
-- `model/` owns `UserId`, Chat Proto messages, commands, events, and rejections.
-- `app/` owns the in-memory server, Aggregate, Projection, and application
-  registry/handler composition.
-- `web/` provides the React application built on `client-react` and
-  `client-web`.
+- ✅ How a Proto model is shared by a Node server and browser UI.
+- ✅ How an Aggregate accepts a command and a Projection builds the chat view.
+- ✅ How the framework serves Connect and gRPC-Web without application-owned
+  listener, router, CORS, or signal-handling code.
+- ✅ How authentication policy stays outside the bounded context.
+- ✅ How a React client re-reads current state after a possible subscription gap.
 
-The app directly depends on the single `model` package, which provides every
-Chat type including `UserId`. `app/src/model-registry.ts` is tracked composed
-source. Generated Proto, handler output, and `dist` are ignored build products:
-generate them; never edit them. Nothing in this family is published to npm.
+## 📦 Application map
 
-## Run it locally
+```text
+chat/
+├── model/    # Chat messages, commands, events, and rejections
+├── app/      # Bounded context, domain handlers, policy, and server
+├── web/      # React UI and browser client
+└── README.md # You are here
+```
 
-Install once from the repository root:
+These are private workspace packages. Generated model and handler files are
+build outputs; the startup commands create them when needed.
 
-```sh
+## 🚀 Run Chat locally
+
+Install dependencies once from the repository root:
+
+```bash
 pnpm install --frozen-lockfile
 ```
 
-In one terminal, start the complete loopback-only server topology:
+Start the server in one terminal:
 
-```sh
+```bash
 pnpm --dir examples/chat/app start
 ```
 
-It owns generation/build work and prints `Chat local server ready at
-http://127.0.0.1:8090` only after the browser gateway binds. Stop it with
-`Ctrl-C`; it closes gateway subscriptions and the native backend. In a second
-terminal, start the visible React UI:
+Start the React UI in another terminal:
 
-```sh
+```bash
 pnpm --dir examples/chat/web start
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI uses a local-only,
-memory-only development session for `ada` in room `general`; its bearer is non-secret,
-unlogged, loopback-only, and is not a production authentication flow.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a message, and post
+it to room `general`. Stop either process with `Ctrl-C`.
 
-## Retained interoperability harness
+## 🧭 Follow one message
 
-All commands below run from the repository root. Install the locked dependency
-graph, then generate the ignored outputs:
+1. The browser creates `PostMessage` and sends it through the authenticated
+   browser endpoint.
+2. `ChatMessageAggregate` stores one message and emits `MessagePosted`.
+3. `ChatMessageViewProjection` creates the room’s visible message row.
+4. The browser queries current rows and treats subscription updates as hints to
+   refresh that state.
 
-```sh
-pnpm install --frozen-lockfile
-pnpm proto:generate
-```
+Chat messages are entities, not domain-event subscriptions. Reusing a
+`MessageId` leaves the first message unchanged and records the generated
+`MessageAlreadyPosted` rejection.
 
-Build exactly the three Chat projects after generation:
+## 🧪 Run the tests
 
-```sh
-pnpm exec tsc -b \
-  examples/chat/model/tsconfig.json \
-  examples/chat/app/tsconfig.json \
-  examples/chat/web/tsconfig.json
-```
-
-Run the focused server and jsdom browser tests:
-
-```sh
+```bash
 pnpm --config.verify-deps-before-run=false exec vitest run \
   examples/chat/app/test \
   examples/chat/web/test/chat-web.test.tsx
-```
 
-Run the server-backed browser acceptance test in Chromium, Firefox, and WebKit:
-
-```sh
 pnpm --config.verify-deps-before-run=false --dir examples/chat/web test:browser
 ```
 
-On a fresh machine, install those browser binaries first:
+The browser suite requires Playwright browsers. Install them once with
+`pnpm exec playwright install chromium firefox webkit`.
 
-```sh
-pnpm exec playwright install chromium firefox webkit
-```
+## ⚠️ Local authentication and delivery
 
-The full browser interoperability topology starts a Chat backend, a native
-authentication gateway, and Envoy with local TLS. It needs Docker/Envoy and
-the Playwright browsers:
+The demo uses in-memory storage and a fixed, non-secret local identity for
+`ada`. It is not a production sign-in flow. Subscription notices can be
+duplicated, reordered, or missed; after reconnecting, the UI re-queries the
+authoritative Projection state.
 
-```sh
-pnpm exec node examples/chat/web/test/interop/browser/run.mjs
-```
+## 🔗 Learn more
 
-The jsdom test exercises the deterministic in-memory request only. The
-Playwright test starts the documented local server and web commands, then posts
-and reads a real Projection through the loopback gateway. The full
-interoperability command is the only one that exercises the HTTPS
-browser-to-Envoy-to-gateway-to-backend route.
-
-## Application and session boundary
-
-The exported `app/` API is a library: a caller creates and closes its runtime.
-Its private package also provides the local example CLI used by the command
-above:
-
-```ts
-const application = new ChatApplication();
-const server = await application.start({ host: "127.0.0.1", port: 0 });
-try {
-  // Use server.baseUrl.
-} finally {
-  await server.close();
-}
-```
-
-The app defaults to loopback and an ephemeral port, uses in-memory storage, and
-allows at most 1,000 active subscriptions. A host application establishes the
-browser session and creates a fresh `ClientRequest` after sign-in. The browser
-session object is informational, never a credential; cookie/bearer transport
-setup belongs to `client-web`.
-
-The gateway is the trust boundary. It authenticates the request, supplies the
-trusted actor, optional tenant, and clock, authorizes the requested room, and
-owns subscription activation/cancellation. The browser never reaches the Chat
-backend directly. The local demo uses binary Connect; gRPC-Web belongs to the
-Envoy interoperability topology. Clients do not probe or fall back between
-protocols.
-
-## What the browser does
-
-The browser sends `PostMessage` commands, then reads room-filtered
-`ChatMessageView` Projection entities with an authoritative Query and
-subscribes to the same Projection topic. It does not consume an event stream
-or keep an unbounded aggregate message list.
-
-Each browser-generated `MessageId` identifies one message Aggregate. A repeat,
-including a concurrent repeat, keeps the first Aggregate and Projection state
-and produces no second Projection update. The admitted transport call still
-acknowledges `{ kind: "ok" }`; the domain outcome is exactly one stored
-`MessageAlreadyPosted` rejection event beside the first normal event.
-
-Subscription deliveries are best-effort notices, not complete history. They
-may be duplicated, omitted, or reordered. On reconnect or a possible gap, the
-client re-queries the authoritative Projection state; it makes no completeness
-promise and cannot recover intermediate history.
-
-For app-specific details, see [app/README.md](app/README.md). For browser
-integration, session setup, and Envoy extension requirements, see
-[web/README.md](web/README.md) and the
-[browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md).
+- [Chat server](app/README.md)
+- [Chat model](model/README.md)
+- [Chat web UI](web/README.md)
+- [browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [Reference for coding agents](REFERENCE.md)

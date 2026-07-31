@@ -1,4 +1,4 @@
-# @spine-event-engine/storage-rdbms
+# MySQL storage for Spine TS
 
 `@spine-event-engine/storage-rdbms` stores Spine TS records in MySQL. It is a
 durable implementation of `@spine-event-engine/storage` and owns the mysql2
@@ -8,16 +8,25 @@ package.
 For database requirements, query limits, lifecycle, and error details, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
-## Use from this source workspace
+## 💡 Why use it?
+
+- ✅ Stores Spine records durably in a MySQL database.
+- ✅ Owns a bounded `mysql2` connection pool and transactional writes.
+- ✅ Supports declared-column filters, sorting, offsets, limits, and
+  continuations.
+- ✅ Keeps adapter tables private behind the common `RecordStorage` API.
+
+## 🚀 Build it in this workspace
 
 ```sh
-pnpm --filter @spine-event-engine/storage-rdbms build
+pnpm typecheck:build
 ```
 
-This private snapshot package is not published to an npm registry. Use it from
-this workspace while developing the framework.
+Run this workspace-wide TypeScript build from the repository root. This private
+snapshot package is not published to an npm registry; use it from this
+workspace while developing the framework.
 
-## Create and close a MySQL factory
+## 🔌 Create and close a MySQL factory
 
 Provide a MySQL URL that includes a database name. The factory connects,
 creates or verifies its tables, and then is ready for the normal storage API.
@@ -42,7 +51,7 @@ Use a dedicated database account. The account must be able to create and
 inspect the adapter tables as well as perform normal transactional reads and
 writes. Do not commit connection URLs or credentials.
 
-## What the adapter supports
+## ✨ Supported records and queries
 
 The adapter performs record CRUD, transactional `writeAll`, payload-based
 compare-and-set, named-column queries, sort order, offsets, limits, and keyset
@@ -54,7 +63,7 @@ The factory creates private `spine_ts_records` and `spine_ts_columns` tables.
 They are adapter implementation details; application code should use
 `RecordStorage` rather than issuing SQL against them.
 
-## Verify a disposable database
+## 🧪 Verify with a disposable database
 
 Run the opt-in integration suite against a disposable MySQL database:
 
@@ -66,3 +75,16 @@ SPINE_TS_MYSQL_URL='mysql://user:password@127.0.0.1:3306/spine_test' \
 The test creates adapter-owned tables and removes them afterward. It is not a
 substitute for an application's backup, monitoring, permissions, or database
 operations plan.
+
+## ⚠️ Before production
+
+Use a dedicated database and account, protect the connection URL, configure
+TLS, and plan backups, monitoring, and migrations. Indexed `bigint` values must
+fit the exact signed 64-bit MySQL range. PostgreSQL support is planned for the
+same package but is not implemented.
+
+## 🔗 Learn more
+
+- [Storage API](../storage/README.md)
+- [End-user storage guide](../../docs/USER_GUIDE.md#storage)
+- [Reference for coding agents](REFERENCE.md)

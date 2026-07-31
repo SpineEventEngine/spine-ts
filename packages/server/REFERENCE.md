@@ -62,6 +62,45 @@ records use the context storage factory. The package does not guarantee
 cluster-complete observations, subscription replay, event-gap repair, or
 exactly-once effects.
 
+### Standalone and browser hosting
+
+`Server.start()` installs no process signal handlers. `Server.run()` registers
+the successfully started server with one process coordinator. The coordinator
+uses one `SIGINT`/`SIGTERM` listener pair, closes servers in reverse successful
+start order, shares concurrent close work, leaves failed closes registered for
+retry, and sets `process.exitCode` to `1` after signal-driven close failure.
+
+`ServerOptions.browser` changes the public listener, not the bounded-context
+services. The native HTTP/2 backend binds to an ephemeral loopback port and is
+never returned. After it is ready, the server creates `UnaryGateway`,
+`SubscriptionGateway`, and native gateway services, then binds one HTTP/1.1
+Connect/gRPC-Web listener. A public bind failure closes subscription resources
+and the native backend; multiple rollback failures are aggregated.
+
+Browser unary gateway admission has a fixed 1 MiB (1,048,576-byte) request
+limit. A larger unary gateway request is rejected with `ResourceExhausted`.
+This is an additional boundary: `readMaxBytes` still limits the Connect or
+gRPC-Web transport message accepted by the public listener, so the effective
+inbound limit is the stricter applicable limit. `writeMaxBytes` limits public
+transport responses independently.
+
+Browser origins must be unique canonical HTTP(S) origins with no path, query,
+fragment, or trailing slash. Requests without an allowed exact `Origin` receive
+403 before RPC handling. Allowed responses include credentialed exact-origin
+CORS, `Vary: Origin`, protocol request headers, and exposed gRPC status headers.
+
+With `cookies`, `OpaqueSessionCookies` performs strict bearer-first or
+CSRF-protected cookie extraction. A strict rejection becomes an unusable
+credential and never falls back to permissive header parsing. Without cookies,
+the host accepts exactly one non-whitespace bearer token. Credentials and raw
+transport metadata do not reach the private backend. The application-supplied
+context resolver replaces caller actor and tenant facts before forwarding.
+
+Browser close stops new listener intake, closes subscription admission and
+bindings so active streams settle, awaits listener closure, then closes the
+native backend. Concurrent calls share an attempt; a failed unfinished phase
+can be retried without repeating completed native cleanup.
+
 ## Delivery and environment
 
 `Inbox`, `InboxStorage`, `ShardIndex`, and `ShardedWorkRegistry` provide the

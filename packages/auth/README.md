@@ -1,4 +1,4 @@
-# @spine-event-engine/auth
+# Authentication for Spine applications
 
 Use this package to build an application gateway that authenticates a request,
 authorizes it, resolves a trusted actor context, and forwards approved Spine
@@ -7,10 +7,19 @@ traffic. Spine bounded contexts do not perform these routines themselves.
 For detailed gateway, session, OIDC, subscription, and native-transport
 contracts, read the [reference for agents](REFERENCE.md).
 
+## 💡 Why use it?
+
+- ✅ Keeps credentials outside bounded contexts.
+- ✅ Turns a verified session into a trusted actor and optional tenant.
+- ✅ Supports bearer sessions, CSRF-protected opaque cookies, and application
+  adapters for Google, GitHub, or another OpenID Connect provider.
+- ✅ Applies the same authorization boundary to commands, queries, and
+  subscriptions.
+
 The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains how an application composes these extension points.
 
-## Build a unary gateway
+## 🚀 Build a unary gateway
 
 Supply application-owned session, authorization, context, and forwarding
 collaborators. The gateway replaces a matching caller context with a freshly
@@ -44,7 +53,7 @@ The package gives applications extension points, not a deployment mandate or an
 identity-provider configuration. Applications choose their listener, routes,
 session persistence, identity provider, authorization rules, and backend.
 
-## Use a bounded local session store in development
+## 🧪 Use a local session store in development
 
 `OpaqueSessions` is a process-local store. It is useful for a local gateway or
 a single process, not for a shared production deployment.
@@ -64,7 +73,7 @@ For browser clients, use an application sign-in route and exchange its result
 for an application cookie or bearer session. Do not put provider access tokens
 in client-side storage.
 
-## Configure an external sign-in provider
+## 🔐 Configure an external sign-in provider
 
 An application can create a Google or GitHub provider adapter, then give its
 verified identity result to an `OidcFlow` and application session issuer. The
@@ -84,3 +93,15 @@ const github = createGitHubProvider({
 if (google === undefined) throw new Error("Google provider discovery failed");
 void github;
 ```
+
+## ⚠️ What the package does not do
+
+It does not create sign-in pages, application users, permissions, HTTP routes,
+TLS, or a production session database. Applications select those pieces and
+deploy the gateway at their own trust boundary.
+
+## 🔗 Learn more
+
+- [Browser authentication and extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [Server package](../server/README.md)
+- [Reference for coding agents](REFERENCE.md)

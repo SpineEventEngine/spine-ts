@@ -26,6 +26,10 @@ import {
 } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/events_pb.js";
 import { MessageAlreadyPosted } from "@spine-event-engine/example-chat-model/generated/spine/examples/chat/rejections.js";
 
+import { ChatAuthorizationPolicy, ChatContextResolver } from "./chat-policy.js";
+import { LocalChatSession } from "./local-session.js";
+import { typeRegistry } from "./model-registry.js";
+
 export { typeRegistry } from "./model-registry.js";
 export { chatProtoModule } from "@spine-event-engine/example-chat-model";
 export { ChatAuthorizationPolicy, ChatContextResolver } from "./chat-policy.js";
@@ -115,6 +119,11 @@ export interface ChatServerOptions {
    * Selects the TCP port that receives Chat requests.
    */
   readonly port?: number;
+
+  /**
+   * Selects the sole browser origin admitted by the local gateway.
+   */
+  readonly webOrigin?: string;
 }
 
 /**
@@ -147,12 +156,34 @@ export class ChatApplication {
    * @returns The running server, which callers must close when finished.
    */
   async start(options: ChatServerOptions = {}): Promise<RunningServer> {
+    return (await this.#server(options)).start();
+  }
+
+  /**
+   * Starts the local Chat server with framework-owned process shutdown.
+   *
+   * @param options Optional loopback host and browser-origin overrides.
+   * @returns The running server after the browser listener is ready.
+   */
+  async run(options: ChatServerOptions = {}): Promise<RunningServer> {
+    return (await this.#server(options)).run();
+  }
+
+  async #server(options: ChatServerOptions): Promise<Server> {
+    const policy = new ChatAuthorizationPolicy();
     return Server.atPort(options.port ?? 0, {
       host: options.host ?? "127.0.0.1",
       services: { subscriptionLimit: 1_000 },
-    })
-      .add(await this.createContext())
-      .start();
+      browser: {
+        origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
+        registry: typeRegistry,
+        sessions: LocalChatSession.resolver(),
+        authorize: policy.authorize.bind(policy),
+        contexts: new ChatContextResolver(),
+        clock: LocalChatSession.clock,
+        fingerprint: (principal) => principal.id,
+      },
+    }).add(await this.createContext());
   }
 }
 

@@ -1,7 +1,15 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
+import type {
+  AuthorizationPolicy,
+  Clock,
+  ContextResolver,
+  OpaqueSessionCookies,
+  SessionResolver,
+} from "@spine-event-engine/auth";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
+import type { TypeRegistryLookup } from "@spine-event-engine/core";
 import type { StorageFactory } from "@spine-event-engine/storage";
 
 import {
@@ -11,7 +19,9 @@ import {
 } from "../context/bounded-context.js";
 import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
 import { ContextTransportGroup } from "./context-transport-group.js";
+import { BrowserServer } from "./browser-server.js";
 import type { EnvironmentAttachmentHandle } from "./environment-attachment.js";
+import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
 
@@ -38,6 +48,7 @@ export class Server {
   readonly #contexts: ServerContext[] = [];
   readonly #resources: { close(): unknown }[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
+  readonly #browser: BrowserServerOptions | undefined;
   readonly #environment: ServerEnvironment;
   #starting: Promise<RunningServer> | undefined;
   #failedStartCleanup: FailedStartCleanup | undefined;
@@ -62,6 +73,7 @@ export class Server {
     this.#contexts.push(...(options.contexts ?? []));
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
+    this.#browser = options.browser;
     this.#environment = ServerEnvironment.instance();
   }
 
@@ -141,6 +153,18 @@ export class Server {
     return starting;
   }
 
+  /**
+   * Starts this server with process-owned `SIGINT` and `SIGTERM` shutdown.
+   *
+   * This is the normal application entry point. Embedded applications should
+   * use {@link start} and keep ownership of process signals themselves.
+   *
+   * @returns The running server after its listener accepts requests.
+   */
+  async run(): Promise<RunningServer> {
+    return ProcessServerCoordinator.add(await this.start());
+  }
+
   async #startOnce(): Promise<RunningServer> {
     const contexts = await ServerValues.buildContexts(
       this.#contexts,
@@ -201,7 +225,11 @@ export class Server {
       this.#readMaxBytes,
       this.#writeMaxBytes,
     );
-    const address = await ServerValues.listen(httpServer, this.#host, this.#port).catch(
+    const listener =
+      this.#browser === undefined
+        ? { host: this.#host, port: this.#port }
+        : { host: defaultHost, port: defaultPort };
+    const address = await ServerValues.listen(httpServer, listener.host, listener.port).catch(
       async (error: unknown) => {
         const cleanup: FailedStartCleanup = {
           closeGroup: new RetryableCloseGroup(
@@ -219,7 +247,7 @@ export class Server {
     );
     const host = typeof address.address === "string" ? address.address : this.#host;
 
-    return new RunningHttp2Server({
+    const running = new RunningHttp2Server({
       server: httpServer,
       sessions,
       environment: this.#environment,
@@ -229,6 +257,27 @@ export class Server {
       port: address.port,
       closeables,
     });
+    const browser = this.#browser;
+    if (browser === undefined) return running;
+    try {
+      return await BrowserServer.open(running, {
+        ...browser,
+        host: browser.host ?? this.#host,
+        port: browser.port ?? this.#port,
+        readMaxBytes: this.#readMaxBytes,
+        writeMaxBytes: this.#writeMaxBytes,
+      });
+    } catch (error) {
+      try {
+        await running.close();
+      } catch (closeError) {
+        throw new AggregateError(
+          [error, closeError],
+          "Server browser startup failed and rollback failed.",
+        );
+      }
+      throw error;
+    }
   }
 
   async #retryFailedStartCleanup(cleanup: FailedStartCleanup): Promise<never> {
@@ -453,6 +502,73 @@ export interface ServerOptions {
    * Extra framework-owned closeables to close after contexts become safe to close.
    */
   readonly resources?: readonly { close(): unknown }[];
+
+  /**
+   * Authenticated browser listener configuration. When present, the native
+   * HTTP/2 listener remains private on loopback and this public listener
+   * becomes the returned server URL.
+   */
+  readonly browser?: BrowserServerOptions;
+}
+
+/**
+ * Configures the authenticated browser-facing Connect and gRPC-Web listener.
+ */
+export interface BrowserServerOptions {
+  // prettier-ignore
+
+  /**
+   * Public browser listener host. Defaults to the server host.
+   */
+  readonly host?: string;
+
+  /**
+   * Public browser listener port. Defaults to the server port.
+   */
+  readonly port?: number;
+
+  /**
+   * Exact browser origins permitted to make RPC calls.
+   */
+  readonly origins: readonly string[];
+
+  /**
+   * Decodes application request content for authorization and actor resolution.
+   */
+  readonly registry?: TypeRegistryLookup;
+
+  /**
+   * Resolves bearer or opaque-cookie sessions selected by the application.
+   */
+  readonly sessions: SessionResolver;
+
+  /**
+   * Applies application authorization after authentication.
+   */
+  readonly authorize: AuthorizationPolicy["authorize"];
+
+  /**
+   * Replaces browser-supplied actor and tenant context with trusted values.
+   */
+  readonly contexts: ContextResolver;
+
+  /**
+   * Supplies trusted timestamps for gateway decisions.
+   */
+  readonly clock: Clock;
+
+  /**
+   * Creates stable subscription ownership identities for authenticated principals.
+   *
+   * @param principal Supplies the authenticated principal.
+   * @returns The stable ownership identity.
+   */
+  readonly fingerprint: (principal: { readonly id: string }) => string;
+
+  /**
+   * Enables strict opaque-cookie extraction alongside bearer credentials.
+   */
+  readonly cookies?: OpaqueSessionCookies;
 }
 
 /**

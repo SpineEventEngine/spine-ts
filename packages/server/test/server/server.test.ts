@@ -1,7 +1,17 @@
 import * as http2 from "node:http2";
+import * as http from "node:http";
 
 import { create, type Message } from "@bufbuild/protobuf";
-import { CommandSchema } from "@spine-event-engine/proto";
+import { createClient } from "@connectrpc/connect";
+import { createConnectTransport } from "@connectrpc/connect-node";
+import { createGrpcWebTransport } from "@connectrpc/connect-web";
+import { OpaqueSessionCookies, SubscriptionGateway } from "@spine-event-engine/auth";
+import type { RequestCredential } from "@spine-event-engine/auth";
+import { TypeRegistry } from "@spine-event-engine/core";
+import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
+import { CommandSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
+import { CommandService } from "@spine-event-engine/proto/client";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   InMemoryStorageFactory,
   type RecordSpec,
@@ -19,13 +29,14 @@ import type {
   TransportSubscriptionHandle,
 } from "@spine-event-engine/transport";
 import { TransportSubscriptions, TransportTopics } from "@spine-event-engine/transport";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BoundedContext,
   EnvironmentType,
   Server,
   ServerEnvironment,
+  type BrowserServerOptions,
   type ServerEnvironmentCloseable,
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
@@ -49,6 +60,638 @@ describe("Server", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("runs a server under process-owned signal shutdown", async () => {
+    const server = await Server.atPort(0).run();
+    const session = http2.connect(server.baseUrl);
+    session.on("error", () => undefined);
+    await once(session, "remoteSettings");
+    const closed = once(session, "close");
+
+    process.emit("SIGTERM");
+
+    await expect(closed).resolves.toBeUndefined();
+    await server.close();
+  });
+
+  it("closes process-owned servers in reverse successful-start order", async () => {
+    const closed: string[] = [];
+    const first = await Server.atPort(0)
+      .addResource({ close: () => closed.push("first") })
+      .run();
+    const second = await Server.atPort(0)
+      .addResource({ close: () => closed.push("second") })
+      .run();
+
+    process.emit("SIGINT");
+
+    await Promise.all([first.close(), second.close()]);
+    expect(closed).toEqual(["second", "first"]);
+  });
+
+  it("shares close work when an explicit close races a process signal", async () => {
+    let closes = 0;
+    const server = await Server.atPort(0)
+      .addResource({
+        close: () => {
+          closes += 1;
+        },
+      })
+      .run();
+    const closing = server.close();
+    process.emit("SIGTERM");
+    await closing;
+    expect(closes).toBe(1);
+  });
+
+  it("keeps a failed signal close retryable", async () => {
+    const original = process.exitCode;
+    let attempts = 0;
+    const server = await Server.atPort(0)
+      .addResource({
+        close: () => {
+          attempts += 1;
+          if (attempts === 1) throw new Error("close failed");
+        },
+      })
+      .run();
+    try {
+      process.emit("SIGTERM");
+      await waitFor(() => process.exitCode === 1);
+      expect(process.exitCode).toBe(1);
+      await server.close();
+      expect(attempts).toBe(2);
+    } finally {
+      await server.close().catch(() => undefined);
+      process.exitCode = original;
+    }
+  });
+
+  it("serves browser preflight only to configured origins", async () => {
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+      },
+    }).start();
+
+    try {
+      const allowed = await fetch(`${server.baseUrl}/spine.client.CommandService/Post`, {
+        method: "OPTIONS",
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      const forbidden = await fetch(`${server.baseUrl}/spine.client.CommandService/Post`, {
+        method: "OPTIONS",
+        headers: { origin: "http://localhost:5173" },
+      });
+
+      expect(allowed.status).toBe(204);
+      expect(allowed.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5173");
+      expect(allowed.headers.get("vary")).toBe("Origin");
+      expect(allowed.headers.get("access-control-allow-credentials")).toBe("true");
+      expect(allowed.headers.get("access-control-expose-headers")).toContain("grpc-status");
+      expect(forbidden.status).toBe(403);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it.each(["http://example.test/path", "ftp://example.test", "not an origin"])(
+    "rejects a noncanonical browser origin %s",
+    async (origin) => {
+      await expect(
+        new Server({ browser: { ...browserGateway(), origins: [origin] } }).start(),
+      ).rejects.toThrow("canonical HTTP(S) origins");
+    },
+  );
+
+  it("rejects duplicate browser origins", async () => {
+    await expect(
+      new Server({
+        browser: {
+          ...browserGateway(),
+          origins: ["http://127.0.0.1:5173", "http://127.0.0.1:5173"],
+        },
+      }).start(),
+    ).rejects.toThrow("unique and non-empty");
+  });
+
+  it("rejects an empty browser origin list", async () => {
+    await expect(
+      new Server({ browser: { ...browserGateway(), origins: [] } }).start(),
+    ).rejects.toThrow("unique and non-empty");
+  });
+
+  it("accepts a canonical HTTPS browser origin", async () => {
+    const server = await new Server({
+      browser: { ...browserGateway(), port: 0, origins: ["https://chat.example"] },
+    }).start();
+    try {
+      const response = await fetch(`${server.baseUrl}/spine.client.CommandService/Post`, {
+        method: "OPTIONS",
+        headers: { origin: "https://chat.example" },
+      });
+      expect(response.status).toBe(204);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("formats an IPv6 browser listener URL", async () => {
+    const server = await new Server({
+      host: "::1",
+      browser: { ...browserGateway(), host: "::1", port: 0 },
+    }).start();
+    try {
+      expect(server.host).toBe("::1");
+      expect(server.baseUrl).toBe(`http://[::1]:${server.port.toString()}`);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a browser request without an origin", async () => {
+    const server = await new Server({ browser: { port: 0, ...browserGateway() } }).start();
+    try {
+      const response = await fetch(`${server.baseUrl}/spine.client.CommandService/Post`, {
+        method: "POST",
+      });
+      expect(response.status).toBe(403);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("routes browser Connect RPCs through its authentication boundary", async () => {
+    const server = await new Server({ browser: { port: 0, ...browserGateway() } }).start();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+
+    try {
+      await expect(
+        client.resolveContext(create(ResolveContextRequestSchema), {
+          headers: { origin: "http://127.0.0.1:5173" },
+        }),
+      ).rejects.toMatchObject({ code: 16 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("accepts an application type registry for browser request decoding", async () => {
+    const server = await new Server({
+      browser: { port: 0, ...browserGateway(), registry: new TypeRegistry([TenantIdSchema]) },
+    }).start();
+    try {
+      expect(server.port).toBeGreaterThan(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("enforces the configured browser request-message limit", async () => {
+    const server = await new Server({
+      readMaxBytes: 32,
+      browser: { port: 0, ...browserGateway() },
+    }).start();
+    const client = createClient(
+      CommandService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    try {
+      await expect(
+        client.post(
+          create(CommandSchema, {
+            message: { typeUrl: "type.example.test/Large", value: new Uint8Array(128) },
+          }),
+          { headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" } },
+        ),
+      ).rejects.toMatchObject({ code: 8 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("enforces the configured browser response-message limit", async () => {
+    const options = {
+      ...browserGateway(),
+      sessions: {
+        resolve: () =>
+          Promise.resolve({ principal: { id: "ada" }, expiresAt: create(TimestampSchema) }),
+      },
+      contexts: {
+        resolve: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "x".repeat(128) }),
+            timestamp: create(TimestampSchema),
+          }),
+        resolveContext: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "x".repeat(128) }),
+            timestamp: create(TimestampSchema),
+          }),
+      },
+    };
+    const server = await new Server({
+      writeMaxBytes: 32,
+      browser: { port: 0, ...options },
+    }).start();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    try {
+      await expect(
+        client.resolveContext(create(ResolveContextRequestSchema), {
+          headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" },
+        }),
+      ).rejects.toMatchObject({ code: 8 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("enforces the configured browser request-message limit over gRPC-Web", async () => {
+    const server = await new Server({
+      readMaxBytes: 32,
+      browser: { port: 0, ...browserGateway() },
+    }).start();
+    const client = createClient(
+      CommandService,
+      createGrpcWebTransport({ baseUrl: server.baseUrl }),
+    );
+    try {
+      await expect(
+        client.post(
+          create(CommandSchema, {
+            message: { typeUrl: "type.example.test/Large", value: new Uint8Array(128) },
+          }),
+          { headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" } },
+        ),
+      ).rejects.toMatchObject({ code: 8 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("enforces the configured browser response-message limit over gRPC-Web", async () => {
+    const options = {
+      ...browserGateway(),
+      sessions: {
+        resolve: () =>
+          Promise.resolve({ principal: { id: "ada" }, expiresAt: create(TimestampSchema) }),
+      },
+      contexts: {
+        resolve: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "x".repeat(128) }),
+            timestamp: create(TimestampSchema),
+          }),
+        resolveContext: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "x".repeat(128) }),
+            timestamp: create(TimestampSchema),
+          }),
+      },
+    };
+    const server = await new Server({
+      writeMaxBytes: 32,
+      browser: { port: 0, ...options },
+    }).start();
+    const client = createClient(
+      AuthenticationService,
+      createGrpcWebTransport({ baseUrl: server.baseUrl }),
+    );
+    try {
+      await expect(
+        client.resolveContext(create(ResolveContextRequestSchema), {
+          headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" },
+        }),
+      ).rejects.toMatchObject({ code: 8 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("routes browser gRPC-Web RPCs through its authentication boundary", async () => {
+    const server = await new Server({ browser: { port: 0, ...browserGateway() } }).start();
+    const client = createClient(
+      AuthenticationService,
+      createGrpcWebTransport({ baseUrl: server.baseUrl }),
+    );
+
+    try {
+      await expect(
+        client.resolveContext(create(ResolveContextRequestSchema), {
+          headers: { origin: "http://127.0.0.1:5173" },
+        }),
+      ).rejects.toMatchObject({ code: 16 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("extracts an opaque browser session cookie before gateway admission", async () => {
+    const cookies = new OpaqueSessionCookies({
+      csrfSecret: new Uint8Array(32).fill(7),
+      origins: ["http://127.0.0.1:5173"],
+    });
+    const sessionId = "a".repeat(43);
+    let credential: string | undefined;
+    const options = {
+      ...browserGateway(),
+      cookies,
+      sessions: {
+        resolve(value: RequestCredential) {
+          credential = `${value.kind}:${value.value}`;
+          return Promise.resolve(undefined);
+        },
+      },
+    };
+    const server = await new Server({ browser: { port: 0, ...options } }).start();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+
+    try {
+      await expect(
+        client.resolveContext(create(ResolveContextRequestSchema), {
+          headers: {
+            origin: "http://127.0.0.1:5173",
+            cookie: cookies
+              .issue(sessionId)
+              .map((value) => value.split(";", 1)[0])
+              .join("; "),
+            "x-spine-csrf": cookies.csrf(sessionId),
+          },
+        }),
+      ).rejects.toMatchObject({ code: 16 });
+      expect(credential).toBe(`cookie:${sessionId}`);
+    } finally {
+      await server.close();
+      await cookies.close();
+    }
+  });
+
+  it("does not admit malformed bearer or rejected cookie credentials", async () => {
+    const cookies = new OpaqueSessionCookies({
+      csrfSecret: new Uint8Array(32).fill(8),
+      origins: ["http://127.0.0.1:5173"],
+    });
+    const values: string[] = [];
+    const options = {
+      ...browserGateway(),
+      cookies,
+      sessions: {
+        resolve(value: RequestCredential) {
+          values.push(value.value);
+          return Promise.resolve(undefined);
+        },
+      },
+    };
+    const server = await new Server({ browser: { port: 0, ...options } }).start();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    try {
+      for (const headers of [
+        { origin: "http://127.0.0.1:5173", authorization: "Bearer one two" },
+        {
+          origin: "http://127.0.0.1:5173",
+          authorization: "Bearer valid, Bearer other",
+          cookie: "broken",
+          "x-spine-csrf": "bad",
+        },
+      ])
+        await expect(
+          client.resolveContext(create(ResolveContextRequestSchema), { headers }),
+        ).rejects.toMatchObject({ code: 16 });
+      expect(values).toEqual(["", ""]);
+    } finally {
+      await server.close();
+      await cookies.close();
+    }
+  });
+
+  it("extracts an exact bearer credential before gateway admission", async () => {
+    let credential: RequestCredential | undefined;
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        sessions: {
+          resolve(value: RequestCredential) {
+            credential = value;
+            return Promise.resolve(undefined);
+          },
+        },
+      },
+    }).start();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    try {
+      await expect(
+        client.resolveContext(create(ResolveContextRequestSchema), {
+          headers: {
+            origin: "http://127.0.0.1:5173",
+            authorization: "Bearer exact-token",
+          },
+        }),
+      ).rejects.toMatchObject({ code: 16 });
+      expect(credential).toEqual({ kind: "bearer", value: "exact-token" });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("forces a stalled permitted browser request closed before native cleanup", async () => {
+    let admitted = false;
+    const closed: string[] = [];
+    const options = {
+      ...browserGateway(),
+      sessions: {
+        resolve: () => {
+          admitted = true;
+          return new Promise<undefined>(() => undefined);
+        },
+      },
+    };
+    const server = await new Server({
+      browser: { port: 0, ...options },
+      resources: [{ close: () => closed.push("native") }],
+    }).start();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    const request = client.resolveContext(create(ResolveContextRequestSchema), {
+      headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" },
+    });
+    const rejected = request.catch(() => undefined);
+    try {
+      await waitFor(() => admitted);
+      await expect(
+        Promise.race([
+          server.close(),
+          delay(1_000).then(() => {
+            throw new Error("close timed out");
+          }),
+        ]),
+      ).resolves.toBeUndefined();
+      expect(closed).toEqual(["native"]);
+    } finally {
+      await rejected;
+      await server.close().catch(() => undefined);
+    }
+  });
+
+  it("shares a pending listener drain across a failed browser subscription close", async () => {
+    let admitted = false;
+    const closed: string[] = [];
+    const drain = vi.spyOn(http.Server.prototype, "closeAllConnections");
+    const subscriptionClose = vi
+      .spyOn(SubscriptionGateway.prototype, "close")
+      .mockRejectedValueOnce(new Error("subscription cleanup failed"));
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        sessions: {
+          resolve: () => {
+            admitted = true;
+            return new Promise<undefined>(() => undefined);
+          },
+        },
+      },
+      resources: [
+        {
+          close: () => {
+            expect(drain).toHaveBeenCalledTimes(1);
+            closed.push("native");
+          },
+        },
+      ],
+    }).start();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    const request = client.resolveContext(create(ResolveContextRequestSchema), {
+      headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" },
+    });
+    const rejected = request.catch(() => undefined);
+    try {
+      await waitFor(() => admitted);
+      await expect(server.close()).rejects.toThrow("subscription cleanup failed");
+      const retry = server.close();
+      await delay(25);
+      expect(closed).toEqual([]);
+      await expect(retry).resolves.toBeUndefined();
+      expect(closed).toEqual(["native"]);
+    } finally {
+      subscriptionClose.mockRestore();
+      drain.mockRestore();
+      await rejected;
+      await server.close().catch(() => undefined);
+    }
+  });
+
+  it("retries a failed browser listener close", async () => {
+    const close = vi.spyOn(http.Server.prototype, "close");
+    const server = await new Server({ browser: { port: 0, ...browserGateway() } }).start();
+    close.mockImplementationOnce(function (this: http.Server, callback?: (error?: Error) => void) {
+      callback?.(new Error("browser listener close failed"));
+      return this;
+    });
+    try {
+      await expect(server.close()).rejects.toThrow("browser listener close failed");
+      close.mockRestore();
+      await expect(server.close()).resolves.toBeUndefined();
+    } finally {
+      close.mockRestore();
+      await server.close().catch(() => undefined);
+    }
+  });
+
+  it("replaces browser actor and tenant facts with trusted context", async () => {
+    const options = {
+      ...browserGateway(),
+      sessions: {
+        resolve: () =>
+          Promise.resolve({
+            principal: { id: "ada" },
+            expiresAt: create(TimestampSchema, { seconds: 10n }),
+          }),
+      },
+      contexts: {
+        resolve: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "ada" }),
+            timestamp: create(TimestampSchema),
+          }),
+        resolveContext: () =>
+          Promise.resolve({
+            actor: create(UserIdSchema, { value: "ada" }),
+            tenant: create(TenantIdSchema, { kind: { case: "value", value: "acme" } }),
+            timestamp: create(TimestampSchema),
+          }),
+      },
+    };
+    const server = await new Server({ browser: { port: 0, ...options } }).start();
+    const client = createClient(
+      AuthenticationService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+    try {
+      const response = await client.resolveContext(create(ResolveContextRequestSchema), {
+        headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" },
+      });
+      expect(response.actor?.value).toBe("ada");
+      expect(response.tenant?.kind.value).toBe("acme");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rolls back the private native server when the public browser port is unavailable", async () => {
+    const occupied = await Server.atPort(0).start();
+    const closed: string[] = [];
+    try {
+      await expect(
+        new Server({
+          browser: { port: occupied.port, ...browserGateway() },
+          resources: [{ close: () => closed.push("resource") }],
+        }).start(),
+      ).rejects.toMatchObject({ code: "EADDRINUSE" });
+      expect(closed).toEqual(["resource"]);
+    } finally {
+      await occupied.close();
+    }
+  });
+
+  it("retries only the unfinished native close phase behind the browser listener", async () => {
+    let attempts = 0;
+    const server = await new Server({
+      browser: { port: 0, ...browserGateway() },
+      resources: [
+        {
+          close: () => {
+            attempts += 1;
+            if (attempts === 1) throw new Error("close failed");
+          },
+        },
+      ],
+    }).start();
+    await expect(server.close()).rejects.toThrow("close failed");
+    await expect(server.close()).resolves.toBeUndefined();
+    expect(attempts).toBe(2);
   });
 
   it("honors an explicit host and port", async () => {
@@ -503,6 +1146,36 @@ function nextTurn(): Promise<void> {
   return new Promise((resolve) => {
     setImmediate(resolve);
   });
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await nextTurn();
+  }
+  throw new Error("Timed out waiting for signal shutdown.");
+}
+
+function browserGateway(): BrowserServerOptions {
+  return {
+    origins: ["http://127.0.0.1:5173"],
+    sessions: { resolve: () => Promise.resolve(undefined) },
+    authorize: () => Promise.resolve(false),
+    contexts: {
+      resolve: () =>
+        Promise.resolve({
+          actor: create(UserIdSchema, { value: "test" }),
+          timestamp: create(TimestampSchema),
+        }),
+      resolveContext: () =>
+        Promise.resolve({
+          actor: create(UserIdSchema, { value: "test" }),
+          timestamp: create(TimestampSchema),
+        }),
+    },
+    clock: { now: () => create(TimestampSchema) },
+    fingerprint: () => "test",
+  };
 }
 
 class CloseTrackingStorageFactory extends InMemoryStorageFactory {

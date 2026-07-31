@@ -1,4 +1,4 @@
-# @spine-event-engine/delivery-client
+# Client for the Spine Delivery server
 
 This package is the Node client for the Delivery simple-server gRPC API. Use it
 from a trusted application network to read inbox work and coordinate shards.
@@ -6,7 +6,14 @@ from a trusted application network to read inbox work and coordinate shards.
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
 
-## Connect and read
+## 💡 Why use it?
+
+- ✅ Connects a Node process to the in-memory Delivery simple server.
+- ✅ Reads inbox work and current shard assignments.
+- ✅ Observes later shard changes without polling.
+- ✅ Adapts remote inbox and shard services to `DeliveryBuilder`.
+
+## 🚀 Connect and read
 
 Connect to an absolute HTTP(S) origin whose path is `/`. The client owns this
 connection and `close()` ends its active reads and streams.
@@ -38,7 +45,7 @@ try {
 }
 ```
 
-## Observe shards
+## 👀 Observe shards
 
 Use a snapshot to establish current facts and an observation stream for later
 hints. Cancel the stream when it is no longer needed.
@@ -86,5 +93,15 @@ The quarantine must atomically store only a bounded record before callback
 admission and before removal. An in-memory `Map` is suitable only for a test:
 production recovery needs a durable, capacity-bounded implementation.
 
-The protocol is unauthenticated. It offers no durable client state, exactly-once
-delivery, renewable fencing, or safe automatic mutation retry.
+## ⚠️ Reconcile uncertain writes
+
+Read operations may use the configured bounded retry policy. Mutations do not
+retry automatically: if a response is lost, first read the named fact and
+decide what happened. The protocol is unauthenticated and offers no durable
+client state, exactly-once delivery, or renewable fencing.
+
+## 🔗 Learn more
+
+- [Delivery server](../delivery-server/README.md)
+- [Server delivery APIs](../server/README.md#delivery-and-environment)
+- [Reference for coding agents](REFERENCE.md)

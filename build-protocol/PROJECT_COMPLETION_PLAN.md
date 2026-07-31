@@ -1102,6 +1102,18 @@ until clean.
 The project is complete only after the closure commit itself is verified on
 `main`.
 
+## Active Post-Release Milestone
+
+### T-0084: Application Hosting And Beginner Documentation
+
+T-0084 is active. It adds one concise framework-owned host for native gRPC and
+browser HTTP transports, removes generic hosting boilerplate from Chat, splits
+human READMEs from agent references across all modules, verifies every example
+startup, and leaves the Chat server and UI running after reviewed integration.
+The task is high-risk because it changes a public API and lifecycle/authentication
+boundaries. Its canonical ledger is in
+`build-protocol/tasks/T-0084-app-host-docs/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:

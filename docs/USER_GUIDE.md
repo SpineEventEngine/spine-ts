@@ -598,7 +598,17 @@ explicit process shutdown.
 
 ## 6. Start and close the server
 
-`start()` builds contexts, completes finite startup recovery, opens context
+Use `run()` for a standalone application. It starts the server, reports
+readiness only after the listener binds, and closes it on `SIGINT` or
+`SIGTERM`:
+
+```ts
+const running = await server.run();
+console.log(`Spine server ready at ${running.baseUrl}`);
+```
+
+Use `start()` when a test runner, desktop host, or another framework owns
+process signals. `start()` builds contexts, completes finite startup recovery, opens context
 transport intake, and only then opens the HTTP/2 listener. The default host is
 `127.0.0.1`; port `0` asks the OS for a free port.
 
@@ -720,7 +730,50 @@ scope. `Client.connectTo()` owns its Node HTTP/2 session; use
 
 ### Browser gateway / Envoy reference
 
-The browser route terminates at an application-owned authentication gateway;
+For ordinary local browser applications, configure `Server` with its `browser`
+option and call `run()`. The framework keeps the native backend loopback-private
+and serves authenticated Connect and gRPC-Web requests with exact allowed
+origins. Your application supplies sessions, authorization, trusted actor and
+tenant resolution, and allowed origins; it does not create listener, router,
+CORS, or signal machinery.
+
+```ts
+import type {
+  AuthorizationPolicy,
+  Clock,
+  ContextResolver,
+  SessionResolver,
+} from "@spine-event-engine/auth";
+import { Server } from "@spine-event-engine/server";
+
+declare const sessions: SessionResolver;
+declare const authorize: AuthorizationPolicy["authorize"];
+declare const contexts: ContextResolver;
+declare const clock: Clock;
+declare const tasksContext: import("@spine-event-engine/server").BoundedContext;
+
+const browserServer = await new Server({
+  contexts: [tasksContext],
+  port: 8090,
+  browser: {
+    origins: ["http://127.0.0.1:5173"],
+    sessions,
+    authorize,
+    contexts,
+    clock,
+    fingerprint: (principal) => principal.id,
+  },
+}).run();
+
+console.log(browserServer.baseUrl);
+```
+
+The framework accepts only exact, canonical HTTP or HTTPS origins. If the
+application uses CSRF-protected opaque cookies, also pass its configured
+`OpaqueSessionCookies` instance as `browser.cookies`. Otherwise the listener
+accepts one well-formed bearer credential per request.
+
+The framework browser route terminates at its authentication boundary; native
 Spine backend listeners are not public browser endpoints. The repository
 provides a customizable Envoy reference that accepts only `ResolveContext`,
 `Post`, `Read`, `Subscribe`, `Activate`, and `Cancel`, sends upstream requests

@@ -1,4 +1,4 @@
-# @spine-event-engine/client-node
+# Spine client for Node.js
 
 Use this package from a Node.js application that sends Spine commands, reads
 queries, or maintains subscriptions. It creates the Node HTTP/2 transport; the
@@ -10,7 +10,14 @@ agents](REFERENCE.md).
 The [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 explains the gateway boundary shared by Node and browser clients.
 
-## Connect to an application gateway
+## 💡 Why use it?
+
+- ✅ Posts commands and reads entities through typed Spine services.
+- ✅ Creates, activates, and cancels subscriptions.
+- ✅ Owns the Node HTTP/2 connection and closes it predictably.
+- ✅ Builds safe entity queries from generated `(column)` declarations.
+
+## 🚀 Connect to an application server
 
 Create one client for the process or application component that owns the
 connection. A client created with `connectTo()` owns and closes its HTTP/2
@@ -50,7 +57,7 @@ Node subscriptions use the same `createSubscription`, `activate`, and `cancel`
 API as the browser client; see the [client-web reference](../client-web/REFERENCE.md)
 for its lifecycle and recovery limits.
 
-## Query entities by declared columns
+## 🔎 Query entities by declared columns
 
 Generate entity columns from the model package, register them once, and build
 queries with those declared columns. The `./codegen` entry point is for model
@@ -86,3 +93,16 @@ const response = await client.asGuest().send(query);
 console.log(response.message.length);
 await client.close();
 ```
+
+## ⚠️ Connection behavior
+
+The client does not make a server safe for public access. Put the authenticated
+application gateway at the network boundary. Commands are not retried
+automatically, and an interrupted subscription must be recreated before the
+application re-reads current entity state.
+
+## 🔗 Learn more
+
+- [Browser client](../client-web/README.md)
+- [Server](../server/README.md)
+- [Reference for coding agents](REFERENCE.md)

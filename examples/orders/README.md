@@ -1,53 +1,54 @@
-# Datastore orders load example
+# Orders — Datastore-ready Spine example
 
-Prerequisites: Node 24 LTS or newer and pnpm. Install once with
-`pnpm install --frozen-lockfile` from the repository root.
+This example models ordering work with Aggregates, Process Managers, and
+Projections. It runs in memory with one command and can use Google Cloud
+Datastore when the application supplies that storage factory.
 
-This generated-Protobuf example composes its domain with a caller-provided
-`StorageFactory`: `createDatastoreOrdersContext` and
-`startDatastoreOrdersServer` are provider-neutral. For Datastore-specific
-composition, `startOrdersDatastoreServer` creates the Datastore adapter at the
-entrypoint; domain handlers do not depend on provider types.
+## 💡 What will you learn?
 
-The fixed topology has two aggregates (`Order` and `Sku`), ten projections, and
-two process managers: 14 repositories in total.
+- ✅ How one bounded context coordinates `Order` and `Sku` Aggregates.
+- ✅ How events update ten read-side Projections and two Process Managers.
+- ✅ How domain code stays independent of the selected storage provider.
+- ✅ How commands, queries, and subscriptions behave under a small local load.
 
-After `pnpm install --frozen-lockfile` from the repository root, run the
-complete in-memory local demonstration:
+## 🚀 Run it
+
+From the repository root, install dependencies once:
+
+```bash
+pnpm install --frozen-lockfile
+```
+
+Run the complete in-memory example with ten simulated users:
 
 ```bash
 SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run load
 ```
 
-Run the complete three-file, 11-test example suite:
+The command generates and builds the required code, starts a loopback server,
+runs the scenario, prints one JSON result, and closes the server.
+
+Choose `10`, `100`, or `1000` users by changing
+`SPINE_DATASTORE_ORDERS_LOAD_USERS`.
+
+## 🧪 Run the example tests
 
 ```bash
-pnpm --config.verify-deps-before-run=false exec vitest run examples/orders/test/proto-module.test.ts examples/orders/test/topology.test.ts examples/orders/test/load-runner.test.ts
+pnpm --config.verify-deps-before-run=false exec vitest run \
+  examples/orders/test/proto-module.test.ts \
+  examples/orders/test/topology.test.ts \
+  examples/orders/test/load-runner.test.ts
 ```
 
-The command owns workspace generation/build preparation, prints one JSON result,
-closes its listener and sessions, then exits. The load script accepts only 10,
-100, or 1,000 independent users:
+## ⚠️ What this example does not prove
 
-```bash
-SPINE_DATASTORE_ORDERS_LOAD_USERS=10 pnpm --dir examples/orders run load
-SPINE_DATASTORE_ORDERS_LOAD_USERS=100 pnpm --dir examples/orders run load
-SPINE_DATASTORE_ORDERS_LOAD_USERS=1000 pnpm --dir examples/orders run load
-```
+The command uses in-memory storage. It is a learning and load-checking example,
+not a production benchmark or a live Datastore test. Cloud credentials,
+indexes, quotas, and deployment belong to the application using the Datastore
+adapter.
 
-Each user has a unique command/query/subscription identity and subscription
-iterator, but users do not each own an HTTP/2 session. The runner creates at
-most 16 shared client sessions and executes users in waves of at most 10.
+## 🔗 Learn more
 
-For a successful user, command acknowledgement and query visibility are timed
-from immediately before command submission. Subscription delivery is timed
-from the wait for that user's first subscription update. Every RPC receives the
-user's `AbortController` signal. A timeout aborts that controller and clears
-its timer; cleanup then aborts the user, waits at most 500 ms for
-`iterator.return()`, and tolerates the expected cancellation race. After all
-users settle, the outer run aborts the shared session pool. It does not issue a
-subscription cancellation RPC.
-
-The test and load script start an in-memory loopback server. They demonstrate
-the example's local command/query/subscription behavior, not live Datastore
-service behavior, emulator validation, a benchmark, or a saturation result.
+- [Datastore storage](../../packages/storage-datastore/README.md)
+- [Server](../../packages/server/README.md)
+- [Reference for coding agents](REFERENCE.md)

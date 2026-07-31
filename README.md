@@ -1,77 +1,137 @@
-# Spine TS
+# Spine TS — Event-driven applications in TypeScript
 
-This repository is the TypeScript/Node.js implementation workspace for a Spine-inspired server-side framework.
+Spine TS helps Node.js applications process commands, store entity state, build
+read models, and notify clients through typed Protobuf contracts.
 
-Current status: verified local/example readiness over copied Spine Protobuf
-contracts, core validation/envelope helpers, descriptor-backed server metadata,
-bare decorator ingestion through generated handler registries, framework-owned
-entity transactions, repository-backed aggregate/projection/process-manager
-execution, read-side catch-up, durable delivery inbox primitives, durable
-inactive subscription recovery, adapter-neutral transport contracts,
-adapter-private same-host ZeroMQ IPC, optional durable Datastore and MySQL-first
-RDBMS storage adapters, and real Connect/Node `CommandService`,
-`QueryService`, and `SubscriptionService` wiring hosted by a small local HTTP/2
-`Server`.
+> **🔧 Spine TS is an experimental snapshot.** Its public API may change before
+> the first stable release.
 
-The runnable `examples/todo` package is a real local Connect/Node
-gRPC-compatible app. It uses generated Protobuf and handler-registry artifacts
-from the build workflow, bare application handler decorators, and process-local
-in-memory storage. It is not a production persistence, deployment,
-authentication, tracing, or multi-machine topology recipe. The framework also
-provides a trusted-network in-memory delivery server, delivery client, and
-supervisor; the example does not configure or prove those capabilities. The
-delivery server deliberately excludes durable persistence, Redis, Hazelcast,
-TLS, authentication/authorization, public-Internet hardening, a human
-administration surface, retained attempt/update replay policy,
-application-owned semantic-tag registration or handler materialization, and
-broader production verification.
+## 💡 Why use Spine TS?
 
-## Workspace
+- ✅ **Keep contracts in Protobuf.** Commands, events, entities, validation, and
+  query columns share one model.
+- ✅ **Write focused domain code.** Aggregates, Process Managers, and Projections
+  receive signals through generated, type-safe handlers.
+- ✅ **Choose storage in application code.** Start in memory, then configure
+  Google Cloud Datastore or MySQL without changing domain handlers.
+- ✅ **Serve Node and browser clients.** Native gRPC, Connect, and gRPC-Web use
+  the same Command, Query, and Subscription services.
+- ✅ **Test applications as a user would.** `BlackBox` exercises complete bounded
+  contexts without exposing test-only runtime APIs.
 
-- Package manager: `pnpm@11.9.0` via the `packageManager` field.
-- Node.js engine target: Node 24 LTS or newer.
-- TypeScript module target: ESM-first `NodeNext`.
-- Package boundaries: `packages/proto`, `packages/client-web`, `packages/client-node`, `packages/core`, `packages/server`,
-  `packages/delivery-client`, `packages/delivery-server`, `packages/transport`, `packages/storage`, `packages/storage-datastore`,
-  `packages/storage-rdbms`, and `packages/testing`.
-- Example boundary: `examples/todo`.
-- Copied Spine proto contracts live under `proto/`, with source provenance in
-  `proto/spine-sources.json`.
-- `@spine-event-engine/proto` exposes curated Protobuf-ES schemas, descriptors, message
-  types, and Spine custom options for the first intake set.
-- `@spine-event-engine/client-web` owns the browser-safe injected-transport
-  protocol kernel; `@spine-event-engine/client-node` owns Node transport factories,
-  descriptor-backed typed Entity columns, and the Query DSL.
-- `@spine-event-engine/delivery-server` provides the in-memory simple-server core and a
-  standalone cleartext HTTP/2 listener with Inbox, Shard, Admin, and health
-  services. State is lost on restart; it is trusted-network infrastructure,
-  not a public-Internet or durable deployment.
-- `@spine-event-engine/core` owns type metadata, validation, and envelope helpers;
-  `@spine-event-engine/server` owns bounded-context, service, lifecycle, and durable
-  handoff behavior; `@spine-event-engine/storage` owns record storage; and
-  `@spine-event-engine/transport` owns adapter-neutral transport contracts plus its
-  adapter-scoped same-host ZeroMQ subpath; Datastore and MySQL RDBMS adapters
-  implement the same storage port without deployment/resilience guarantees.
-- Package tests live outside package source under `packages/<package>/test`.
-- Cleanup enforcement runs through `pnpm lint` and therefore also through
-  `pnpm verify`.
+## ✨ What is included?
 
-## Useful Commands
+**Application runtime**
 
-- `pnpm install`
-- `pnpm proto:generate`
-- `pnpm typecheck:build`
-- `pnpm docs:check`
-- `pnpm vitest run examples/todo/test/black-box.test.ts`
-- `pnpm vitest run examples/todo/test/local-multi-process.test.ts`
-- `pnpm --filter @spine-event-engine/example-todo start`
-- `pnpm --filter @spine-event-engine/example-todo smoke`
-- `pnpm lint`
-- `pnpm verify`
-- `pnpm docs:api`
+- Bounded contexts, entities, generated handlers, validation, rejections, and
+  event-driven state changes.
+- A `Server` that owns startup, readiness, shutdown, and optional authenticated
+  browser access.
+- In-memory delivery coordination for one process or a trusted local network.
 
-See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide,
-[examples/todo/README.md](examples/todo/README.md) for the local runnable flow,
-and [examples/projects/README.md](examples/projects/README.md)
-for the project-management load specimen,
-and [build-protocol](build-protocol/README.md) for the implementation protocol.
+**Clients and models**
+
+- Node and browser clients for commands, queries, and subscriptions.
+- A small React adapter with hooks for query and subscription lifecycles.
+- Protobuf generation tools, type registries, `Any` packing, and typed query
+  columns.
+
+**Storage**
+
+- In-memory storage for development and tests.
+- Google Cloud Datastore and MySQL adapters for application-selected
+  persistence.
+
+## 🚀 Try the Chat application
+
+Install the workspace dependencies:
+
+```bash
+pnpm install --frozen-lockfile
+```
+
+Start the Chat server in one terminal:
+
+```bash
+pnpm --dir examples/chat/app start
+```
+
+Start its React UI in another terminal:
+
+```bash
+pnpm --dir examples/chat/web start
+```
+
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The example uses
+in-memory storage and a local development identity, so it is safe to explore
+without cloud credentials.
+
+See the [Chat guide](examples/chat/README.md) for a beginner walkthrough.
+
+## 📦 Workspace map
+
+```text
+spine-ts/
+├── packages/          # Framework, clients, storage adapters, and tooling
+├── examples/          # Complete applications and focused examples
+├── proto/             # Spine Protobuf sources copied with provenance
+├── docs/              # User, browser, architecture, and API guides
+└── build-protocol/    # Rules used to develop this repository
+```
+
+Start with these packages:
+
+| Goal                            | Package                                                               |
+| ------------------------------- | --------------------------------------------------------------------- |
+| Build and run a bounded context | [`@spine-event-engine/server`](packages/server/README.md)             |
+| Connect from Node.js            | [`@spine-event-engine/client-node`](packages/client-node/README.md)   |
+| Connect from a browser          | [`@spine-event-engine/client-web`](packages/client-web/README.md)     |
+| Use React hooks                 | [`@spine-event-engine/client-react`](packages/client-react/README.md) |
+| Configure authentication        | [`@spine-event-engine/auth`](packages/auth/README.md)                 |
+| Choose a storage backend        | [`@spine-event-engine/storage`](packages/storage/README.md)           |
+| Generate application model code | [`@spine-event-engine/proto-tools`](packages/proto-tools/README.md)   |
+
+## 🎓 Documentation
+
+- [End-user guide](docs/USER_GUIDE.md)
+- [Chat example](examples/chat/README.md)
+- [Browser authentication and extension guide](docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [Generated API documentation](docs/api/README.md)
+- [Reference for coding agents](REFERENCE.md)
+
+The coding-agent reference is deliberately separate from this beginner guide.
+It records repository boundaries, verification commands, and detailed
+implementation constraints.
+
+## 🛠️ Development
+
+Spine TS requires Node.js 24 LTS or newer and `pnpm@11.9.0`.
+
+| Command                | Purpose                                             |
+| ---------------------- | --------------------------------------------------- |
+| `pnpm proto:generate`  | Generates Protobuf and handler code.                |
+| `pnpm typecheck:build` | Builds the TypeScript project graph.                |
+| `pnpm test`            | Runs the test suite.                                |
+| `pnpm lint`            | Checks source, documentation, and repository rules. |
+| `pnpm docs:api`        | Generates and validates API documentation.          |
+| `pnpm verify`          | Runs the complete release-readiness check.          |
+
+## ⚠️ Current limits
+
+- Packages are not published to npm yet; examples run from this workspace.
+- The supplied delivery server is in-memory and loses its state on restart.
+- Browser deployments still need application-selected identity providers,
+  durable sessions, TLS, and network policy.
+- Subscription updates are notifications, not a complete event history. Clients
+  re-query entity state after reconnecting.
+
+## 📄 License
+
+Apache 2.0.
+
+## 🔗 Related projects
+
+- [Spine Event Engine](https://spine.io/)
+- [Spine Validation for TypeScript](https://github.com/SpineEventEngine/validation-ts)
+- [Protobuf-ES](https://github.com/bufbuild/protobuf-es)
+- [Connect](https://connectrpc.com/)

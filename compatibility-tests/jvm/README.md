@@ -1,16 +1,16 @@
-# JVM compatibility-test tooling
+# JVM compatibility checks
 
 This directory is repository test tooling, not an npm package or a runtime
-module. It holds checks that compare selected static evidence from a pinned
-Spine JVM source archive with this repository's Proto and TypeScript fixtures.
+module. It helps framework maintainers notice when selected Spine JVM contracts
+no longer match the Proto and TypeScript assumptions in this repository.
 
-## Who uses it and when
+## 💡 Who uses it?
 
 Framework maintainers run these checks when changing the compatibility
 fixtures, the related Proto sources, or the archive-validation tooling. Normal
 application developers do not need to run them for application work.
 
-## What the checks do
+## ✨ What the checks do
 
 The fixture check downloads the pinned `SpineEventEngine/core-java` source
 archive when it is not cached. It verifies the archive SHA-256, extracts it to
@@ -30,7 +30,7 @@ six imported Proto files are not present in this repository:
 
 The check fails closed rather than claiming a complete comparison.
 
-## Commands
+## 🚀 Run the checks
 
 From the repository root, run the complete focused suite:
 
@@ -44,7 +44,7 @@ To run the static archive/source check alone:
 node compatibility-tests/jvm/fixture.mjs
 ```
 
-## Cache and network behavior
+## 📦 Cache and network behavior
 
 The pinned archive is stored in the ignored
 `compatibility-tests/jvm/.cache` directory. The first run needs network access
@@ -53,7 +53,7 @@ fail until that archive is already cached. Temporary extracted source is
 removed after every run. Remove `compatibility-tests/jvm/.cache` to discard the
 cache and require a fresh verified download.
 
-## Limitations
+## ⚠️ Limits
 
 Neither check builds or runs the JVM project. They do not download a JDK or
 Gradle, invoke Gradle, or establish JVM runtime compatibility.

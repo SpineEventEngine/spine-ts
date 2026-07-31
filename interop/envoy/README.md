@@ -1,4 +1,4 @@
-# Browser gateway Envoy reference
+# Envoy template for a Spine browser gateway
 
 `renderEnvoy()` creates a narrow browser-facing Envoy template. It is a
 starting point, not a managed deployment product: applications own the gateway
@@ -9,7 +9,15 @@ Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTEN
 before adapting this template: it documents the gateway trust boundary,
 session/provider ownership, delivery limits, and verification matrix.
 
-## Render a configuration
+## 💡 What does the template provide?
+
+- ✅ Browser TLS termination.
+- ✅ gRPC-Web and explicitly selected Connect requests.
+- ✅ Exact-origin CORS with credentials.
+- ✅ A narrow route to the authenticated application gateway, never the
+  private Spine backend.
+
+## 🚀 Render a configuration
 
 Pass an HTTPS browser origin, the Envoy listen address and port, the application
 gateway address and port, and paths to PEM certificate and key files:
@@ -40,7 +48,7 @@ Do not publish a direct route from the browser to a Spine backend. The
 application gateway resolves credentials into trusted context and is the only
 public upstream in this topology. Backend listeners remain application-private.
 
-## Validate the exact reference image
+## ✅ Validate the configuration
 
 Mount the rendered file and the TLS files read-only, then validate it with the
 pinned image used by the acceptance topology:
@@ -53,10 +61,12 @@ docker run --rm \
   -c /etc/envoy/envoy.yaml --mode validate
 ```
 
+## ⚠️ Customize before deployment
+
 The template deliberately has finite request/header limits and a no-timeout
 `Activate` stream route. Copy and customize it for real deployment needs, such
 as certificates, hostnames, observability, external rate limits, or a different
 network topology; keep the gateway-only public boundary when doing so.
 
 See the [user guide](../../docs/USER_GUIDE.md#browser-gateway-envoy-reference)
-and the [Chat fixture](../../examples/chat/web/README.md#real-browser-topology).
+and the [Chat web guide](../../examples/chat/web/README.md).

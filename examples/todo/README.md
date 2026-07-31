@@ -1,65 +1,60 @@
-# To-Do Example
+# To-Do — Your first Spine TS application
 
-A runnable local Spine TS application: generated Protobuf messages, bare-decorated
-task handlers, a generated handler registry, a task-list projection, and real
-Connect/Node `CommandService`, `QueryService`, and `SubscriptionService` routes.
+The To-Do example is the smallest complete Node application in this repository.
+It accepts task commands, updates a task-list Projection, and exposes commands,
+queries, and subscriptions through a real local server.
 
-## Run it
+## 💡 What will you learn?
 
-Prerequisites: Node 24 or newer and pnpm. From the repository root, install
-workspace dependencies once with `pnpm install --frozen-lockfile`.
+- ✅ How Proto messages become generated TypeScript model code.
+- ✅ How `@Assign` and `@Subscribe` methods handle commands and events.
+- ✅ How generated validation and domain rejections protect entity state.
+- ✅ How a client posts a command and reads the resulting Projection.
 
-In terminal one, start the local server:
+## 🚀 Run it
+
+Install workspace dependencies once:
+
+```bash
+pnpm install --frozen-lockfile
+```
+
+Start the server in one terminal:
 
 ```bash
 pnpm --filter @spine-event-engine/example-todo start
 ```
 
-It regenerates and compiles the workspace, then prints its readiness line only
-after binding `http://127.0.0.1:8080`. In terminal two, post one generated
-`CreateTask` command and wait for its projected `TaskList` row:
+After it reports `http://127.0.0.1:8080`, run the smoke client in another
+terminal:
 
 ```bash
 pnpm --filter @spine-event-engine/example-todo smoke
 ```
 
-Set `SPINE_TODO_BASE_URL` when the server uses another local address. Stop the
-server with `Ctrl-C`; `SIGINT` and `SIGTERM` each close the listener once.
+The smoke client posts one `CreateTask` command and waits for the matching
+`TaskList` row. Stop the server with `Ctrl-C`.
 
-## Focused tests
+## 🧪 Run the focused tests
 
 ```bash
-pnpm typecheck:build
 pnpm vitest run examples/todo/test/black-box.test.ts
 pnpm vitest run examples/todo/test/local-multi-process.test.ts
 ```
 
-The black-box suite covers real loopback command, query, and subscription
-behavior through `@spine-event-engine/testing` `BlackBox`, which is equally usable from
-Node's test runner and Vitest. The local multi-process suite proves a bounded
-same-host fixture; it is not an application CLI. Managed sandboxes can reject
-loopback or local IPC binding with `EPERM`; rerun those native tests where
-those permissions are available.
+The first suite uses the public `BlackBox` testing API. The second starts
+separate local processes and therefore needs permission to bind loopback and
+same-host IPC endpoints.
 
-## What it demonstrates
+## ⚠️ Local by design
 
-- `CreateTask`, `RenameTask`, `CompleteTask`, and `ReopenTask` command paths.
-- Asynchronous projection reads and live `TaskList` subscriptions.
-- Non-OK validation errors and OK-acknowledged domain rejections whose
-  best-effort follow-up posts may reach active, non-saturated subscriptions.
-- Rejection subscription updates retain the typed payload but redact the
-  rejected-command payload forms and throwable stack at the client boundary;
-  internal generated subscribers retain full defensive context.
-- Generated `TaskAlreadyDone` and `TaskNotDone` throwable companions with
-  ordinary bare `@Subscribe` consumers.
-- Generated registry loading for bare `@Assign` and `@Subscribe` handlers.
+State is in memory and disappears when the server stops. This example does not
+configure production storage, authentication, deployment, tracing, monitoring,
+or a multi-machine topology.
 
-Read the detailed [user guide](USER_GUIDE.md), the framework
-[user guide](../../docs/USER_GUIDE.md), and the [server package README](../../packages/server/README.md).
+## 🔗 Learn more
 
-## Limits
-
-This is a local development and test example. Storage is in memory and belongs
-to one server process; restart clears it. It does not provide production
-persistence, authentication, deployment automation, tracing, health checks,
-process supervision, or remote/multi-host transport.
+- [To-Do walkthrough](USER_GUIDE.md)
+- [Framework user guide](../../docs/USER_GUIDE.md)
+- [Black-box testing](../../packages/testing/README.md)
+- [Reference for coding agents](REFERENCE.md)

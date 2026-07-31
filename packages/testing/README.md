@@ -1,13 +1,20 @@
-# @spine-event-engine/testing
+# Black-box testing for Spine applications
 
 Use this package to test a bounded context through the same local server and
 Node client boundary used by an application. `BlackBox` is the end-user test
-API; it is not a fixture API.
+API; applications do not need internal test utilities.
 
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
 
-## Start a test
+## 💡 Why use it?
+
+- ✅ Tests a complete bounded context through real Spine services.
+- ✅ Posts commands, sends queries, and observes subscriptions as a user.
+- ✅ Runs on an ephemeral local server with predictable cleanup.
+- ✅ Waits for genuinely asynchronous results with bounded polling.
+
+## 🚀 Start a test
 
 Create a `BlackBox` from a built context or its builder. It starts an ephemeral
 local server and closes it when the test is finished.
@@ -36,7 +43,7 @@ const alice = box.onBehalfOf("alice");
 // const result = await alice.send(query);
 ```
 
-## Observe an asynchronous result
+## ⏳ Observe an asynchronous result
 
 Use `eventually()` only for a result that becomes visible later. Assert an
 immediate command result directly instead of polling for it.
@@ -58,5 +65,15 @@ const value = await box.eventually(
 subscriptions owned by the box, closes its client, and then closes the local
 server.
 
-This package tests one local Node process. It does not test a browser,
-cross-process delivery, authentication, or a production storage deployment.
+## ⚠️ Test boundary
+
+`BlackBox` tests one local Node process. It does not prove browser behavior,
+cross-process delivery, authentication infrastructure, or a production storage
+deployment. Choose the application’s real storage factory only when an
+integration test intentionally covers that provider.
+
+## 🔗 Learn more
+
+- [Todo example tests](../../examples/todo/README.md)
+- [Server](../server/README.md)
+- [Reference for coding agents](REFERENCE.md)

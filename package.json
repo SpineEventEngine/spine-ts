@@ -26,7 +26,7 @@
     "docs:api": "pnpm proto:generate && pnpm docs:api:generated",
     "docs:api:generated": "typedoc --options typedoc.json",
     "docs:check": "pnpm proto:generate && pnpm docs:check:generated",
-    "docs:check:generated": "typedoc --options typedoc.json && node scripts/check-api-docs.mjs",
+    "docs:check:generated": "typedoc --options typedoc.json && node scripts/check-api-docs.mjs && node scripts/check-doc-audience.mjs",
     "proto:verify": "node scripts/verify-proto-sources.mjs",
     "proto:lint": "node scripts/proto-workflow.mjs lint",
     "proto:generate": "node scripts/proto-workflow.mjs generate",

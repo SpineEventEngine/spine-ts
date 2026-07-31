@@ -1,4 +1,4 @@
-# @spine-event-engine/proto-tools
+# Protobuf tooling for Spine applications
 
 This package generates TypeScript from application-owned Proto models and
 assembles those models into an application registry. It runs at build time, not
@@ -7,7 +7,14 @@ inside a server process.
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
 
-## Create a model package
+## 💡 Why use it?
+
+- ✅ Generates Protobuf-ES code for application-owned models.
+- ✅ Creates one importable `ProtoModule` per model package.
+- ✅ Follows dependencies between model packages deterministically.
+- ✅ Generates typed rejection helpers and handler registries.
+
+## 🚀 Create a model package
 
 A model package owns canonical `.proto` files, generated code, and one exported
 `ProtoModule`. Use separate model packages for independently developed bounded
@@ -36,7 +43,7 @@ Generation creates the generated Protobuf-ES sources, a `proto-module.ts`,
 typed rejection companions for owned rejection Proto files, and a deterministic
 `spine-proto-manifest.json`. Do not edit generated output by hand.
 
-## Compose an application
+## 🧩 Compose an application
 
 An application lists its direct model packages and a source location for the
 generated registry.
@@ -71,3 +78,16 @@ import { ProtoConfig } from "@spine-event-engine/proto-tools";
 const config = ProtoConfig.read(".");
 void config;
 ```
+
+## ⚠️ Build-time only
+
+Run this tooling after changing Proto files or decorated handlers. Generated
+files are outputs, not source: never edit them by hand. Application runtime code
+imports the generated model module and registry; it does not invoke the CLI.
+
+## 🔗 Learn more
+
+- [Spine Protobuf package](../proto/README.md)
+- [Core message tools](../core/README.md)
+- [Chat model example](../../examples/chat/model/README.md)
+- [Reference for coding agents](REFERENCE.md)
