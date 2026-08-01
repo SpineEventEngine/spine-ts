@@ -1125,6 +1125,17 @@ branch coverage, merged as `18090c2f`, and passes post-merge generation/build
 plus real Chromium, Firefox, and WebKit acceptance. Its canonical ledger is in
 `build-protocol/tasks/T-0086-message-board/TASK.md`.
 
+### T-0087: Message Board Live Status And Keyboard Posting
+
+T-0087 is complete. It gives the browser page the exact `Message Board` title,
+replaces misleading connection text with one lifecycle-accurate badge, removes
+the redundant board fragment, and adds Command+Enter/Control+Enter posting with
+an accessible hint and IME protection. The reviewed task gate passed with
+96.36% branch coverage and 100% function/line coverage across runtime changes;
+post-merge verification passed 29 focused tests plus Chromium, Firefox, and
+WebKit acceptance. It merged as `b9e3fdf5`. Its canonical ledger is in
+`build-protocol/tasks/T-0087-message-board-live-status/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:

@@ -1,6 +1,6 @@
 # T-0087: Message Board live status and keyboard posting
 
-Status: Ready for integration
+Status: Complete
 Start: `2026-08-01`
 Baseline: `1a0e343a67e1c88c6a8d364d8001c380f1570d99`
 Branch: `task/T-0087-message-board-live-status`
@@ -75,3 +75,14 @@ are disconnected.
   typecheck/build/lint, deterministic documentation checks, formatting,
   `git diff --check`, changed-branch coverage inspection, and real browser
   acceptance against the local server and UI.
+
+## Integration
+
+- Reviewed feature endpoint: `54bb94f0da52bc8a68a3b2e3f6fe36d545efd7c8`.
+- Integration merge: `b9e3fdf571bcfe7280c0a4d5783e43272a9bf352`.
+- The merged tree and verified task tree share exact tree hash
+  `07d4afd3b3e3ed46da48290c2b58f9f033ec2450`.
+- Post-merge verification passed 29 focused tests plus real Chromium, Firefox,
+  and WebKit acceptance.
+- The feature endpoint and merge were pushed to `origin`; this closure record
+  is pushed in its containing `main` commit.
