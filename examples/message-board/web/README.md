@@ -8,11 +8,14 @@ reports the failure.
 ## 💡 What does it demonstrate?
 
 - ✅ A browser-safe Spine client using the React adapter.
-- ✅ A username input and message textarea with stable retry behavior.
+- ✅ A username input and message textarea with stable retry behavior and a
+  Command+Enter or Control+Enter post shortcut.
 - ✅ Server-authored Proto validation messages displayed beside each field.
 - ✅ Oldest-first messages with approximate relative time.
 - ✅ A board query followed by Projection subscription notices.
 - ✅ Re-query after reconnect or a possible update gap.
+- ✅ One live-status badge: `Updating live` only for a connected subscription,
+  otherwise `No live updates`.
 
 ## 🚀 Start the UI
 
@@ -32,6 +35,16 @@ The page posts `PostMessage`, queries `BoardMessageView` entities for board
 `general`, and subscribes to the same Projection topic. An update tells the UI
 to refresh; it is not a complete message history. Duplicate, reordered, and
 missing notices are allowed, so authoritative query results always win.
+
+The Message label describes the keyboard shortcut. In the textarea, press
+Command+Enter on macOS or Control+Enter on other platforms to post; plain Enter
+remains a new line. The shortcut does not post while an input method editor is
+composing text.
+
+The live-status badge only says `Updating live` when the subscription lifecycle
+is exactly connected. It otherwise says `No live updates`. A disconnected or
+exhausted subscription does not prevent commands: posts and their authoritative
+refresh are independent client operations.
 
 React-specific `use...` names are hooks from
 `@spine-event-engine/client-react`. The framework-neutral browser client keeps

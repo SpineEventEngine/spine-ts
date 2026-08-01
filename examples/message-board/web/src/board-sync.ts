@@ -34,7 +34,7 @@ export interface BoardSyncResult {
 }
 
 /**
- * Synchronizes one board from authoritative queries and subscription hints.
+ * Returns one board's authoritative state and live update status.
  *
  * @param board Identifies the board to synchronize.
  * @param request Sends authoritative queries and subscription operations.

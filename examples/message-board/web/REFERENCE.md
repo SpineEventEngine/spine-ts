@@ -27,6 +27,14 @@ already contains authoritative state. Raw updates and `gapPossible` notices
 coalesce into at most one active refresh and one follow-up. A later normal
 refresh supersedes recovered state. Intermediate history is not reconstructed.
 
+The single status badge says `Updating live` only for the exact `connected`
+subscription lifecycle state; every other state, including an absent lifecycle,
+says `No live updates`. This status does not block posting. Commands and the
+post-success authoritative refresh remain usable after the subscription has
+exhausted its reconnect attempts. The message textarea posts on Command+Enter
+or Control+Enter, keeps plain Enter multiline, and ignores shortcuts during IME
+composition.
+
 ## Tests and Envoy topology
 
 ```bash
