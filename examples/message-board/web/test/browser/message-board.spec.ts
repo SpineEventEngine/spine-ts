@@ -4,9 +4,11 @@ test("posts and reads a real MessageBoard Projection through the local gateway",
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "MessageBoard" })).toBeVisible();
+  await expect(page).toHaveTitle("Message Board");
+  await expect(page.getByRole("heading", { name: "Message Board" })).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Updating live");
 
-  await page.getByRole("button", { name: "Post message" }).click();
+  await page.getByRole("textbox", { name: "Message" }).press("ControlOrMeta+Enter");
   await expect(page.getByText("Enter a username.")).toBeVisible();
   await expect(page.getByText("Enter a message.")).toBeVisible();
 

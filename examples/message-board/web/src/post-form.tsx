@@ -17,6 +17,7 @@ import {
   useState,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
   type ReactElement,
 } from "react";
 
@@ -57,7 +58,7 @@ export interface PostFormProps {
   readonly createMessageId?: () => string;
 
   /**
-   * Refreshes authoritative board state after a successful post.
+   * Schedules an authoritative board refresh after a successful post.
    */
   readonly onPosted: () => void;
 }
@@ -68,13 +69,8 @@ export interface PostFormProps {
  * @param props The board, actor, request, identifier source, and refresh callback.
  * @returns The MessageBoard post form.
  */
-export const PostForm = ({
-  board,
-  actor,
-  request,
-  createMessageId = BoardPost.createId,
-  onPosted,
-}: PostFormProps): ReactElement => {
+export const PostForm = (props: PostFormProps): ReactElement => {
+  const { board, actor, request, createMessageId = BoardPost.createId, onPosted } = props;
   const [username, setUsername] = useState("");
   const [text, setText] = useState("");
   const [feedback, setFeedback] = useState<PostFeedbackValue>({ fields: {} });
@@ -93,8 +89,7 @@ export const PostForm = ({
     [],
   );
 
-  const post = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const post = () => {
     if (posting) return;
     const next =
       pendingPost.current ?? new BoardPost(board, actor).create(username, text, createMessageId());
@@ -131,6 +126,22 @@ export const PostForm = ({
     );
   };
 
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    post();
+  };
+
+  const onShortcutKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.nativeEvent.isComposing ||
+      event.key !== "Enter" ||
+      (!event.metaKey && !event.ctrlKey)
+    )
+      return;
+    event.preventDefault();
+    post();
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -138,7 +149,7 @@ export const PostForm = ({
         <p className="text-sm text-muted-foreground">Both fields are required by the server.</p>
       </CardHeader>
       <CardContent>
-        <form className="space-y-5" noValidate onSubmit={post}>
+        <form className="space-y-5" noValidate onSubmit={onSubmit}>
           {feedback.general !== undefined && (
             <Alert role="alert" className="border-destructive/40 text-destructive">
               {feedback.general}
@@ -166,7 +177,12 @@ export const PostForm = ({
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="message">Message</Label>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <Label htmlFor="message">Message</Label>
+              <p id="message-hint" className="text-xs text-muted-foreground">
+                ⌘↵ or Ctrl+Enter to post
+              </p>
+            </div>
             <Textarea
               ref={messageInput}
               id="message"
@@ -174,8 +190,11 @@ export const PostForm = ({
               placeholder="Share something with the board…"
               value={text}
               aria-invalid={feedback.fields.text !== undefined}
-              aria-describedby={feedback.fields.text === undefined ? undefined : "message-error"}
+              aria-describedby={
+                feedback.fields.text === undefined ? "message-hint" : "message-hint message-error"
+              }
               onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setText(event.target.value)}
+              onKeyDown={onShortcutKeyDown}
             />
             {feedback.fields.text !== undefined && (
               <p id="message-error" role="alert" className="text-sm font-medium text-destructive">
@@ -199,6 +218,8 @@ export const PostForm = ({
  * Creates a post command for one board and signed-in actor.
  */
 class BoardPost {
+  // prettier-ignore
+
   /**
    * Creates a board-bound command factory.
    *

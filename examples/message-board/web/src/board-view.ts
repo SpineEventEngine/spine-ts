@@ -29,6 +29,13 @@ import {
  * Builds the authoritative query and subscription target for one board.
  */
 export class BoardView {
+  // prettier-ignore
+
+  /**
+   * Creates query and subscription values for one board.
+   *
+   * @param board The board whose messages are selected.
+   */
   constructor(private readonly board: string) {}
 
   /**
@@ -108,6 +115,8 @@ export class BoardView {
  * Orders message rows by creation time and identifier.
  */
 const BoardRows = Object.freeze({
+  // prettier-ignore
+
   /**
    * Compares two message rows for oldest-first display.
    *

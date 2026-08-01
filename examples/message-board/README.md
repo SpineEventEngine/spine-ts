@@ -49,7 +49,9 @@ pnpm --dir examples/message-board/web start
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a username and a
-message, and post it to board `general`. Stop either process with `Ctrl-C`.
+message, and post it to board `general`. In the message textarea, Command+Enter
+on macOS or Control+Enter elsewhere posts while plain Enter adds a line. Stop
+either process with `Ctrl-C`.
 
 Leave either field empty to see the validation text declared in
 [`commands.proto`](model/proto/spine/examples/messageboard/commands.proto). The
@@ -69,6 +71,10 @@ validation response returned by the server.
 The interface shows approximate ages such as `just now` and `3 hours ago`.
 When two rows share the same timestamp, the message identifier provides a
 stable tie-break so a refresh cannot shuffle them.
+
+The `Updating live` badge appears only while the subscription is connected.
+Otherwise, `No live updates` accurately describes the subscription without
+blocking posts or their authoritative refresh.
 
 MessageBoard messages are entities, not domain-event subscriptions. Reusing a
 `MessageId` leaves the first message unchanged and records the generated

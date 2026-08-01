@@ -54,6 +54,28 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
   });
 
+  it("uses the Message Board title before and after sign-in", async () => {
+    const guest = render(
+      createElement(MessageBoardApp, {
+        session: guestSession(async () => signedInSession()),
+        request: requestFixture(),
+        board: "general",
+      }),
+    );
+    expect(screen.getByRole("heading", { name: "Message Board" })).toBeTruthy();
+    guest.unmount();
+
+    render(
+      createElement(MessageBoardApp, {
+        session: signedInSession(),
+        request: requestFixture(),
+        board: "general",
+      }),
+    );
+    expect(screen.getByRole("heading", { name: "Message Board" })).toBeTruthy();
+    expect(screen.queryByText("#general")).toBeNull();
+  });
+
   it("shows a rejected sign-in and permits a successful retry", async () => {
     const request = requestFixture();
     const signIn = vi
@@ -130,16 +152,14 @@ describe("MessageBoardApp", () => {
     expect(screen.queryByText("other board message")).toBeNull();
   });
 
-  it("shows a lifecycle gap and performs an authoritative board re-query", async () => {
+  it("re-queries authoritatively after a lifecycle gap", async () => {
     const request = requestFixture();
     render(
       createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
     );
     await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
     request.subscription.emitLifecycle({ state: "gapPossible", generation: 1 });
-    await waitFor(() =>
-      expect(screen.getByText("Updates may be incomplete; refreshing messages.")).toBeTruthy(),
-    );
+    await screen.findByText("No live updates");
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
   });
 
@@ -377,18 +397,75 @@ describe("MessageBoardApp", () => {
     ]);
   });
 
-  it("shows a failed subscription lifecycle notice", async () => {
+  it("shows one lifecycle badge that only calls connected updates live", async () => {
     const request = requestFixture();
     render(
       createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
     );
+    await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("No live updates")).toBeTruthy();
+    request.subscription.emitLifecycle({ state: "connected", generation: 1 });
+    await screen.findByText("Updating live");
+    request.subscription.emitLifecycle({
+      state: "failed",
+      generation: 1,
+      error: new Error("closed"),
+    });
+    await screen.findByText("No live updates");
+    expect(screen.queryByText("Message updates disconnected.")).toBeNull();
+    expect(screen.queryByText("Connected")).toBeNull();
+  });
+
+  it("posts only on the platform shortcut and leaves composing Enter untouched", async () => {
+    const request = requestFixture();
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("general message");
+    const message = screen.getByRole("textbox", { name: "Message" });
+    expect(screen.getByText("⌘↵ or Ctrl+Enter to post")).toBeTruthy();
+
+    fillPost("first shortcut");
+    fireEvent.keyDown(message, { key: "Enter" });
+    expect(request.post).not.toHaveBeenCalled();
+    fireEvent.keyDown(message, { key: "Enter", metaKey: true });
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+
+    fillPost("second shortcut");
+    fireEvent.keyDown(message, { key: "Enter", ctrlKey: true });
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
+
+    fillPost("composing shortcut");
+    fireEvent.keyDown(message, { key: "Enter", ctrlKey: true, isComposing: true });
+    expect(request.post).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the authoritative board after shortcut posting with a failed subscription", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
     await waitFor(() => expect(request.subscription.activate).toHaveBeenCalledTimes(1));
     request.subscription.emitLifecycle({
       state: "failed",
       generation: 1,
       error: new Error("closed"),
     });
-    await screen.findByText("Message updates disconnected.");
+    await screen.findByText("No live updates");
+
+    fillPost("posted without subscription update");
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Message" }), {
+      key: "Enter",
+      metaKey: true,
+    });
+
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.query.resolveAt(1, responseRows("initial", "posted without subscription update"));
+    await screen.findByText("posted without subscription update");
   });
 
   it("retries a resolved command rejection with its original payload", async () => {

@@ -25,7 +25,8 @@ export interface MessageListProps {
  * @param props The ordered board rows.
  * @returns The message list or its empty state.
  */
-export const MessageList = ({ rows }: MessageListProps): ReactElement => {
+export const MessageList = (props: MessageListProps): ReactElement => {
+  const { rows } = props;
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const clock = window.setInterval(() => setNow(new Date()), 30_000);
@@ -86,6 +87,8 @@ export const MessageList = ({ rows }: MessageListProps): ReactElement => {
  * Presents compact values derived from message rows.
  */
 const MessageRows = Object.freeze({
+  // prettier-ignore
+
   /**
    * Obtains the avatar initial for a username.
    *

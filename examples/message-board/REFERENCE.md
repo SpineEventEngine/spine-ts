@@ -46,6 +46,13 @@ The browser uses a board-filtered Projection Query and Projection subscription.
 Updates are best-effort hints. A gap or reconnect triggers an authoritative
 re-query; intermediate history cannot be recovered.
 
+The web UI exposes one lifecycle badge: exact `connected` is `Updating live`;
+all other lifecycle states are `No live updates`. The status does not govern
+command availability because a post and post-success Query refresh do not rely
+on a live subscription. The message textarea posts on Command+Enter or
+Control+Enter, preserves plain Enter for multiline text, and ignores shortcuts
+while IME composition is active.
+
 ## Verification and interoperability
 
 ```bash

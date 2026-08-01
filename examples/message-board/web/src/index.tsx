@@ -1,6 +1,6 @@
 import { SpineClientProvider } from "@spine-event-engine/client-react";
 import type { ClientRequest, SubscriptionLifecycle } from "@spine-event-engine/client-web";
-import { MessageCircle, Sparkles } from "lucide-react";
+import { CircleCheck, MessageCircle, WifiOff } from "lucide-react";
 import { useEffect, useRef, useState, type ReactElement } from "react";
 
 import { useBoardSync } from "./board-sync.js";
@@ -124,7 +124,7 @@ export const MessageBoardApp = (props: MessageBoardAppProps): ReactElement => {
             <div className="mx-auto mb-3 grid size-14 place-items-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
               <MessageCircle aria-hidden="true" />
             </div>
-            <h1 className="text-2xl font-bold tracking-tight">MessageBoard</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Message Board</h1>
             <p className="text-sm text-muted-foreground">Sign in to read and share messages.</p>
           </CardHeader>
           <CardContent className="space-y-4 pt-6">
@@ -163,20 +163,11 @@ const Board = function Board({
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:py-12">
       <header className="flex items-center justify-between gap-4">
         <div>
-          <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-            <Sparkles className="size-3.5" aria-hidden="true" />
-            Live board
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">MessageBoard</h1>
-          <p className="mt-1 text-muted-foreground">#{board}</p>
+          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Message Board</h1>
         </div>
-        <div className="hidden items-center gap-2 rounded-full border bg-card/80 px-3 py-2 text-sm text-muted-foreground shadow-sm sm:flex">
-          <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
-          Connected
-        </div>
+        <SubscriptionBadge lifecycle={synchronized.lifecycle} />
       </header>
 
-      <SubscriptionNotice lifecycle={synchronized.lifecycle} />
       <MessageList rows={synchronized.rows} />
       <PostForm
         board={board}
@@ -189,20 +180,27 @@ const Board = function Board({
   );
 };
 
-const SubscriptionNotice = function SubscriptionNotice({
+const SubscriptionBadge = function SubscriptionBadge({
   lifecycle,
 }: {
   readonly lifecycle: SubscriptionLifecycle | undefined;
-}): ReactElement | undefined {
-  if (lifecycle?.state === "gapPossible" || lifecycle?.state === "resynchronizing") {
-    return <Alert role="status">Updates may be incomplete; refreshing messages.</Alert>;
-  }
-  if (lifecycle?.state === "failed") {
-    return (
-      <Alert role="alert" className="border-destructive/40 text-destructive">
-        Message updates disconnected.
-      </Alert>
-    );
-  }
-  return undefined;
+}): ReactElement {
+  const updating = lifecycle?.state === "connected";
+  return (
+    <div
+      role="status"
+      className={
+        updating
+          ? "inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-2 text-sm font-medium text-primary"
+          : "inline-flex items-center gap-2 rounded-full bg-zinc-800 px-3 py-2 text-sm font-medium text-zinc-300"
+      }
+    >
+      {updating ? (
+        <CircleCheck className="size-4" aria-hidden="true" />
+      ) : (
+        <WifiOff className="size-4" aria-hidden="true" />
+      )}
+      {updating ? "Updating live" : "No live updates"}
+    </div>
+  );
 };
