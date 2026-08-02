@@ -65,3 +65,18 @@ traversal, or monorepo rebuild at startup.
   exposed; otherwise the immutable configured role/profile and limitation are
   the available acceptance evidence.
 
+## Requirements Splitter Result
+
+- Existing role: `requirements_splitter`.
+- Expected and explicitly dispatched profile: `gpt-5.6-sol` / high.
+- Runtime self-introspection was not exposed. The immutable configured
+  role/profile is the available metadata evidence; no visible mismatch or
+  inherited-profile fallback occurred.
+- The accepted split is
+  `build-protocol/planning/T-0095_BUILD_ONCE_IMAGES_SPLIT.md`. It keeps E1 as one
+  implementation slice with four ordered checkpoints: fresh packed build; one
+  MessageBoard artifact with combined/application-only entrypoints; local
+  MessageBoard, standalone-gateway, and simple-delivery-server images; and
+  review/release convergence.
+- No governing conflict or blocker was found. T-0096 exclusively owns
+  Compose/Kubernetes and production topology acceptance.
