@@ -225,29 +225,34 @@ ports. The corrected minimum seam is:
 ```ts
 export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
   open(): unknown;
-  configure(builder: DeliveryBuilder): void;
+  readonly inbox: DeliveryInbox;
+  readonly workRegistry: DeliveryWorkRegistry;
 }
 ```
 
 - `server` remains independent of `delivery-client`; its existing environment
-  worker accepts this builder configurator and applies it to both the finite
-  worker delivery and supervisor delivery before `build()`.
+  worker accepts these existing generic delivery ports. The finite path passes
+  them to its current internal `Delivery` constructor, while the supervisor
+  path passes them to its current `DeliveryBuilder`. Neither path changes its
+  delivery type or execution model.
 - `RemoteDelivery.open()` creates one client, one `RemoteInbox`, and one
   `RemoteWorkRegistry`, completes bounded readiness, then publishes those
-  adapters. `configure()` injects the published adapters into the supplied
-  existing builder and fails closed before successful open.
+  adapters. The port getters return those published adapters and fail closed
+  before successful open.
 - `RemoteDelivery` does not construct or reflectively close a `Delivery`.
   `Delivery` has no close contract. Final remote closure therefore owns the
   client/session and quarantine phases only; attachment retirement already
   quiesces the worker/supervisor before the environment closes the remote
   owner.
-- Existing close-only local delivery settings remain unchanged. The
-  configurator is used only for `ServerEnvironmentDelivery`.
+- Existing close-only local delivery settings remain unchanged. Remote ports
+  are used only when the configured facility is a `ServerEnvironmentDelivery`.
 
 The correction adds one RED behavior test proving that an attachment generation
-applies the configured delivery to both existing builder paths and one remote
+applies the configured ports to both existing delivery paths and one remote
 test proving the adapters are unavailable before open and injected after
 readiness. It may minimally change
 `packages/server/src/server/environment-delivery-worker.ts`, its mirrored test,
-and `environment-attachment.ts` assembly. No new worker, supervisor, runner,
-provider selector, or package dependency is introduced.
+and `ServerEnvironment` attachment assembly. `environment-attachment.ts` needs
+no new concept because its existing `createWorker` seam is sufficient. No new
+worker, supervisor, runner, provider selector, or package dependency is
+introduced.
