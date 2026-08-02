@@ -162,3 +162,9 @@ changes the contract again.
   example, and final-environment retry wording are corrected.
 - Validation: focused server tests 58/58; affected lint, Prettier, TSDoc, and
   whitespace checks passed.
+
+## Release-gate Mechanical Disposition
+
+- Cleanup enforcement required a documented internal grouping for private
+  coordinator removal/retirement operations. The deterministic refactor passed
+  focused tests and all affected checks; it does not reopen review lanes.

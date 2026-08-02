@@ -31,7 +31,7 @@ export const ProcessServerCoordinator: Readonly<{
       baseUrl: server.baseUrl,
       close: async () => {
         await server.close();
-        await retire(record);
+        await ProcessServerCoordinatorValues.retire(record);
         onRetired();
       },
     };
@@ -51,7 +51,7 @@ export const ProcessServerCoordinator: Readonly<{
     for (const record of [...running].reverse()) {
       try {
         await record.server.close();
-        await retire(record);
+        await ProcessServerCoordinatorValues.retire(record);
       } catch {
         process.exitCode = 1;
       }
@@ -59,30 +59,36 @@ export const ProcessServerCoordinator: Readonly<{
   },
 });
 
-function remove(record: RunRecord): void {
-  const index = running.indexOf(record);
-  if (index >= 0) running.splice(index, 1);
-  if (running.length > 0) return;
-  process.off("SIGINT", ProcessServerCoordinator.onSignal);
-  process.off("SIGTERM", ProcessServerCoordinator.onSignal);
-  signalsInstalled = false;
-}
-
-function retire(record: RunRecord): Promise<void> {
-  const current = record.retirement;
-  if (current !== undefined) return current;
-  const retirement = Promise.resolve()
-    .then(async () => {
-      if (!running.includes(record)) return;
-      if (running.length === 1) {
-        await record.environment.close();
-      }
-      remove(record);
-    })
-    .catch((error: unknown) => {
-      record.retirement = undefined;
-      throw error;
-    });
-  record.retirement = retirement;
-  return retirement;
-}
+/**
+ * Groups private process-owned run retirement operations.
+ *
+ * @internal
+ */
+const ProcessServerCoordinatorValues = Object.freeze({
+  remove(record: RunRecord): void {
+    const index = running.indexOf(record);
+    if (index >= 0) running.splice(index, 1);
+    if (running.length > 0) return;
+    process.off("SIGINT", ProcessServerCoordinator.onSignal);
+    process.off("SIGTERM", ProcessServerCoordinator.onSignal);
+    signalsInstalled = false;
+  },
+  retire(record: RunRecord): Promise<void> {
+    const current = record.retirement;
+    if (current !== undefined) return current;
+    const retirement = Promise.resolve()
+      .then(async () => {
+        if (!running.includes(record)) return;
+        if (running.length === 1) {
+          await record.environment.close();
+        }
+        ProcessServerCoordinatorValues.remove(record);
+      })
+      .catch((error: unknown) => {
+        record.retirement = undefined;
+        throw error;
+      });
+    record.retirement = retirement;
+    return retirement;
+  },
+});
