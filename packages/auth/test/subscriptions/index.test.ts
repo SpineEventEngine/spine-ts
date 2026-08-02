@@ -617,6 +617,69 @@ describe("SubscriptionGateway", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "binding-capacity-exceeded" });
   });
 
+  it("suppresses backend activation and cancellation when a durable guard is false", async () => {
+    const fixture = setup();
+    const bindings = fixture.bindings;
+    const guarded = {
+      create: bindings.create.bind(bindings),
+      activate: async (input: Parameters<typeof bindings.activate>[0]) => {
+        await input.onBackend(
+          { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+          new AbortController().signal,
+          () => Promise.resolve(false),
+        );
+        return { kind: "activated" as const };
+      },
+      cancel: async (input: Parameters<typeof bindings.cancel>[0]) => {
+        await input.onBackend(
+          { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+          new AbortController().signal,
+          () => Promise.resolve(false),
+        );
+        return { kind: "closed" as const };
+      },
+      reserveCapacity: bindings.reserveCapacity.bind(bindings),
+      purgeExpired: bindings.purgeExpired.bind(bindings),
+      close: bindings.close.bind(bindings),
+    };
+    const subscriptionGateway = new SubscriptionGateway({ ...fixture.options, bindings: guarded });
+    const wire = await subscribe(subscriptionGateway);
+
+    await expect(subscriptionGateway.handle(request("Activate", wire))).resolves.toEqual({
+      kind: "activated",
+    });
+    await expect(subscriptionGateway.handle(request("Cancel", wire))).resolves.toEqual({
+      kind: "cancelled",
+    });
+    expect(fixture.calls).toEqual(["subscribe"]);
+  });
+
+  it("releases an implicit reservation before compensating an oversized backend", async () => {
+    const fixture = setup();
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      limits: { bindingLimit: 1 },
+      dispose: () => Promise.resolve(),
+    });
+    fixture.options.creator.subscribe = () =>
+      Promise.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([1, 2]) });
+    const subscriptionGateway = new SubscriptionGateway({
+      ...fixture.options,
+      bindings,
+      limits: { maxBackendEnvelopeBytes: 1 },
+    });
+
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
+      kind: "rejected",
+      reason: "backend-envelope-too-large",
+    });
+    fixture.options.creator.subscribe = () =>
+      Promise.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) });
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
+      kind: "subscribed",
+    });
+  });
+
   it("denies a foreign cancel before it reserves a binding queue slot", async () => {
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",

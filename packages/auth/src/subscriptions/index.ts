@@ -122,7 +122,9 @@ export type SubscriptionAbortSignal = AbortSignal;
  *
  * @param envelope Supplies the copied private envelope.
  * @param signal Cancels the backend effect.
- * @param guard Checks whether the durable owner may still continue the effect.
+ * @param guard Checks whether a durable owner may continue. When supplied, a
+ * false result stops the next backend effect or public update. When absent,
+ * in-memory bindings continue normally.
  * @returns Completes after the backend effect ends.
  */
 export type OnBackendSubscription = (
@@ -996,7 +998,8 @@ export class SubscriptionGateway {
         tenant,
         nowMs,
         signal: active,
-        onBackend: (backend, signal) => this.#forwardActivate(wire, backend, updates, signal),
+        onBackend: (backend, signal, guard) =>
+          this.#forwardActivate(wire, backend, updates, signal, guard),
       });
       if (result.kind !== "activated") return SubscriptionGatewayValues.rejected("denied");
       await this.#cleanupAfterActivationFailure(id, fingerprint, tenant, nowMs, wire);
@@ -1024,7 +1027,7 @@ export class SubscriptionGateway {
         principalFingerprint: fingerprint,
         tenant,
         nowMs,
-        onBackend: (backend, signal) => this.#forwardCancel(wire, backend, signal),
+        onBackend: (backend, signal, guard) => this.#forwardCancel(wire, backend, signal, guard),
       });
       return result.kind === "denied"
         ? SubscriptionGatewayValues.rejected("denied")
@@ -1102,6 +1105,7 @@ export class SubscriptionGateway {
     controller: AbortController,
   ): Promise<SubscriptionGatewayResult> {
     if (backend.bytes.byteLength > this.#limits.maxBackendEnvelopeBytes) {
+      await reservation.release();
       await this.#compensate(backend.bytes, controller);
       return SubscriptionGatewayValues.rejected("backend-envelope-too-large");
     }
@@ -1115,15 +1119,17 @@ export class SubscriptionGateway {
       });
       return SubscriptionGatewayValues.subscribed(binding.id, bytes);
     } catch (error) {
-      return this.#failedCreation(error, backend.bytes, controller);
+      return this.#failedCreation(error, backend.bytes, controller, reservation);
     }
   }
   async #failedCreation(
     error: unknown,
     bytes: Uint8Array,
     controller: AbortController,
+    reservation: SubscriptionCapacityReservation,
   ): Promise<SubscriptionGatewayResult> {
     try {
+      await reservation.release();
       await this.#compensate(bytes, controller);
     } catch (disposeError) {
       throw new AggregateError(
@@ -1167,7 +1173,7 @@ export class SubscriptionGateway {
         principalFingerprint: fingerprint,
         tenant,
         nowMs,
-        onBackend: (backend, signal) => this.#forwardCancel(wire, backend, signal),
+        onBackend: (backend, signal, guard) => this.#forwardCancel(wire, backend, signal, guard),
       });
     } catch {
       // The activation failure remains authoritative; cancellation stays retryable.
@@ -1178,9 +1184,11 @@ export class SubscriptionGateway {
     backend: BackendSubscriptionEnvelope,
     updates: SubscriptionUpdateSink,
     signal: SubscriptionAbortSignal,
+    guard: (() => Promise<boolean>) | undefined,
   ): Promise<void> {
     const privateWire = SubscriptionGatewayValues.copyPublic(wire);
     try {
+      if (!(await SubscriptionGatewayValues.canContinue(guard))) return;
       const publicSubscription = fromBinary(SubscriptionSchema, wire.bytes);
       await this.#options.creator.activate(
         {
@@ -1188,6 +1196,7 @@ export class SubscriptionGateway {
           backend,
           updates: async (update) => {
             try {
+              if (!(await SubscriptionGatewayValues.canContinue(guard))) return;
               const decoded = fromBinary(SubscriptionUpdateSchema, update.bytes);
               decoded.subscription = clone(SubscriptionSchema, publicSubscription);
               await updates({
@@ -1209,9 +1218,11 @@ export class SubscriptionGateway {
     wire: PublicSubscriptionWire,
     backend: BackendSubscriptionEnvelope,
     signal: SubscriptionAbortSignal,
+    guard: (() => Promise<boolean>) | undefined,
   ): Promise<void> {
     const privateWire = SubscriptionGatewayValues.copyPublic(wire);
     try {
+      if (!(await SubscriptionGatewayValues.canContinue(guard))) return;
       await this.#options.creator.cancel({ wire: privateWire, backend }, signal);
     } finally {
       privateWire.bytes.fill(0);
@@ -1223,6 +1234,10 @@ export class SubscriptionGateway {
  * Builds validated subscription gateway inputs and isolated wire values.
  */
 const SubscriptionGatewayValues = Object.freeze({
+  async canContinue(guard: (() => Promise<boolean>) | undefined): Promise<boolean> {
+    return guard === undefined || (await guard());
+  },
+
   discardUpdate(update: SubscriptionUpdateWire): Promise<void> {
     update.bytes.fill(0);
     return Promise.resolve();
