@@ -594,7 +594,7 @@ describe("SubscriptionGateway", () => {
       create: bindings.create.bind(bindings),
       activate: bindings.activate.bind(bindings),
       cancel: bindings.cancel.bind(bindings),
-      reserveCapacity: () => {
+      reserveCapacity: async () => {
         throw new Error("store unavailable");
       },
       purgeExpired: bindings.purgeExpired.bind(bindings),
@@ -607,7 +607,7 @@ describe("SubscriptionGateway", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "denied" });
     const capacityFailure = {
       ...unavailable,
-      reserveCapacity: () => ({ release: () => undefined }),
+      reserveCapacity: async () => ({ release: () => undefined }),
       create: () => {
         throw new Error("binding-capacity-exceeded");
       },

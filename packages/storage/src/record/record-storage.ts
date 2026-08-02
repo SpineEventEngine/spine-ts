@@ -18,10 +18,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   /**
    * Declares whether this handle provides atomic compare-and-set mutations.
    *
-   * Registry and delivery code must reject a handle that sets this capability
-   * to `false` rather than treating a failed conditional write as a collision.
+   * The base contract defaults to `false`. An adapter sets this to `true` only
+   * when its `compareAndSet()` implementation is atomic across compatible
+   * handles. Registry and delivery code must reject a handle that leaves this
+   * capability disabled rather than treating a failed conditional write as a
+   * collision.
    */
-  readonly atomicCompareAndSet: boolean = true;
+  readonly atomicCompareAndSet: boolean = false;
   readonly #context: StorageContext;
   #open = true;
   readonly #recordSpec: RecordSpec<I, R>;

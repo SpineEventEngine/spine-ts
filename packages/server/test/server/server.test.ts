@@ -40,6 +40,7 @@ import {
   type ServerEnvironmentCloseable,
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+import { EnvironmentTests } from "../../src/server/environment.js";
 
 describe("Server", () => {
   beforeEach(async () => {
@@ -48,6 +49,26 @@ describe("Server", () => {
 
   afterEach(async () => {
     await resetServerEnvironmentForTest();
+  });
+
+  it("rejects production browser bindings before context assembly or listener startup", async () => {
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: new CloseTrackingTransport([]),
+    });
+    let resourceClosed = false;
+
+    await expect(
+      new Server({ browser: { port: 0, ...browserGateway() } })
+        .addResource({
+          close: () => {
+            resourceClosed = true;
+          },
+        })
+        .start(),
+    ).rejects.toThrow("requires durable subscription bindings");
+    expect(resourceClosed).toBe(false);
   });
 
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {

@@ -513,6 +513,7 @@ class MysqlPoolLifecycle {
 }
 
 class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  override readonly atomicCompareAndSet = true;
   readonly #scope: Uint8Array;
 
   constructor(

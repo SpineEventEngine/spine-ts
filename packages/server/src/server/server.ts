@@ -615,9 +615,8 @@ export interface BrowserServerOptions {
   /**
    * Supplies the registry that owns opaque browser-subscription bindings.
    *
-   * Production requires a durable registry created by
-   * {@link DurableSubscriptionBindings}. Local development may omit it and
-   * use an explicit in-memory registry.
+   * Production requires bindings that declare durable registry capability.
+   * Local development may omit it and use an explicit in-memory registry.
    */
   readonly bindings?: SubscriptionBindings;
 

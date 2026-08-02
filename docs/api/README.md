@@ -847,7 +847,10 @@ check before row access.
 `RecordStorage.compareAndSet(id, expected, next)` must be atomic across those
 handles for one logical backing store; `next: undefined` is a conditional
 delete, and `false` means the expected value did not match so no mutation was
-applied. `EventStore` is a framework delegate over
+applied. The `atomicCompareAndSet` capability defaults to `false`; a provider
+sets it to `true` only when it supplies this cross-handle atomicity. Code that
+requires the guarantee must reject a handle that does not declare it.
+`EventStore` is a framework delegate over
 `RecordStorage<EventId, Event>` and is storage-only here: it persists
 and reads generated Spine events, rejects missing, blank, or duplicate event
 IDs on the local append path, and can run `OnEventAccepted` between precheck

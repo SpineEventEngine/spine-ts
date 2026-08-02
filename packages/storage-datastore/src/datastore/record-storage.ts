@@ -130,6 +130,7 @@ class FlatEntityCodec<I, R extends Message> {
  * Private initial handle for the Datastore adapter.
  */
 export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  override readonly atomicCompareAndSet = true;
   readonly #codec: FlatEntityCodec<I, R>;
 
   /**
@@ -176,7 +177,10 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     _query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     const query = this.#codec.createQuery(this.client);
-    const providerLimit = this.#codec.queryLimit();
+    const providerLimit = DatastoreRecordQuery.limit(
+      _query,
+      this.#codec.queryLimit(),
+    );
     DatastoreQueryPushdown.translate(
       query,
       _query,
@@ -187,7 +191,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     const entities = DatastoreResults.entities(
       await this.client.runQuery(query, wrappedReadOptions),
     );
-    if (entities.length >= providerLimit) {
+    if (providerLimit === this.#codec.queryLimit() && entities.length >= providerLimit) {
       throw new DatastoreQueryLimitError(providerLimit - 1);
     }
     const entries = entities.map((entity) => ({
@@ -601,6 +605,33 @@ const DatastoreQueryPushdown = Object.freeze(
         operator,
         RecordValues.provider(predicate.value, `Datastore query filter "${predicate.column}"`),
       );
+    }
+  })(),
+);
+
+/**
+ * Selects safe provider bounds for direct record queries.
+ */
+const DatastoreRecordQuery = Object.freeze(
+  new (class {
+    /**
+     * Returns a caller limit only when it cannot change local query semantics.
+     *
+     * @param query Supplies the requested record query.
+     * @param scanLimit Supplies the configured materialization limit.
+     * @returns The finite provider row bound.
+     */
+    limit<I>(query: RecordQuery<I>, scanLimit: number): number {
+      if (
+        query.limit !== undefined &&
+        query.ids === undefined &&
+        query.filters === undefined &&
+        query.sort === undefined &&
+        query.after === undefined &&
+        query.offset === undefined
+      )
+        return query.limit;
+      return scanLimit;
     }
   })(),
 );

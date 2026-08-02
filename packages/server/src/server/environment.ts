@@ -54,6 +54,16 @@ export class Environment {
       process.env.NODE_ENV === "production" ? EnvironmentType.Production : EnvironmentType.Local,
     ));
   }
+
+  /**
+   * Selects an environment for deterministic package tests.
+   *
+   * @param type Supplies the test environment type.
+   * @internal
+   */
+  static useForTests(type: EnvironmentType): void {
+    resolvedEnvironment = new Environment(type);
+  }
 }
 
 /**
@@ -61,7 +71,10 @@ export class Environment {
  *
  * @internal
  */
-export const EnvironmentTests: { readonly reset: () => void } = Object.freeze({
+export const EnvironmentTests: {
+  readonly reset: () => void;
+  readonly use: (type: EnvironmentType) => void;
+} = Object.freeze({
   // prettier-ignore
 
   /**
@@ -69,5 +82,14 @@ export const EnvironmentTests: { readonly reset: () => void } = Object.freeze({
    */
   reset(): void {
     resetLocalTest();
+  },
+
+  /**
+   * Selects one environment type before the next singleton lookup.
+   *
+   * @param type Supplies the test environment type.
+   */
+  use(type: EnvironmentType): void {
+    Environment.useForTests(type);
   },
 });

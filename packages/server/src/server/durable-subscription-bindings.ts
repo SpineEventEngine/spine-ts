@@ -83,6 +83,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   readonly #nextId: () => string;
   readonly #recordLimit: number;
   readonly #storage: RecordStorage<string, Any>;
+  readonly #pendingReservations = new Set<SubscriptionCapacityReservation>();
   readonly #reservations = new Set<SubscriptionCapacityReservation>();
   #closed = false;
 
@@ -118,7 +119,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async reserveCapacity(): Promise<SubscriptionCapacityReservation> {
     this.#requireOpen();
     const records = await this.#storage.queryEntries({ limit: this.#recordLimit + 1 });
-    if (records.length + this.#reservations.size >= this.#recordLimit)
+    for (const entry of records)
+      DurableBindingValues.read(entry.record, entry.id, this.#maxRecordBytes).backend.fill(0);
+    if (records.length + this.#reservations.size + this.#pendingReservations.size >= this.#recordLimit)
       throw new Error("binding-capacity-exceeded");
     let released = false;
     const reservation: SubscriptionCapacityReservation = {
@@ -147,7 +150,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }): Promise<{ readonly id: string }> {
     this.#requireOpen();
     DurableBindingValues.createInput(input);
-    const reservation = this.#reservation(input.reservation) ?? (await this.reserveCapacity());
+    const reservation = this.#consumeReservation(input.reservation) ?? (await this.#reserveForCreate());
     try {
       const id = this.#nextId();
       if (!DurableBindingValues.token(id)) throw new Error("subscription ID must be unique");
@@ -168,7 +171,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         throw new Error("subscription ID must be unique");
       return Object.freeze({ id });
     } finally {
-      reservation.release();
+      this.#releaseReservation(reservation);
     }
   }
 
@@ -259,6 +262,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   close(): Promise<void> {
     this.#closed = true;
+    this.#pendingReservations.clear();
     this.#reservations.clear();
     this.#storage.close();
     return Promise.resolve();
@@ -295,12 +299,24 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     return { kind: "owned", binding };
   }
 
-  #reservation(
+  async #reserveForCreate(): Promise<SubscriptionCapacityReservation> {
+    const reservation = await this.reserveCapacity();
+    this.#reservations.delete(reservation);
+    this.#pendingReservations.add(reservation);
+    return reservation;
+  }
+
+  #consumeReservation(
     reservation: SubscriptionCapacityReservation | undefined,
   ): SubscriptionCapacityReservation | undefined {
-    return reservation !== undefined && this.#reservations.has(reservation)
-      ? reservation
-      : undefined;
+    if (reservation === undefined || !this.#reservations.delete(reservation)) return undefined;
+    this.#pendingReservations.add(reservation);
+    return reservation;
+  }
+
+  #releaseReservation(reservation: SubscriptionCapacityReservation): void {
+    this.#pendingReservations.delete(reservation);
+    reservation.release();
   }
 
   #requireOpen(): void {

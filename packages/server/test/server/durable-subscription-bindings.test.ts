@@ -1,11 +1,19 @@
-import { create } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { create, type Message } from "@bufbuild/protobuf";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
+import {
+  InMemoryStorageFactory,
+  RecordStorage,
+  type RecordEntry,
+  type RecordSpec,
+  StorageFactory,
+  type StorageContext,
+} from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
 import { BrowserServer } from "../../src/server/browser-server.js";
 import { DurableSubscriptionBindingRecords } from "../../src/server/durable-subscription-bindings.js";
+import type { BrowserServerOptions } from "../../src/server/server.js";
 
 describe("DurableSubscriptionBindings", () => {
   it("round-trips an owned private envelope across an independently closed registry", async () => {
@@ -100,13 +108,13 @@ describe("DurableSubscriptionBindings", () => {
   it("rejects volatile browser bindings before production listener assembly", () => {
     const bindings = registry(new InMemoryStorageFactory(), "messageboard");
     expect(() => {
-      BrowserServer.requireDurableBindings({}, true);
+      BrowserServer.requireDurableBindings({} as BrowserServerOptions, true);
     }).toThrow("requires durable subscription bindings");
     expect(() => {
-      BrowserServer.requireDurableBindings({ bindings }, true);
+      BrowserServer.requireDurableBindings({ bindings } as unknown as BrowserServerOptions, true);
     }).not.toThrow();
     expect(() => {
-      BrowserServer.requireDurableBindings({}, false);
+      BrowserServer.requireDurableBindings({} as BrowserServerOptions, false);
     }).not.toThrow();
     void bindings.close();
   });
@@ -252,12 +260,12 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
-  it("rechecks forged, released, and foreign reservations before creation", async () => {
+  it("rejects forged and released reservations before creation", async () => {
     const factory = new InMemoryStorageFactory();
     const first = limitedRegistry(factory, "first");
-    const second = limitedRegistry(factory, "second");
-    const foreign = await second.reserveCapacity();
-    foreign.release();
+    const released = await first.reserveCapacity();
+    released.release();
+    const forged = { release: () => undefined };
 
     await first.create({
       backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
@@ -271,18 +279,70 @@ describe("DurableSubscriptionBindings", () => {
         principalFingerprint: "principal-a",
         tenant: undefined,
         expiresAtMs: 1_000,
-        reservation: foreign,
+        reservation: released,
+      }),
+    ).rejects.toThrow("binding-capacity-exceeded");
+    await expect(
+      first.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([3]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 1_000,
+        reservation: forged,
       }),
     ).rejects.toThrow("binding-capacity-exceeded");
     await first.close();
+  });
+
+  it("does not consume a live reservation owned by another registry", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = capacityRegistry(factory, "messageboard", 2);
+    const second = capacityRegistry(factory, "messageboard", 2);
+    const foreign = await second.reserveCapacity();
+
+    await first.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+      reservation: foreign,
+    });
+    await expect(
+      second.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([2]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 1_000,
+        reservation: foreign,
+      }),
+    ).resolves.toBeDefined();
+    await first.close();
     await second.close();
+  });
+
+  it("admits at most one concurrent creation with the same reservation", async () => {
+    const bindings = limitedRegistry(new InMemoryStorageFactory(), "messageboard");
+    const reservation = await bindings.reserveCapacity();
+    const input = {
+      backend: { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+      reservation,
+    };
+
+    const results = await Promise.allSettled([bindings.create(input), bindings.create(input)]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    await bindings.close();
   });
 
   it("rejects a storage handle without atomic compare-and-set capability", () => {
     expect(
       () =>
         new DurableSubscriptionBindings({
-          storageFactory: new IncompatibleStorageFactory(),
+          storageFactory: new UnprovenStorageFactory(),
           namespace: "messageboard",
           nextId: () => "binding",
           dispose: () => Promise.resolve(),
@@ -326,6 +386,36 @@ describe("DurableSubscriptionBindings", () => {
     expect(() => {
       DurableSubscriptionBindingRecords.validate(record);
     }).toThrow("Durable subscription registry record is invalid.");
+  });
+
+  it.each([
+    create(AnySchema, { typeUrl: "wrong", value: new Uint8Array([1]) }),
+    create(AnySchema, {
+      typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
+      value: new TextEncoder().encode("null"),
+    }),
+    create(AnySchema, {
+      typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
+      value: new TextEncoder().encode(
+        '{"version":1,"id":"binding","principalFingerprint":"owner","expiresAtMs":1,"lifecycle":"inactive","leaseUntilMs":0,"cancellationFence":0,"backend":"AQ==","encodedBytes":99}',
+      ),
+    }),
+  ])("fails closed before admitting a seeded invalid row %#", async (record) => {
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new SeededStorageFactory([{ id: "binding", record }]),
+      namespace: "messageboard",
+      nextId: () => "new-binding",
+      dispose: () => Promise.resolve(),
+      leaseMs: 1,
+      cleanupBatchSize: 1,
+      recordLimit: 1,
+      maxRecordBytes: 1_024,
+    });
+
+    await expect(bindings.reserveCapacity()).rejects.toThrow(
+      "Durable subscription registry record is invalid.",
+    );
+    await bindings.close();
   });
 
   it.each([
@@ -374,6 +464,14 @@ function limitedRegistry(
   storageFactory: InMemoryStorageFactory,
   namespace: string,
 ): DurableSubscriptionBindings {
+  return capacityRegistry(storageFactory, namespace, 1);
+}
+
+function capacityRegistry(
+  storageFactory: InMemoryStorageFactory,
+  namespace: string,
+  recordLimit: number,
+): DurableSubscriptionBindings {
   return new DurableSubscriptionBindings({
     storageFactory,
     namespace,
@@ -381,15 +479,80 @@ function limitedRegistry(
     dispose: () => Promise.resolve(),
     leaseMs: 1,
     cleanupBatchSize: 1,
-    recordLimit: 1,
+    recordLimit,
     maxRecordBytes: 1_024,
   });
 }
 
-class IncompatibleStorageFactory extends InMemoryStorageFactory {
-  override createRecordStorage(...args: Parameters<InMemoryStorageFactory["createRecordStorage"]>) {
-    const storage = super.createRecordStorage(...args);
-    Object.assign(storage, { atomicCompareAndSet: false });
-    return storage;
+class SeededStorageFactory extends StorageFactory {
+  constructor(private readonly entries: readonly RecordEntry<string, Any>[]) {
+    super();
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new SeededRecordStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this.entries,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class SeededRecordStorage extends RecordStorage<string, Any> {
+  override readonly atomicCompareAndSet: boolean = true;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    private readonly entries: readonly RecordEntry<string, Any>[],
+  ) {
+    super(context, recordSpec);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecordEntries(): Promise<readonly RecordEntry<string, Any>[]> {
+    return Promise.resolve(this.entries);
+  }
+
+  protected readRecord(): Promise<Any | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+class UnprovenStorageFactory extends StorageFactory {
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new UnprovenRecordStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class UnprovenRecordStorage extends SeededRecordStorage {
+  override readonly atomicCompareAndSet = false;
+
+  constructor(context: StorageContext, recordSpec: RecordSpec<string, Any>) {
+    super(context, recordSpec, []);
   }
 }
