@@ -72,6 +72,11 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await Promise.all(
       attachments.map((attachment) => serverEnvironmentAccess.detach(environment, attachment)),
     );
+    const later = await serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [],
+    });
+    await serverEnvironmentAccess.detach(environment, later);
 
     expect(opens).toBe(1);
   });

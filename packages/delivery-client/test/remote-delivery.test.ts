@@ -6,6 +6,7 @@ import type { RemovalQuarantine } from "../src/client/types.js";
 const remote = vi.hoisted(() => ({
   clients: [] as FakeClient[],
   closeEvents: [] as string[],
+  closeFailures: [] as (Error | undefined)[],
   readiness: [] as (() => Promise<readonly unknown[]>)[],
 }));
 
@@ -44,7 +45,13 @@ vi.mock("@spine-event-engine/server", () => ({
     }
 
     build(): { close(): void } {
-      return { close: () => remote.closeEvents.push("delivery") };
+      return {
+        close: () => {
+          remote.closeEvents.push("delivery");
+          const failure = remote.closeFailures.shift();
+          if (failure !== undefined) throw failure;
+        },
+      };
     }
   },
 }));
@@ -64,14 +71,20 @@ class FakeClient {
 
   close(): void {
     if (this.#closed) return;
-    this.#closed = true;
     remote.closeEvents.push("client");
+    const failure = remote.closeFailures.shift();
+    if (failure !== undefined) throw failure;
+    this.#closed = true;
   }
 }
 
 function quarantine(): CloseableQuarantine {
   return {
-    close: () => remote.closeEvents.push("quarantine"),
+    close: () => {
+      remote.closeEvents.push("quarantine");
+      const failure = remote.closeFailures.shift();
+      if (failure !== undefined) throw failure;
+    },
     get: () => Promise.resolve(undefined),
     put: () => Promise.resolve(),
     delete: () => Promise.resolve(),
@@ -82,6 +95,7 @@ describe("RemoteDelivery", () => {
   beforeEach(() => {
     remote.clients = [];
     remote.closeEvents = [];
+    remote.closeFailures = [];
     remote.readiness = [];
   });
 
@@ -159,17 +173,26 @@ describe("RemoteDelivery", () => {
     expect(remote.closeEvents).toEqual(["delivery", "client", "quarantine"]);
   });
 
-  it("retries only unfinished remote close phases after each phase failure", async () => {
+  it.each([
+    ["delivery", [new Error("delivery close failed")], ["delivery", "client", "quarantine", "delivery"]],
+    ["client", [undefined, new Error("client close failed")], ["delivery", "client", "quarantine", "client"]],
+    [
+      "quarantine",
+      [undefined, undefined, new Error("quarantine close failed")],
+      ["delivery", "client", "quarantine", "quarantine"],
+    ],
+  ] as const)("retries only unfinished remote close phases after %s failure", async (_phase, failures, events) => {
     const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
     });
     await delivery.open();
 
-    await delivery.close();
+    remote.closeFailures.push(...failures);
+    await expect(delivery.close()).rejects.toThrow("RemoteDelivery close failed.");
     await delivery.close();
 
-    expect(remote.closeEvents).toEqual(["delivery", "client", "quarantine"]);
+    expect(remote.closeEvents).toEqual(events);
   });
 
   it("closes the transferred quarantine when the environment owner never opened", async () => {
