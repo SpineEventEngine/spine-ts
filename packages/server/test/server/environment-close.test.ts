@@ -74,12 +74,12 @@ describe("ServerEnvironment close", () => {
       nestedDeliveryError,
       nestedDeliveryError,
       deliveryError,
-      tracerError,
       transportError,
+      tracerError,
       storageError,
       cyclicStorageFailure,
     ]);
-    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
+    expect(attempts).toEqual(["delivery", "transport", "tracer", "storage"]);
   });
 
   it("flattens iterable aggregate errors while continuing later facilities", async () => {
@@ -98,7 +98,7 @@ describe("ServerEnvironment close", () => {
 
     expect(failure).toBeInstanceOf(AggregateError);
     expect((failure as AggregateError).errors).toEqual([iterableLeaf]);
-    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
+    expect(attempts).toEqual(["delivery", "transport", "tracer", "storage"]);
   });
 
   it("flattens a deep aggregate chain without blocking later facilities or completed-index retries", async () => {
@@ -119,9 +119,9 @@ describe("ServerEnvironment close", () => {
 
     expect(firstFailure).toBeInstanceOf(AggregateError);
     expect((firstFailure as AggregateError).errors).toEqual([leaf]);
-    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
+    expect(attempts).toEqual(["delivery", "transport", "tracer", "storage"]);
     await expect(environment.close()).resolves.toBeUndefined();
-    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage", "delivery"]);
+    expect(attempts).toEqual(["delivery", "transport", "tracer", "storage", "delivery"]);
   });
 
   it("retries only facilities that previously failed and leaves completed facilities idempotent", async () => {
@@ -151,7 +151,7 @@ describe("ServerEnvironment close", () => {
     await expect(environment.close()).resolves.toBeUndefined();
     await expect(environment.close()).resolves.toBeUndefined();
 
-    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage", "tracer", "storage"]);
+    expect(attempts).toEqual(["delivery", "transport", "tracer", "storage", "tracer", "storage"]);
   });
 
   it("contains a throwing close getter, continues later facilities, and retries that facility", async () => {
@@ -180,9 +180,9 @@ describe("ServerEnvironment close", () => {
 
     expect(firstFailure).toBeInstanceOf(AggregateError);
     expect((firstFailure as AggregateError).errors).toEqual([getterFailure]);
-    expect(attempts).toEqual(["tracer", "transport", "storage"]);
+    expect(attempts).toEqual(["transport", "tracer", "storage"]);
     await expect(environment.close()).resolves.toBeUndefined();
-    expect(attempts).toEqual(["tracer", "transport", "storage", "delivery"]);
+    expect(attempts).toEqual(["transport", "tracer", "storage", "delivery"]);
     expect(getterAttempts).toBe(2);
   });
 
@@ -198,7 +198,7 @@ describe("ServerEnvironment close", () => {
     await expect(environment.close()).resolves.toBeUndefined();
     await expect(environment.close()).resolves.toBeUndefined();
 
-    expect(attempts).toEqual(["delivery", "tracer", "transport", "storage"]);
+    expect(attempts).toEqual(["delivery", "transport", "tracer", "storage"]);
   });
 
   it("ignores owned non-closeable facilities", async () => {

@@ -45,6 +45,7 @@ export { Environment, EnvironmentType } from "./server/environment.js";
 export {
   ServerEnvironment,
   type ServerEnvironmentCloseable,
+  type ServerEnvironmentDelivery,
   type ServerEnvironmentSettings,
 } from "./server/server-environment.js";
 

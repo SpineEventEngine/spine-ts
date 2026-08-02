@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const remote = vi.hoisted(() => ({
   clients: [] as FakeClient[],
@@ -77,6 +77,12 @@ async function remoteDelivery(): Promise<{
 }
 
 describe("RemoteDelivery", () => {
+  beforeEach(() => {
+    remote.clients = [];
+    remote.closeEvents = [];
+    remote.readiness = [];
+  });
+
   it("builds one remote environment delivery from an endpoint and durable quarantine", async () => {
     const delivery = (await remoteDelivery()).RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",

@@ -14,6 +14,7 @@ export {
   MAX_INBOX_PAYLOAD_BYTES,
 } from "./client/client.js";
 export { RemoteInbox, RemoteWorkRegistry } from "./remote/adapters.js";
+export { RemoteDelivery, type RemoteDeliveryConfig } from "./remote/remote-delivery.js";
 
 export type {
   DeliveryClientOptions,

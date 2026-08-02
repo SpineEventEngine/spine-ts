@@ -93,6 +93,23 @@ The quarantine must atomically store only a bounded record before callback
 admission and before removal. An in-memory `Map` is suitable only for a test:
 production recovery needs a durable, capacity-bounded implementation.
 
+For server assembly, pass one `RemoteDelivery` to the environment instead of
+manually wiring adapters. `open()` runs before the first attachment/listener
+admission. A failed bounded readiness check closes its fresh client and can be
+retried; the transferred quarantine stays open until environment shutdown.
+
+```ts
+import { RemoteDelivery, type RemovalQuarantine } from "@spine-event-engine/delivery-client";
+import { EnvironmentType, ServerEnvironment, type ServerEnvironmentCloseable } from "@spine-event-engine/server";
+
+declare const quarantine: RemovalQuarantine & ServerEnvironmentCloseable;
+ServerEnvironment.when(EnvironmentType.Production).use({
+  storageFactory: {} as never,
+  transport: {} as never,
+  delivery: RemoteDelivery.connectTo({ endpoint: "https://delivery.example.test", removalQuarantine: quarantine }),
+});
+```
+
 ## ⚠️ Reconcile uncertain writes
 
 Read operations may use the configured bounded retry policy. Mutations do not

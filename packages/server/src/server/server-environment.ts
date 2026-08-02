@@ -34,6 +34,20 @@ export interface ServerEnvironmentCloseable {
 }
 
 /**
+ * A closeable environment facility that must open before attachment admission.
+ */
+export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
+  // prettier-ignore
+
+  /**
+   * Opens the facility before the environment admits attachments.
+   *
+   * @returns An optional asynchronous open operation.
+   */
+  open(): unknown;
+}
+
+/**
  * Facilities configured for one Node environment type.
  */
 export interface ServerEnvironmentSettings {
@@ -52,7 +66,7 @@ export interface ServerEnvironmentSettings {
   /**
    * Optional closeable delivery owner for durable delivery seams.
    */
-  readonly delivery?: ServerEnvironmentCloseable;
+  readonly delivery?: ServerEnvironmentCloseable | ServerEnvironmentDelivery;
 
   /**
    * Optional tracing factory placeholder for later tracing adapters.
@@ -100,7 +114,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   /**
    * Optional closeable delivery owner selected for this environment.
    */
-  readonly delivery: ServerEnvironmentCloseable | undefined;
+  readonly delivery: ServerEnvironmentCloseable | ServerEnvironmentDelivery | undefined;
 
   /**
    * Optional tracing factory selected for this environment.
@@ -110,6 +124,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly #ownedCloseables: readonly unknown[];
   readonly #closeGroup: RetryableCloseGroup;
   #close: Promise<void> | undefined;
+  #deliveryOpen: Promise<void> | undefined;
+  #deliveryOpened = false;
 
   private constructor(environment: Environment, settings: RequiredFacilities) {
     this.environment = environment;
@@ -190,6 +206,31 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     return this.#close;
   }
 
+  /**
+   * Opens an openable configured delivery before attachment admission.
+   *
+   * @returns A promise that settles when delivery is open for attachments.
+   * @internal
+   */
+  openDelivery(): Promise<void> {
+    if (this.#deliveryOpened) return Promise.resolve();
+    const opening = (this.#deliveryOpen ??= Promise.resolve()
+      .then(() => {
+        const delivery = this.delivery;
+        if (delivery !== undefined && "open" in delivery && typeof delivery.open === "function") {
+          return delivery.open();
+        }
+        return undefined;
+      })
+      .then(() => {
+        this.#deliveryOpened = true;
+      }));
+    void opening.catch(() => {
+      if (this.#deliveryOpen === opening) this.#deliveryOpen = undefined;
+    });
+    return opening;
+  }
+
   #attachments(): EnvironmentAttachments {
     const attachments = environmentAttachments.get(this);
     if (attachments === undefined) {
@@ -202,7 +243,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly transport: SignalTransport;
-  readonly delivery: ServerEnvironmentCloseable | undefined;
+  readonly delivery: ServerEnvironmentCloseable | ServerEnvironmentDelivery | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 }
 
@@ -280,7 +321,7 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     if (attachments === undefined) {
       return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
     }
-    return attachments.attach(options);
+    return environment.openDelivery().then(() => attachments.attach(options));
   },
   failedStartPending(environment: ServerEnvironment) {
     const attachments = environmentAttachments.get(environment);
@@ -374,8 +415,8 @@ const ServerEnvironmentValues = Object.freeze({
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
     return Object.freeze([
       ...(options.delivery === undefined ? [] : [options.delivery]),
-      ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.transport,
+      ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
     ]);
   },
