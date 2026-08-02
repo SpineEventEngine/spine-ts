@@ -96,6 +96,37 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("enforces capacity across independently opened registries", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = capacityRegistry(factory, "shared", 1);
+    const second = capacityRegistry(factory, "shared", 1);
+    const held = await first.reserveCapacity();
+
+    await expect(second.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
+    await held.release();
+    await expect(second.reserveCapacity()).resolves.toBeDefined();
+
+    await first.close();
+    await second.close();
+  });
+
+  it("converts a preallocated reservation without allocating another slot", async () => {
+    const bindings = limitedRegistry(new InMemoryStorageFactory(), "same-slot");
+    const reservation = await bindings.reserveCapacity();
+
+    await expect(
+      bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 1_000,
+        reservation,
+      }),
+    ).resolves.toMatchObject({ id: expect.any(String) });
+    await expect(bindings.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
+    await bindings.close();
+  });
+
   it("declares durable capability without treating in-memory bindings as durable", () => {
     const bindings = registry(new InMemoryStorageFactory(), "messageboard");
 
