@@ -113,4 +113,3 @@ complete review wave across style, documentation, TypeScript/API, and
 performance/reliability. Final security remains the Wave 5 G1 role; fail-closed
 routing, origin isolation, redaction, and cancellation remain mandatory here.
 After convergence, run `verify:release` once.
-
