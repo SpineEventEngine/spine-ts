@@ -7,8 +7,10 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-No implementation frontier is active. Wave 5 packaging and deployment still
-requires its separate human Q&A before implementation starts.
+No implementation frontier is active. Wave 5 packaging and deployment Q&A is
+complete. Its approved scope and optimized execution sequence are recorded in
+`build-protocol/planning/WAVE_5_PACKAGING_DEPLOYMENT_PLAN.md`; implementation
+starts only when the human explicitly starts Wave 5.
 
 ## Purpose
 
@@ -111,15 +113,18 @@ durably closed.
   Projection-based MessageBoard example. Subscriptions are explicitly best-effort
   notifications with reconnect/re-query behavior and no completeness promise.
 - **Wave 5:** storage-neutral application packaging/deployment contracts,
-  containers, deterministic Compose, and minimal Kubernetes references.
+  combined and standalone production gateways, a durable subscription
+  registry, containers, deterministic Compose, and minimal Kubernetes
+  references. The approved plan is
+  `build-protocol/planning/WAVE_5_PACKAGING_DEPLOYMENT_PLAN.md`.
 - **Wave 6:** horizontal best-effort subscription propagation so notifications
   produced by any application node are reachable through subscriptions
   attached to any node. The earlier cluster-complete-while-connected delivery
   guarantee is superseded; queries remain authoritative.
 
-Each Wave 5-6 plan still requires a separate human Q&A. Do not publish packages
-to npm until all waves are complete and publication is revisited with the
-human.
+Wave 5 Q&A is complete. Wave 6 still requires a separate human Q&A. Do not
+publish packages to npm until all waves are complete and publication is
+revisited with the human.
 
 ## Authored API And Example Quality Correction
 
