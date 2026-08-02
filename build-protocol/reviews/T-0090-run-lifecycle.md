@@ -116,3 +116,40 @@ substantively affected concerns:
 Every dispatch must explicitly supply the expected model and reasoning. Actual
 runtime metadata will be recorded if exposed; otherwise the immutable role
 profile and that limitation remain the acceptance evidence.
+
+## Wave 2 Results
+
+- Style/maintainability: clean under the explicitly configured existing
+  reviewer with `gpt-5.6-terra` / high.
+- Performance/reliability: clean under the explicitly configured existing
+  reviewer with `gpt-5.6-terra` / high.
+- TypeScript/API docs: one P1 stale-handle contract defect and the shared stale
+  user-guide claim under the explicitly configured existing reviewer with
+  `gpt-5.6-terra` / high.
+- Documentation: one P1 contradiction, one P2 beginner-workflow defect, and
+  one retry-wording clarity gap under the explicitly configured existing
+  reviewer with `gpt-5.6-luna` / medium.
+
+Runtime self-introspection was unavailable in all four lanes; the immutable
+configured role/profile is the available evidence. No visible mismatch or
+fallback occurred, so every result is accepted.
+
+## Final Narrow Correction Batch
+
+1. After a successful managed close, a later call to the same `Server.run()`
+   must not return the cached closed handle. Preserve the cached handle while
+   close remains retryable, then either clear it and let the terminal
+   environment reject a new run or reject terminally at the server boundary.
+   Add a regression for the observable behavior.
+2. Qualify the stale `docs/USER_GUIDE.md` assertion that server close never
+   closes process facilities so it applies only to caller-managed `start()`.
+3. Make the server README's standalone beginner example use run-managed
+   `run()`, or relabel it unambiguously as caller-managed startup.
+4. Clarify that final run-managed close retries unfinished environment cleanup
+   as well as unfinished server cleanup.
+
+This batch is narrow and deterministic. Reliability and maintainability lanes
+do not reopen. After focused GREEN evidence, the orchestrator will inspect the
+stale-handle regression and documentation changes directly, run the release
+gate, and close the task without a third specialist wave unless the correction
+changes the contract again.
