@@ -65,6 +65,7 @@ export const BrowserServer: Readonly<{
     const origins = BrowserServer.origins(options.origins);
     const authRoutes = BrowserServer.authRoutes(options.authRoutes);
     const activeAuth = new Set<AbortController>();
+    let draining = false;
     const backendBaseUrl = typeof native === "string" ? native : native.baseUrl;
     const creator = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: backendBaseUrl }));
     const bindings =
@@ -104,6 +105,11 @@ export const BrowserServer: Readonly<{
       writeMaxBytes: options.writeMaxBytes,
     });
     const server = http.createServer((request, response) => {
+      if (draining) {
+        response.statusCode = 503;
+        response.end();
+        return;
+      }
       const path = request.url ?? "";
       const auth = authRoutes.get(`${request.method ?? ""} ${path}`);
       if (auth !== undefined) {
@@ -165,6 +171,9 @@ export const BrowserServer: Readonly<{
       subscriptions,
       address,
       activeAuth,
+      () => {
+        draining = true;
+      },
     );
   },
   requests(options: BrowserServerOptions) {
@@ -420,6 +429,7 @@ class RunningBrowserServer implements RunningServer {
   readonly #subscriptions: SubscriptionGateway;
   readonly #native: RunningServer | undefined;
   readonly #activeAuth: Set<AbortController>;
+  readonly #beginDrain: () => void;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -435,11 +445,13 @@ class RunningBrowserServer implements RunningServer {
     subscriptions: SubscriptionGateway,
     address: AddressInfo,
     activeAuth: Set<AbortController>,
+    beginDrain: () => void,
   ) {
     this.#server = server;
     this.#native = native;
     this.#subscriptions = subscriptions;
     this.#activeAuth = activeAuth;
+    this.#beginDrain = beginDrain;
     this.host = typeof address.address === "string" ? address.address : "127.0.0.1";
     this.port = address.port;
     const host =
@@ -456,6 +468,7 @@ class RunningBrowserServer implements RunningServer {
   }
 
   async #closeOnce(): Promise<void> {
+    this.#beginDrain();
     for (const controller of this.#activeAuth) controller.abort();
     const listener = this.#listenerClosed ? undefined : this.#closeListenerPhase();
     if (!this.#subscriptionsClosed) {

@@ -455,6 +455,46 @@ describe("Server", () => {
     await request;
   });
 
+  it("rejects retained-connection auth admission while the listener drains", async () => {
+    let calls = 0;
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "GET",
+            path: "/auth/drain",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 1024,
+            timeoutMs: 1000,
+            onRequest: () => ((calls += 1), new Response()),
+          },
+        ],
+      },
+    }).start();
+    const original = http.Server.prototype.close;
+    const close = vi.spyOn(http.Server.prototype, "close").mockImplementationOnce(function (
+      this: http.Server,
+      callback?: (error?: Error) => void,
+    ) {
+      setTimeout(() => original.call(this, callback), 50);
+      return this;
+    });
+    try {
+      const closing = server.close();
+      const response = await fetch(`${server.baseUrl}/auth/drain`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      }).catch(() => undefined);
+      expect(response?.status).toBe(503);
+      expect(calls).toBe(0);
+      await closing;
+    } finally {
+      close.mockRestore();
+      await server.close().catch(() => undefined);
+    }
+  });
+
   it("uses fixed auth errors without starting application work", async () => {
     let calls = 0;
     const server = await new Server({
