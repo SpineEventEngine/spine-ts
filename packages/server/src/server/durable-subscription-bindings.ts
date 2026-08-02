@@ -264,9 +264,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       await input.onBackend(Values.envelope(claimed), controller.signal, () =>
         this.#current(input.id, claimed.fence, "active", Date.now()),
       );
-      return (await this.#current(input.id, claimed.fence, "active", input.nowMs))
-        ? { kind: "activated" }
-        : { kind: "denied" };
+      if (!(await this.#current(input.id, claimed.fence, "active", input.nowMs)))
+        return { kind: "denied" };
+      await this.#finalizeActivation(claimed, input.nowMs);
+      return { kind: "activated" };
     } finally {
       clearTimeout(active.timer);
       if (this.#active.get(input.id) === active) this.#active.delete(input.id);
@@ -572,6 +573,31 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       this.#current(next.id, next.fence, "cancelling", nowMs),
     );
     await this.#retire(next);
+  }
+  async #finalizeActivation(active: Binding, nowMs: number): Promise<void> {
+    const row = await this.#storage.read(active.id);
+    if (row === undefined) return;
+    const current = Values.read(row, active.id, this.#maxRecordBytes) as Binding;
+    if (
+      current.lifecycle !== "active" ||
+      current.ownerId !== this.#owner ||
+      current.fence !== active.fence ||
+      (current.leaseUntilMs ?? 0) <= nowMs
+    )
+      return;
+    const cancelling = this.#work(current, "cancelling", nowMs, "activation-end");
+    if (!(await this.#cas(active.id, row, Values.write(cancelling, this.#maxRecordBytes)))) {
+      const reread = await this.#storage.read(active.id);
+      if (reread === undefined || !this.#sameBinding(reread, cancelling)) return;
+    }
+    try {
+      await this.#dispose(Values.envelope(cancelling), new AbortController().signal, () =>
+        this.#current(cancelling.id, cancelling.fence, "cancelling", nowMs),
+      );
+    } catch {
+      return;
+    }
+    await this.#retire(cancelling);
   }
   async #retire(expected: Binding): Promise<void> {
     const row = await this.#storage.read(expected.id);

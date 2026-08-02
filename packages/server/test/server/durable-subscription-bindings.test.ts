@@ -287,6 +287,43 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("finalizes a settled active callback under a new durable cancellation fence", async () => {
+    const disposed: number[] = [];
+    const bindings = cleanupRegistry(new InMemoryStorageFactory(), "activation-final", (value) => {
+      disposed.push(value.bytes[0] ?? 0);
+      return Promise.resolve();
+    });
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([7]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+
+    await expect(
+      bindings.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+
+    expect(disposed).toEqual([7]);
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    await bindings.close();
+  });
+
   it("allows one local cancellation callback and fences a stale active callback", async () => {
     const factory = new InMemoryStorageFactory();
     const first = registry(factory, "cancel-fence");
