@@ -1,6 +1,6 @@
 # T-0092 Review Record
 
-Status: Complete; release verification passed
+Status: Complete; merged and post-merge verified
 
 ## Required Concerns
 
@@ -282,3 +282,7 @@ and 3,401 tests, with 3 files and 25 tests skipped. Repository coverage was
 94.15% statements, 90.04% branches, 94.61% functions, and 95.04% lines. All
 generated build, tooling typecheck, lint, cleanup, TSDoc, formatting,
 documentation, Proto, package, and release-readiness gates passed.
+
+T-0092 merged into `main` as `8f1d636e` and was pushed to `origin/main`.
+Post-merge Proto generation, generated TypeScript build, and 358 focused
+auth/server/storage-provider tests across seven files passed on `main`.

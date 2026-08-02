@@ -1,6 +1,6 @@
 # T-0092: Two-gateway subscription coordination
 
-Status: Ready for merge
+Status: Complete
 Start: `2026-08-02`
 Baseline: `229b610e`
 Branch: `task/T-0092-subscription-coordination`
