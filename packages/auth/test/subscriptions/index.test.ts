@@ -594,9 +594,7 @@ describe("SubscriptionGateway", () => {
       create: bindings.create.bind(bindings),
       activate: bindings.activate.bind(bindings),
       cancel: bindings.cancel.bind(bindings),
-      reserveCapacity: async () => {
-        throw new Error("store unavailable");
-      },
+      reserveCapacity: () => Promise.reject(new Error("store unavailable")),
       purgeExpired: bindings.purgeExpired.bind(bindings),
       close: bindings.close.bind(bindings),
     };
@@ -607,7 +605,7 @@ describe("SubscriptionGateway", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "denied" });
     const capacityFailure = {
       ...unavailable,
-      reserveCapacity: async () => ({ release: async () => undefined }),
+      reserveCapacity: () => Promise.resolve({ release: () => Promise.resolve() }),
       create: () => {
         throw new Error("binding-capacity-exceeded");
       },
@@ -1563,7 +1561,7 @@ describe("SubscriptionGateway", () => {
     expect(compensationAborted).toBe(true);
     expect(bindings.size).toBe(0);
     const reusable = await bindings.reserveCapacity();
-    reusable.release();
+    await reusable.release();
   });
 
   it("releases a capacity-one lease after timed-out compensation", async () => {

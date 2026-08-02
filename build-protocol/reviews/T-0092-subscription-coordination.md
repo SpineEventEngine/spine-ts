@@ -41,3 +41,17 @@ is reserved for a complete converged checkpoint.
 
 - Evidence: the narrow server typecheck and focused durable registry suite
   (104 tests) passed, as did Prettier and `git diff --check`.
+
+## Auth Test Preflight Correction
+
+- Mechanical preflight found four ESLint failures in the auth subscription
+  test doubles: redundant async wrappers and an unawaited release promise.
+  This is test-tooling cleanup, not a specialist-review finding, and does not
+  change the durable registry or public subscription contract.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium) made
+  the bounded correction. Runtime self-introspection remains unavailable.
+- Pending evidence: affected lint, focused auth test/typecheck, formatting,
+  and `git diff --check`, followed by immediate feature-branch push.
+
+- Evidence: affected ESLint and auth typecheck passed; the focused auth
+  subscription suite passed 51 tests; Prettier and `git diff --check` passed.
