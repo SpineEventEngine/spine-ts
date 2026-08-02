@@ -621,19 +621,21 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     throw new Error("Subscription cleanup lost its durable lease.");
   }
   async #failClean(expected: Cleanup, nowMs: number): Promise<void> {
-    const failureCount = Math.min(31, expected.failureCount + 1);
+    const current = await this.#cleanup();
+    if (current.ownerId !== this.#owner || current.fence !== expected.fence) return;
+    const failureCount = Math.min(31, current.failureCount + 1);
     const multiplier = 2 ** Math.min(4, failureCount - 1);
     const delay = Math.min(Number.MAX_SAFE_INTEGER - nowMs, this.#leaseMs * multiplier);
     const next: Cleanup = {
       family: "cleanup",
       id: cleanupId,
-      revision: expected.revision + 1,
-      fence: expected.fence,
+      revision: current.revision + 1,
+      fence: current.fence,
       failureCount,
       retryAfterMs: nowMs + delay,
-      ...(expected.afterId === undefined ? {} : { afterId: expected.afterId }),
+      ...(current.afterId === undefined ? {} : { afterId: current.afterId }),
     };
-    if (await this.#replaceCleanup(expected, next)) return;
+    if (await this.#replaceCleanup(current, next)) return;
     const reread = await this.#cleanup();
     if (!this.#sameCleanup(reread, next)) return;
   }

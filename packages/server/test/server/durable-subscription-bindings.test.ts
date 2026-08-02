@@ -386,6 +386,77 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it.each(["cancellation", "retirement"] as const)(
+    "reconciles an applied-then-thrown %s before another cancellation effect",
+    async (phase) => {
+      const factory = new ApplyThenThrowFactory(phase);
+      const bindings = capacityRegistry(factory, `cancel-${phase}`, 2);
+      const binding = await bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 10_000,
+      });
+      factory.arm();
+      let calls = 0;
+
+      await expect(
+        bindings.cancel({
+          id: binding.id,
+          principalFingerprint: "principal-a",
+          tenant: undefined,
+          nowMs: 1,
+          onBackend: () => {
+            calls += 1;
+            return Promise.resolve();
+          },
+        }),
+      ).resolves.toEqual({ kind: "closed" });
+      expect(calls).toBe(1);
+      await bindings.close();
+    },
+  );
+
+  it("takes over an expired cancellation lease with a new durable fence", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = timedRegistry(factory, "cancel-takeover");
+    const second = timedRegistry(factory, "cancel-takeover");
+    const binding = await first.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    let releaseFirst: (() => void) | undefined;
+    const firstCancel = first.cancel({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 1,
+      onBackend: () => new Promise<void>((resolve) => (releaseFirst = resolve)),
+    });
+    await Promise.resolve();
+    let secondCalls = 0;
+
+    await expect(
+      second.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 101,
+        onBackend: () => {
+          secondCalls += 1;
+          return Promise.resolve();
+        },
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    expect(secondCalls).toBe(1);
+    releaseFirst?.();
+    await expect(firstCancel).resolves.toEqual({ kind: "closed" });
+    await first.close();
+    await second.close();
+  });
+
   it("renews a live lease and aborts local work after a durable renewal loss", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
@@ -589,6 +660,7 @@ describe("DurableSubscriptionBindings", () => {
       failureCount: 1,
       retryAfterMs: 20,
     });
+    expect(await cleanupControl(factory, "cleanup-backoff")).not.toHaveProperty("ownerId");
     await bindings.purgeExpired(19);
     expect(calls).toBe(1);
     await bindings.purgeExpired(20);
@@ -1143,7 +1215,9 @@ class ApplyThenThrowFactory extends StorageFactory {
       | "completion"
       | "repair-page"
       | "repair-final"
-      | "claim",
+      | "claim"
+      | "cancellation"
+      | "retirement",
   ) {
     super();
   }
@@ -1185,7 +1259,13 @@ class ApplyThenThrowFactory extends StorageFactory {
             !text.includes('"operation"')) ||
           (this.phase === "claim" &&
             id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"active"'));
+            text.includes('"lifecycle":"active"')) ||
+          (this.phase === "cancellation" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"cancelling"')) ||
+          (this.phase === "retirement" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"retired"'));
         if (hit) this.#armed = false;
         return hit;
       },
