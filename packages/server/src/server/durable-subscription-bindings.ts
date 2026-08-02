@@ -54,9 +54,12 @@ interface Quota {
   readonly revision: number;
   readonly used: number;
   readonly operation?: {
-    readonly kind: "repair";
+    readonly kind: "reserve" | "release" | "repair";
+    readonly operationId: string;
+    readonly bindingId?: string;
+    readonly token?: string;
     readonly afterId?: string;
-    readonly count: number;
+    readonly count?: number;
   };
 }
 interface Cleanup {
@@ -90,7 +93,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   readonly #owner = crypto.randomUUID();
   readonly #reservations = new Map<
     SubscriptionCapacityReservation,
-    { id: string; token: string }
+    { id: string; token: string; consumed: boolean }
   >();
   readonly #active = new Map<
     string,
@@ -133,46 +136,34 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   async reserveCapacity(): Promise<SubscriptionCapacityReservation> {
     this.#open();
+    // This bounded validation pass fails closed for corrupt rows before a new
+    // admission decision. Capacity itself is always decided by the quota row.
     const existing = await this.#storage.queryEntries({ limit: this.#recordLimit + 2 });
     for (const row of existing) Values.read(row.record, row.id, this.#maxRecordBytes);
     for (let count = 0; count < attempts; count += 1) {
       const quota = await this.#quota();
       if (quota.operation !== undefined) {
-        await this.#repair();
+        await this.#complete(quota);
         continue;
       }
       if (quota.used >= this.#recordLimit) throw new Error("binding-capacity-exceeded");
       const id = this.#nextId();
       if (!Values.publicId(id)) throw new Error("subscription ID must be unique");
       const token = crypto.randomUUID();
-      const binding: Binding = {
-        family: "binding",
-        id,
-        revision: 1,
-        admissionToken: token,
-        lifecycle: "reserved",
-        fence: 0,
-        reservationOwner: this.#owner,
-        reservationUntilMs: Number.MAX_SAFE_INTEGER,
+      const operation = {
+        kind: "reserve" as const,
+        operationId: crypto.randomUUID(),
+        bindingId: id,
+        token,
       };
-      if (
-        !(await this.#storage.compareAndSet(
-          id,
-          undefined,
-          Values.write(binding, this.#maxRecordBytes),
-        ))
-      )
-        continue;
-      const next: Quota = { ...quota, revision: quota.revision + 1, used: quota.used + 1 };
-      if (
-        !(await this.#storage.compareAndSet(
-          quotaId,
-          Values.write(quota, this.#maxRecordBytes),
-          Values.write(next, this.#maxRecordBytes),
-        ))
-      ) {
-        await this.#repair();
+      const staged: Quota = { ...quota, revision: quota.revision + 1, operation };
+      if (!(await this.#replaceQuota(quota, staged))) {
+        const reread = await this.#quota();
+        if (reread.operation?.operationId !== operation.operationId) continue;
       }
+      await this.#complete(staged);
+      const admitted = await this.#slot(id, token);
+      if (admitted === undefined) continue;
       let released = false;
       const reservation: SubscriptionCapacityReservation = {
         release: async () => {
@@ -182,7 +173,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
           await this.#release(id, token);
         },
       };
-      this.#reservations.set(reservation, { id, token });
+      this.#reservations.set(reservation, { id, token, consumed: false });
       return reservation;
     }
     throw new Error("binding-capacity-exceeded");
@@ -204,7 +195,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       input.reservation === undefined ? undefined : this.#reservations.get(input.reservation);
     const reservation = supplied === undefined ? await this.reserveCapacity() : input.reservation!;
     const held = this.#reservations.get(reservation);
-    if (held === undefined) throw new Error("binding-capacity-exceeded");
+    if (held === undefined || held.consumed) throw new Error("binding-capacity-exceeded");
+    held.consumed = true;
     const row = await this.#storage.read(held.id);
     const old =
       row === undefined ? undefined : (Values.read(row, held.id, this.#maxRecordBytes) as Binding);
@@ -223,8 +215,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       backend: Values.base64(input.backend.bytes),
       backendBytes: input.backend.bytes.byteLength,
     };
-    if (!(await this.#storage.compareAndSet(old.id, row, Values.write(next, this.#maxRecordBytes))))
-      throw new Error("binding-capacity-exceeded");
+    if (!(await this.#cas(old.id, row, Values.write(next, this.#maxRecordBytes)))) {
+      const applied = await this.#slot(old.id, held.token);
+      const current = await this.#storage.read(old.id);
+      if (applied !== undefined || current === undefined || !this.#sameBinding(current, next))
+        throw new Error("binding-capacity-exceeded");
+    }
     this.#reservations.delete(reservation);
     return Object.freeze({ id: old.id });
   }
@@ -428,30 +424,21 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
   async #release(id: string, token: string): Promise<void> {
     for (let count = 0; count < attempts; count += 1) {
-      const row = await this.#storage.read(id);
-      if (row !== undefined) {
-        const binding = Values.read(row, id, this.#maxRecordBytes) as Binding;
-        if (
-          binding.admissionToken !== token ||
-          !["reserved", "retired"].includes(binding.lifecycle)
-        )
-          return;
-        if (!(await this.#storage.compareAndSet(id, row, undefined))) continue;
-      }
       const quota = await this.#quota();
       if (quota.operation !== undefined) {
-        await this.#repair();
+        await this.#complete(quota);
         continue;
       }
-      const next = { ...quota, revision: quota.revision + 1, used: Math.max(0, quota.used - 1) };
-      if (
-        await this.#storage.compareAndSet(
-          quotaId,
-          Values.write(quota, this.#maxRecordBytes),
-          Values.write(next, this.#maxRecordBytes),
-        )
-      )
-        return;
+      const operation = {
+        kind: "release" as const,
+        operationId: crypto.randomUUID(),
+        bindingId: id,
+        token,
+      };
+      const staged: Quota = { ...quota, revision: quota.revision + 1, operation };
+      if (!(await this.#replaceQuota(quota, staged))) continue;
+      await this.#complete(staged);
+      return;
     }
   }
   async #quota(): Promise<Quota> {
@@ -472,7 +459,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async #repair(): Promise<void> {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const quota = await this.#quota();
-      const operation = quota.operation ?? { kind: "repair" as const, count: 0 };
+      const operation = quota.operation ?? {
+        kind: "repair" as const,
+        operationId: crypto.randomUUID(),
+        count: 0,
+      };
       const page = await this.#storage.queryEntries({
         sort: [{ field: "id" }],
         ...(operation.afterId === undefined
@@ -483,7 +474,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         limit: this.#cleanupBatchSize,
       });
       const data = page.filter((entry) => entry.id !== quotaId && entry.id !== cleanupId);
-      const count = operation.count + data.length;
+      const count = (operation.count ?? 0) + data.length;
       const afterId = page.at(-1)?.id;
       const completed = page.length < this.#cleanupBatchSize;
       const next: Quota = completed
@@ -495,22 +486,105 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
             used: quota.used,
             operation: {
               kind: "repair",
+              operationId: operation.operationId,
               count,
               ...(afterId === undefined ? {} : { afterId }),
             },
           };
-      if (
-        await this.#storage.compareAndSet(
-          quotaId,
-          Values.write(quota, this.#maxRecordBytes),
-          Values.write(next, this.#maxRecordBytes),
-        )
-      ) {
+      if (await this.#replaceQuota(quota, next)) {
         if (completed) return;
         continue;
       }
     }
     throw new Error("Subscription quota repair did not converge.");
+  }
+  async #complete(quota: Quota): Promise<void> {
+    const operation = quota.operation;
+    if (operation === undefined) return;
+    if (operation.kind === "repair") return this.#repair();
+    const id = operation.bindingId!;
+    const token = operation.token!;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const current = await this.#quota();
+      if (current.operation === undefined) return;
+      if (current.operation.operationId !== operation.operationId) continue;
+      const row = await this.#storage.read(id);
+      if (operation.kind === "reserve") {
+        if (row === undefined) {
+          const slot: Binding = {
+            family: "binding",
+            id,
+            revision: 1,
+            admissionToken: token,
+            lifecycle: "reserved",
+            fence: 0,
+            reservationOwner: this.#owner,
+            reservationUntilMs: Number.MAX_SAFE_INTEGER,
+          };
+          await this.#cas(id, undefined, Values.write(slot, this.#maxRecordBytes));
+          continue;
+        }
+        const slot = Values.read(row, id, this.#maxRecordBytes) as Binding;
+        if (slot.admissionToken !== token) throw new Error("binding-capacity-exceeded");
+        const done: Quota = {
+          family: "quota",
+          id: quotaId,
+          revision: current.revision + 1,
+          used: current.used + 1,
+        };
+        if (await this.#replaceQuota(current, done)) return;
+      } else {
+        if (row !== undefined) {
+          const slot = Values.read(row, id, this.#maxRecordBytes) as Binding;
+          if (slot.admissionToken !== token || !["reserved", "retired"].includes(slot.lifecycle))
+            return;
+          await this.#cas(id, row, undefined);
+          continue;
+        }
+        const done: Quota = {
+          family: "quota",
+          id: quotaId,
+          revision: current.revision + 1,
+          used: Math.max(0, current.used - 1),
+        };
+        if (await this.#replaceQuota(current, done)) return;
+      }
+    }
+    throw new Error("Subscription quota operation did not converge.");
+  }
+  async #slot(id: string, token: string): Promise<Binding | undefined> {
+    const row = await this.#storage.read(id);
+    if (row === undefined) return undefined;
+    const binding = Values.read(row, id, this.#maxRecordBytes) as Binding;
+    return binding.lifecycle === "reserved" && binding.admissionToken === token
+      ? binding
+      : undefined;
+  }
+  #sameBinding(record: Any, expected: Binding): boolean {
+    try {
+      const actual = Values.read(record, expected.id, this.#maxRecordBytes) as Binding;
+      return (
+        actual.revision === expected.revision &&
+        actual.admissionToken === expected.admissionToken &&
+        actual.lifecycle === expected.lifecycle
+      );
+    } catch {
+      return false;
+    }
+  }
+  async #replaceQuota(expected: Quota, next: Quota): Promise<boolean> {
+    return this.#cas(
+      quotaId,
+      Values.write(expected, this.#maxRecordBytes),
+      Values.write(next, this.#maxRecordBytes),
+    );
+  }
+  async #cas(id: string, expected: Any | undefined, next: Any | undefined): Promise<boolean> {
+    try {
+      return await this.#storage.compareAndSet(id, expected, next);
+    } catch {
+      return false;
+    }
   }
   #owned(
     binding: Binding,

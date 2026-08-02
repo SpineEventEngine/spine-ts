@@ -5,6 +5,7 @@ import {
   RecordStorage,
   type RecordEntry,
   type RecordSpec,
+  type RecordQuery,
   StorageFactory,
   type StorageContext,
 } from "@spine-event-engine/storage";
@@ -109,6 +110,26 @@ describe("DurableSubscriptionBindings", () => {
     await first.close();
     await second.close();
   });
+
+  it.each(["quota", "slot", "conversion", "deletion", "completion"] as const)(
+    "reconciles an applied-then-thrown %s mutation",
+    async (phase) => {
+      const bindings = capacityRegistry(new ApplyThenThrowFactory(phase), `fault-${phase}`, 1);
+      const reservation = await bindings.reserveCapacity();
+      if (phase === "conversion") {
+        await expect(
+          bindings.create({
+            backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+            principalFingerprint: "principal-a",
+            tenant: undefined,
+            expiresAtMs: 1_000,
+            reservation,
+          }),
+        ).resolves.toBeDefined();
+      } else await reservation.release();
+      await bindings.close();
+    },
+  );
 
   it("converts a preallocated reservation without allocating another slot", async () => {
     const bindings = limitedRegistry(new InMemoryStorageFactory(), "same-slot");
@@ -554,7 +575,7 @@ function limitedRegistry(
 }
 
 function capacityRegistry(
-  storageFactory: InMemoryStorageFactory,
+  storageFactory: StorageFactory,
   namespace: string,
   recordLimit: number,
 ): DurableSubscriptionBindings {
@@ -640,5 +661,84 @@ class UnprovenRecordStorage extends SeededRecordStorage {
 
   constructor(context: StorageContext, recordSpec: RecordSpec<string, Any>) {
     super(context, recordSpec, []);
+  }
+}
+
+class ApplyThenThrowFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  #armed = true;
+
+  constructor(private readonly phase: "quota" | "slot" | "conversion" | "deletion" | "completion") {
+    super();
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new ApplyThenThrowStorage(
+      context,
+      spec,
+      this.#delegate.createRecordStorage(context, spec),
+      (id, next) => {
+        if (!this.#armed) return false;
+        const text =
+          next === undefined ? "" : new TextDecoder().decode((next as unknown as Any).value);
+        const hit =
+          (this.phase === "slot" && id !== "!subscription-quota" && text.includes('"reserved"')) ||
+          (this.phase === "conversion" &&
+            id !== "!subscription-quota" &&
+            text.includes('"inactive"')) ||
+          (this.phase === "deletion" && id !== "!subscription-quota" && next === undefined) ||
+          (this.phase === "quota" &&
+            id === "!subscription-quota" &&
+            text.includes('"operation"')) ||
+          (this.phase === "completion" &&
+            id === "!subscription-quota" &&
+            !text.includes('"operation"'));
+        if (hit) this.#armed = false;
+        return hit;
+      },
+    );
+  }
+}
+
+class ApplyThenThrowStorage<I, R extends Message> extends RecordStorage<I, R> {
+  override readonly atomicCompareAndSet = true;
+
+  constructor(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    private readonly delegate: RecordStorage<I, R>,
+    private readonly shouldThrow: (id: I, next: R | undefined) => boolean,
+  ) {
+    super(context, spec);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.delegate.delete(id);
+  }
+  protected queryRecordEntries(query: RecordQuery<I>) {
+    return this.delegate.queryEntries(query);
+  }
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.delegate.read(id);
+  }
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.delegate.writeAll(records.map((entry) => entry.record));
+  }
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.delegate.write(record.record);
+  }
+  protected async compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    const applied = await this.delegate.compareAndSet(id, expected?.record, next?.record);
+    if (applied && this.shouldThrow(id, next?.record)) throw new Error("applied-then-thrown");
+    return applied;
   }
 }
