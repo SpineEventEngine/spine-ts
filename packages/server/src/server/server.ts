@@ -594,6 +594,12 @@ export interface BrowserServerOptions {
   };
 
   /**
+   * Application-owned, exact authentication endpoints exposed beside the fixed
+   * Spine RPC paths. These endpoints are not a general-purpose router.
+   */
+  readonly authRoutes?: readonly BrowserAuthRoute[];
+
+  /**
    * Exact browser origins permitted to make RPC calls.
    */
   readonly origins: readonly string[];
@@ -643,6 +649,17 @@ export interface BrowserServerOptions {
    * Enables strict opaque-cookie extraction alongside bearer credentials.
    */
   readonly cookies?: OpaqueSessionCookies;
+}
+
+/** One bounded application authentication request registration. */
+export interface BrowserAuthRoute {
+  readonly method: "GET" | "POST";
+  readonly path: string;
+  readonly origins: readonly string[];
+  readonly allowMissingOrigin?: boolean;
+  readonly maxRequestBytes: number;
+  readonly timeoutMs: number;
+  readonly onRequest: (request: Request, signal: AbortSignal) => Response | Promise<Response>;
 }
 
 /**

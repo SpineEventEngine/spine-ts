@@ -13,7 +13,13 @@ import {
 import type { RequestCredential } from "@spine-event-engine/auth";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
-import { CommandSchema, TenantIdSchema, UserIdSchema } from "@spine-event-engine/proto";
+import {
+  ActorContextSchema,
+  CommandContextSchema,
+  CommandSchema,
+  TenantIdSchema,
+  UserIdSchema,
+} from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
@@ -94,7 +100,10 @@ describe("Server", () => {
     try {
       await expect(starting).rejects.toThrow("canonical HTTP(S) origin");
     } finally {
-      await starting.then((running) => running.close(), () => undefined);
+      await starting.then(
+        (running) => running.close(),
+        () => undefined,
+      );
     }
 
     expect(resourceClosed).toBe(false);
@@ -179,6 +188,125 @@ describe("Server", () => {
 
     try {
       await expect(ServerEnvironment.instance().close()).resolves.toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("forwards an authenticated browser command through the supplied standalone backend", async () => {
+    const paths: string[] = [];
+    const backend = http2.createServer();
+    backend.on("stream", (stream, headers) => {
+      paths.push(String(headers[":path"]));
+      stream.respond({ ":status": 200, "content-type": "application/grpc", "grpc-status": "0" });
+      stream.end();
+    });
+    await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
+    const address = backend.address();
+    if (address === null || typeof address === "string") throw new Error("backend address missing");
+    const actor = create(UserIdSchema, { value: "ada" });
+    const context = create(ActorContextSchema, { actor, timestamp: create(TimestampSchema) });
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
+        bindings: inMemoryBindings(),
+        sessions: {
+          resolve: () =>
+            Promise.resolve({ principal: { id: "ada" }, expiresAt: create(TimestampSchema) }),
+        },
+        authorize: () => Promise.resolve(true),
+        contexts: {
+          resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+          resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+        },
+      },
+    }).start();
+    const client = createClient(
+      CommandService,
+      createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" }),
+    );
+
+    try {
+      await expect(
+        client.post(
+          create(CommandSchema, {
+            context: create(CommandContextSchema, { actorContext: context }),
+          }),
+          { headers: { origin: "http://127.0.0.1:5173", authorization: "Bearer token" } },
+        ),
+      ).rejects.toMatchObject({ code: 2 });
+      expect(paths).toEqual(["/spine.client.CommandService/Post"]);
+    } finally {
+      await server.close();
+      await new Promise<void>((resolve, reject) =>
+        backend.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
+  it("dispatches one exact standalone auth callback without an Origin", async () => {
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "GET",
+            path: "/auth/callback",
+            origins: ["http://127.0.0.1:5173"],
+            allowMissingOrigin: true,
+            maxRequestBytes: 1024,
+            timeoutMs: 1000,
+            onRequest: () => new Response("ok", { status: 200 }),
+          },
+        ],
+      },
+    }).start();
+    try {
+      const response = await fetch(`${server.baseUrl}/auth/callback`);
+      await expect(response.text()).resolves.toBe("ok");
+      expect(response.status).toBe(200);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("fails closed for an auth route's wrong origin, method, and bounded body", async () => {
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "POST",
+            path: "/auth/exchange",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 2,
+            timeoutMs: 1000,
+            onRequest: () => new Response(),
+          },
+        ],
+      },
+    }).start();
+    try {
+      await expect(
+        fetch(`${server.baseUrl}/auth/exchange`, {
+          method: "POST",
+          headers: { origin: "https://other.example" },
+        }),
+      ).resolves.toMatchObject({ status: 403 });
+      await expect(
+        fetch(`${server.baseUrl}/auth/exchange`, { headers: { origin: "http://127.0.0.1:5173" } }),
+      ).resolves.toMatchObject({ status: 405 });
+      await expect(
+        fetch(`${server.baseUrl}/auth/exchange`, {
+          method: "POST",
+          headers: { origin: "http://127.0.0.1:5173" },
+          body: "too long",
+        }),
+      ).resolves.toMatchObject({ status: 413 });
     } finally {
       await server.close();
     }

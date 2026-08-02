@@ -3,6 +3,12 @@
  */
 export function renderEnvoy(options) {
   const topology = normalize(options);
+  const routes = [...spineRoutes, ...topology.authRoutes]
+    .map(
+      (route) =>
+        `                        - match: { path: ${route.path} }\n                          route: { cluster: gateway, timeout: ${route.timeout} }`,
+    )
+    .join("\n");
   return `static_resources:
   listeners:
     - name: browser_gateway
@@ -31,18 +37,7 @@ export function renderEnvoy(options) {
                     - name: gateway
                       domains: ["*"]
                       routes:
-                        - match: { prefix: /spine.auth.AuthenticationService/ResolveContext }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.CommandService/Post }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.QueryService/Read }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.SubscriptionService/Subscribe }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.SubscriptionService/Activate }
-                          route: { cluster: gateway, timeout: 0s }
-                        - match: { prefix: /spine.client.SubscriptionService/Cancel }
-                          route: { cluster: gateway, timeout: 30s }
+${routes}
                       cors:
                         allow_origin_string_match:
                           - exact: ${topology.browserOrigin}
@@ -94,5 +89,24 @@ function normalize(options) {
     browserOrigin: options.browserOrigin,
     tlsCertificate: options.tlsCertificate,
     tlsKey: options.tlsKey,
+    authRoutes: (options.authRoutes ?? []).map((route) => {
+      if (
+        !/^[A-Z]+$/.test(route.method) ||
+        !/^\/(?!\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(route.path)
+      )
+        throw new Error("auth routes require an exact method and canonical path");
+      if (!Number.isSafeInteger(route.timeoutMs) || route.timeoutMs < 1)
+        throw new Error("auth routes require a finite timeout");
+      return { path: route.path, timeout: `${route.timeoutMs}ms` };
+    }),
   };
 }
+
+const spineRoutes = [
+  { path: "/spine.auth.AuthenticationService/ResolveContext", timeout: "30s" },
+  { path: "/spine.client.CommandService/Post", timeout: "30s" },
+  { path: "/spine.client.QueryService/Read", timeout: "30s" },
+  { path: "/spine.client.SubscriptionService/Subscribe", timeout: "30s" },
+  { path: "/spine.client.SubscriptionService/Activate", timeout: "0s" },
+  { path: "/spine.client.SubscriptionService/Cancel", timeout: "30s" },
+];
