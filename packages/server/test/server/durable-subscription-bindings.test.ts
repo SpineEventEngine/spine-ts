@@ -164,6 +164,25 @@ describe("DurableSubscriptionBindings", () => {
     await reopened.close();
   });
 
+  it("converges concurrent helpers on one durable paged repair", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "repair-race");
+    await seedRepair(store, 0, undefined);
+    await store.compareAndSet("binding-a", undefined, repairRecord("binding-a", "reserved"));
+    await store.compareAndSet("binding-b", undefined, repairRecord("binding-b", "reserved"));
+    await store.compareAndSet("binding-c", undefined, repairRecord("binding-c", "retired"));
+    store.close();
+    const first = capacityRegistry(factory, "repair-race", 4);
+    const second = capacityRegistry(factory, "repair-race", 4);
+
+    const results = await Promise.allSettled([first.reserveCapacity(), second.reserveCapacity()]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    await first.close();
+    await second.close();
+  });
+
   it.each([
     { afterId: undefined, count: 0 },
     { afterId: "binding-a", count: 1 },
