@@ -111,21 +111,16 @@ export const BrowserServer: Readonly<{
         return;
       }
       const path = request.url ?? "";
-      const auth = authRoutes.get(`${request.method ?? ""} ${path}`);
-      if (auth !== undefined) {
+      const auth = authRoutes.get(path);
+      if (auth !== undefined && request.method === auth.method) {
         void BrowserServer.dispatchAuth(request, response, auth, activeAuth);
         return;
       }
-      const authPath = [...authRoutes.values()].find((route) => route.path === path);
-      if (authPath !== undefined) {
+      if (auth !== undefined) {
         const origin = request.headers.origin;
-        if (
-          request.method === "OPTIONS" &&
-          origin !== undefined &&
-          authPath.origins.includes(origin)
-        ) {
+        if (request.method === "OPTIONS" && origin !== undefined && auth.origins.includes(origin)) {
           response.setHeader("access-control-allow-origin", origin);
-          response.setHeader("access-control-allow-methods", `${authPath.method},OPTIONS`);
+          response.setHeader("access-control-allow-methods", `${auth.method},OPTIONS`);
           response.statusCode = 204;
         } else response.statusCode = request.method === "OPTIONS" ? 403 : 405;
         response.end();
@@ -286,6 +281,8 @@ export const BrowserServer: Readonly<{
   ): ReadonlyMap<string, BrowserAuthRoute> {
     const result = new Map<string, BrowserAuthRoute>();
     for (const route of routes ?? []) {
+      if (route.method !== "GET" && route.method !== "POST")
+        throw new Error("Browser auth routes must use GET or POST.");
       if (!/^\/(?!\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(route.path))
         throw new Error("Browser auth routes must use exact canonical non-root paths.");
       if (
@@ -305,10 +302,9 @@ export const BrowserServer: Readonly<{
           "Browser auth route timeoutMs must be a safe positive millisecond duration.",
         );
       BrowserServer.origins(route.origins);
-      const key = `${route.method} ${route.path}`;
-      if (result.has(key))
-        throw new Error("Browser auth routes must be unique by method and path.");
-      result.set(key, route);
+      if (result.has(route.path))
+        throw new Error("Browser auth routes must use one method per canonical path.");
+      result.set(route.path, route);
     }
     return result;
   },

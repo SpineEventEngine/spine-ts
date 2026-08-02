@@ -690,7 +690,14 @@ describe("Server", () => {
     expect(() => BrowserServer.authRoutes([{ ...route, timeoutMs: 2_147_483_648 }])).toThrow(
       "safe positive millisecond",
     );
-    expect(() => BrowserServer.authRoutes([route, route])).toThrow("unique by method and path");
+    expect(() => BrowserServer.authRoutes([route, route])).toThrow("one method per canonical path");
+    expect(() => BrowserServer.authRoutes([{ ...route, method: "GET" }])).not.toThrow();
+    expect(() => BrowserServer.authRoutes([{ ...route, method: "PUT" as "POST" }])).toThrow(
+      "GET or POST",
+    );
+    expect(() => BrowserServer.authRoutes([route, { ...route, method: "GET" }])).toThrow(
+      "one method per canonical path",
+    );
   });
 
   it("rejects a chunked auth body that exceeds its bound before handler work", async () => {
