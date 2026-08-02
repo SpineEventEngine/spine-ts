@@ -2054,6 +2054,33 @@ describe("DurableSubscriptionBindings", () => {
     await expect(bindings.reserveCapacity()).resolves.toBeDefined();
     await bindings.close();
   });
+
+  it("cleans an expired binding whose ID sorts before durable control rows", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "low-cleanup-id");
+    await seedRecord(
+      store,
+      "\u0000binding",
+      durableRecord("binding", {
+        id: "\u0000binding",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "reserved",
+        fence: 0,
+      }),
+    );
+    await seedRecord(
+      store,
+      "!subscription-quota",
+      durableRecord("quota", { id: "!subscription-quota", revision: 1, used: 1 }),
+    );
+    store.close();
+    const bindings = capacityRegistry(factory, "low-cleanup-id", 1);
+
+    await bindings.purgeExpired(1);
+    await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
 });
 
 function registry(storageFactory: StorageFactory, namespace: string): DurableSubscriptionBindings {

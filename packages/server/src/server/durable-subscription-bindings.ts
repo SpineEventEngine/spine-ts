@@ -370,7 +370,13 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       next = this.#work(old, "cancelling", input.nowMs, "client");
       if (!(await this.#cas(input.id, row, Values.write(next, this.#maxRecordBytes)))) {
         const current = await this.#storage.read(input.id);
-        if (current === undefined || !this.#sameBinding(current, next)) return { kind: "denied" };
+        if (current === undefined) return { kind: "closed" };
+        if (!this.#sameBinding(current, next)) {
+          const live = Values.read(current, input.id, this.#maxRecordBytes) as Binding;
+          if (live.lifecycle === "cancelling" && (live.leaseUntilMs ?? 0) <= input.nowMs)
+            return this.#cancel(input);
+          return { kind: "denied" };
+        }
       }
     }
     this.#active.get(input.id)?.controller.abort();
@@ -589,17 +595,31 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
   async #clean(claimed: Cleanup, nowMs: number): Promise<void> {
     let control = claimed;
-    const afterId = control.afterId ?? quotaId;
+    const limit = this.#cleanupBatchSize + 2;
     const rows = await this.#storage.queryEntries({
       sort: [{ field: "id" }],
-      after: { id: afterId, values: [{ field: "id", value: afterId }] },
-      limit: this.#cleanupBatchSize,
+      ...(control.afterId === undefined
+        ? {}
+        : {
+            after: {
+              id: control.afterId,
+              values: [{ field: "id", value: control.afterId }],
+            },
+          }),
+      limit,
     });
+    let processed = 0;
     for (const row of rows) {
-      if (row.id !== quotaId && row.id !== cleanupId) await this.#cleanBinding(row.id, nowMs);
+      if (row.id === quotaId || row.id === cleanupId) {
+        control = await this.#advanceClean(control, row.id, false);
+        continue;
+      }
+      await this.#cleanBinding(row.id, nowMs);
+      processed += 1;
       control = await this.#advanceClean(control, row.id, false);
+      if (processed === this.#cleanupBatchSize) return;
     }
-    await this.#advanceClean(control, undefined, rows.length < this.#cleanupBatchSize);
+    await this.#advanceClean(control, undefined, rows.length < limit);
   }
   async #cleanBinding(id: string, nowMs: number): Promise<void> {
     const row = await this.#storage.read(id);
@@ -861,7 +881,16 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       return (
         actual.revision === expected.revision &&
         actual.admissionToken === expected.admissionToken &&
-        actual.lifecycle === expected.lifecycle
+        actual.lifecycle === expected.lifecycle &&
+        actual.fence === expected.fence &&
+        actual.ownerId === expected.ownerId &&
+        actual.leaseUntilMs === expected.leaseUntilMs &&
+        actual.reason === expected.reason &&
+        actual.backend === expected.backend &&
+        actual.backendBytes === expected.backendBytes &&
+        actual.expiresAtMs === expected.expiresAtMs &&
+        actual.principalFingerprint === expected.principalFingerprint &&
+        actual.tenant === expected.tenant
       );
     } catch {
       return false;
