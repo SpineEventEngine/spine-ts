@@ -4,7 +4,7 @@ import {
   InMemoryStorageFactory,
   RecordStorage,
   type RecordEntry,
-  type RecordSpec,
+  RecordSpec,
   type RecordQuery,
   StorageFactory,
   type StorageContext,
@@ -90,8 +90,8 @@ describe("DurableSubscriptionBindings", () => {
     const bindings = registry(new InMemoryStorageFactory(), "messageboard");
     const reservation = await bindings.reserveCapacity();
 
-    reservation.release();
-    reservation.release();
+    await reservation.release();
+    await reservation.release();
 
     await expect(bindings.reserveCapacity()).resolves.toBeDefined();
     await bindings.close();
@@ -131,19 +131,53 @@ describe("DurableSubscriptionBindings", () => {
     },
   );
 
+  it("resumes a bounded paged repair across independently reopened registries", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "repair");
+    await seedRepair(store, 0, undefined);
+    await store.compareAndSet("binding-a", undefined, repairRecord("binding-a", "reserved"));
+    await store.compareAndSet("binding-b", undefined, malformedRepairRecord("binding-b"));
+    await store.compareAndSet("binding-c", undefined, repairRecord("binding-c", "retired"));
+    store.close();
+
+    const first = capacityRegistry(factory, "repair", 4);
+    await expect(first.reserveCapacity()).resolves.toBeDefined();
+    await first.close();
+
+    const reopened = capacityRegistry(factory, "repair", 4);
+    await expect(reopened.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
+    await reopened.close();
+  });
+
+  it.each([
+    { afterId: undefined, count: 0 },
+    { afterId: "binding-a", count: 1 },
+    { afterId: "binding-b", count: 2 },
+  ])("restarts repair from durable cursor %#", async ({ afterId, count }) => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, `restart-${count.toString()}`);
+    await seedRepair(store, count, afterId);
+    await store.compareAndSet("binding-a", undefined, repairRecord("binding-a", "reserved"));
+    await store.compareAndSet("binding-b", undefined, repairRecord("binding-b", "reserved"));
+    await store.compareAndSet("binding-c", undefined, repairRecord("binding-c", "retired"));
+    store.close();
+    const bindings = capacityRegistry(factory, `restart-${count.toString()}`, 3);
+    await expect(bindings.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
+    await bindings.close();
+  });
+
   it("converts a preallocated reservation without allocating another slot", async () => {
     const bindings = limitedRegistry(new InMemoryStorageFactory(), "same-slot");
     const reservation = await bindings.reserveCapacity();
 
-    await expect(
-      bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
-        principalFingerprint: "principal-a",
-        tenant: undefined,
-        expiresAtMs: 1_000,
-        reservation,
-      }),
-    ).resolves.toMatchObject({ id: expect.any(String) });
+    const created = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+      reservation,
+    });
+    expect(created.id).not.toHaveLength(0);
     await expect(bindings.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
     await bindings.close();
   });
@@ -372,7 +406,7 @@ describe("DurableSubscriptionBindings", () => {
     const first = limitedRegistry(factory, "first");
     const released = await first.reserveCapacity();
     await released.release();
-    const forged = { release: async () => undefined };
+    const forged = { release: (): Promise<void> => Promise.resolve() };
 
     await first.create({
       backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
@@ -588,6 +622,87 @@ function capacityRegistry(
     cleanupBatchSize: 1,
     recordLimit,
     maxRecordBytes: 1_024,
+  });
+}
+
+function repairStore(factory: StorageFactory, namespace: string): RecordStorage<string, Any> {
+  return factory.createRecordStorage(
+    { name: `spine.gateway.${namespace}`, multitenant: false },
+    new RecordSpec({
+      schema: AnySchema,
+      storageKey: "spine.gateway.SubscriptionBinding:v2",
+      idKind: "string",
+      extractId: (record) => repairId(record),
+    }),
+  );
+}
+
+function repairId(record: Any): string {
+  const value: unknown = JSON.parse(new TextDecoder().decode(record.value));
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    !("id" in value) ||
+    typeof value.id !== "string"
+  )
+    throw new Error("repair record has no ID");
+  return value.id;
+}
+
+async function seedRepair(
+  store: RecordStorage<string, Any>,
+  count: number,
+  afterId: string | undefined,
+): Promise<void> {
+  const operation = {
+    kind: "repair",
+    operationId: "repair-test",
+    count,
+    ...(afterId === undefined ? {} : { afterId }),
+  };
+  await store.compareAndSet(
+    "!subscription-quota",
+    undefined,
+    create(AnySchema, {
+      typeUrl: "type.spine-event-engine.gateway/SubscriptionBindingQuota",
+      value: new TextEncoder().encode(
+        JSON.stringify({
+          version: 1,
+          family: "quota",
+          id: "!subscription-quota",
+          revision: 1,
+          used: 0,
+          operation,
+        }),
+      ),
+    }),
+  );
+}
+
+function repairRecord(id: string, lifecycle: "reserved" | "retired"): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
+    value: new TextEncoder().encode(
+      JSON.stringify({
+        version: 2,
+        family: "binding",
+        id,
+        revision: 1,
+        admissionToken: `${id}-token`,
+        lifecycle,
+        fence: 0,
+        ...(lifecycle === "reserved" ? { reservationOwner: "owner", reservationUntilMs: 999 } : {}),
+      }),
+    ),
+  });
+}
+
+function malformedRepairRecord(id: string): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
+    value: new TextEncoder().encode(
+      JSON.stringify({ version: 2, family: "binding", id, revision: 1 }),
+    ),
   });
 }
 

@@ -109,6 +109,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   constructor(options: DurableSubscriptionBindingsOptions) {
     Values.options(options);
     this.#dispose = options.dispose;
+    void this.#dispose;
     this.#nextId = options.nextId;
     this.#leaseMs = options.leaseMs;
     this.#cleanupBatchSize = options.cleanupBatchSize;
@@ -136,10 +137,14 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   async reserveCapacity(): Promise<SubscriptionCapacityReservation> {
     this.#open();
-    // This bounded validation pass fails closed for corrupt rows before a new
-    // admission decision. Capacity itself is always decided by the quota row.
-    const existing = await this.#storage.queryEntries({ limit: this.#recordLimit + 2 });
-    for (const row of existing) Values.read(row.record, row.id, this.#maxRecordBytes);
+    const initialQuota = await this.#storage.read(quotaId);
+    if (initialQuota === undefined) {
+      // A namespace without a repair control row must fail closed before it
+      // admits another slot. A durable repair deliberately counts malformed
+      // slots without decoding them so corruption cannot create capacity.
+      const existing = await this.#storage.queryEntries({ limit: this.#recordLimit + 2 });
+      for (const row of existing) Values.read(row.record, row.id, this.#maxRecordBytes);
+    }
     for (let count = 0; count < attempts; count += 1) {
       const quota = await this.#quota();
       if (quota.operation !== undefined) {
@@ -193,7 +198,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     Values.input(input);
     const supplied =
       input.reservation === undefined ? undefined : this.#reservations.get(input.reservation);
-    const reservation = supplied === undefined ? await this.reserveCapacity() : input.reservation!;
+    const reservation =
+      supplied === undefined || input.reservation === undefined
+        ? await this.reserveCapacity()
+        : input.reservation;
     const held = this.#reservations.get(reservation);
     if (held === undefined || held.consumed) throw new Error("binding-capacity-exceeded");
     held.consumed = true;
@@ -240,7 +248,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     const claimed = await this.#claim(input, "active");
     if (claimed === undefined) return { kind: "denied" };
     const controller = new AbortController();
-    const abort = () => controller.abort();
+    const abort = () => {
+      controller.abort();
+    };
     input.signal.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(
       () => void this.#renew(input.id, claimed.fence, controller),
@@ -350,6 +360,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     this.#active.clear();
     this.#reservations.clear();
     this.#storage.close();
+    await Promise.resolve();
   }
 
   async #claim(
@@ -398,10 +409,15 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
   async #renew(id: string, fence: number, controller: AbortController): Promise<void> {
     const row = await this.#storage.read(id);
-    if (row === undefined) return controller.abort();
+    if (row === undefined) {
+      controller.abort();
+      return;
+    }
     const old = Values.read(row, id, this.#maxRecordBytes) as Binding;
-    if (old.lifecycle !== "active" || old.ownerId !== this.#owner || old.fence !== fence)
-      return controller.abort();
+    if (old.lifecycle !== "active" || old.ownerId !== this.#owner || old.fence !== fence) {
+      controller.abort();
+      return;
+    }
     const next = { ...old, revision: old.revision + 1, leaseUntilMs: Date.now() + this.#leaseMs };
     if (!(await this.#storage.compareAndSet(id, row, Values.write(next, this.#maxRecordBytes))))
       controller.abort();
@@ -459,11 +475,17 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async #repair(): Promise<void> {
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const quota = await this.#quota();
-      const operation = quota.operation ?? {
-        kind: "repair" as const,
-        operationId: crypto.randomUUID(),
-        count: 0,
-      };
+      if (quota.operation === undefined) {
+        const staged: Quota = {
+          ...quota,
+          revision: quota.revision + 1,
+          operation: { kind: "repair", operationId: crypto.randomUUID(), count: 0 },
+        };
+        await this.#replaceQuota(quota, staged);
+        continue;
+      }
+      const operation = quota.operation;
+      if (operation.kind !== "repair") return this.#complete(quota);
       const page = await this.#storage.queryEntries({
         sort: [{ field: "id" }],
         ...(operation.afterId === undefined
@@ -502,8 +524,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     const operation = quota.operation;
     if (operation === undefined) return;
     if (operation.kind === "repair") return this.#repair();
-    const id = operation.bindingId!;
-    const token = operation.token!;
+    if (operation.bindingId === undefined || operation.token === undefined)
+      throw new Error("Subscription quota operation is invalid.");
+    const { bindingId: id, token } = operation;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       const current = await this.#quota();
       if (current.operation === undefined) return;
@@ -662,7 +685,7 @@ const Values = Object.freeze({
     };
   },
   id(record: Any): string {
-    return (this.read(record, undefined, Number.MAX_SAFE_INTEGER) as Stored).id;
+    return this.read(record, undefined, Number.MAX_SAFE_INTEGER).id;
   },
   write(value: Stored, maxBytes: number): Any {
     const typeUrl =
