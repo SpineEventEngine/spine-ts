@@ -133,3 +133,19 @@ public lifecycle assembly.
 - Expected reasoning: medium.
 - Both fields must be explicit. Runtime metadata will be recorded when exposed;
   otherwise the immutable configured role/profile and limitation are evidence.
+
+## Requirements Boundary Reopened
+
+- Pre-review acceptance inspection found that the remote owner constructs a
+  `Delivery` with `RemoteInbox` and `RemoteWorkRegistry`, but the environment's
+  attachment generation still creates its existing local delivery worker. The
+  remote facility is therefore opened and closed without driving application
+  delivery work.
+- Lifecycle-only tests do not satisfy the objective that one configuration
+  produces the existing environment delivery facility without manual adapter
+  wiring. Review and release verification remain blocked on a focused
+  architecture correction and behavior test proving the remote ports are used.
+- The existing requirements splitter is redispatched with explicit
+  `gpt-5.6-sol` / high reasoning to choose the minimum internal worker-factory
+  seam while preserving `delivery-client -> server` dependency direction and
+  the public `RemoteDelivery.connectTo()` shape where possible.
