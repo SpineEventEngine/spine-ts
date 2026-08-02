@@ -297,10 +297,10 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)
       '@spine-event-engine/core':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
       jose:
         specifier: 6.2.4
@@ -321,13 +321,13 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/client-web':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../client-web
       '@spine-event-engine/core':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
     devDependencies:
       '@spine-event-engine/server':
@@ -355,10 +355,10 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/core':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
 
   packages/core:
@@ -367,7 +367,7 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
       '@spine-event-engine/validation-ts':
         specifier: 2.0.0-snapshot.4
@@ -385,10 +385,10 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
       '@spine-event-engine/server':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../server
 
   packages/delivery-server:
@@ -403,7 +403,7 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
 
   packages/proto:
@@ -449,19 +449,19 @@ importers:
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
       '@spine-event-engine/auth':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../auth
       '@spine-event-engine/core':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../core
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
       '@spine-event-engine/storage':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../storage
       '@spine-event-engine/transport':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../transport
       typescript:
         specifier: 6.0.3
@@ -477,7 +477,7 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
 
   packages/storage-datastore:
@@ -489,10 +489,10 @@ importers:
         specifier: 10.1.1
         version: 10.1.1
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
       '@spine-event-engine/storage':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../storage
 
   packages/storage-rdbms:
@@ -534,7 +534,7 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
       '@spine-event-engine/proto':
-        specifier: workspace:*
+        specifier: 2.0.0-snapshot.1
         version: link:../proto
       zeromq:
         specifier: 6.5.0

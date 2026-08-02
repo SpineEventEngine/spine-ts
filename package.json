@@ -22,6 +22,7 @@
     "test:generated": "pnpm typecheck:build:generated && vitest run --passWithNoTests",
     "test:coverage": "pnpm proto:generate && pnpm test:coverage:generated",
     "test:coverage:generated": "pnpm typecheck:build:generated && vitest run --coverage --passWithNoTests",
+    "images:build:local": "node examples/message-board/deploy/container/build-local-images.mjs",
     "test:images:local": "node --test examples/message-board/deploy/container/image-contract.test.mjs",
     "test:compatibility:jvm": "pnpm check:node && pnpm exec vitest run compatibility-tests/jvm/fixture.test.mjs && node --test compatibility-tests/jvm/wire-compatibility.test.mjs",
     "test:envoy": "node --test interop/envoy/render.test.mjs interop/envoy/validate.test.mjs",

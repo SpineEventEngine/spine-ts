@@ -7,9 +7,17 @@ interface DeploymentConfig extends BoardServerOptions {
   readonly projectId: string;
 }
 
+interface GatewayConfig {
+  readonly host: string;
+  readonly port: number;
+  readonly webOrigin: string;
+  readonly backendUrl: string;
+}
+
 interface DeploymentContract {
   application(environment: NodeJS.ProcessEnv): DeploymentConfig;
   combined(environment: NodeJS.ProcessEnv): DeploymentConfig;
+  gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
   storage(config: DeploymentConfig): StorageFactory;
 }
 
@@ -29,6 +37,15 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     return {
       ...MessageBoardDeployment.application(environment),
       webOrigin: required(environment, "BROWSER_ORIGIN"),
+    };
+  },
+
+  gateway(environment: NodeJS.ProcessEnv): GatewayConfig {
+    return {
+      host: required(environment, "HOST"),
+      port: port(required(environment, "PORT")),
+      webOrigin: required(environment, "BROWSER_ORIGIN"),
+      backendUrl: required(environment, "BACKEND_URL"),
     };
   },
 

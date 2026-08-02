@@ -1,6 +1,6 @@
 # T-0095: Build-once packages and local images
 
-Status: Requirements split active
+Status: Blocked at checkpoint 3 by Docker engine context ingestion
 Start: `2026-08-02`
 Baseline: `1c53cbdf`
 Branch: `task/T-0095-build-once-images`
