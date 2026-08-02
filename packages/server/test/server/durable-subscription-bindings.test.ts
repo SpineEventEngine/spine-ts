@@ -1149,13 +1149,10 @@ describe("DurableSubscriptionBindings", () => {
         retryAfterMs: 0,
       }),
     ];
-    for (const [index, record] of invalid.entries())
+    for (const record of invalid)
       expect(() => {
         DurableSubscriptionBindingRecords.validate(record);
-      }).toThrow(
-        "Durable subscription registry record is invalid.",
-        `invalid durable record ${index.toString()}`,
-      );
+      }).toThrow("Durable subscription registry record is invalid.");
   });
 
   it.each([

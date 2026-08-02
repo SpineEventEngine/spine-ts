@@ -26,3 +26,18 @@ yet cover the accepted ambiguous-CAS, paged repair, guarded-update,
 cancellation-takeover, or cleanup continuation/backoff/restart matrix. The
 same implementation owner receives these deterministic gaps; reviewer capacity
 is reserved for a complete converged checkpoint.
+
+## Preflight Tooling Correction
+
+- Mechanical preflight found `TS2554` in the durable bindings test: a Vitest
+  `toThrow()` assertion supplied an unsupported second argument. This is a
+  test-tooling defect, not a specialist-review finding and does not change the
+  durable registry contract.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium) made
+  the bounded correction. Runtime self-introspection remains unavailable;
+  immutable configured-role evidence is the available metadata.
+- Pending evidence: narrow server typecheck and focused durable registry test
+  after the correction, followed by immediate feature-branch push.
+
+- Evidence: the narrow server typecheck and focused durable registry suite
+  (104 tests) passed, as did Prettier and `git diff --check`.
