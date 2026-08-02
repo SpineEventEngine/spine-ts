@@ -1,6 +1,14 @@
 import type { RunningServer } from "./server.js";
+import type { ServerEnvironment } from "./server-environment.js";
 
-const running: RunningServer[] = [];
+interface RunRecord {
+  readonly server: RunningServer;
+  readonly environment: ServerEnvironment;
+  retirement: Promise<void> | undefined;
+  retired: boolean;
+}
+
+const running: RunRecord[] = [];
 let signalsInstalled = false;
 
 /**
@@ -9,14 +17,16 @@ let signalsInstalled = false;
  * @internal
  */
 export const ProcessServerCoordinator: Readonly<{
-  add(server: RunningServer): RunningServer;
+  add(server: RunningServer, environment: ServerEnvironment): RunningServer;
   installSignals(): void;
   remove(server: RunningServer): void;
+  retire(record: RunRecord): Promise<void>;
   onSignal(): void;
   closeRunning(): Promise<void>;
 }> = Object.freeze({
-  add(server: RunningServer): RunningServer {
-    running.push(server);
+  add(server: RunningServer, environment: ServerEnvironment): RunningServer {
+    const record: RunRecord = { server, environment, retirement: undefined, retired: false };
+    running.push(record);
     ProcessServerCoordinator.installSignals();
     return {
       host: server.host,
@@ -24,7 +34,7 @@ export const ProcessServerCoordinator: Readonly<{
       baseUrl: server.baseUrl,
       close: async () => {
         await server.close();
-        ProcessServerCoordinator.remove(server);
+        await ProcessServerCoordinator.retire(record);
       },
     };
   },
@@ -36,7 +46,7 @@ export const ProcessServerCoordinator: Readonly<{
   },
 
   remove(server: RunningServer): void {
-    const index = running.lastIndexOf(server);
+    const index = running.findIndex((record) => record.server === server);
     if (index >= 0) running.splice(index, 1);
     if (running.length > 0) return;
     process.off("SIGINT", ProcessServerCoordinator.onSignal);
@@ -44,15 +54,36 @@ export const ProcessServerCoordinator: Readonly<{
     signalsInstalled = false;
   },
 
+  retire(record: RunRecord): Promise<void> {
+    const current = record.retirement;
+    if (current !== undefined) return current;
+    const retirement = Promise.resolve()
+      .then(async () => {
+        if (!record.retired) {
+          record.retired = true;
+          ProcessServerCoordinator.remove(record.server);
+        }
+        if (running.length === 0) {
+          await record.environment.close();
+        }
+      })
+      .catch((error: unknown) => {
+        record.retirement = undefined;
+        throw error;
+      });
+    record.retirement = retirement;
+    return retirement;
+  },
+
   onSignal(): void {
     void ProcessServerCoordinator.closeRunning();
   },
 
   async closeRunning(): Promise<void> {
-    for (const server of [...running].reverse()) {
+    for (const record of [...running].reverse()) {
       try {
-        await server.close();
-        ProcessServerCoordinator.remove(server);
+        await record.server.close();
+        await ProcessServerCoordinator.retire(record);
       } catch {
         process.exitCode = 1;
       }

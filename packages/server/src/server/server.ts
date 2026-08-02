@@ -20,7 +20,7 @@ import {
 import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
 import { ContextTransportGroup } from "./context-transport-group.js";
 import { BrowserServer } from "./browser-server.js";
-import type { EnvironmentAttachmentHandle } from "./environment-attachment.js";
+import type { EnvironmentAttachmentHandle, EnvironmentOwnership } from "./environment-attachment.js";
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
@@ -51,6 +51,7 @@ export class Server {
   readonly #browser: BrowserServerOptions | undefined;
   readonly #environment: ServerEnvironment;
   #starting: Promise<RunningServer> | undefined;
+  #startingOwnership: EnvironmentOwnership | undefined;
   #failedStartCleanup: FailedStartCleanup | undefined;
   #failedStartConsumed = false;
 
@@ -129,8 +130,17 @@ export class Server {
    * @returns The running server once its listener accepts requests.
    */
   start(): Promise<RunningServer> {
+    return this.#start("caller");
+  }
+
+  #start(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const current = this.#starting;
     if (current !== undefined) {
+      if (this.#startingOwnership !== ownership) {
+        return Promise.reject(
+          new Error("Server cannot mix caller-managed and run-managed startup attempts."),
+        );
+      }
       return current;
     }
     if (this.#failedStartConsumed) {
@@ -140,8 +150,9 @@ export class Server {
     }
     const cleanup = this.#failedStartCleanup;
     const starting =
-      cleanup === undefined ? this.#startOnce() : this.#retryFailedStartCleanup(cleanup);
+      cleanup === undefined ? this.#startOnce(ownership) : this.#retryFailedStartCleanup(cleanup);
     this.#starting = starting;
+    this.#startingOwnership = ownership;
     void starting.then(
       () => {
         this.#finishStart(starting);
@@ -158,14 +169,16 @@ export class Server {
    *
    * This is the normal application entry point. Embedded applications should
    * use {@link start} and keep ownership of process signals themselves.
+   * After the final run-managed server retires, its environment closes
+   * permanently. Caller-managed servers never close their environment.
    *
    * @returns The running server after its listener accepts requests.
    */
   async run(): Promise<RunningServer> {
-    return ProcessServerCoordinator.add(await this.start());
+    return ProcessServerCoordinator.add(await this.#start("server"), this.#environment);
   }
 
-  async #startOnce(): Promise<RunningServer> {
+  async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const contexts = await ServerValues.buildContexts(
       this.#contexts,
       this.#environment.storageFactory,
@@ -173,7 +186,7 @@ export class Server {
     let attachment: EnvironmentAttachmentHandle;
     try {
       attachment = await serverEnvironmentAccess.attach(this.#environment, {
-        ownership: "caller",
+        ownership,
         descriptors: contexts.map((context) => boundedContextAccess.delivery(context)),
       });
     } catch (error) {
@@ -430,6 +443,7 @@ export class Server {
   #finishStart(starting: Promise<RunningServer>): void {
     if (this.#starting === starting) {
       this.#starting = undefined;
+      this.#startingOwnership = undefined;
     }
   }
 }
@@ -597,9 +611,11 @@ export interface RunningServer {
    *
    * It stops network intake and sessions, closes context transport and drains
    * accepted work before detaching delivery. A failed intake close blocks later
-   * phases until a retry. Sibling servers and process-wide facilities remain
-   * available. Concurrent calls share one attempt; later calls retry only
-   * unfinished cleanup, preserving stable flattened failure order.
+   * phases until a retry. Sibling servers remain available. Caller-managed
+   * servers leave process-wide facilities available; closing the final
+   * run-managed server closes its environment. Concurrent calls share one
+   * attempt; later calls retry only unfinished cleanup, preserving stable
+   * flattened failure order.
    *
    * @returns A promise that settles after server-owned cleanup completes.
    */
