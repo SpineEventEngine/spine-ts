@@ -351,6 +351,14 @@ export const BrowserServer: Readonly<{
     };
     request.once("aborted", abort);
     response.once("close", abort);
+    let rejectAbort!: (reason: unknown) => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      rejectAbort = reject;
+    });
+    const onAbort = () => {
+      rejectAbort(new Error("browser auth request aborted"));
+    };
+    controller.signal.addEventListener("abort", onAbort, { once: true });
     try {
       const requestChunks: Uint8Array[] = [];
       let size = 0;
@@ -375,18 +383,7 @@ export const BrowserServer: Readonly<{
         ...(size === 0 ? {} : { body: Buffer.concat(requestChunks) }),
         signal: controller.signal,
       });
-      const result = await Promise.race([
-        route.onRequest(input, controller.signal),
-        new Promise<never>((_resolve, reject) => {
-          controller.signal.addEventListener(
-            "abort",
-            () => {
-              reject(new Error("browser auth request aborted"));
-            },
-            { once: true },
-          );
-        }),
-      ]);
+      const result = await Promise.race([route.onRequest(input, controller.signal), aborted]);
       if (controller.signal.aborted) {
         if (!response.writableEnded) {
           response.statusCode = 504;
@@ -400,18 +397,7 @@ export const BrowserServer: Readonly<{
       if (reader !== undefined) {
         let reading = true;
         while (reading) {
-          const next = await Promise.race([
-            reader.read(),
-            new Promise<never>((_resolve, reject) => {
-              controller.signal.addEventListener(
-                "abort",
-                () => {
-                  reject(new Error("browser auth request aborted"));
-                },
-                { once: true },
-              );
-            }),
-          ]);
+          const next = await Promise.race([reader.read(), aborted]);
           if (next.done) {
             reading = false;
             continue;
@@ -438,6 +424,7 @@ export const BrowserServer: Readonly<{
       clearTimeout(timer);
       request.off("aborted", abort);
       response.off("close", abort);
+      controller.signal.removeEventListener("abort", onAbort);
       active.delete(controller);
     }
   },
