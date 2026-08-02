@@ -600,7 +600,9 @@ explicit process shutdown.
 
 Use `run()` for a standalone application. It starts the server, reports
 readiness only after the listener binds, and closes it on `SIGINT` or
-`SIGTERM`:
+`SIGTERM`. Run-managed siblings share one generation; the final run-managed
+server permanently closes its environment, with a failed final close retryable
+through a later signal or `close()`:
 
 ```ts
 const running = await server.run();
@@ -608,7 +610,9 @@ console.log(`Spine server ready at ${running.baseUrl}`);
 ```
 
 Use `start()` when a test runner, desktop host, or another framework owns
-process signals. `start()` builds contexts, completes finite startup recovery, opens context
+process signals. It never closes the shared environment. Caller-managed siblings
+share one generation, while mixed active `start()`/`run()` admission rejects
+before listener open. `start()` builds contexts, completes finite startup recovery, opens context
 transport intake, and only then opens the HTTP/2 listener. The default host is
 `127.0.0.1`; port `0` asks the OS for a free port.
 
@@ -625,8 +629,9 @@ try {
 
 `close()` stops listener intake and sessions, closes context transport intake,
 drains accepted work, detaches delivery, then closes contexts and added
-resources. It does not close shared process facilities; after every server has
-detached, call `await ServerEnvironment.instance().close()` during process
+resources. Caller-managed `start()` close does not close shared process
+facilities; after every caller-managed server has detached, call
+`await ServerEnvironment.instance().close()` during process
 shutdown. Concurrent closes share work; a successful close is idempotent. If
 close fails, call `close()` again to retry only unfinished server cleanup. A
 failed start is terminal for that `Server` instance after its cleanup completes;

@@ -75,6 +75,25 @@ describe("Server", () => {
     await server.close();
   });
 
+  it("coalesces concurrent run calls before process lifecycle admission", async () => {
+    const sigintListeners = process.listenerCount("SIGINT");
+    const sigtermListeners = process.listenerCount("SIGTERM");
+    const server = Server.atPort(0);
+
+    const [first, second] = await Promise.all([server.run(), server.run()]);
+
+    try {
+      expect(second).toBe(first);
+      expect(process.listenerCount("SIGINT")).toBe(sigintListeners + 1);
+      expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners + 1);
+    } finally {
+      await first.close();
+    }
+
+    expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
+    expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
+  });
+
   it("closes process-owned servers in reverse successful-start order", async () => {
     const closed: string[] = [];
     const first = await Server.atPort(0)
@@ -126,6 +145,65 @@ describe("Server", () => {
       await server.close().catch(() => undefined);
       process.exitCode = original;
     }
+  });
+
+  it("retries a failed final environment close on a later process signal", async () => {
+    const original = process.exitCode;
+    const closed: string[] = [];
+    const storageError = new Error("storage close failed once");
+    const sigintListeners = process.listenerCount("SIGINT");
+    const sigtermListeners = process.listenerCount("SIGTERM");
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      storageFactory: new FlakyCloseStorageFactory(closed, storageError),
+      transport: new CloseTrackingTransport(closed),
+    });
+    const server = await Server.atPort(0).run();
+
+    try {
+      process.emit("SIGTERM");
+      await waitFor(() => closed.length === 2);
+      expect(process.listenerCount("SIGINT")).toBe(sigintListeners + 1);
+      expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners + 1);
+
+      process.emit("SIGTERM");
+      await waitFor(() => closed.length === 3);
+      expect(closed).toEqual(["transport", "storage", "storage"]);
+      expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
+      expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
+    } finally {
+      await server.close().catch(() => undefined);
+      process.exitCode = original;
+    }
+  });
+
+  it("releases failed run ownership without installing process signal listeners", async () => {
+    const sigintListeners = process.listenerCount("SIGINT");
+    const sigtermListeners = process.listenerCount("SIGTERM");
+    const occupied = http.createServer();
+    await new Promise<void>((resolve) => occupied.listen(0, "127.0.0.1", resolve));
+    const address = occupied.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("Test listener did not expose a TCP port.");
+    }
+
+    try {
+      await expect(Server.atPort(address.port).run()).rejects.toMatchObject({ code: "EADDRINUSE" });
+      expect(process.listenerCount("SIGINT")).toBe(sigintListeners);
+      expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        occupied.close((error) => {
+          if (error === undefined) {
+            resolve();
+          } else {
+            reject(error);
+          }
+        }),
+      );
+    }
+
+    const callerManaged = await Server.atPort(0).start();
+    await callerManaged.close();
   });
 
   it("rejects run admission before opening a listener while caller ownership is active", async () => {

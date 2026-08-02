@@ -77,3 +77,20 @@ and no visible mismatch or fallback occurred. All four results are accepted.
 The same implementation owner receives this single aggregated batch. A second
 review wave will cover only behavior, API, maintainability, reliability, and
 documentation materially changed by these corrections.
+
+## Wave 1 Correction Disposition
+
+- Implementer: existing `implementer`, configured `gpt-5.6-terra` / `medium`;
+  runtime self-introspection unavailable, with configured profile retained as
+  evidence.
+- Findings 1–2 resolved: same-builder concurrent `run()` calls coalesce before
+  coordinator admission, and a failed final close remains reachable for a
+  second-signal retry.
+- Finding 3 confirmed: occupied-port failed `run()` startup leaks no signal
+  listeners and releases ownership for caller-managed startup.
+- Finding 4 resolved: retirement record mechanics are module-private.
+- Findings 5–6 resolved: required lifecycle prose and public TSDoc now cover
+  ownership, admission, sibling sharing, final close, and retry behavior.
+- Focused validation passed: server and attachment suites 133/133; affected
+  lint, formatting, TSDoc, and whitespace checks passed. Narrow re-review is
+  pending orchestrator dispatch.

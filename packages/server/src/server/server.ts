@@ -55,6 +55,7 @@ export class Server {
   readonly #environment: ServerEnvironment;
   #starting: Promise<RunningServer> | undefined;
   #startingOwnership: EnvironmentOwnership | undefined;
+  #run: Promise<RunningServer> | undefined;
   #failedStartCleanup: FailedStartCleanup | undefined;
   #failedStartConsumed = false;
 
@@ -126,6 +127,9 @@ export class Server {
    * order before the listener opens. A failed assembly, registration, or
    * listener open leaves no listener and closes acquired resources. Network
    * and transport cleanup are hard gates before delivery or dependencies close.
+   * It shares only a caller-managed active environment generation, rejects
+   * while run-managed ownership is active, installs no signal handlers, and
+   * never closes the environment.
    * A later call after incomplete cleanup retries only that cleanup and leaves
    * this server terminal. A fresh server may reuse the singleton environment.
    * Concurrent callers share one start or cleanup attempt.
@@ -172,13 +176,27 @@ export class Server {
    *
    * This is the normal application entry point. Embedded applications should
    * use {@link start} and keep ownership of process signals themselves.
-   * After the final run-managed server retires, its environment closes
-   * permanently. Caller-managed servers never close their environment.
+   * Concurrent calls on one builder return one managed handle. Run-managed
+   * siblings share an active generation but reject while caller-managed
+   * ownership is active. The final run-managed retirement permanently closes
+   * its environment; a failed final close stays retryable through `close()` or
+   * a later process signal. Caller-managed servers never close their environment.
    *
    * @returns The running server after its listener accepts requests.
    */
-  async run(): Promise<RunningServer> {
-    return ProcessServerCoordinator.add(await this.#start("server"), this.#environment);
+  run(): Promise<RunningServer> {
+    const current = this.#run;
+    if (current !== undefined) return current;
+    const running = this.#start("server").then((server) =>
+      ProcessServerCoordinator.add(server, this.#environment),
+    );
+    this.#run = running;
+    void running.catch(() => {
+      if (this.#run === running) {
+        this.#run = undefined;
+      }
+    });
+    return running;
   }
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
