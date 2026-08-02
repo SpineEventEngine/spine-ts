@@ -200,3 +200,10 @@ four tests. Scoped coverage is 95.22% statements and 91.48% branches for the
 changed browser host, with all required metrics above 90%. Runtime
 self-introspection remained unavailable; explicit reviewer profiles matched
 with no visible fallback. Every required T-0093 concern is closed.
+
+## Release Documentation-Policy Correction
+
+The release policy flagged internal milestone terminology in the public Envoy
+README. The corrected wording describes a Docker-capable gateway deployment
+acceptance command, retains the generic-release boundary, and removes internal
+task/wave jargon.

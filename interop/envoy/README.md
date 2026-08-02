@@ -56,10 +56,10 @@ renders both an accepted configuration and a deliberately invalid one:
 pnpm test:envoy
 ```
 
-This is a capability-dependent T-0093/Wave 5 acceptance command: it requires
+This is a Docker-capable gateway deployment acceptance command: it requires
 Docker and the pinned image, and is therefore not part of the generic
-`verify:release` profile. Run it in every Docker-capable acceptance environment;
-the test skips only when Docker is unavailable.
+`verify:release` profile. Run it in every Docker-capable deployment acceptance
+environment; the test skips only when Docker is unavailable.
 
 Do not publish a direct route from the browser to a Spine backend. The
 application gateway resolves credentials into trusted context and is the only
