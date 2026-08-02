@@ -23,20 +23,6 @@ function configured(delivery: ServerEnvironmentCloseable & { open?: unknown }) {
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
-  it("passes configured delivery ports to finite and supervisor environment paths", () => {
-    const delivery = {
-      open: () => undefined,
-      close: () => undefined,
-      inbox: {},
-      workRegistry: {},
-    };
-    const environment = configured(delivery);
-
-    expect(environment.delivery).toBe(delivery);
-    expect("inbox" in delivery).toBe(true);
-    expect("workRegistry" in delivery).toBe(true);
-  });
-
   it("routes configured ports through the real attachment factory to finite and supervisor delivery", async () => {
     let finiteReads = 0;
     let finitePickups = 0;
@@ -58,14 +44,27 @@ describe("ServerEnvironment delivery lifecycle", () => {
       },
       release: () => Promise.resolve(false),
     };
+    let ready = false;
+    let opens = 0;
     const withInbox = vi.spyOn(DeliveryBuilder.prototype, "withInbox");
     const withWorkRegistry = vi.spyOn(DeliveryBuilder.prototype, "withWorkRegistry");
-    const environment = configured({
-      open: () => undefined,
+    const delivery = {
+      open: () => {
+        opens += 1;
+        ready = true;
+      },
       close: () => undefined,
-      inbox,
-      workRegistry,
-    });
+      get inbox() {
+        if (!ready) throw new Error("Inbox port read before delivery readiness.");
+        return inbox;
+      },
+      get workRegistry() {
+        if (!ready) throw new Error("Work-registry port read before delivery readiness.");
+        return workRegistry;
+      },
+    };
+    const environment = configured(delivery);
+    expect(opens).toBe(0);
     const descriptor = environmentDescriptor(environment);
     let attachment: EnvironmentAttachmentHandle | undefined;
 
@@ -75,6 +74,7 @@ describe("ServerEnvironment delivery lifecycle", () => {
         descriptors: [descriptor],
       });
 
+      expect(opens).toBe(1);
       await waitFor(() => finitePickups > 0 && finiteReads > 0);
       expect(withInbox).toHaveBeenCalledWith(inbox);
       expect(withWorkRegistry).toHaveBeenCalledWith(workRegistry);
