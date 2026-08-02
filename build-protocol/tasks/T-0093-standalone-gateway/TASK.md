@@ -70,6 +70,16 @@ and owned resources.
 
 ## Immediate Next Action
 
-Dispatch the existing requirements splitter, accept the bounded plan, then use
-one implementation owner with deterministic request/routing/lifecycle tests.
+The requirements split is accepted in
+`build-protocol/planning/T-0093_STANDALONE_GATEWAY_SPLIT.md`. Dispatch one
+implementation owner with deterministic request/routing/lifecycle tests.
 
+## Requirements Splitter Result
+
+- Existing role: `requirements_splitter`.
+- Expected and explicitly dispatched profile: `gpt-5.6-sol` / high.
+- Runtime self-introspection was unavailable; the immutable configured profile
+  is the accepted metadata and no visible mismatch or fallback occurred.
+- No governing conflict was found. The split deepens the existing host,
+  selects standalone mode with `browser.backend`, and adds no runner/router or
+  duplicate namespace configuration.
