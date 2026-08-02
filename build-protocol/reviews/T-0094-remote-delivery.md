@@ -47,7 +47,28 @@ created.
 
 ## Concern Dispositions
 
-- Style/maintainability: pending.
-- TypeScript/API: pending.
-- Performance/reliability: pending.
+- Style/maintainability: completed with one P1 and two P2 findings. The worker
+  port lookup happens before an openable delivery is ready; the remote test
+  retains a superseded builder mock; and `RemoteDelivery.close()` has stale
+  TSDoc. Configured role/profile was `style_maintainability_reviewer`,
+  `gpt-5.6-terra` / high. Runtime self-introspection was unavailable.
+- TypeScript/API: completed with two P1 and three P2 findings. The review
+  confirmed the open/close race, found inconsistent structural narrowing for
+  openable delivery settings, found `openDelivery()` in the public declaration,
+  confirmed the stale close TSDoc, and rejected fake `as never` collaborators
+  in a beginner snippet. Focused tests and declaration checks passed.
+  Configured role/profile was `typescript_api_docs_reviewer`,
+  `gpt-5.6-terra` / high. Runtime self-introspection was unavailable.
+- Performance/reliability: completed with one P1 and one P2 finding. Closing
+  during pending readiness can leak and publish a client over a closed
+  quarantine, and no integration test proves the complete environment-to-worker
+  port path for both finite and supervisor deliveries. Other readiness,
+  failed-open retry, shutdown phase retry, and dependency-direction behavior
+  was clean. Configured role/profile was
+  `performance_reliability_reviewer`, `gpt-5.6-terra` / high. Runtime
+  self-introspection was unavailable.
 - Documentation: pending.
+
+The completed lanes overlap on the lifecycle race, stale close documentation,
+and missing real wiring coverage. They will be deduplicated into one correction
+batch after the documentation lane completes.
