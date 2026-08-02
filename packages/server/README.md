@@ -108,6 +108,18 @@ listener, router, CORS middleware, or shutdown coordinator. The application
 still supplies its session resolver, authorization policy, and trusted actor
 context resolver.
 
+For a separately hosted TS or JVM backend, set `browser.backend.baseUrl` to its
+canonical HTTP(S) origin. The gateway keeps `ResolveContext` local and forwards
+the five application RPCs only after the same authentication, authorization,
+and trusted-context rewrite. Production standalone mode also needs a type
+registry and named `DurableSubscriptionBindings`; the external backend remains
+caller-owned.
+
+Applications may add only explicit OAuth-style callbacks with `authRoutes`.
+Each route uses an exact `GET`/`POST` path, per-route origins, a safe body limit,
+and a finite timeout. This is not a general HTTP router; use it for bounded
+identity exchanges and validate OAuth state in the application handler.
+
 ```ts
 import {
   DurableSubscriptionBindings,
