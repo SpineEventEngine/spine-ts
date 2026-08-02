@@ -453,6 +453,54 @@ describe("Server", () => {
     }
   });
 
+  it("maps auth method, origin, streamed overflow, and handler failure exactly", async () => {
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "POST",
+            path: "/auth/map",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 2,
+            timeoutMs: 1000,
+            onRequest: () => {
+              throw new Error("private");
+            },
+          },
+        ],
+      },
+    }).start();
+    try {
+      await expect(
+        fetch(`${server.baseUrl}/auth/map`, { headers: { origin: "http://127.0.0.1:5173" } }),
+      ).resolves.toMatchObject({ status: 405 });
+      await expect(
+        fetch(`${server.baseUrl}/auth/map`, {
+          method: "POST",
+          headers: { origin: "https://other.example" },
+        }),
+      ).resolves.toMatchObject({ status: 403 });
+      await expect(
+        fetch(`${server.baseUrl}/auth/map`, {
+          method: "POST",
+          headers: { origin: "http://127.0.0.1:5173" },
+          body: "abc",
+        }),
+      ).resolves.toMatchObject({ status: 413 });
+      await expect(
+        fetch(`${server.baseUrl}/auth/map`, {
+          method: "POST",
+          headers: { origin: "http://127.0.0.1:5173" },
+          body: "a",
+        }),
+      ).resolves.toMatchObject({ status: 500 });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
     const server = await Server.atPort(0).start();
 
