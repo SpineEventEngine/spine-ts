@@ -45,8 +45,8 @@ interface Binding {
   readonly backend?: string;
   readonly backendBytes?: number;
   readonly ownerId?: string;
-  readonly leaseUntilMs?: number;
-  readonly reason?: "client" | "activation-end" | "expired";
+  readonly leaseUntilMs?: number | undefined;
+  readonly reason?: "client" | "activation-end" | "expired" | undefined;
 }
 interface Quota {
   readonly family: "quota";
@@ -58,7 +58,7 @@ interface Quota {
     readonly operationId: string;
     readonly bindingId?: string;
     readonly token?: string;
-    readonly afterId?: string;
+    readonly afterId?: string | undefined;
     readonly count?: number;
   };
 }
@@ -68,8 +68,8 @@ interface Cleanup {
   readonly revision: number;
   readonly ownerId?: string;
   readonly fence: number;
-  readonly leaseUntilMs?: number;
-  readonly afterId?: string;
+  readonly leaseUntilMs?: number | undefined;
+  readonly afterId?: string | undefined;
   readonly failureCount: number;
   readonly retryAfterMs: number;
 }
@@ -442,7 +442,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       fence: old.fence + 1,
       ownerId: this.#owner,
       leaseUntilMs: this.#until(nowMs),
-      ...(reason === undefined ? {} : { reason }),
+      reason,
     };
   }
   async #renew(id: string, fence: number, controller: AbortController): Promise<void> {
@@ -491,7 +491,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       value.lifecycle === lifecycle &&
       value.ownerId === this.#owner &&
       value.fence === fence &&
-      (value.leaseUntilMs ?? 0) > nowMs
+      Number(value.leaseUntilMs) > nowMs
     );
   }
   async #release(id: string, token: string): Promise<void> {
@@ -643,7 +643,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       revision: expected.revision + 1,
       fence: expected.fence,
       ownerId: this.#owner,
-      ...(expected.leaseUntilMs === undefined ? {} : { leaseUntilMs: expected.leaseUntilMs }),
+      leaseUntilMs: expected.leaseUntilMs,
       failureCount: reset ? 0 : expected.failureCount,
       retryAfterMs: 0,
       ...(reset || continuedAfterId === undefined ? {} : { afterId: continuedAfterId }),
@@ -666,7 +666,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       fence: current.fence,
       failureCount,
       retryAfterMs: nowMs + delay,
-      ...(current.afterId === undefined ? {} : { afterId: current.afterId }),
+      afterId: current.afterId,
     };
     if (await this.#replaceCleanup(current, next)) return;
     const reread = await this.#cleanup();
@@ -725,7 +725,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
               kind: "repair",
               operationId: operation.operationId,
               count,
-              ...(afterId === undefined ? {} : { afterId }),
+              afterId,
             },
           };
       if (await this.#replaceQuota(quota, next)) {
@@ -915,7 +915,7 @@ const Values = Object.freeze({
   envelope(binding: Binding): BackendSubscriptionEnvelope {
     return {
       kind: "backend-subscription-envelope",
-      bytes: Uint8Array.from(Buffer.from(binding.backend ?? "", "base64")),
+      bytes: Uint8Array.from(Buffer.from(String(binding.backend), "base64")),
     };
   },
   id(record: Any): string {

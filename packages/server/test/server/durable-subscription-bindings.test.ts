@@ -1090,7 +1090,9 @@ describe("DurableSubscriptionBindings", () => {
       }),
     ];
     for (const record of valid)
-      expect(() => DurableSubscriptionBindingRecords.validate(record)).not.toThrow();
+      expect(() => {
+        DurableSubscriptionBindingRecords.validate(record);
+      }).not.toThrow();
 
     const invalid = [
       durableRecord("binding", {
@@ -1148,7 +1150,9 @@ describe("DurableSubscriptionBindings", () => {
       }),
     ];
     for (const [index, record] of invalid.entries())
-      expect(() => DurableSubscriptionBindingRecords.validate(record)).toThrow(
+      expect(() => {
+        DurableSubscriptionBindingRecords.validate(record);
+      }).toThrow(
         "Durable subscription registry record is invalid.",
         `invalid durable record ${index.toString()}`,
       );
@@ -1295,19 +1299,19 @@ describe("DurableSubscriptionBindings", () => {
       }),
     ],
   ])("fails closed for each malformed durable invariant %#", (record) => {
-    expect(() => DurableSubscriptionBindingRecords.validate(record)).toThrow(
-      "Durable subscription registry record is invalid.",
-    );
+    expect(() => {
+      DurableSubscriptionBindingRecords.validate(record);
+    }).toThrow("Durable subscription registry record is invalid.");
   });
 
   it("rejects mismatched durable keys and bounded records", () => {
     const record = durableRecord("quota", { id: "!subscription-quota", revision: 1, used: 0 });
-    expect(() => DurableSubscriptionBindingRecords.validate(record, "other")).toThrow(
-      "Durable subscription registry record is invalid.",
-    );
-    expect(() => DurableSubscriptionBindingRecords.validate(record, undefined, 1)).toThrow(
-      "Durable subscription registry record is invalid.",
-    );
+    expect(() => {
+      DurableSubscriptionBindingRecords.validate(record, "other");
+    }).toThrow("Durable subscription registry record is invalid.");
+    expect(() => {
+      DurableSubscriptionBindingRecords.validate(record, undefined, 1);
+    }).toThrow("Durable subscription registry record is invalid.");
   });
 
   it("returns closed or denied for missing, expired, and already retired operations", async () => {
@@ -1869,6 +1873,180 @@ describe("DurableSubscriptionBindings", () => {
           ...options,
         }),
     ).toThrow();
+  });
+
+  it("fails closed when a reserved durable row vanishes before conversion", async () => {
+    const factory = new VanishingFactory("binding", 1);
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "vanished-conversion",
+      nextId: () => "binding",
+      dispose: () => Promise.resolve(),
+      leaseMs: 10,
+      cleanupBatchSize: 1,
+      recordLimit: 1,
+      maxRecordBytes: 1_024,
+    });
+    const reservation = await bindings.reserveCapacity();
+    factory.arm();
+
+    await expect(
+      bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 100,
+        reservation,
+      }),
+    ).rejects.toThrow("binding-capacity-exceeded");
+    await bindings.close();
+  });
+
+  it("does not return a reservation whose durable slot disappears after admission", async () => {
+    const factory = new VanishingFactory("binding", 2);
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: factory,
+      namespace: "vanished-admission",
+      nextId: () => "binding",
+      dispose: () => Promise.resolve(),
+      leaseMs: 10,
+      cleanupBatchSize: 1,
+      recordLimit: 1,
+      maxRecordBytes: 1_024,
+    });
+    factory.arm();
+
+    await expect(bindings.reserveCapacity()).rejects.toThrow();
+    await bindings.close();
+  });
+
+  it("keeps the newer local activation while an expired callback finishes", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "overlapping-activation");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    let resume: (() => void) | undefined;
+    let started: (() => void) | undefined;
+    const first = bindings.activate({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onBackend: () =>
+        new Promise<void>((resolve) => {
+          started?.();
+          resume = resolve;
+        }),
+    });
+    await new Promise<void>((resolve) => {
+      started = resolve;
+    });
+
+    await expect(
+      bindings.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 2_000,
+        signal: new AbortController().signal,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    resume?.();
+    await expect(first).resolves.toEqual({ kind: "denied" });
+    await bindings.close();
+  });
+
+  it("denies a foreign gateway while a failed cancellation retains its lease", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "foreign-cancellation");
+    const second = registry(factory, "foreign-cancellation");
+    const binding = await first.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    await expect(
+      first.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.reject(new Error("backend failure")),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+
+    await expect(
+      second.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 2,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await first.close();
+    await second.close();
+  });
+
+  it("repairs a legacy incomplete quota operation conservatively", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "repair-without-count");
+    await seedRecord(
+      store,
+      "!subscription-quota",
+      durableRecord("quota", {
+        id: "!subscription-quota",
+        revision: 1,
+        used: 0,
+        operation: { kind: "repair", operationId: "repair" },
+      }),
+    );
+    await seedRecord(store, "binding", repairRecord("binding", "reserved"));
+    store.close();
+    const bindings = capacityRegistry(factory, "repair-without-count", 1);
+
+    await expect(bindings.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
+    await bindings.close();
+  });
+
+  it("treats incomplete durable expiry facts as expired without retaining capacity", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "incomplete-expiry");
+    await seedRecord(
+      store,
+      "binding",
+      durableRecord("binding", {
+        id: "binding",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "reserved",
+        fence: 0,
+      }),
+    );
+    await seedRecord(
+      store,
+      "!subscription-cleanup",
+      durableRecord("cleanup", {
+        id: "!subscription-cleanup",
+        revision: 1,
+        fence: 1,
+        ownerId: "other-gateway",
+        failureCount: 0,
+        retryAfterMs: 0,
+      }),
+    );
+    store.close();
+    const bindings = capacityRegistry(factory, "incomplete-expiry", 1);
+
+    await bindings.purgeExpired(1);
+    await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
   });
 });
 
