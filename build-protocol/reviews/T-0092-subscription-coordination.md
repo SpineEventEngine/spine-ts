@@ -125,3 +125,37 @@ Every model and reasoning field is explicit in the dispatch. The reviewer
 surface does not expose runtime self-introspection; unless a visible mismatch
 is reported, the immutable configured role/profile is the accepted runtime
 metadata and this limitation will be recorded with each result.
+
+## First Specialist Wave Results
+
+All four dispatched concerns returned at endpoint `8e28ab94`. None exposed
+runtime model/reasoning self-introspection, so the explicit immutable
+role/profile in the dispatch is the accepted metadata. No visible mismatch or
+fallback was reported.
+
+- Style/maintainability (`style_maintainability_reviewer`,
+  `gpt-5.6-terra` / high): requested changes. P1: the accepted capacity,
+  ownership, and competing-cleaner races lack deterministic barriers at the
+  contested read/CAS boundary. P2: duplicated fault decorators match brittle
+  serialized substrings instead of semantic records.
+- TypeScript/API documentation (`typescript_api_docs_reviewer`,
+  `gpt-5.6-terra` / high): requested changes. Blocking: the auth gateway drops
+  the durable guard before update forwarding and backend cancellation.
+  Important: the public guard contract does not define the callback's timing,
+  false-result, and absent-guard obligations.
+- Documentation (`documentation_reviewer`, `gpt-5.6-luna` / medium): requested
+  changes. The README and REFERENCE claim that lease loss stops forwarding,
+  but the current gateway does not enforce the guard at the final effect
+  boundary. Other reviewed quota, restart, cleanup, reconnect/re-query,
+  replay, ordering, and delivery-limit claims are consistent.
+- Performance/reliability (`performance_reliability_reviewer`,
+  `gpt-5.6-terra` / high): requested changes. P1: ambiguous CAS can accept a
+  different same-shaped owner; failed creation can retain an implicit quota
+  reservation; a slow cleaner can lose its unrenewed lease and duplicate
+  disposal; close does not converge all in-flight activation/cancellation
+  work. P2: cleanup can permanently skip valid IDs sorting before its initial
+  control-record cursor.
+
+One consolidated correction batch returns to the existing implementation
+owner. Re-review will cover only the concerns materially affected by the
+corrections.
