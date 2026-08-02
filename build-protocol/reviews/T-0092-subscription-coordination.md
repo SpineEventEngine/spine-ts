@@ -1,6 +1,6 @@
 # T-0092 Review Record
 
-Status: Awaiting complete implementation checkpoint
+Status: Specialist review wave in progress
 
 ## Required Concerns
 
@@ -104,3 +104,24 @@ is reserved for a complete converged checkpoint.
 - Evidence: affected ESLint and server/storage/Datastore/MySQL typechecks
   passed; four focused suites passed 178 tests; full `format:check`, TSDoc
   enforcement, and `git diff --check` passed.
+
+## Specialist Review Dispatch
+
+Review endpoint: `d214b046` against the T-0092 base `0748473e`.
+
+The full no-tests task preflight passed before dispatch: generated builds,
+tooling typecheck, repository lint, cleanup and TSDoc enforcement, formatting,
+generated documentation checks, Proto lint/currentness, and release-readiness
+checks are clean.
+
+| Concern | Existing role | Expected model | Expected reasoning |
+| --- | --- | --- | --- |
+| Style and maintainability | `style_maintainability_reviewer` | `gpt-5.6-terra` | high |
+| Documentation | `documentation_reviewer` | `gpt-5.6-luna` | medium |
+| TypeScript and API documentation | `typescript_api_docs_reviewer` | `gpt-5.6-terra` | high |
+| Performance and reliability | `performance_reliability_reviewer` | `gpt-5.6-terra` | high |
+
+Every model and reasoning field is explicit in the dispatch. The reviewer
+surface does not expose runtime self-introspection; unless a visible mismatch
+is reported, the immutable configured role/profile is the accepted runtime
+metadata and this limitation will be recorded with each result.
