@@ -13,7 +13,7 @@ afterEach(async () => {
   await resetServerEnvironmentForTest();
 });
 
-function configured(delivery: ServerEnvironmentCloseable & { open?: () => unknown }) {
+function configured(delivery: ServerEnvironmentCloseable & { open?: unknown }) {
   ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
   return ServerEnvironment.instance();
 }
@@ -31,6 +31,42 @@ describe("ServerEnvironment delivery lifecycle", () => {
     expect(environment.delivery).toBe(delivery);
     expect("inbox" in delivery).toBe(true);
     expect("workRegistry" in delivery).toBe(true);
+  });
+
+  it("does not expose the internal delivery opener on the environment instance", () => {
+    const environment = configured({ close: () => undefined });
+
+    expect("openDelivery" in environment).toBe(false);
+  });
+
+  it("preserves a close-only delivery with an unrelated non-callable open property", async () => {
+    const environment = configured({ close: () => undefined, open: "legacy metadata" });
+
+    const attachment = await serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [],
+    });
+    await serverEnvironmentAccess.detach(environment, attachment);
+  });
+
+  it("rejects an incomplete callable delivery instead of reading invalid ports", async () => {
+    const environment = configured({
+      close: () => undefined,
+      open: () => undefined,
+    });
+
+    const result: Error | EnvironmentAttachmentHandle = await serverEnvironmentAccess
+      .attach(environment, { ownership: "caller", descriptors: [] })
+      .then<Error | EnvironmentAttachmentHandle, Error | EnvironmentAttachmentHandle>(
+        (attachment) => attachment,
+        (error: unknown) => error as Error,
+      );
+    if (!(result instanceof Error)) await serverEnvironmentAccess.detach(environment, result);
+
+    expect(result).toHaveProperty(
+      "message",
+      "ServerEnvironmentDelivery requires inbox and workRegistry ports.",
+    );
   });
 
   it("opens configured delivery before the first environment attachment", async () => {

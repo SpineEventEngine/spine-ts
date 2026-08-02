@@ -5,6 +5,8 @@ import type { RemovalQuarantine } from "../src/client/types.js";
 
 const remote = vi.hoisted(() => ({
   clients: [] as FakeClient[],
+  inboxes: [] as unknown[],
+  workRegistries: [] as unknown[],
   closeEvents: [] as string[],
   closeFailures: [] as (Error | undefined)[],
   readiness: [] as (() => Promise<readonly unknown[]>)[],
@@ -25,33 +27,13 @@ vi.mock("../src/remote/adapters.js", () => ({
     constructor(
       readonly client: FakeClient,
       readonly quarantine: CloseableQuarantine,
-    ) {}
+    ) {
+      remote.inboxes.push(this);
+    }
   },
   RemoteWorkRegistry: class {
-    constructor(readonly client: FakeClient) {}
-  },
-}));
-
-vi.mock("@spine-event-engine/server", () => ({
-  DeliveryBuilder: class {
-    withInbox(inbox: unknown): this {
-      expect(inbox).toBeInstanceOf(Object);
-      return this;
-    }
-
-    withWorkRegistry(registry: unknown): this {
-      expect(registry).toBeInstanceOf(Object);
-      return this;
-    }
-
-    build(): { close(): void } {
-      return {
-        close: () => {
-          remote.closeEvents.push("delivery");
-          const failure = remote.closeFailures.shift();
-          if (failure !== undefined) throw failure;
-        },
-      };
+    constructor(readonly client: FakeClient) {
+      remote.workRegistries.push(this);
     }
   },
 }));
@@ -94,12 +76,14 @@ function quarantine(): CloseableQuarantine {
 describe("RemoteDelivery", () => {
   beforeEach(() => {
     remote.clients = [];
+    remote.inboxes = [];
+    remote.workRegistries = [];
     remote.closeEvents = [];
     remote.closeFailures = [];
     remote.readiness = [];
   });
 
-  it("builds one remote environment delivery from an endpoint and durable quarantine", async () => {
+  it("creates one client and publishes its exact remote adapters", async () => {
     const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
@@ -108,6 +92,10 @@ describe("RemoteDelivery", () => {
     await delivery.open();
 
     expect(remote.clients).toHaveLength(1);
+    expect(remote.inboxes).toHaveLength(1);
+    expect(remote.workRegistries).toHaveLength(1);
+    expect(delivery.inbox).toBe(remote.inboxes[0]);
+    expect(delivery.workRegistry).toBe(remote.workRegistries[0]);
   });
 
   it("fails closed before readiness then exposes its exact remote adapters", async () => {
@@ -148,6 +136,48 @@ describe("RemoteDelivery", () => {
     expect(remote.clients).toHaveLength(1);
     release();
     await expect(opening).resolves.toBeUndefined();
+  });
+
+  it("closes an opening client before readiness can publish adapters", async () => {
+    let release: () => void = () => undefined;
+    remote.readiness.push(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([]);
+        }),
+    );
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+    });
+
+    const opening = delivery.open();
+    await Promise.resolve();
+    const closing = delivery.close();
+
+    expect(remote.closeEvents).toEqual(["client"]);
+    expect(() => delivery.inbox).toThrow("Remote delivery is not open.");
+    release();
+    await expect(opening).rejects.toThrow("Remote delivery is closed.");
+    await expect(closing).resolves.toBeUndefined();
+    expect(remote.closeEvents).toEqual(["client", "quarantine"]);
+  });
+
+  it("rejects opening before or after terminal closure", async () => {
+    const unopened = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+    });
+    await unopened.close();
+    await expect(unopened.open()).rejects.toThrow("Remote delivery is closed.");
+
+    const opened = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+    });
+    await opened.open();
+    await opened.close();
+    await expect(opened.open()).rejects.toThrow("Remote delivery is closed.");
   });
 
   it("coalesces concurrent open calls into one client and one readiness attempt", async () => {
