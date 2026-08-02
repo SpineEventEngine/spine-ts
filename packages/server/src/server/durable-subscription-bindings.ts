@@ -53,6 +53,11 @@ interface Quota {
   readonly id: typeof quotaId;
   readonly revision: number;
   readonly used: number;
+  readonly operation?: {
+    readonly kind: "repair";
+    readonly afterId?: string;
+    readonly count: number;
+  };
 }
 interface Cleanup {
   readonly family: "cleanup";
@@ -132,6 +137,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     for (const row of existing) Values.read(row.record, row.id, this.#maxRecordBytes);
     for (let count = 0; count < attempts; count += 1) {
       const quota = await this.#quota();
+      if (quota.operation !== undefined) {
+        await this.#repair();
+        continue;
+      }
       if (quota.used >= this.#recordLimit) throw new Error("binding-capacity-exceeded");
       const id = this.#nextId();
       if (!Values.publicId(id)) throw new Error("subscription ID must be unique");
@@ -430,6 +439,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         if (!(await this.#storage.compareAndSet(id, row, undefined))) continue;
       }
       const quota = await this.#quota();
+      if (quota.operation !== undefined) {
+        await this.#repair();
+        continue;
+      }
       const next = { ...quota, revision: quota.revision + 1, used: Math.max(0, quota.used - 1) };
       if (
         await this.#storage.compareAndSet(
@@ -455,14 +468,47 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     return Values.read(created, quotaId, this.#maxRecordBytes) as Quota;
   }
   async #repair(): Promise<void> {
-    const rows = await this.#storage.queryEntries({ limit: this.#recordLimit + 2 });
-    const used = rows.filter((row) => row.id !== quotaId && row.id !== cleanupId).length;
-    const quota = await this.#quota();
-    await this.#storage.compareAndSet(
-      quotaId,
-      Values.write(quota, this.#maxRecordBytes),
-      Values.write({ ...quota, revision: quota.revision + 1, used }, this.#maxRecordBytes),
-    );
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const quota = await this.#quota();
+      const operation = quota.operation ?? { kind: "repair" as const, count: 0 };
+      const page = await this.#storage.queryEntries({
+        sort: [{ field: "id" }],
+        ...(operation.afterId === undefined
+          ? {}
+          : {
+              after: { id: operation.afterId, values: [{ field: "id", value: operation.afterId }] },
+            }),
+        limit: this.#cleanupBatchSize,
+      });
+      const data = page.filter((entry) => entry.id !== quotaId && entry.id !== cleanupId);
+      const count = operation.count + data.length;
+      const afterId = page.at(-1)?.id;
+      const completed = page.length < this.#cleanupBatchSize;
+      const next: Quota = completed
+        ? { family: "quota", id: quotaId, revision: quota.revision + 1, used: count }
+        : {
+            family: "quota",
+            id: quotaId,
+            revision: quota.revision + 1,
+            used: quota.used,
+            operation: {
+              kind: "repair",
+              count,
+              ...(afterId === undefined ? {} : { afterId }),
+            },
+          };
+      if (
+        await this.#storage.compareAndSet(
+          quotaId,
+          Values.write(quota, this.#maxRecordBytes),
+          Values.write(next, this.#maxRecordBytes),
+        )
+      ) {
+        if (completed) return;
+        continue;
+      }
+    }
+    throw new Error("Subscription quota repair did not converge.");
   }
   #owned(
     binding: Binding,
