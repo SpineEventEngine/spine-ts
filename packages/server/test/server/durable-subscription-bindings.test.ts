@@ -554,6 +554,46 @@ describe("DurableSubscriptionBindings", () => {
     }
   });
 
+  it("reconciles an applied-then-thrown renewal without abandoning its active callback", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    try {
+      const factory = new ApplyThenThrowFactory("renewal");
+      const bindings = timedRegistry(factory, "renewal-fault");
+      const binding = await bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 10_000,
+      });
+      let signal: AbortSignal | undefined;
+      let finish: (() => void) | undefined;
+      const active = bindings.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1_000,
+        signal: new AbortController().signal,
+        onBackend: (_value, current) =>
+          new Promise<void>((resolve) => {
+            signal = current;
+            finish = resolve;
+          }),
+      });
+      await Promise.resolve();
+      factory.arm();
+
+      await vi.advanceTimersByTimeAsync(51);
+
+      expect(signal?.aborted).toBe(false);
+      finish?.();
+      await expect(active).resolves.toEqual({ kind: "activated" });
+      await bindings.close();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("declares durable capability without treating in-memory bindings as durable", () => {
     const bindings = registry(new InMemoryStorageFactory(), "messageboard");
 
@@ -1311,7 +1351,8 @@ class ApplyThenThrowFactory extends StorageFactory {
       | "claim"
       | "cancellation"
       | "retirement"
-      | "cleanup-claim",
+      | "cleanup-claim"
+      | "renewal",
   ) {
     super();
   }
@@ -1362,7 +1403,11 @@ class ApplyThenThrowFactory extends StorageFactory {
             text.includes('"lifecycle":"retired"')) ||
           (this.phase === "cleanup-claim" &&
             id === "!subscription-cleanup" &&
-            text.includes('"ownerId"'));
+            text.includes('"ownerId"')) ||
+          (this.phase === "renewal" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"active"') &&
+            text.includes('"revision":4'));
         if (hit) this.#armed = false;
         return hit;
       },
