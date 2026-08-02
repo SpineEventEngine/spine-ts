@@ -1805,8 +1805,14 @@ describe("DurableSubscriptionBindings", () => {
   });
 
   it.each([
-    '{"version":1,"id":"binding","principalFingerprint":"owner","expiresAtMs":1,"lifecycle":"inactive","leaseUntilMs":0,"cancellationFence":0,"backend":"AQ","encodedBytes":2}',
-    '{"version":1,"id":"binding","principalFingerprint":"owner","expiresAtMs":1,"lifecycle":"inactive","leaseUntilMs":0,"cancellationFence":0,"backend":"AQ==","encodedBytes":3}',
+    [
+      '{"version":1,"id":"binding","principalFingerprint":"owner","expiresAtMs":1,',
+      '"lifecycle":"inactive","leaseUntilMs":0,"cancellationFence":0,"backend":"AQ","encodedBytes":2}',
+    ].join(""),
+    [
+      '{"version":1,"id":"binding","principalFingerprint":"owner","expiresAtMs":1,',
+      '"lifecycle":"inactive","leaseUntilMs":0,"cancellationFence":0,"backend":"AQ==","encodedBytes":3}',
+    ].join(""),
   ])("rejects noncanonical or mismatched byte accounting %#", (value) => {
     const record = create(AnySchema, {
       typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
@@ -1827,7 +1833,10 @@ describe("DurableSubscriptionBindings", () => {
     create(AnySchema, {
       typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
       value: new TextEncoder().encode(
-        '{"version":1,"id":"binding","principalFingerprint":"owner","expiresAtMs":1,"lifecycle":"inactive","leaseUntilMs":0,"cancellationFence":0,"backend":"AQ==","encodedBytes":99}',
+        [
+          '{"version":1,"id":"binding","principalFingerprint":"owner","expiresAtMs":1,',
+          '"lifecycle":"inactive","leaseUntilMs":0,"cancellationFence":0,"backend":"AQ==","encodedBytes":99}',
+        ].join(""),
       ),
     }),
   ])("fails closed before admitting a seeded invalid row %#", async (record) => {

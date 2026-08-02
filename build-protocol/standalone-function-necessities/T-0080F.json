@@ -961,5 +961,14 @@
     "name": "wireComparison",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration wireComparison()#1 requires remediation by the assigned slice."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/server/durable-subscription-bindings.ts",
+    "kind": "function-declaration",
+    "identity": "isDurableSubscriptionBindings()#1",
+    "name": "isDurableSubscriptionBindings",
+    "disposition": "necessity",
+    "reason": "TypeScript public type-predicate boundary: isDurableSubscriptionBindings narrows an optional binding collaborator at server assembly without owning registry state."
   }
 ]

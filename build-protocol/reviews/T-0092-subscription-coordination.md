@@ -55,3 +55,20 @@ is reserved for a complete converged checkpoint.
 
 - Evidence: affected ESLint and auth typecheck passed; the focused auth
   subscription suite passed 51 tests; Prettier and `git diff --check` passed.
+
+## Cleanup Enforcement Correction
+
+- Mechanical cleanup enforcement found three overlong durable-fixture lines
+  and required a specific necessity disposition for the standalone public
+  predicate `isDurableSubscriptionBindings()`. This is structural/documentation
+  policy cleanup, not a specialist-review finding.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium) split
+  the fixtures without changing their serialized values and recorded the exact
+  TypeScript type-predicate boundary rationale in the server ledger. Runtime
+  self-introspection remains unavailable.
+- Pending evidence: cleanup check, affected lint/typecheck/tests, formatting,
+  and `git diff --check`, followed by immediate push.
+
+- Evidence: cleanup enforcement, affected ESLint, and server typecheck passed;
+  the focused durable registry suite passed 104 tests; Prettier and
+  `git diff --check` passed.
