@@ -17,7 +17,9 @@ afterEach(async () => {
   await resetServerEnvironmentForTest();
 });
 
-function configured<T extends ServerEnvironmentCloseable & { open?: unknown }>(delivery: T) {
+function configured(
+  delivery: ServerEnvironmentCloseable & { open?: unknown; [key: string]: unknown },
+) {
   ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
   return ServerEnvironment.instance();
 }

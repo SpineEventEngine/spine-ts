@@ -143,7 +143,9 @@ describe("RemoteDelivery", () => {
     remote.readiness.push(
       () =>
         new Promise((resolve) => {
-          release = () => resolve([]);
+          release = () => {
+            resolve([]);
+          };
         }),
     );
     const delivery = RemoteDelivery.connectTo({
