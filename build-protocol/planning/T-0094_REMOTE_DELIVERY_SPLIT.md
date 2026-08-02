@@ -26,13 +26,15 @@ quarantine, or remote-adapter type crosses into `server`.
 The delivery-client package owns the only remote-specific configuration:
 
 ```ts
-export interface RemoteDeliveryEnvironmentConfig {
+export interface RemoteDeliveryConfig {
   readonly endpoint: string;
   readonly removalQuarantine: RemovalQuarantine & ServerEnvironmentCloseable;
   readonly clientOptions?: DeliveryClientOptions;
 }
 
-export function remoteDelivery(config: RemoteDeliveryEnvironmentConfig): ServerEnvironmentDelivery;
+export class RemoteDelivery implements ServerEnvironmentDelivery {
+  static connectTo(config: RemoteDeliveryConfig): RemoteDelivery;
+}
 ```
 
 Application assembly is one setting, with storage and transport still selected
@@ -42,11 +44,11 @@ by the application:
 ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory,
   transport,
-  delivery: remoteDelivery({ endpoint, removalQuarantine }),
+  delivery: RemoteDelivery.connectTo({ endpoint, removalQuarantine }),
 });
 ```
 
-`remoteDelivery()` owns a lazy, retryable resource bundle. Each open attempt
+`RemoteDelivery` owns a lazy, retryable resource bundle. Each open attempt
 creates one `DeliveryClient.connectTo()` client, gives that same client to one
 `RemoteInbox` and one `RemoteWorkRegistry`, and feeds those adapters into the
 existing `DeliveryBuilder`. A bounded `DeliveryClient.shardSnapshot()` is the
@@ -105,7 +107,7 @@ transferred quarantine exactly once.
 
 ## 3. Exact RED tests
 
-Create `packages/delivery-client/src/remote/remote-delivery.test.ts` with these
+Create `packages/delivery-client/test/remote-delivery.test.ts` with these
 initial failing cases:
 
 1. `builds one remote environment delivery from an endpoint and durable quarantine`
@@ -128,7 +130,7 @@ initial failing cases:
    — close-before-open owns and closes the quarantine once without allocating a
    client.
 
-Extend `packages/server/src/server/server-environment.test.ts` with these
+Extend `packages/server/test/server/server-environment.test.ts` with these
 initial failing cases:
 
 1. `opens configured delivery before the first environment attachment`
@@ -156,12 +158,12 @@ errors.
 One implementation owner exclusively owns:
 
 - `packages/delivery-client/src/remote/remote-delivery.ts` (new)
-- `packages/delivery-client/src/remote/remote-delivery.test.ts` (new)
+- `packages/delivery-client/test/remote-delivery.test.ts` (new)
 - `packages/delivery-client/src/index.ts`
 - `packages/delivery-client/README.md`
 - `packages/delivery-client/REFERENCE.md`
 - `packages/server/src/server/server-environment.ts`
-- `packages/server/src/server/server-environment.test.ts`
+- `packages/server/test/server/server-environment.test.ts`
 - `packages/server/src/index.ts`
 - `packages/server/README.md`
 - `packages/server/REFERENCE.md`

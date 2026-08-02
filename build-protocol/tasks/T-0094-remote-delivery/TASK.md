@@ -111,3 +111,25 @@ public lifecycle assembly.
   remain in `delivery-client`, preserving the existing dependency direction.
 - No current blocker. Implementation proceeds with the exact RED matrix,
   ownership order, paths, and gates in the accepted split.
+
+## Orchestrator Acceptance Correction
+
+- Corrected the splitter's test paths to the required mirrored `test/` trees;
+  production tests may not be co-located under `src/`.
+- Replaced the proposed exported standalone factory with
+  `RemoteDelivery.connectTo(RemoteDeliveryConfig)`. The remote facility owns
+  state and lifecycle, so behavior belongs to that named type under the
+  project's declaration rules.
+- These corrections do not alter the cycle-free dependency seam, lifecycle
+  order, RED behaviors, or verification boundary.
+
+## Implementation Owner Dispatch
+
+- Existing role: `implementer`.
+- Owned scope: every exact path in the accepted split, with the two corrected
+  test paths. `environment-attachment.ts` remains read-only unless a RED test
+  proves the documented minimum change is required.
+- Expected model: `gpt-5.6-terra`.
+- Expected reasoning: medium.
+- Both fields must be explicit. Runtime metadata will be recorded when exposed;
+  otherwise the immutable configured role/profile and limitation are evidence.
