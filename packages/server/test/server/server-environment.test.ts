@@ -74,6 +74,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const environment = configured({
       open: () => new Promise<void>((resolve) => (release = resolve)),
       close: () => undefined,
+      inbox: {},
+      workRegistry: {},
     });
 
     const attaching = serverEnvironmentAccess.attach(environment, {
@@ -92,9 +94,40 @@ describe("ServerEnvironment delivery lifecycle", () => {
     await serverEnvironmentAccess.detach(environment, attachment);
   });
 
+  it("closes configured delivery while its attachment readiness remains pending", async () => {
+    let release: () => void = () => undefined;
+    const events: string[] = [];
+    const environment = configured({
+      open: () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      close: () => events.push("delivery"),
+      inbox: {},
+      workRegistry: {},
+    });
+    const attaching = serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [],
+    });
+    await Promise.resolve();
+
+    const closing = environment.close();
+    release();
+
+    await expect(attaching).rejects.toThrow("ServerEnvironment is closed.");
+    await expect(closing).resolves.toBeUndefined();
+    expect(events).toEqual(["delivery"]);
+  });
+
   it("does not create an attachment when configured delivery open rejects", async () => {
     const failure = new Error("delivery unavailable");
-    const environment = configured({ open: () => Promise.reject(failure), close: () => undefined });
+    const environment = configured({
+      open: () => Promise.reject(failure),
+      close: () => undefined,
+      inbox: {},
+      workRegistry: {},
+    });
 
     const result: Error | EnvironmentAttachmentHandle = await serverEnvironmentAccess
       .attach(environment, { ownership: "caller", descriptors: [] })
@@ -113,6 +146,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
         opens += 1;
       },
       close: () => undefined,
+      inbox: {},
+      workRegistry: {},
     });
 
     const attachments = await Promise.all([

@@ -41,8 +41,10 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   readonly #quarantine: RemoteDeliveryConfig["removalQuarantine"];
   readonly #options: DeliveryClientOptions;
   #bundle: RemoteDeliveryBundle | undefined;
+  #client: DeliveryClient | undefined;
   #opening: Promise<void> | undefined;
   #closing: Promise<void> | undefined;
+  #closed = false;
   #clientClosed = false;
   #quarantineClosed = false;
 
@@ -68,6 +70,7 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
    * @returns A promise that settles after bounded Admin readiness succeeds.
    */
   open(): Promise<void> {
+    if (this.#closed) return Promise.reject(new Error("Remote delivery is closed."));
     if (this.#bundle !== undefined) return Promise.resolve();
     const opening = (this.#opening ??= this.#open());
     void opening.catch(() => {
@@ -97,11 +100,12 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   }
 
   /**
-   * Closes the built facility, client, and transferred quarantine in order.
+   * Closes the client-owned HTTP/2 session, then the transferred quarantine.
    *
    * @returns A promise that retries only unfinished close phases after a failure.
    */
   close(): Promise<void> {
+    this.#closed = true;
     const closing = (this.#closing ??= this.#close());
     void closing.catch(() => {
       if (this.#closing === closing) this.#closing = undefined;
@@ -111,13 +115,18 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
 
   async #open(): Promise<void> {
     const client = DeliveryClient.connectTo(this.#endpoint, this.#options);
+    this.#client = client;
     const inbox = new RemoteInbox(client, this.#quarantine);
     const workRegistry = new RemoteWorkRegistry(client);
     try {
       await client.shardSnapshot();
+      if (this.#closed) throw new Error("Remote delivery is closed.");
       this.#bundle = { client, inbox, workRegistry };
     } catch (error) {
-      client.close();
+      if (!this.#closed) {
+        client.close();
+        if (this.#client === client) this.#client = undefined;
+      }
       throw error;
     }
   }
@@ -126,10 +135,18 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     const errors: unknown[] = [];
     if (!this.#clientClosed) {
       try {
-        this.#bundle?.client.close();
+        this.#client?.close();
         this.#clientClosed = true;
       } catch (error) {
         errors.push(error);
+      }
+    }
+    const opening = this.#opening;
+    if (opening !== undefined) {
+      try {
+        await opening;
+      } catch {
+        // Closure makes a pending opening terminal; its resource is handled above.
       }
     }
     if (!this.#quarantineClosed) {

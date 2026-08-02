@@ -105,11 +105,15 @@ import {
   ServerEnvironment,
   type ServerEnvironmentCloseable,
 } from "@spine-event-engine/server";
+import type { StorageFactory } from "@spine-event-engine/storage";
+import type { SignalTransport } from "@spine-event-engine/transport";
 
 declare const quarantine: RemovalQuarantine & ServerEnvironmentCloseable;
+declare const storageFactory: StorageFactory;
+declare const transport: SignalTransport;
 ServerEnvironment.when(EnvironmentType.Production).use({
-  storageFactory: {} as never,
-  transport: {} as never,
+  storageFactory,
+  transport,
   delivery: RemoteDelivery.connectTo({
     endpoint: "https://delivery.example.test",
     removalQuarantine: quarantine,

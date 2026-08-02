@@ -160,6 +160,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
         },
       }),
     );
+    deliveryOpeners.set(this, () => this.#openDelivery());
     testAttachmentsInstallable.add(this);
     Object.freeze(this);
   }
@@ -226,18 +227,12 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     return this.#close;
   }
 
-  /**
-   * Opens an openable configured delivery before attachment admission.
-   *
-   * @returns A promise that settles when delivery is open for attachments.
-   * @internal
-   */
-  openDelivery(): Promise<void> {
+  #openDelivery(): Promise<void> {
     if (this.#deliveryOpened) return Promise.resolve();
     const opening = (this.#deliveryOpen ??= Promise.resolve()
       .then(() => {
-        const delivery = this.delivery as Partial<ServerEnvironmentDelivery> | undefined;
-        if (typeof delivery?.open === "function") {
+        const delivery = ServerEnvironmentValues.openableDelivery(this.delivery);
+        if (delivery !== undefined) {
           return delivery.open();
         }
         return undefined;
@@ -327,6 +322,7 @@ interface ServerEnvironmentAccess {
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
+const deliveryOpeners = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
 
 /**
@@ -341,7 +337,11 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     if (attachments === undefined) {
       return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
     }
-    return environment.openDelivery().then(() => attachments.attach(options));
+    const openDelivery = deliveryOpeners.get(environment);
+    if (openDelivery === undefined) {
+      return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
+    }
+    return openDelivery().then(() => attachments.attach(options));
   },
   failedStartPending(environment: ServerEnvironment) {
     const attachments = environmentAttachments.get(environment);
@@ -432,11 +432,26 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
  * @internal Groups private facility-assembly operations for the environment singleton.
  */
 const ServerEnvironmentValues = Object.freeze({
+  openableDelivery(
+    delivery: ServerEnvironmentCloseable | undefined,
+  ): ServerEnvironmentDelivery | undefined {
+    if (delivery === undefined) return undefined;
+    const candidate = delivery as Partial<ServerEnvironmentDelivery>;
+    if (typeof candidate.open !== "function") return undefined;
+    if (
+      typeof candidate.close !== "function" ||
+      !("inbox" in candidate) ||
+      !("workRegistry" in candidate)
+    ) {
+      throw new TypeError("ServerEnvironmentDelivery requires inbox and workRegistry ports.");
+    }
+    return candidate as ServerEnvironmentDelivery;
+  },
   ports(
     delivery: ServerEnvironmentCloseable | undefined,
   ): { readonly inbox: DeliveryInbox; readonly workRegistry: DeliveryWorkRegistry } | undefined {
-    if (delivery === undefined || !("open" in delivery)) return undefined;
-    const remote = delivery as ServerEnvironmentDelivery;
+    const remote = ServerEnvironmentValues.openableDelivery(delivery);
+    if (remote === undefined) return undefined;
     return { inbox: remote.inbox, workRegistry: remote.workRegistry };
   },
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
