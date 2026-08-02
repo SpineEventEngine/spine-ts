@@ -38,12 +38,12 @@ readiness all passed.
 
 ## Specialist Dispatch
 
-| Concern | Existing role | Expected model | Expected reasoning |
-| --- | --- | --- | --- |
-| Style and maintainability | `style_maintainability_reviewer` | `gpt-5.6-terra` | high |
-| Documentation | `documentation_reviewer` | `gpt-5.6-luna` | medium |
-| TypeScript and API documentation | `typescript_api_docs_reviewer` | `gpt-5.6-terra` | high |
-| Performance and reliability | `performance_reliability_reviewer` | `gpt-5.6-terra` | high |
+| Concern                          | Existing role                      | Expected model  | Expected reasoning |
+| -------------------------------- | ---------------------------------- | --------------- | ------------------ |
+| Style and maintainability        | `style_maintainability_reviewer`   | `gpt-5.6-terra` | high               |
+| Documentation                    | `documentation_reviewer`           | `gpt-5.6-luna`  | medium             |
+| TypeScript and API documentation | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` | high               |
+| Performance and reliability      | `performance_reliability_reviewer` | `gpt-5.6-terra` | high               |
 
 Every profile field is explicit at dispatch. The review endpoint is the pushed
 implementation checkpoint `762abca5` plus this record-only dispatch commit.
