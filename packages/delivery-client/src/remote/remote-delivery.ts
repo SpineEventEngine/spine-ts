@@ -75,11 +75,22 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     });
     return opening;
   }
+
+  /**
+   * Returns the ready remote inbox adapter.
+   *
+   * @returns The published inbox adapter after readiness succeeds.
+   */
   get inbox(): RemoteInbox {
     if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
     return this.#bundle.inbox;
   }
 
+  /**
+   * Returns the ready remote shard work-registry adapter.
+   *
+   * @returns The published work registry after readiness succeeds.
+   */
   get workRegistry(): RemoteWorkRegistry {
     if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
     return this.#bundle.workRegistry;

@@ -47,7 +47,15 @@ export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
    * @returns An optional asynchronous open operation.
    */
   open(): unknown;
+
+  /**
+   * Supplies the inbox port used by environment delivery generations.
+   */
   readonly inbox: DeliveryInbox;
+
+  /**
+   * Supplies the shard work-registry port used by environment delivery generations.
+   */
   readonly workRegistry: DeliveryWorkRegistry;
 }
 
