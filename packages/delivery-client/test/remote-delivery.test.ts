@@ -171,7 +171,7 @@ describe("RemoteDelivery", () => {
     await delivery.open();
 
     expect(remote.clients).toHaveLength(2);
-    expect(remote.closeEvents).toEqual(["delivery", "client"]);
+    expect(remote.closeEvents).toEqual(["client"]);
   });
 
   it("closes delivery client and quarantine in dependency order exactly once", async () => {
@@ -184,16 +184,15 @@ describe("RemoteDelivery", () => {
     await Promise.all([delivery.close(), delivery.close()]);
     await delivery.close();
 
-    expect(remote.closeEvents).toEqual(["delivery", "client", "quarantine"]);
+    expect(remote.closeEvents).toEqual(["client", "quarantine"]);
   });
 
   it.each([
-    ["delivery", [new Error("delivery close failed")], ["delivery", "client", "quarantine", "delivery"]],
-    ["client", [undefined, new Error("client close failed")], ["delivery", "client", "quarantine", "client"]],
+    ["client", [new Error("client close failed")], ["client", "quarantine", "client"]],
     [
       "quarantine",
-      [undefined, undefined, new Error("quarantine close failed")],
-      ["delivery", "client", "quarantine", "quarantine"],
+      [undefined, new Error("quarantine close failed")],
+      ["client", "quarantine", "quarantine"],
     ],
   ] as const)("retries only unfinished remote close phases after %s failure", async (_phase, failures, events) => {
     const delivery = RemoteDelivery.connectTo({

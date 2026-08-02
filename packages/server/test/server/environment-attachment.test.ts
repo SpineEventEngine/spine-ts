@@ -231,29 +231,20 @@ describe("EnvironmentDeliveryWorker", () => {
     const target = descriptor("ConfiguredPorts", "type.example.dev/ConfiguredPorts", storageFactory);
     const scope = runScope("configured-ports-owner", target.ready);
     const base = new Delivery({ context: target.context, storageFactory });
-    let calls = 0;
-    const inbox = Object.create(base.inbox) as typeof base.inbox;
-    const registry = Object.create(base.shards) as typeof base.shards;
-    inbox.read = async (...args) => {
-      calls += 1;
-      return base.inbox.read(...args);
-    };
-    registry.pickUp = async (...args) => {
-      calls += 1;
-      return base.shards.pickUp(...args);
-    };
+    const read = vi.spyOn(Object.getPrototypeOf(base.inbox), "read");
+    const pickUp = vi.spyOn(Object.getPrototypeOf(base.shards), "pickUp");
     const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
-      readonly ports: { readonly inbox: typeof inbox; readonly workRegistry: typeof registry };
+      readonly ports: { readonly inbox: typeof base.inbox; readonly workRegistry: typeof base.shards };
     }) => EnvironmentDeliveryWorker;
-    const worker = new Worker({ ports: { inbox, workRegistry: registry } });
+    const worker = new Worker({ ports: { inbox: base.inbox, workRegistry: base.shards } });
     worker.add({ owner: scope.owner, descriptor: target.value, storageFactory, tenant: {}, context: target.context, scopes: [scope] });
     await base.inbox.receive(message(target.ready, "configured-finite"));
     await worker.start(Object.freeze({ scopes: Object.freeze([scope]) }), [target.ready.shard]);
-    expect(calls).toBeGreaterThan(0);
+    expect(read.mock.calls.length + pickUp.mock.calls.length).toBeGreaterThan(0);
     await base.inbox.receive(message(target.ready, "configured-supervisor"));
-    worker.notify(target.ready);
+    worker.notify(scope);
     await Promise.resolve();
-    expect(calls).toBeGreaterThan(1);
+    expect(read.mock.calls.length + pickUp.mock.calls.length).toBeGreaterThan(1);
     worker.stop();
     await worker.awaitSettled();
     await worker.retire();

@@ -1,8 +1,4 @@
-import {
-  DeliveryBuilder,
-  type ServerEnvironmentCloseable,
-  type ServerEnvironmentDelivery,
-} from "@spine-event-engine/server";
+import { type ServerEnvironmentCloseable, type ServerEnvironmentDelivery } from "@spine-event-engine/server";
 
 import { DeliveryClient } from "../client/client.js";
 import type { DeliveryClientOptions, RemovalQuarantine } from "../client/types.js";
@@ -44,7 +40,6 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   #bundle: RemoteDeliveryBundle | undefined;
   #opening: Promise<void> | undefined;
   #closing: Promise<void> | undefined;
-  #deliveryClosed = false;
   #clientClosed = false;
   #quarantineClosed = false;
 
@@ -77,6 +72,8 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     });
     return opening;
   }
+  get inbox(): RemoteInbox { if (this.#bundle === undefined) throw new Error("Remote delivery is not open."); return this.#bundle.inbox; }
+  get workRegistry(): RemoteWorkRegistry { if (this.#bundle === undefined) throw new Error("Remote delivery is not open."); return this.#bundle.workRegistry; }
 
   /**
    * Closes the built facility, client, and transferred quarantine in order.
@@ -93,15 +90,12 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
 
   async #open(): Promise<void> {
     const client = DeliveryClient.connectTo(this.#endpoint, this.#options);
-    const delivery = new DeliveryBuilder()
-      .withInbox(new RemoteInbox(client, this.#quarantine))
-      .withWorkRegistry(new RemoteWorkRegistry(client))
-      .build();
+    const inbox = new RemoteInbox(client, this.#quarantine);
+    const workRegistry = new RemoteWorkRegistry(client);
     try {
       await client.shardSnapshot();
-      this.#bundle = { client, delivery };
+      this.#bundle = { client, inbox, workRegistry };
     } catch (error) {
-      await RemoteDeliveryValues.close(delivery);
       client.close();
       throw error;
     }
@@ -109,14 +103,6 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
 
   async #close(): Promise<void> {
     const errors: unknown[] = [];
-    if (!this.#deliveryClosed) {
-      try {
-        await RemoteDeliveryValues.close(this.#bundle?.delivery);
-        this.#deliveryClosed = true;
-      } catch (error) {
-        errors.push(error);
-      }
-    }
     if (!this.#clientClosed) {
       try {
         this.#bundle?.client.close();
@@ -139,13 +125,6 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
 
 interface RemoteDeliveryBundle {
   readonly client: DeliveryClient;
-  readonly delivery: ReturnType<DeliveryBuilder["build"]>;
+  readonly inbox: RemoteInbox;
+  readonly workRegistry: RemoteWorkRegistry;
 }
-
-const RemoteDeliveryValues = Object.freeze({
-  async close(value: unknown): Promise<void> {
-    if (typeof value !== "object" || value === null) return;
-    const close: unknown = Reflect.get(value, "close");
-    if (typeof close === "function") await Reflect.apply(close, value, []);
-  },
-});
