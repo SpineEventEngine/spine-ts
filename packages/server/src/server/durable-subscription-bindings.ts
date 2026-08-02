@@ -9,99 +9,111 @@ import type {
 } from "@spine-event-engine/auth";
 import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
 
-const recordVersion = 1;
-const recordTypeUrl = "type.spine-event-engine.gateway/DurableSubscriptionBinding";
-const registryStorageKey = "spine.gateway.SubscriptionBinding:v1";
+const bindingType = "type.spine-event-engine.gateway/DurableSubscriptionBinding";
+const quotaType = "type.spine-event-engine.gateway/SubscriptionBindingQuota";
+const cleanupType = "type.spine-event-engine.gateway/SubscriptionBindingCleanup";
+const quotaId = "!subscription-quota";
+const cleanupId = "!subscription-cleanup";
+const attempts = 8;
 
 /**
- * Configures a durable browser-subscription registry.
+ * Configures one durable, namespace-global subscription registry.
  */
 export interface DurableSubscriptionBindingsOptions {
-  // prettier-ignore
-
-  /**
-   * Supplies the independently owned registry storage factory.
-   */
   readonly storageFactory: StorageFactory;
-
-  /**
-   * Identifies the application-local registry namespace.
-   */
   readonly namespace: string;
-
-  // prettier-ignore
-
-  /**
-   * Creates unique public subscription identifiers.
-   *
-   * @returns A unique public subscription identifier.
-   */
   readonly nextId: () => string;
-
-  /**
-   * Disposes a private backend envelope after cancellation or expiry.
-   */
   readonly dispose: OnBackendSubscription;
-
-  /**
-   * Limits one future ownership lease in milliseconds.
-   */
   readonly leaseMs: number;
-
-  /**
-   * Limits one future expired-record cleanup batch.
-   */
   readonly cleanupBatchSize: number;
-
-  /**
-   * Limits records admitted by this registry instance.
-   */
   readonly recordLimit: number;
-
-  /**
-   * Limits encoded private records in bytes.
-   */
   readonly maxRecordBytes: number;
 }
 
+interface Binding {
+  readonly family: "binding";
+  readonly id: string;
+  readonly revision: number;
+  readonly admissionToken: string;
+  readonly lifecycle: "reserved" | "inactive" | "active" | "cancelling" | "retired";
+  readonly fence: number;
+  readonly reservationOwner?: string;
+  readonly reservationUntilMs?: number;
+  readonly principalFingerprint?: string;
+  readonly tenant?: string;
+  readonly expiresAtMs?: number;
+  readonly backend?: string;
+  readonly backendBytes?: number;
+  readonly ownerId?: string;
+  readonly leaseUntilMs?: number;
+  readonly reason?: "client" | "activation-end" | "expired";
+}
+interface Quota {
+  readonly family: "quota";
+  readonly id: typeof quotaId;
+  readonly revision: number;
+  readonly used: number;
+}
+interface Cleanup {
+  readonly family: "cleanup";
+  readonly id: typeof cleanupId;
+  readonly revision: number;
+  readonly ownerId?: string;
+  readonly fence: number;
+  readonly leaseUntilMs?: number;
+  readonly afterId?: string;
+  readonly failureCount: number;
+  readonly retryAfterMs: number;
+}
+type Stored = Binding | Quota | Cleanup;
+
 /**
- * Stores private browser-subscription bindings in a supplied record store.
+ * Stores private bindings and their coordination facts in one record namespace.
  *
- * The registry preserves bindings through one gateway restart. Later gateway
- * coordination extends this contract without changing the stored public ID.
+ * A record is durable coordination, not a durable stream: clients reconnect and
+ * re-query entity state after a gateway restart and may observe update gaps.
  */
 export class DurableSubscriptionBindings implements SubscriptionBindings {
-  // prettier-ignore
-
-  /**
-   * Identifies durable registry capability for production host admission.
-   */
   readonly durable = true;
-  readonly #dispose: OnBackendSubscription;
-  readonly #cleanupBatchSize: number;
-  readonly #maxRecordBytes: number;
-  readonly #nextId: () => string;
-  readonly #recordLimit: number;
   readonly #storage: RecordStorage<string, Any>;
-  readonly #pendingReservations = new Set<SubscriptionCapacityReservation>();
-  readonly #reservations = new Set<SubscriptionCapacityReservation>();
+  readonly #dispose: OnBackendSubscription;
+  readonly #nextId: () => string;
+  readonly #leaseMs: number;
+  readonly #cleanupBatchSize: number;
+  readonly #recordLimit: number;
+  readonly #maxRecordBytes: number;
+  readonly #owner = crypto.randomUUID();
+  readonly #reservations = new Map<
+    SubscriptionCapacityReservation,
+    { id: string; token: string }
+  >();
+  readonly #active = new Map<
+    string,
+    { controller: AbortController; timer: ReturnType<typeof setTimeout>; fence: number }
+  >();
   #closed = false;
 
   /**
-   * Opens one namespaced registry handle without taking ownership of its factory.
+   * Opens a registry handle without taking ownership of the supplied factory.
    *
-   * @param options Supplies bounded storage, identity, and disposal collaborators.
+   * @param options Supplies finite storage, lease, and cleanup collaborators.
    */
   constructor(options: DurableSubscriptionBindingsOptions) {
-    DurableBindingValues.options(options);
+    Values.options(options);
     this.#dispose = options.dispose;
-    this.#cleanupBatchSize = options.cleanupBatchSize;
-    this.#maxRecordBytes = options.maxRecordBytes;
     this.#nextId = options.nextId;
+    this.#leaseMs = options.leaseMs;
+    this.#cleanupBatchSize = options.cleanupBatchSize;
     this.#recordLimit = options.recordLimit;
+    this.#maxRecordBytes = options.maxRecordBytes;
     this.#storage = options.storageFactory.createRecordStorage(
       { name: `spine.gateway.${options.namespace}`, multitenant: false },
-      DurableBindingValues.spec(options.maxRecordBytes),
+      new RecordSpec({
+        schema: AnySchema,
+        storageKey: "spine.gateway.SubscriptionBinding:v2",
+        idKind: "string",
+        extractId: (record) => Values.id(record),
+      }),
     );
     if (!this.#storage.atomicCompareAndSet) {
       this.#storage.close();
@@ -109,37 +121,66 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     }
   }
 
-  // prettier-ignore
-
   /**
-   * Acquires one local admission slot for a pending backend Subscribe operation.
+   * Reserves one namespace-global slot and preallocates its public identifier.
    *
-   * @returns Resolves to an exactly-once releasable reservation.
+   * @returns Resolves to an asynchronously releasable reservation.
    */
   async reserveCapacity(): Promise<SubscriptionCapacityReservation> {
-    this.#requireOpen();
-    const records = await this.#storage.queryEntries({ limit: this.#recordLimit + 1 });
-    for (const entry of records)
-      DurableBindingValues.read(entry.record, entry.id, this.#maxRecordBytes).backend.fill(0);
-    if (records.length + this.#reservations.size + this.#pendingReservations.size >= this.#recordLimit)
-      throw new Error("binding-capacity-exceeded");
-    let released = false;
-    const reservation: SubscriptionCapacityReservation = {
-      release: () => {
-        if (released) return;
-        released = true;
-        this.#reservations.delete(reservation);
-      },
-    };
-    this.#reservations.add(reservation);
-    return reservation;
+    this.#open();
+    const existing = await this.#storage.queryEntries({ limit: this.#recordLimit + 2 });
+    for (const row of existing) Values.read(row.record, row.id, this.#maxRecordBytes);
+    for (let count = 0; count < attempts; count += 1) {
+      const quota = await this.#quota();
+      if (quota.used >= this.#recordLimit) throw new Error("binding-capacity-exceeded");
+      const id = this.#nextId();
+      if (!Values.publicId(id)) throw new Error("subscription ID must be unique");
+      const token = crypto.randomUUID();
+      const binding: Binding = {
+        family: "binding",
+        id,
+        revision: 1,
+        admissionToken: token,
+        lifecycle: "reserved",
+        fence: 0,
+        reservationOwner: this.#owner,
+        reservationUntilMs: Number.MAX_SAFE_INTEGER,
+      };
+      if (
+        !(await this.#storage.compareAndSet(
+          id,
+          undefined,
+          Values.write(binding, this.#maxRecordBytes),
+        ))
+      )
+        continue;
+      const next: Quota = { ...quota, revision: quota.revision + 1, used: quota.used + 1 };
+      if (
+        !(await this.#storage.compareAndSet(
+          quotaId,
+          Values.write(quota, this.#maxRecordBytes),
+          Values.write(next, this.#maxRecordBytes),
+        ))
+      ) {
+        await this.#repair();
+      }
+      let released = false;
+      const reservation: SubscriptionCapacityReservation = {
+        release: async () => {
+          if (released) return;
+          released = true;
+          this.#reservations.delete(reservation);
+          await this.#release(id, token);
+        },
+      };
+      this.#reservations.set(reservation, { id, token });
+      return reservation;
+    }
+    throw new Error("binding-capacity-exceeded");
   }
 
   /**
-   * Creates one inactive private binding.
-   *
-   * @param input Supplies the backend envelope and mandatory owner facts.
-   * @returns Resolves to the public binding identifier.
+   * Converts an owned reserved slot to an inactive private binding.
    */
   async create(input: {
     readonly backend: BackendSubscriptionEnvelope;
@@ -148,38 +189,39 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly expiresAtMs: number;
     readonly reservation?: SubscriptionCapacityReservation;
   }): Promise<{ readonly id: string }> {
-    this.#requireOpen();
-    DurableBindingValues.createInput(input);
-    const reservation = this.#consumeReservation(input.reservation) ?? (await this.#reserveForCreate());
-    try {
-      const id = this.#nextId();
-      if (!DurableBindingValues.token(id)) throw new Error("subscription ID must be unique");
-      const record = DurableBindingValues.write({
-        id,
-        backend: input.backend.bytes,
-        principalFingerprint: input.principalFingerprint,
-        tenant: input.tenant,
-        expiresAtMs: input.expiresAtMs,
-        lifecycle: "inactive",
-        leaseUntilMs: 0,
-        cancellationFence: 0,
-        version: recordVersion,
-      });
-      if (record.value.byteLength > this.#maxRecordBytes)
-        throw new Error("backend-envelope-too-large");
-      if (!(await this.#storage.compareAndSet(id, undefined, record)))
-        throw new Error("subscription ID must be unique");
-      return Object.freeze({ id });
-    } finally {
-      this.#releaseReservation(reservation);
-    }
+    this.#open();
+    Values.input(input);
+    const supplied =
+      input.reservation === undefined ? undefined : this.#reservations.get(input.reservation);
+    const reservation = supplied === undefined ? await this.reserveCapacity() : input.reservation!;
+    const held = this.#reservations.get(reservation);
+    if (held === undefined) throw new Error("binding-capacity-exceeded");
+    const row = await this.#storage.read(held.id);
+    const old =
+      row === undefined ? undefined : (Values.read(row, held.id, this.#maxRecordBytes) as Binding);
+    if (old?.lifecycle !== "reserved" || old.admissionToken !== held.token)
+      throw new Error("binding-capacity-exceeded");
+    const next: Binding = {
+      family: "binding",
+      id: old.id,
+      revision: old.revision + 1,
+      admissionToken: old.admissionToken,
+      lifecycle: "inactive",
+      fence: 0,
+      principalFingerprint: input.principalFingerprint,
+      ...(input.tenant === undefined ? {} : { tenant: input.tenant }),
+      expiresAtMs: input.expiresAtMs,
+      backend: Values.base64(input.backend.bytes),
+      backendBytes: input.backend.bytes.byteLength,
+    };
+    if (!(await this.#storage.compareAndSet(old.id, row, Values.write(next, this.#maxRecordBytes))))
+      throw new Error("binding-capacity-exceeded");
+    this.#reservations.delete(reservation);
+    return Object.freeze({ id: old.id });
   }
 
   /**
-   * Activates one currently owned inactive binding.
-   *
-   * @param input Supplies public identity, mandatory ownership facts, and callback.
-   * @returns Resolves to the activation transition.
+   * Claims a finite lease before running one backend activation callback.
    */
   async activate(input: {
     readonly id: string;
@@ -190,22 +232,30 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly signal: AbortSignal;
   }): Promise<SubscriptionBindingTransition> {
     if (input.signal.aborted) return { kind: "denied" };
-    const stored = await this.#owned(input);
-    if (stored?.lifecycle !== "inactive") return { kind: "denied" };
-    const privateCopy = DurableBindingValues.envelope(stored.backend);
+    const claimed = await this.#claim(input, "active");
+    if (claimed === undefined) return { kind: "denied" };
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    input.signal.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(
+      () => void this.#renew(input.id, claimed.fence, controller),
+      Math.max(1, Math.floor(this.#leaseMs / 2)),
+    );
+    this.#active.set(input.id, { controller, timer, fence: claimed.fence });
     try {
-      await input.onBackend(privateCopy, input.signal);
-      return { kind: "activated" };
+      await input.onBackend(Values.envelope(claimed), controller.signal);
+      return (await this.#current(input.id, claimed.fence, "active", input.nowMs))
+        ? { kind: "activated" }
+        : { kind: "denied" };
     } finally {
-      privateCopy.bytes.fill(0);
+      clearTimeout(timer);
+      this.#active.delete(input.id);
+      input.signal.removeEventListener("abort", abort);
     }
   }
 
   /**
-   * Cancels one currently owned binding and erases its private record.
-   *
-   * @param input Supplies public identity, mandatory ownership facts, and callback.
-   * @returns Resolves to the cancellation transition.
+   * Fences cancellation before invoking the backend cleanup callback.
    */
   async cancel(input: {
     readonly id: string;
@@ -214,123 +264,225 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
   }): Promise<SubscriptionBindingTransition> {
-    const owned = await this.#ownership(input);
-    if (owned.kind === "absent") return { kind: "closed" };
-    if (owned.kind === "denied") return { kind: "denied" };
-    const stored = owned.binding;
-    const record = await this.#storage.read(input.id);
-    if (record === undefined) return { kind: "closed" };
-    const privateCopy = DurableBindingValues.envelope(stored.backend);
+    const row = await this.#storage.read(input.id);
+    if (row === undefined) return { kind: "closed" };
+    const old = Values.read(row, input.id, this.#maxRecordBytes) as Binding;
+    if (!this.#owned(old, input) || old.lifecycle === "reserved" || old.lifecycle === "retired")
+      return { kind: "denied" };
+    if (old.lifecycle === "active") this.#active.get(input.id)?.controller.abort();
+    const next = this.#work(old, "cancelling", input.nowMs, "client");
+    if (
+      !(await this.#storage.compareAndSet(input.id, row, Values.write(next, this.#maxRecordBytes)))
+    )
+      return { kind: "denied" };
     try {
-      await input.onBackend(privateCopy, new AbortController().signal);
-      if (!(await this.#storage.compareAndSet(input.id, record, undefined)))
-        return { kind: "denied" };
-      return { kind: "closed" };
-    } finally {
-      privateCopy.bytes.fill(0);
+      await input.onBackend(Values.envelope(next), new AbortController().signal);
+    } catch {
+      return { kind: "denied" };
     }
+    const current = await this.#storage.read(input.id);
+    if (current === undefined) return { kind: "closed" };
+    const live = Values.read(current, input.id, this.#maxRecordBytes) as Binding;
+    if (live.lifecycle !== "cancelling" || live.fence !== next.fence) return { kind: "denied" };
+    const retired: Binding = {
+      family: "binding",
+      id: live.id,
+      revision: live.revision + 1,
+      admissionToken: live.admissionToken,
+      lifecycle: "retired",
+      fence: live.fence,
+    };
+    if (
+      !(await this.#storage.compareAndSet(
+        input.id,
+        current,
+        Values.write(retired, this.#maxRecordBytes),
+      ))
+    )
+      return { kind: "denied" };
+    await this.#release(retired.id, retired.admissionToken);
+    return { kind: "closed" };
   }
 
   /**
-   * Removes expired bindings within the configured finite batch bound.
-   *
-   * @param nowMs Supplies the current Unix time in milliseconds.
-   * @returns Resolves after one bounded cleanup pass.
+   * Cleans a finite page of expired reservations and bindings.
    */
   async purgeExpired(nowMs: number): Promise<void> {
-    this.#requireOpen();
-    DurableBindingValues.time(nowMs, "Subscription expiry cleanup time");
-    const records = await this.#storage.queryEntries({ limit: this.#cleanupBatchSize });
-    for (const entry of records) {
-      const stored = DurableBindingValues.read(entry.record, entry.id, this.#maxRecordBytes);
-      if (stored.expiresAtMs > nowMs) continue;
-      if (await this.#storage.compareAndSet(entry.id, entry.record, undefined)) {
-        const privateCopy = DurableBindingValues.envelope(stored.backend);
-        try {
-          await this.#dispose(privateCopy, new AbortController().signal);
-        } finally {
-          privateCopy.bytes.fill(0);
-        }
+    this.#open();
+    Values.time(nowMs);
+    const rows = await this.#storage.queryEntries({
+      sort: [{ field: "id" }],
+      limit: this.#cleanupBatchSize,
+    });
+    for (const row of rows) {
+      if (row.id === quotaId || row.id === cleanupId) continue;
+      let binding: Binding;
+      try {
+        binding = Values.read(row.record, row.id, this.#maxRecordBytes) as Binding;
+      } catch {
+        continue;
+      }
+      if (binding.lifecycle === "reserved" && (binding.reservationUntilMs ?? 0) <= nowMs)
+        await this.#release(binding.id, binding.admissionToken);
+      else if (binding.lifecycle === "inactive" && (binding.expiresAtMs ?? 0) <= nowMs) {
+        if (await this.#storage.compareAndSet(binding.id, row.record, undefined))
+          await this.#release(binding.id, binding.admissionToken);
       }
     }
   }
 
   /**
-   * Closes this registry handle without closing its supplied storage factory.
-   *
-   * @returns Completes after future registry operations are refused.
+   * Stops local work without removing durable rows needed by a later handle.
    */
-  close(): Promise<void> {
+  async close(): Promise<void> {
     this.#closed = true;
-    this.#pendingReservations.clear();
+    for (const active of this.#active.values()) {
+      clearTimeout(active.timer);
+      active.controller.abort();
+    }
+    this.#active.clear();
     this.#reservations.clear();
     this.#storage.close();
-    return Promise.resolve();
   }
 
-  async #owned(input: {
-    readonly id: string;
-    readonly principalFingerprint: string;
-    readonly tenant: string | undefined;
-    readonly nowMs: number;
-  }): Promise<StoredBinding | undefined> {
-    const ownership = await this.#ownership(input);
-    return ownership.kind === "owned" ? ownership.binding : undefined;
-  }
-
-  async #ownership(input: {
-    readonly id: string;
-    readonly principalFingerprint: string;
-    readonly tenant: string | undefined;
-    readonly nowMs: number;
-  }): Promise<BindingOwnership> {
-    this.#requireOpen();
-    if (!DurableBindingValues.token(input.id)) return { kind: "absent" };
-    DurableBindingValues.time(input.nowMs, "Subscription ownership time");
-    const record = await this.#storage.read(input.id);
-    if (record === undefined) return { kind: "absent" };
-    const binding = DurableBindingValues.read(record, input.id, this.#maxRecordBytes);
-    if (binding.expiresAtMs <= input.nowMs) return { kind: "absent" };
+  async #claim(
+    input: {
+      readonly id: string;
+      readonly principalFingerprint: string;
+      readonly tenant: string | undefined;
+      readonly nowMs: number;
+    },
+    lifecycle: "active",
+  ): Promise<Binding | undefined> {
+    this.#open();
+    const row = await this.#storage.read(input.id);
+    if (row === undefined) return undefined;
+    const old = Values.read(row, input.id, this.#maxRecordBytes) as Binding;
     if (
-      binding.principalFingerprint !== input.principalFingerprint ||
-      binding.tenant !== input.tenant
+      !this.#owned(old, input) ||
+      (old.lifecycle !== "inactive" &&
+        !(old.lifecycle === "active" && (old.leaseUntilMs ?? 0) <= input.nowMs))
     )
-      return { kind: "denied" };
-    return { kind: "owned", binding };
+      return undefined;
+    const next = this.#work(old, lifecycle, input.nowMs);
+    return (await this.#storage.compareAndSet(
+      input.id,
+      row,
+      Values.write(next, this.#maxRecordBytes),
+    ))
+      ? next
+      : undefined;
   }
-
-  async #reserveForCreate(): Promise<SubscriptionCapacityReservation> {
-    const reservation = await this.reserveCapacity();
-    this.#reservations.delete(reservation);
-    this.#pendingReservations.add(reservation);
-    return reservation;
+  #work(
+    old: Binding,
+    lifecycle: "active" | "cancelling",
+    nowMs: number,
+    reason?: "client" | "activation-end" | "expired",
+  ): Binding {
+    return {
+      ...old,
+      revision: old.revision + 1,
+      lifecycle,
+      fence: old.fence + 1,
+      ownerId: this.#owner,
+      leaseUntilMs: nowMs + this.#leaseMs,
+      ...(reason === undefined ? {} : { reason }),
+    };
   }
-
-  #consumeReservation(
-    reservation: SubscriptionCapacityReservation | undefined,
-  ): SubscriptionCapacityReservation | undefined {
-    if (reservation === undefined || !this.#reservations.delete(reservation)) return undefined;
-    this.#pendingReservations.add(reservation);
-    return reservation;
+  async #renew(id: string, fence: number, controller: AbortController): Promise<void> {
+    const row = await this.#storage.read(id);
+    if (row === undefined) return controller.abort();
+    const old = Values.read(row, id, this.#maxRecordBytes) as Binding;
+    if (old.lifecycle !== "active" || old.ownerId !== this.#owner || old.fence !== fence)
+      return controller.abort();
+    const next = { ...old, revision: old.revision + 1, leaseUntilMs: Date.now() + this.#leaseMs };
+    if (!(await this.#storage.compareAndSet(id, row, Values.write(next, this.#maxRecordBytes))))
+      controller.abort();
   }
-
-  #releaseReservation(reservation: SubscriptionCapacityReservation): void {
-    this.#pendingReservations.delete(reservation);
-    reservation.release();
+  async #current(
+    id: string,
+    fence: number,
+    lifecycle: Binding["lifecycle"],
+    nowMs: number,
+  ): Promise<boolean> {
+    const row = await this.#storage.read(id);
+    if (row === undefined) return false;
+    const value = Values.read(row, id, this.#maxRecordBytes) as Binding;
+    return (
+      value.lifecycle === lifecycle &&
+      value.ownerId === this.#owner &&
+      value.fence === fence &&
+      (value.leaseUntilMs ?? 0) > nowMs
+    );
   }
-
-  #requireOpen(): void {
+  async #release(id: string, token: string): Promise<void> {
+    for (let count = 0; count < attempts; count += 1) {
+      const row = await this.#storage.read(id);
+      if (row !== undefined) {
+        const binding = Values.read(row, id, this.#maxRecordBytes) as Binding;
+        if (
+          binding.admissionToken !== token ||
+          !["reserved", "retired"].includes(binding.lifecycle)
+        )
+          return;
+        if (!(await this.#storage.compareAndSet(id, row, undefined))) continue;
+      }
+      const quota = await this.#quota();
+      const next = { ...quota, revision: quota.revision + 1, used: Math.max(0, quota.used - 1) };
+      if (
+        await this.#storage.compareAndSet(
+          quotaId,
+          Values.write(quota, this.#maxRecordBytes),
+          Values.write(next, this.#maxRecordBytes),
+        )
+      )
+        return;
+    }
+  }
+  async #quota(): Promise<Quota> {
+    const row = await this.#storage.read(quotaId);
+    if (row !== undefined) return Values.read(row, quotaId, this.#maxRecordBytes) as Quota;
+    const fresh: Quota = { family: "quota", id: quotaId, revision: 1, used: 0 };
+    await this.#storage.compareAndSet(
+      quotaId,
+      undefined,
+      Values.write(fresh, this.#maxRecordBytes),
+    );
+    const created = await this.#storage.read(quotaId);
+    if (created === undefined) throw new Error("Subscription quota was not created.");
+    return Values.read(created, quotaId, this.#maxRecordBytes) as Quota;
+  }
+  async #repair(): Promise<void> {
+    const rows = await this.#storage.queryEntries({ limit: this.#recordLimit + 2 });
+    const used = rows.filter((row) => row.id !== quotaId && row.id !== cleanupId).length;
+    const quota = await this.#quota();
+    await this.#storage.compareAndSet(
+      quotaId,
+      Values.write(quota, this.#maxRecordBytes),
+      Values.write({ ...quota, revision: quota.revision + 1, used }, this.#maxRecordBytes),
+    );
+  }
+  #owned(
+    binding: Binding,
+    input: {
+      readonly principalFingerprint: string;
+      readonly tenant: string | undefined;
+      readonly nowMs: number;
+    },
+  ): boolean {
+    return (
+      binding.principalFingerprint === input.principalFingerprint &&
+      binding.tenant === input.tenant &&
+      (binding.expiresAtMs ?? 0) > input.nowMs
+    );
+  }
+  #open(): void {
     if (this.#closed) throw new Error("subscription bindings are closed");
   }
 }
 
-// prettier-ignore
-
 /**
- * Determines whether bindings persist beyond one process.
- *
- * @param value Supplies the candidate subscription bindings.
- * @returns Whether the candidate declares durable registry capability.
+ * Checks whether bindings are backed by durable coordination storage.
  */
 export function isDurableSubscriptionBindings(
   value: SubscriptionBindings | undefined,
@@ -338,70 +490,70 @@ export function isDurableSubscriptionBindings(
   return value !== undefined && "durable" in value && value.durable === true;
 }
 
-/**
- * Validates private gateway records without exposing their backend envelopes.
- *
- * @internal
- */
+/** @internal */
 export const DurableSubscriptionBindingRecords: Readonly<{
   validate(record: Any, expectedId?: string, maxBytes?: number): void;
 }> = Object.freeze({
   validate(record: Any, expectedId?: string, maxBytes: number = Number.MAX_SAFE_INTEGER): void {
-    DurableBindingValues.read(record, expectedId, maxBytes).backend.fill(0);
+    Values.read(record, expectedId, maxBytes);
   },
 });
 
-interface StoredBinding {
-  readonly id: string;
-  readonly backend: Uint8Array;
-  readonly principalFingerprint: string;
-  readonly tenant: string | undefined;
-  readonly expiresAtMs: number;
-  readonly lifecycle: "inactive" | "active" | "closed";
-  readonly leaseUntilMs: number;
-  readonly cancellationFence: number;
-  readonly encodedBytes: number;
-  readonly version: number;
-}
-
-type BindingOwnership =
-  | { readonly kind: "absent" }
-  | { readonly kind: "denied" }
-  | { readonly kind: "owned"; readonly binding: StoredBinding };
-
-const DurableBindingValues = Object.freeze({
-  createInput(input: {
+const Values = Object.freeze({
+  options(options: DurableSubscriptionBindingsOptions): void {
+    for (const value of [
+      options.leaseMs,
+      options.cleanupBatchSize,
+      options.recordLimit,
+      options.maxRecordBytes,
+    ])
+      if (!Number.isSafeInteger(value) || value <= 0)
+        throw new Error("Subscription registry options must be positive safe integers.");
+    if (!options.namespace.trim())
+      throw new Error("Subscription registry namespace must be non-blank.");
+  },
+  input(input: {
     readonly backend: BackendSubscriptionEnvelope;
     readonly principalFingerprint: string;
     readonly expiresAtMs: number;
   }): void {
-    if (!DurableBindingValues.token(input.principalFingerprint))
-      throw new Error("subscription owner is required");
-    DurableBindingValues.time(input.expiresAtMs, "Subscription expiry");
-    if (input.backend.bytes.byteLength === 0) throw new Error("subscription backend is required");
+    if (!input.principalFingerprint.trim() || input.backend.bytes.byteLength === 0)
+      throw new Error("subscription owner and backend are required");
+    this.time(input.expiresAtMs);
   },
-  envelope(bytes: Uint8Array): BackendSubscriptionEnvelope {
-    return { kind: "backend-subscription-envelope", bytes: bytes.slice() };
+  time(value: number): void {
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new Error("Subscription time must be a safe integer.");
   },
-  options(options: DurableSubscriptionBindingsOptions): void {
-    if (!DurableBindingValues.token(options.namespace))
-      throw new Error("Subscription registry namespace must be non-blank.");
-    for (const [name, value] of Object.entries({
-      leaseMs: options.leaseMs,
-      cleanupBatchSize: options.cleanupBatchSize,
-      recordLimit: options.recordLimit,
-      maxRecordBytes: options.maxRecordBytes,
-    })) {
-      if (
-        !Number.isSafeInteger(value) ||
-        value <= 0 ||
-        (name === "recordLimit" && value === Number.MAX_SAFE_INTEGER)
-      )
-        throw new Error(`Subscription registry ${name} must be a positive safe integer.`);
-    }
+  publicId(value: string): boolean {
+    return value.trim().length > 0 && !value.startsWith("!");
   },
-  read(record: Any, expectedId: string | undefined, maxBytes: number): StoredBinding {
-    if (record.typeUrl !== recordTypeUrl || record.value.byteLength > maxBytes)
+  base64(bytes: Uint8Array): string {
+    return Buffer.from(bytes).toString("base64");
+  },
+  envelope(binding: Binding): BackendSubscriptionEnvelope {
+    return {
+      kind: "backend-subscription-envelope",
+      bytes: Uint8Array.from(Buffer.from(binding.backend ?? "", "base64")),
+    };
+  },
+  id(record: Any): string {
+    return (this.read(record, undefined, Number.MAX_SAFE_INTEGER) as Stored).id;
+  },
+  write(value: Stored, maxBytes: number): Any {
+    const typeUrl =
+      value.family === "binding" ? bindingType : value.family === "quota" ? quotaType : cleanupType;
+    const record = create(AnySchema, {
+      typeUrl,
+      value: new TextEncoder().encode(
+        JSON.stringify({ version: value.family === "binding" ? 2 : 1, ...value }),
+      ),
+    });
+    if (record.value.byteLength > maxBytes) throw new Error("backend-envelope-too-large");
+    return record;
+  },
+  read(record: Any, expectedId: string | undefined, maxBytes: number): Stored {
+    if (record.value.byteLength > maxBytes)
       throw new Error("Durable subscription registry record is invalid.");
     let value: unknown;
     try {
@@ -412,69 +564,70 @@ const DurableBindingValues = Object.freeze({
     if (value === null || typeof value !== "object")
       throw new Error("Durable subscription registry record is invalid.");
     const source = value as Record<string, unknown>;
+    const family = source.family;
+    const valid =
+      (family === "binding" && record.typeUrl === bindingType && source.version === 2) ||
+      (family === "quota" && record.typeUrl === quotaType && source.version === 1) ||
+      (family === "cleanup" && record.typeUrl === cleanupType && source.version === 1);
     if (
-      source.version !== recordVersion ||
-      !DurableBindingValues.token(source.id) ||
-      (expectedId !== undefined && source.id !== expectedId) ||
-      !DurableBindingValues.token(source.principalFingerprint) ||
-      (source.tenant !== undefined && typeof source.tenant !== "string") ||
-      !DurableBindingValues.finite(source.expiresAtMs) ||
-      !["inactive", "active", "closed"].includes(source.lifecycle as string) ||
-      !DurableBindingValues.finite(source.leaseUntilMs) ||
-      !DurableBindingValues.finite(source.cancellationFence) ||
-      !DurableBindingValues.finite(source.encodedBytes) ||
-      typeof source.backend !== "string"
+      !valid ||
+      typeof source.id !== "string" ||
+      (source.id !== expectedId && expectedId !== undefined) ||
+      !Number.isSafeInteger(source.revision) ||
+      (source.revision as number) < 1
+    )
+      throw new Error("Durable subscription registry record is invalid.");
+    if (family === "quota") {
+      if (
+        source.id !== quotaId ||
+        !Number.isSafeInteger(source.used) ||
+        (source.used as number) < 0
+      )
+        throw new Error("Durable subscription registry record is invalid.");
+      return source as unknown as Quota;
+    }
+    if (family === "cleanup") {
+      if (
+        source.id !== cleanupId ||
+        !Number.isSafeInteger(source.fence) ||
+        !Number.isSafeInteger(source.failureCount) ||
+        !Number.isSafeInteger(source.retryAfterMs)
+      )
+        throw new Error("Durable subscription registry record is invalid.");
+      return source as unknown as Cleanup;
+    }
+    if (
+      !this.publicId(source.id) ||
+      !this.publicId(source.admissionToken as string) ||
+      !["reserved", "inactive", "active", "cancelling", "retired"].includes(
+        source.lifecycle as string,
+      ) ||
+      !Number.isSafeInteger(source.fence) ||
+      (source.fence as number) < 0
+    )
+      throw new Error("Durable subscription registry record is invalid.");
+    const binding = source as unknown as Binding;
+    if (["inactive", "active", "cancelling"].includes(binding.lifecycle)) {
+      if (
+        !binding.principalFingerprint ||
+        !binding.backend ||
+        !Number.isSafeInteger(binding.backendBytes) ||
+        Buffer.from(binding.backend, "base64").toString("base64") !== binding.backend ||
+        Buffer.byteLength(binding.backend, "base64") !== binding.backendBytes ||
+        !Number.isSafeInteger(binding.expiresAtMs)
+      )
+        throw new Error("Durable subscription registry record is invalid.");
+    }
+    if (
+      ["active", "cancelling"].includes(binding.lifecycle) &&
+      (!binding.ownerId || !Number.isSafeInteger(binding.leaseUntilMs))
     )
       throw new Error("Durable subscription registry record is invalid.");
     if (
-      Buffer.from(source.backend, "base64").toString("base64") !== source.backend ||
-      Buffer.byteLength(source.backend) !== source.encodedBytes
+      binding.lifecycle === "retired" &&
+      (binding.backend !== undefined || binding.principalFingerprint !== undefined)
     )
       throw new Error("Durable subscription registry record is invalid.");
-    const backend = Uint8Array.from(Buffer.from(source.backend, "base64"));
-    if (backend.byteLength === 0)
-      throw new Error("Durable subscription registry record is invalid.");
-    return Object.freeze({
-      id: source.id,
-      backend,
-      principalFingerprint: source.principalFingerprint,
-      tenant: source.tenant,
-      expiresAtMs: source.expiresAtMs,
-      lifecycle: source.lifecycle as StoredBinding["lifecycle"],
-      leaseUntilMs: source.leaseUntilMs,
-      cancellationFence: source.cancellationFence,
-      encodedBytes: source.encodedBytes,
-      version: source.version,
-    });
-  },
-  finite(value: unknown): value is number {
-    return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-  },
-  time(value: number, label: string): void {
-    if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} must be a safe time.`);
-  },
-  token(value: unknown): value is string {
-    return typeof value === "string" && value.trim().length > 0;
-  },
-  spec(maxBytes: number): RecordSpec<string, Any> {
-    return new RecordSpec<string, Any>({
-      schema: AnySchema,
-      storageKey: registryStorageKey,
-      idKind: "string",
-      extractId: (record) => DurableBindingValues.read(record, undefined, maxBytes).id,
-    });
-  },
-  write(record: Omit<StoredBinding, "encodedBytes">): Any {
-    const backend = Buffer.from(record.backend).toString("base64");
-    return create(AnySchema, {
-      typeUrl: recordTypeUrl,
-      value: new TextEncoder().encode(
-        JSON.stringify({
-          ...record,
-          backend,
-          encodedBytes: Buffer.byteLength(backend),
-        }),
-      ),
-    });
+    return binding;
   },
 });

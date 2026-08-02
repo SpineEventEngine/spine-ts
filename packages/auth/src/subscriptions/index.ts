@@ -203,7 +203,7 @@ export interface SubscriptionCapacityReservation {
   /**
    * Clears the previously reserved binding slot.
    */
-  release(): void;
+  release(): Promise<void>;
 }
 
 /**
@@ -326,6 +326,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
             released = true;
             this.#reservations.delete(reservation);
           }
+          return Promise.resolve();
         },
       };
       this.#reservations.add(reservation);
@@ -407,7 +408,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
         expiring: false,
         cancelRequested: false,
       });
-      input.reservation?.release();
+      void input.reservation?.release();
       return Promise.resolve({ id });
     } catch (error) {
       return Promise.reject(
@@ -855,7 +856,7 @@ export class SubscriptionGateway {
     this.#closed = true;
     for (const [controller, reservation] of this.#pendingSubscribes) {
       controller.abort();
-      reservation.release();
+      await reservation.release();
     }
     this.#pendingSubscribes.clear();
     await this.#options.bindings.close();
@@ -1058,7 +1059,7 @@ export class SubscriptionGateway {
       );
     } finally {
       this.#pendingSubscribes.delete(controller);
-      reservation.release();
+      await reservation.release();
       backend?.bytes.fill(0);
     }
   }

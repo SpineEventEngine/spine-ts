@@ -264,7 +264,7 @@ describe("DurableSubscriptionBindings", () => {
     const factory = new InMemoryStorageFactory();
     const first = limitedRegistry(factory, "first");
     const released = await first.reserveCapacity();
-    released.release();
+    await released.release();
     const forged = { release: () => undefined };
 
     await first.create({
