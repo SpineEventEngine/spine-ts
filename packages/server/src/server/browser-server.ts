@@ -344,7 +344,7 @@ export const BrowserServer: Readonly<{
     active.add(controller);
     const timer = setTimeout(() => {
       controller.abort();
-      request.destroy();
+      request.resume();
     }, route.timeoutMs);
     const abort = () => {
       controller.abort();
@@ -355,15 +355,21 @@ export const BrowserServer: Readonly<{
     const aborted = new Promise<never>((_resolve, reject) => {
       rejectAbort = reject;
     });
+    let responseReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
     const onAbort = () => {
       rejectAbort(new Error("browser auth request aborted"));
+      void responseReader?.cancel().catch(() => undefined);
     };
     controller.signal.addEventListener("abort", onAbort, { once: true });
     try {
       const requestChunks: Uint8Array[] = [];
       let size = 0;
-      for await (const chunk of request) {
-        if (controller.signal.aborted) throw new Error("browser auth request aborted");
+      const requestBody = request[Symbol.asyncIterator]();
+      let reading = true;
+      while (reading) {
+        const next = await Promise.race([requestBody.next(), aborted]);
+        if (next.done) break;
+        const chunk = next.value;
         const bytes = Buffer.from(chunk);
         size += bytes.byteLength;
         if (size > route.maxRequestBytes) {
@@ -391,20 +397,20 @@ export const BrowserServer: Readonly<{
         }
         return;
       }
-      const reader = result.body?.getReader();
+      responseReader = result.body?.getReader();
       const responseChunks: Uint8Array[] = [];
       let responseBytes = 0;
-      if (reader !== undefined) {
-        let reading = true;
+      if (responseReader !== undefined) {
+        reading = true;
         while (reading) {
-          const next = await Promise.race([reader.read(), aborted]);
+          const next = await Promise.race([responseReader.read(), aborted]);
           if (next.done) {
             reading = false;
             continue;
           }
           responseBytes += next.value.byteLength;
           if (responseBytes > writeMaxBytes) {
-            await reader.cancel();
+            await responseReader.cancel();
             response.statusCode = 413;
             response.end();
             return;

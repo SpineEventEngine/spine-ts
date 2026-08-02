@@ -720,6 +720,8 @@ describe("Server", () => {
   });
 
   it("applies the auth deadline while response transfer is pending", async () => {
+    let cancel!: () => void;
+    const cancelled = new Promise<void>((resolve) => (cancel = resolve));
     const server = await new Server({
       browser: {
         port: 0,
@@ -733,7 +735,10 @@ describe("Server", () => {
             timeoutMs: 5,
             onRequest: () =>
               new Response(
-                new ReadableStream<Uint8Array>({ pull: () => new Promise<void>(() => undefined) }),
+                new ReadableStream<Uint8Array>({
+                  pull: () => new Promise<void>(() => undefined),
+                  cancel,
+                }),
               ),
           },
         ],
@@ -745,6 +750,7 @@ describe("Server", () => {
           headers: { origin: "http://127.0.0.1:5173" },
         }),
       ).resolves.toMatchObject({ status: 504 });
+      await expect(cancelled).resolves.toBeUndefined();
     } finally {
       await server.close();
     }
@@ -769,16 +775,22 @@ describe("Server", () => {
       },
     }).start();
     try {
-      await new Promise<void>((resolve) => {
+      const status = await new Promise<number | undefined>((resolve, reject) => {
         const request = http.request(`${server.baseUrl}/auth/drip`, {
           method: "POST",
           headers: { origin: "http://127.0.0.1:5173", "transfer-encoding": "chunked" },
         });
-        request.once("error", () => {
-          resolve();
+        request.once("error", reject);
+        request.once("response", (response) => {
+          response.resume();
+          response.once("end", () => {
+            request.destroy();
+            resolve(response.statusCode);
+          });
         });
         request.write("a");
       });
+      expect(status).toBe(504);
       expect(calls).toBe(0);
     } finally {
       await server.close();
