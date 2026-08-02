@@ -5,8 +5,12 @@ handlers, storage, command/event processing, queries, subscriptions, and a
 local Connect/gRPC-compatible server.
 
 For a standalone application, use `await server.run()` to let the framework
-close the server on `SIGINT` or `SIGTERM`. Embedded applications use
-`await server.start()` and close the returned server themselves. Add the
+close the server on `SIGINT` or `SIGTERM` and permanently close the environment
+after the final run-managed server retires. Embedded applications use
+`await server.start()` and close the returned server themselves; `start()`
+never closes the shared environment. Active caller-managed and run-managed
+generations are exclusive, while matching `start()` or `run()` siblings share.
+Add the
 `browser` option with exact allowed origins and your session, authorization,
 and trusted-context collaborators to serve Connect and gRPC-Web without
 application-owned listener or CORS code.
@@ -79,13 +83,15 @@ import { Server, type BoundedContext } from "@spine-event-engine/server";
 
 declare const context: BoundedContext;
 const server = new Server({ contexts: [context], port: 0 });
-const running = await server.start();
+const running = await server.run();
 console.log(running.baseUrl);
-await running.close();
 ```
 
 Use `run()` for a standalone process. It installs framework-owned `SIGINT` and
-`SIGTERM` shutdown. Use `start()` when another host owns the process lifecycle.
+`SIGTERM` shutdown; siblings share its generation, and a failed final close is
+retryable by a later signal or `close()`. Use `start()` when another host owns
+the process lifecycle; it shares only caller-managed siblings and never closes
+the environment.
 
 ```ts
 import { Server, type BoundedContext } from "@spine-event-engine/server";

@@ -567,11 +567,13 @@ or server resolution, then configure storage and transport through
 `ServerEnvironment.when(EnvironmentType.Production).use(...)` before that
 resolution. `Server` builds added `BoundedContextBuilder` values before listener
 open and uses the singleton storage factory unless the builder chose one
-explicitly. Shutdown stops intake, closes active sessions, and closes owned
-contexts/resources; facilities remain open until every server has detached and
-the process explicitly calls `ServerEnvironment.instance().close()`. Failed
-close attempts are retryable without rerunning close hooks that already
-succeeded. It still does not export a production transport endpoint runner,
+explicitly. `start()` is caller-managed: it neither installs process signal
+handlers nor closes the environment. `run()` is process-managed: concurrent
+same-builder calls coalesce, run-managed siblings share one active generation,
+and the last run-managed retirement closes that environment. Mixed active
+caller-managed/run-managed admission rejects before listener open. A failed
+final close stays reachable for explicit or later-signal retry without
+rerunning completed close hooks. It still does not export a production transport endpoint runner,
 integration broker, durable retry owner, process supervisor, event storage
 policy beyond existing seams, retained active-stream/update replay storage, or
 worker topology as part of this closure.

@@ -1,6 +1,6 @@
 # Wave 5 Packaging and Deployment Plan
 
-Status: Q&A complete; approved scope awaiting autonomous implementation start
+Status: Approved; autonomous implementation active under `T-0089`
 
 Planning record: `T-0088`
 

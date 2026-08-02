@@ -202,10 +202,7 @@ export class EnvironmentRegistrations {
    * @returns The new opaque registration claim.
    */
   claim(ownership: EnvironmentOwnership): EnvironmentRegistrationClaim {
-    if (
-      (ownership === "server" && this.#claims.size > 0) ||
-      (ownership === "caller" && this.#ownership === "server")
-    ) {
+    if (this.#ownership !== undefined && this.#ownership !== ownership) {
       throw new Error("Server-owned environment registration requires exclusive ownership.");
     }
 

@@ -1,6 +1,13 @@
 import type { RunningServer } from "./server.js";
+import type { ServerEnvironment } from "./server-environment.js";
 
-const running: RunningServer[] = [];
+interface RunRecord {
+  readonly server: RunningServer;
+  readonly environment: ServerEnvironment;
+  retirement: Promise<void> | undefined;
+}
+
+const running: RunRecord[] = [];
 let signalsInstalled = false;
 
 /**
@@ -9,14 +16,14 @@ let signalsInstalled = false;
  * @internal
  */
 export const ProcessServerCoordinator: Readonly<{
-  add(server: RunningServer): RunningServer;
+  add(server: RunningServer, environment: ServerEnvironment, onRetired: () => void): RunningServer;
   installSignals(): void;
-  remove(server: RunningServer): void;
   onSignal(): void;
   closeRunning(): Promise<void>;
 }> = Object.freeze({
-  add(server: RunningServer): RunningServer {
-    running.push(server);
+  add(server: RunningServer, environment: ServerEnvironment, onRetired: () => void): RunningServer {
+    const record: RunRecord = { server, environment, retirement: undefined };
+    running.push(record);
     ProcessServerCoordinator.installSignals();
     return {
       host: server.host,
@@ -24,7 +31,8 @@ export const ProcessServerCoordinator: Readonly<{
       baseUrl: server.baseUrl,
       close: async () => {
         await server.close();
-        ProcessServerCoordinator.remove(server);
+        await ProcessServerCoordinatorValues.retire(record);
+        onRetired();
       },
     };
   },
@@ -35,27 +43,52 @@ export const ProcessServerCoordinator: Readonly<{
     process.on("SIGTERM", ProcessServerCoordinator.onSignal);
   },
 
-  remove(server: RunningServer): void {
-    const index = running.lastIndexOf(server);
+  onSignal(): void {
+    void ProcessServerCoordinator.closeRunning();
+  },
+
+  async closeRunning(): Promise<void> {
+    for (const record of [...running].reverse()) {
+      try {
+        await record.server.close();
+        await ProcessServerCoordinatorValues.retire(record);
+      } catch {
+        process.exitCode = 1;
+      }
+    }
+  },
+});
+
+/**
+ * Groups private process-owned run retirement operations.
+ *
+ * @internal
+ */
+const ProcessServerCoordinatorValues = Object.freeze({
+  remove(record: RunRecord): void {
+    const index = running.indexOf(record);
     if (index >= 0) running.splice(index, 1);
     if (running.length > 0) return;
     process.off("SIGINT", ProcessServerCoordinator.onSignal);
     process.off("SIGTERM", ProcessServerCoordinator.onSignal);
     signalsInstalled = false;
   },
-
-  onSignal(): void {
-    void ProcessServerCoordinator.closeRunning();
-  },
-
-  async closeRunning(): Promise<void> {
-    for (const server of [...running].reverse()) {
-      try {
-        await server.close();
-        ProcessServerCoordinator.remove(server);
-      } catch {
-        process.exitCode = 1;
-      }
-    }
+  retire(record: RunRecord): Promise<void> {
+    const current = record.retirement;
+    if (current !== undefined) return current;
+    const retirement = Promise.resolve()
+      .then(async () => {
+        if (!running.includes(record)) return;
+        if (running.length === 1) {
+          await record.environment.close();
+        }
+        ProcessServerCoordinatorValues.remove(record);
+      })
+      .catch((error: unknown) => {
+        record.retirement = undefined;
+        throw error;
+      });
+    record.retirement = retirement;
+    return retirement;
   },
 });

@@ -49,7 +49,7 @@ function serverEnvironment(settings: ServerEnvironmentSettings = {}): ServerEnvi
 }
 
 describe("EnvironmentRegistrations", () => {
-  it("shares one caller-owned generation and rejects every exclusive conflict before mutation", () => {
+  it("shares ownership generations and rejects mixed ownership before mutation", () => {
     const registrations = new EnvironmentRegistrations();
 
     const first = registrations.claim("caller");
@@ -65,13 +65,13 @@ describe("EnvironmentRegistrations", () => {
 
     const exclusive = new EnvironmentRegistrations();
     const owner = exclusive.claim("server");
-    expect(() => exclusive.claim("server")).toThrow(
-      "Server-owned environment registration requires exclusive ownership.",
-    );
+    const sibling = exclusive.claim("server");
+    expect(sibling.generation).toBe(owner.generation);
+    expect(sibling.token).not.toBe(owner.token);
     expect(() => exclusive.claim("caller")).toThrow(
       "Server-owned environment registration requires exclusive ownership.",
     );
-    expect(exclusive.count).toBe(1);
+    expect(exclusive.count).toBe(2);
     expect(owner.generation).not.toBe(first.generation);
   });
 

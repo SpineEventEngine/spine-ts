@@ -48,8 +48,9 @@ dispatch route.
 CommandService, QueryService, and SubscriptionService contracts. `Server`
 opens the local Node HTTP/2 listener; default host is `127.0.0.1`. Set
 `readMaxBytes` and `writeMaxBytes` only to integers 1–4294967295; defaults are 4194304. `RunningServer.close()` stops intake, closes sessions, waits for active
-work to stop using dependencies, then closes contexts. It does not close global
-process facilities; close `ServerEnvironment.instance()` separately when used.
+work to stop using dependencies, then closes contexts. Caller-managed `start()`
+does not close global process facilities; close `ServerEnvironment.instance()`
+separately when used. The final run-managed `run()` close closes its environment.
 
 `Stand` registers entity state for point/list reads, updates current state, and
 offers in-process subscriptions. `catchUpReadSide(options?)` clears registered
@@ -64,11 +65,14 @@ exactly-once effects.
 
 ### Standalone and browser hosting
 
-`Server.start()` installs no process signal handlers. `Server.run()` registers
-the successfully started server with one process coordinator. The coordinator
-uses one `SIGINT`/`SIGTERM` listener pair, closes servers in reverse successful
-start order, shares concurrent close work, leaves failed closes registered for
-retry, and sets `process.exitCode` to `1` after signal-driven close failure.
+`Server.start()` installs no process signal handlers, never closes its
+environment, and shares only a caller-managed active generation. `Server.run()`
+coalesces concurrent calls on one builder, shares a run-managed generation with
+other `run()` servers, and rejects mixed admission before listener open. The
+coordinator uses one `SIGINT`/`SIGTERM` listener pair, closes servers in reverse
+successful-start order, retains failed final environment closure for later
+signal or explicit-close retry, and sets `process.exitCode` to `1` after a
+signal-driven failure.
 
 `ServerOptions.browser` changes the public listener, not the bounded-context
 services. The native HTTP/2 backend binds to an ephemeral loopback port and is
