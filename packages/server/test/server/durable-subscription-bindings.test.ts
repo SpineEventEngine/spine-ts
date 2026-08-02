@@ -138,16 +138,19 @@ describe("DurableSubscriptionBindings", () => {
       expiresAtMs: 10_000,
     });
     let resume: (() => void) | undefined;
+    let guard: (() => Promise<boolean>) | undefined;
     const pending = first.activate({
       id: binding.id,
       principalFingerprint: "principal-a",
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: () =>
-        new Promise<void>((resolve) => {
+      onBackend: (_backend, _signal, current) => {
+        guard = current;
+        return new Promise<void>((resolve) => {
           resume = resolve;
-        }),
+        });
+      },
     });
     await Promise.resolve();
 
@@ -171,6 +174,7 @@ describe("DurableSubscriptionBindings", () => {
         onBackend: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "activated" });
+    await expect(guard?.()).resolves.toBe(false);
     resume?.();
     await expect(pending).resolves.toEqual({ kind: "denied" });
 

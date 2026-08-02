@@ -126,6 +126,7 @@ export type SubscriptionAbortSignal = AbortSignal;
 export type OnBackendSubscription = (
   envelope: BackendSubscriptionEnvelope,
   signal: SubscriptionAbortSignal,
+  guard?: () => Promise<boolean>,
 ) => Promise<void>;
 
 /**

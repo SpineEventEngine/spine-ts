@@ -243,7 +243,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     );
     this.#active.set(input.id, { controller, timer, fence: claimed.fence });
     try {
-      await input.onBackend(Values.envelope(claimed), controller.signal);
+      await input.onBackend(Values.envelope(claimed), controller.signal, () =>
+        this.#current(input.id, claimed.fence, "active", Date.now()),
+      );
       return (await this.#current(input.id, claimed.fence, "active", input.nowMs))
         ? { kind: "activated" }
         : { kind: "denied" };
