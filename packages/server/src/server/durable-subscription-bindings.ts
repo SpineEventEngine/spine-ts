@@ -135,12 +135,15 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     SubscriptionCapacityReservation,
     { id: string; token: string; consumed: boolean }
   >();
-  readonly #active = new Map<
-    string,
-    { controller: AbortController; timer: ReturnType<typeof setTimeout>; fence: number }
-  >();
+  readonly #active = new Set<{
+    id: string;
+    controller: AbortController;
+    timer: ReturnType<typeof setTimeout>;
+    fence: number;
+  }>();
   readonly #cancelling = new Map<string, Promise<SubscriptionBindingTransition>>();
   readonly #cancelControllers = new Map<string, AbortController>();
+  readonly #cleanupControllers = new Set<AbortController>();
   readonly #running = new Set<Promise<unknown>>();
   #closed = false;
 
@@ -244,39 +247,47 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     Values.input(input);
     const supplied =
       input.reservation === undefined ? undefined : this.#reservations.get(input.reservation);
-    const reservation =
+    const acquired =
       supplied === undefined || input.reservation === undefined
         ? await this.reserveCapacity()
         : input.reservation;
-    const held = this.#reservations.get(reservation);
-    if (held === undefined || held.consumed) throw new Error("binding-capacity-exceeded");
-    held.consumed = true;
-    const row = await this.#storage.read(held.id);
-    const old =
-      row === undefined ? undefined : (Values.read(row, held.id, this.#maxRecordBytes) as Binding);
-    if (old?.lifecycle !== "reserved" || old.admissionToken !== held.token)
-      throw new Error("binding-capacity-exceeded");
-    const next: Binding = {
-      family: "binding",
-      id: old.id,
-      revision: old.revision + 1,
-      admissionToken: old.admissionToken,
-      lifecycle: "inactive",
-      fence: 0,
-      principalFingerprint: input.principalFingerprint,
-      ...(input.tenant === undefined ? {} : { tenant: input.tenant }),
-      expiresAtMs: input.expiresAtMs,
-      backend: Values.base64(input.backend.bytes),
-      backendBytes: input.backend.bytes.byteLength,
-    };
-    if (!(await this.#cas(old.id, row, Values.write(next, this.#maxRecordBytes)))) {
-      const applied = await this.#slot(old.id, held.token);
-      const current = await this.#storage.read(old.id);
-      if (applied !== undefined || current === undefined || !this.#sameBinding(current, next))
+    const internallyAcquired = acquired !== input.reservation;
+    try {
+      const held = this.#reservations.get(acquired);
+      if (held === undefined || held.consumed) throw new Error("binding-capacity-exceeded");
+      held.consumed = true;
+      const row = await this.#storage.read(held.id);
+      const old =
+        row === undefined
+          ? undefined
+          : (Values.read(row, held.id, this.#maxRecordBytes) as Binding);
+      if (old?.lifecycle !== "reserved" || old.admissionToken !== held.token)
         throw new Error("binding-capacity-exceeded");
+      const next: Binding = {
+        family: "binding",
+        id: old.id,
+        revision: old.revision + 1,
+        admissionToken: old.admissionToken,
+        lifecycle: "inactive",
+        fence: 0,
+        principalFingerprint: input.principalFingerprint,
+        ...(input.tenant === undefined ? {} : { tenant: input.tenant }),
+        expiresAtMs: input.expiresAtMs,
+        backend: Values.base64(input.backend.bytes),
+        backendBytes: input.backend.bytes.byteLength,
+      };
+      if (!(await this.#cas(old.id, row, Values.write(next, this.#maxRecordBytes)))) {
+        const applied = await this.#slot(old.id, held.token);
+        const current = await this.#storage.read(old.id);
+        if (applied !== undefined || current === undefined || !this.#sameBinding(current, next))
+          throw new Error("binding-capacity-exceeded");
+      }
+      this.#reservations.delete(acquired);
+      return Object.freeze({ id: old.id });
+    } catch (error) {
+      if (internallyAcquired) await acquired.release();
+      throw error;
     }
-    this.#reservations.delete(reservation);
-    return Object.freeze({ id: old.id });
   }
 
   /**
@@ -319,12 +330,13 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     };
     input.signal.addEventListener("abort", abort, { once: true });
     const active = {
+      id: input.id,
       controller,
       timer: undefined as unknown as ReturnType<typeof setTimeout>,
       fence: claimed.fence,
     };
-    this.#active.set(input.id, active);
-    this.#scheduleRenew(input.id, active);
+    this.#active.add(active);
+    this.#scheduleRenew(active);
     try {
       await input.onBackend(Values.envelope(claimed), controller.signal, () =>
         this.#current(input.id, claimed.fence, "active", Date.now()),
@@ -335,7 +347,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       return { kind: "activated" };
     } finally {
       clearTimeout(active.timer);
-      if (this.#active.get(input.id) === active) this.#active.delete(input.id);
+      this.#active.delete(active);
       input.signal.removeEventListener("abort", abort);
     }
   }
@@ -400,7 +412,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         }
       }
     }
-    this.#active.get(input.id)?.controller.abort();
+    for (const active of this.#active) if (active.id === input.id) active.controller.abort();
     const controller = new AbortController();
     this.#cancelControllers.set(input.id, controller);
     try {
@@ -441,6 +453,16 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    * @returns Completes after one cleanup page is processed.
    */
   async purgeExpired(nowMs: number): Promise<void> {
+    const task = this.#purgeExpired(nowMs);
+    this.#running.add(task);
+    try {
+      await task;
+    } finally {
+      this.#running.delete(task);
+    }
+  }
+
+  async #purgeExpired(nowMs: number): Promise<void> {
     this.#open();
     Values.time(nowMs);
     for (let count = 0; count < attempts; count += 1) {
@@ -480,15 +502,17 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   async close(): Promise<void> {
     this.#closed = true;
-    for (const active of this.#active.values()) {
+    for (const active of this.#active) {
       clearTimeout(active.timer);
       active.controller.abort();
     }
     for (const controller of this.#cancelControllers.values()) controller.abort();
+    for (const controller of this.#cleanupControllers) controller.abort();
     await Promise.allSettled(this.#running);
     this.#active.clear();
     this.#cancelling.clear();
     this.#cancelControllers.clear();
+    this.#cleanupControllers.clear();
     this.#reservations.clear();
     this.#storage.close();
     await Promise.resolve();
@@ -534,33 +558,39 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       reason,
     };
   }
-  async #renew(id: string, fence: number, controller: AbortController): Promise<void> {
-    const row = await this.#storage.read(id);
+  async #renew(active: {
+    id: string;
+    controller: AbortController;
+    timer: ReturnType<typeof setTimeout>;
+    fence: number;
+  }): Promise<void> {
+    const row = await this.#storage.read(active.id);
     if (row === undefined) {
-      controller.abort();
+      active.controller.abort();
       return;
     }
-    const old = Values.read(row, id, this.#maxRecordBytes) as Binding;
-    if (old.lifecycle !== "active" || old.ownerId !== this.#owner || old.fence !== fence) {
-      controller.abort();
+    const old = Values.read(row, active.id, this.#maxRecordBytes) as Binding;
+    if (old.lifecycle !== "active" || old.ownerId !== this.#owner || old.fence !== active.fence) {
+      active.controller.abort();
       return;
     }
     const next = { ...old, revision: old.revision + 1, leaseUntilMs: this.#until(Date.now()) };
-    if (!(await this.#cas(id, row, Values.write(next, this.#maxRecordBytes)))) {
-      if (!(await this.#current(id, fence, "active", Date.now()))) {
-        controller.abort();
+    if (!(await this.#cas(active.id, row, Values.write(next, this.#maxRecordBytes)))) {
+      if (!(await this.#current(active.id, active.fence, "active", Date.now()))) {
+        active.controller.abort();
         return;
       }
     }
-    const active = this.#active.get(id);
-    if (active?.fence === fence && !controller.signal.aborted) this.#scheduleRenew(id, active);
+    if (this.#active.has(active) && !active.controller.signal.aborted) this.#scheduleRenew(active);
   }
-  #scheduleRenew(
-    id: string,
-    active: { controller: AbortController; timer: ReturnType<typeof setTimeout>; fence: number },
-  ): void {
+  #scheduleRenew(active: {
+    id: string;
+    controller: AbortController;
+    timer: ReturnType<typeof setTimeout>;
+    fence: number;
+  }): void {
     active.timer = setTimeout(
-      () => void this.#renew(id, active.fence, active.controller),
+      () => void this.#renew(active),
       Math.max(1, Math.floor(this.#leaseMs / 2)),
     );
   }
@@ -644,7 +674,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         continue;
       }
       control = await this.#renewCleanup(control, nowMs);
-      await this.#cleanBinding(row.id, nowMs);
+      const heartbeat = this.#heartbeatCleanup(control, nowMs);
+      try {
+        await this.#cleanBinding(row.id, nowMs, heartbeat.signal);
+      } finally {
+        control = await heartbeat.stop();
+      }
       control = await this.#shortenCleanup(control, nowMs);
       processed += 1;
       control = await this.#advanceClean(control, row.id, false);
@@ -652,7 +687,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     }
     await this.#advanceClean(control, undefined, rows.length < limit);
   }
-  async #cleanBinding(id: string, nowMs: number): Promise<void> {
+  async #cleanBinding(id: string, nowMs: number, signal: AbortSignal): Promise<void> {
     const row = await this.#storage.read(id);
     if (row === undefined) return;
     let binding: Binding;
@@ -674,7 +709,43 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       (["inactive", "active"].includes(binding.lifecycle) && (binding.expiresAtMs ?? 0) <= nowMs) ||
       (binding.lifecycle === "cancelling" && (binding.leaseUntilMs ?? 0) <= nowMs)
     )
-      await this.#cancelExpired(binding, row, nowMs);
+      await this.#cancelExpired(binding, row, nowMs, signal);
+  }
+  #heartbeatCleanup(
+    initial: Cleanup,
+    nowMs: number,
+  ): {
+    readonly signal: AbortSignal;
+    stop(): Promise<Cleanup>;
+  } {
+    const controller = new AbortController();
+    this.#cleanupControllers.add(controller);
+    let current = initial;
+    let stopped = false;
+    let renewal = Promise.resolve();
+    const renew = () => {
+      renewal = renewal.then(async () => {
+        if (stopped || controller.signal.aborted) return;
+        current = await this.#renewCleanup(
+          current,
+          Math.max(nowMs, (current.leaseUntilMs ?? nowMs) - 1),
+        );
+      });
+      void renewal.catch(() => {
+        controller.abort();
+      });
+    };
+    const timer = setInterval(renew, Math.max(1, Math.floor(this.#leaseMs / 2)));
+    return {
+      signal: controller.signal,
+      stop: async () => {
+        stopped = true;
+        clearInterval(timer);
+        await renewal;
+        this.#cleanupControllers.delete(controller);
+        return current;
+      },
+    };
   }
   async #renewCleanup(expected: Cleanup, nowMs: number): Promise<Cleanup> {
     const current = await this.#cleanup();
@@ -708,13 +779,13 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     if (this.#sameCleanup(reread, next)) return reread;
     throw new Error("Subscription cleanup lost its durable lease.");
   }
-  async #cancelExpired(old: Binding, row: Any, nowMs: number): Promise<void> {
+  async #cancelExpired(old: Binding, row: Any, nowMs: number, signal: AbortSignal): Promise<void> {
     const next = this.#work(old, "cancelling", nowMs, "expired");
     if (!(await this.#cas(old.id, row, Values.write(next, this.#maxRecordBytes)))) {
       const reread = await this.#storage.read(old.id);
       if (reread === undefined || !this.#sameBinding(reread, next)) return;
     }
-    await this.#dispose(Values.envelope(next), new AbortController().signal, () =>
+    await this.#dispose(Values.envelope(next), signal, () =>
       this.#current(next.id, next.fence, "cancelling", nowMs),
     );
     await this.#retire(next);

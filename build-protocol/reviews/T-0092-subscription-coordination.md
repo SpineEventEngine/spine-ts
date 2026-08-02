@@ -114,12 +114,12 @@ tooling typecheck, repository lint, cleanup and TSDoc enforcement, formatting,
 generated documentation checks, Proto lint/currentness, and release-readiness
 checks are clean.
 
-| Concern | Existing role | Expected model | Expected reasoning |
-| --- | --- | --- | --- |
-| Style and maintainability | `style_maintainability_reviewer` | `gpt-5.6-terra` | high |
-| Documentation | `documentation_reviewer` | `gpt-5.6-luna` | medium |
-| TypeScript and API documentation | `typescript_api_docs_reviewer` | `gpt-5.6-terra` | high |
-| Performance and reliability | `performance_reliability_reviewer` | `gpt-5.6-terra` | high |
+| Concern                          | Existing role                      | Expected model  | Expected reasoning |
+| -------------------------------- | ---------------------------------- | --------------- | ------------------ |
+| Style and maintainability        | `style_maintainability_reviewer`   | `gpt-5.6-terra` | high               |
+| Documentation                    | `documentation_reviewer`           | `gpt-5.6-luna`  | medium             |
+| TypeScript and API documentation | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` | high               |
+| Performance and reliability      | `performance_reliability_reviewer` | `gpt-5.6-terra` | high               |
 
 Every model and reasoning field is explicit in the dispatch. The reviewer
 surface does not expose runtime self-introspection; unless a visible mismatch
@@ -212,3 +212,28 @@ configured profiles matched the dispatch with no visible fallback.
 Only style/maintainability and performance/reliability will be reopened after
 this narrow correction. The clean API and documentation lanes remain closed
 unless their contracts or claims change substantively.
+
+## Final Narrow Correction Evidence
+
+Correction endpoint: pending commit after `693357ca`. The existing
+`implementer` was explicitly configured as `gpt-5.6-terra` / medium; runtime
+self-introspection remains unavailable.
+
+- `create()` now releases only an internally acquired reservation on each
+  failure before the inactive durable binding is established. A capacity-one
+  regression proves immediate readmission after failed direct creation.
+- A cleaner starts a close-safe heartbeat for every awaited disposal. The
+  heartbeat renews the same fence until the callback returns; a barrier test
+  holds disposal beyond multiple lease intervals and proves a second registry
+  cannot duplicate it.
+- Active work is retained as fence-specific entries, so closing one public ID
+  aborts and converges every overlapping cooperative activation callback.
+- The common parsed-record storage script supplies reusable two-party
+  storage-CAS barriers. Capacity, binding ownership, and cleaner contention
+  tests use them. Lease scripts compare prior and next owner/fence/lease facts,
+  with no incidental revision matching.
+
+Focused durable evidence: 121 tests passed; exact source coverage is 93.47%
+statements, 90.17% branches, 93.75% functions, and 96.03% lines. The pending
+mechanical checks will be recorded before the immediate push. Only
+style/maintainability and performance/reliability need re-review.

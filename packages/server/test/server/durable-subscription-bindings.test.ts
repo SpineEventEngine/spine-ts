@@ -124,6 +124,19 @@ describe("DurableSubscriptionBindings", () => {
     await second.close();
   });
 
+  it("serializes competing capacity claims at their quota CAS boundary", async () => {
+    const factory = new ScriptedStorageFactory("quota-stage", "pass");
+    factory.barrier();
+    const first = capacityRegistry(factory, "barrier-capacity", 1);
+    const second = capacityRegistry(factory, "barrier-capacity", 1);
+
+    const results = await Promise.allSettled([first.reserveCapacity(), second.reserveCapacity()]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    await first.close();
+    await second.close();
+  });
+
   it.each(["quota", "slot", "conversion", "deletion", "completion"] as const)(
     "reconciles an applied-then-thrown %s mutation",
     async (phase) => {
@@ -417,6 +430,42 @@ describe("DurableSubscriptionBindings", () => {
       { kind: "closed" },
       { kind: "closed" },
     ]);
+    await first.close();
+    await second.close();
+  });
+
+  it("serializes competing activation claims at their binding CAS boundary", async () => {
+    const factory = new ScriptedStorageFactory("claim", "pass");
+    factory.barrier();
+    const first = registry(factory, "barrier-owner");
+    const second = registry(factory, "barrier-owner");
+    const binding = await first.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+    });
+
+    const outcomes = await Promise.all([
+      first.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: () => Promise.resolve(),
+      }),
+      second.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: () => Promise.resolve(),
+      }),
+    ]);
+    expect(outcomes.filter((outcome) => outcome.kind === "activated")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.kind === "denied")).toHaveLength(1);
     await first.close();
     await second.close();
   });
@@ -794,6 +843,24 @@ describe("DurableSubscriptionBindings", () => {
     await second.close();
   });
 
+  it("serializes competing cleaner claims at their cleanup CAS boundary", async () => {
+    const factory = new ScriptedStorageFactory("cleanup-claim", "pass");
+    factory.barrier();
+    let calls = 0;
+    const dispose = () => {
+      calls += 1;
+      return Promise.resolve();
+    };
+    const first = cleanupRegistry(factory, "barrier-cleaner", dispose);
+    const second = cleanupRegistry(factory, "barrier-cleaner", dispose);
+    await first.create(expiredInput());
+
+    await Promise.all([first.purgeExpired(2), second.purgeExpired(2)]);
+    expect(calls).toBe(1);
+    await first.close();
+    await second.close();
+  });
+
   it("renews a cleaner lease before a blocked disposal can be taken over", async () => {
     const factory = new InMemoryStorageFactory();
     let release: (() => void) | undefined;
@@ -810,13 +877,44 @@ describe("DurableSubscriptionBindings", () => {
     const cleaning = first.purgeExpired(1);
     await new Promise<void>((resolve) => {
       const wait = () => {
-        if (release === undefined) queueMicrotask(wait);
+        if (release === undefined) setTimeout(wait, 1);
         else resolve();
       };
       wait();
     });
 
     await second.purgeExpired(11);
+    expect(calls).toBe(1);
+    release?.();
+    await cleaning;
+    await first.close();
+    await second.close();
+  });
+
+  it("keeps cleaner ownership while a disposal outlives multiple lease intervals", async () => {
+    const factory = new InMemoryStorageFactory();
+    let release: (() => void) | undefined;
+    let calls = 0;
+    const dispose = () => {
+      calls += 1;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    };
+    const first = cleanupRegistry(factory, "slow-cleaner", dispose);
+    const second = cleanupRegistry(factory, "slow-cleaner", dispose);
+    await first.create(expiredInput());
+    const cleaning = first.purgeExpired(1);
+    await new Promise<void>((resolve) => {
+      const wait = () => {
+        if (release === undefined) setTimeout(wait, 1);
+        else resolve();
+      };
+      wait();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    await second.purgeExpired(22);
     expect(calls).toBe(1);
     release?.();
     await cleaning;
@@ -1599,6 +1697,23 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("releases an internally acquired reservation after failed durable creation", async () => {
+    const factory = new RejectOnceFactory("conversion");
+    const bindings = capacityRegistry(factory, "failed-internal-create", 1);
+    factory.arm();
+
+    await expect(
+      bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 100,
+      }),
+    ).rejects.toThrow("binding-capacity-exceeded");
+    await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
+
   it("treats a vanished cancellation row as already closed after its callback", async () => {
     const factory = new VanishingFactory("binding-1", 2);
     const bindings = registry(factory, "cancel-vanished");
@@ -1694,6 +1809,16 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.purgeExpired(1);
 
     await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
+
+  it("keeps cleanup finite when a selected binding disappears before reading", async () => {
+    const factory = new VanishingFactory("binding-1", 1);
+    const bindings = cleanupRegistry(factory, "vanished-cleanup", () => Promise.resolve());
+    await bindings.create(expiredInput());
+    factory.arm();
+
+    await expect(bindings.purgeExpired(2)).resolves.toBeUndefined();
     await bindings.close();
   });
 
@@ -2219,6 +2344,63 @@ describe("DurableSubscriptionBindings", () => {
     await expect(Promise.all([active, bindings.close()])).resolves.toHaveLength(2);
   });
 
+  it("aborts every overlapping activation fence when closing one binding", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "close-overlapping-activation");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    let started = 0;
+    let aborted = 0;
+    const callback: OnBackendSubscription = (_value, signal) =>
+      new Promise<void>((resolve) => {
+        started += 1;
+        signal.addEventListener(
+          "abort",
+          () => {
+            aborted += 1;
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    const first = bindings.activate({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onBackend: callback,
+    });
+    await new Promise<void>((resolve) => {
+      const wait = () => {
+        if (started < 1) setTimeout(wait, 1);
+        else resolve();
+      };
+      wait();
+    });
+    const second = bindings.activate({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 1_001,
+      signal: new AbortController().signal,
+      onBackend: callback,
+    });
+    await new Promise<void>((resolve) => {
+      const wait = () => {
+        if (started < 2) setTimeout(wait, 1);
+        else resolve();
+      };
+      wait();
+    });
+
+    await expect(Promise.all([first, second, bindings.close()])).resolves.toHaveLength(3);
+    expect(aborted).toBe(2);
+  });
+
   it("converges a deferred cancellation before closing its durable storage", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "close-cancellation");
     const binding = await bindings.create({
@@ -2559,7 +2741,23 @@ type ScriptPhase =
   | "quota-create"
   | "cleanup-create";
 
-type ScriptOutcome = "apply-then-throw" | "reject";
+type ScriptOutcome = "apply-then-throw" | "reject" | "pass";
+
+/**
+ * Holds a fixed number of storage operations at the same atomic mutation boundary.
+ */
+class StorageScriptBarrier {
+  #arrivals = 0;
+  readonly #released = Promise.withResolvers<undefined>();
+
+  constructor(private readonly parties = 2) {}
+
+  async wait(): Promise<void> {
+    this.#arrivals += 1;
+    if (this.#arrivals === this.parties) this.#released.resolve(undefined);
+    await this.#released.promise;
+  }
+}
 
 /**
  * Scripts one semantic registry transition without depending on serialized JSON text.
@@ -2567,6 +2765,7 @@ type ScriptOutcome = "apply-then-throw" | "reject";
 class ScriptedStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   #armed = false;
+  #barrier: StorageScriptBarrier | undefined;
 
   constructor(
     private readonly phase: ScriptPhase,
@@ -2579,6 +2778,11 @@ class ScriptedStorageFactory extends StorageFactory {
     this.#armed = true;
   }
 
+  barrier(): StorageScriptBarrier {
+    this.#barrier ??= new StorageScriptBarrier();
+    return this.#barrier;
+  }
+
   protected override onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     spec: RecordSpec<I, R>,
@@ -2588,12 +2792,29 @@ class ScriptedStorageFactory extends StorageFactory {
       spec,
       this.#delegate.createRecordStorage(context, spec),
       this.outcome,
-      (id, next) => this.#take(String(id), next as unknown as Any | undefined),
+      async (id, expected, next) => {
+        if (
+          this.#barrier !== undefined &&
+          scriptedTransition(
+            this.phase,
+            String(id),
+            expected as unknown as Any | undefined,
+            next as unknown as Any | undefined,
+          )
+        )
+          await this.#barrier.wait();
+      },
+      (id, expected, next) =>
+        this.#take(
+          String(id),
+          expected as unknown as Any | undefined,
+          next as unknown as Any | undefined,
+        ),
     );
   }
 
-  #take(id: string, next: Any | undefined): boolean {
-    if (!this.#armed || !scriptedTransition(this.phase, id, next)) return false;
+  #take(id: string, expected: Any | undefined, next: Any | undefined): boolean {
+    if (!this.#armed || !scriptedTransition(this.phase, id, expected, next)) return false;
     this.#armed = false;
     return true;
   }
@@ -2652,7 +2873,8 @@ class ScriptedStorage<I, R extends Message> extends RecordStorage<I, R> {
     spec: RecordSpec<I, R>,
     private readonly delegate: RecordStorage<I, R>,
     private readonly outcome: ScriptOutcome,
-    private readonly take: (id: I, next: R | undefined) => boolean,
+    private readonly before: (id: I, expected: R | undefined, next: R | undefined) => Promise<void>,
+    private readonly take: (id: I, expected: R | undefined, next: R | undefined) => boolean,
   ) {
     super(context, spec);
   }
@@ -2684,15 +2906,26 @@ class ScriptedStorage<I, R extends Message> extends RecordStorage<I, R> {
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
-    if (this.outcome === "reject" && this.take(id, next?.record)) return false;
+    await this.before(id, expected?.record, next?.record);
+    if (this.outcome === "reject" && this.take(id, expected?.record, next?.record)) return false;
     const applied = await this.delegate.compareAndSet(id, expected?.record, next?.record);
-    if (applied && this.outcome === "apply-then-throw" && this.take(id, next?.record))
+    if (
+      applied &&
+      this.outcome === "apply-then-throw" &&
+      this.take(id, expected?.record, next?.record)
+    )
       throw new Error("applied-then-thrown");
     return applied;
   }
 }
 
-function scriptedTransition(phase: ScriptPhase, id: string, next: Any | undefined): boolean {
+function scriptedTransition(
+  phase: ScriptPhase,
+  id: string,
+  expected: Any | undefined,
+  next: Any | undefined,
+): boolean {
+  const prior = scriptedFact(expected);
   const fact = scriptedFact(next);
   const operation = fact?.operation as Record<string, unknown> | undefined;
   const binding = fact?.family === "binding";
@@ -2721,9 +2954,21 @@ function scriptedTransition(phase: ScriptPhase, id: string, next: Any | undefine
     case "cleanup-claim":
       return cleanup && fact.ownerId !== undefined;
     case "cleaner-renewal":
-      return cleanup && fact.ownerId !== undefined && fact.revision === 5;
+      return (
+        cleanup &&
+        prior !== undefined &&
+        prior.ownerId === fact.ownerId &&
+        prior.fence === fact.fence &&
+        Number(fact.leaseUntilMs) > Number(prior.leaseUntilMs)
+      );
     case "cleaner-shorten":
-      return cleanup && fact.ownerId !== undefined && fact.revision === 6;
+      return (
+        cleanup &&
+        prior !== undefined &&
+        prior.ownerId === fact.ownerId &&
+        prior.fence === fact.fence &&
+        Number(fact.leaseUntilMs) < Number(prior.leaseUntilMs)
+      );
     case "cleanup-fail":
       return cleanup && fact.ownerId === undefined && fact.failureCount === 1;
     case "renewal":
