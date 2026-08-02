@@ -253,3 +253,16 @@ endpoint, using their previously recorded explicit profiles.
 
 Runtime self-introspection remained unavailable; both explicit
 `gpt-5.6-terra` / high reviewer profiles matched with no visible fallback.
+
+## Final Test Determinism Correction
+
+The P2 test-only finding at endpoint `2abc39e2` is resolved. The slow-cleaner
+regression uses explicit promise barriers and controlled fake timers; it no
+longer polls wall-clock time or sleeps. This preserves the accepted production
+behavior while deterministically proving heartbeat renewal across multiple
+lease intervals. The existing `implementer` was explicitly configured as
+`gpt-5.6-terra` / medium; runtime self-introspection is unavailable.
+
+Focused durable verification passed 121 tests with 90.17% exact branch
+coverage. Build/tooling typechecks, affected ESLint, TSDoc and cleanup checks,
+formatting, and diff validation passed. No review concern remains open.

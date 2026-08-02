@@ -892,34 +892,33 @@ describe("DurableSubscriptionBindings", () => {
   });
 
   it("keeps cleaner ownership while a disposal outlives multiple lease intervals", async () => {
-    const factory = new InMemoryStorageFactory();
-    let release: (() => void) | undefined;
-    let calls = 0;
-    const dispose = () => {
-      calls += 1;
-      return new Promise<void>((resolve) => {
-        release = resolve;
-      });
-    };
-    const first = cleanupRegistry(factory, "slow-cleaner", dispose);
-    const second = cleanupRegistry(factory, "slow-cleaner", dispose);
-    await first.create(expiredInput());
-    const cleaning = first.purgeExpired(1);
-    await new Promise<void>((resolve) => {
-      const wait = () => {
-        if (release === undefined) setTimeout(wait, 1);
-        else resolve();
+    vi.useFakeTimers();
+    try {
+      const factory = new InMemoryStorageFactory();
+      const started = Promise.withResolvers<undefined>();
+      const released = Promise.withResolvers<undefined>();
+      let calls = 0;
+      const dispose = () => {
+        calls += 1;
+        started.resolve(undefined);
+        return released.promise;
       };
-      wait();
-    });
-    await new Promise((resolve) => setTimeout(resolve, 30));
+      const first = cleanupRegistry(factory, "slow-cleaner", dispose);
+      const second = cleanupRegistry(factory, "slow-cleaner", dispose);
+      await first.create(expiredInput());
+      const cleaning = first.purgeExpired(1);
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(20);
 
-    await second.purgeExpired(22);
-    expect(calls).toBe(1);
-    release?.();
-    await cleaning;
-    await first.close();
-    await second.close();
+      await second.purgeExpired(22);
+      expect(calls).toBe(1);
+      released.resolve(undefined);
+      await cleaning;
+      await first.close();
+      await second.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reconciles an applied-then-thrown cleanup claim before disposal", async () => {
