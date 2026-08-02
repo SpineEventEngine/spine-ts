@@ -458,11 +458,13 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     const row = await this.#storage.read(quotaId);
     if (row !== undefined) return Values.read(row, quotaId, this.#maxRecordBytes) as Quota;
     const fresh: Quota = { family: "quota", id: quotaId, revision: 1, used: 0 };
-    await this.#storage.compareAndSet(
-      quotaId,
-      undefined,
-      Values.write(fresh, this.#maxRecordBytes),
-    );
+    const encoded = Values.write(fresh, this.#maxRecordBytes);
+    try {
+      await this.#storage.compareAndSet(quotaId, undefined, encoded);
+    } catch {
+      // A provider may apply an atomic mutation before its request reports a
+      // transport failure. The exact durable row below is the authority.
+    }
     const created = await this.#storage.read(quotaId);
     if (created === undefined) throw new Error("Subscription quota was not created.");
     return Values.read(created, quotaId, this.#maxRecordBytes) as Quota;
