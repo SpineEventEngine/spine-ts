@@ -59,12 +59,12 @@ exactly-once effects, or a production topology.
 `RemoteDelivery.connectTo({ endpoint, removalQuarantine, clientOptions? })`
 creates one lazy `ServerEnvironmentDelivery`. The supplied durable quarantine
 transfers to that owner. Its `open()` creates one client plus one remote inbox
-and work registry, builds the existing delivery facility, and completes the
-client's bounded `shardSnapshot()` readiness call before publication. Concurrent
-opens share an attempt. A failed attempt closes its facility and client, does
-not close the quarantine, and a later open creates a fresh client.
+and work registry, then completes the client's bounded `shardSnapshot()`
+readiness call before publishing those generic ports. Concurrent opens share an
+attempt. A failed attempt closes only its client, does not close the quarantine,
+and a later open creates a fresh client.
 
-Environment shutdown closes the built facility, client-owned HTTP/2 session,
-then quarantine. Concurrent/repeated close calls share work; a failed phase is
-the only phase retried. This adds no health route, provider selector, worker,
-or delivery-server mode.
+Environment shutdown closes the client-owned HTTP/2 session, then quarantine.
+Concurrent/repeated close calls share work; a failed phase is the only phase
+retried. This adds no health route, provider selector, worker, or
+delivery-server mode.
