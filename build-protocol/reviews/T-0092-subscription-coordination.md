@@ -186,3 +186,29 @@ enforcement, formatting, and diff checks passed.
 All four concerns are materially affected and receive one targeted re-review
 at `693357ca`, using the same explicit existing reviewer profiles recorded in
 the first dispatch. Runtime self-introspection remains unavailable.
+
+## Targeted Re-review Results
+
+The API and documentation concerns are clean. Style/maintainability and
+performance/reliability require one final narrow correction. Runtime
+self-introspection remained unavailable for every reviewer; the explicit
+configured profiles matched the dispatch with no visible fallback.
+
+- TypeScript/API documentation: resolved. Guard propagation, effect-boundary
+  checks, and false/absent TSDoc semantics are correct.
+- Documentation: resolved. README/REFERENCE accurately distinguish guard
+  suppression, renewal-detected abort, and cleanup renewal behavior.
+- Style/maintainability: P1 remains because capacity, ownership, and cleaner
+  contention tests still lack a reusable storage-boundary barrier. P2 remains
+  because two cleaner scripts match incidental revision numbers instead of
+  semantic lease transitions.
+- Performance/reliability: full durable identity, low-ID cleanup, and the
+  single-operation close paths are resolved. Three P1s remain: direct durable
+  `create()` does not compensate an internally acquired reservation on failure;
+  one cleanup lease extension can expire during an arbitrarily slow disposer;
+  and overlapping same-ID activations retain only the newest controller, so
+  close can wait forever on an older cooperative callback.
+
+Only style/maintainability and performance/reliability will be reopened after
+this narrow correction. The clean API and documentation lanes remain closed
+unless their contracts or claims change substantively.
