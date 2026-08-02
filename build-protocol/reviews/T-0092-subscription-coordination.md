@@ -159,3 +159,30 @@ fallback was reported.
 One consolidated correction batch returns to the existing implementation
 owner. Re-review will cover only the concerns materially affected by the
 corrections.
+
+## Correction Evidence And Targeted Re-review
+
+Correction endpoint: `693357ca`.
+
+- The auth gateway enforces the durable guard immediately before activation,
+  cancellation, and every forwarded update; false suppresses the effect.
+- Ambiguous CAS reconciliation compares complete relevant durable ownership
+  facts, and failed creation releases its implicit reservation.
+- Cleanup scans the full public keyspace, renews/fences ownership around slow
+  disposal, and uses deterministic two-registry regressions.
+- Close aborts and converges fence-specific activation/cancellation work before
+  storage closure, with deferred callback regressions.
+- Fault injection is consolidated into a semantic parsed-record script instead
+  of serialized substring matching; accepted contention paths have controlled
+  race points.
+- README, REFERENCE, and public guard documentation describe the enforced
+  effect-boundary and renewal-detection semantics.
+
+Focused auth, durable, and public-export suites passed 177 tests. Exact durable
+source coverage is 90.22% branches, 93.41% statements, 94.82% functions, and
+95.75% lines. Build/tooling typechecks, scoped lint, TSDoc and cleanup
+enforcement, formatting, and diff checks passed.
+
+All four concerns are materially affected and receive one targeted re-review
+at `693357ca`, using the same explicit existing reviewer profiles recorded in
+the first dispatch. Runtime self-introspection remains unavailable.
