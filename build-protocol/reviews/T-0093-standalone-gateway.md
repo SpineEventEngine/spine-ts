@@ -1,6 +1,6 @@
 # T-0093 Review Record
 
-Status: Specialist review wave in progress
+Status: Specialist review complete; release verification pending
 
 ## Required Concerns
 
@@ -180,3 +180,23 @@ substantively.
 
 Only these narrow concerns reopen. Runtime self-introspection remained
 unavailable; the explicit reviewer profiles matched with no visible fallback.
+
+## Final Confirmation
+
+Final endpoint: `257b3ec1`.
+
+- TypeScript/API: clean. Best-effort cancellation preserves fixed 413;
+  slow-body timeout returns 504 with server-side connection close; public
+  `writeMaxBytes` and `maxActiveAuthRequests` TSDoc is complete.
+- Documentation: clean. Agent reference covers explicit bindings in every
+  standalone mode; Envoy capability wording and all prior Origin, OAuth, JVM,
+  admission, deadline, and response-bound claims are accurate.
+- Performance/reliability: clean. Slow-body close and no-late-handler behavior,
+  single-listener reader cancellation, fixed-status preservation, and pinned
+  valid/invalid Envoy validation are proven.
+
+Focused server tests passed 85 tests and executable Envoy validation passed
+four tests. Scoped coverage is 95.22% statements and 91.48% branches for the
+changed browser host, with all required metrics above 90%. Runtime
+self-introspection remained unavailable; explicit reviewer profiles matched
+with no visible fallback. Every required T-0093 concern is closed.
