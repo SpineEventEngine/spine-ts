@@ -7,10 +7,11 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-No implementation frontier is active. Wave 5 packaging and deployment Q&A is
-complete. Its approved scope and optimized execution sequence are recorded in
-`build-protocol/planning/WAVE_5_PACKAGING_DEPLOYMENT_PLAN.md`; implementation
-starts only when the human explicitly starts Wave 5.
+Wave 5 packaging and deployment is the active implementation frontier under
+`T-0089`. Its approved scope and optimized execution sequence are recorded in
+`build-protocol/planning/WAVE_5_PACKAGING_DEPLOYMENT_PLAN.md`. Execution
+continues autonomously through reviewed, verified, merged, and pushed closure
+unless a genuine protocol or environmental blocker requires the human.
 
 ## Purpose
 
