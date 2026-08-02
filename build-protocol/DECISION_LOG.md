@@ -4913,3 +4913,59 @@ Consequences:
   callbacks, token storage, context trust, already-open stream revocation
   limits, Envoy customization, and backend-bypass consequences.
 - Wave 4 creates and tests the Envoy template; Wave 5 productionizes it.
+
+## D-0106: Support Durable Gateway Coordination In Both Deployment Modes
+
+Status: Accepted
+
+Date: 2026-08-02
+
+Task: Wave 5 planning / `T-0088`
+
+Decision:
+
+- Support combined gateway/application and standalone gateway deployments as
+  first-class production modes. Multiple application replicas require the
+  standalone mode; small production deployments may choose either.
+- Require a durable, storage-neutral subscription registry in production in
+  both modes. Gateway assembly receives this gateway-owned lifecycle dependency
+  and its logical namespace explicitly. Supply a `StorageFactory`-backed
+  implementation and retain the in-memory registry only for local development
+  and tests; production startup rejects it.
+- Coordinate two standalone gateway replicas with compare-and-set claims,
+  finite leases, bounded recovery and cleanup, and cancellation fences.
+- Persist logical subscription ownership across redeployment, but do not claim
+  that a live stream survives. Reconnect, authoritative entity re-query, gaps,
+  and duplicates retain the Wave 4 semantics.
+- Keep application storage an application-code decision. Deployment templates
+  pass configuration and secrets but never select a storage engine.
+- Run exactly one in-memory `delivery-server/simple-server` replica. Do not add
+  Redis, Hazelcast, or another durable delivery-server mode.
+- Let `Server.run()` close `ServerEnvironment` after the last run-managed
+  server closes. Multiple run-managed servers may share the environment, but
+  run ownership cannot mix with externally start-managed servers. Keep
+  `Server.start()` caller-managed.
+- Provide TCP startup/readiness probes and no default application health or
+  liveness endpoint. TCP readiness is listener readiness, not continuing
+  dependency health.
+
+Reasoning:
+
+- Durable registry records are needed even for one gateway because logical
+  subscriptions must survive gateway redeployment. Atomic shared ownership is
+  also the smallest design that supports two gateway replicas without sticky
+  routing.
+- Storage-neutral infrastructure preserves the application's existing storage
+  configuration across replicas and avoids a second configuration framework.
+- Combined mode remains useful for small deployments, while standalone mode
+  provides a migration path and the only supported multi-instance topology.
+
+Consequences:
+
+- Wave 5 must test two gateways and two application replicas with shared
+  application-selected storage.
+- Shared session signing, validation, and revocation settings become explicit
+  deployment requirements.
+- Production container, Compose, Kubernetes, and Envoy documentation must state
+  lifecycle, readiness, durability, and subscription limitations without
+  promising high availability from the in-memory delivery server.
