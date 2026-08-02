@@ -636,6 +636,38 @@ describe("Server", () => {
     }
   });
 
+  it("passes a bounded auth body through its response transfer", async () => {
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "POST",
+            path: "/auth/body",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 16,
+            timeoutMs: 1000,
+            onRequest: async (request) =>
+              new Response(await request.text(), { status: 201, headers: { "x-auth": "ok" } }),
+          },
+        ],
+      },
+    }).start();
+    try {
+      const response = await fetch(`${server.baseUrl}/auth/body`, {
+        method: "POST",
+        headers: { origin: "http://127.0.0.1:5173" },
+        body: "body",
+      });
+      expect(response.status).toBe(201);
+      expect(response.headers.get("x-auth")).toBe("ok");
+      await expect(response.text()).resolves.toBe("body");
+    } finally {
+      await server.close();
+    }
+  });
+
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
     const server = await Server.atPort(0).start();
 
