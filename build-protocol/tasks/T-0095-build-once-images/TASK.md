@@ -80,3 +80,13 @@ traversal, or monorepo rebuild at startup.
   review/release convergence.
 - No governing conflict or blocker was found. T-0096 exclusively owns
   Compose/Kubernetes and production topology acceptance.
+
+## Implementation Owner Dispatch
+
+- Existing role: `implementer`.
+- Owned scope: the exact E1 files and four ordered checkpoints in the accepted
+  split, beginning with the fresh packed-build RED acceptance.
+- Expected model: `gpt-5.6-terra`.
+- Expected reasoning: medium.
+- Both fields are explicit in dispatch. The owner must not spawn subagents,
+  cross into T-0096 topology paths, or touch protected human-review files.
