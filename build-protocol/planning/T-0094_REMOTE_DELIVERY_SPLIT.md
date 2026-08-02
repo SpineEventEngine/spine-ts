@@ -215,3 +215,39 @@ cannot accept the existing `RemoteInbox`/`RemoteWorkRegistry` pair, or the
 supplied quarantine cannot satisfy both durable removal semantics and one-owner
 close. Those findings would change the frozen public or ownership contract;
 ordinary typing or test-seam work is not a blocker.
+
+## Functional Wiring Correction
+
+Pre-review inspection found that the first implementation opened and owned the
+remote resources but left `EnvironmentDeliveryWorker` on its default local
+ports. The corrected minimum seam is:
+
+```ts
+export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
+  open(): unknown;
+  configure(builder: DeliveryBuilder): void;
+}
+```
+
+- `server` remains independent of `delivery-client`; its existing environment
+  worker accepts this builder configurator and applies it to both the finite
+  worker delivery and supervisor delivery before `build()`.
+- `RemoteDelivery.open()` creates one client, one `RemoteInbox`, and one
+  `RemoteWorkRegistry`, completes bounded readiness, then publishes those
+  adapters. `configure()` injects the published adapters into the supplied
+  existing builder and fails closed before successful open.
+- `RemoteDelivery` does not construct or reflectively close a `Delivery`.
+  `Delivery` has no close contract. Final remote closure therefore owns the
+  client/session and quarantine phases only; attachment retirement already
+  quiesces the worker/supervisor before the environment closes the remote
+  owner.
+- Existing close-only local delivery settings remain unchanged. The
+  configurator is used only for `ServerEnvironmentDelivery`.
+
+The correction adds one RED behavior test proving that an attachment generation
+applies the configured delivery to both existing builder paths and one remote
+test proving the adapters are unavailable before open and injected after
+readiness. It may minimally change
+`packages/server/src/server/environment-delivery-worker.ts`, its mirrored test,
+and `environment-attachment.ts` assembly. No new worker, supervisor, runner,
+provider selector, or package dependency is introduced.

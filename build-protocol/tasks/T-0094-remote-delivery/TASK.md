@@ -149,3 +149,19 @@ public lifecycle assembly.
   `gpt-5.6-sol` / high reasoning to choose the minimum internal worker-factory
   seam while preserving `delivery-client -> server` dependency direction and
   the public `RemoteDelivery.connectTo()` shape where possible.
+
+## Functional Wiring Resolution
+
+- The corrective splitter dispatch used the explicit existing
+  `requirements_splitter`, `gpt-5.6-sol` / high profile but produced no artifact
+  or blocker within its bounded interval and was interrupted. Runtime
+  self-introspection was unavailable and no result is accepted from it.
+- The orchestrator inspected the complete existing worker graph and froze the
+  minimum correction in the split: `ServerEnvironmentDelivery.configure()`
+  mutates the existing `DeliveryBuilder`; the existing worker applies it to its
+  finite-run and supervisor builders.
+- `RemoteDelivery` publishes its client-backed adapters after readiness and
+  injects them through that seam. It no longer builds or reflectively closes a
+  `Delivery`, which has no close contract.
+- The existing implementer is redispatched with the complete RED/GREEN
+  correction batch and the same explicit `gpt-5.6-terra` / medium profile.
