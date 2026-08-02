@@ -110,6 +110,20 @@ describe("RemoteDelivery", () => {
     expect(remote.clients).toHaveLength(1);
   });
 
+  it("fails closed before readiness then exposes its exact remote adapters", async () => {
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+    }) as unknown as { open(): Promise<void>; readonly inbox: unknown; readonly workRegistry: unknown };
+
+    expect(() => delivery.inbox).toThrow("Remote delivery is not open.");
+    expect(() => delivery.workRegistry).toThrow("Remote delivery is not open.");
+    await delivery.open();
+
+    expect(delivery.inbox).toBeInstanceOf(Object);
+    expect(delivery.workRegistry).toBeInstanceOf(Object);
+  });
+
   it("completes bounded Admin readiness before publishing the remote delivery", async () => {
     let release: () => void = () => undefined;
     remote.readiness.push(

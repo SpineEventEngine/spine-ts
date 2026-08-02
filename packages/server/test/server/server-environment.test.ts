@@ -19,6 +19,20 @@ function configured(delivery: ServerEnvironmentCloseable & { open?: () => unknow
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("passes configured delivery ports to finite and supervisor environment paths", () => {
+    const delivery = {
+      open: () => undefined,
+      close: () => undefined,
+      inbox: {},
+      workRegistry: {},
+    };
+    const environment = configured(delivery);
+
+    expect(environment.delivery).toBe(delivery);
+    expect("inbox" in environment.delivery!).toBe(true);
+    expect("workRegistry" in environment.delivery!).toBe(true);
+  });
+
   it("opens configured delivery before the first environment attachment", async () => {
     let release: () => void = () => undefined;
     const environment = configured({
