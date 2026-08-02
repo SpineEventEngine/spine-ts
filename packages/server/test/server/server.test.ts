@@ -418,6 +418,43 @@ describe("Server", () => {
     }
   });
 
+  it("aborts active auth work before close settles", async () => {
+    let abort!: () => void;
+    let start!: () => void;
+    const aborted = new Promise<void>((resolve) => (abort = resolve));
+    const started = new Promise<void>((resolve) => (start = resolve));
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "GET",
+            path: "/auth/close",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 1024,
+            timeoutMs: 10_000,
+            onRequest: (_request, signal) => (
+              start(),
+              new Promise<Response>((resolve) =>
+                signal.addEventListener("abort", () => (abort(), resolve(new Response())), {
+                  once: true,
+                }),
+              )
+            ),
+          },
+        ],
+      },
+    }).start();
+    const request = fetch(`${server.baseUrl}/auth/close`, {
+      headers: { origin: "http://127.0.0.1:5173" },
+    }).catch(() => undefined);
+    await started;
+    await server.close();
+    await expect(aborted).resolves.toBeUndefined();
+    await request;
+  });
+
   it("uses fixed auth errors without starting application work", async () => {
     let calls = 0;
     const server = await new Server({

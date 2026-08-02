@@ -55,6 +55,7 @@ export const BrowserServer: Readonly<{
     request: http.IncomingMessage,
     response: http.ServerResponse,
     route: BrowserAuthRoute,
+    active: Set<AbortController>,
   ): Promise<void>;
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
@@ -63,6 +64,7 @@ export const BrowserServer: Readonly<{
     BrowserServer.requireDurableBindings(options, options.production);
     const origins = BrowserServer.origins(options.origins);
     const authRoutes = BrowserServer.authRoutes(options.authRoutes);
+    const activeAuth = new Set<AbortController>();
     const backendBaseUrl = typeof native === "string" ? native : native.baseUrl;
     const creator = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: backendBaseUrl }));
     const bindings =
@@ -105,7 +107,7 @@ export const BrowserServer: Readonly<{
       const path = request.url ?? "";
       const auth = authRoutes.get(`${request.method ?? ""} ${path}`);
       if (auth !== undefined) {
-        void BrowserServer.dispatchAuth(request, response, auth);
+        void BrowserServer.dispatchAuth(request, response, auth, activeAuth);
         return;
       }
       const authPath = [...authRoutes.values()].find((route) => route.path === path);
@@ -162,6 +164,7 @@ export const BrowserServer: Readonly<{
       typeof native === "string" ? undefined : native,
       subscriptions,
       address,
+      activeAuth,
     );
   },
   requests(options: BrowserServerOptions) {
@@ -303,6 +306,7 @@ export const BrowserServer: Readonly<{
     request: http.IncomingMessage,
     response: http.ServerResponse,
     route: BrowserAuthRoute,
+    active: Set<AbortController>,
   ): Promise<void> {
     const origin = request.headers.origin;
     if (
@@ -320,6 +324,7 @@ export const BrowserServer: Readonly<{
       return;
     }
     const controller = new AbortController();
+    active.add(controller);
     const timer = setTimeout(() => controller.abort(), route.timeoutMs);
     const abort = () => controller.abort();
     request.once("aborted", abort);
@@ -376,6 +381,7 @@ export const BrowserServer: Readonly<{
       clearTimeout(timer);
       request.off("aborted", abort);
       response.off("close", abort);
+      active.delete(controller);
     }
   },
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo> {
@@ -413,6 +419,7 @@ class RunningBrowserServer implements RunningServer {
   readonly #server: http.Server;
   readonly #subscriptions: SubscriptionGateway;
   readonly #native: RunningServer | undefined;
+  readonly #activeAuth: Set<AbortController>;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -427,10 +434,12 @@ class RunningBrowserServer implements RunningServer {
     native: RunningServer | undefined,
     subscriptions: SubscriptionGateway,
     address: AddressInfo,
+    activeAuth: Set<AbortController>,
   ) {
     this.#server = server;
     this.#native = native;
     this.#subscriptions = subscriptions;
+    this.#activeAuth = activeAuth;
     this.host = typeof address.address === "string" ? address.address : "127.0.0.1";
     this.port = address.port;
     const host =
@@ -447,6 +456,7 @@ class RunningBrowserServer implements RunningServer {
   }
 
   async #closeOnce(): Promise<void> {
+    for (const controller of this.#activeAuth) controller.abort();
     const listener = this.#listenerClosed ? undefined : this.#closeListenerPhase();
     if (!this.#subscriptionsClosed) {
       await this.#subscriptions.close();
