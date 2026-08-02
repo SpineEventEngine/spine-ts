@@ -188,7 +188,11 @@ export class Server {
     const current = this.#run;
     if (current !== undefined) return current;
     const running = this.#start("server").then((server) =>
-      ProcessServerCoordinator.add(server, this.#environment),
+      ProcessServerCoordinator.add(server, this.#environment, () => {
+        if (this.#run === running) {
+          this.#run = undefined;
+        }
+      }),
     );
     this.#run = running;
     void running.catch(() => {

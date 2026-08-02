@@ -16,12 +16,12 @@ let signalsInstalled = false;
  * @internal
  */
 export const ProcessServerCoordinator: Readonly<{
-  add(server: RunningServer, environment: ServerEnvironment): RunningServer;
+  add(server: RunningServer, environment: ServerEnvironment, onRetired: () => void): RunningServer;
   installSignals(): void;
   onSignal(): void;
   closeRunning(): Promise<void>;
 }> = Object.freeze({
-  add(server: RunningServer, environment: ServerEnvironment): RunningServer {
+  add(server: RunningServer, environment: ServerEnvironment, onRetired: () => void): RunningServer {
     const record: RunRecord = { server, environment, retirement: undefined };
     running.push(record);
     ProcessServerCoordinator.installSignals();
@@ -32,6 +32,7 @@ export const ProcessServerCoordinator: Readonly<{
       close: async () => {
         await server.close();
         await retire(record);
+        onRetired();
       },
     };
   },

@@ -83,9 +83,8 @@ import { Server, type BoundedContext } from "@spine-event-engine/server";
 
 declare const context: BoundedContext;
 const server = new Server({ contexts: [context], port: 0 });
-const running = await server.start();
+const running = await server.run();
 console.log(running.baseUrl);
-await running.close();
 ```
 
 Use `run()` for a standalone process. It installs framework-owned `SIGINT` and

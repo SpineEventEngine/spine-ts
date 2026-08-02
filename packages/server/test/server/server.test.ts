@@ -94,6 +94,15 @@ describe("Server", () => {
     expect(process.listenerCount("SIGTERM")).toBe(sigtermListeners);
   });
 
+  it("does not return a closed managed handle from a later run call", async () => {
+    const server = Server.atPort(0);
+    const running = await server.run();
+
+    await running.close();
+
+    await expect(server.run()).rejects.toThrow("ServerEnvironment is closed.");
+  });
+
   it("closes process-owned servers in reverse successful-start order", async () => {
     const closed: string[] = [];
     const first = await Server.atPort(0)

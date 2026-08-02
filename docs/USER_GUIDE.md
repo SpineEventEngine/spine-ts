@@ -592,9 +592,9 @@ const server = Server.atPort(0).add(tasksBuilder);
 ```
 
 The server gives the singleton storage factory to added builders unless a
-builder explicitly selected a storage factory. Closing a server never closes
-process facilities; call `await ServerEnvironment.instance().close()` during
-explicit process shutdown.
+builder explicitly selected a storage factory. Closing a caller-managed
+`start()` server never closes process facilities; call
+`await ServerEnvironment.instance().close()` during explicit process shutdown.
 
 ## 6. Start and close the server
 
@@ -633,7 +633,8 @@ resources. Caller-managed `start()` close does not close shared process
 facilities; after every caller-managed server has detached, call
 `await ServerEnvironment.instance().close()` during process
 shutdown. Concurrent closes share work; a successful close is idempotent. If
-close fails, call `close()` again to retry only unfinished server cleanup. A
+close fails, call `close()` again to retry unfinished server or final
+run-managed environment cleanup. A
 failed start is terminal for that `Server` instance after its cleanup completes;
 create a new server instance for a new attempt.
 

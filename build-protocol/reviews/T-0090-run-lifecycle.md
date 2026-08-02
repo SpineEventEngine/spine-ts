@@ -153,3 +153,12 @@ do not reopen. After focused GREEN evidence, the orchestrator will inspect the
 stale-handle regression and documentation changes directly, run the release
 gate, and close the task without a third specialist wave unless the correction
 changes the contract again.
+
+## Final Narrow Correction Disposition
+
+- Resolved: successful managed close clears the same-builder cached run handle;
+  failed close retains it for retry. Focused regression passes.
+- Resolved: USER_GUIDE caller-managed qualification, README standalone `run()`
+  example, and final-environment retry wording are corrected.
+- Validation: focused server tests 58/58; affected lint, Prettier, TSDoc, and
+  whitespace checks passed.
