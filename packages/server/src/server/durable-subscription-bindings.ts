@@ -175,7 +175,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         release: async () => {
           if (released) return;
           released = true;
-          this.#reservations.delete(reservation);
+          if (!this.#reservations.delete(reservation)) return;
           await this.#release(id, token);
         },
       };
@@ -513,6 +513,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       return;
     }
   }
+  #forgetReservation(id: string, token: string): void {
+    for (const [reservation, held] of this.#reservations)
+      if (held.id === id && held.token === token) this.#reservations.delete(reservation);
+  }
   async #cleanup(): Promise<Cleanup> {
     const row = await this.#storage.read(cleanupId);
     if (row !== undefined) return Values.read(row, cleanupId, this.#maxRecordBytes) as Cleanup;
@@ -553,6 +557,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       return;
     }
     if (binding.lifecycle === "reserved" && (binding.reservationUntilMs ?? 0) <= nowMs) {
+      this.#forgetReservation(binding.id, binding.admissionToken);
       await this.#release(binding.id, binding.admissionToken);
       return;
     }

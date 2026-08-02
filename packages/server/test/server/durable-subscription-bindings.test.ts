@@ -100,11 +100,13 @@ describe("DurableSubscriptionBindings", () => {
 
   it("releases an expired durable reservation through the finite cleanup page", async () => {
     const bindings = capacityRegistry(new InMemoryStorageFactory(), "reservation-expiry", 1);
-    await bindings.reserveCapacity();
+    const expired = await bindings.reserveCapacity();
 
     await bindings.purgeExpired(Number.MAX_SAFE_INTEGER - 10);
 
     await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await expired.release();
+    await expect(bindings.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
     await bindings.close();
   });
 
