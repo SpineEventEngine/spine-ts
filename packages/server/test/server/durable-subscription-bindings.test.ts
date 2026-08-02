@@ -114,7 +114,9 @@ describe("DurableSubscriptionBindings", () => {
   it.each(["quota", "slot", "conversion", "deletion", "completion"] as const)(
     "reconciles an applied-then-thrown %s mutation",
     async (phase) => {
-      const bindings = capacityRegistry(new ApplyThenThrowFactory(phase), `fault-${phase}`, 1);
+      const factory = new ApplyThenThrowFactory(phase);
+      factory.arm();
+      const bindings = capacityRegistry(factory, `fault-${phase}`, 1);
       const reservation = await bindings.reserveCapacity();
       if (phase === "conversion") {
         await expect(
@@ -165,6 +167,25 @@ describe("DurableSubscriptionBindings", () => {
     await expect(bindings.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
     await bindings.close();
   });
+
+  it.each(["repair-page", "repair-final"] as const)(
+    "reconciles an applied repair %s after reopening",
+    async (phase) => {
+      const factory = new ApplyThenThrowFactory(phase);
+      const store = repairStore(factory, phase);
+      await seedRepair(store, 0, undefined);
+      await store.compareAndSet("binding-a", undefined, repairRecord("binding-a", "reserved"));
+      await store.compareAndSet("binding-b", undefined, repairRecord("binding-b", "retired"));
+      store.close();
+      factory.arm();
+      const first = capacityRegistry(factory, phase, 3);
+      await expect(first.reserveCapacity()).resolves.toBeDefined();
+      await first.close();
+      const reopened = capacityRegistry(factory, phase, 3);
+      await expect(reopened.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
+      await reopened.close();
+    },
+  );
 
   it("converts a preallocated reservation without allocating another slot", async () => {
     const bindings = limitedRegistry(new InMemoryStorageFactory(), "same-slot");
@@ -781,10 +802,17 @@ class UnprovenRecordStorage extends SeededRecordStorage {
 
 class ApplyThenThrowFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
-  #armed = true;
+  #armed = false;
 
-  constructor(private readonly phase: "quota" | "slot" | "conversion" | "deletion" | "completion") {
+  constructor(
+    private readonly phase:
+      "quota" | "slot" | "conversion" | "deletion" | "completion" | "repair-page" | "repair-final",
+  ) {
     super();
+  }
+
+  arm(): void {
+    this.#armed = true;
   }
 
   protected override onCreateRecordStorage<I, R extends Message>(
@@ -809,6 +837,13 @@ class ApplyThenThrowFactory extends StorageFactory {
             id === "!subscription-quota" &&
             text.includes('"operation"')) ||
           (this.phase === "completion" &&
+            id === "!subscription-quota" &&
+            !text.includes('"operation"')) ||
+          (this.phase === "repair-page" &&
+            id === "!subscription-quota" &&
+            text.includes('"kind":"repair"') &&
+            text.includes('"afterId"')) ||
+          (this.phase === "repair-final" &&
             id === "!subscription-quota" &&
             !text.includes('"operation"'));
         if (hit) this.#armed = false;

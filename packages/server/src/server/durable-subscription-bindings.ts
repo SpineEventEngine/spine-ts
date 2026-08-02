@@ -517,6 +517,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         if (completed) return;
         continue;
       }
+      const reread = await this.#quota();
+      if (reread.operation === undefined) return;
+      if (reread.operation.operationId !== operation.operationId) continue;
     }
     throw new Error("Subscription quota repair did not converge.");
   }
