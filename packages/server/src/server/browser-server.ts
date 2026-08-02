@@ -436,7 +436,7 @@ class RunningBrowserServer implements RunningServer {
   readonly #subscriptions: SubscriptionGateway;
   readonly #native: RunningServer | undefined;
   readonly #activeAuth: Set<AbortController>;
-  readonly #beginDrain: () => void;
+  readonly #onDrain: () => void;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -452,13 +452,13 @@ class RunningBrowserServer implements RunningServer {
     subscriptions: SubscriptionGateway,
     address: AddressInfo,
     activeAuth: Set<AbortController>,
-    beginDrain: () => void,
+    onDrain: () => void,
   ) {
     this.#server = server;
     this.#native = native;
     this.#subscriptions = subscriptions;
     this.#activeAuth = activeAuth;
-    this.#beginDrain = beginDrain;
+    this.#onDrain = onDrain;
     this.host = typeof address.address === "string" ? address.address : "127.0.0.1";
     this.port = address.port;
     const host =
@@ -475,7 +475,7 @@ class RunningBrowserServer implements RunningServer {
   }
 
   async #closeOnce(): Promise<void> {
-    this.#beginDrain();
+    this.#onDrain();
     for (const controller of this.#activeAuth) controller.abort();
     const listener = this.#listenerClosed ? undefined : this.#closeListenerPhase();
     if (!this.#subscriptionsClosed) {
