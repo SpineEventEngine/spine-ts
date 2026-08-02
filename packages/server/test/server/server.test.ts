@@ -392,6 +392,32 @@ describe("Server", () => {
     }
   });
 
+  it("aborts a timed out auth handler with a fixed gateway timeout", async () => {
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "GET",
+            path: "/auth/wait",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 1024,
+            timeoutMs: 5,
+            onRequest: () => new Promise<Response>(() => undefined),
+          },
+        ],
+      },
+    }).start();
+    try {
+      await expect(
+        fetch(`${server.baseUrl}/auth/wait`, { headers: { origin: "http://127.0.0.1:5173" } }),
+      ).resolves.toMatchObject({ status: 504 });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
     const server = await Server.atPort(0).start();
 

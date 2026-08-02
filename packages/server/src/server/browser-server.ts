@@ -347,7 +347,16 @@ export const BrowserServer: Readonly<{
         ...(size === 0 ? {} : { body: Buffer.concat(chunks) }),
         signal: controller.signal,
       });
-      const result = await route.onRequest(input, controller.signal);
+      const result = await Promise.race([
+        route.onRequest(input, controller.signal),
+        new Promise<never>((_resolve, reject) =>
+          controller.signal.addEventListener(
+            "abort",
+            () => reject(new Error("browser auth request aborted")),
+            { once: true },
+          ),
+        ),
+      ]);
       if (controller.signal.aborted) {
         if (!response.writableEnded) {
           response.statusCode = 504;
