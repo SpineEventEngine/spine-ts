@@ -127,6 +127,57 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("fences a stale gateway after another gateway claims an expired lease", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "lease");
+    const second = registry(factory, "lease");
+    const binding = await first.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    let resume: (() => void) | undefined;
+    const pending = first.activate({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onBackend: () =>
+        new Promise<void>((resolve) => {
+          resume = resolve;
+        }),
+    });
+    await Promise.resolve();
+
+    await expect(
+      second.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 2,
+        signal: new AbortController().signal,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await expect(
+      second.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 2_000,
+        signal: new AbortController().signal,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    resume?.();
+    await expect(pending).resolves.toEqual({ kind: "denied" });
+
+    await first.close();
+    await second.close();
+  });
+
   it("declares durable capability without treating in-memory bindings as durable", () => {
     const bindings = registry(new InMemoryStorageFactory(), "messageboard");
 
