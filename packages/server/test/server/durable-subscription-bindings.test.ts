@@ -347,7 +347,7 @@ describe("DurableSubscriptionBindings", () => {
     const first = limitedRegistry(factory, "first");
     const released = await first.reserveCapacity();
     await released.release();
-    const forged = { release: () => undefined };
+    const forged = { release: async () => undefined };
 
     await first.create({
       backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },

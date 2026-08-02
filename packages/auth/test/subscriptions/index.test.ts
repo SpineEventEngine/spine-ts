@@ -607,7 +607,7 @@ describe("SubscriptionGateway", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "denied" });
     const capacityFailure = {
       ...unavailable,
-      reserveCapacity: async () => ({ release: () => undefined }),
+      reserveCapacity: async () => ({ release: async () => undefined }),
       create: () => {
         throw new Error("binding-capacity-exceeded");
       },
