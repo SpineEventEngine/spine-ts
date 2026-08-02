@@ -26,29 +26,83 @@ static_resources:
                     - name: gateway
                       domains: ["*"]
                       routes:
-                        - match: { path: /spine.auth.AuthenticationService/ResolveContext, headers: [{ name: ":method", exact_match: POST }] }
-                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
-                        - match: { path: /spine.client.CommandService/Post, headers: [{ name: ":method", exact_match: POST }] }
-                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
-                        - match: { path: /spine.client.QueryService/Read, headers: [{ name: ":method", exact_match: POST }] }
-                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
-                        - match: { path: /spine.client.SubscriptionService/Subscribe, headers: [{ name: ":method", exact_match: POST }] }
-                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
-                        - match: { path: /spine.client.SubscriptionService/Activate, headers: [{ name: ":method", exact_match: POST }] }
-                          route: { cluster: gateway, timeout: 0s, max_request_bytes: 1048576 }
-                        - match: { path: /spine.client.SubscriptionService/Cancel, headers: [{ name: ":method", exact_match: POST }] }
-                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
+                        - match:
+                            {
+                              path: /spine.auth.AuthenticationService/ResolveContext,
+                              headers: [{ name: ":method", exact_match: POST }],
+                            }
+                          route: { cluster: gateway, timeout: 30s }
+                          typed_per_filter_config:
+                            envoy.filters.http.buffer:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute
+                              buffer: { max_request_bytes: 1048576 }
+                        - match:
+                            {
+                              path: /spine.client.CommandService/Post,
+                              headers: [{ name: ":method", exact_match: POST }],
+                            }
+                          route: { cluster: gateway, timeout: 30s }
+                          typed_per_filter_config:
+                            envoy.filters.http.buffer:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute
+                              buffer: { max_request_bytes: 1048576 }
+                        - match:
+                            {
+                              path: /spine.client.QueryService/Read,
+                              headers: [{ name: ":method", exact_match: POST }],
+                            }
+                          route: { cluster: gateway, timeout: 30s }
+                          typed_per_filter_config:
+                            envoy.filters.http.buffer:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute
+                              buffer: { max_request_bytes: 1048576 }
+                        - match:
+                            {
+                              path: /spine.client.SubscriptionService/Subscribe,
+                              headers: [{ name: ":method", exact_match: POST }],
+                            }
+                          route: { cluster: gateway, timeout: 30s }
+                          typed_per_filter_config:
+                            envoy.filters.http.buffer:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute
+                              buffer: { max_request_bytes: 1048576 }
+                        - match:
+                            {
+                              path: /spine.client.SubscriptionService/Activate,
+                              headers: [{ name: ":method", exact_match: POST }],
+                            }
+                          route: { cluster: gateway, timeout: 0s }
+                          typed_per_filter_config:
+                            envoy.filters.http.buffer:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute
+                              buffer: { max_request_bytes: 1048576 }
+                        - match:
+                            {
+                              path: /spine.client.SubscriptionService/Cancel,
+                              headers: [{ name: ":method", exact_match: POST }],
+                            }
+                          route: { cluster: gateway, timeout: 30s }
+                          typed_per_filter_config:
+                            envoy.filters.http.buffer:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute
+                              buffer: { max_request_bytes: 1048576 }
                       cors:
                         allow_origin_string_match:
                           - exact: https://chat.example.test
+                        allow_credentials: true
                         allow_methods: GET, POST, OPTIONS
-                        allow_headers: content-type,x-grpc-web,grpc-timeout,authorization,x-user-agent
+                        allow_headers: content-type,x-grpc-web,grpc-timeout,connect-protocol-version,connect-timeout-ms,authorization,x-user-agent,x-spine-csrf
                         expose_headers: grpc-status,grpc-message
                         max_age: "86400"
                 http_filters:
+                  - name: envoy.filters.http.buffer
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+                      max_request_bytes: 1048576
                   - name: envoy.filters.http.grpc_web
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
+                    # Connect application/json and application/proto requests pass through unchanged to the HTTP/2 gateway.
                   - name: envoy.filters.http.cors
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors

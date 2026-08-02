@@ -101,12 +101,13 @@ Post, Read, Subscribe, Activate, and Cancel use the same authenticated policy,
 context-replacement, and native descriptors before reaching the backend.
 
 `browser.authRoutes` is deliberately a bounded callback seam, not a router.
-Each registration has one exact `GET` or `POST` canonical path, unique method/
+Each registration has one exact `GET` or `POST` canonical path, one method per
 path, exact canonical origins, finite request bytes, and a finite timeout. A
 missing Origin is rejected unless that route explicitly permits it for an OAuth
 callback. Unknown paths, method/origin failures, body overflow, timeout, and
 handler failure return fixed 404, 405, 403, 413, 504, and 500 responses without
-calling application code on rejected input. Listener close ultimately aborts an
+calling application code on rejected input. The 404 unknown-path result applies
+only after framework Origin admission. Listener close ultimately aborts an
 active request through its disconnect signal.
 
 With `cookies`, `OpaqueSessionCookies` performs strict bearer-first or

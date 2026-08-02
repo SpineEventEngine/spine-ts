@@ -19,6 +19,15 @@ paths and explicitly registered bounded authentication routes, requires a
 durable subscription registry in production, and closes intake before relays
 and owned resources.
 
+## Human-Imposed Requirements Ledger
+
+| Requirement                                                    | Evidence                                        |
+| -------------------------------------------------------------- | ----------------------------------------------- |
+| Keep one gateway pipeline and no general router or health API. | `Server` composes the existing `BrowserServer`. |
+| Never build or launch JVM code.                                | Fixture and wire checks are static only.        |
+| Fail closed before standalone ownership/listener work.         | Server admission regressions.                   |
+| Push verified checkpoints immediately.                         | Task branch history and work log.               |
+
 ## Acceptance Criteria
 
 1. Production startup requires an explicit backend target, session and auth

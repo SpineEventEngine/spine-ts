@@ -6,7 +6,7 @@ export function renderEnvoy(options) {
   const routes = [...spineRoutes, ...topology.authRoutes]
     .map(
       (route) =>
-        `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: ${route.method} }] }\n                          route: { cluster: gateway, timeout: ${route.timeout}, max_request_bytes: ${route.maxRequestBytes} }`,
+        `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: ${route.method} }] }\n                          route: { cluster: gateway, timeout: ${route.timeout} }\n                          typed_per_filter_config:\n                            envoy.filters.http.buffer:\n                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute\n                              buffer: { max_request_bytes: ${route.maxRequestBytes} }`,
     )
     .join("\n");
   return `static_resources:
@@ -47,6 +47,10 @@ ${routes}
                         expose_headers: grpc-status,grpc-message
                         max_age: "86400"
                 http_filters:
+                  - name: envoy.filters.http.buffer
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+                      max_request_bytes: 1048576
                   - name: envoy.filters.http.grpc_web
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
@@ -102,7 +106,7 @@ function normalize(options) {
       return {
         path: route.path,
         method: route.method,
-        timeout: `${route.timeoutMs}ms`,
+        timeout: `${String(route.timeoutMs / 1000)}s`,
         maxRequestBytes: route.maxRequestBytes,
       };
     }),
