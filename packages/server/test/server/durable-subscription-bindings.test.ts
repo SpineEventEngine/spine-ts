@@ -1499,6 +1499,53 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("treats a vanished cancellation row as already closed after its callback", async () => {
+    const factory = new VanishingFactory("binding-1", 2);
+    const bindings = registry(factory, "cancel-vanished");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    factory.arm();
+
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    await bindings.close();
+  });
+
+  it("does not finalize an activation after its durable row disappears", async () => {
+    const factory = new VanishingFactory("binding-1", 2);
+    const bindings = registry(factory, "activation-vanished");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    factory.arm();
+
+    await expect(
+      bindings.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await bindings.close();
+  });
+
   it("treats an unexpired cleanup lease held by another gateway as authoritative", async () => {
     const factory = new InMemoryStorageFactory();
     const store = repairStore(factory, "foreign-cleaner");
@@ -2347,6 +2394,81 @@ class RejectOnceStorage<I, R extends Message> extends RecordStorage<I, R> {
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
     if (this.shouldReject(id, next?.record)) return Promise.resolve(false);
+    return this.delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+}
+
+class VanishingFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  #armed = false;
+
+  constructor(
+    private readonly id: string,
+    private readonly afterReads: number,
+  ) {
+    super();
+  }
+
+  arm(): void {
+    this.#armed = true;
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new VanishingStorage(
+      context,
+      spec,
+      this.#delegate.createRecordStorage(context, spec),
+      this.id as unknown as I,
+      () => this.#armed,
+      this.afterReads,
+    );
+  }
+}
+
+class VanishingStorage<I, R extends Message> extends RecordStorage<I, R> {
+  override readonly atomicCompareAndSet = true;
+  #reads = 0;
+
+  constructor(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    private readonly delegate: RecordStorage<I, R>,
+    private readonly target: I,
+    private readonly armed: () => boolean,
+    private readonly afterReads: number,
+  ) {
+    super(context, spec);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.delegate.delete(id);
+  }
+  protected queryRecordEntries(query: RecordQuery<I>) {
+    return this.delegate.queryEntries(query);
+  }
+  protected async readRecord(id: I): Promise<R | undefined> {
+    if (this.armed() && id === this.target && ++this.#reads >= this.afterReads) {
+      await this.delegate.delete(id);
+      return undefined;
+    }
+    return this.delegate.read(id);
+  }
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.delegate.writeAll(records.map((entry) => entry.record));
+  }
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.delegate.write(record.record);
+  }
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
     return this.delegate.compareAndSet(id, expected?.record, next?.record);
   }
 }
