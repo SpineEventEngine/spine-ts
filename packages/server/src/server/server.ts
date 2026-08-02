@@ -207,6 +207,7 @@ export class Server {
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const browser = this.#browser;
+    if (browser?.backend !== undefined) BrowserServer.backendUrl(browser.backend.baseUrl);
     if (
       browser?.backend !== undefined &&
       (this.#contexts.length > 0 ||
@@ -607,6 +608,11 @@ export interface BrowserServerOptions {
    * Spine RPC paths. These endpoints are not a general-purpose router.
    */
   readonly authRoutes?: readonly BrowserAuthRoute[];
+
+  /**
+   * Limits concurrently admitted application authentication requests.
+   */
+  readonly maxActiveAuthRequests?: number;
 
   /**
    * Exact browser origins permitted to make RPC calls.

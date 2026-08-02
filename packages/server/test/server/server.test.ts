@@ -784,6 +784,55 @@ describe("Server", () => {
     }
   });
 
+  it("refuses excess auth admission and recovers after completion", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    let calls = 0;
+    const ready = new Promise<void>((resolve) => (started = resolve));
+    const server = await new Server({
+      browser: {
+        port: 0,
+        maxActiveAuthRequests: 1,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "GET",
+            path: "/auth/admission",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 16,
+            timeoutMs: 1000,
+            onRequest: () => {
+              calls += 1;
+              if (calls > 1) return new Response("ok");
+              return new Promise<Response>((resolve) => {
+                started();
+                release = () => {
+                  resolve(new Response("ok"));
+                };
+              });
+            },
+          },
+        ],
+      },
+    }).start();
+    try {
+      const first = fetch(`${server.baseUrl}/auth/admission`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      await ready;
+      await expect(
+        fetch(`${server.baseUrl}/auth/admission`, { headers: { origin: "http://127.0.0.1:5173" } }),
+      ).resolves.toMatchObject({ status: 503 });
+      release();
+      await first;
+      await expect(
+        fetch(`${server.baseUrl}/auth/admission`, { headers: { origin: "http://127.0.0.1:5173" } }),
+      ).resolves.toMatchObject({ status: 200 });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("rejects noncanonical and unbounded auth route registrations before listening", () => {
     const route = {
       method: "POST" as const,

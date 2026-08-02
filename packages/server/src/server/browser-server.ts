@@ -66,6 +66,9 @@ export const BrowserServer: Readonly<{
     const origins = BrowserServer.origins(options.origins);
     const authRoutes = BrowserServer.authRoutes(options.authRoutes);
     const activeAuth = new Set<AbortController>();
+    const maxActiveAuthRequests = options.maxActiveAuthRequests ?? 64;
+    if (!Number.isSafeInteger(maxActiveAuthRequests) || maxActiveAuthRequests < 1)
+      throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
     let draining = false;
     const backendBaseUrl = typeof native === "string" ? native : native.baseUrl;
     const creator = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: backendBaseUrl }));
@@ -114,6 +117,11 @@ export const BrowserServer: Readonly<{
       const path = request.url ?? "";
       const auth = authRoutes.get(path);
       if (auth !== undefined && request.method === auth.method) {
+        if (activeAuth.size >= maxActiveAuthRequests) {
+          response.statusCode = 503;
+          response.end();
+          return;
+        }
         void BrowserServer.dispatchAuth(request, response, auth, activeAuth, options.writeMaxBytes);
         return;
       }
