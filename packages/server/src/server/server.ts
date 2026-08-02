@@ -651,14 +651,49 @@ export interface BrowserServerOptions {
   readonly cookies?: OpaqueSessionCookies;
 }
 
-/** One bounded application authentication request registration. */
+/**
+ * Configures one bounded application authentication request.
+ */
 export interface BrowserAuthRoute {
+  // prettier-ignore
+
+  /**
+   * Selects the accepted HTTP method.
+   */
   readonly method: "GET" | "POST";
+
+  /**
+   * Selects the exact canonical request path.
+   */
   readonly path: string;
+
+  /**
+   * Lists exact browser origins allowed for this route.
+   */
   readonly origins: readonly string[];
+
+  /**
+   * Allows an OAuth callback without an Origin header.
+   */
   readonly allowMissingOrigin?: boolean;
+
+  /**
+   * Limits accepted request-body bytes.
+   */
   readonly maxRequestBytes: number;
+
+  /**
+   * Limits request processing time in milliseconds.
+   */
   readonly timeoutMs: number;
+
+  /**
+   * Handles one admitted authentication request.
+   *
+   * @param request Supplies the bounded Fetch request.
+   * @param signal Signals timeout, disconnect, or gateway close.
+   * @returns Returns the application response.
+   */
   readonly onRequest: (request: Request, signal: AbortSignal) => Response | Promise<Response>;
 }
 
