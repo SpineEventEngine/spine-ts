@@ -1,6 +1,6 @@
 # T-0093 Review Record
 
-Status: Awaiting implementation
+Status: Mechanical preflight in progress
 
 ## Required Concerns
 
@@ -19,3 +19,10 @@ Expected reviewer profiles are recorded in the task and must be explicit at
 dispatch. Actual runtime metadata will be recorded when exposed; otherwise the
 immutable configured role/profile and limitation are recorded honestly.
 
+## Implementation evidence
+
+- CP2 observes the five external shared descriptors while ResolveContext stays
+  local. CP4 covers timeout, client disconnect, close abort, and drain refusal.
+- CP5 renders exact POST/path Envoy routes with finite request bounds; Activate
+  alone has zero timeout. Frozen JVM evidence is static only (fixture 11/11,
+  wire 4/4); no JVM build was run.

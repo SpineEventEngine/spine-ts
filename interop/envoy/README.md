@@ -42,7 +42,11 @@ The reference accepts only the six public gateway methods: `ResolveContext`,
 `Post`, `Read`, `Subscribe`, `Activate`, and `Cancel`. It terminates browser
 TLS, permits the exact supplied HTTPS Origin with credentials, supports
 gRPC-Web, and passes explicitly selected binary Connect requests through to the
-gateway. The upstream connection uses HTTP/2.
+gateway. Each route is an exact POST path with a finite 1 MiB request bound and
+30-second timeout, except the live `Activate` stream which has a zero route
+timeout. Supplied application auth routes are exact GET/POST paths with their
+own finite limits and timeouts; the template has no prefix or catch-all
+upstream. The upstream connection uses HTTP/2.
 
 Do not publish a direct route from the browser to a Spine backend. The
 application gateway resolves credentials into trusted context and is the only

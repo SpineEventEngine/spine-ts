@@ -26,18 +26,18 @@ static_resources:
                     - name: gateway
                       domains: ["*"]
                       routes:
-                        - match: { prefix: /spine.auth.AuthenticationService/ResolveContext }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.CommandService/Post }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.QueryService/Read }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.SubscriptionService/Subscribe }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.SubscriptionService/Activate }
-                          route: { cluster: gateway, timeout: 0s }
-                        - match: { prefix: /spine.client.SubscriptionService/Cancel }
-                          route: { cluster: gateway, timeout: 30s }
+                        - match: { path: /spine.auth.AuthenticationService/ResolveContext, headers: [{ name: ":method", exact_match: POST }] }
+                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
+                        - match: { path: /spine.client.CommandService/Post, headers: [{ name: ":method", exact_match: POST }] }
+                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
+                        - match: { path: /spine.client.QueryService/Read, headers: [{ name: ":method", exact_match: POST }] }
+                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
+                        - match: { path: /spine.client.SubscriptionService/Subscribe, headers: [{ name: ":method", exact_match: POST }] }
+                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
+                        - match: { path: /spine.client.SubscriptionService/Activate, headers: [{ name: ":method", exact_match: POST }] }
+                          route: { cluster: gateway, timeout: 0s, max_request_bytes: 1048576 }
+                        - match: { path: /spine.client.SubscriptionService/Cancel, headers: [{ name: ":method", exact_match: POST }] }
+                          route: { cluster: gateway, timeout: 30s, max_request_bytes: 1048576 }
                       cors:
                         allow_origin_string_match:
                           - exact: https://chat.example.test
