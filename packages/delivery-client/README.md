@@ -100,13 +100,20 @@ retried; the transferred quarantine stays open until environment shutdown.
 
 ```ts
 import { RemoteDelivery, type RemovalQuarantine } from "@spine-event-engine/delivery-client";
-import { EnvironmentType, ServerEnvironment, type ServerEnvironmentCloseable } from "@spine-event-engine/server";
+import {
+  EnvironmentType,
+  ServerEnvironment,
+  type ServerEnvironmentCloseable,
+} from "@spine-event-engine/server";
 
 declare const quarantine: RemovalQuarantine & ServerEnvironmentCloseable;
 ServerEnvironment.when(EnvironmentType.Production).use({
   storageFactory: {} as never,
   transport: {} as never,
-  delivery: RemoteDelivery.connectTo({ endpoint: "https://delivery.example.test", removalQuarantine: quarantine }),
+  delivery: RemoteDelivery.connectTo({
+    endpoint: "https://delivery.example.test",
+    removalQuarantine: quarantine,
+  }),
 });
 ```
 

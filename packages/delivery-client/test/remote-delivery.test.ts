@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { RemoteDelivery } from "../src/remote/remote-delivery.js";
+import type { RemovalQuarantine } from "../src/client/types.js";
+
 const remote = vi.hoisted(() => ({
   clients: [] as FakeClient[],
   closeEvents: [] as string[],
@@ -7,18 +10,21 @@ const remote = vi.hoisted(() => ({
 }));
 
 vi.mock("../src/client/client.js", () => ({
-  DeliveryClient: class {
-    static connectTo = vi.fn(() => {
+  DeliveryClient: {
+    connectTo: vi.fn(() => {
       const client = new FakeClient(remote.readiness.shift() ?? (() => Promise.resolve([])));
       remote.clients.push(client);
       return client;
-    });
+    }),
   },
 }));
 
 vi.mock("../src/remote/adapters.js", () => ({
   RemoteInbox: class {
-    constructor(readonly client: FakeClient, readonly quarantine: CloseableQuarantine) {}
+    constructor(
+      readonly client: FakeClient,
+      readonly quarantine: CloseableQuarantine,
+    ) {}
   },
   RemoteWorkRegistry: class {
     constructor(readonly client: FakeClient) {}
@@ -43,7 +49,7 @@ vi.mock("@spine-event-engine/server", () => ({
   },
 }));
 
-interface CloseableQuarantine {
+interface CloseableQuarantine extends RemovalQuarantine {
   close(): unknown;
 }
 
@@ -64,16 +70,12 @@ class FakeClient {
 }
 
 function quarantine(): CloseableQuarantine {
-  return { close: () => remote.closeEvents.push("quarantine") };
-}
-
-async function remoteDelivery(): Promise<{
-  connectTo(config: { endpoint: string; removalQuarantine: CloseableQuarantine }): {
-    open(): Promise<void>;
-    close(): Promise<void>;
+  return {
+    close: () => remote.closeEvents.push("quarantine"),
+    get: () => Promise.resolve(undefined),
+    put: () => Promise.resolve(),
+    delete: () => Promise.resolve(),
   };
-}> {
-  return import("../src/remote/remote-delivery.js");
 }
 
 describe("RemoteDelivery", () => {
@@ -84,7 +86,7 @@ describe("RemoteDelivery", () => {
   });
 
   it("builds one remote environment delivery from an endpoint and durable quarantine", async () => {
-    const delivery = (await remoteDelivery()).RemoteDelivery.connectTo({
+    const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
     });
@@ -99,10 +101,12 @@ describe("RemoteDelivery", () => {
     remote.readiness.push(
       () =>
         new Promise((resolve) => {
-          release = () => resolve([]);
+          release = () => {
+            resolve([]);
+          };
         }),
     );
-    const delivery = (await remoteDelivery()).RemoteDelivery.connectTo({
+    const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
     });
@@ -115,7 +119,7 @@ describe("RemoteDelivery", () => {
   });
 
   it("coalesces concurrent open calls into one client and one readiness attempt", async () => {
-    const delivery = (await remoteDelivery()).RemoteDelivery.connectTo({
+    const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
     });
@@ -130,7 +134,7 @@ describe("RemoteDelivery", () => {
       () => Promise.reject(new Error("readiness failed")),
       () => Promise.resolve([]),
     );
-    const delivery = (await remoteDelivery()).RemoteDelivery.connectTo({
+    const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
     });
@@ -143,7 +147,7 @@ describe("RemoteDelivery", () => {
   });
 
   it("closes delivery client and quarantine in dependency order exactly once", async () => {
-    const delivery = (await remoteDelivery()).RemoteDelivery.connectTo({
+    const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
     });
@@ -156,7 +160,7 @@ describe("RemoteDelivery", () => {
   });
 
   it("retries only unfinished remote close phases after each phase failure", async () => {
-    const delivery = (await remoteDelivery()).RemoteDelivery.connectTo({
+    const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
     });
@@ -169,7 +173,7 @@ describe("RemoteDelivery", () => {
   });
 
   it("closes the transferred quarantine when the environment owner never opened", async () => {
-    const delivery = (await remoteDelivery()).RemoteDelivery.connectTo({
+    const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
     });

@@ -5,6 +5,7 @@ import {
   type ServerEnvironmentCloseable,
   serverEnvironmentAccess,
 } from "../../src/server/server-environment.js";
+import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
 import { EnvironmentType } from "../../src/server/environment.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 
@@ -25,7 +26,10 @@ describe("ServerEnvironment delivery lifecycle", () => {
       close: () => undefined,
     });
 
-    const attaching = serverEnvironmentAccess.attach(environment, { ownership: "caller", descriptors: [] });
+    const attaching = serverEnvironmentAccess.attach(environment, {
+      ownership: "caller",
+      descriptors: [],
+    });
     let attached = false;
     void attaching.then(() => {
       attached = true;
@@ -42,13 +46,13 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const failure = new Error("delivery unavailable");
     const environment = configured({ open: () => Promise.reject(failure), close: () => undefined });
 
-    const result = await serverEnvironmentAccess
+    const result: Error | EnvironmentAttachmentHandle = await serverEnvironmentAccess
       .attach(environment, { ownership: "caller", descriptors: [] })
-      .then(
+      .then<Error | EnvironmentAttachmentHandle, Error | EnvironmentAttachmentHandle>(
         (attachment) => attachment,
-        (error: unknown) => error,
+        (error: unknown) => error as Error,
       );
-    if (result !== failure) await serverEnvironmentAccess.detach(environment, result);
+    if (!(result instanceof Error)) await serverEnvironmentAccess.detach(environment, result);
     expect(result).toBe(failure);
   });
 
@@ -65,7 +69,9 @@ describe("ServerEnvironment delivery lifecycle", () => {
       serverEnvironmentAccess.attach(environment, { ownership: "caller", descriptors: [] }),
       serverEnvironmentAccess.attach(environment, { ownership: "caller", descriptors: [] }),
     ]);
-    await Promise.all(attachments.map((attachment) => serverEnvironmentAccess.detach(environment, attachment)));
+    await Promise.all(
+      attachments.map((attachment) => serverEnvironmentAccess.detach(environment, attachment)),
+    );
 
     expect(opens).toBe(1);
   });

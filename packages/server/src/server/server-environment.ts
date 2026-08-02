@@ -66,7 +66,7 @@ export interface ServerEnvironmentSettings {
   /**
    * Optional closeable delivery owner for durable delivery seams.
    */
-  readonly delivery?: ServerEnvironmentCloseable | ServerEnvironmentDelivery;
+  readonly delivery?: ServerEnvironmentCloseable;
 
   /**
    * Optional tracing factory placeholder for later tracing adapters.
@@ -114,7 +114,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   /**
    * Optional closeable delivery owner selected for this environment.
    */
-  readonly delivery: ServerEnvironmentCloseable | ServerEnvironmentDelivery | undefined;
+  readonly delivery: ServerEnvironmentCloseable | undefined;
 
   /**
    * Optional tracing factory selected for this environment.
@@ -216,8 +216,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     if (this.#deliveryOpened) return Promise.resolve();
     const opening = (this.#deliveryOpen ??= Promise.resolve()
       .then(() => {
-        const delivery = this.delivery;
-        if (delivery !== undefined && "open" in delivery && typeof delivery.open === "function") {
+        const delivery = this.delivery as Partial<ServerEnvironmentDelivery> | undefined;
+        if (typeof delivery?.open === "function") {
           return delivery.open();
         }
         return undefined;
@@ -243,7 +243,7 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
 interface RequiredFacilities {
   readonly storageFactory: StorageFactory;
   readonly transport: SignalTransport;
-  readonly delivery: ServerEnvironmentCloseable | ServerEnvironmentDelivery | undefined;
+  readonly delivery: ServerEnvironmentCloseable | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 }
 
