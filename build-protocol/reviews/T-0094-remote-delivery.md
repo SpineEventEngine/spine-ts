@@ -1,8 +1,8 @@
 # T-0094 Remote Delivery Review
 
-Status: Review wave active
+Status: Converged; final release verification pending
 Baseline: `c618e6da`
-Candidate: `5476b1ac`
+Candidate: `26372e4f`
 
 ## Requirements And Evidence
 
@@ -77,3 +77,28 @@ created.
 The completed lanes overlap on the lifecycle race, stale close documentation,
 and missing real wiring coverage. They are deduplicated into one correction
 batch for the existing implementation owner.
+
+## Correction And Re-review
+
+- The implementation owner used RED/GREEN checkpoints to serialize remote
+  open/close, make closure terminal, preserve retry checkpoints, apply one
+  complete non-evaluating delivery guard, defer port getters until readiness,
+  hide the opener behind the internal access seam, remove obsolete test setup,
+  repair TSDoc and the beginner snippet, and cover the real attachment path.
+- The production-path regression uses getters that throw before `open()`, then
+  proves exact configured-port use through both finite and supervisor delivery.
+  Focused verification passes 100 tests; the final narrowed test passes 11/11.
+- Performance/reliability re-review: clean at `d5585dc3`.
+- TypeScript/API re-review: clean at `d5585dc3`.
+- Style/maintainability re-review first requested readiness-gated getter
+  coverage, then returned clean at `26372e4f` after that deterministic test-only
+  correction.
+- Documentation was not reopened: its original review was clean, and the
+  correction changed only already-reviewed stale TSDoc/snippet claims in the
+  direction required by the API finding. Deterministic TSDoc, API-doc, audience,
+  formatting, and diff checks pass.
+
+All reopened reviewers retained their explicitly configured role profiles;
+runtime self-introspection remained unavailable and no visible mismatch or
+fallback occurred. All findings are resolved. Final `verify:release` remains
+the merge gate.
