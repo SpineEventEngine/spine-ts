@@ -2081,6 +2081,63 @@ describe("DurableSubscriptionBindings", () => {
     await expect(bindings.reserveCapacity()).resolves.toBeDefined();
     await bindings.close();
   });
+
+  it("converges a deferred activation before closing its durable storage", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "close-activation");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    let started: (() => void) | undefined;
+    const active = bindings.activate({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onBackend: (_value, signal) =>
+        new Promise<void>((resolve) => {
+          started = resolve;
+          signal.addEventListener("abort", resolve, { once: true });
+        }),
+    });
+    await new Promise<void>((resolve) => {
+      const wait = () => (started === undefined ? queueMicrotask(wait) : resolve());
+      wait();
+    });
+
+    await expect(Promise.all([active, bindings.close()])).resolves.toHaveLength(2);
+  });
+
+  it("converges a deferred cancellation before closing its durable storage", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "close-cancellation");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    let started: (() => void) | undefined;
+    const cancelling = bindings.cancel({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 1,
+      onBackend: (_value, signal) =>
+        new Promise<void>((resolve) => {
+          started = resolve;
+          signal.addEventListener("abort", resolve, { once: true });
+        }),
+    });
+    await new Promise<void>((resolve) => {
+      const wait = () => (started === undefined ? queueMicrotask(wait) : resolve());
+      wait();
+    });
+
+    await expect(Promise.all([cancelling, bindings.close()])).resolves.toHaveLength(2);
+  });
 });
 
 function registry(storageFactory: StorageFactory, namespace: string): DurableSubscriptionBindings {

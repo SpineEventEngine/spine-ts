@@ -164,8 +164,11 @@ omitting `bindings` uses an in-memory registry.
 Every durable reservation has its final public ID before the backend subscribe
 operation begins. Registries using the same namespace coordinate that finite
 capacity, so the limit applies across gateway processes rather than to each
-process separately. An activation uses a finite lease and fence: a gateway
-that loses its lease stops forwarding and cannot later complete as owner.
+process separately. An activation uses a finite lease and fence. Before each
+backend effect and each forwarded update, a durable binding checks that it
+still owns its lease. A lost lease suppresses later effects and updates, and
+the local controller is aborted when a renewal observes the loss. It cannot
+later complete as owner.
 Cancellation can be retried after an uncertain backend result. Expired records
 are cleaned in bounded batches when requests call the registry; applications
 may also call `purgeExpired(nowMs)` from their own maintenance loop. This is
