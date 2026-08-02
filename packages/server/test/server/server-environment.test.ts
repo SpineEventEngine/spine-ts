@@ -29,8 +29,8 @@ describe("ServerEnvironment delivery lifecycle", () => {
     const environment = configured(delivery);
 
     expect(environment.delivery).toBe(delivery);
-    expect("inbox" in environment.delivery!).toBe(true);
-    expect("workRegistry" in environment.delivery!).toBe(true);
+    expect("inbox" in delivery).toBe(true);
+    expect("workRegistry" in delivery).toBe(true);
   });
 
   it("opens configured delivery before the first environment attachment", async () => {
