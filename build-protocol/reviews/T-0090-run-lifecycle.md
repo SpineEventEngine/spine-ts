@@ -94,3 +94,25 @@ documentation materially changed by these corrections.
 - Focused validation passed: server and attachment suites 133/133; affected
   lint, formatting, TSDoc, and whitespace checks passed. Narrow re-review is
   pending orchestrator dispatch.
+
+## Wave 2 Dispatches
+
+The correction endpoint is `2dbb6f97`. Re-review is restricted to the
+substantively affected concerns:
+
+- Existing `style_maintainability_reviewer`; scope: concurrent-run coalescing,
+  module-private retirement, retained final record, and regression-test
+  maintainability. Expected `gpt-5.6-terra` / high.
+- Existing `documentation_reviewer`; scope: corrected server README/reference,
+  user guide, architecture guide, and lifecycle TSDoc. Expected
+  `gpt-5.6-luna` / medium.
+- Existing `typescript_api_docs_reviewer`; scope: public `start()`/`run()` and
+  managed-close declarations/TSDoc plus private coordinator surface. Expected
+  `gpt-5.6-terra` / high.
+- Existing `performance_reliability_reviewer`; scope: concurrent admission,
+  failed-start rollback, signal-driven final-close retry, and bounded listener
+  and record lifecycle. Expected `gpt-5.6-terra` / high.
+
+Every dispatch must explicitly supply the expected model and reasoning. Actual
+runtime metadata will be recorded if exposed; otherwise the immutable role
+profile and that limitation remain the acceptance evidence.
