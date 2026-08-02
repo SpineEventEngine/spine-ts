@@ -365,12 +365,10 @@ export const BrowserServer: Readonly<{
       const requestChunks: Uint8Array[] = [];
       let size = 0;
       const requestBody = request[Symbol.asyncIterator]();
-      let reading = true;
-      while (reading) {
+      for (;;) {
         const next = await Promise.race([requestBody.next(), aborted]);
         if (next.done) break;
-        const chunk = next.value;
-        const bytes = Buffer.from(chunk);
+        const bytes = Buffer.from(next.value as Uint8Array);
         size += bytes.byteLength;
         if (size > route.maxRequestBytes) {
           response.statusCode = 413;
@@ -401,13 +399,9 @@ export const BrowserServer: Readonly<{
       const responseChunks: Uint8Array[] = [];
       let responseBytes = 0;
       if (responseReader !== undefined) {
-        reading = true;
-        while (reading) {
+        for (;;) {
           const next = await Promise.race([responseReader.read(), aborted]);
-          if (next.done) {
-            reading = false;
-            continue;
-          }
+          if (next.done) break;
           responseBytes += next.value.byteLength;
           if (responseBytes > writeMaxBytes) {
             await responseReader.cancel();
