@@ -97,3 +97,17 @@ Use focused delivery-client/server lifecycle tests and changed-source coverage
 during implementation. After cheap preflight and one converged relevant review
 wave, run `verify:release` once because the task changes shared runtime and
 public lifecycle assembly.
+
+## Requirements Split Result
+
+- Accepted split: `build-protocol/planning/T-0094_REMOTE_DELIVERY_SPLIT.md`.
+- Existing role: `requirements_splitter`.
+- Expected profile was explicit in dispatch: `gpt-5.6-sol` / high reasoning.
+- Runtime model/reasoning self-introspection was not exposed by the execution
+  surface; the immutable configured role/profile and explicit dispatch are the
+  available acceptance evidence.
+- Frozen boundary: a generic openable delivery lifecycle port remains in
+  `server`; endpoint, client, adapters, builder wiring, and quarantine ownership
+  remain in `delivery-client`, preserving the existing dependency direction.
+- No current blocker. Implementation proceeds with the exact RED matrix,
+  ownership order, paths, and gates in the accepted split.
