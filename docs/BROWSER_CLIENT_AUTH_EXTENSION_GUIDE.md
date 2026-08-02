@@ -441,4 +441,6 @@ errors.
 The TypeScript runtime checks exercise the real browser-to-gateway topology.
 JVM evidence is limited to static source and descriptor compatibility; this
 repository does not establish complete transitive or runtime JVM
-interoperability. No Spine JVM project is built or executed here.
+interoperability. No Spine JVM project is built or executed here; the frozen
+fixture records six unresolved transitive wire imports, so this is not a JVM
+runtime compatibility claim.

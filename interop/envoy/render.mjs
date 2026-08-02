@@ -3,6 +3,12 @@
  */
 export function renderEnvoy(options) {
   const topology = normalize(options);
+  const routes = [...spineRoutes, ...topology.authRoutes]
+    .map(
+      (route) =>
+        `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: ${route.method} }] }\n                          route: { cluster: gateway, timeout: ${route.timeout} }\n                          typed_per_filter_config:\n                            envoy.filters.http.buffer:\n                              "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.BufferPerRoute\n                              buffer: { max_request_bytes: ${route.maxRequestBytes} }`,
+    )
+    .join("\n");
   return `static_resources:
   listeners:
     - name: browser_gateway
@@ -31,18 +37,7 @@ export function renderEnvoy(options) {
                     - name: gateway
                       domains: ["*"]
                       routes:
-                        - match: { prefix: /spine.auth.AuthenticationService/ResolveContext }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.CommandService/Post }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.QueryService/Read }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.SubscriptionService/Subscribe }
-                          route: { cluster: gateway, timeout: 30s }
-                        - match: { prefix: /spine.client.SubscriptionService/Activate }
-                          route: { cluster: gateway, timeout: 0s }
-                        - match: { prefix: /spine.client.SubscriptionService/Cancel }
-                          route: { cluster: gateway, timeout: 30s }
+${routes}
                       cors:
                         allow_origin_string_match:
                           - exact: ${topology.browserOrigin}
@@ -52,6 +47,10 @@ export function renderEnvoy(options) {
                         expose_headers: grpc-status,grpc-message
                         max_age: "86400"
                 http_filters:
+                  - name: envoy.filters.http.buffer
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.buffer.v3.Buffer
+                      max_request_bytes: 1048576
                   - name: envoy.filters.http.grpc_web
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
@@ -94,5 +93,61 @@ function normalize(options) {
     browserOrigin: options.browserOrigin,
     tlsCertificate: options.tlsCertificate,
     tlsKey: options.tlsKey,
+    authRoutes: (options.authRoutes ?? []).map((route) => {
+      if (
+        !/^[A-Z]+$/.test(route.method) ||
+        !/^\/(?!\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(route.path)
+      )
+        throw new Error("auth routes require an exact method and canonical path");
+      if (!Number.isSafeInteger(route.timeoutMs) || route.timeoutMs < 1)
+        throw new Error("auth routes require a finite timeout");
+      if (!Number.isSafeInteger(route.maxRequestBytes) || route.maxRequestBytes < 1)
+        throw new Error("auth routes require a finite request-body limit");
+      return {
+        path: route.path,
+        method: route.method,
+        timeout: `${String(route.timeoutMs / 1000)}s`,
+        maxRequestBytes: route.maxRequestBytes,
+      };
+    }),
   };
 }
+
+const spineRoutes = [
+  {
+    path: "/spine.auth.AuthenticationService/ResolveContext",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.CommandService/Post",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.QueryService/Read",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.SubscriptionService/Subscribe",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.SubscriptionService/Activate",
+    method: "POST",
+    timeout: "0s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.SubscriptionService/Cancel",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+];

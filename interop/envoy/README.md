@@ -42,7 +42,24 @@ The reference accepts only the six public gateway methods: `ResolveContext`,
 `Post`, `Read`, `Subscribe`, `Activate`, and `Cancel`. It terminates browser
 TLS, permits the exact supplied HTTPS Origin with credentials, supports
 gRPC-Web, and passes explicitly selected binary Connect requests through to the
-gateway. The upstream connection uses HTTP/2.
+gateway. Each route is an exact POST path with a finite 1 MiB request bound and
+30-second timeout, except the live `Activate` stream which has a zero route
+timeout. Supplied application auth routes are exact GET/POST paths with their
+own finite limits and timeouts; the template has no prefix or catch-all
+upstream. The upstream connection uses HTTP/2.
+
+The limits use Envoy's supported HTTP buffer filter and route-specific
+`BufferPerRoute` configuration. The repository's pinned-image regression gate
+renders both an accepted configuration and a deliberately invalid one:
+
+```sh
+pnpm test:envoy
+```
+
+This is a Docker-capable gateway deployment acceptance command: it requires
+Docker and the pinned image, and is therefore not part of the generic
+`verify:release` profile. Run it in every Docker-capable deployment acceptance
+environment; the test skips only when Docker is unavailable.
 
 Do not publish a direct route from the browser to a Spine backend. The
 application gateway resolves credentials into trusted context and is the only

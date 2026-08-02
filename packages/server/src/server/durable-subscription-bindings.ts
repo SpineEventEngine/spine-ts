@@ -123,6 +123,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    * Indicates that this registry uses durable coordination storage.
    */
   readonly durable = true;
+
+  /**
+   * Names the validated durable registry shared by standalone gateway replicas.
+   */
+  readonly namespace: string;
   readonly #storage: RecordStorage<string, Any>;
   readonly #dispose: OnBackendSubscription;
   readonly #nextId: () => string;
@@ -154,6 +159,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   constructor(options: DurableSubscriptionBindingsOptions) {
     Values.options(options);
+    this.namespace = options.namespace;
     this.#dispose = options.dispose;
     void this.#dispose;
     this.#nextId = options.nextId;

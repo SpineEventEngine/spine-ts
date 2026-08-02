@@ -206,11 +206,31 @@ export class Server {
   }
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
-    if (this.#browser !== undefined)
+    const browser = this.#browser;
+    if (browser?.backend !== undefined) BrowserServer.backendUrl(browser.backend.baseUrl);
+    if (
+      browser?.backend !== undefined &&
+      (this.#contexts.length > 0 ||
+        this.#resources.length > 0 ||
+        Object.keys(this.#services).length > 0)
+    )
+      throw new Error(
+        "Standalone browser server cannot own local contexts, services, or resources.",
+      );
+    if (browser !== undefined)
       BrowserServer.requireDurableBindings(
-        this.#browser,
+        browser,
         this.#environment.environment.type === EnvironmentType.Production,
       );
+    if (browser?.backend !== undefined)
+      return BrowserServer.open(BrowserServer.backendUrl(browser.backend.baseUrl), {
+        ...browser,
+        host: browser.host ?? this.#host,
+        port: browser.port ?? this.#port,
+        readMaxBytes: this.#readMaxBytes,
+        writeMaxBytes: this.#writeMaxBytes,
+        production: this.#environment.environment.type === EnvironmentType.Production,
+      });
     const contexts = await ServerValues.buildContexts(
       this.#contexts,
       this.#environment.storageFactory,
@@ -302,7 +322,6 @@ export class Server {
       port: address.port,
       closeables,
     });
-    const browser = this.#browser;
     if (browser === undefined) return running;
     try {
       return await BrowserServer.open(running, {
@@ -525,9 +544,9 @@ export interface ServerOptions {
   readonly readMaxBytes?: number;
 
   /**
-   * Maximum uncompressed bytes emitted for one RPC response message.
+   * Maximum uncompressed bytes emitted for one RPC or auth-callback response.
    * Defaults to 4,194,304 bytes. Must be an integer from 1 through
-   * 4,294,967,295.
+   * 4,294,967,295. An auth callback exceeding this bound receives 413.
    */
   readonly writeMaxBytes?: number;
 
@@ -573,6 +592,30 @@ export interface BrowserServerOptions {
    * Public browser listener port. Defaults to the server port.
    */
   readonly port?: number;
+
+  /**
+   * Selects a separately hosted Spine backend.
+   *
+   * The URL must be one canonical HTTP(S) origin without credentials, query,
+   * fragment, or a path beyond `/`.
+   */
+  readonly backend?: {
+    readonly baseUrl: string;
+  };
+
+  /**
+   * Application-owned, exact authentication endpoints exposed beside the fixed
+   * Spine RPC paths. These endpoints are not a general-purpose router.
+   */
+  readonly authRoutes?: readonly BrowserAuthRoute[];
+
+  /**
+   * Limits concurrently admitted application authentication requests across
+   * this listener. Defaults to 64 and must be a positive safe integer. Excess
+   * requests receive 503 before handler invocation; capacity recovers when an
+   * admitted request settles.
+   */
+  readonly maxActiveAuthRequests?: number;
 
   /**
    * Exact browser origins permitted to make RPC calls.
@@ -624,6 +667,52 @@ export interface BrowserServerOptions {
    * Enables strict opaque-cookie extraction alongside bearer credentials.
    */
   readonly cookies?: OpaqueSessionCookies;
+}
+
+/**
+ * Configures one bounded application authentication request.
+ */
+export interface BrowserAuthRoute {
+  // prettier-ignore
+
+  /**
+   * Selects the accepted HTTP method.
+   */
+  readonly method: "GET" | "POST";
+
+  /**
+   * Selects the exact canonical request path.
+   */
+  readonly path: string;
+
+  /**
+   * Lists exact browser origins allowed for this route.
+   */
+  readonly origins: readonly string[];
+
+  /**
+   * Allows an OAuth callback without an Origin header.
+   */
+  readonly allowMissingOrigin?: boolean;
+
+  /**
+   * Limits accepted request-body bytes.
+   */
+  readonly maxRequestBytes: number;
+
+  /**
+   * Limits request processing time in milliseconds.
+   */
+  readonly timeoutMs: number;
+
+  /**
+   * Handles one admitted authentication request.
+   *
+   * @param request Supplies the bounded Fetch request.
+   * @param signal Signals timeout, disconnect, or gateway close.
+   * @returns Returns the application response.
+   */
+  readonly onRequest: (request: Request, signal: AbortSignal) => Response | Promise<Response>;
 }
 
 /**

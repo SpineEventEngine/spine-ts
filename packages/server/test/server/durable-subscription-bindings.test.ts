@@ -18,6 +18,11 @@ import { DurableSubscriptionBindingRecords } from "../../src/server/durable-subs
 import type { BrowserServerOptions } from "../../src/server/server.js";
 
 describe("DurableSubscriptionBindings", () => {
+  it("exposes its validated namespace for standalone gateway production admission", () => {
+    const bindings = registry(new InMemoryStorageFactory(), "standalone-gateway");
+
+    expect(bindings.namespace).toBe("standalone-gateway");
+  });
   it("round-trips an owned private envelope across an independently closed registry", async () => {
     const factory = new InMemoryStorageFactory();
     const first = registry(factory, "messageboard");
