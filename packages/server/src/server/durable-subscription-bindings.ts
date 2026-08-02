@@ -602,6 +602,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     afterId: string | undefined,
     reset: boolean,
   ): Promise<Cleanup> {
+    const continuedAfterId = afterId ?? expected.afterId;
     const next: Cleanup = {
       family: "cleanup",
       id: cleanupId,
@@ -611,9 +612,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       ...(expected.leaseUntilMs === undefined ? {} : { leaseUntilMs: expected.leaseUntilMs }),
       failureCount: reset ? 0 : expected.failureCount,
       retryAfterMs: 0,
-      ...(reset || (afterId === undefined && expected.afterId === undefined)
-        ? {}
-        : { afterId: afterId ?? expected.afterId! }),
+      ...(reset || continuedAfterId === undefined ? {} : { afterId: continuedAfterId }),
     };
     if (await this.#replaceCleanup(expected, next)) return next;
     const reread = await this.#cleanup();
