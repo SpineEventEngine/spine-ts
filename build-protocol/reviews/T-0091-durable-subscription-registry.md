@@ -1,6 +1,6 @@
 # T-0091 Review Record
 
-Status: Awaiting implementation checkpoint
+Status: Wave 1 dispatched
 
 ## Required Concerns
 
@@ -32,3 +32,27 @@ configured role/profile and limitation are the acceptance evidence.
 
 Every dispatch must explicitly supply its recorded model and reasoning. The
 complete wave will be collected before one correction batch is accepted.
+
+## Wave 1 Dispatches
+
+The complete implementation endpoint is `4db3628f`.
+
+- Existing `style_maintainability_reviewer`; scope: the binding-contract
+  evolution, registry/codec depth, naming, ownership, standalone-function
+  discipline, test maintainability, and avoidance of B2 abstractions. Expected
+  `gpt-5.6-terra` / high.
+- Existing `documentation_reviewer`; scope: server README/reference and API
+  audience claims for production configuration, durability, local behavior,
+  restart limits, and private data. Expected `gpt-5.6-luna` / medium.
+- Existing `typescript_api_docs_reviewer`; scope: public bindings capability,
+  options/exports, awaitable compatibility, declarations/TSDoc, storage
+  ownership, and later standalone-host reuse. Expected
+  `gpt-5.6-terra` / high.
+- Existing `performance_reliability_reviewer`; scope: exact-once async
+  reservation, persistence/CAS compatibility, byte ownership and limits,
+  restart/close, malformed state, production fail-closed timing, and provider
+  behavior. Expected `gpt-5.6-terra` / high.
+
+Every dispatch explicitly supplies its expected model and reasoning. Runtime
+self-introspection will be recorded when exposed; otherwise the immutable
+configured role/profile and limitation are the acceptance evidence.
