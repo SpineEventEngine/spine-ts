@@ -358,23 +358,32 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async purgeExpired(nowMs: number): Promise<void> {
     this.#open();
     Values.time(nowMs);
-    const rows = await this.#storage.queryEntries({
-      sort: [{ field: "id" }],
-      limit: this.#cleanupBatchSize,
-    });
-    for (const row of rows) {
-      if (row.id === quotaId || row.id === cleanupId) continue;
-      let binding: Binding;
-      try {
-        binding = Values.read(row.record, row.id, this.#maxRecordBytes) as Binding;
-      } catch {
-        continue;
+    for (let count = 0; count < attempts; count += 1) {
+      const control = await this.#cleanup();
+      if (control.retryAfterMs > nowMs) return;
+      if (
+        control.ownerId !== undefined &&
+        control.ownerId !== this.#owner &&
+        (control.leaseUntilMs ?? 0) > nowMs
+      )
+        return;
+      const claimed: Cleanup = {
+        ...control,
+        revision: control.revision + 1,
+        ownerId: this.#owner,
+        fence: control.fence + 1,
+        leaseUntilMs: nowMs + this.#leaseMs,
+      };
+      if (!(await this.#replaceCleanup(control, claimed))) {
+        const reread = await this.#cleanup();
+        if (!this.#sameCleanup(reread, claimed)) continue;
       }
-      if (binding.lifecycle === "reserved" && (binding.reservationUntilMs ?? 0) <= nowMs)
-        await this.#release(binding.id, binding.admissionToken);
-      else if (binding.lifecycle === "inactive" && (binding.expiresAtMs ?? 0) <= nowMs) {
-        if (await this.#storage.compareAndSet(binding.id, row.record, undefined))
-          await this.#release(binding.id, binding.admissionToken);
+      try {
+        await this.#clean(claimed, nowMs);
+        return;
+      } catch {
+        await this.#failClean(claimed, nowMs);
+        return;
       }
     }
   }
@@ -499,6 +508,134 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       await this.#complete(staged);
       return;
     }
+  }
+  async #cleanup(): Promise<Cleanup> {
+    const row = await this.#storage.read(cleanupId);
+    if (row !== undefined) return Values.read(row, cleanupId, this.#maxRecordBytes) as Cleanup;
+    const fresh: Cleanup = {
+      family: "cleanup",
+      id: cleanupId,
+      revision: 1,
+      fence: 0,
+      failureCount: 0,
+      retryAfterMs: 0,
+    };
+    await this.#cas(cleanupId, undefined, Values.write(fresh, this.#maxRecordBytes));
+    const created = await this.#storage.read(cleanupId);
+    if (created === undefined) throw new Error("Subscription cleanup was not created.");
+    return Values.read(created, cleanupId, this.#maxRecordBytes) as Cleanup;
+  }
+  async #clean(claimed: Cleanup, nowMs: number): Promise<void> {
+    let control = claimed;
+    const afterId = control.afterId ?? quotaId;
+    const rows = await this.#storage.queryEntries({
+      sort: [{ field: "id" }],
+      after: { id: afterId, values: [{ field: "id", value: afterId }] },
+      limit: this.#cleanupBatchSize,
+    });
+    for (const row of rows) {
+      if (row.id !== quotaId && row.id !== cleanupId) await this.#cleanBinding(row.id, nowMs);
+      control = await this.#advanceClean(control, row.id, false);
+    }
+    await this.#advanceClean(control, undefined, rows.length < this.#cleanupBatchSize);
+  }
+  async #cleanBinding(id: string, nowMs: number): Promise<void> {
+    const row = await this.#storage.read(id);
+    if (row === undefined) return;
+    let binding: Binding;
+    try {
+      binding = Values.read(row, id, this.#maxRecordBytes) as Binding;
+    } catch {
+      return;
+    }
+    if (binding.lifecycle === "reserved" && (binding.reservationUntilMs ?? 0) <= nowMs) {
+      await this.#release(binding.id, binding.admissionToken);
+      return;
+    }
+    if (binding.lifecycle === "retired") {
+      await this.#release(binding.id, binding.admissionToken);
+      return;
+    }
+    if (
+      (binding.lifecycle === "inactive" && (binding.expiresAtMs ?? 0) <= nowMs) ||
+      (binding.lifecycle === "cancelling" && (binding.leaseUntilMs ?? 0) <= nowMs)
+    )
+      await this.#cancelExpired(binding, row, nowMs);
+  }
+  async #cancelExpired(old: Binding, row: Any, nowMs: number): Promise<void> {
+    const next = this.#work(old, "cancelling", nowMs, "expired");
+    if (!(await this.#cas(old.id, row, Values.write(next, this.#maxRecordBytes)))) {
+      const reread = await this.#storage.read(old.id);
+      if (reread === undefined || !this.#sameBinding(reread, next)) return;
+    }
+    await this.#dispose(Values.envelope(next), new AbortController().signal, () =>
+      this.#current(next.id, next.fence, "cancelling", Date.now()),
+    );
+    await this.#retire(next);
+  }
+  async #retire(expected: Binding): Promise<void> {
+    const row = await this.#storage.read(expected.id);
+    if (row === undefined) return;
+    const current = Values.read(row, expected.id, this.#maxRecordBytes) as Binding;
+    if (
+      current.lifecycle !== "cancelling" ||
+      current.ownerId !== this.#owner ||
+      current.fence !== expected.fence
+    )
+      return;
+    const retired: Binding = {
+      family: "binding",
+      id: current.id,
+      revision: current.revision + 1,
+      admissionToken: current.admissionToken,
+      lifecycle: "retired",
+      fence: current.fence,
+    };
+    if (!(await this.#cas(expected.id, row, Values.write(retired, this.#maxRecordBytes)))) {
+      const reread = await this.#storage.read(expected.id);
+      if (reread === undefined || !this.#sameBinding(reread, retired)) return;
+    }
+    await this.#release(retired.id, retired.admissionToken);
+  }
+  async #advanceClean(
+    expected: Cleanup,
+    afterId: string | undefined,
+    reset: boolean,
+  ): Promise<Cleanup> {
+    const next: Cleanup = {
+      family: "cleanup",
+      id: cleanupId,
+      revision: expected.revision + 1,
+      fence: expected.fence,
+      ownerId: this.#owner,
+      ...(expected.leaseUntilMs === undefined ? {} : { leaseUntilMs: expected.leaseUntilMs }),
+      failureCount: reset ? 0 : expected.failureCount,
+      retryAfterMs: 0,
+      ...(reset || (afterId === undefined && expected.afterId === undefined)
+        ? {}
+        : { afterId: afterId ?? expected.afterId! }),
+    };
+    if (await this.#replaceCleanup(expected, next)) return next;
+    const reread = await this.#cleanup();
+    if (this.#sameCleanup(reread, next)) return reread;
+    throw new Error("Subscription cleanup lost its durable lease.");
+  }
+  async #failClean(expected: Cleanup, nowMs: number): Promise<void> {
+    const failureCount = Math.min(31, expected.failureCount + 1);
+    const multiplier = 2 ** Math.min(4, failureCount - 1);
+    const delay = Math.min(Number.MAX_SAFE_INTEGER - nowMs, this.#leaseMs * multiplier);
+    const next: Cleanup = {
+      family: "cleanup",
+      id: cleanupId,
+      revision: expected.revision + 1,
+      fence: expected.fence,
+      failureCount,
+      retryAfterMs: nowMs + delay,
+      ...(expected.afterId === undefined ? {} : { afterId: expected.afterId }),
+    };
+    if (await this.#replaceCleanup(expected, next)) return;
+    const reread = await this.#cleanup();
+    if (!this.#sameCleanup(reread, next)) return;
   }
   async #quota(): Promise<Quota> {
     const row = await this.#storage.read(quotaId);
@@ -641,9 +778,25 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       return false;
     }
   }
+  #sameCleanup(actual: Cleanup, expected: Cleanup): boolean {
+    return (
+      actual.revision === expected.revision &&
+      actual.ownerId === expected.ownerId &&
+      actual.fence === expected.fence &&
+      actual.afterId === expected.afterId &&
+      actual.retryAfterMs === expected.retryAfterMs
+    );
+  }
   async #replaceQuota(expected: Quota, next: Quota): Promise<boolean> {
     return this.#cas(
       quotaId,
+      Values.write(expected, this.#maxRecordBytes),
+      Values.write(next, this.#maxRecordBytes),
+    );
+  }
+  async #replaceCleanup(expected: Cleanup, next: Cleanup): Promise<boolean> {
+    return this.#cas(
+      cleanupId,
       Values.write(expected, this.#maxRecordBytes),
       Values.write(next, this.#maxRecordBytes),
     );

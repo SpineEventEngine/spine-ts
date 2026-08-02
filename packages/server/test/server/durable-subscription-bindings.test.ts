@@ -512,6 +512,90 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("persists a finite cleanup continuation and resumes after reopening", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = cleanupRegistry(factory, "cleanup-page", () => Promise.resolve());
+    await first.create(expiredInput());
+    await first.create(expiredInput());
+    await first.create(expiredInput());
+
+    await first.purgeExpired(2);
+    expect(await cleanupControl(factory, "cleanup-page")).toMatchObject({ afterId: "binding-1" });
+    await first.close();
+
+    const reopened = cleanupRegistry(factory, "cleanup-page", () => Promise.resolve());
+    await reopened.purgeExpired(12);
+    expect(await cleanupControl(factory, "cleanup-page")).toMatchObject({ afterId: "binding-2" });
+    await reopened.purgeExpired(12);
+    expect(await cleanupControl(factory, "cleanup-page")).toMatchObject({ afterId: "binding-3" });
+    await reopened.purgeExpired(12);
+    expect(await cleanupControl(factory, "cleanup-page")).not.toHaveProperty("afterId");
+    await reopened.close();
+  });
+
+  it("fences an expired session into cancellation before durable release", async () => {
+    const disposed: number[] = [];
+    const bindings = cleanupRegistry(new InMemoryStorageFactory(), "cleanup-expired", (value) => {
+      disposed.push(value.bytes[0] ?? 0);
+      return Promise.resolve();
+    });
+    const binding = await bindings.create(expiredInput());
+
+    await bindings.purgeExpired(2);
+
+    expect(disposed).toEqual([1]);
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 2,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    await bindings.close();
+  });
+
+  it("permits only one durable cleaner callback across two registry handles", async () => {
+    const factory = new InMemoryStorageFactory();
+    let calls = 0;
+    const dispose = () => {
+      calls += 1;
+      return Promise.resolve();
+    };
+    const first = cleanupRegistry(factory, "cleanup-race", dispose);
+    const second = cleanupRegistry(factory, "cleanup-race", dispose);
+    await first.create(expiredInput());
+
+    await Promise.all([first.purgeExpired(2), second.purgeExpired(2)]);
+
+    expect(calls).toBe(1);
+    await first.close();
+    await second.close();
+  });
+
+  it("persists bounded cleanup backoff before retrying a failed callback", async () => {
+    const factory = new InMemoryStorageFactory();
+    let calls = 0;
+    const bindings = cleanupRegistry(factory, "cleanup-backoff", () => {
+      calls += 1;
+      return Promise.reject(new Error("private backend failure"));
+    });
+    await bindings.create(expiredInput());
+
+    await bindings.purgeExpired(10);
+    expect(calls).toBe(1);
+    expect(await cleanupControl(factory, "cleanup-backoff")).toMatchObject({
+      failureCount: 1,
+      retryAfterMs: 20,
+    });
+    await bindings.purgeExpired(19);
+    expect(calls).toBe(1);
+    await bindings.purgeExpired(20);
+    expect(calls).toBe(2);
+    await bindings.close();
+  });
+
   it("rejects expired, aborted, oversized, and unauthorised private operations", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "messageboard");
     const binding = await bindings.create({
@@ -847,6 +931,49 @@ function timedRegistry(
     recordLimit: 10,
     maxRecordBytes: 1_024,
   });
+}
+
+function cleanupRegistry(
+  storageFactory: StorageFactory,
+  namespace: string,
+  dispose: (value: { readonly bytes: Uint8Array }) => Promise<void>,
+): DurableSubscriptionBindings {
+  let nextId = 0;
+  return new DurableSubscriptionBindings({
+    storageFactory,
+    namespace,
+    nextId: () => `binding-${(++nextId).toString()}`,
+    dispose: (value) => dispose(value),
+    leaseMs: 10,
+    cleanupBatchSize: 1,
+    recordLimit: 10,
+    maxRecordBytes: 1_024,
+  });
+}
+
+function expiredInput(): {
+  readonly backend: { readonly kind: "backend-subscription-envelope"; readonly bytes: Uint8Array };
+  readonly principalFingerprint: string;
+  readonly tenant: undefined;
+  readonly expiresAtMs: number;
+} {
+  return {
+    backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+    principalFingerprint: "principal-a",
+    tenant: undefined,
+    expiresAtMs: 1,
+  };
+}
+
+async function cleanupControl(
+  factory: StorageFactory,
+  namespace: string,
+): Promise<Record<string, unknown>> {
+  const store = repairStore(factory, namespace);
+  const record = await store.read("!subscription-cleanup");
+  store.close();
+  if (record === undefined) throw new Error("cleanup control is absent");
+  return JSON.parse(new TextDecoder().decode(record.value)) as Record<string, unknown>;
 }
 
 function repairStore(factory: StorageFactory, namespace: string): RecordStorage<string, Any> {
