@@ -19,6 +19,7 @@ import {
 } from "@spine-event-engine/proto/client";
 
 import type { BrowserServerOptions, RunningServer } from "./server.js";
+import { isDurableSubscriptionBindings } from "./durable-subscription-bindings.js";
 
 const gracefulBrowserDrainMs = 100;
 
@@ -27,6 +28,7 @@ interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port">
   readonly port: number;
   readonly readMaxBytes: number;
   readonly writeMaxBytes: number;
+  readonly production: boolean;
 }
 
 /**
@@ -44,16 +46,20 @@ export const BrowserServer: Readonly<{
     transport(context: { readonly requestHeader: Headers }): ReturnType<typeof TransportFacts.from>;
   };
   origins(origins: readonly string[]): ReadonlySet<string>;
+  requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
 }> = Object.freeze({
   async open(native: RunningServer, options: BrowserHostOptions): Promise<RunningServer> {
+    BrowserServer.requireDurableBindings(options, options.production);
     const origins = BrowserServer.origins(options.origins);
     const creator = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: native.baseUrl }));
-    const bindings = new InMemorySubscriptionBindings({
-      nextId: () => globalThis.crypto.randomUUID(),
-      dispose: creator.dispose.bind(creator),
-    });
+    const bindings =
+      options.bindings ??
+      new InMemorySubscriptionBindings({
+        nextId: () => globalThis.crypto.randomUUID(),
+        dispose: creator.dispose.bind(creator),
+      });
     const requests = BrowserServer.requests(options);
     const unary = new UnaryGateway({
       ...(options.registry === undefined ? {} : { registry: options.registry }),
@@ -167,6 +173,10 @@ export const BrowserServer: Readonly<{
     if (origins.size === 0 || origins.size !== values.length)
       throw new Error("Server browser origins must be unique and non-empty.");
     return origins;
+  },
+  requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
+    if (production && !isDurableSubscriptionBindings(options.bindings))
+      throw new Error("Production browser server requires durable subscription bindings.");
   },
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo> {
     return new Promise((resolve, reject) => {

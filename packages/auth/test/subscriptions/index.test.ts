@@ -594,7 +594,7 @@ describe("SubscriptionGateway", () => {
       create: bindings.create.bind(bindings),
       activate: bindings.activate.bind(bindings),
       cancel: bindings.cancel.bind(bindings),
-      reserveCapacity: () => {
+      reserveCapacity: async () => {
         throw new Error("store unavailable");
       },
       purgeExpired: bindings.purgeExpired.bind(bindings),
@@ -607,7 +607,7 @@ describe("SubscriptionGateway", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "denied" });
     const capacityFailure = {
       ...unavailable,
-      reserveCapacity: () => ({ release: () => undefined }),
+      reserveCapacity: async () => ({ release: () => undefined }),
       create: () => {
         throw new Error("binding-capacity-exceeded");
       },
@@ -694,7 +694,7 @@ describe("SubscriptionGateway", () => {
     await subscriptionGateway.close();
     expect(aborted).toBe(true);
     await expect(pending).rejects.toThrow("aborted");
-    expect(() => bindings.reserveCapacity()).toThrow("closed");
+    await expect(bindings.reserveCapacity()).rejects.toThrow("closed");
   });
   it("returns only a copied public subscription wire and never a backend envelope", async () => {
     const fixture = setup();
@@ -1562,7 +1562,7 @@ describe("SubscriptionGateway", () => {
     await expect(pending).rejects.toBeInstanceOf(AggregateError);
     expect(compensationAborted).toBe(true);
     expect(bindings.size).toBe(0);
-    const reusable = bindings.reserveCapacity();
+    const reusable = await bindings.reserveCapacity();
     reusable.release();
   });
 

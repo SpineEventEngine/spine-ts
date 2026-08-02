@@ -26,6 +26,9 @@ specifications for one logical scope.
 `index`, `query`, `queryEntries`, `queryPlan`, and `queryPlanEntries`. It clones
 IDs and messages at its public boundary. `RecordQuery.ids` filters actual
 storage slots, while `index()` returns logical IDs extracted from record bodies.
+Its `atomicCompareAndSet` capability defaults to `false`. A provider sets it to
+`true` only when `compareAndSet()` is atomic across compatible handles; code
+that needs that guarantee must reject a handle that does not declare it.
 
 ## Query behavior
 

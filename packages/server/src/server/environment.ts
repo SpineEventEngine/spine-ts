@@ -17,6 +17,9 @@ export enum EnvironmentType {
 
 let resolvedEnvironment: Environment | undefined;
 let resetLocalTest: (() => void) | undefined;
+let useEnvironmentTest: (type: EnvironmentType) => void = () => {
+  throw new Error("Environment test controls are unavailable.");
+};
 
 /**
  * Stable process environment information for the Node runtime.
@@ -42,6 +45,9 @@ export class Environment {
     resetLocalTest = () => {
       resolvedEnvironment = new Environment(EnvironmentType.Local);
     };
+    useEnvironmentTest = (type) => {
+      resolvedEnvironment = new Environment(type);
+    };
   }
 
   /**
@@ -54,6 +60,7 @@ export class Environment {
       process.env.NODE_ENV === "production" ? EnvironmentType.Production : EnvironmentType.Local,
     ));
   }
+
 }
 
 /**
@@ -61,7 +68,10 @@ export class Environment {
  *
  * @internal
  */
-export const EnvironmentTests: { readonly reset: () => void } = Object.freeze({
+export const EnvironmentTests: {
+  readonly reset: () => void;
+  readonly use: (type: EnvironmentType) => void;
+} = Object.freeze({
   // prettier-ignore
 
   /**
@@ -69,5 +79,14 @@ export const EnvironmentTests: { readonly reset: () => void } = Object.freeze({
    */
   reset(): void {
     resetLocalTest();
+  },
+
+  /**
+   * Selects one environment type before the next singleton lookup.
+   *
+   * @param type Supplies the test environment type.
+   */
+  use(type: EnvironmentType): void {
+    useEnvironmentTest(type);
   },
 });

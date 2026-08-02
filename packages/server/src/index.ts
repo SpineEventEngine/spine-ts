@@ -35,6 +35,11 @@ export {
   type RunningServer,
   type ServerOptions,
 } from "./server/server.js";
+export {
+  DurableSubscriptionBindings,
+  isDurableSubscriptionBindings,
+  type DurableSubscriptionBindingsOptions,
+} from "./server/durable-subscription-bindings.js";
 export { Environment, EnvironmentType } from "./server/environment.js";
 export {
   ServerEnvironment,

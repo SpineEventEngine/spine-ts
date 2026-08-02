@@ -13,6 +13,18 @@ import type { NormalizedQueryPlan, StorageQueryCapabilities } from "../query/que
  * Common record-oriented storage contract for identified Protobuf messages.
  */
 export abstract class RecordStorage<I, R extends Message> implements Storage {
+  // prettier-ignore
+
+  /**
+   * Declares whether this handle provides atomic compare-and-set mutations.
+   *
+   * The base contract defaults to `false`. An adapter sets this to `true` only
+   * when its `compareAndSet()` implementation is atomic across compatible
+   * handles. Registry and delivery code must reject a handle that leaves this
+   * capability disabled rather than treating a failed conditional write as a
+   * collision.
+   */
+  readonly atomicCompareAndSet: boolean = false;
   readonly #context: StorageContext;
   #open = true;
   readonly #recordSpec: RecordSpec<I, R>;

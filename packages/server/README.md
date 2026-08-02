@@ -109,13 +109,29 @@ still supplies its session resolver, authorization policy, and trusted actor
 context resolver.
 
 ```ts
-import { Server, type BoundedContext } from "@spine-event-engine/server";
+import {
+  DurableSubscriptionBindings,
+  Server,
+  type BoundedContext,
+} from "@spine-event-engine/server";
 
 declare const context: BoundedContext;
 declare const sessions: import("@spine-event-engine/auth").SessionResolver;
 declare const authorize: import("@spine-event-engine/auth").AuthorizationPolicy["authorize"];
 declare const contextResolver: import("@spine-event-engine/auth").ContextResolver;
 declare const clock: import("@spine-event-engine/auth").Clock;
+declare const registryStorage: import("@spine-event-engine/storage").StorageFactory;
+
+const bindings = new DurableSubscriptionBindings({
+  storageFactory: registryStorage,
+  namespace: "my-app",
+  nextId: () => crypto.randomUUID(),
+  dispose: async () => undefined,
+  leaseMs: 60_000,
+  cleanupBatchSize: 100,
+  recordLimit: 10_000,
+  maxRecordBytes: 1_048_576,
+});
 
 const running = await new Server({
   contexts: [context],
@@ -127,11 +143,23 @@ const running = await new Server({
     contexts: contextResolver,
     clock,
     fingerprint: (principal) => principal.id,
+    bindings,
   },
 }).run();
 
 void running;
 ```
+
+In production, browser access needs bindings that declare the durable
+capability. `DurableSubscriptionBindings` is the supplied implementation;
+compatible bindings can be used by later standalone hosting as well. Startup
+rejects missing or volatile bindings before opening a listener. The registry
+uses the storage factory that your application supplies and closes only its own
+handle, so you can use a separate factory from application-data storage or
+intentionally share one. Its namespace separates applications sharing a
+provider. `leaseMs` is milliseconds; `cleanupBatchSize`, `recordLimit`, and
+`maxRecordBytes` are positive safe integers. For local development and tests,
+omitting `bindings` uses an in-memory registry.
 
 The server validates commands before handler code runs. Invalid payloads are
 returned as `COMMAND_VALIDATION_ERROR`; invalid state transitions are returned

@@ -12,6 +12,11 @@ import { TenantRecords } from "./tenant-records.js";
  * In-memory record storage with per-tenant slices when the context is multitenant.
  */
 export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+
+  /**
+   * Declares atomic conditional mutations for compatible in-memory handles.
+   */
+  override readonly atomicCompareAndSet = true;
   readonly #records: () => TenantRecords<I, R>;
 
   /**
