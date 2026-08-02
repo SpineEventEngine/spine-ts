@@ -239,3 +239,17 @@ auth/server/export suites passed 184 tests. Build/tooling typechecks, ESLint,
 TSDoc and cleanup enforcement, formatting, and diff checks passed. Only
 style/maintainability and performance/reliability need re-review at this
 endpoint, using their previously recorded explicit profiles.
+
+## Final Targeted Re-review Results
+
+- Style/maintainability: clean. Shared two-party CAS barriers cover capacity,
+  activation ownership, and cleaner contention; cleaner scripts match semantic
+  owner/fence/lease transitions without revision coupling.
+- Performance/reliability: all three runtime P1 findings are resolved. One P2
+  test-quality finding remains: the multi-lease cleaner regression polls and
+  sleeps on wall-clock time instead of synchronizing on a controlled heartbeat
+  transition. Replace it with an explicit heartbeat/CAS barrier or controlled
+  timers, then re-review only this deterministic-test concern.
+
+Runtime self-introspection remained unavailable; both explicit
+`gpt-5.6-terra` / high reviewer profiles matched with no visible fallback.
