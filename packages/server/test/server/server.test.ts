@@ -418,6 +418,41 @@ describe("Server", () => {
     }
   });
 
+  it("uses fixed auth errors without starting application work", async () => {
+    let calls = 0;
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "POST",
+            path: "/auth/fixed",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 2,
+            timeoutMs: 1000,
+            onRequest: () => ((calls += 1), new Response("unexpected")),
+          },
+        ],
+      },
+    }).start();
+    try {
+      await expect(
+        fetch(`${server.baseUrl}/missing`, { headers: { origin: "http://127.0.0.1:5173" } }),
+      ).resolves.toMatchObject({ status: 404 });
+      await expect(
+        fetch(`${server.baseUrl}/auth/fixed`, {
+          method: "POST",
+          headers: { origin: "http://127.0.0.1:5173", "content-length": "3" },
+          body: "abc",
+        }),
+      ).resolves.toMatchObject({ status: 413 });
+      expect(calls).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
     const server = await Server.atPort(0).start();
 
