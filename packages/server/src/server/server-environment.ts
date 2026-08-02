@@ -143,10 +143,15 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       this.#ownedCloseables,
       "ServerEnvironment close failed.",
     );
-    environmentAttachments.set(this, new EnvironmentAttachments({ createWorker: () => {
-      const ports = ServerEnvironmentValues.ports(this.delivery);
-      return new EnvironmentDeliveryWorker(ports === undefined ? {} : { ports });
-    } }));
+    environmentAttachments.set(
+      this,
+      new EnvironmentAttachments({
+        createWorker: () => {
+          const ports = ServerEnvironmentValues.ports(this.delivery);
+          return new EnvironmentDeliveryWorker(ports === undefined ? {} : { ports });
+        },
+      }),
+    );
     testAttachmentsInstallable.add(this);
     Object.freeze(this);
   }
@@ -419,7 +424,9 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
  * @internal Groups private facility-assembly operations for the environment singleton.
  */
 const ServerEnvironmentValues = Object.freeze({
-  ports(delivery: ServerEnvironmentCloseable | undefined): { readonly inbox: DeliveryInbox; readonly workRegistry: DeliveryWorkRegistry } | undefined {
+  ports(
+    delivery: ServerEnvironmentCloseable | undefined,
+  ): { readonly inbox: DeliveryInbox; readonly workRegistry: DeliveryWorkRegistry } | undefined {
     if (delivery === undefined || !("open" in delivery)) return undefined;
     const remote = delivery as ServerEnvironmentDelivery;
     return { inbox: remote.inbox, workRegistry: remote.workRegistry };

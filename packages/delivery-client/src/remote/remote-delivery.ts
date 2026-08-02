@@ -1,4 +1,7 @@
-import { type ServerEnvironmentCloseable, type ServerEnvironmentDelivery } from "@spine-event-engine/server";
+import {
+  type ServerEnvironmentCloseable,
+  type ServerEnvironmentDelivery,
+} from "@spine-event-engine/server";
 
 import { DeliveryClient } from "../client/client.js";
 import type { DeliveryClientOptions, RemovalQuarantine } from "../client/types.js";
@@ -72,8 +75,15 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     });
     return opening;
   }
-  get inbox(): RemoteInbox { if (this.#bundle === undefined) throw new Error("Remote delivery is not open."); return this.#bundle.inbox; }
-  get workRegistry(): RemoteWorkRegistry { if (this.#bundle === undefined) throw new Error("Remote delivery is not open."); return this.#bundle.workRegistry; }
+  get inbox(): RemoteInbox {
+    if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
+    return this.#bundle.inbox;
+  }
+
+  get workRegistry(): RemoteWorkRegistry {
+    if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
+    return this.#bundle.workRegistry;
+  }
 
   /**
    * Closes the built facility, client, and transferred quarantine in order.
