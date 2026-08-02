@@ -130,6 +130,7 @@ class FlatEntityCodec<I, R extends Message> {
  * Private initial handle for the Datastore adapter.
  */
 export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  // prettier-ignore
 
   /**
    * Declares atomic conditional mutations for compatible Datastore handles.
@@ -181,10 +182,7 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
     _query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {
     const query = this.#codec.createQuery(this.client);
-    const providerLimit = DatastoreRecordQuery.limit(
-      _query,
-      this.#codec.queryLimit(),
-    );
+    const providerLimit = DatastoreRecordQuery.limit(_query, this.#codec.queryLimit());
     DatastoreQueryPushdown.translate(
       query,
       _query,
@@ -618,6 +616,7 @@ const DatastoreQueryPushdown = Object.freeze(
  */
 const DatastoreRecordQuery = Object.freeze(
   new (class {
+    // prettier-ignore
 
     /**
      * Returns a caller limit only when it cannot change local query semantics.

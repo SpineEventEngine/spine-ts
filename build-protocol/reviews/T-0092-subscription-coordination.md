@@ -88,3 +88,19 @@ is reserved for a complete converged checkpoint.
 - Evidence: TSDoc enforcement, affected ESLint, and auth/server typechecks
   passed; focused auth subscription and durable registry suites passed 155
   tests; Prettier and `git diff --check` passed.
+
+## Repository Format Baseline Prerequisite
+
+- Repository-wide `format:check` found four current-main baseline files. The
+  bounded correction preserves user-required blank lines before TSDoc with the
+  established `// prettier-ignore` convention and applies ordinary Prettier
+  wrapping to the Datastore limit call. No behavior changed.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium) made
+  this mechanical baseline correction. Runtime self-introspection remains
+  unavailable.
+- Pending evidence: full format and TSDoc checks, affected lint/typechecks/
+  tests, and `git diff --check`, followed by immediate push.
+
+- Evidence: affected ESLint and server/storage/Datastore/MySQL typechecks
+  passed; four focused suites passed 178 tests; full `format:check`, TSDoc
+  enforcement, and `git diff --check` passed.
