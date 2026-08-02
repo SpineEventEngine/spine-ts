@@ -159,7 +159,7 @@ export class MessageBoardApplication {
    * @returns The running server, which callers must close when finished.
    */
   async start(options: BoardServerOptions = {}): Promise<RunningServer> {
-    return (await this.#server(options)).start();
+    return (await this.#server(options, new InMemoryStorageFactory(), true)).start();
   }
 
   /**
@@ -169,24 +169,61 @@ export class MessageBoardApplication {
    * @returns The running server after the browser listener is ready.
    */
   async run(options: BoardServerOptions = {}): Promise<RunningServer> {
-    return (await this.#server(options)).run();
+    return (await this.#server(options, new InMemoryStorageFactory(), true)).run();
   }
 
-  async #server(options: BoardServerOptions): Promise<Server> {
+  /**
+   * Starts the native MessageBoard application with an application-selected storage factory.
+   *
+   * @param options Network listener configuration.
+   * @param storageFactory The MessageBoard storage factory selected by its deployment configuration.
+   * @returns The running native application server.
+   */
+  async runApplication(
+    options: BoardServerOptions,
+    storageFactory: StorageFactory,
+  ): Promise<RunningServer> {
+    return (await this.#server(options, storageFactory, false)).run();
+  }
+
+  /**
+   * Starts the combined MessageBoard browser and native application server.
+   *
+   * @param options Network listener and browser configuration.
+   * @param storageFactory The MessageBoard storage factory selected by its deployment configuration.
+   * @returns The running combined server.
+   */
+  async runCombined(
+    options: BoardServerOptions,
+    storageFactory: StorageFactory,
+  ): Promise<RunningServer> {
+    return (await this.#server(options, storageFactory, true)).run();
+  }
+
+  async #server(
+    options: BoardServerOptions,
+    storageFactory: StorageFactory,
+    browser: boolean,
+  ): Promise<Server> {
     const policy = new BoardAccessPolicy();
-    return Server.atPort(options.port ?? 0, {
+    const server = Server.atPort(options.port ?? 0, {
       host: options.host ?? "127.0.0.1",
       services: { subscriptionLimit: 1_000 },
-      browser: {
-        origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
-        registry: typeRegistry,
-        sessions: LocalBoardSession.resolver(),
-        authorize: policy.authorize.bind(policy),
-        contexts: new BoardContextResolver(),
-        clock: LocalBoardSession.clock,
-        fingerprint: (principal) => principal.id,
-      },
-    }).add(await this.createContext());
+      ...(browser
+        ? {
+            browser: {
+              origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
+              registry: typeRegistry,
+              sessions: LocalBoardSession.resolver(),
+              authorize: policy.authorize.bind(policy),
+              contexts: new BoardContextResolver(),
+              clock: LocalBoardSession.clock,
+              fingerprint: (principal) => principal.id,
+            },
+          }
+        : {}),
+    });
+    return server.add(await this.createContext(storageFactory));
   }
 }
 
