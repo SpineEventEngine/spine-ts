@@ -6,7 +6,7 @@ export function renderEnvoy(options) {
   const routes = [...spineRoutes, ...topology.authRoutes]
     .map(
       (route) =>
-        `                        - match: { path: ${route.path} }\n                          route: { cluster: gateway, timeout: ${route.timeout} }`,
+        `                        - match: { path: ${route.path}, headers: [{ name: ":method", exact_match: ${route.method} }] }\n                          route: { cluster: gateway, timeout: ${route.timeout}, max_request_bytes: ${route.maxRequestBytes} }`,
     )
     .join("\n");
   return `static_resources:
@@ -97,16 +97,53 @@ function normalize(options) {
         throw new Error("auth routes require an exact method and canonical path");
       if (!Number.isSafeInteger(route.timeoutMs) || route.timeoutMs < 1)
         throw new Error("auth routes require a finite timeout");
-      return { path: route.path, timeout: `${route.timeoutMs}ms` };
+      if (!Number.isSafeInteger(route.maxRequestBytes) || route.maxRequestBytes < 1)
+        throw new Error("auth routes require a finite request-body limit");
+      return {
+        path: route.path,
+        method: route.method,
+        timeout: `${route.timeoutMs}ms`,
+        maxRequestBytes: route.maxRequestBytes,
+      };
     }),
   };
 }
 
 const spineRoutes = [
-  { path: "/spine.auth.AuthenticationService/ResolveContext", timeout: "30s" },
-  { path: "/spine.client.CommandService/Post", timeout: "30s" },
-  { path: "/spine.client.QueryService/Read", timeout: "30s" },
-  { path: "/spine.client.SubscriptionService/Subscribe", timeout: "30s" },
-  { path: "/spine.client.SubscriptionService/Activate", timeout: "0s" },
-  { path: "/spine.client.SubscriptionService/Cancel", timeout: "30s" },
+  {
+    path: "/spine.auth.AuthenticationService/ResolveContext",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.CommandService/Post",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.QueryService/Read",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.SubscriptionService/Subscribe",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.SubscriptionService/Activate",
+    method: "POST",
+    timeout: "0s",
+    maxRequestBytes: 1048576,
+  },
+  {
+    path: "/spine.client.SubscriptionService/Cancel",
+    method: "POST",
+    timeout: "30s",
+    maxRequestBytes: 1048576,
+  },
 ];

@@ -29,13 +29,16 @@ test("renders a bounded grpc-web gateway-only listener", () => {
   assert.match(rendered, /envoy\.extensions\.upstreams\.http\.v3\.HttpProtocolOptions/);
   assert.match(rendered, /max_request_headers_kb: 16/);
   assert.match(rendered, /stream_idle_timeout: 30s/);
-  assert.match(rendered, /match: \{ path: \/spine\.client\.CommandService\/Post \}/);
+  assert.match(
+    rendered,
+    /path: \/spine\.client\.CommandService\/Post, headers: \[\{ name: ":method", exact_match: POST \}\]/,
+  );
   assert.match(rendered, /\/spine\.auth\.AuthenticationService\/ResolveContext/);
   assert.match(rendered, /\/spine\.client\.QueryService\/Read/);
   assert.match(rendered, /\/spine\.client\.SubscriptionService\/Activate/);
   assert.match(
     rendered,
-    /SubscriptionService\/Activate \}\n {26}route: \{ cluster: gateway, timeout: 0s \}/,
+    /SubscriptionService\/Activate, headers: \[\{ name: ":method", exact_match: POST \}\] \}\n {26}route: \{ cluster: gateway, timeout: 0s, max_request_bytes: 1048576 \}/,
   );
   assert.doesNotMatch(rendered, /backend/);
   assert.doesNotMatch(rendered, /match: \{ prefix:/);
@@ -46,10 +49,16 @@ test("renders supplied auth endpoints as exact finite routes", () => {
     browserOrigin: "https://chat.example.test",
     tlsCertificate: "/cert",
     tlsKey: "/key",
-    authRoutes: [{ method: "POST", path: "/auth/exchange", timeoutMs: 1200 }],
+    authRoutes: [
+      { method: "POST", path: "/auth/exchange", timeoutMs: 1200, maxRequestBytes: 4096 },
+    ],
   });
-  assert.match(rendered, /match: \{ path: \/auth\/exchange \}/);
+  assert.match(
+    rendered,
+    /path: \/auth\/exchange, headers: \[\{ name: ":method", exact_match: POST \}\]/,
+  );
   assert.match(rendered, /timeout: 1200ms/);
+  assert.match(rendered, /max_request_bytes: 4096/);
 });
 
 test("rejects an insecure or incomplete public topology", () => {
