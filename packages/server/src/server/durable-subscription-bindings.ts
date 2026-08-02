@@ -971,8 +971,11 @@ const Values = Object.freeze({
       if (
         source.id !== cleanupId ||
         !Number.isSafeInteger(source.fence) ||
+        (source.fence as number) < 0 ||
         !Number.isSafeInteger(source.failureCount) ||
-        !Number.isSafeInteger(source.retryAfterMs)
+        (source.failureCount as number) < 0 ||
+        !Number.isSafeInteger(source.retryAfterMs) ||
+        (source.retryAfterMs as number) < 0
       )
         throw new Error("Durable subscription registry record is invalid.");
       return source as unknown as Cleanup;

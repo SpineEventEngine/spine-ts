@@ -1023,6 +1023,461 @@ describe("DurableSubscriptionBindings", () => {
     ).toThrow("requires atomic compare-and-set");
   });
 
+  it("accepts each durable record family and rejects incompatible private state", () => {
+    const valid = [
+      durableRecord("binding", {
+        id: "reserved",
+        revision: 1,
+        admissionToken: "reserved-token",
+        lifecycle: "reserved",
+        fence: 0,
+        reservationOwner: "gateway",
+        reservationUntilMs: 10,
+      }),
+      durableRecord("binding", {
+        id: "inactive",
+        revision: 1,
+        admissionToken: "inactive-token",
+        lifecycle: "inactive",
+        fence: 0,
+        principalFingerprint: "principal",
+        tenant: "tenant",
+        expiresAtMs: 10,
+        backend: "AQ==",
+        backendBytes: 1,
+      }),
+      durableRecord("binding", {
+        id: "active",
+        revision: 1,
+        admissionToken: "active-token",
+        lifecycle: "active",
+        fence: 1,
+        principalFingerprint: "principal",
+        expiresAtMs: 10,
+        backend: "AQ==",
+        backendBytes: 1,
+        ownerId: "gateway",
+        leaseUntilMs: 9,
+      }),
+      durableRecord("binding", {
+        id: "cancelling",
+        revision: 1,
+        admissionToken: "cancelling-token",
+        lifecycle: "cancelling",
+        fence: 2,
+        principalFingerprint: "principal",
+        expiresAtMs: 10,
+        backend: "AQ==",
+        backendBytes: 1,
+        ownerId: "gateway",
+        leaseUntilMs: 9,
+      }),
+      durableRecord("binding", {
+        id: "retired",
+        revision: 1,
+        admissionToken: "retired-token",
+        lifecycle: "retired",
+        fence: 2,
+      }),
+      durableRecord("quota", { id: "!subscription-quota", revision: 1, used: 0 }),
+      durableRecord("cleanup", {
+        id: "!subscription-cleanup",
+        revision: 1,
+        fence: 0,
+        failureCount: 0,
+        retryAfterMs: 0,
+      }),
+    ];
+    for (const record of valid)
+      expect(() => DurableSubscriptionBindingRecords.validate(record)).not.toThrow();
+
+    const invalid = [
+      durableRecord("binding", {
+        id: "!private",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "reserved",
+        fence: 0,
+      }),
+      durableRecord("binding", {
+        id: "missing",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "active",
+        fence: 0,
+        principalFingerprint: "principal",
+        expiresAtMs: 1,
+        backend: "AQ==",
+        backendBytes: 1,
+      }),
+      durableRecord("binding", {
+        id: "bad-bytes",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "inactive",
+        fence: 0,
+        principalFingerprint: "principal",
+        expiresAtMs: 1,
+        backend: "not-base64",
+        backendBytes: 1,
+      }),
+      durableRecord("binding", {
+        id: "retired-private",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "retired",
+        fence: 0,
+        principalFingerprint: "principal",
+      }),
+      durableRecord("quota", { id: "wrong", revision: 1, used: 0 }),
+      durableRecord("quota", { id: "!subscription-quota", revision: 1, used: -1 }),
+      durableRecord("cleanup", {
+        id: "wrong",
+        revision: 1,
+        fence: 0,
+        failureCount: 0,
+        retryAfterMs: 0,
+      }),
+      durableRecord("cleanup", {
+        id: "!subscription-cleanup",
+        revision: 1,
+        fence: -1,
+        failureCount: 0,
+        retryAfterMs: 0,
+      }),
+    ];
+    for (const [index, record] of invalid.entries())
+      expect(() => DurableSubscriptionBindingRecords.validate(record)).toThrow(
+        "Durable subscription registry record is invalid.",
+        `invalid durable record ${index.toString()}`,
+      );
+  });
+
+  it.each([
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 0,
+        admissionToken: "token",
+        lifecycle: "reserved",
+        fence: 0,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "",
+        lifecycle: "reserved",
+        fence: 0,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "unknown",
+        fence: 0,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "reserved",
+        fence: -1,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "inactive",
+        expiresAtMs: 1,
+        backend: "AQ==",
+        backendBytes: 1,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "inactive",
+        principalFingerprint: "p",
+        backend: "AQ==",
+        backendBytes: 1,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "inactive",
+        principalFingerprint: "p",
+        expiresAtMs: 1,
+        backendBytes: 1,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "inactive",
+        principalFingerprint: "p",
+        expiresAtMs: 1,
+        backend: "AQ==",
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "inactive",
+        principalFingerprint: "p",
+        expiresAtMs: 1,
+        backend: "AQ==",
+        backendBytes: 2,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "active",
+        principalFingerprint: "p",
+        expiresAtMs: 1,
+        backend: "AQ==",
+        backendBytes: 1,
+        ownerId: "",
+        leaseUntilMs: 1,
+      }),
+    ],
+    [
+      durableRecord("binding", {
+        id: "id",
+        revision: 1,
+        admissionToken: "token",
+        lifecycle: "active",
+        principalFingerprint: "p",
+        expiresAtMs: 1,
+        backend: "AQ==",
+        backendBytes: 1,
+        ownerId: "owner",
+        leaseUntilMs: 0.1,
+      }),
+    ],
+    [durableRecord("quota", { id: "!subscription-quota", revision: 1, used: 0.1 })],
+    [
+      durableRecord("cleanup", {
+        id: "!subscription-cleanup",
+        revision: 1,
+        fence: 0,
+        failureCount: 0.1,
+        retryAfterMs: 0,
+      }),
+    ],
+    [
+      durableRecord("cleanup", {
+        id: "!subscription-cleanup",
+        revision: 1,
+        fence: 0,
+        failureCount: 0,
+        retryAfterMs: 0.1,
+      }),
+    ],
+  ])("fails closed for each malformed durable invariant %#", (record) => {
+    expect(() => DurableSubscriptionBindingRecords.validate(record)).toThrow(
+      "Durable subscription registry record is invalid.",
+    );
+  });
+
+  it("rejects mismatched durable keys and bounded records", () => {
+    const record = durableRecord("quota", { id: "!subscription-quota", revision: 1, used: 0 });
+    expect(() => DurableSubscriptionBindingRecords.validate(record, "other")).toThrow(
+      "Durable subscription registry record is invalid.",
+    );
+    expect(() => DurableSubscriptionBindingRecords.validate(record, undefined, 1)).toThrow(
+      "Durable subscription registry record is invalid.",
+    );
+  });
+
+  it("returns closed or denied for missing, expired, and already retired operations", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "terminal-operations");
+    await expect(
+      bindings.cancel({
+        id: "missing",
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    await bindings.close();
+  });
+
+  it("fails closed when an atomic cancellation claim loses its race", async () => {
+    const factory = new RejectOnceFactory("cancellation");
+    const bindings = registry(factory, "cancel-race");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    factory.arm();
+
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await bindings.close();
+  });
+
+  it("does not run a backend callback when activation loses its atomic claim", async () => {
+    const factory = new RejectOnceFactory("claim");
+    const bindings = registry(factory, "activation-race");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    factory.arm();
+    const backend = vi.fn(() => Promise.resolve());
+
+    await expect(
+      bindings.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: backend,
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+
+    expect(backend).not.toHaveBeenCalled();
+    await bindings.close();
+  });
+
+  it("returns a finite denial when retirement loses its atomic update", async () => {
+    const factory = new RejectOnceFactory("retirement");
+    const bindings = registry(factory, "retirement-race");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    factory.arm();
+
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await bindings.close();
+  });
+
+  it("recovers cleanup after a competing control-row update", async () => {
+    const factory = new RejectOnceFactory("cleanup-advance");
+    let calls = 0;
+    const bindings = cleanupRegistry(factory, "cleanup-race-loss", () => {
+      calls += 1;
+      return Promise.resolve();
+    });
+    await bindings.create(expiredInput());
+    factory.arm();
+
+    await bindings.purgeExpired(2);
+    await bindings.purgeExpired(20);
+
+    expect(calls).toBeGreaterThanOrEqual(1);
+    await bindings.close();
+  });
+
+  it("rejects a reserved control ID from the identifier generator", async () => {
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "invalid-id",
+      nextId: () => "!subscription-quota",
+      dispose: () => Promise.resolve(),
+      leaseMs: 1,
+      cleanupBatchSize: 1,
+      recordLimit: 2,
+      maxRecordBytes: 1_024,
+    });
+
+    await expect(bindings.reserveCapacity()).rejects.toThrow("subscription ID must be unique");
+    await bindings.close();
+  });
+
+  it.each(["quota-stage", "slot", "quota-completion"] as const)(
+    "converges a rejected %s admission update",
+    async (phase) => {
+      const factory = new RejectOnceFactory(phase);
+      const bindings = capacityRegistry(factory, `rejected-${phase}`, 2);
+      const initial = await bindings.reserveCapacity();
+      await initial.release();
+      factory.arm();
+
+      await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+      await bindings.close();
+    },
+  );
+
+  it("converges a rejected release update without retaining capacity", async () => {
+    const factory = new RejectOnceFactory("release-stage");
+    const bindings = capacityRegistry(factory, "rejected-release", 1);
+    const reservation = await bindings.reserveCapacity();
+    factory.arm();
+
+    await reservation.release();
+    await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
+
   it.each([
     create(AnySchema, { typeUrl: "wrong", value: new Uint8Array([1]) }),
     create(AnySchema, {
@@ -1112,10 +1567,7 @@ describe("DurableSubscriptionBindings", () => {
   });
 });
 
-function registry(
-  storageFactory: InMemoryStorageFactory,
-  namespace: string,
-): DurableSubscriptionBindings {
+function registry(storageFactory: StorageFactory, namespace: string): DurableSubscriptionBindings {
   let nextId = 0;
   return new DurableSubscriptionBindings({
     storageFactory,
@@ -1289,6 +1741,24 @@ function malformedRepairRecord(id: string): Any {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
       JSON.stringify({ version: 2, family: "binding", id, revision: 1 }),
+    ),
+  });
+}
+
+function durableRecord(
+  family: "binding" | "quota" | "cleanup",
+  value: Record<string, unknown>,
+): Any {
+  const typeUrl =
+    family === "binding"
+      ? "type.spine-event-engine.gateway/DurableSubscriptionBinding"
+      : family === "quota"
+        ? "type.spine-event-engine.gateway/SubscriptionBindingQuota"
+        : "type.spine-event-engine.gateway/SubscriptionBindingCleanup";
+  return create(AnySchema, {
+    typeUrl,
+    value: new TextEncoder().encode(
+      JSON.stringify({ version: family === "binding" ? 2 : 1, family, ...value }),
     ),
   });
 }
@@ -1483,5 +1953,110 @@ class ApplyThenThrowStorage<I, R extends Message> extends RecordStorage<I, R> {
     const applied = await this.delegate.compareAndSet(id, expected?.record, next?.record);
     if (applied && this.shouldThrow(id, next?.record)) throw new Error("applied-then-thrown");
     return applied;
+  }
+}
+
+class RejectOnceFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  #armed = false;
+
+  constructor(
+    private readonly phase:
+      | "claim"
+      | "cancellation"
+      | "retirement"
+      | "cleanup-advance"
+      | "quota-stage"
+      | "quota-completion"
+      | "slot"
+      | "release-stage",
+  ) {
+    super();
+  }
+
+  arm(): void {
+    this.#armed = true;
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new RejectOnceStorage(
+      context,
+      spec,
+      this.#delegate.createRecordStorage(context, spec),
+      (id, next) => {
+        if (!this.#armed) return false;
+        const text =
+          next === undefined ? "" : new TextDecoder().decode((next as unknown as Any).value);
+        const rejected =
+          (this.phase === "quota-stage" &&
+            id === "!subscription-quota" &&
+            text.includes('"kind":"reserve"')) ||
+          (this.phase === "quota-completion" &&
+            id === "!subscription-quota" &&
+            !text.includes('"operation"')) ||
+          (this.phase === "slot" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"reserved"')) ||
+          (this.phase === "release-stage" &&
+            id === "!subscription-quota" &&
+            text.includes('"kind":"release"')) ||
+          (this.phase === "claim" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"active"')) ||
+          (this.phase === "cancellation" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"cancelling"')) ||
+          (this.phase === "retirement" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"retired"')) ||
+          (this.phase === "cleanup-advance" &&
+            id === "!subscription-cleanup" &&
+            text.includes('"afterId"'));
+        if (rejected) this.#armed = false;
+        return rejected;
+      },
+    );
+  }
+}
+
+class RejectOnceStorage<I, R extends Message> extends RecordStorage<I, R> {
+  override readonly atomicCompareAndSet = true;
+
+  constructor(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+    private readonly delegate: RecordStorage<I, R>,
+    private readonly shouldReject: (id: I, next: R | undefined) => boolean,
+  ) {
+    super(context, spec);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.delegate.delete(id);
+  }
+  protected queryRecordEntries(query: RecordQuery<I>) {
+    return this.delegate.queryEntries(query);
+  }
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.delegate.read(id);
+  }
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.delegate.writeAll(records.map((entry) => entry.record));
+  }
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.delegate.write(record.record);
+  }
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.shouldReject(id, next?.record)) return Promise.resolve(false);
+    return this.delegate.compareAndSet(id, expected?.record, next?.record);
   }
 }
