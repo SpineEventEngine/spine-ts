@@ -394,8 +394,6 @@ export const BrowserServer: Readonly<{
         }
         return;
       }
-      response.statusCode = result.status;
-      result.headers.forEach((value, key) => response.setHeader(key, value));
       const reader = result.body?.getReader();
       const responseChunks: Uint8Array[] = [];
       let responseBytes = 0;
@@ -420,6 +418,7 @@ export const BrowserServer: Readonly<{
           }
           responseBytes += next.value.byteLength;
           if (responseBytes > writeMaxBytes) {
+            await reader.cancel();
             response.statusCode = 413;
             response.end();
             return;
@@ -427,6 +426,8 @@ export const BrowserServer: Readonly<{
           responseChunks.push(next.value);
         }
       }
+      response.statusCode = result.status;
+      result.headers.forEach((value, key) => response.setHeader(key, value));
       response.end(Buffer.concat(responseChunks));
     } catch {
       if (!response.writableEnded) {

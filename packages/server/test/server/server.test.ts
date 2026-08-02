@@ -702,7 +702,7 @@ describe("Server", () => {
             origins: ["http://127.0.0.1:5173"],
             maxRequestBytes: 16,
             timeoutMs: 1000,
-            onRequest: () => new Response("response-too-large"),
+            onRequest: () => new Response("response-too-large", { headers: { "x-private": "no" } }),
           },
         ],
       },
@@ -712,6 +712,7 @@ describe("Server", () => {
         headers: { origin: "http://127.0.0.1:5173" },
       });
       expect(response.status).toBe(413);
+      expect(response.headers.get("x-private")).toBeNull();
       await expect(response.text()).resolves.toBe("");
     } finally {
       await server.close();
