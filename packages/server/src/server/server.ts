@@ -20,7 +20,10 @@ import {
 import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
 import { ContextTransportGroup } from "./context-transport-group.js";
 import { BrowserServer } from "./browser-server.js";
-import type { EnvironmentAttachmentHandle, EnvironmentOwnership } from "./environment-attachment.js";
+import type {
+  EnvironmentAttachmentHandle,
+  EnvironmentOwnership,
+} from "./environment-attachment.js";
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";

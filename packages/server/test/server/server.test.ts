@@ -139,7 +139,10 @@ describe("Server", () => {
           "Server-owned environment registration requires exclusive ownership.",
         );
       } finally {
-        await rejected.then((server) => server.close(), () => undefined);
+        await rejected.then(
+          (server) => server.close(),
+          () => undefined,
+        );
       }
       const sibling = await Server.atPort(rejectedPort).start();
       expect(sibling.port).toBe(rejectedPort);
@@ -160,7 +163,10 @@ describe("Server", () => {
           "Server-owned environment registration requires exclusive ownership.",
         );
       } finally {
-        await rejected.then((server) => server.close(), () => undefined);
+        await rejected.then(
+          (server) => server.close(),
+          () => undefined,
+        );
       }
       const sibling = await Server.atPort(rejectedPort).run();
       expect(sibling.port).toBe(rejectedPort);
