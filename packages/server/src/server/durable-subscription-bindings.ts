@@ -373,7 +373,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         revision: control.revision + 1,
         ownerId: this.#owner,
         fence: control.fence + 1,
-        leaseUntilMs: nowMs + this.#leaseMs,
+        leaseUntilMs: this.#until(nowMs),
       };
       if (!(await this.#replaceCleanup(control, claimed))) {
         const reread = await this.#cleanup();
@@ -441,7 +441,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       lifecycle,
       fence: old.fence + 1,
       ownerId: this.#owner,
-      leaseUntilMs: nowMs + this.#leaseMs,
+      leaseUntilMs: this.#until(nowMs),
       ...(reason === undefined ? {} : { reason }),
     };
   }
@@ -456,7 +456,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       controller.abort();
       return;
     }
-    const next = { ...old, revision: old.revision + 1, leaseUntilMs: Date.now() + this.#leaseMs };
+    const next = { ...old, revision: old.revision + 1, leaseUntilMs: this.#until(Date.now()) };
     if (!(await this.#cas(id, row, Values.write(next, this.#maxRecordBytes)))) {
       if (!(await this.#current(id, fence, "active", Date.now()))) {
         controller.abort();
@@ -474,6 +474,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       () => void this.#renew(id, active.fence, active.controller),
       Math.max(1, Math.floor(this.#leaseMs / 2)),
     );
+  }
+  #until(nowMs: number): number {
+    return Math.min(Number.MAX_SAFE_INTEGER, nowMs + this.#leaseMs);
   }
   async #current(
     id: string,
@@ -752,7 +755,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
             lifecycle: "reserved",
             fence: 0,
             reservationOwner: this.#owner,
-            reservationUntilMs: Number.MAX_SAFE_INTEGER,
+            reservationUntilMs: this.#until(Date.now()),
           };
           await this.#cas(id, undefined, Values.write(slot, this.#maxRecordBytes));
           continue;

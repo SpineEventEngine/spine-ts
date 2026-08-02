@@ -98,6 +98,16 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("releases an expired durable reservation through the finite cleanup page", async () => {
+    const bindings = capacityRegistry(new InMemoryStorageFactory(), "reservation-expiry", 1);
+    await bindings.reserveCapacity();
+
+    await bindings.purgeExpired(Number.MAX_SAFE_INTEGER - 10);
+
+    await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
+
   it("enforces capacity across independently opened registries", async () => {
     const factory = new InMemoryStorageFactory();
     const first = capacityRegistry(factory, "shared", 1);
