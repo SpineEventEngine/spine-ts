@@ -127,8 +127,9 @@ Two gateways coordinate ownership with finite leases and fences. Before each
 backend effect and public update, the gateway checks its durable owner/fence
 guard. A false guard suppresses that effect or update; renewal also aborts the
 local controller when it observes lease loss. A former owner cannot finalize.
-Cleanup remains
-bounded and restart-safe at the record level; active streams do not resume,
+Cleanup remains bounded and restart-safe at the record level. It renews the
+fenced cleaner lease immediately before each disposal callback, preventing a
+second cleaner from taking over during that callback. Active streams do not resume,
 updates are not replayed, and the registry provides neither exactly-once
 delivery, global update ordering, nor cluster-complete notification delivery.
 

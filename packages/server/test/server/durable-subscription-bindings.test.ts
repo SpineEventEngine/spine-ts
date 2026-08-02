@@ -794,6 +794,36 @@ describe("DurableSubscriptionBindings", () => {
     await second.close();
   });
 
+  it("renews a cleaner lease before a blocked disposal can be taken over", async () => {
+    const factory = new InMemoryStorageFactory();
+    let release: (() => void) | undefined;
+    let calls = 0;
+    const dispose = () => {
+      calls += 1;
+      return new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    };
+    const first = cleanupRegistry(factory, "blocked-cleaner", dispose);
+    const second = cleanupRegistry(factory, "blocked-cleaner", dispose);
+    await first.create(expiredInput());
+    const cleaning = first.purgeExpired(1);
+    await new Promise<void>((resolve) => {
+      const wait = () => {
+        if (release === undefined) queueMicrotask(wait);
+        else resolve();
+      };
+      wait();
+    });
+
+    await second.purgeExpired(11);
+    expect(calls).toBe(1);
+    release?.();
+    await cleaning;
+    await first.close();
+    await second.close();
+  });
+
   it("reconciles an applied-then-thrown cleanup claim before disposal", async () => {
     const factory = new ApplyThenThrowFactory("cleanup-claim");
     let calls = 0;
@@ -807,6 +837,75 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.purgeExpired(2);
 
     expect(calls).toBe(1);
+    await bindings.close();
+  });
+
+  it.each([
+    ["applied-then-thrown", () => new ApplyThenThrowFactory("cleaner-renewal")],
+    ["rejected", () => new RejectOnceFactory("cleaner-renewal")],
+  ] as const)(
+    "backs off when a %s cleaner renewal cannot be confirmed",
+    async (_outcome, createFactory) => {
+      const factory = createFactory();
+      let calls = 0;
+      const bindings = cleanupRegistry(factory, "cleaner-renewal", () => {
+        calls += 1;
+        return Promise.resolve();
+      });
+      await bindings.create(expiredInput());
+      factory.arm();
+
+      await bindings.purgeExpired(2);
+      expect(calls).toBe(_outcome === "applied-then-thrown" ? 1 : 0);
+
+      await bindings.purgeExpired(20);
+      expect(calls).toBe(1);
+      await bindings.close();
+    },
+  );
+
+  it.each([
+    ["applied-then-thrown", () => new ApplyThenThrowFactory("cleaner-shorten")],
+    ["rejected", () => new RejectOnceFactory("cleaner-shorten")],
+  ] as const)("reconciles a %s cleaner lease shortening race", async (_outcome, createFactory) => {
+    const factory = createFactory();
+    let calls = 0;
+    const bindings = cleanupRegistry(factory, "cleaner-shorten", () => {
+      calls += 1;
+      return Promise.resolve();
+    });
+    await bindings.create(expiredInput());
+    factory.arm();
+
+    await bindings.purgeExpired(2);
+    expect(calls).toBe(1);
+    await bindings.close();
+  });
+
+  it("reconciles an applied cleaner cursor advancement", async () => {
+    const factory = new ApplyThenThrowFactory("cleanup-advance");
+    let calls = 0;
+    const bindings = cleanupRegistry(factory, "cleanup-advance-applied", () => {
+      calls += 1;
+      return Promise.resolve();
+    });
+    await bindings.create(expiredInput());
+    factory.arm();
+
+    await bindings.purgeExpired(2);
+    expect(calls).toBe(1);
+    await bindings.close();
+  });
+
+  it("keeps cleanup finite when its durable backoff write loses a race", async () => {
+    const factory = new RejectOnceFactory("cleanup-fail");
+    const bindings = cleanupRegistry(factory, "cleanup-fail", () =>
+      Promise.reject(new Error("private backend failure")),
+    );
+    await bindings.create(expiredInput());
+    factory.arm();
+
+    await expect(bindings.purgeExpired(2)).resolves.toBeUndefined();
     await bindings.close();
   });
 
@@ -2100,11 +2199,20 @@ describe("DurableSubscriptionBindings", () => {
       onBackend: (_value, signal) =>
         new Promise<void>((resolve) => {
           started = resolve;
-          signal.addEventListener("abort", resolve, { once: true });
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
         }),
     });
     await new Promise<void>((resolve) => {
-      const wait = () => (started === undefined ? queueMicrotask(wait) : resolve());
+      const wait = () => {
+        if (started === undefined) queueMicrotask(wait);
+        else resolve();
+      };
       wait();
     });
 
@@ -2128,11 +2236,20 @@ describe("DurableSubscriptionBindings", () => {
       onBackend: (_value, signal) =>
         new Promise<void>((resolve) => {
           started = resolve;
-          signal.addEventListener("abort", resolve, { once: true });
+          signal.addEventListener(
+            "abort",
+            () => {
+              resolve();
+            },
+            { once: true },
+          );
         }),
     });
     await new Promise<void>((resolve) => {
-      const wait = () => (started === undefined ? queueMicrotask(wait) : resolve());
+      const wait = () => {
+        if (started === undefined) queueMicrotask(wait);
+        else resolve();
+      };
       wait();
     });
 
@@ -2417,12 +2534,78 @@ class UnprovenRecordStorage extends SeededRecordStorage {
   }
 }
 
-class ApplyThenThrowFactory extends StorageFactory {
+type ScriptPhase =
+  | "quota"
+  | "slot"
+  | "conversion"
+  | "deletion"
+  | "completion"
+  | "repair-page"
+  | "repair-final"
+  | "claim"
+  | "cancellation"
+  | "retirement"
+  | "cleanup-claim"
+  | "cleaner-renewal"
+  | "cleaner-shorten"
+  | "cleanup-fail"
+  | "renewal"
+  | "cleanup-advance"
+  | "quota-stage"
+  | "quota-completion"
+  | "release-stage"
+  | "expired-cancellation"
+  | "activation-finalize"
+  | "quota-create"
+  | "cleanup-create";
+
+type ScriptOutcome = "apply-then-throw" | "reject";
+
+/**
+ * Scripts one semantic registry transition without depending on serialized JSON text.
+ */
+class ScriptedStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   #armed = false;
 
   constructor(
-    private readonly phase:
+    private readonly phase: ScriptPhase,
+    private readonly outcome: ScriptOutcome,
+  ) {
+    super();
+  }
+
+  arm(): void {
+    this.#armed = true;
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    spec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new ScriptedStorage(
+      context,
+      spec,
+      this.#delegate.createRecordStorage(context, spec),
+      this.outcome,
+      (id, next) => this.#take(String(id), next as unknown as Any | undefined),
+    );
+  }
+
+  #take(id: string, next: Any | undefined): boolean {
+    if (!this.#armed || !scriptedTransition(this.phase, id, next)) return false;
+    this.#armed = false;
+    return true;
+  }
+}
+
+/**
+ * Preserves concise test setup while delegating all scripting to one semantic decorator.
+ */
+class ApplyThenThrowFactory extends ScriptedStorageFactory {
+  constructor(
+    phase: Extract<
+      ScriptPhase,
       | "quota"
       | "slot"
       | "conversion"
@@ -2434,77 +2617,42 @@ class ApplyThenThrowFactory extends StorageFactory {
       | "cancellation"
       | "retirement"
       | "cleanup-claim"
-      | "renewal",
+      | "cleaner-renewal"
+      | "cleaner-shorten"
+      | "cleanup-advance"
+      | "renewal"
+    >,
   ) {
-    super();
-  }
-
-  arm(): void {
-    this.#armed = true;
-  }
-
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    spec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new ApplyThenThrowStorage(
-      context,
-      spec,
-      this.#delegate.createRecordStorage(context, spec),
-      (id, next) => {
-        if (!this.#armed) return false;
-        const text =
-          next === undefined ? "" : new TextDecoder().decode((next as unknown as Any).value);
-        const hit =
-          (this.phase === "slot" && id !== "!subscription-quota" && text.includes('"reserved"')) ||
-          (this.phase === "conversion" &&
-            id !== "!subscription-quota" &&
-            text.includes('"inactive"')) ||
-          (this.phase === "deletion" && id !== "!subscription-quota" && next === undefined) ||
-          (this.phase === "quota" &&
-            id === "!subscription-quota" &&
-            text.includes('"operation"')) ||
-          (this.phase === "completion" &&
-            id === "!subscription-quota" &&
-            !text.includes('"operation"')) ||
-          (this.phase === "repair-page" &&
-            id === "!subscription-quota" &&
-            text.includes('"kind":"repair"') &&
-            text.includes('"afterId"')) ||
-          (this.phase === "repair-final" &&
-            id === "!subscription-quota" &&
-            !text.includes('"operation"')) ||
-          (this.phase === "claim" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"active"')) ||
-          (this.phase === "cancellation" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"cancelling"')) ||
-          (this.phase === "retirement" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"retired"')) ||
-          (this.phase === "cleanup-claim" &&
-            id === "!subscription-cleanup" &&
-            text.includes('"ownerId"')) ||
-          (this.phase === "renewal" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"active"') &&
-            text.includes('"revision":4'));
-        if (hit) this.#armed = false;
-        return hit;
-      },
-    );
+    super(phase, "apply-then-throw");
   }
 }
 
-class ApplyThenThrowStorage<I, R extends Message> extends RecordStorage<I, R> {
+/**
+ * Preserves concise test setup while delegating all scripting to one semantic decorator.
+ */
+class RejectOnceFactory extends ScriptedStorageFactory {
+  constructor(
+    phase: Exclude<
+      ScriptPhase,
+      "deletion" | "completion" | "repair-page" | "repair-final" | "cleanup-claim"
+    >,
+  ) {
+    super(phase, "reject");
+  }
+}
+
+/**
+ * Delegates record storage while forcing one named registry transition to fail deterministically.
+ */
+class ScriptedStorage<I, R extends Message> extends RecordStorage<I, R> {
   override readonly atomicCompareAndSet = true;
 
   constructor(
     context: StorageContext,
     spec: RecordSpec<I, R>,
     private readonly delegate: RecordStorage<I, R>,
-    private readonly shouldThrow: (id: I, next: R | undefined) => boolean,
+    private readonly outcome: ScriptOutcome,
+    private readonly take: (id: I, next: R | undefined) => boolean,
   ) {
     super(context, spec);
   }
@@ -2512,158 +2660,96 @@ class ApplyThenThrowStorage<I, R extends Message> extends RecordStorage<I, R> {
   protected deleteRecord(id: I): Promise<boolean> {
     return this.delegate.delete(id);
   }
+
   protected queryRecordEntries(query: RecordQuery<I>) {
     return this.delegate.queryEntries(query);
   }
+
   protected readRecord(id: I): Promise<R | undefined> {
     return this.delegate.read(id);
   }
+
   protected writeAllRecords(
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void> {
     return this.delegate.writeAll(records.map((entry) => entry.record));
   }
+
   protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
     return this.delegate.write(record.record);
   }
+
   protected async compareAndSetRecord(
     id: I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
+    if (this.outcome === "reject" && this.take(id, next?.record)) return false;
     const applied = await this.delegate.compareAndSet(id, expected?.record, next?.record);
-    if (applied && this.shouldThrow(id, next?.record)) throw new Error("applied-then-thrown");
+    if (applied && this.outcome === "apply-then-throw" && this.take(id, next?.record))
+      throw new Error("applied-then-thrown");
     return applied;
   }
 }
 
-class RejectOnceFactory extends StorageFactory {
-  readonly #delegate = new InMemoryStorageFactory();
-  #armed = false;
-
-  constructor(
-    private readonly phase:
-      | "claim"
-      | "cancellation"
-      | "retirement"
-      | "cleanup-advance"
-      | "quota-stage"
-      | "quota-completion"
-      | "slot"
-      | "release-stage"
-      | "expired-cancellation"
-      | "activation-finalize"
-      | "quota-create"
-      | "cleanup-create"
-      | "conversion"
-      | "renewal",
-  ) {
-    super();
-  }
-
-  arm(): void {
-    this.#armed = true;
-  }
-
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    spec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new RejectOnceStorage(
-      context,
-      spec,
-      this.#delegate.createRecordStorage(context, spec),
-      (id, next) => {
-        if (!this.#armed) return false;
-        const text =
-          next === undefined ? "" : new TextDecoder().decode((next as unknown as Any).value);
-        const rejected =
-          (this.phase === "quota-create" &&
-            id === "!subscription-quota" &&
-            !text.includes('"operation"')) ||
-          (this.phase === "cleanup-create" &&
-            id === "!subscription-cleanup" &&
-            !text.includes('"ownerId"')) ||
-          (this.phase === "quota-stage" &&
-            id === "!subscription-quota" &&
-            text.includes('"kind":"reserve"')) ||
-          (this.phase === "quota-completion" &&
-            id === "!subscription-quota" &&
-            !text.includes('"operation"')) ||
-          (this.phase === "slot" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"reserved"')) ||
-          (this.phase === "conversion" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"inactive"')) ||
-          (this.phase === "release-stage" &&
-            id === "!subscription-quota" &&
-            text.includes('"kind":"release"')) ||
-          (this.phase === "expired-cancellation" &&
-            id !== "!subscription-quota" &&
-            text.includes('"reason":"expired"')) ||
-          (this.phase === "activation-finalize" &&
-            id !== "!subscription-quota" &&
-            text.includes('"reason":"activation-end"')) ||
-          (this.phase === "renewal" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"active"')) ||
-          (this.phase === "claim" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"active"')) ||
-          (this.phase === "cancellation" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"cancelling"')) ||
-          (this.phase === "retirement" &&
-            id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"retired"')) ||
-          (this.phase === "cleanup-advance" &&
-            id === "!subscription-cleanup" &&
-            text.includes('"afterId"'));
-        if (rejected) this.#armed = false;
-        return rejected;
-      },
-    );
+function scriptedTransition(phase: ScriptPhase, id: string, next: Any | undefined): boolean {
+  const fact = scriptedFact(next);
+  const operation = fact?.operation as Record<string, unknown> | undefined;
+  const binding = fact?.family === "binding";
+  const quota = id === "!subscription-quota" && fact?.family === "quota";
+  const cleanup = id === "!subscription-cleanup" && fact?.family === "cleanup";
+  switch (phase) {
+    case "quota":
+      return quota && operation !== undefined;
+    case "slot":
+      return binding && fact.lifecycle === "reserved";
+    case "conversion":
+      return binding && fact.lifecycle === "inactive";
+    case "deletion":
+      return id !== "!subscription-quota" && id !== "!subscription-cleanup" && next === undefined;
+    case "completion":
+    case "repair-final":
+      return quota && operation === undefined;
+    case "repair-page":
+      return quota && operation?.kind === "repair" && operation.afterId !== undefined;
+    case "claim":
+      return binding && fact.lifecycle === "active";
+    case "cancellation":
+      return binding && fact.lifecycle === "cancelling";
+    case "retirement":
+      return binding && fact.lifecycle === "retired";
+    case "cleanup-claim":
+      return cleanup && fact.ownerId !== undefined;
+    case "cleaner-renewal":
+      return cleanup && fact.ownerId !== undefined && fact.revision === 5;
+    case "cleaner-shorten":
+      return cleanup && fact.ownerId !== undefined && fact.revision === 6;
+    case "cleanup-fail":
+      return cleanup && fact.ownerId === undefined && fact.failureCount === 1;
+    case "renewal":
+      return binding && fact.lifecycle === "active";
+    case "cleanup-advance":
+      return cleanup && fact.afterId !== undefined;
+    case "quota-stage":
+      return quota && operation?.kind === "reserve";
+    case "quota-completion":
+      return quota && operation === undefined;
+    case "release-stage":
+      return quota && operation?.kind === "release";
+    case "expired-cancellation":
+      return binding && fact.reason === "expired";
+    case "activation-finalize":
+      return binding && fact.reason === "activation-end";
+    case "quota-create":
+      return quota && operation === undefined;
+    case "cleanup-create":
+      return cleanup && fact.ownerId === undefined;
   }
 }
 
-class RejectOnceStorage<I, R extends Message> extends RecordStorage<I, R> {
-  override readonly atomicCompareAndSet = true;
-
-  constructor(
-    context: StorageContext,
-    spec: RecordSpec<I, R>,
-    private readonly delegate: RecordStorage<I, R>,
-    private readonly shouldReject: (id: I, next: R | undefined) => boolean,
-  ) {
-    super(context, spec);
-  }
-
-  protected deleteRecord(id: I): Promise<boolean> {
-    return this.delegate.delete(id);
-  }
-  protected queryRecordEntries(query: RecordQuery<I>) {
-    return this.delegate.queryEntries(query);
-  }
-  protected readRecord(id: I): Promise<R | undefined> {
-    return this.delegate.read(id);
-  }
-  protected writeAllRecords(
-    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
-  ): Promise<void> {
-    return this.delegate.writeAll(records.map((entry) => entry.record));
-  }
-  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
-    return this.delegate.write(record.record);
-  }
-  protected compareAndSetRecord(
-    id: I,
-    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-  ): Promise<boolean> {
-    if (this.shouldReject(id, next?.record)) return Promise.resolve(false);
-    return this.delegate.compareAndSet(id, expected?.record, next?.record);
-  }
+function scriptedFact(next: Any | undefined): Record<string, unknown> | undefined {
+  if (next === undefined) return undefined;
+  return JSON.parse(new TextDecoder().decode(next.value)) as Record<string, unknown>;
 }
 
 class VanishingFactory extends StorageFactory {

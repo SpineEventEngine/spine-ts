@@ -171,7 +171,9 @@ the local controller is aborted when a renewal observes the loss. It cannot
 later complete as owner.
 Cancellation can be retried after an uncertain backend result. Expired records
 are cleaned in bounded batches when requests call the registry; applications
-may also call `purgeExpired(nowMs)` from their own maintenance loop. This is
+may also call `purgeExpired(nowMs)` from their own maintenance loop. A cleaner
+renews its fenced lease immediately before each disposal callback, so another
+registry cannot take over while that callback is still running. This is
 coordination only: it does not recover a live stream or promise replay,
 exactly-once updates, ordering, or cluster-complete notifications.
 

@@ -643,7 +643,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         control = await this.#advanceClean(control, row.id, false);
         continue;
       }
+      control = await this.#renewCleanup(control, nowMs);
       await this.#cleanBinding(row.id, nowMs);
+      control = await this.#shortenCleanup(control, nowMs);
       processed += 1;
       control = await this.#advanceClean(control, row.id, false);
       if (processed === this.#cleanupBatchSize) return;
@@ -673,6 +675,38 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       (binding.lifecycle === "cancelling" && (binding.leaseUntilMs ?? 0) <= nowMs)
     )
       await this.#cancelExpired(binding, row, nowMs);
+  }
+  async #renewCleanup(expected: Cleanup, nowMs: number): Promise<Cleanup> {
+    const current = await this.#cleanup();
+    if (
+      current.ownerId !== this.#owner ||
+      current.fence !== expected.fence ||
+      (current.leaseUntilMs ?? 0) <= nowMs
+    )
+      throw new Error("Subscription cleanup lost its durable lease.");
+    const next: Cleanup = {
+      ...current,
+      revision: current.revision + 1,
+      leaseUntilMs: this.#until(Math.max(nowMs, current.leaseUntilMs ?? nowMs)),
+    };
+    if (await this.#replaceCleanup(current, next)) return next;
+    const reread = await this.#cleanup();
+    if (this.#sameCleanup(reread, next)) return reread;
+    throw new Error("Subscription cleanup lost its durable lease.");
+  }
+  async #shortenCleanup(expected: Cleanup, nowMs: number): Promise<Cleanup> {
+    const current = await this.#cleanup();
+    if (current.ownerId !== this.#owner || current.fence !== expected.fence)
+      throw new Error("Subscription cleanup lost its durable lease.");
+    const next: Cleanup = {
+      ...current,
+      revision: current.revision + 1,
+      leaseUntilMs: this.#until(nowMs),
+    };
+    if (await this.#replaceCleanup(current, next)) return next;
+    const reread = await this.#cleanup();
+    if (this.#sameCleanup(reread, next)) return reread;
+    throw new Error("Subscription cleanup lost its durable lease.");
   }
   async #cancelExpired(old: Binding, row: Any, nowMs: number): Promise<void> {
     const next = this.#work(old, "cancelling", nowMs, "expired");
