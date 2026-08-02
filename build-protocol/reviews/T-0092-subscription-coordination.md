@@ -215,7 +215,7 @@ unless their contracts or claims change substantively.
 
 ## Final Narrow Correction Evidence
 
-Correction endpoint: pending commit after `693357ca`. The existing
+Correction endpoint: `0eb0dba0`. The existing
 `implementer` was explicitly configured as `gpt-5.6-terra` / medium; runtime
 self-introspection remains unavailable.
 
@@ -234,6 +234,8 @@ self-introspection remains unavailable.
   with no incidental revision matching.
 
 Focused durable evidence: 121 tests passed; exact source coverage is 93.47%
-statements, 90.17% branches, 93.75% functions, and 96.03% lines. The pending
-mechanical checks will be recorded before the immediate push. Only
-style/maintainability and performance/reliability need re-review.
+statements, 90.17% branches, 93.75% functions, and 96.03% lines. Focused
+auth/server/export suites passed 184 tests. Build/tooling typechecks, ESLint,
+TSDoc and cleanup enforcement, formatting, and diff checks passed. Only
+style/maintainability and performance/reliability need re-review at this
+endpoint, using their previously recorded explicit profiles.
