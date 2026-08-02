@@ -634,6 +634,39 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
+  it("fences an active expired session before cleanup disposal", async () => {
+    const factory = new InMemoryStorageFactory();
+    let disposed = 0;
+    const bindings = cleanupRegistry(factory, "cleanup-active", () => {
+      disposed += 1;
+      return Promise.resolve();
+    });
+    const binding = await bindings.create(expiredInput());
+    let guard: (() => Promise<boolean>) | undefined;
+    let resume: (() => void) | undefined;
+    const active = bindings.activate({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 0,
+      signal: new AbortController().signal,
+      onBackend: (_value, _signal, current) =>
+        new Promise<void>((resolve) => {
+          guard = current;
+          resume = resolve;
+        }),
+    });
+    await Promise.resolve();
+
+    await bindings.purgeExpired(2);
+
+    expect(disposed).toBe(1);
+    await expect(guard?.()).resolves.toBe(false);
+    resume?.();
+    await expect(active).resolves.toEqual({ kind: "denied" });
+    await bindings.close();
+  });
+
   it("permits only one durable cleaner callback across two registry handles", async () => {
     const factory = new InMemoryStorageFactory();
     let calls = 0;

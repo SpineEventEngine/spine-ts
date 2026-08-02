@@ -557,7 +557,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       return;
     }
     if (
-      (binding.lifecycle === "inactive" && (binding.expiresAtMs ?? 0) <= nowMs) ||
+      (["inactive", "active"].includes(binding.lifecycle) && (binding.expiresAtMs ?? 0) <= nowMs) ||
       (binding.lifecycle === "cancelling" && (binding.leaseUntilMs ?? 0) <= nowMs)
     )
       await this.#cancelExpired(binding, row, nowMs);
