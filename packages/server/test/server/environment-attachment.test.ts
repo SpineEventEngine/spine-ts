@@ -226,6 +226,44 @@ describe("EnvironmentDeliveryWorker", () => {
     await worker.retire();
   });
 
+  it("uses configured ports for finite and supervisor environment delivery", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor(
+      "ConfiguredPorts",
+      "type.example.dev/ConfiguredPorts",
+      storageFactory,
+    );
+    const scope = runScope("configured-ports-owner", target.ready);
+    const base = new Delivery({ context: target.context, storageFactory });
+    const read = vi.spyOn(Object.getPrototypeOf(base.inbox), "read");
+    const pickUp = vi.spyOn(Object.getPrototypeOf(base.shards), "pickUp");
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: {
+        readonly inbox: typeof base.inbox;
+        readonly workRegistry: typeof base.shards;
+      };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({ ports: { inbox: base.inbox, workRegistry: base.shards } });
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: {},
+      context: target.context,
+      scopes: [scope],
+    });
+    await base.inbox.receive(message(target.ready, "configured-finite"));
+    await worker.start(Object.freeze({ scopes: Object.freeze([scope]) }), [target.ready.shard]);
+    expect(read.mock.calls.length + pickUp.mock.calls.length).toBeGreaterThan(0);
+    await base.inbox.receive(message(target.ready, "configured-supervisor"));
+    worker.notify(scope);
+    await Promise.resolve();
+    expect(read.mock.calls.length + pickUp.mock.calls.length).toBeGreaterThan(1);
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
   it("routes post-start work through the real runtime supervisor", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor(

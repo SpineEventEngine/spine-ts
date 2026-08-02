@@ -9,6 +9,7 @@ import {
   type DeliveryRunWorker,
 } from "../delivery/delivery-run-coordinator.js";
 import { DeliveryBuilder, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
+import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import { Delivery, type OnDeliveryMessage } from "../delivery/delivery.js";
 import type { DeliveryOperationOptions } from "../delivery/delivery-ports.js";
 import { DeliverySupervisor, type DeliveryShardUpdate } from "../delivery/delivery-supervisor.js";
@@ -109,7 +110,12 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   readonly #stoppedWorkers = new Set<string>();
   readonly #stoppedSupervisors = new Set<string>();
   readonly #stoppedOwners = new Set<string>();
-  readonly #createWorker: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+  readonly #createWorker: (
+    runtime: EnvironmentDeliveryRuntime,
+    ports?: EnvironmentDeliveryPorts,
+  ) => DeliveryRunWorker;
+  readonly #ports:
+    { readonly inbox: DeliveryInbox; readonly workRegistry: DeliveryWorkRegistry } | undefined;
 
   /**
    * Creates an environment delivery worker.
@@ -118,6 +124,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
    */
   constructor(options: EnvironmentDeliveryWorkerOptions = {}) {
     this.#createWorker = options.createWorker ?? EnvironmentDeliveryValues.createWorker;
+    this.#ports = options.ports;
   }
 
   /**
@@ -128,8 +135,8 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     if (this.#workers.has(runtime.owner.key)) {
       throw new Error("Environment delivery owner is already configured.");
     }
-    const worker = this.#createWorker(runtime);
-    const supervisor = EnvironmentDeliveryValues.createSupervisor(runtime);
+    const worker = this.#createWorker(runtime, this.#ports);
+    const supervisor = EnvironmentDeliveryValues.createSupervisor(runtime, this.#ports);
     this.#workers.set(runtime.owner.key, worker);
     this.#supervisors.set(runtime.owner.key, supervisor);
     void supervisor.start();
@@ -343,7 +350,15 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
 }
 
 interface EnvironmentDeliveryWorkerOptions {
-  readonly createWorker?: (runtime: EnvironmentDeliveryRuntime) => DeliveryRunWorker;
+  readonly createWorker?: (
+    runtime: EnvironmentDeliveryRuntime,
+    ports?: EnvironmentDeliveryPorts,
+  ) => DeliveryRunWorker;
+  readonly ports?: EnvironmentDeliveryPorts;
+}
+interface EnvironmentDeliveryPorts {
+  readonly inbox: DeliveryInbox;
+  readonly workRegistry: DeliveryWorkRegistry;
 }
 
 class RuntimeDeliverySupervisor {
@@ -492,10 +507,14 @@ class LocalDeliverySource {
  * @internal Groups private delivery-runtime assembly and failure operations.
  */
 const EnvironmentDeliveryValues = Object.freeze({
-  createWorker(runtime: EnvironmentDeliveryRuntime): DeliveryRunWorker {
+  createWorker(
+    runtime: EnvironmentDeliveryRuntime,
+    ports?: EnvironmentDeliveryPorts,
+  ): DeliveryRunWorker {
     const delivery = new Delivery({
       context: runtime.context,
       storageFactory: runtime.storageFactory,
+      ...(ports ?? {}),
     });
     const worker = new DeliveryWorker({
       delivery,
@@ -505,7 +524,10 @@ const EnvironmentDeliveryValues = Object.freeze({
     });
     return deliveryRunWorkers.worker(worker);
   },
-  createSupervisor(runtime: EnvironmentDeliveryRuntime): RuntimeDeliverySupervisor {
+  createSupervisor(
+    runtime: EnvironmentDeliveryRuntime,
+    ports?: EnvironmentDeliveryPorts,
+  ): RuntimeDeliverySupervisor {
     const shards = EnvironmentDeliveryValues.uniqueShards(runtime.scopes);
     if (shards.length === 0) {
       throw new Error("Environment delivery supervisor requires at least one shard.");
@@ -518,12 +540,14 @@ const EnvironmentDeliveryValues = Object.freeze({
     }
     return new RuntimeDeliverySupervisor(
       [...groups].map(([shardCount, exactShards]) => {
-        const delivery = new DeliveryBuilder()
+        const builder = new DeliveryBuilder()
           .withContext(runtime.context)
           .withStorageFactory(runtime.storageFactory)
           .withStrategy(UniformAcrossAllShards.forNumber(shardCount))
-          .withNode(runtime.context.name)
-          .build();
+          .withNode(runtime.context.name);
+        if (ports !== undefined)
+          builder.withInbox(ports.inbox).withWorkRegistry(ports.workRegistry);
+        const delivery = builder.build();
         return new RuntimeDeliverySupervisorGroup({
           delivery,
           shards: exactShards,

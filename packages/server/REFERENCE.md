@@ -180,3 +180,13 @@ optional `tracerFactory`, `nodeId`, and `close()` lifecycle. Applications do
 not manage internal server attachments through this public API. Neither API
 authenticates requests or supplies a production scheduler, remote topology,
 storage adapter, or deployment policy.
+
+`ServerEnvironmentDelivery` extends the existing closeable facility shape with
+`open()` plus generic `inbox` and `workRegistry` ports. After readiness, the
+environment supplies those ports to both existing delivery paths: direct finite
+`Delivery` construction and the supervisor's `DeliveryBuilder`. The environment
+invokes `open()` once before attachment admission and coalesces concurrent
+callers; rejection admits no attachment and a later attempt retries open. A
+close-only local delivery remains source-compatible. After attachments retire,
+environment close runs delivery, transport, tracer, then storage and preserves
+retry checkpoints for failed phases.

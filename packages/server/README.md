@@ -230,6 +230,14 @@ the separate public `DeliverySource` used to observe remote shards.
 delivery/tracing facilities, and their process lifecycle. They do not create a
 production transport topology or durable scheduler for you.
 
+An openable `ServerEnvironmentDelivery` is opened before the first environment
+attachment is admitted, then supplies its inbox and work-registry ports to both
+the existing finite and supervisor delivery paths; a close-only local delivery
+remains supported. The environment stops attachments before closing delivery,
+transport, tracing, and storage in that order. Use `RemoteDelivery` from
+`@spine-event-engine/delivery-client` when an application selects a remote
+delivery endpoint and durable removal quarantine.
+
 ## ⚠️ Runtime boundaries
 
 The package is Node-only. It does not choose an identity provider, session

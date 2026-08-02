@@ -11,6 +11,8 @@ import type {
 } from "@spine-event-engine/transport";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
+import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
+import { EnvironmentDeliveryWorker } from "./environment-delivery-worker.js";
 import {
   EnvironmentAttachments,
   type EnvironmentAttachOptions,
@@ -31,6 +33,30 @@ export interface ServerEnvironmentCloseable {
    * @returns An optional asynchronous close operation.
    */
   close(): unknown;
+}
+
+/**
+ * A closeable environment facility that must open before attachment admission.
+ */
+export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
+  // prettier-ignore
+
+  /**
+   * Opens the facility before the environment admits attachments.
+   *
+   * @returns An optional asynchronous open operation.
+   */
+  open(): unknown;
+
+  /**
+   * Supplies the inbox port used by environment delivery generations.
+   */
+  readonly inbox: DeliveryInbox;
+
+  /**
+   * Supplies the shard work-registry port used by environment delivery generations.
+   */
+  readonly workRegistry: DeliveryWorkRegistry;
 }
 
 /**
@@ -110,6 +136,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly #ownedCloseables: readonly unknown[];
   readonly #closeGroup: RetryableCloseGroup;
   #close: Promise<void> | undefined;
+  #deliveryOpen: Promise<void> | undefined;
+  #deliveryOpened = false;
 
   private constructor(environment: Environment, settings: RequiredFacilities) {
     this.environment = environment;
@@ -123,7 +151,16 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       this.#ownedCloseables,
       "ServerEnvironment close failed.",
     );
-    environmentAttachments.set(this, new EnvironmentAttachments());
+    environmentAttachments.set(
+      this,
+      new EnvironmentAttachments({
+        createWorker: () => {
+          const ports = ServerEnvironmentValues.ports(this.delivery);
+          return new EnvironmentDeliveryWorker(ports === undefined ? {} : { ports });
+        },
+      }),
+    );
+    deliveryOpeners.set(this, () => this.#openDelivery());
     testAttachmentsInstallable.add(this);
     Object.freeze(this);
   }
@@ -188,6 +225,25 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
         throw error;
       });
     return this.#close;
+  }
+
+  #openDelivery(): Promise<void> {
+    if (this.#deliveryOpened) return Promise.resolve();
+    const opening = (this.#deliveryOpen ??= Promise.resolve()
+      .then(() => {
+        const delivery = ServerEnvironmentValues.openableDelivery(this.delivery);
+        if (delivery !== undefined) {
+          return delivery.open();
+        }
+        return undefined;
+      })
+      .then(() => {
+        this.#deliveryOpened = true;
+      }));
+    void opening.catch(() => {
+      if (this.#deliveryOpen === opening) this.#deliveryOpen = undefined;
+    });
+    return opening;
   }
 
   #attachments(): EnvironmentAttachments {
@@ -266,6 +322,7 @@ interface ServerEnvironmentAccess {
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
+const deliveryOpeners = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
 
 /**
@@ -280,7 +337,11 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     if (attachments === undefined) {
       return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
     }
-    return attachments.attach(options);
+    const openDelivery = deliveryOpeners.get(environment);
+    if (openDelivery === undefined) {
+      return Promise.reject(new TypeError("Attachment requires a ServerEnvironment instance."));
+    }
+    return openDelivery().then(() => attachments.attach(options));
   },
   failedStartPending(environment: ServerEnvironment) {
     const attachments = environmentAttachments.get(environment);
@@ -371,11 +432,33 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
  * @internal Groups private facility-assembly operations for the environment singleton.
  */
 const ServerEnvironmentValues = Object.freeze({
+  openableDelivery(
+    delivery: ServerEnvironmentCloseable | undefined,
+  ): ServerEnvironmentDelivery | undefined {
+    if (delivery === undefined) return undefined;
+    const candidate = delivery as Partial<ServerEnvironmentDelivery>;
+    if (typeof candidate.open !== "function") return undefined;
+    if (
+      typeof candidate.close !== "function" ||
+      !("inbox" in candidate) ||
+      !("workRegistry" in candidate)
+    ) {
+      throw new TypeError("ServerEnvironmentDelivery requires inbox and workRegistry ports.");
+    }
+    return candidate as ServerEnvironmentDelivery;
+  },
+  ports(
+    delivery: ServerEnvironmentCloseable | undefined,
+  ): { readonly inbox: DeliveryInbox; readonly workRegistry: DeliveryWorkRegistry } | undefined {
+    const remote = ServerEnvironmentValues.openableDelivery(delivery);
+    if (remote === undefined) return undefined;
+    return { inbox: remote.inbox, workRegistry: remote.workRegistry };
+  },
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
     return Object.freeze([
       ...(options.delivery === undefined ? [] : [options.delivery]),
-      ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.transport,
+      ...(options.tracerFactory === undefined ? [] : [options.tracerFactory]),
       options.storageFactory,
     ]);
   },
