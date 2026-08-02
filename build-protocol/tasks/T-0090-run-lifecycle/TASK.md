@@ -1,6 +1,6 @@
 # T-0090: Run-managed server lifecycle
 
-Status: Active
+Status: Complete
 Start: `2026-08-02`
 Baseline: `29dd6a3c`
 Branch: `task/T-0090-run-lifecycle`
@@ -86,3 +86,13 @@ environment.
 All required model/reasoning fields are recorded before dispatch. Reviewers
 receive the complete converged checkpoint and return one aggregated finding
 batch before corrections.
+
+## Completion
+
+- Focused lifecycle suites passed after every behavioral correction.
+- All required specialist concerns have recorded accepted dispositions.
+- `pnpm --config.verify-deps-before-run=false verify:release` passed with
+  168 test files and 3,276 tests passing. Branch coverage is 90.02% and line
+  coverage is 95.00%.
+- The task branch is committed and synchronized with `origin`; merge and
+  post-merge evidence are owned by the parent Wave 5 execution task.

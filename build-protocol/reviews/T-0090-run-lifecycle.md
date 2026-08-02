@@ -1,6 +1,6 @@
 # T-0090 Review Record
 
-Status: Wave 1 findings accepted; correction in progress
+Status: Complete
 
 ## Required Concerns
 
@@ -168,3 +168,13 @@ changes the contract again.
 - Cleanup enforcement required a documented internal grouping for private
   coordinator removal/retirement operations. The deterministic refactor passed
   focused tests and all affected checks; it does not reopen review lanes.
+
+## Final Acceptance
+
+- Every canonical concern has a recorded disposition; security is N/A for the
+  concrete unchanged-trust-boundary reason above.
+- Both review waves converged. All accepted findings are resolved, and the
+  deterministic release-gate correction changed neither behavior nor public
+  contracts.
+- `verify:release` passed: 168 test files passed, 3 skipped; 3,276 tests
+  passed, 25 skipped; 90.02% branch coverage and 95.00% line coverage.
