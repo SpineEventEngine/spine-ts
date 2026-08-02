@@ -20,13 +20,48 @@ const attempts = 8;
  * Configures one durable, namespace-global subscription registry.
  */
 export interface DurableSubscriptionBindingsOptions {
+  // prettier-ignore
+
+  /**
+   * Stores durable registry records.
+   */
   readonly storageFactory: StorageFactory;
+
+  /**
+   * Names the shared registry.
+   */
   readonly namespace: string;
+
+  /**
+   * Returns a public binding identifier.
+   *
+   * @returns The next public binding identifier.
+   */
   readonly nextId: () => string;
+
+  /**
+   * Disposes one backend subscription.
+   */
   readonly dispose: OnBackendSubscription;
+
+  /**
+   * Limits one durable ownership lease in milliseconds.
+   */
   readonly leaseMs: number;
+
+  /**
+   * Limits records processed by one cleanup pass.
+   */
   readonly cleanupBatchSize: number;
+
+  /**
+   * Limits bindings in the shared registry.
+   */
   readonly recordLimit: number;
+
+  /**
+   * Limits encoded durable record bytes.
+   */
   readonly maxRecordBytes: number;
 }
 
@@ -82,6 +117,11 @@ type Stored = Binding | Quota | Cleanup;
  * re-query entity state after a gateway restart and may observe update gaps.
  */
 export class DurableSubscriptionBindings implements SubscriptionBindings {
+  // prettier-ignore
+
+  /**
+   * Indicates that this registry uses durable coordination storage.
+   */
   readonly durable = true;
   readonly #storage: RecordStorage<string, Any>;
   readonly #dispose: OnBackendSubscription;
@@ -132,9 +172,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Reserves one namespace-global slot and preallocates its public identifier.
+   * Creates one namespace-global reservation with a public identifier.
    *
-   * @returns Resolves to an asynchronously releasable reservation.
+   * @returns The reservation that releases an unused slot.
    */
   async reserveCapacity(): Promise<SubscriptionCapacityReservation> {
     this.#open();
@@ -187,6 +227,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Converts an owned reserved slot to an inactive private binding.
+   *
+   * @param input Supplies the private envelope, ownership facts, and optional slot.
+   * @returns The public binding identifier.
    */
   async create(input: {
     readonly backend: BackendSubscriptionEnvelope;
@@ -235,7 +278,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Claims a finite lease before running one backend activation callback.
+   * Activates an owned binding through one backend callback.
+   *
+   * @param input Supplies the binding, ownership facts, and activation callback.
+   * @returns The activation outcome.
    */
   async activate(input: {
     readonly id: string;
@@ -276,7 +322,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Fences cancellation before invoking the backend cleanup callback.
+   * Cancels an owned binding through one backend callback.
+   *
+   * @param input Supplies the binding, ownership facts, and cleanup callback.
+   * @returns The cancellation outcome.
    */
   async cancel(input: {
     readonly id: string;
@@ -354,7 +403,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Cleans a finite page of expired reservations and bindings.
+   * Removes a finite page of expired reservations and bindings.
+   *
+   * @param nowMs Supplies the current time in milliseconds.
+   * @returns Completes after one cleanup page is processed.
    */
   async purgeExpired(nowMs: number): Promise<void> {
     this.#open();
@@ -391,6 +443,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
 
   /**
    * Stops local work without removing durable rows needed by a later handle.
+   *
+   * @returns Completes after local work is stopped.
    */
   async close(): Promise<void> {
     this.#closed = true;
@@ -864,6 +918,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
 
 /**
  * Checks whether bindings are backed by durable coordination storage.
+ *
+ * @param value Supplies the optional binding store.
+ * @returns Whether the store uses durable coordination storage.
  */
 export function isDurableSubscriptionBindings(
   value: SubscriptionBindings | undefined,
@@ -871,7 +928,11 @@ export function isDurableSubscriptionBindings(
   return value !== undefined && "durable" in value && value.durable === true;
 }
 
-/** @internal */
+/**
+ * Validates durable registry records for tests and adapters.
+ *
+ * @internal
+ */
 export const DurableSubscriptionBindingRecords: Readonly<{
   validate(record: Any, expectedId?: string, maxBytes?: number): void;
 }> = Object.freeze({

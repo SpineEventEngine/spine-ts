@@ -119,8 +119,10 @@ export type SubscriptionAbortSignal = AbortSignal;
 
 /**
  * Processes a fresh private backend-envelope copy.
+ *
  * @param envelope Supplies the copied private envelope.
  * @param signal Cancels the backend effect.
+ * @param guard Checks whether the durable owner may still continue the effect.
  * @returns Completes after the backend effect ends.
  */
 export type OnBackendSubscription = (
@@ -203,6 +205,8 @@ export interface SubscriptionCapacityReservation {
 
   /**
    * Clears the previously reserved binding slot.
+   *
+   * @returns Completes after the slot is available again.
    */
   release(): Promise<void>;
 }

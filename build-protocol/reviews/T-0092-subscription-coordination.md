@@ -72,3 +72,19 @@ is reserved for a complete converged checkpoint.
 - Evidence: cleanup enforcement, affected ESLint, and server typecheck passed;
   the focused durable registry suite passed 104 tests; Prettier and
   `git diff --check` passed.
+
+## TSDoc Preflight Correction
+
+- Mechanical TSDoc enforcement found missing callable summaries, parameter and
+  return descriptions, option/property summaries, and one inline block opener
+  in the auth subscription contract and durable registry. This is
+  documentation-only cleanup, not a specialist-review finding.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium)
+  corrected the complete reported batch under the project TSDoc rules. Runtime
+  self-introspection remains unavailable.
+- Pending evidence: TSDoc enforcement, affected lint/typechecks/tests,
+  formatting, and `git diff --check`, followed by immediate push.
+
+- Evidence: TSDoc enforcement, affected ESLint, and auth/server typechecks
+  passed; focused auth subscription and durable registry suites passed 155
+  tests; Prettier and `git diff --check` passed.
