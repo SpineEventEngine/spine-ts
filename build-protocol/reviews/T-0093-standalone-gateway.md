@@ -150,3 +150,20 @@ substantively.
 - README, reference, Envoy, and browser-auth guidance now cover explicit
   standalone bindings, aggregate admission, `writeMaxBytes`/413 behavior, and
   partial JVM evidence with six unresolved imports.
+
+## Final Narrow Re-review Results
+
+- Documentation: one Medium omission remains in agent REFERENCE: local/test
+  standalone also requires explicit bindings.
+- TypeScript/API: best-effort response-reader cancellation is required so a
+  rejecting application `cancel()` cannot change fixed overflow 413 to 500.
+  Public TSDoc must cover auth-response `writeMaxBytes` and the admission
+  default, validation, listener scope, and pre-handler 503.
+- Performance/reliability: slow-body 504 must close the incomplete connection
+  server-side after flushing; the client test must not mask it. `test:envoy`
+  must either be enforced by a Docker-capable profile or documented precisely
+  as a capability-dependent acceptance command rather than an unconditional
+  generic release gate.
+
+Only these narrow concerns reopen. Runtime self-introspection remained
+unavailable; the explicit reviewer profiles matched with no visible fallback.
