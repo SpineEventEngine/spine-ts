@@ -134,3 +134,19 @@ profiles matched with no visible fallback.
 Only API, documentation, and reliability reopen after one narrow correction.
 The clean maintainability lane remains closed unless structure changes
 substantively.
+
+## Narrow Correction Evidence
+
+- `2554e4d8` replaces timeout socket destruction with an abort-raced body
+  iterator and `request.resume()`, so unfinished uploads return fixed 504
+  without handler invocation. The same signal cancels a stalled response reader
+  and its one listener is removed on settlement.
+- Application status and headers are copied only after a complete bounded body
+  read, so 413/504 paths cannot leak application headers.
+- `pnpm test:envoy` is an executable repository gate. It renders generated TLS
+  paths as `/run/tls/*` and validates with pinned Envoy v1.38.3; its initial
+  host-path fixture failure is recorded in the task log and the corrected run
+  passes all four tests.
+- README, reference, Envoy, and browser-auth guidance now cover explicit
+  standalone bindings, aggregate admission, `writeMaxBytes`/413 behavior, and
+  partial JVM evidence with six unresolved imports.

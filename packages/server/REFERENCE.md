@@ -107,8 +107,13 @@ missing Origin is rejected unless that route explicitly permits it for an OAuth
 callback. Unknown paths, method/origin failures, body overflow, timeout, and
 handler failure return fixed 404, 405, 403, 413, 504, and 500 responses without
 calling application code on rejected input. The 404 unknown-path result applies
-only after framework Origin admission. Listener close ultimately aborts an
-active request through its disconnect signal.
+only after framework Origin admission. Auth admission is bounded to 64 active
+requests by default or a configured positive `maxActiveAuthRequests`; excess
+requests receive 503 before handler invocation and capacity returns when work
+settles. The route deadline covers body intake, handler work, and response
+transfer. Response bodies use `writeMaxBytes`; overflow returns 413 before any
+application status or headers are committed. Listener close ultimately aborts
+an active request through its disconnect signal.
 
 With `cookies`, `OpaqueSessionCookies` performs strict bearer-first or
 CSRF-protected cookie extraction. A strict rejection becomes an unusable

@@ -111,14 +111,20 @@ context resolver.
 For a separately hosted TS or JVM backend, set `browser.backend.baseUrl` to its
 canonical HTTP(S) origin. The gateway keeps `ResolveContext` local and forwards
 the five application RPCs only after the same authentication, authorization,
-and trusted-context rewrite. Production standalone mode also needs a type
-registry and named `DurableSubscriptionBindings`; the external backend remains
-caller-owned.
+and trusted-context rewrite. Every standalone mode requires explicit
+subscription bindings: local development and tests may explicitly supply an
+in-memory binding, while production also needs a type registry and named
+`DurableSubscriptionBindings`. The external backend remains caller-owned.
 
 Applications may add only explicit OAuth-style callbacks with `authRoutes`.
 Each route uses an exact `GET`/`POST` path, per-route origins, a safe body limit,
 and a finite timeout. This is not a general HTTP router; use it for bounded
 identity exchanges and validate OAuth state in the application handler.
+The host admits at most 64 active auth requests by default (or the configured
+positive `maxActiveAuthRequests`); excess requests receive 503 before a handler
+runs. A route timeout covers request intake, handler work, and response
+transfer. Auth response bodies are bounded by `writeMaxBytes`; an overflow
+returns 413 without copying application headers.
 
 ```ts
 import {
@@ -170,8 +176,9 @@ uses the storage factory that your application supplies and closes only its own
 handle, so you can use a separate factory from application-data storage or
 intentionally share one. Its namespace separates applications sharing a
 provider. `leaseMs` is milliseconds; `cleanupBatchSize`, `recordLimit`, and
-`maxRecordBytes` are positive safe integers. For local development and tests,
-omitting `bindings` uses an in-memory registry.
+`maxRecordBytes` are positive safe integers. Combined browser mode may omit
+bindings to use an in-memory registry; standalone mode must always supply them
+explicitly.
 
 Every durable reservation has its final public ID before the backend subscribe
 operation begins. Registries using the same namespace coordinate that finite

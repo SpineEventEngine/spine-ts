@@ -48,6 +48,14 @@ timeout. Supplied application auth routes are exact GET/POST paths with their
 own finite limits and timeouts; the template has no prefix or catch-all
 upstream. The upstream connection uses HTTP/2.
 
+The limits use Envoy's supported HTTP buffer filter and route-specific
+`BufferPerRoute` configuration. The repository's pinned-image regression gate
+renders this configuration and validates it before release:
+
+```sh
+pnpm test:envoy
+```
+
 Do not publish a direct route from the browser to a Spine backend. The
 application gateway resolves credentials into trusted context and is the only
 public upstream in this topology. Backend listeners remain application-private.
