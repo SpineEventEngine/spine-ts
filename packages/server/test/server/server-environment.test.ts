@@ -1,10 +1,14 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { StorageContext } from "@spine-event-engine/storage";
 
 import {
   ServerEnvironment,
   type ServerEnvironmentCloseable,
   serverEnvironmentAccess,
 } from "../../src/server/server-environment.js";
+import type { ContextDeliveryDescriptor } from "../../src/context/bounded-context.js";
+import { DeliveryBuilder } from "../../src/delivery/delivery-builder.js";
+import { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
 import { EnvironmentType } from "../../src/server/environment.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
@@ -31,6 +35,56 @@ describe("ServerEnvironment delivery lifecycle", () => {
     expect(environment.delivery).toBe(delivery);
     expect("inbox" in delivery).toBe(true);
     expect("workRegistry" in delivery).toBe(true);
+  });
+
+  it("routes configured ports through the real attachment factory to finite and supervisor delivery", async () => {
+    let finiteReads = 0;
+    let finitePickups = 0;
+    const inbox = {
+      sessionKind: "EXCLUSIVE" as const,
+      receive: () => Promise.resolve({}),
+      read: () => {
+        finiteReads += 1;
+        return Promise.resolve([]);
+      },
+      readMessage: () => Promise.resolve(undefined),
+      begin: () => Promise.resolve(undefined),
+    };
+    const workRegistry = {
+      sessionKind: "EXCLUSIVE" as const,
+      pickUp: () => {
+        finitePickups += 1;
+        return Promise.resolve(undefined);
+      },
+      release: () => Promise.resolve(false),
+    };
+    const withInbox = vi.spyOn(DeliveryBuilder.prototype, "withInbox");
+    const withWorkRegistry = vi.spyOn(DeliveryBuilder.prototype, "withWorkRegistry");
+    const environment = configured({
+      open: () => undefined,
+      close: () => undefined,
+      inbox,
+      workRegistry,
+    });
+    const descriptor = environmentDescriptor(environment);
+    let attachment: EnvironmentAttachmentHandle | undefined;
+
+    try {
+      attachment = await serverEnvironmentAccess.attach(environment, {
+        ownership: "caller",
+        descriptors: [descriptor],
+      });
+
+      await waitFor(() => finitePickups > 0 && finiteReads > 0);
+      expect(withInbox).toHaveBeenCalledWith(inbox);
+      expect(withWorkRegistry).toHaveBeenCalledWith(workRegistry);
+      await serverEnvironmentAccess.detach(environment, attachment);
+      attachment = undefined;
+    } finally {
+      if (attachment !== undefined) await serverEnvironmentAccess.detach(environment, attachment);
+      withInbox.mockRestore();
+      withWorkRegistry.mockRestore();
+    }
   });
 
   it("does not expose the internal delivery opener on the environment instance", () => {
@@ -209,3 +263,32 @@ describe("ServerEnvironment delivery lifecycle", () => {
     expect(events).toEqual(["delivery", "delivery"]);
   });
 });
+
+function environmentDescriptor(environment: ServerEnvironment): ContextDeliveryDescriptor {
+  const ready = {
+    label: "UPDATE_SUBSCRIBER" as const,
+    targetTypeUrl: "type.googleapis.com/example.EnvironmentPort",
+    shard: ShardIndex.single(),
+  };
+  return Object.freeze({
+    storageFactory: environment.storageFactory,
+    startupScopes: () => Promise.resolve([{}]),
+    storageContext: () =>
+      Object.freeze({ name: "environment-port-integration", multitenant: false }) as StorageContext,
+    endpoints: () => [ready],
+    replay: () => Promise.resolve(),
+    onReady: () => () => undefined,
+    transition: (_scopes, onReady) => {
+      onReady(ready);
+      return Promise.resolve();
+    },
+  });
+}
+
+async function waitFor(condition: () => boolean): Promise<void> {
+  for (let attempts = 0; attempts < 40; attempts += 1) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error("Timed out waiting for configured finite delivery ports.");
+}
