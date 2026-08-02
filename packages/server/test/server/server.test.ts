@@ -668,6 +668,25 @@ describe("Server", () => {
     }
   });
 
+  it("rejects noncanonical and unbounded auth route registrations before listening", () => {
+    const route = {
+      method: "POST" as const,
+      path: "/auth/valid",
+      origins: ["http://127.0.0.1:5173"],
+      maxRequestBytes: 16,
+      timeoutMs: 1000,
+      onRequest: () => new Response(),
+    };
+    expect(() => BrowserServer.authRoutes([{ ...route, path: "/" }])).toThrow("canonical non-root");
+    expect(() => BrowserServer.authRoutes([{ ...route, maxRequestBytes: 0 }])).toThrow(
+      "positive safe transport bound",
+    );
+    expect(() => BrowserServer.authRoutes([{ ...route, timeoutMs: 0 }])).toThrow(
+      "safe positive millisecond",
+    );
+    expect(() => BrowserServer.authRoutes([route, route])).toThrow("unique by method and path");
+  });
+
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
     const server = await Server.atPort(0).start();
 
