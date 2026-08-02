@@ -116,7 +116,7 @@ describe("Server", () => {
   });
 
   it("requires a registry before admitting a production standalone gateway", () => {
-    expect(() =>
+    expect(() => {
       BrowserServer.requireDurableBindings(
         {
           ...browserGateway(),
@@ -124,12 +124,12 @@ describe("Server", () => {
           bindings: { durable: true, namespace: "gateway" },
         } as unknown as BrowserServerOptions,
         true,
-      ),
-    ).toThrow("type registry");
+      );
+    }).toThrow("type registry");
   });
 
   it("requires a named durable binding registry before admitting a production standalone gateway", () => {
-    expect(() =>
+    expect(() => {
       BrowserServer.requireDurableBindings(
         {
           ...browserGateway(),
@@ -138,12 +138,12 @@ describe("Server", () => {
           bindings: { durable: true, namespace: " " },
         } as unknown as BrowserServerOptions,
         true,
-      ),
-    ).toThrow("named durable subscription bindings");
+      );
+    }).toThrow("named durable subscription bindings");
   });
 
   it("rejects missing standalone authentication collaborators before listener startup", () => {
-    expect(() =>
+    expect(() => {
       BrowserServer.requireDurableBindings(
         {
           ...browserGateway(),
@@ -151,12 +151,12 @@ describe("Server", () => {
           sessions: undefined,
         } as unknown as BrowserServerOptions,
         false,
-      ),
-    ).toThrow("sessions");
+      );
+    }).toThrow("sessions");
   });
 
   it("requires explicit standalone subscription bindings outside production", () => {
-    expect(() =>
+    expect(() => {
       BrowserServer.requireDurableBindings(
         {
           ...browserGateway(),
@@ -164,8 +164,8 @@ describe("Server", () => {
           bindings: undefined,
         } as unknown as BrowserServerOptions,
         false,
-      ),
-    ).toThrow("explicit subscription bindings");
+      );
+    }).toThrow("explicit subscription bindings");
   });
 
   it("opens the browser pipeline against a standalone backend origin", async () => {
@@ -247,7 +247,10 @@ describe("Server", () => {
     } finally {
       await server.close();
       await new Promise<void>((resolve, reject) =>
-        backend.close((error) => (error ? reject(error) : resolve())),
+        backend.close((error) => {
+          if (error) reject(error);
+          else resolve();
+        }),
       );
     }
   });
@@ -311,7 +314,7 @@ describe("Server", () => {
         create(TopicSchema, { context: create(ActorContextSchema, { actor }) }),
         { headers },
       );
-      for await (const _update of subscriptions.activate(subscription, { headers })) break;
+      await subscriptions.activate(subscription, { headers })[Symbol.asyncIterator]().next();
       await subscriptions.cancel(subscription, { headers });
       expect(paths).toEqual([
         "/spine.client.CommandService/Post",
@@ -322,7 +325,11 @@ describe("Server", () => {
       ]);
     } finally {
       await server.close();
-      await new Promise<void>((resolve) => backend.close(() => resolve()));
+      await new Promise<void>((resolve) =>
+        backend.close(() => {
+          resolve();
+        }),
+      );
     }
   });
 
@@ -434,14 +441,19 @@ describe("Server", () => {
             origins: ["http://127.0.0.1:5173"],
             maxRequestBytes: 1024,
             timeoutMs: 10_000,
-            onRequest: (_request, signal) => (
-              start(),
-              new Promise<Response>((resolve) =>
-                signal.addEventListener("abort", () => (abort(), resolve(new Response())), {
-                  once: true,
-                }),
-              )
-            ),
+            onRequest: (_request, signal) => {
+              start();
+              return new Promise<Response>((resolve) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    abort();
+                    resolve(new Response());
+                  },
+                  { once: true },
+                );
+              });
+            },
           },
         ],
       },
@@ -473,12 +485,11 @@ describe("Server", () => {
         ],
       },
     }).start();
-    const original = http.Server.prototype.close;
     const close = vi.spyOn(http.Server.prototype, "close").mockImplementationOnce(function (
       this: http.Server,
       callback?: (error?: Error) => void,
     ) {
-      setTimeout(() => original.call(this, callback), 50);
+      setTimeout(() => http.Server.prototype.close.call(this, callback), 50);
       return this;
     });
     try {
@@ -511,14 +522,19 @@ describe("Server", () => {
             origins: ["http://127.0.0.1:5173"],
             maxRequestBytes: 1024,
             timeoutMs: 10_000,
-            onRequest: (_request, signal) => (
-              start(),
-              new Promise<Response>((resolve) =>
-                signal.addEventListener("abort", () => (abort(), resolve(new Response())), {
-                  once: true,
-                }),
-              )
-            ),
+            onRequest: (_request, signal) => {
+              start();
+              return new Promise<Response>((resolve) => {
+                signal.addEventListener(
+                  "abort",
+                  () => {
+                    abort();
+                    resolve(new Response());
+                  },
+                  { once: true },
+                );
+              });
+            },
           },
         ],
       },

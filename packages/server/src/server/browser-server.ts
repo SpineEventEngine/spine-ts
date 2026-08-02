@@ -244,19 +244,20 @@ export const BrowserServer: Readonly<{
     return value;
   },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
+    const supplied = options as Partial<BrowserServerOptions>;
     if (options.backend !== undefined) {
       BrowserServer.backendUrl(options.backend.baseUrl);
-      if (options.sessions === undefined || typeof options.sessions.resolve !== "function")
+      if (supplied.sessions === undefined || typeof supplied.sessions.resolve !== "function")
         throw new Error("Standalone browser server requires sessions.");
       if (typeof options.authorize !== "function")
         throw new Error("Standalone browser server requires authorization.");
       if (
-        options.contexts === undefined ||
-        typeof options.contexts.resolve !== "function" ||
-        typeof options.contexts.resolveContext !== "function"
+        supplied.contexts === undefined ||
+        typeof supplied.contexts.resolve !== "function" ||
+        typeof supplied.contexts.resolveContext !== "function"
       )
         throw new Error("Standalone browser server requires context resolution.");
-      if (options.clock === undefined || typeof options.clock.now !== "function")
+      if (supplied.clock === undefined || typeof supplied.clock.now !== "function")
         throw new Error("Standalone browser server requires a clock.");
       if (typeof options.fingerprint !== "function")
         throw new Error("Standalone browser server requires a fingerprint function.");
@@ -334,12 +335,16 @@ export const BrowserServer: Readonly<{
     }
     const controller = new AbortController();
     active.add(controller);
-    const timer = setTimeout(() => controller.abort(), route.timeoutMs);
-    const abort = () => controller.abort();
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, route.timeoutMs);
+    const abort = () => {
+      controller.abort();
+    };
     request.once("aborted", abort);
     response.once("close", abort);
     try {
-      const chunks: Buffer[] = [];
+      const chunks: Uint8Array[] = [];
       let size = 0;
       for await (const chunk of request) {
         const bytes = Buffer.from(chunk);
@@ -363,13 +368,15 @@ export const BrowserServer: Readonly<{
       });
       const result = await Promise.race([
         route.onRequest(input, controller.signal),
-        new Promise<never>((_resolve, reject) =>
+        new Promise<never>((_resolve, reject) => {
           controller.signal.addEventListener(
             "abort",
-            () => reject(new Error("browser auth request aborted")),
+            () => {
+              reject(new Error("browser auth request aborted"));
+            },
             { once: true },
-          ),
-        ),
+          );
+        }),
       ]);
       if (controller.signal.aborted) {
         if (!response.writableEnded) {
