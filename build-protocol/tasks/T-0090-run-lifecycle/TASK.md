@@ -61,8 +61,9 @@ environment.
 - Expected reasoning: medium.
 - Both fields must be explicit. Runtime metadata is recorded when exposed;
   otherwise the immutable configured role/profile and limitation are evidence.
-- The implementer must not spawn children, merge, or push. It may commit only
-  after focused preflight passes, and must report RED and GREEN evidence.
+- The implementer must not spawn children or merge. It may commit only after
+  focused preflight passes and must push every commit immediately, then report
+  RED and GREEN evidence.
 
 ## Verification
 
