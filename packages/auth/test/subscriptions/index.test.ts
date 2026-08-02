@@ -594,9 +594,7 @@ describe("SubscriptionGateway", () => {
       create: bindings.create.bind(bindings),
       activate: bindings.activate.bind(bindings),
       cancel: bindings.cancel.bind(bindings),
-      reserveCapacity: async () => {
-        throw new Error("store unavailable");
-      },
+      reserveCapacity: () => Promise.reject(new Error("store unavailable")),
       purgeExpired: bindings.purgeExpired.bind(bindings),
       close: bindings.close.bind(bindings),
     };
@@ -607,7 +605,7 @@ describe("SubscriptionGateway", () => {
     ).resolves.toEqual({ kind: "rejected", reason: "denied" });
     const capacityFailure = {
       ...unavailable,
-      reserveCapacity: async () => ({ release: () => undefined }),
+      reserveCapacity: () => Promise.resolve({ release: () => Promise.resolve() }),
       create: () => {
         throw new Error("binding-capacity-exceeded");
       },
@@ -617,6 +615,69 @@ describe("SubscriptionGateway", () => {
         request("Subscribe", topic),
       ),
     ).resolves.toEqual({ kind: "rejected", reason: "binding-capacity-exceeded" });
+  });
+
+  it("suppresses backend activation and cancellation when a durable guard is false", async () => {
+    const fixture = setup();
+    const bindings = fixture.bindings;
+    const guarded = {
+      create: bindings.create.bind(bindings),
+      activate: async (input: Parameters<typeof bindings.activate>[0]) => {
+        await input.onBackend(
+          { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+          new AbortController().signal,
+          () => Promise.resolve(false),
+        );
+        return { kind: "activated" as const };
+      },
+      cancel: async (input: Parameters<typeof bindings.cancel>[0]) => {
+        await input.onBackend(
+          { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+          new AbortController().signal,
+          () => Promise.resolve(false),
+        );
+        return { kind: "closed" as const };
+      },
+      reserveCapacity: bindings.reserveCapacity.bind(bindings),
+      purgeExpired: bindings.purgeExpired.bind(bindings),
+      close: bindings.close.bind(bindings),
+    };
+    const subscriptionGateway = new SubscriptionGateway({ ...fixture.options, bindings: guarded });
+    const wire = await subscribe(subscriptionGateway);
+
+    await expect(subscriptionGateway.handle(request("Activate", wire))).resolves.toEqual({
+      kind: "activated",
+    });
+    await expect(subscriptionGateway.handle(request("Cancel", wire))).resolves.toEqual({
+      kind: "cancelled",
+    });
+    expect(fixture.calls).toEqual(["subscribe"]);
+  });
+
+  it("releases an implicit reservation before compensating an oversized backend", async () => {
+    const fixture = setup();
+    const bindings = new InMemorySubscriptionBindings({
+      nextId: () => "one",
+      limits: { bindingLimit: 1 },
+      dispose: () => Promise.resolve(),
+    });
+    fixture.options.creator.subscribe = () =>
+      Promise.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([1, 2]) });
+    const subscriptionGateway = new SubscriptionGateway({
+      ...fixture.options,
+      bindings,
+      limits: { maxBackendEnvelopeBytes: 1 },
+    });
+
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
+      kind: "rejected",
+      reason: "backend-envelope-too-large",
+    });
+    fixture.options.creator.subscribe = () =>
+      Promise.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) });
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
+      kind: "subscribed",
+    });
   });
 
   it("denies a foreign cancel before it reserves a binding queue slot", async () => {
@@ -1563,7 +1624,7 @@ describe("SubscriptionGateway", () => {
     expect(compensationAborted).toBe(true);
     expect(bindings.size).toBe(0);
     const reusable = await bindings.reserveCapacity();
-    reusable.release();
+    await reusable.release();
   });
 
   it("releases a capacity-one lease after timed-out compensation", async () => {

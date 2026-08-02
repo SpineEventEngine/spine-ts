@@ -12,6 +12,7 @@ import { TenantRecords } from "./tenant-records.js";
  * In-memory record storage with per-tenant slices when the context is multitenant.
  */
 export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  // prettier-ignore
 
   /**
    * Declares atomic conditional mutations for compatible in-memory handles.

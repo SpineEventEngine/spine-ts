@@ -1,0 +1,284 @@
+# T-0092 Review Record
+
+Status: Complete; release verification passed
+
+## Required Concerns
+
+- Style/maintainability: required for the durable state machine, transition
+  organization, naming, and deterministic race fixtures.
+- Documentation: required for visible leases, limits, restart, cleanup, and
+  update-delivery limitation claims.
+- TypeScript/API docs: required for any binding/option/result evolution,
+  declarations/TSDoc, compatibility, and avoidance of premature public APIs.
+- Performance/reliability: required for every race, fence, lease, retry,
+  ambiguous outcome, accounting, cleanup, restart, and bounded-resource claim.
+- Final security: remains the parent Wave 5 release gate; private data and
+  sanitized failures are mandatory focused acceptance now.
+
+Expected reviewer models/reasoning are recorded in the task before dispatch.
+Actual runtime metadata will be recorded when exposed; otherwise immutable
+configured role/profile evidence and the limitation are recorded honestly.
+
+## Pre-review Mechanical Disposition
+
+Specialist dispatch is deferred because the implementation checkpoint does not
+yet cover the accepted ambiguous-CAS, paged repair, guarded-update,
+cancellation-takeover, or cleanup continuation/backoff/restart matrix. The
+same implementation owner receives these deterministic gaps; reviewer capacity
+is reserved for a complete converged checkpoint.
+
+## Preflight Tooling Correction
+
+- Mechanical preflight found `TS2554` in the durable bindings test: a Vitest
+  `toThrow()` assertion supplied an unsupported second argument. This is a
+  test-tooling defect, not a specialist-review finding and does not change the
+  durable registry contract.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium) made
+  the bounded correction. Runtime self-introspection remains unavailable;
+  immutable configured-role evidence is the available metadata.
+- Pending evidence: narrow server typecheck and focused durable registry test
+  after the correction, followed by immediate feature-branch push.
+
+- Evidence: the narrow server typecheck and focused durable registry suite
+  (104 tests) passed, as did Prettier and `git diff --check`.
+
+## Auth Test Preflight Correction
+
+- Mechanical preflight found four ESLint failures in the auth subscription
+  test doubles: redundant async wrappers and an unawaited release promise.
+  This is test-tooling cleanup, not a specialist-review finding, and does not
+  change the durable registry or public subscription contract.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium) made
+  the bounded correction. Runtime self-introspection remains unavailable.
+- Pending evidence: affected lint, focused auth test/typecheck, formatting,
+  and `git diff --check`, followed by immediate feature-branch push.
+
+- Evidence: affected ESLint and auth typecheck passed; the focused auth
+  subscription suite passed 51 tests; Prettier and `git diff --check` passed.
+
+## Cleanup Enforcement Correction
+
+- Mechanical cleanup enforcement found three overlong durable-fixture lines
+  and required a specific necessity disposition for the standalone public
+  predicate `isDurableSubscriptionBindings()`. This is structural/documentation
+  policy cleanup, not a specialist-review finding.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium) split
+  the fixtures without changing their serialized values and recorded the exact
+  TypeScript type-predicate boundary rationale in the server ledger. Runtime
+  self-introspection remains unavailable.
+- Pending evidence: cleanup check, affected lint/typecheck/tests, formatting,
+  and `git diff --check`, followed by immediate push.
+
+- Evidence: cleanup enforcement, affected ESLint, and server typecheck passed;
+  the focused durable registry suite passed 104 tests; Prettier and
+  `git diff --check` passed.
+
+## TSDoc Preflight Correction
+
+- Mechanical TSDoc enforcement found missing callable summaries, parameter and
+  return descriptions, option/property summaries, and one inline block opener
+  in the auth subscription contract and durable registry. This is
+  documentation-only cleanup, not a specialist-review finding.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium)
+  corrected the complete reported batch under the project TSDoc rules. Runtime
+  self-introspection remains unavailable.
+- Pending evidence: TSDoc enforcement, affected lint/typechecks/tests,
+  formatting, and `git diff --check`, followed by immediate push.
+
+- Evidence: TSDoc enforcement, affected ESLint, and auth/server typechecks
+  passed; focused auth subscription and durable registry suites passed 155
+  tests; Prettier and `git diff --check` passed.
+
+## Repository Format Baseline Prerequisite
+
+- Repository-wide `format:check` found four current-main baseline files. The
+  bounded correction preserves user-required blank lines before TSDoc with the
+  established `// prettier-ignore` convention and applies ordinary Prettier
+  wrapping to the Datastore limit call. No behavior changed.
+- The recorded existing `implementer` profile (`gpt-5.6-terra` / medium) made
+  this mechanical baseline correction. Runtime self-introspection remains
+  unavailable.
+- Pending evidence: full format and TSDoc checks, affected lint/typechecks/
+  tests, and `git diff --check`, followed by immediate push.
+
+- Evidence: affected ESLint and server/storage/Datastore/MySQL typechecks
+  passed; four focused suites passed 178 tests; full `format:check`, TSDoc
+  enforcement, and `git diff --check` passed.
+
+## Specialist Review Dispatch
+
+Review endpoint: `d214b046` against the T-0092 base `0748473e`.
+
+The full no-tests task preflight passed before dispatch: generated builds,
+tooling typecheck, repository lint, cleanup and TSDoc enforcement, formatting,
+generated documentation checks, Proto lint/currentness, and release-readiness
+checks are clean.
+
+| Concern                          | Existing role                      | Expected model  | Expected reasoning |
+| -------------------------------- | ---------------------------------- | --------------- | ------------------ |
+| Style and maintainability        | `style_maintainability_reviewer`   | `gpt-5.6-terra` | high               |
+| Documentation                    | `documentation_reviewer`           | `gpt-5.6-luna`  | medium             |
+| TypeScript and API documentation | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` | high               |
+| Performance and reliability      | `performance_reliability_reviewer` | `gpt-5.6-terra` | high               |
+
+Every model and reasoning field is explicit in the dispatch. The reviewer
+surface does not expose runtime self-introspection; unless a visible mismatch
+is reported, the immutable configured role/profile is the accepted runtime
+metadata and this limitation will be recorded with each result.
+
+## First Specialist Wave Results
+
+All four dispatched concerns returned at endpoint `8e28ab94`. None exposed
+runtime model/reasoning self-introspection, so the explicit immutable
+role/profile in the dispatch is the accepted metadata. No visible mismatch or
+fallback was reported.
+
+- Style/maintainability (`style_maintainability_reviewer`,
+  `gpt-5.6-terra` / high): requested changes. P1: the accepted capacity,
+  ownership, and competing-cleaner races lack deterministic barriers at the
+  contested read/CAS boundary. P2: duplicated fault decorators match brittle
+  serialized substrings instead of semantic records.
+- TypeScript/API documentation (`typescript_api_docs_reviewer`,
+  `gpt-5.6-terra` / high): requested changes. Blocking: the auth gateway drops
+  the durable guard before update forwarding and backend cancellation.
+  Important: the public guard contract does not define the callback's timing,
+  false-result, and absent-guard obligations.
+- Documentation (`documentation_reviewer`, `gpt-5.6-luna` / medium): requested
+  changes. The README and REFERENCE claim that lease loss stops forwarding,
+  but the current gateway does not enforce the guard at the final effect
+  boundary. Other reviewed quota, restart, cleanup, reconnect/re-query,
+  replay, ordering, and delivery-limit claims are consistent.
+- Performance/reliability (`performance_reliability_reviewer`,
+  `gpt-5.6-terra` / high): requested changes. P1: ambiguous CAS can accept a
+  different same-shaped owner; failed creation can retain an implicit quota
+  reservation; a slow cleaner can lose its unrenewed lease and duplicate
+  disposal; close does not converge all in-flight activation/cancellation
+  work. P2: cleanup can permanently skip valid IDs sorting before its initial
+  control-record cursor.
+
+One consolidated correction batch returns to the existing implementation
+owner. Re-review will cover only the concerns materially affected by the
+corrections.
+
+## Correction Evidence And Targeted Re-review
+
+Correction endpoint: `693357ca`.
+
+- The auth gateway enforces the durable guard immediately before activation,
+  cancellation, and every forwarded update; false suppresses the effect.
+- Ambiguous CAS reconciliation compares complete relevant durable ownership
+  facts, and failed creation releases its implicit reservation.
+- Cleanup scans the full public keyspace, renews/fences ownership around slow
+  disposal, and uses deterministic two-registry regressions.
+- Close aborts and converges fence-specific activation/cancellation work before
+  storage closure, with deferred callback regressions.
+- Fault injection is consolidated into a semantic parsed-record script instead
+  of serialized substring matching; accepted contention paths have controlled
+  race points.
+- README, REFERENCE, and public guard documentation describe the enforced
+  effect-boundary and renewal-detection semantics.
+
+Focused auth, durable, and public-export suites passed 177 tests. Exact durable
+source coverage is 90.22% branches, 93.41% statements, 94.82% functions, and
+95.75% lines. Build/tooling typechecks, scoped lint, TSDoc and cleanup
+enforcement, formatting, and diff checks passed.
+
+All four concerns are materially affected and receive one targeted re-review
+at `693357ca`, using the same explicit existing reviewer profiles recorded in
+the first dispatch. Runtime self-introspection remains unavailable.
+
+## Targeted Re-review Results
+
+The API and documentation concerns are clean. Style/maintainability and
+performance/reliability require one final narrow correction. Runtime
+self-introspection remained unavailable for every reviewer; the explicit
+configured profiles matched the dispatch with no visible fallback.
+
+- TypeScript/API documentation: resolved. Guard propagation, effect-boundary
+  checks, and false/absent TSDoc semantics are correct.
+- Documentation: resolved. README/REFERENCE accurately distinguish guard
+  suppression, renewal-detected abort, and cleanup renewal behavior.
+- Style/maintainability: P1 remains because capacity, ownership, and cleaner
+  contention tests still lack a reusable storage-boundary barrier. P2 remains
+  because two cleaner scripts match incidental revision numbers instead of
+  semantic lease transitions.
+- Performance/reliability: full durable identity, low-ID cleanup, and the
+  single-operation close paths are resolved. Three P1s remain: direct durable
+  `create()` does not compensate an internally acquired reservation on failure;
+  one cleanup lease extension can expire during an arbitrarily slow disposer;
+  and overlapping same-ID activations retain only the newest controller, so
+  close can wait forever on an older cooperative callback.
+
+Only style/maintainability and performance/reliability will be reopened after
+this narrow correction. The clean API and documentation lanes remain closed
+unless their contracts or claims change substantively.
+
+## Final Narrow Correction Evidence
+
+Correction endpoint: `0eb0dba0`. The existing
+`implementer` was explicitly configured as `gpt-5.6-terra` / medium; runtime
+self-introspection remains unavailable.
+
+- `create()` now releases only an internally acquired reservation on each
+  failure before the inactive durable binding is established. A capacity-one
+  regression proves immediate readmission after failed direct creation.
+- A cleaner starts a close-safe heartbeat for every awaited disposal. The
+  heartbeat renews the same fence until the callback returns; a barrier test
+  holds disposal beyond multiple lease intervals and proves a second registry
+  cannot duplicate it.
+- Active work is retained as fence-specific entries, so closing one public ID
+  aborts and converges every overlapping cooperative activation callback.
+- The common parsed-record storage script supplies reusable two-party
+  storage-CAS barriers. Capacity, binding ownership, and cleaner contention
+  tests use them. Lease scripts compare prior and next owner/fence/lease facts,
+  with no incidental revision matching.
+
+Focused durable evidence: 121 tests passed; exact source coverage is 93.47%
+statements, 90.17% branches, 93.75% functions, and 96.03% lines. Focused
+auth/server/export suites passed 184 tests. Build/tooling typechecks, ESLint,
+TSDoc and cleanup enforcement, formatting, and diff checks passed. Only
+style/maintainability and performance/reliability need re-review at this
+endpoint, using their previously recorded explicit profiles.
+
+## Final Targeted Re-review Results
+
+- Style/maintainability: clean. Shared two-party CAS barriers cover capacity,
+  activation ownership, and cleaner contention; cleaner scripts match semantic
+  owner/fence/lease transitions without revision coupling.
+- Performance/reliability: all three runtime P1 findings are resolved. One P2
+  test-quality finding remains: the multi-lease cleaner regression polls and
+  sleeps on wall-clock time instead of synchronizing on a controlled heartbeat
+  transition. Replace it with an explicit heartbeat/CAS barrier or controlled
+  timers, then re-review only this deterministic-test concern.
+
+Runtime self-introspection remained unavailable; both explicit
+`gpt-5.6-terra` / high reviewer profiles matched with no visible fallback.
+
+## Final Test Determinism Correction
+
+The P2 test-only finding at endpoint `2abc39e2` is resolved. The slow-cleaner
+regression uses explicit promise barriers and controlled fake timers; it no
+longer polls wall-clock time or sleeps. This preserves the accepted production
+behavior while deterministically proving heartbeat renewal across multiple
+lease intervals. The existing `implementer` was explicitly configured as
+`gpt-5.6-terra` / medium; runtime self-introspection is unavailable.
+
+Focused durable verification passed 121 tests with 90.17% exact branch
+coverage. Build/tooling typechecks, affected ESLint, TSDoc and cleanup checks,
+formatting, and diff validation passed. No review concern remains open.
+
+The final narrow performance/reliability confirmation at `1752301e` is clean:
+explicit promise synchronization and controlled fake timers replace all
+wall-clock polling/sleep in the multi-lease cleaner regression. The focused
+suite passed 121 tests. Runtime self-introspection remained unavailable; the
+explicit `performance_reliability_reviewer`, `gpt-5.6-terra` / high profile is
+the accepted metadata. All required T-0092 concerns are closed.
+
+## Release Verification
+
+`pnpm --config.verify-deps-before-run=false verify:release` passed at
+`0070c043` plus the record-only review closure. The run passed 169 test files
+and 3,401 tests, with 3 files and 25 tests skipped. Repository coverage was
+94.15% statements, 90.04% branches, 94.61% functions, and 95.04% lines. All
+generated build, tooling typecheck, lint, cleanup, TSDoc, formatting,
+documentation, Proto, package, and release-readiness gates passed.

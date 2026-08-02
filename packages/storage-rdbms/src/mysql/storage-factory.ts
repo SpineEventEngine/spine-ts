@@ -513,6 +513,7 @@ class MysqlPoolLifecycle {
 }
 
 class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  // prettier-ignore
 
   /**
    * Declares atomic conditional mutations for compatible MySQL handles.

@@ -60,7 +60,6 @@ export class Environment {
       process.env.NODE_ENV === "production" ? EnvironmentType.Production : EnvironmentType.Local,
     ));
   }
-
 }
 
 /**
