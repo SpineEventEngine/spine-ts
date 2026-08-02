@@ -111,3 +111,26 @@ mechanical, generated, documentation, Proto, and release-readiness checks pass.
 
 All four concerns receive one targeted re-review using their previously
 recorded explicit profiles. Runtime self-introspection remains unavailable.
+
+## Targeted Re-review Results
+
+Runtime self-introspection remained unavailable; all explicit configured
+profiles matched with no visible fallback.
+
+- Style/maintainability: clean. Method/path validation and the requirements
+  ledger are complete; the reserved-route disposition remains correct.
+- Documentation: requested changes. Explicit bindings for every standalone
+  mode, partial/static JVM compatibility, aggregate admission, and auth
+  response `writeMaxBytes`/413 behavior remain undocumented.
+- TypeScript/API: requested changes. Application headers are copied before
+  gateway-controlled response 413/504 outcomes; slow body timeout resets the
+  socket instead of returning fixed 504. Public admission and auth response
+  bound documentation is incomplete.
+- Performance/reliability: requested changes. Response readers are not
+  cancelled on timeout/disconnect/close/overflow and abort listeners accumulate
+  per chunk; slow-body timeout lacks fixed 504; pinned Envoy validation is
+  manual evidence rather than an executable repository gate.
+
+Only API, documentation, and reliability reopen after one narrow correction.
+The clean maintainability lane remains closed unless structure changes
+substantively.
