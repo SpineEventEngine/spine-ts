@@ -128,6 +128,27 @@ describe("Server", () => {
     }).toThrow("type registry");
   });
 
+  it("rejects local ownership that standalone mode would otherwise ignore", async () => {
+    let closed = false;
+    await expect(
+      new Server({
+        resources: [
+          {
+            close: () => {
+              closed = true;
+            },
+          },
+        ],
+        browser: {
+          ...browserGateway(),
+          backend: { baseUrl: "http://127.0.0.1:65534" },
+          bindings: inMemoryBindings(),
+        },
+      }).start(),
+    ).rejects.toThrow("cannot own local contexts, services, or resources");
+    expect(closed).toBe(false);
+  });
+
   it("requires a named durable binding registry before admitting a production standalone gateway", () => {
     expect(() => {
       BrowserServer.requireDurableBindings(

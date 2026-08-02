@@ -207,6 +207,15 @@ export class Server {
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const browser = this.#browser;
+    if (
+      browser?.backend !== undefined &&
+      (this.#contexts.length > 0 ||
+        this.#resources.length > 0 ||
+        Object.keys(this.#services).length > 0)
+    )
+      throw new Error(
+        "Standalone browser server cannot own local contexts, services, or resources.",
+      );
     if (browser !== undefined)
       BrowserServer.requireDurableBindings(
         browser,
