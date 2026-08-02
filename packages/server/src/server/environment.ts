@@ -17,6 +17,9 @@ export enum EnvironmentType {
 
 let resolvedEnvironment: Environment | undefined;
 let resetLocalTest: (() => void) | undefined;
+let useEnvironmentTest: (type: EnvironmentType) => void = () => {
+  throw new Error("Environment test controls are unavailable.");
+};
 
 /**
  * Stable process environment information for the Node runtime.
@@ -42,6 +45,9 @@ export class Environment {
     resetLocalTest = () => {
       resolvedEnvironment = new Environment(EnvironmentType.Local);
     };
+    useEnvironmentTest = (type) => {
+      resolvedEnvironment = new Environment(type);
+    };
   }
 
   /**
@@ -55,15 +61,6 @@ export class Environment {
     ));
   }
 
-  /**
-   * Selects an environment for deterministic package tests.
-   *
-   * @param type Supplies the test environment type.
-   * @internal
-   */
-  static useForTests(type: EnvironmentType): void {
-    resolvedEnvironment = new Environment(type);
-  }
 }
 
 /**
@@ -90,6 +87,6 @@ export const EnvironmentTests: {
    * @param type Supplies the test environment type.
    */
   use(type: EnvironmentType): void {
-    Environment.useForTests(type);
+    useEnvironmentTest(type);
   },
 });

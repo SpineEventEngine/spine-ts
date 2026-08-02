@@ -211,3 +211,16 @@ boundary. After correction, the orchestrator will directly inspect these exact
 regressions and public claims, run deterministic preflight and `verify:release`,
 and close the slice without a third broad reviewer wave unless the public
 contract changes again.
+
+## Direct Acceptance Disposition
+
+- Accepted with one non-contract cleanup: remove the accidental public
+  `Environment.useForTests()` helper while retaining `EnvironmentTests.use()`
+  as the documented internal test seam.
+- Release evidence: `pnpm --config.verify-deps-before-run=false verify:release`
+  exited `0` before `a44ba06d`. Node, Proto, generated/tooling TypeScript,
+  ESLint, cleanup/TSDoc, format, generated-docs, Proto lint/currentness, and
+  release-readiness gates passed.
+- The captured release output did not retain exact repository-wide Vitest and
+  coverage totals. Focused evidence immediately before release was 4 files and
+  169 tests passing. This is an evidence limitation, not a claim of totals.

@@ -130,6 +130,10 @@ class FlatEntityCodec<I, R extends Message> {
  * Private initial handle for the Datastore adapter.
  */
 export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+
+  /**
+   * Declares atomic conditional mutations for compatible Datastore handles.
+   */
   override readonly atomicCompareAndSet = true;
   readonly #codec: FlatEntityCodec<I, R>;
 
@@ -614,6 +618,7 @@ const DatastoreQueryPushdown = Object.freeze(
  */
 const DatastoreRecordQuery = Object.freeze(
   new (class {
+
     /**
      * Returns a caller limit only when it cannot change local query semantics.
      *
