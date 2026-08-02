@@ -1229,7 +1229,15 @@ async function unusedPort(): Promise<number> {
   if (address === null || typeof address === "string") {
     throw new Error("Test listener did not expose a TCP port.");
   }
-  await new Promise<void>((resolve, reject) => listener.close((error) => error ? reject(error) : resolve()));
+  await new Promise<void>((resolve, reject) =>
+    listener.close((error) => {
+      if (error === undefined) {
+        resolve();
+      } else {
+        reject(error);
+      }
+    }),
+  );
   return address.port;
 }
 
