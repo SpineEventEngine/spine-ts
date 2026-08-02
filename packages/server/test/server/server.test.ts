@@ -693,6 +693,78 @@ describe("Server", () => {
     expect(() => BrowserServer.authRoutes([route, route])).toThrow("unique by method and path");
   });
 
+  it("rejects a chunked auth body that exceeds its bound before handler work", async () => {
+    let calls = 0;
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "POST",
+            path: "/auth/chunked",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 2,
+            timeoutMs: 1000,
+            onRequest: () => ((calls += 1), new Response()),
+          },
+        ],
+      },
+    }).start();
+    try {
+      const status = await new Promise<number>((resolve, reject) => {
+        const request = http.request(
+          `${server.baseUrl}/auth/chunked`,
+          {
+            method: "POST",
+            headers: { origin: "http://127.0.0.1:5173", "transfer-encoding": "chunked" },
+          },
+          (response) => {
+            resolve(response.statusCode ?? 0);
+          },
+        );
+        request.once("error", reject);
+        request.end("abc");
+      });
+      expect(status).toBe(413);
+      expect(calls).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("answers an allowed exact auth preflight without application work", async () => {
+    let calls = 0;
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "POST",
+            path: "/auth/preflight",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 16,
+            timeoutMs: 1000,
+            onRequest: () => ((calls += 1), new Response()),
+          },
+        ],
+      },
+    }).start();
+    try {
+      const response = await fetch(`${server.baseUrl}/auth/preflight`, {
+        method: "OPTIONS",
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(response.status).toBe(204);
+      expect(response.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5173");
+      expect(response.headers.get("access-control-allow-methods")).toBe("POST,OPTIONS");
+      expect(calls).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
     const server = await Server.atPort(0).start();
 
