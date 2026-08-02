@@ -1,6 +1,6 @@
 # T-0091 Review Record
 
-Status: Wave 1 findings accepted; correction in progress
+Status: Complete
 
 ## Required Concerns
 
@@ -224,3 +224,15 @@ contract changes again.
 - The captured release output did not retain exact repository-wide Vitest and
   coverage totals. Focused evidence immediately before release was 4 files and
   169 tests passing. This is an evidence limitation, not a claim of totals.
+
+## Final Acceptance
+
+- Every required concern has a recorded disposition and all accepted findings
+  are resolved. Final security remains correctly assigned to the parent Wave 5
+  release gate.
+- The test-only public method found during direct inspection was removed behind
+  the existing internal test seam. Affected TypeScript, ESLint, TSDoc,
+  TypeDoc/API docs, formatting, diff, and focused server tests passed.
+- `verify:release` exited `0` before the final acceptance cleanup; the cleanup
+  changed no runtime behavior or public contract and passed all affected
+  deterministic checks.

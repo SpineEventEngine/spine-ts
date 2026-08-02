@@ -1,6 +1,6 @@
 # T-0091: Durable subscription registry foundation
 
-Status: Active
+Status: Complete
 Start: `2026-08-02`
 Baseline: `a33364f9`
 Branch: `task/T-0091-durable-subscription-registry`
@@ -98,3 +98,16 @@ remain available only for explicit local and test use.
 
 All required model and reasoning fields are recorded before dispatch.
 Reviewers receive one converged checkpoint and return one aggregated batch.
+
+## Completion
+
+- The awaitable binding contract, durable namespaced registry, bounded codec,
+  provider capability, production admission, and public guidance meet every
+  acceptance criterion.
+- Two complete specialist waves converged and all accepted findings are
+  resolved. The final direct acceptance cleanup changed no public contract.
+- Focused final evidence is 4 files and 169 tests passing. The full
+  `verify:release` command exited `0`; its exact repository-wide Vitest totals
+  were not retained and are not inferred.
+- The task branch and every checkpoint are synchronized with `origin`. Parent
+  T-0089 owns merge and post-merge verification evidence.
