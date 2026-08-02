@@ -207,3 +207,11 @@ The release policy flagged internal milestone terminology in the public Envoy
 README. The corrected wording describes a Docker-capable gateway deployment
 acceptance command, retains the generic-release boundary, and removes internal
 task/wave jargon.
+
+## Accepted Release Gate
+
+- Full release verification passes at `748d2476` with 90.06% repository branch
+  coverage.
+- Executable pinned-Envoy acceptance passes 4/4.
+- All recorded findings are resolved and all four applicable specialist
+  concerns are clean. T-0093 is accepted for integration.

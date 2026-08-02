@@ -1,6 +1,6 @@
 # T-0093: Standalone gateway host
 
-Status: Active
+Status: Ready for integration; implementation and specialist review complete
 Start: `2026-08-02`
 Baseline: `ef7912e1`
 Branch: `task/T-0093-standalone-gateway`
@@ -92,3 +92,16 @@ implementation owner with deterministic request/routing/lifecycle tests.
 - No governing conflict was found. The split deepens the existing host,
   selects standalone mode with `browser.backend`, and adds no runner/router or
   duplicate namespace configuration.
+
+## Final Verification
+
+- All four applicable specialist concerns are clean. Runtime self-introspection
+  was unavailable; every dispatch used its explicitly required immutable role,
+  model, and reasoning profile, with no visible mismatch or fallback.
+- `pnpm --config.verify-deps-before-run=false verify:release` passes at
+  `748d2476`. The repository totals are 94.16% statements, 90.06% branches,
+  94.60% functions, and 95.04% lines.
+- `pnpm test:envoy` passes 4/4, including acceptance and deliberate rejection
+  checks against the pinned Envoy image.
+- T-0093 is ready for a no-fast-forward merge into `main`, followed by the
+  change-sensitive post-merge verification required by the parent task.
