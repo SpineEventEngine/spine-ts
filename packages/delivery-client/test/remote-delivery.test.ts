@@ -114,7 +114,11 @@ describe("RemoteDelivery", () => {
     const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
       removalQuarantine: quarantine(),
-    }) as unknown as { open(): Promise<void>; readonly inbox: unknown; readonly workRegistry: unknown };
+    }) as unknown as {
+      open(): Promise<void>;
+      readonly inbox: unknown;
+      readonly workRegistry: unknown;
+    };
 
     expect(() => delivery.inbox).toThrow("Remote delivery is not open.");
     expect(() => delivery.workRegistry).toThrow("Remote delivery is not open.");
@@ -194,19 +198,22 @@ describe("RemoteDelivery", () => {
       [undefined, new Error("quarantine close failed")],
       ["client", "quarantine", "quarantine"],
     ],
-  ] as const)("retries only unfinished remote close phases after %s failure", async (_phase, failures, events) => {
-    const delivery = RemoteDelivery.connectTo({
-      endpoint: "http://127.0.0.1:8080",
-      removalQuarantine: quarantine(),
-    });
-    await delivery.open();
+  ] as const)(
+    "retries only unfinished remote close phases after %s failure",
+    async (_phase, failures, events) => {
+      const delivery = RemoteDelivery.connectTo({
+        endpoint: "http://127.0.0.1:8080",
+        removalQuarantine: quarantine(),
+      });
+      await delivery.open();
 
-    remote.closeFailures.push(...failures);
-    await expect(delivery.close()).rejects.toThrow("RemoteDelivery close failed.");
-    await delivery.close();
+      remote.closeFailures.push(...failures);
+      await expect(delivery.close()).rejects.toThrow("RemoteDelivery close failed.");
+      await delivery.close();
 
-    expect(remote.closeEvents).toEqual(events);
-  });
+      expect(remote.closeEvents).toEqual(events);
+    },
+  );
 
   it("closes the transferred quarantine when the environment owner never opened", async () => {
     const delivery = RemoteDelivery.connectTo({
