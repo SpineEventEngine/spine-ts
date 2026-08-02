@@ -138,3 +138,26 @@ changed by the corrections.
 Correction verification is recorded in the T-0091 work log. Re-review is
 limited to style/maintainability, documentation, TypeScript/API, and
 performance/reliability because all four concerns changed substantively.
+
+## Wave 2 Dispatches
+
+The correction endpoint is `503c5074`.
+
+- Existing `style_maintainability_reviewer`; scope: storage capability
+  placement/default, revised binding cohesion, bounded-query reuse, ownership
+  result shape, and corrected regressions. Expected `gpt-5.6-terra` / high.
+- Existing `documentation_reviewer`; scope: corrected capability, namespace,
+  units, validation, restart/stream limitation, and roadmap-free prose.
+  Expected `gpt-5.6-luna` / medium.
+- Existing `typescript_api_docs_reviewer`; scope: new public
+  `RecordStorage.atomicCompareAndSet`, declarations/TSDoc/compatibility,
+  capability-vs-class contract, and pre-listener Server admission. Expected
+  `gpt-5.6-terra` / high.
+- Existing `performance_reliability_reviewer`; scope: all seven behavioral
+  corrections, especially capability truthfulness, bounded provider work,
+  reservation provenance, malformed records, accounting, and race-safe
+  fail-closed behavior. Expected `gpt-5.6-terra` / high.
+
+Every dispatch explicitly supplies its expected model and reasoning. Runtime
+self-introspection will be recorded if exposed; otherwise the immutable role
+profile and limitation remain the acceptance evidence.
