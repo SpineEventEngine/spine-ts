@@ -37,7 +37,7 @@ interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port">
  * @internal
  */
 export const BrowserServer: Readonly<{
-  open(native: RunningServer, options: BrowserHostOptions): Promise<RunningServer>;
+  open(native: RunningServer | string, options: BrowserHostOptions): Promise<RunningServer>;
   requests(options: BrowserServerOptions): {
     credential(context: { readonly requestHeader: Headers }): {
       readonly kind: "bearer" | "cookie";
@@ -46,14 +46,16 @@ export const BrowserServer: Readonly<{
     transport(context: { readonly requestHeader: Headers }): ReturnType<typeof TransportFacts.from>;
   };
   origins(origins: readonly string[]): ReadonlySet<string>;
+  backendUrl(value: string): string;
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
 }> = Object.freeze({
-  async open(native: RunningServer, options: BrowserHostOptions): Promise<RunningServer> {
+  async open(native: RunningServer | string, options: BrowserHostOptions): Promise<RunningServer> {
     BrowserServer.requireDurableBindings(options, options.production);
     const origins = BrowserServer.origins(options.origins);
-    const creator = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: native.baseUrl }));
+    const backendBaseUrl = typeof native === "string" ? native : native.baseUrl;
+    const creator = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: backendBaseUrl }));
     const bindings =
       options.bindings ??
       new InMemorySubscriptionBindings({
@@ -125,7 +127,7 @@ export const BrowserServer: Readonly<{
       }
       throw error;
     }
-    return new RunningBrowserServer(server, native, subscriptions, address);
+    return new RunningBrowserServer(server, typeof native === "string" ? undefined : native, subscriptions, address);
   },
   requests(options: BrowserServerOptions) {
     return {
@@ -174,9 +176,60 @@ export const BrowserServer: Readonly<{
       throw new Error("Server browser origins must be unique and non-empty.");
     return origins;
   },
+  backendUrl(value: string): string {
+    let backend: URL;
+    try {
+      backend = new URL(value);
+    } catch {
+      throw new Error("Server browser backend must be a canonical HTTP(S) origin.");
+    }
+    if (
+      (backend.protocol !== "http:" && backend.protocol !== "https:") ||
+      backend.origin !== value ||
+      backend.pathname !== "/" ||
+      backend.search ||
+      backend.hash ||
+      backend.username ||
+      backend.password
+    ) {
+      throw new Error("Server browser backend must be a canonical HTTP(S) origin.");
+    }
+    return value;
+  },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
-    if (production && !isDurableSubscriptionBindings(options.bindings))
+    if (options.backend !== undefined) {
+      BrowserServer.backendUrl(options.backend.baseUrl);
+      if (options.sessions === undefined || typeof options.sessions.resolve !== "function")
+        throw new Error("Standalone browser server requires sessions.");
+      if (typeof options.authorize !== "function")
+        throw new Error("Standalone browser server requires authorization.");
+      if (
+        options.contexts === undefined ||
+        typeof options.contexts.resolve !== "function" ||
+        typeof options.contexts.resolveContext !== "function"
+      )
+        throw new Error("Standalone browser server requires context resolution.");
+      if (options.clock === undefined || typeof options.clock.now !== "function")
+        throw new Error("Standalone browser server requires a clock.");
+      if (typeof options.fingerprint !== "function")
+        throw new Error("Standalone browser server requires a fingerprint function.");
+      if (options.bindings === undefined)
+        throw new Error("Standalone browser server requires explicit subscription bindings.");
+    }
+    if (options.backend !== undefined && production && options.registry === undefined)
+      throw new Error("Production standalone browser server requires a type registry.");
+    const bindings = options.bindings;
+    if (production && !isDurableSubscriptionBindings(bindings))
       throw new Error("Production browser server requires durable subscription bindings.");
+    if (
+      options.backend !== undefined &&
+      production &&
+      (bindings === undefined ||
+        !("namespace" in bindings) ||
+        typeof bindings.namespace !== "string" ||
+        !bindings.namespace.trim())
+    )
+      throw new Error("Production standalone browser server requires named durable subscription bindings.");
   },
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo> {
     return new Promise((resolve, reject) => {
@@ -212,7 +265,7 @@ export const BrowserServer: Readonly<{
 class RunningBrowserServer implements RunningServer {
   readonly #server: http.Server;
   readonly #subscriptions: SubscriptionGateway;
-  readonly #native: RunningServer;
+  readonly #native: RunningServer | undefined;
   readonly host: string;
   readonly port: number;
   readonly baseUrl: string;
@@ -224,7 +277,7 @@ class RunningBrowserServer implements RunningServer {
 
   constructor(
     server: http.Server,
-    native: RunningServer,
+    native: RunningServer | undefined,
     subscriptions: SubscriptionGateway,
     address: AddressInfo,
   ) {
@@ -256,7 +309,7 @@ class RunningBrowserServer implements RunningServer {
       await listener;
       this.#listenerClosed = true;
     }
-    if (!this.#nativeClosed) {
+    if (this.#native !== undefined && !this.#nativeClosed) {
       await this.#native.close();
       this.#nativeClosed = true;
     }

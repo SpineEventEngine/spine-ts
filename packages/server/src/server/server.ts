@@ -206,11 +206,21 @@ export class Server {
   }
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
-    if (this.#browser !== undefined)
+    const browser = this.#browser;
+    if (browser !== undefined)
       BrowserServer.requireDurableBindings(
-        this.#browser,
+        browser,
         this.#environment.environment.type === EnvironmentType.Production,
       );
+    if (browser?.backend !== undefined)
+      return BrowserServer.open(BrowserServer.backendUrl(browser.backend.baseUrl), {
+        ...browser,
+        host: browser.host ?? this.#host,
+        port: browser.port ?? this.#port,
+        readMaxBytes: this.#readMaxBytes,
+        writeMaxBytes: this.#writeMaxBytes,
+        production: this.#environment.environment.type === EnvironmentType.Production,
+      });
     const contexts = await ServerValues.buildContexts(
       this.#contexts,
       this.#environment.storageFactory,
@@ -302,7 +312,6 @@ export class Server {
       port: address.port,
       closeables,
     });
-    const browser = this.#browser;
     if (browser === undefined) return running;
     try {
       return await BrowserServer.open(running, {
@@ -573,6 +582,16 @@ export interface BrowserServerOptions {
    * Public browser listener port. Defaults to the server port.
    */
   readonly port?: number;
+
+  /**
+   * Selects a separately hosted Spine backend.
+   *
+   * The URL must be one canonical HTTP(S) origin without credentials, query,
+   * fragment, or a path beyond `/`.
+   */
+  readonly backend?: {
+    readonly baseUrl: string;
+  };
 
   /**
    * Exact browser origins permitted to make RPC calls.

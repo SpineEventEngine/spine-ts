@@ -5,7 +5,11 @@ import { create, type Message } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-node";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
-import { OpaqueSessionCookies, SubscriptionGateway } from "@spine-event-engine/auth";
+import {
+  InMemorySubscriptionBindings,
+  OpaqueSessionCookies,
+  SubscriptionGateway,
+} from "@spine-event-engine/auth";
 import type { RequestCredential } from "@spine-event-engine/auth";
 import { TypeRegistry } from "@spine-event-engine/core";
 import { AuthenticationService, ResolveContextRequestSchema } from "@spine-event-engine/proto/auth";
@@ -40,6 +44,7 @@ import {
   type ServerEnvironmentCloseable,
 } from "../../src/index.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
+import { BrowserServer } from "../../src/server/browser-server.js";
 import { EnvironmentTests } from "../../src/server/environment.js";
 
 describe("Server", () => {
@@ -69,6 +74,114 @@ describe("Server", () => {
         .start(),
     ).rejects.toThrow("requires durable subscription bindings");
     expect(resourceClosed).toBe(false);
+  });
+
+  it("rejects an invalid standalone backend before context assembly or listener startup", async () => {
+    let resourceClosed = false;
+    const browser = {
+      ...browserGateway(),
+      backend: { baseUrl: "https://backend.example.test/private" },
+    } as BrowserServerOptions;
+
+    const starting = new Server({ browser })
+      .addResource({
+        close: () => {
+          resourceClosed = true;
+        },
+      })
+      .start();
+
+    try {
+      await expect(starting).rejects.toThrow("canonical HTTP(S) origin");
+    } finally {
+      await starting.then((running) => running.close(), () => undefined);
+    }
+
+    expect(resourceClosed).toBe(false);
+  });
+
+  it("requires a registry before admitting a production standalone gateway", () => {
+    expect(() =>
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend: { baseUrl: "https://backend.example.test" },
+          bindings: { durable: true, namespace: "gateway" },
+        } as BrowserServerOptions,
+        true,
+      ),
+    ).toThrow("type registry");
+  });
+
+  it("requires a named durable binding registry before admitting a production standalone gateway", () => {
+    expect(() =>
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend: { baseUrl: "https://backend.example.test" },
+          registry: new TypeRegistry(),
+          bindings: { durable: true, namespace: " " },
+        } as BrowserServerOptions,
+        true,
+      ),
+    ).toThrow("named durable subscription bindings");
+  });
+
+  it("rejects missing standalone authentication collaborators before listener startup", () => {
+    expect(() =>
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend: { baseUrl: "https://backend.example.test" },
+          sessions: undefined,
+        } as unknown as BrowserServerOptions,
+        false,
+      ),
+    ).toThrow("sessions");
+  });
+
+  it("requires explicit standalone subscription bindings outside production", () => {
+    expect(() =>
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend: { baseUrl: "https://backend.example.test" },
+          bindings: undefined,
+        } as unknown as BrowserServerOptions,
+        false,
+      ),
+    ).toThrow("explicit subscription bindings");
+  });
+
+  it("opens the browser pipeline against a standalone backend origin", async () => {
+    const server = await BrowserServer.open("http://127.0.0.1:65534", {
+      ...browserGateway(),
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+      bindings: inMemoryBindings(),
+    });
+
+    await server.close();
+  });
+
+  it("does not attach a standalone browser gateway to a native server environment", async () => {
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        backend: { baseUrl: "http://127.0.0.1:65534" },
+        bindings: inMemoryBindings(),
+      },
+    }).start();
+
+    try {
+      await expect(ServerEnvironment.instance().close()).resolves.toBeUndefined();
+    } finally {
+      await server.close();
+    }
   });
 
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
@@ -1395,6 +1508,13 @@ function browserGateway(): BrowserServerOptions {
     clock: { now: () => create(TimestampSchema) },
     fingerprint: () => "test",
   };
+}
+
+function inMemoryBindings(): InMemorySubscriptionBindings {
+  return new InMemorySubscriptionBindings({
+    nextId: () => globalThis.crypto.randomUUID(),
+    dispose: () => Promise.resolve(),
+  });
 }
 
 class CloseTrackingStorageFactory extends InMemoryStorageFactory {
