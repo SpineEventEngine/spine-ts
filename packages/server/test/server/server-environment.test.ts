@@ -17,7 +17,7 @@ afterEach(async () => {
   await resetServerEnvironmentForTest();
 });
 
-function configured(delivery: ServerEnvironmentCloseable & { open?: unknown }) {
+function configured<T extends ServerEnvironmentCloseable & { open?: unknown }>(delivery: T) {
   ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
   return ServerEnvironment.instance();
 }
@@ -278,7 +278,10 @@ function environmentDescriptor(environment: ServerEnvironment): ContextDeliveryD
     endpoints: () => [ready],
     replay: () => Promise.resolve(),
     onReady: () => () => undefined,
-    transition: (_scopes, onReady) => {
+    transition: (
+      _scopes: Parameters<ContextDeliveryDescriptor["transition"]>[0],
+      onReady: Parameters<ContextDeliveryDescriptor["transition"]>[1],
+    ) => {
       onReady(ready);
       return Promise.resolve();
     },
