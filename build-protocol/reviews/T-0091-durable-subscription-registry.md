@@ -161,3 +161,53 @@ The correction endpoint is `503c5074`.
 Every dispatch explicitly supplies its expected model and reasoning. Runtime
 self-introspection will be recorded if exposed; otherwise the immutable role
 profile and limitation remain the acceptance evidence.
+
+## Wave 2 Results
+
+- Style/maintainability: one P1 capability-default defect and two P2 missing
+  regression cases under the explicitly configured existing reviewer with
+  `gpt-5.6-terra` / high.
+- Documentation: one P2 and two P3 public-TSDoc gaps under the explicitly
+  configured existing reviewer with `gpt-5.6-luna` / medium.
+- TypeScript/API docs: one P1 capability-default defect and one P2 stale TSDoc
+  claim under the explicitly configured existing reviewer with
+  `gpt-5.6-terra` / high.
+- Performance/reliability: four P1 defects and one P2 missing integration
+  regression under the explicitly configured existing reviewer with
+  `gpt-5.6-terra` / high.
+
+Runtime self-introspection was unavailable in all lanes; the immutable
+configured role/profile remains the metadata evidence. No visible mismatch or
+fallback occurred, so every result is accepted.
+
+## Final Correction Batch
+
+1. Make atomic CAS capability opt-in. `RecordStorage` defaults false (or is
+   abstract), and the proven in-memory, Datastore, and MySQL implementations
+   explicitly declare true. Align storage reference/API claims and test that a
+   provider which does not opt in is rejected without mutating a normally
+   capable handle.
+2. Consume a live reservation synchronously before the first `create()` await.
+   Add separate forged, released, live-foreign, and concurrent same-token
+   tests; one reservation can admit at most one record.
+3. Preserve requested finite query limits in Datastore provider pushdown rather
+   than replacing them with the generic scan cap. Test the actual provider
+   query limit for admission and cleanup, `recordLimit + 1`, and an overfull
+   namespace.
+4. Validate every bounded admission entry through the configured codec before
+   counting it. A seeded malformed, noncanonical, oversized, wrong-key, or
+   accounting-mismatched row must make reservation fail closed.
+5. Add a full `Server.start()` production regression that proves missing or
+   volatile bindings reject before context assembly and listener creation;
+   keep the explicit local in-memory case.
+6. Correct public TSDoc to require durable-capable bindings rather than class
+   identity; document namespace isolation and invalid-constructor rejection;
+   and state that records survive process restarts while active streams do not
+   resume/replay and have no exactly-once or global-order guarantee.
+
+This is the final specialist finding batch. The same implementation owner must
+add focused RED/GREEN evidence and keep changes within the approved B1
+boundary. After correction, the orchestrator will directly inspect these exact
+regressions and public claims, run deterministic preflight and `verify:release`,
+and close the slice without a third broad reviewer wave unless the public
+contract changes again.
