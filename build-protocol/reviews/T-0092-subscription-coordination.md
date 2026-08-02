@@ -1,6 +1,6 @@
 # T-0092 Review Record
 
-Status: Awaiting implementation checkpoint
+Status: Awaiting complete implementation checkpoint
 
 ## Required Concerns
 
@@ -18,3 +18,11 @@ Status: Awaiting implementation checkpoint
 Expected reviewer models/reasoning are recorded in the task before dispatch.
 Actual runtime metadata will be recorded when exposed; otherwise immutable
 configured role/profile evidence and the limitation are recorded honestly.
+
+## Pre-review Mechanical Disposition
+
+Specialist dispatch is deferred because the implementation checkpoint does not
+yet cover the accepted ambiguous-CAS, paged repair, guarded-update,
+cancellation-takeover, or cleanup continuation/backoff/restart matrix. The
+same implementation owner receives these deterministic gaps; reviewer capacity
+is reserved for a complete converged checkpoint.
