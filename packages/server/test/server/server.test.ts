@@ -681,7 +681,13 @@ describe("Server", () => {
     expect(() => BrowserServer.authRoutes([{ ...route, maxRequestBytes: 0 }])).toThrow(
       "positive safe transport bound",
     );
+    expect(() => BrowserServer.authRoutes([{ ...route, maxRequestBytes: 4_194_305 }])).toThrow(
+      "positive safe transport bound",
+    );
     expect(() => BrowserServer.authRoutes([{ ...route, timeoutMs: 0 }])).toThrow(
+      "safe positive millisecond",
+    );
+    expect(() => BrowserServer.authRoutes([{ ...route, timeoutMs: 2_147_483_648 }])).toThrow(
       "safe positive millisecond",
     );
     expect(() => BrowserServer.authRoutes([route, route])).toThrow("unique by method and path");
