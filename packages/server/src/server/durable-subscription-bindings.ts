@@ -569,7 +569,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       if (reread === undefined || !this.#sameBinding(reread, next)) return;
     }
     await this.#dispose(Values.envelope(next), new AbortController().signal, () =>
-      this.#current(next.id, next.fence, "cancelling", Date.now()),
+      this.#current(next.id, next.fence, "cancelling", nowMs),
     );
     await this.#retire(next);
   }

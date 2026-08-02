@@ -9,6 +9,7 @@ import {
   StorageFactory,
   type StorageContext,
 } from "@spine-event-engine/storage";
+import type { OnBackendSubscription } from "@spine-event-engine/auth";
 import { describe, expect, it, vi } from "vitest";
 
 import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
@@ -606,15 +607,21 @@ describe("DurableSubscriptionBindings", () => {
 
   it("fences an expired session into cancellation before durable release", async () => {
     const disposed: number[] = [];
-    const bindings = cleanupRegistry(new InMemoryStorageFactory(), "cleanup-expired", (value) => {
-      disposed.push(value.bytes[0] ?? 0);
-      return Promise.resolve();
-    });
+    let current: boolean | undefined;
+    const bindings = cleanupRegistry(
+      new InMemoryStorageFactory(),
+      "cleanup-expired",
+      async (value, _signal, guard) => {
+        disposed.push(value.bytes[0] ?? 0);
+        current = await guard?.();
+      },
+    );
     const binding = await bindings.create(expiredInput());
 
     await bindings.purgeExpired(2);
 
     expect(disposed).toEqual([1]);
+    expect(current).toBe(true);
     await expect(
       bindings.cancel({
         id: binding.id,
@@ -1008,14 +1015,14 @@ function timedRegistry(
 function cleanupRegistry(
   storageFactory: StorageFactory,
   namespace: string,
-  dispose: (value: { readonly bytes: Uint8Array }) => Promise<void>,
+  dispose: OnBackendSubscription,
 ): DurableSubscriptionBindings {
   let nextId = 0;
   return new DurableSubscriptionBindings({
     storageFactory,
     namespace,
     nextId: () => `binding-${(++nextId).toString()}`,
-    dispose: (value) => dispose(value),
+    dispose,
     leaseMs: 10,
     cleanupBatchSize: 1,
     recordLimit: 10,
