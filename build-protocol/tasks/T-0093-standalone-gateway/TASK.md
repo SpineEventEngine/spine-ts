@@ -1,6 +1,6 @@
 # T-0093: Standalone gateway host
 
-Status: Ready for integration; implementation and specialist review complete
+Status: Complete; merged, post-merge verified, and pushed
 Start: `2026-08-02`
 Baseline: `ef7912e1`
 Branch: `task/T-0093-standalone-gateway`
@@ -105,3 +105,12 @@ implementation owner with deterministic request/routing/lifecycle tests.
   checks against the pinned Envoy image.
 - T-0093 is ready for a no-fast-forward merge into `main`, followed by the
   change-sensitive post-merge verification required by the parent task.
+
+## Integration
+
+- Merged into `main` with no fast-forward as `ec40d48d` and immediately pushed
+  to `origin/main`.
+- Post-merge Proto generation and generated TypeScript build pass.
+- The server suite passes 420/420, executable Envoy acceptance passes 4/4,
+  frozen JVM fixture checks pass 11/11, and static wire checks pass 4/4. No JVM
+  project was built or launched.

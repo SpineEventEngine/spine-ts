@@ -215,3 +215,9 @@ task/wave jargon.
 - Executable pinned-Envoy acceptance passes 4/4.
 - All recorded findings are resolved and all four applicable specialist
   concerns are clean. T-0093 is accepted for integration.
+
+## Post-merge Confirmation
+
+The no-fast-forward merge `ec40d48d` passes change-sensitive verification on
+canonical `main`: generated build, 420 server tests, four Envoy tests, 11 frozen
+JVM fixture tests, and four static wire tests. `origin/main` contains the merge.
