@@ -685,6 +685,22 @@ describe("DurableSubscriptionBindings", () => {
     await second.close();
   });
 
+  it("reconciles an applied-then-thrown cleanup claim before disposal", async () => {
+    const factory = new ApplyThenThrowFactory("cleanup-claim");
+    let calls = 0;
+    const bindings = cleanupRegistry(factory, "cleanup-claim", () => {
+      calls += 1;
+      return Promise.resolve();
+    });
+    await bindings.create(expiredInput());
+    factory.arm();
+
+    await bindings.purgeExpired(2);
+
+    expect(calls).toBe(1);
+    await bindings.close();
+  });
+
   it("persists bounded cleanup backoff before retrying a failed callback", async () => {
     const factory = new InMemoryStorageFactory();
     let calls = 0;
@@ -1257,7 +1273,8 @@ class ApplyThenThrowFactory extends StorageFactory {
       | "repair-final"
       | "claim"
       | "cancellation"
-      | "retirement",
+      | "retirement"
+      | "cleanup-claim",
   ) {
     super();
   }
@@ -1305,7 +1322,10 @@ class ApplyThenThrowFactory extends StorageFactory {
             text.includes('"lifecycle":"cancelling"')) ||
           (this.phase === "retirement" &&
             id !== "!subscription-quota" &&
-            text.includes('"lifecycle":"retired"'));
+            text.includes('"lifecycle":"retired"')) ||
+          (this.phase === "cleanup-claim" &&
+            id === "!subscription-cleanup" &&
+            text.includes('"ownerId"'));
         if (hit) this.#armed = false;
         return hit;
       },
