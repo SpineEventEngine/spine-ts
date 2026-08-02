@@ -1,6 +1,6 @@
 # T-0094: Environment-owned remote delivery
 
-Status: Specialist review active
+Status: Reviewed and release-verified; merge pending
 Start: `2026-08-02`
 Baseline: `c618e6da`
 Branch: `task/T-0094-remote-delivery`

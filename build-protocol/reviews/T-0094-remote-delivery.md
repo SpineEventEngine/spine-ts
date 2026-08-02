@@ -1,6 +1,6 @@
 # T-0094 Remote Delivery Review
 
-Status: Converged; final release verification pending
+Status: Converged and release-verified; merge pending
 Baseline: `c618e6da`
 Candidate: `26372e4f`
 
@@ -100,5 +100,14 @@ batch for the existing implementation owner.
 
 All reopened reviewers retained their explicitly configured role profiles;
 runtime self-introspection remained unavailable and no visible mismatch or
-fallback occurred. All findings are resolved. Final `verify:release` remains
-the merge gate.
+fallback occurred. All findings are resolved. The final `verify:release` merge
+gate passed as recorded below.
+
+## Final Verification
+
+`pnpm --config.verify-deps-before-run=false verify:release` passed at
+`09712702`: 171 test files and 3,451 tests passed, with 3 files and 25 tests
+skipped. Coverage passed at 94.16% statements, 90.04% branches, 94.58%
+functions, and 95.05% lines. Generated builds, tooling typecheck, ESLint,
+cleanup, TSDoc, formatting, API documentation, documentation audience, Proto
+integrity, release readiness, and full coverage all passed.
