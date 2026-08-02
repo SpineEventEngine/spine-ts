@@ -109,3 +109,32 @@ fallback occurred, so every result is accepted.
 The same implementation owner receives this one complete batch. Focused TDD
 must cover findings 1–7. Re-review will be restricted to concerns materially
 changed by the corrections.
+
+## Wave 1 Correction Dispositions
+
+1. Accepted and corrected: `Server` validates production browser durability
+   before contexts or either listener open; local in-memory assembly remains
+   available.
+2. Accepted and corrected: `RecordStorage.atomicCompareAndSet` is the explicit
+   provider capability and durable construction rejects `false`.
+3. Accepted and corrected: foreign owner cancellation returns `denied`; absent
+   and expired records remain `closed`.
+4. Accepted and corrected: only an unreleased reservation in the registry's
+   own reservation set is trusted; all other input rechecks bounded capacity.
+5. Accepted and corrected: admission uses `recordLimit + 1` and expiry uses
+   `cleanupBatchSize` through bounded provider queries.
+6. Accepted and corrected: canonical encoded-byte accounting is persisted and
+   validated before private bytes reach a callback.
+7. Accepted and corrected: canonical Base64 and configured byte bounds apply
+   to dynamic record-spec extraction and every registry read.
+8. Accepted and corrected: public prose describes a declared durable
+   capability, with `DurableSubscriptionBindings` as the supplied implementation.
+9. Accepted and corrected: package documentation now states namespace,
+   units, finite validation, restart, stream, replay, ordering, and
+   exactly-once limitations.
+10. Accepted and corrected: public reference text no longer names internal
+    task or wave roadmap terminology.
+
+Correction verification is recorded in the T-0091 work log. Re-review is
+limited to style/maintainability, documentation, TypeScript/API, and
+performance/reliability because all four concerns changed substantively.

@@ -150,12 +150,16 @@ const running = await new Server({
 void running;
 ```
 
-In production, browser access needs `DurableSubscriptionBindings`; startup
-rejects a missing or in-memory registry before opening a listener. The registry
+In production, browser access needs bindings that declare the durable
+capability. `DurableSubscriptionBindings` is the supplied implementation;
+compatible bindings can be used by later standalone hosting as well. Startup
+rejects missing or volatile bindings before opening a listener. The registry
 uses the storage factory that your application supplies and closes only its own
 handle, so you can use a separate factory from application-data storage or
-intentionally share one. For local development and tests, omitting `bindings`
-uses an in-memory registry.
+intentionally share one. Its namespace separates applications sharing a
+provider. `leaseMs` is milliseconds; `cleanupBatchSize`, `recordLimit`, and
+`maxRecordBytes` are positive safe integers. For local development and tests,
+omitting `bindings` uses an in-memory registry.
 
 The server validates commands before handler code runs. Invalid payloads are
 returned as `COMMAND_VALIDATION_ERROR`; invalid state transitions are returned

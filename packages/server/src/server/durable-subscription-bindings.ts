@@ -100,8 +100,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     this.#recordLimit = options.recordLimit;
     this.#storage = options.storageFactory.createRecordStorage(
       { name: `spine.gateway.${options.namespace}`, multitenant: false },
-      durableSubscriptionBindingSpec,
+      DurableBindingValues.spec(options.maxRecordBytes),
     );
+    if (!this.#storage.atomicCompareAndSet) {
+      this.#storage.close();
+      throw new Error("Subscription registry storage requires atomic compare-and-set.");
+    }
   }
 
   // prettier-ignore
@@ -113,7 +117,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   async reserveCapacity(): Promise<SubscriptionCapacityReservation> {
     this.#requireOpen();
-    const records = await this.#storage.index();
+    const records = await this.#storage.queryEntries({ limit: this.#recordLimit + 1 });
     if (records.length + this.#reservations.size >= this.#recordLimit)
       throw new Error("binding-capacity-exceeded");
     let released = false;
@@ -143,7 +147,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }): Promise<{ readonly id: string }> {
     this.#requireOpen();
     DurableBindingValues.createInput(input);
-    const reservation = input.reservation ?? (await this.reserveCapacity());
+    const reservation = this.#reservation(input.reservation) ?? (await this.reserveCapacity());
     try {
       const id = this.#nextId();
       if (!DurableBindingValues.token(id)) throw new Error("subscription ID must be unique");
@@ -207,8 +211,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
   }): Promise<SubscriptionBindingTransition> {
-    const stored = await this.#owned(input);
-    if (stored === undefined) return { kind: "closed" };
+    const owned = await this.#ownership(input);
+    if (owned.kind === "absent") return { kind: "closed" };
+    if (owned.kind === "denied") return { kind: "denied" };
+    const stored = owned.binding;
     const record = await this.#storage.read(input.id);
     if (record === undefined) return { kind: "closed" };
     const privateCopy = DurableBindingValues.envelope(stored.backend);
@@ -231,13 +237,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async purgeExpired(nowMs: number): Promise<void> {
     this.#requireOpen();
     DurableBindingValues.time(nowMs, "Subscription expiry cleanup time");
-    const ids = await this.#storage.index();
-    for (const id of ids.slice(0, this.#cleanupBatchSize)) {
-      const record = await this.#storage.read(id);
-      if (record === undefined) continue;
-      const stored = DurableBindingValues.read(record, id, this.#maxRecordBytes);
+    const records = await this.#storage.queryEntries({ limit: this.#cleanupBatchSize });
+    for (const entry of records) {
+      const stored = DurableBindingValues.read(entry.record, entry.id, this.#maxRecordBytes);
       if (stored.expiresAtMs > nowMs) continue;
-      if (await this.#storage.compareAndSet(id, record, undefined)) {
+      if (await this.#storage.compareAndSet(entry.id, entry.record, undefined)) {
         const privateCopy = DurableBindingValues.envelope(stored.backend);
         try {
           await this.#dispose(privateCopy, new AbortController().signal);
@@ -266,19 +270,37 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly tenant: string | undefined;
     readonly nowMs: number;
   }): Promise<StoredBinding | undefined> {
+    const ownership = await this.#ownership(input);
+    return ownership.kind === "owned" ? ownership.binding : undefined;
+  }
+
+  async #ownership(input: {
+    readonly id: string;
+    readonly principalFingerprint: string;
+    readonly tenant: string | undefined;
+    readonly nowMs: number;
+  }): Promise<BindingOwnership> {
     this.#requireOpen();
-    if (!DurableBindingValues.token(input.id)) return undefined;
+    if (!DurableBindingValues.token(input.id)) return { kind: "absent" };
     DurableBindingValues.time(input.nowMs, "Subscription ownership time");
     const record = await this.#storage.read(input.id);
-    if (record === undefined) return undefined;
-    const stored = DurableBindingValues.read(record, input.id, this.#maxRecordBytes);
+    if (record === undefined) return { kind: "absent" };
+    const binding = DurableBindingValues.read(record, input.id, this.#maxRecordBytes);
+    if (binding.expiresAtMs <= input.nowMs) return { kind: "absent" };
     if (
-      stored.expiresAtMs <= input.nowMs ||
-      stored.principalFingerprint !== input.principalFingerprint ||
-      stored.tenant !== input.tenant
+      binding.principalFingerprint !== input.principalFingerprint ||
+      binding.tenant !== input.tenant
     )
-      return undefined;
-    return stored;
+      return { kind: "denied" };
+    return { kind: "owned", binding };
+  }
+
+  #reservation(
+    reservation: SubscriptionCapacityReservation | undefined,
+  ): SubscriptionCapacityReservation | undefined {
+    return reservation !== undefined && this.#reservations.has(reservation)
+      ? reservation
+      : undefined;
   }
 
   #requireOpen(): void {
@@ -299,18 +321,6 @@ export function isDurableSubscriptionBindings(
 ): value is SubscriptionBindings & { readonly durable: true } {
   return value !== undefined && "durable" in value && value.durable === true;
 }
-
-/**
- * Defines the private physical layout of gateway-owned subscription records.
- *
- * @internal
- */
-export const durableSubscriptionBindingSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
-  schema: AnySchema,
-  storageKey: registryStorageKey,
-  idKind: "string",
-  extractId: (record) => DurableBindingValues.read(record, undefined, Number.MAX_SAFE_INTEGER).id,
-});
 
 /**
  * Validates private gateway records without exposing their backend envelopes.
@@ -334,8 +344,14 @@ interface StoredBinding {
   readonly lifecycle: "inactive" | "active" | "closed";
   readonly leaseUntilMs: number;
   readonly cancellationFence: number;
+  readonly encodedBytes: number;
   readonly version: number;
 }
+
+type BindingOwnership =
+  | { readonly kind: "absent" }
+  | { readonly kind: "denied" }
+  | { readonly kind: "owned"; readonly binding: StoredBinding };
 
 const DurableBindingValues = Object.freeze({
   createInput(input: {
@@ -360,7 +376,11 @@ const DurableBindingValues = Object.freeze({
       recordLimit: options.recordLimit,
       maxRecordBytes: options.maxRecordBytes,
     })) {
-      if (!Number.isSafeInteger(value) || value <= 0)
+      if (
+        !Number.isSafeInteger(value) ||
+        value <= 0 ||
+        (name === "recordLimit" && value === Number.MAX_SAFE_INTEGER)
+      )
         throw new Error(`Subscription registry ${name} must be a positive safe integer.`);
     }
   },
@@ -386,7 +406,13 @@ const DurableBindingValues = Object.freeze({
       !["inactive", "active", "closed"].includes(source.lifecycle as string) ||
       !DurableBindingValues.finite(source.leaseUntilMs) ||
       !DurableBindingValues.finite(source.cancellationFence) ||
+      !DurableBindingValues.finite(source.encodedBytes) ||
       typeof source.backend !== "string"
+    )
+      throw new Error("Durable subscription registry record is invalid.");
+    if (
+      Buffer.from(source.backend, "base64").toString("base64") !== source.backend ||
+      Buffer.byteLength(source.backend) !== source.encodedBytes
     )
       throw new Error("Durable subscription registry record is invalid.");
     const backend = Uint8Array.from(Buffer.from(source.backend, "base64"));
@@ -401,6 +427,7 @@ const DurableBindingValues = Object.freeze({
       lifecycle: source.lifecycle as StoredBinding["lifecycle"],
       leaseUntilMs: source.leaseUntilMs,
       cancellationFence: source.cancellationFence,
+      encodedBytes: source.encodedBytes,
       version: source.version,
     });
   },
@@ -413,13 +440,23 @@ const DurableBindingValues = Object.freeze({
   token(value: unknown): value is string {
     return typeof value === "string" && value.trim().length > 0;
   },
-  write(record: StoredBinding): Any {
+  spec(maxBytes: number): RecordSpec<string, Any> {
+    return new RecordSpec<string, Any>({
+      schema: AnySchema,
+      storageKey: registryStorageKey,
+      idKind: "string",
+      extractId: (record) => DurableBindingValues.read(record, undefined, maxBytes).id,
+    });
+  },
+  write(record: Omit<StoredBinding, "encodedBytes">): Any {
+    const backend = Buffer.from(record.backend).toString("base64");
     return create(AnySchema, {
       typeUrl: recordTypeUrl,
       value: new TextEncoder().encode(
         JSON.stringify({
           ...record,
-          backend: Buffer.from(record.backend).toString("base64"),
+          backend,
+          encodedBytes: Buffer.byteLength(backend),
         }),
       ),
     });
