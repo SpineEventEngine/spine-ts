@@ -544,9 +544,9 @@ export interface ServerOptions {
   readonly readMaxBytes?: number;
 
   /**
-   * Maximum uncompressed bytes emitted for one RPC response message.
+   * Maximum uncompressed bytes emitted for one RPC or auth-callback response.
    * Defaults to 4,194,304 bytes. Must be an integer from 1 through
-   * 4,294,967,295.
+   * 4,294,967,295. An auth callback exceeding this bound receives 413.
    */
   readonly writeMaxBytes?: number;
 
@@ -610,7 +610,10 @@ export interface BrowserServerOptions {
   readonly authRoutes?: readonly BrowserAuthRoute[];
 
   /**
-   * Limits concurrently admitted application authentication requests.
+   * Limits concurrently admitted application authentication requests across
+   * this listener. Defaults to 64 and must be a positive safe integer. Excess
+   * requests receive 503 before handler invocation; capacity recovers when an
+   * admitted request settles.
    */
   readonly maxActiveAuthRequests?: number;
 

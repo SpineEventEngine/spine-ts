@@ -11,7 +11,7 @@ const envoyImage =
   "envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb";
 
 test(
-  "the pinned Envoy image accepts the rendered bounded configuration",
+  "the pinned Envoy image accepts rendered configuration and rejects invalid configuration",
   { timeout: 120_000 },
   async (t) => {
     if (spawnSync("docker", ["info"], { stdio: "ignore" }).status !== 0) {
@@ -72,6 +72,29 @@ test(
         { encoding: "utf8" },
       );
       assert.equal(validation.status, 0, `${validation.stdout}\n${validation.stderr}`);
+      await writeFile(configuration, "this is not a valid Envoy configuration: [");
+      const invalid = spawnSync(
+        "docker",
+        [
+          "run",
+          "--rm",
+          "-v",
+          `${configuration}:/etc/envoy/envoy.yaml:ro`,
+          "-v",
+          `${directory}:/run/tls:ro`,
+          envoyImage,
+          "-c",
+          "/etc/envoy/envoy.yaml",
+          "--mode",
+          "validate",
+        ],
+        { encoding: "utf8" },
+      );
+      assert.notEqual(
+        invalid.status,
+        0,
+        "pinned Envoy unexpectedly accepted invalid configuration",
+      );
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

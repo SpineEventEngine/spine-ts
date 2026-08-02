@@ -95,8 +95,9 @@ CORS, `Vary: Origin`, protocol request headers, and exposed gRPC status headers.
 
 Supplying `browser.backend.baseUrl` selects standalone mode. It is one canonical
 HTTP(S) origin for a Spine TS or JVM backend; the gateway never owns or closes
-that backend. Standalone production additionally requires an application type
-registry and named durable bindings. `ResolveContext` stays in the gateway;
+that backend. Every standalone mode, including local development and tests,
+requires explicit subscription bindings; production additionally requires an
+application type registry and named durable bindings. `ResolveContext` stays in the gateway;
 Post, Read, Subscribe, Activate, and Cancel use the same authenticated policy,
 context-replacement, and native descriptors before reaching the backend.
 

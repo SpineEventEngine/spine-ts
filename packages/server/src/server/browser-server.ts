@@ -404,7 +404,7 @@ export const BrowserServer: Readonly<{
           if (next.done) break;
           responseBytes += next.value.byteLength;
           if (responseBytes > writeMaxBytes) {
-            await responseReader.cancel();
+            await responseReader.cancel().catch(() => undefined);
             response.statusCode = 413;
             response.end();
             return;
@@ -417,6 +417,10 @@ export const BrowserServer: Readonly<{
       response.end(Buffer.concat(responseChunks));
     } catch {
       if (!response.writableEnded) {
+        if (controller.signal.aborted) {
+          response.shouldKeepAlive = false;
+          response.setHeader("connection", "close");
+        }
         response.statusCode = controller.signal.aborted ? 504 : 500;
         response.end();
       }

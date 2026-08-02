@@ -151,6 +151,19 @@ substantively.
   standalone bindings, aggregate admission, `writeMaxBytes`/413 behavior, and
   partial JVM evidence with six unresolved imports.
 
+## Final Narrow Correction Evidence
+
+- Slow auth-body deadline responses set `Connection: close` and disable
+  keep-alive before fixed 504, allowing the server to flush and close the
+  incomplete connection without a client-side destroy; the handler remains
+  uncalled.
+- Overflow cancellation is best effort, preserving fixed 413 when an
+  application response stream rejects `cancel()`.
+- TSDoc and REFERENCE now state the auth response, listener-wide admission,
+  local/test standalone-binding, and recovery guarantees. `pnpm test:envoy`
+  is a Docker-capable T-0093/Wave 5 acceptance command outside generic
+  `verify:release`; it verifies both valid and invalid rendered configurations.
+
 ## Final Narrow Re-review Results
 
 - Documentation: one Medium omission remains in agent REFERENCE: local/test

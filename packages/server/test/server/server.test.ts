@@ -690,6 +690,8 @@ describe("Server", () => {
   });
 
   it("bounds auth response transfer with the server write limit", async () => {
+    let cancelled!: () => void;
+    const cancellation = new Promise<void>((resolve) => (cancelled = resolve));
     const server = await new Server({
       writeMaxBytes: 8,
       browser: {
@@ -702,7 +704,19 @@ describe("Server", () => {
             origins: ["http://127.0.0.1:5173"],
             maxRequestBytes: 16,
             timeoutMs: 1000,
-            onRequest: () => new Response("response-too-large", { headers: { "x-private": "no" } }),
+            onRequest: () =>
+              new Response(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    controller.enqueue(new Uint8Array(9));
+                  },
+                  cancel() {
+                    cancelled();
+                    return Promise.reject(new Error("application cancellation failure"));
+                  },
+                }),
+                { headers: { "x-private": "no" } },
+              ),
           },
         ],
       },
@@ -714,6 +728,7 @@ describe("Server", () => {
       expect(response.status).toBe(413);
       expect(response.headers.get("x-private")).toBeNull();
       await expect(response.text()).resolves.toBe("");
+      await expect(cancellation).resolves.toBeUndefined();
     } finally {
       await server.close();
     }
@@ -775,22 +790,29 @@ describe("Server", () => {
       },
     }).start();
     try {
-      const status = await new Promise<number | undefined>((resolve, reject) => {
+      let requestClosed!: () => void;
+      const closed = new Promise<void>((resolve) => (requestClosed = resolve));
+      const result = await new Promise<{
+        readonly connection: string | undefined;
+        readonly status: number | undefined;
+      }>((resolve, reject) => {
         const request = http.request(`${server.baseUrl}/auth/drip`, {
           method: "POST",
           headers: { origin: "http://127.0.0.1:5173", "transfer-encoding": "chunked" },
         });
         request.once("error", reject);
+        request.once("close", requestClosed);
         request.once("response", (response) => {
           response.resume();
           response.once("end", () => {
-            request.destroy();
-            resolve(response.statusCode);
+            resolve({ connection: response.headers.connection, status: response.statusCode });
           });
         });
         request.write("a");
       });
-      expect(status).toBe(504);
+      expect(result.status).toBe(504);
+      expect(result.connection).toBe("close");
+      await expect(closed).resolves.toBeUndefined();
       expect(calls).toBe(0);
     } finally {
       await server.close();

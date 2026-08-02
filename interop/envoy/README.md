@@ -50,11 +50,16 @@ upstream. The upstream connection uses HTTP/2.
 
 The limits use Envoy's supported HTTP buffer filter and route-specific
 `BufferPerRoute` configuration. The repository's pinned-image regression gate
-renders this configuration and validates it before release:
+renders both an accepted configuration and a deliberately invalid one:
 
 ```sh
 pnpm test:envoy
 ```
+
+This is a capability-dependent T-0093/Wave 5 acceptance command: it requires
+Docker and the pinned image, and is therefore not part of the generic
+`verify:release` profile. Run it in every Docker-capable acceptance environment;
+the test skips only when Docker is unavailable.
 
 Do not publish a direct route from the browser to a Spine backend. The
 application gateway resolves credentials into trusted context and is the only
