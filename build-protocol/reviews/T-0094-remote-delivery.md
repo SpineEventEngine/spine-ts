@@ -1,6 +1,6 @@
 # T-0094 Remote Delivery Review
 
-Status: Converged and release-verified; merge pending
+Status: Complete; integrated and post-merge verified
 Baseline: `c618e6da`
 Candidate: `26372e4f`
 
