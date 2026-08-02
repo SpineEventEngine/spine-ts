@@ -140,6 +140,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     { controller: AbortController; timer: ReturnType<typeof setTimeout>; fence: number }
   >();
   readonly #cancelling = new Map<string, Promise<SubscriptionBindingTransition>>();
+  readonly #cancelControllers = new Map<string, AbortController>();
+  readonly #running = new Set<Promise<unknown>>();
   #closed = false;
 
   /**
@@ -291,6 +293,23 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly onBackend: OnBackendSubscription;
     readonly signal: AbortSignal;
   }): Promise<SubscriptionBindingTransition> {
+    const task = this.#activate(input);
+    this.#running.add(task);
+    try {
+      return await task;
+    } finally {
+      this.#running.delete(task);
+    }
+  }
+
+  async #activate(input: {
+    readonly id: string;
+    readonly principalFingerprint: string;
+    readonly tenant: string | undefined;
+    readonly nowMs: number;
+    readonly onBackend: OnBackendSubscription;
+    readonly signal: AbortSignal;
+  }): Promise<SubscriptionBindingTransition> {
     if (input.signal.aborted) return { kind: "denied" };
     const claimed = await this.#claim(input, "active");
     if (claimed === undefined) return { kind: "denied" };
@@ -338,10 +357,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     if (pending !== undefined) return pending;
     const task = this.#cancel(input);
     this.#cancelling.set(input.id, task);
+    this.#running.add(task);
     try {
       return await task;
     } finally {
       if (this.#cancelling.get(input.id) === task) this.#cancelling.delete(input.id);
+      this.#running.delete(task);
     }
   }
 
@@ -380,12 +401,17 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       }
     }
     this.#active.get(input.id)?.controller.abort();
+    const controller = new AbortController();
+    this.#cancelControllers.set(input.id, controller);
     try {
-      await input.onBackend(Values.envelope(next), new AbortController().signal, () =>
+      await input.onBackend(Values.envelope(next), controller.signal, () =>
         this.#current(input.id, next.fence, "cancelling", Date.now()),
       );
     } catch {
       return { kind: "denied" };
+    } finally {
+      if (this.#cancelControllers.get(input.id) === controller)
+        this.#cancelControllers.delete(input.id);
     }
     const current = await this.#storage.read(input.id);
     if (current === undefined) return { kind: "closed" };
@@ -458,8 +484,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       clearTimeout(active.timer);
       active.controller.abort();
     }
+    for (const controller of this.#cancelControllers.values()) controller.abort();
+    await Promise.allSettled(this.#running);
     this.#active.clear();
     this.#cancelling.clear();
+    this.#cancelControllers.clear();
     this.#reservations.clear();
     this.#storage.close();
     await Promise.resolve();
