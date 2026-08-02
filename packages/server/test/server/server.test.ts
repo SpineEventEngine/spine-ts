@@ -495,6 +495,48 @@ describe("Server", () => {
     }
   });
 
+  it("aborts auth work when its client disconnects", async () => {
+    let start!: () => void;
+    let abort!: () => void;
+    const started = new Promise<void>((resolve) => (start = resolve));
+    const aborted = new Promise<void>((resolve) => (abort = resolve));
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "GET",
+            path: "/auth/disconnect",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 1024,
+            timeoutMs: 10_000,
+            onRequest: (_request, signal) => (
+              start(),
+              new Promise<Response>((resolve) =>
+                signal.addEventListener("abort", () => (abort(), resolve(new Response())), {
+                  once: true,
+                }),
+              )
+            ),
+          },
+        ],
+      },
+    }).start();
+    try {
+      const request = http.request(`${server.baseUrl}/auth/disconnect`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      request.on("error", () => undefined);
+      request.end();
+      await started;
+      request.destroy();
+      await expect(aborted).resolves.toBeUndefined();
+    } finally {
+      await server.close();
+    }
+  });
+
   it("uses fixed auth errors without starting application work", async () => {
     let calls = 0;
     const server = await new Server({
