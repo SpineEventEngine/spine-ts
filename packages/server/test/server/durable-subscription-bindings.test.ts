@@ -612,6 +612,7 @@ describe("DurableSubscriptionBindings", () => {
           }),
       });
       await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
       factory.arm();
 
       await vi.advanceTimersByTimeAsync(51);
@@ -1432,6 +1433,8 @@ describe("DurableSubscriptionBindings", () => {
 
     await bindings.purgeExpired(2);
     await bindings.purgeExpired(20);
+    await bindings.purgeExpired(20);
+    await bindings.purgeExpired(20);
 
     expect(calls).toBeGreaterThanOrEqual(1);
     await bindings.close();
@@ -1475,6 +1478,261 @@ describe("DurableSubscriptionBindings", () => {
 
     await reservation.release();
     await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
+
+  it("fails closed when a reservation conversion loses its atomic replacement", async () => {
+    const factory = new RejectOnceFactory("conversion");
+    const bindings = capacityRegistry(factory, "conversion-race", 1);
+    const reservation = await bindings.reserveCapacity();
+    factory.arm();
+
+    await expect(
+      bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 100,
+        reservation,
+      }),
+    ).rejects.toThrow("binding-capacity-exceeded");
+    await bindings.close();
+  });
+
+  it("treats an unexpired cleanup lease held by another gateway as authoritative", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "foreign-cleaner");
+    await seedRecord(
+      store,
+      "!subscription-cleanup",
+      durableRecord("cleanup", {
+        id: "!subscription-cleanup",
+        revision: 1,
+        ownerId: "other-gateway",
+        fence: 1,
+        leaseUntilMs: 100,
+        failureCount: 0,
+        retryAfterMs: 0,
+      }),
+    );
+    store.close();
+    const bindings = cleanupRegistry(factory, "foreign-cleaner", () => {
+      throw new Error("foreign cleanup must not run");
+    });
+
+    await expect(bindings.purgeExpired(1)).resolves.toBeUndefined();
+    await bindings.close();
+  });
+
+  it("keeps malformed, live reserved, and retired rows finite during cleanup", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "cleanup-row-kinds");
+    await seedRecord(
+      store,
+      "!subscription-quota",
+      durableRecord("quota", {
+        id: "!subscription-quota",
+        revision: 1,
+        used: 2,
+      }),
+    );
+    await seedRecord(store, "a-malformed", malformedRepairRecord("a-malformed"));
+    await seedRecord(store, "b-live", repairRecord("b-live", "reserved"));
+    await seedRecord(store, "c-retired", repairRecord("c-retired", "retired"));
+    store.close();
+    const bindings = cleanupRegistry(factory, "cleanup-row-kinds", () => Promise.resolve());
+
+    await bindings.purgeExpired(1);
+    await bindings.purgeExpired(1);
+    await bindings.purgeExpired(1);
+
+    await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
+
+  it("rejects non-finite operation times and empty private envelopes", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "invalid-inputs");
+    await expect(
+      bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array() },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 1,
+      }),
+    ).rejects.toThrow("subscription owner and backend are required");
+    await expect(
+      bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: -1,
+      }),
+    ).rejects.toThrow("Subscription time must be a safe integer");
+    await expect(bindings.purgeExpired(-1)).rejects.toThrow(
+      "Subscription time must be a safe integer",
+    );
+    await bindings.close();
+  });
+
+  it("retries expired cleanup after its cancellation fence loses a race", async () => {
+    const factory = new RejectOnceFactory("expired-cancellation");
+    let calls = 0;
+    const bindings = cleanupRegistry(factory, "expired-race", () => {
+      calls += 1;
+      return Promise.resolve();
+    });
+    await bindings.create(expiredInput());
+    factory.arm();
+
+    await bindings.purgeExpired(2);
+    await bindings.purgeExpired(20);
+    await bindings.purgeExpired(20);
+    await bindings.purgeExpired(20);
+
+    expect(calls).toBe(1);
+    await bindings.close();
+  });
+
+  it("does not resurrect an activation whose final cancellation update loses a race", async () => {
+    const factory = new RejectOnceFactory("activation-finalize");
+    const bindings = registry(factory, "finalize-race");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 100,
+    });
+    factory.arm();
+
+    await expect(
+      bindings.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    await bindings.close();
+  });
+
+  it("completes a pending release before admitting another slot", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "pending-release");
+    await seedRecord(
+      store,
+      "!subscription-quota",
+      durableRecord("quota", {
+        id: "!subscription-quota",
+        revision: 1,
+        used: 1,
+        operation: {
+          kind: "release",
+          operationId: "release",
+          bindingId: "missing",
+          token: "token",
+        },
+      }),
+    );
+    store.close();
+    const bindings = capacityRegistry(factory, "pending-release", 1);
+
+    await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
+
+  it("fails closed when a pending reservation operation finds a replacement token", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "replacement-token");
+    await seedRecord(
+      store,
+      "!subscription-quota",
+      durableRecord("quota", {
+        id: "!subscription-quota",
+        revision: 1,
+        used: 0,
+        operation: {
+          kind: "reserve",
+          operationId: "reserve",
+          bindingId: "slot",
+          token: "expected",
+        },
+      }),
+    );
+    await seedRecord(store, "slot", repairRecord("slot", "reserved"));
+    store.close();
+    const bindings = capacityRegistry(factory, "replacement-token", 1);
+
+    await expect(bindings.reserveCapacity()).rejects.toThrow("binding-capacity-exceeded");
+    await bindings.close();
+  });
+
+  it("fails closed when fresh quota or cleanup control creation loses its atomic race", async () => {
+    const quotaFactory = new RejectOnceFactory("quota-create");
+    quotaFactory.arm();
+    const quotaBindings = capacityRegistry(quotaFactory, "quota-create-race", 1);
+    await expect(quotaBindings.reserveCapacity()).rejects.toThrow(
+      "Subscription quota was not created",
+    );
+    await quotaBindings.close();
+
+    const cleanupFactory = new RejectOnceFactory("cleanup-create");
+    cleanupFactory.arm();
+    const cleanupBindings = cleanupRegistry(cleanupFactory, "cleanup-create-race", () =>
+      Promise.resolve(),
+    );
+    await expect(cleanupBindings.purgeExpired(1)).rejects.toThrow(
+      "Subscription cleanup was not created",
+    );
+    await cleanupBindings.close();
+  });
+
+  it("finishes an empty durable repair before admitting capacity", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = repairStore(factory, "empty-repair");
+    await seedRepair(store, 0, undefined);
+    store.close();
+    const bindings = capacityRegistry(factory, "empty-repair", 1);
+
+    await expect(bindings.reserveCapacity()).resolves.toBeDefined();
+    await bindings.close();
+  });
+
+  it("bounds cleanup retry arithmetic at the durable safe-integer limit", async () => {
+    const factory = new InMemoryStorageFactory();
+    const bindings = cleanupRegistry(factory, "overflow-backoff", () =>
+      Promise.reject(new Error("private failure")),
+    );
+    await bindings.create(expiredInput());
+    const now = Number.MAX_SAFE_INTEGER - 1;
+
+    await bindings.purgeExpired(now);
+
+    expect(await cleanupControl(factory, "overflow-backoff")).toMatchObject({
+      failureCount: 1,
+      retryAfterMs: Number.MAX_SAFE_INTEGER,
+    });
+    await bindings.close();
+  });
+
+  it("saturates finite activation and cancellation leases", async () => {
+    const bindings = timedRegistry(new InMemoryStorageFactory(), "saturated-lease");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: Number.MAX_SAFE_INTEGER,
+    });
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: Number.MAX_SAFE_INTEGER - 1,
+        onBackend: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
     await bindings.close();
   });
 
@@ -1686,6 +1944,14 @@ function repairId(record: Any): string {
   )
     throw new Error("repair record has no ID");
   return value.id;
+}
+
+async function seedRecord(
+  store: RecordStorage<string, Any>,
+  id: string,
+  record: Any,
+): Promise<void> {
+  await store.compareAndSet(id, undefined, record);
 }
 
 async function seedRepair(
@@ -1969,7 +2235,13 @@ class RejectOnceFactory extends StorageFactory {
       | "quota-stage"
       | "quota-completion"
       | "slot"
-      | "release-stage",
+      | "release-stage"
+      | "expired-cancellation"
+      | "activation-finalize"
+      | "quota-create"
+      | "cleanup-create"
+      | "conversion"
+      | "renewal",
   ) {
     super();
   }
@@ -1991,6 +2263,12 @@ class RejectOnceFactory extends StorageFactory {
         const text =
           next === undefined ? "" : new TextDecoder().decode((next as unknown as Any).value);
         const rejected =
+          (this.phase === "quota-create" &&
+            id === "!subscription-quota" &&
+            !text.includes('"operation"')) ||
+          (this.phase === "cleanup-create" &&
+            id === "!subscription-cleanup" &&
+            !text.includes('"ownerId"')) ||
           (this.phase === "quota-stage" &&
             id === "!subscription-quota" &&
             text.includes('"kind":"reserve"')) ||
@@ -2000,9 +2278,21 @@ class RejectOnceFactory extends StorageFactory {
           (this.phase === "slot" &&
             id !== "!subscription-quota" &&
             text.includes('"lifecycle":"reserved"')) ||
+          (this.phase === "conversion" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"inactive"')) ||
           (this.phase === "release-stage" &&
             id === "!subscription-quota" &&
             text.includes('"kind":"release"')) ||
+          (this.phase === "expired-cancellation" &&
+            id !== "!subscription-quota" &&
+            text.includes('"reason":"expired"')) ||
+          (this.phase === "activation-finalize" &&
+            id !== "!subscription-quota" &&
+            text.includes('"reason":"activation-end"')) ||
+          (this.phase === "renewal" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"active"')) ||
           (this.phase === "claim" &&
             id !== "!subscription-quota" &&
             text.includes('"lifecycle":"active"')) ||
