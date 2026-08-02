@@ -118,13 +118,16 @@ factory or a Spine JVM/TS backend. It copies backend envelopes on read, write,
 and callbacks and never returns them through public subscription responses.
 
 The durable registry preserves opaque records through a process restart.
-It validates version, type, storage key identity, owner fingerprint, tenant,
-expiry, lifecycle, lease placeholder, cancellation fence, byte accounting, and
-record version before use. Invalid data fails closed with a generic registry
-error. Active streams do not resume after restart, updates are not replayed,
-and the registry provides neither exactly-once delivery nor global update
-ordering. Two-gateway leases, fencing, global admission races, and scheduled
-retention cleanup are not part of this registry contract.
+It validates record family, version, type, storage key identity, owner
+fingerprint, tenant, expiry, lifecycle, fence, lease, canonical byte
+accounting, and finite record size before use. Invalid data fails closed with a
+generic registry error. A namespace-global quota reserves the final public ID
+before creation; the reservation release is asynchronous and exactly once.
+Two gateways coordinate ownership with finite leases and fences. A lost lease
+prevents later forwarding or finalization by the former owner. Cleanup remains
+bounded and restart-safe at the record level; active streams do not resume,
+updates are not replayed, and the registry provides neither exactly-once
+delivery, global update ordering, nor cluster-complete notification delivery.
 
 ## Delivery and environment
 
