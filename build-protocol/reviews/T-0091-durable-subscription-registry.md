@@ -1,6 +1,6 @@
 # T-0091 Review Record
 
-Status: Wave 1 dispatched
+Status: Wave 1 findings accepted; correction in progress
 
 ## Required Concerns
 
@@ -56,3 +56,56 @@ The complete implementation endpoint is `4db3628f`.
 Every dispatch explicitly supplies its expected model and reasoning. Runtime
 self-introspection will be recorded when exposed; otherwise the immutable
 configured role/profile and limitation are the acceptance evidence.
+
+## Wave 1 Runtime Evidence
+
+- Style/maintainability completed under the explicitly configured existing
+  reviewer with `gpt-5.6-terra` / high.
+- Documentation completed under the explicitly configured existing reviewer
+  with `gpt-5.6-luna` / medium.
+- TypeScript/API docs completed under the explicitly configured existing
+  reviewer with `gpt-5.6-terra` / high.
+- Performance/reliability completed under the explicitly configured existing
+  reviewer with `gpt-5.6-terra` / high.
+
+Runtime self-introspection was unavailable in all lanes; the immutable
+configured role/profile is the available metadata. No visible mismatch or
+fallback occurred, so every result is accepted.
+
+## Wave 1 Accepted Finding Batch
+
+1. Move production durability admission ahead of every native/public listener
+   open. Add a `Server` integration regression proving missing or volatile
+   bindings reject without reaching listener creation; preserve explicit local
+   in-memory acceptance.
+2. Introduce the smallest explicit provider capability that proves atomic
+   `compareAndSet()` compatibility, reject incompatible registry storage
+   during construction/open, and stop misreporting unsupported CAS as an ID
+   collision.
+3. Preserve absent-versus-unauthorized ownership semantics: a foreign
+   principal/tenant/session cancel must be denied, not reported closed/success.
+4. Accept only a live reservation owned by the same registry, or recheck
+   capacity atomically before creation. Cover forged, released, and
+   other-registry reservations so no path bypasses the finite record limit.
+5. Replace unbounded namespace materialization for admission and cleanup with
+   provider-bounded queries capped by `recordLimit + 1` and the cleanup batch.
+   Test provider scan bounds and overfull storage.
+6. Persist and validate explicit encoded-byte accounting. Reject accounting
+   mismatches and round-trip the frozen field needed by later reconciliation.
+7. Require canonical Base64 for stored private payloads and enforce the
+   configured record-byte bound in index/extract paths. Tampered payloads must
+   fail before any backend callback without exposing private bytes.
+8. Document the durability capability contract rather than requiring class
+   identity. Present `DurableSubscriptionBindings` as the provided
+   implementation while allowing compatible declared capabilities for later
+   standalone hosting.
+9. Document namespace isolation, units, finite constructor validation, and the
+   direct restart limitation: records survive, active streams do not resume,
+   updates are not replayed, and neither exactly-once delivery nor global
+   ordering is guaranteed.
+10. Remove internal Wave/task roadmap wording from public package reference
+    documentation.
+
+The same implementation owner receives this one complete batch. Focused TDD
+must cover findings 1–7. Re-review will be restricted to concerns materially
+changed by the corrections.
