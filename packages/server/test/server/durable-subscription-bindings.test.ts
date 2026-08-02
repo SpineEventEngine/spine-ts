@@ -9,7 +9,7 @@ import {
   StorageFactory,
   type StorageContext,
 } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DurableSubscriptionBindings, isDurableSubscriptionBindings } from "../../src/index.js";
 import { BrowserServer } from "../../src/server/browser-server.js";
@@ -256,6 +256,193 @@ describe("DurableSubscriptionBindings", () => {
 
     await first.close();
     await second.close();
+  });
+
+  it("reconciles an applied-then-thrown activation claim before running the backend", async () => {
+    const factory = new ApplyThenThrowFactory("claim");
+    const bindings = capacityRegistry(factory, "claim", 2);
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    factory.arm();
+    let calls = 0;
+    await expect(
+      bindings.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: () => {
+          calls += 1;
+          return Promise.resolve();
+        },
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    expect(calls).toBe(1);
+    await bindings.close();
+  });
+
+  it("allows one local cancellation callback and fences a stale active callback", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "cancel-fence");
+    const second = registry(factory, "cancel-fence");
+    const binding = await first.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    let activeGuard: (() => Promise<boolean>) | undefined;
+    let resumeActive: (() => void) | undefined;
+    let activeStarted: (() => void) | undefined;
+    const activeReady = new Promise<void>((resolve) => {
+      activeStarted = resolve;
+    });
+    const active = first.activate({
+      id: binding.id,
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onBackend: (_value, _signal, guard) =>
+        new Promise<void>((resolve) => {
+          activeGuard = guard;
+          resumeActive = resolve;
+          activeStarted?.();
+        }),
+    });
+    await activeReady;
+    let releaseCancel: (() => void) | undefined;
+    let calls = 0;
+    let started: (() => void) | undefined;
+    const callbackStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const cancel = () =>
+      second.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 2_000,
+        onBackend: (_value, _signal, guard) =>
+          new Promise<void>((resolve) => {
+            calls += 1;
+            expect(guard).toBeDefined();
+            releaseCancel = resolve;
+            started?.();
+          }),
+      });
+    const one = cancel();
+    const two = cancel();
+    await callbackStarted;
+    expect(calls).toBe(1);
+    await expect(activeGuard?.()).resolves.toBe(false);
+    resumeActive?.();
+    await expect(active).resolves.toEqual({ kind: "denied" });
+    releaseCancel?.();
+    await expect(Promise.all([one, two])).resolves.toEqual([
+      { kind: "closed" },
+      { kind: "closed" },
+    ]);
+    await first.close();
+    await second.close();
+  });
+
+  it("retries a failed cancellation callback with its durable fence", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "cancel-retry");
+    const binding = await bindings.create({
+      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      principalFingerprint: "principal-a",
+      tenant: undefined,
+      expiresAtMs: 10_000,
+    });
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1,
+        onBackend: () => Promise.reject(new Error("transient private failure")),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    let calls = 0;
+    await expect(
+      bindings.cancel({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 2,
+        onBackend: () => {
+          calls += 1;
+          return Promise.resolve();
+        },
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    expect(calls).toBe(1);
+    await bindings.close();
+  });
+
+  it("renews a live lease and aborts local work after a durable renewal loss", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    try {
+      const factory = new InMemoryStorageFactory();
+      const first = timedRegistry(factory, "renew");
+      const second = timedRegistry(factory, "renew");
+      const binding = await first.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        expiresAtMs: 10_000,
+      });
+      let signal: AbortSignal | undefined;
+      let finish: (() => void) | undefined;
+      const active = first.activate({
+        id: binding.id,
+        principalFingerprint: "principal-a",
+        tenant: undefined,
+        nowMs: 1_000,
+        signal: new AbortController().signal,
+        onBackend: (_value, current, _guard) =>
+          new Promise<void>((resolve) => {
+            signal = current;
+            finish = resolve;
+          }),
+      });
+      await vi.advanceTimersByTimeAsync(51);
+      await expect(
+        second.activate({
+          id: binding.id,
+          principalFingerprint: "principal-a",
+          tenant: undefined,
+          nowMs: 1_101,
+          signal: new AbortController().signal,
+          onBackend: () => Promise.resolve(),
+        }),
+      ).resolves.toEqual({ kind: "denied" });
+      await vi.advanceTimersByTimeAsync(1_100);
+      await expect(
+        second.cancel({
+          id: binding.id,
+          principalFingerprint: "principal-a",
+          tenant: undefined,
+          nowMs: 2_201,
+          onBackend: () => Promise.resolve(),
+        }),
+      ).resolves.toEqual({ kind: "closed" });
+      await vi.advanceTimersByTimeAsync(51);
+      expect(signal?.aborted).toBe(true);
+      finish?.();
+      await expect(active).resolves.toEqual({ kind: "denied" });
+      await first.close();
+      await second.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("declares durable capability without treating in-memory bindings as durable", () => {
@@ -646,6 +833,22 @@ function capacityRegistry(
   });
 }
 
+function timedRegistry(
+  storageFactory: StorageFactory,
+  namespace: string,
+): DurableSubscriptionBindings {
+  return new DurableSubscriptionBindings({
+    storageFactory,
+    namespace,
+    nextId: () => crypto.randomUUID(),
+    dispose: () => Promise.resolve(),
+    leaseMs: 100,
+    cleanupBatchSize: 1,
+    recordLimit: 10,
+    maxRecordBytes: 1_024,
+  });
+}
+
 function repairStore(factory: StorageFactory, namespace: string): RecordStorage<string, Any> {
   return factory.createRecordStorage(
     { name: `spine.gateway.${namespace}`, multitenant: false },
@@ -806,7 +1009,14 @@ class ApplyThenThrowFactory extends StorageFactory {
 
   constructor(
     private readonly phase:
-      "quota" | "slot" | "conversion" | "deletion" | "completion" | "repair-page" | "repair-final",
+      | "quota"
+      | "slot"
+      | "conversion"
+      | "deletion"
+      | "completion"
+      | "repair-page"
+      | "repair-final"
+      | "claim",
   ) {
     super();
   }
@@ -845,7 +1055,10 @@ class ApplyThenThrowFactory extends StorageFactory {
             text.includes('"afterId"')) ||
           (this.phase === "repair-final" &&
             id === "!subscription-quota" &&
-            !text.includes('"operation"'));
+            !text.includes('"operation"')) ||
+          (this.phase === "claim" &&
+            id !== "!subscription-quota" &&
+            text.includes('"lifecycle":"active"'));
         if (hit) this.#armed = false;
         return hit;
       },

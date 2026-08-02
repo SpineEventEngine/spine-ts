@@ -99,6 +99,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     string,
     { controller: AbortController; timer: ReturnType<typeof setTimeout>; fence: number }
   >();
+  readonly #cancelling = new Map<string, Promise<SubscriptionBindingTransition>>();
   #closed = false;
 
   /**
@@ -252,11 +253,13 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       controller.abort();
     };
     input.signal.addEventListener("abort", abort, { once: true });
-    const timer = setTimeout(
-      () => void this.#renew(input.id, claimed.fence, controller),
-      Math.max(1, Math.floor(this.#leaseMs / 2)),
-    );
-    this.#active.set(input.id, { controller, timer, fence: claimed.fence });
+    const active = {
+      controller,
+      timer: undefined as unknown as ReturnType<typeof setTimeout>,
+      fence: claimed.fence,
+    };
+    this.#active.set(input.id, active);
+    this.#scheduleRenew(input.id, active);
     try {
       await input.onBackend(Values.envelope(claimed), controller.signal, () =>
         this.#current(input.id, claimed.fence, "active", Date.now()),
@@ -265,8 +268,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         ? { kind: "activated" }
         : { kind: "denied" };
     } finally {
-      clearTimeout(timer);
-      this.#active.delete(input.id);
+      clearTimeout(active.timer);
+      if (this.#active.get(input.id) === active) this.#active.delete(input.id);
       input.signal.removeEventListener("abort", abort);
     }
   }
@@ -281,19 +284,50 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
   }): Promise<SubscriptionBindingTransition> {
+    const pending = this.#cancelling.get(input.id);
+    if (pending !== undefined) return pending;
+    const task = this.#cancel(input);
+    this.#cancelling.set(input.id, task);
+    try {
+      return await task;
+    } finally {
+      if (this.#cancelling.get(input.id) === task) this.#cancelling.delete(input.id);
+    }
+  }
+
+  async #cancel(input: {
+    readonly id: string;
+    readonly principalFingerprint: string;
+    readonly tenant: string | undefined;
+    readonly nowMs: number;
+    readonly onBackend: OnBackendSubscription;
+  }): Promise<SubscriptionBindingTransition> {
     const row = await this.#storage.read(input.id);
     if (row === undefined) return { kind: "closed" };
     const old = Values.read(row, input.id, this.#maxRecordBytes) as Binding;
     if (!this.#owned(old, input) || old.lifecycle === "reserved" || old.lifecycle === "retired")
       return { kind: "denied" };
-    if (old.lifecycle === "active") this.#active.get(input.id)?.controller.abort();
-    const next = this.#work(old, "cancelling", input.nowMs, "client");
+    let next: Binding;
     if (
-      !(await this.#storage.compareAndSet(input.id, row, Values.write(next, this.#maxRecordBytes)))
-    )
-      return { kind: "denied" };
+      old.lifecycle === "cancelling" &&
+      old.ownerId === this.#owner &&
+      old.leaseUntilMs! > input.nowMs
+    ) {
+      next = old;
+    } else {
+      if (old.lifecycle === "cancelling" && (old.leaseUntilMs ?? 0) > input.nowMs)
+        return { kind: "denied" };
+      next = this.#work(old, "cancelling", input.nowMs, "client");
+      if (!(await this.#cas(input.id, row, Values.write(next, this.#maxRecordBytes)))) {
+        const current = await this.#storage.read(input.id);
+        if (current === undefined || !this.#sameBinding(current, next)) return { kind: "denied" };
+      }
+    }
+    this.#active.get(input.id)?.controller.abort();
     try {
-      await input.onBackend(Values.envelope(next), new AbortController().signal);
+      await input.onBackend(Values.envelope(next), new AbortController().signal, () =>
+        this.#current(input.id, next.fence, "cancelling", Date.now()),
+      );
     } catch {
       return { kind: "denied" };
     }
@@ -309,14 +343,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       lifecycle: "retired",
       fence: live.fence,
     };
-    if (
-      !(await this.#storage.compareAndSet(
-        input.id,
-        current,
-        Values.write(retired, this.#maxRecordBytes),
-      ))
-    )
-      return { kind: "denied" };
+    if (!(await this.#cas(input.id, current, Values.write(retired, this.#maxRecordBytes)))) {
+      const reread = await this.#storage.read(input.id);
+      if (reread === undefined) return { kind: "closed" };
+      if (!this.#sameBinding(reread, retired)) return { kind: "denied" };
+    }
     await this.#release(retired.id, retired.admissionToken);
     return { kind: "closed" };
   }
@@ -358,6 +389,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       active.controller.abort();
     }
     this.#active.clear();
+    this.#cancelling.clear();
     this.#reservations.clear();
     this.#storage.close();
     await Promise.resolve();
@@ -383,13 +415,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     )
       return undefined;
     const next = this.#work(old, lifecycle, input.nowMs);
-    return (await this.#storage.compareAndSet(
-      input.id,
-      row,
-      Values.write(next, this.#maxRecordBytes),
-    ))
-      ? next
-      : undefined;
+    if (await this.#cas(input.id, row, Values.write(next, this.#maxRecordBytes))) return next;
+    const reread = await this.#storage.read(input.id);
+    return reread !== undefined && this.#sameBinding(reread, next) ? next : undefined;
   }
   #work(
     old: Binding,
@@ -419,8 +447,24 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       return;
     }
     const next = { ...old, revision: old.revision + 1, leaseUntilMs: Date.now() + this.#leaseMs };
-    if (!(await this.#storage.compareAndSet(id, row, Values.write(next, this.#maxRecordBytes))))
-      controller.abort();
+    if (!(await this.#cas(id, row, Values.write(next, this.#maxRecordBytes)))) {
+      if (!(await this.#current(id, fence, "active", Date.now()))) {
+        controller.abort();
+        return;
+      }
+    }
+    const active = this.#active.get(id);
+    if (active !== undefined && active.fence === fence && !controller.signal.aborted)
+      this.#scheduleRenew(id, active);
+  }
+  #scheduleRenew(
+    id: string,
+    active: { controller: AbortController; timer: ReturnType<typeof setTimeout>; fence: number },
+  ): void {
+    active.timer = setTimeout(
+      () => void this.#renew(id, active.fence, active.controller),
+      Math.max(1, Math.floor(this.#leaseMs / 2)),
+    );
   }
   async #current(
     id: string,
