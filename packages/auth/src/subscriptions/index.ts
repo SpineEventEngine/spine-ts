@@ -261,7 +261,7 @@ export interface SubscriptionBindings {
    * Acquires one finite binding slot.
    * @returns Returns the reservation to release when unused.
    */
-  reserveCapacity(): SubscriptionCapacityReservation;
+  reserveCapacity(): Promise<SubscriptionCapacityReservation>;
 
   /**
    * Removes bindings expired at the supplied time.
@@ -314,7 +314,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
    * Acquires one finite slot before an asynchronous backend Subscribe effect.
    * @returns Returns the reservation to release when unused.
    */
-  reserveCapacity(): SubscriptionCapacityReservation {
+  async reserveCapacity(): Promise<SubscriptionCapacityReservation> {
     if (this.#closed) throw new Error("subscription bindings are closed");
     if (this.#bindings.size + this.#reservations.size >= this.#limits.bindingLimit)
       throw new Error("binding-capacity-exceeded");
@@ -1033,7 +1033,7 @@ export class SubscriptionGateway {
     tenant: string | undefined,
     expiresAtMs: number,
   ): Promise<SubscriptionGatewayResult> {
-    const reservation = this.#reserveCapacity();
+    const reservation = await this.#reserveCapacity();
     if ("kind" in reservation) return reservation;
     const controller = new AbortController();
     this.#pendingSubscribes.set(controller, reservation);
@@ -1060,9 +1060,9 @@ export class SubscriptionGateway {
       backend?.bytes.fill(0);
     }
   }
-  #reserveCapacity(): SubscriptionCapacityReservation | SubscriptionGatewayResult {
+  async #reserveCapacity(): Promise<SubscriptionCapacityReservation | SubscriptionGatewayResult> {
     try {
-      return this.#options.bindings.reserveCapacity();
+      return await this.#options.bindings.reserveCapacity();
     } catch (error) {
       return SubscriptionGatewayValues.rejected(
         error instanceof Error && error.message === "binding-capacity-exceeded"
