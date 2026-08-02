@@ -20,7 +20,13 @@ import {
   TenantIdSchema,
   UserIdSchema,
 } from "@spine-event-engine/proto";
-import { CommandService } from "@spine-event-engine/proto/client";
+import {
+  CommandService,
+  QuerySchema,
+  QueryService,
+  SubscriptionService,
+  TopicSchema,
+} from "@spine-event-engine/proto/client";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import {
   InMemoryStorageFactory,
@@ -243,6 +249,80 @@ describe("Server", () => {
       await new Promise<void>((resolve, reject) =>
         backend.close((error) => (error ? reject(error) : resolve())),
       );
+    }
+  });
+
+  it("keeps ResolveContext local while the standalone gateway selects every backend descriptor", async () => {
+    const paths: string[] = [];
+    const backend = http2.createServer();
+    backend.on("stream", (stream, headers) => {
+      paths.push(String(headers[":path"]));
+      stream.respond({ ":status": 200, "content-type": "application/grpc", "grpc-status": "0" });
+      stream.end(Buffer.from([0, 0, 0, 0, 0]));
+    });
+    await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
+    const address = backend.address();
+    if (address === null || typeof address === "string") throw new Error("backend address missing");
+    const actor = create(UserIdSchema, { value: "ada" });
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        backend: { baseUrl: `http://127.0.0.1:${address.port.toString()}` },
+        bindings: inMemoryBindings(),
+        sessions: {
+          resolve: () =>
+            Promise.resolve({
+              principal: { id: "ada" },
+              expiresAt: create(TimestampSchema, { seconds: 100n }),
+            }),
+        },
+        authorize: () => Promise.resolve(true),
+        contexts: {
+          resolve: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+          resolveContext: () => Promise.resolve({ actor, timestamp: create(TimestampSchema) }),
+        },
+      },
+    }).start();
+    const transport = createConnectTransport({ baseUrl: server.baseUrl, httpVersion: "1.1" });
+    const headers = { origin: "http://127.0.0.1:5173", authorization: "Bearer token" };
+    try {
+      await expect(
+        createClient(AuthenticationService, transport).resolveContext(
+          create(ResolveContextRequestSchema),
+          { headers },
+        ),
+      ).resolves.toMatchObject({ actor });
+      await createClient(CommandService, transport)
+        .post(
+          create(CommandSchema, {
+            context: create(CommandContextSchema, {
+              actorContext: create(ActorContextSchema, { actor }),
+            }),
+          }),
+          { headers },
+        )
+        .catch(() => undefined);
+      await createClient(QueryService, transport)
+        .read(create(QuerySchema, { context: create(ActorContextSchema, { actor }) }), { headers })
+        .catch(() => undefined);
+      const subscriptions = createClient(SubscriptionService, transport);
+      const subscription = await subscriptions.subscribe(
+        create(TopicSchema, { context: create(ActorContextSchema, { actor }) }),
+        { headers },
+      );
+      for await (const _update of subscriptions.activate(subscription, { headers })) break;
+      await subscriptions.cancel(subscription, { headers });
+      expect(paths).toEqual([
+        "/spine.client.CommandService/Post",
+        "/spine.client.QueryService/Read",
+        "/spine.client.SubscriptionService/Subscribe",
+        "/spine.client.SubscriptionService/Activate",
+        "/spine.client.SubscriptionService/Cancel",
+      ]);
+    } finally {
+      await server.close();
+      await new Promise<void>((resolve) => backend.close(() => resolve()));
     }
   });
 
