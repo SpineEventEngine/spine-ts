@@ -116,7 +116,7 @@ describe("Server", () => {
           ...browserGateway(),
           backend: { baseUrl: "https://backend.example.test" },
           bindings: { durable: true, namespace: "gateway" },
-        } as BrowserServerOptions,
+        } as unknown as BrowserServerOptions,
         true,
       ),
     ).toThrow("type registry");
@@ -130,7 +130,7 @@ describe("Server", () => {
           backend: { baseUrl: "https://backend.example.test" },
           registry: new TypeRegistry(),
           bindings: { durable: true, namespace: " " },
-        } as BrowserServerOptions,
+        } as unknown as BrowserServerOptions,
         true,
       ),
     ).toThrow("named durable subscription bindings");
