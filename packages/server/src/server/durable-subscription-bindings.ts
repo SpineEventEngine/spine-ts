@@ -17,6 +17,8 @@ const registryStorageKey = "spine.gateway.SubscriptionBinding:v1";
  * Configures a durable browser-subscription registry.
  */
 export interface DurableSubscriptionBindingsOptions {
+  // prettier-ignore
+
   /**
    * Supplies the independently owned registry storage factory.
    */
@@ -27,8 +29,12 @@ export interface DurableSubscriptionBindingsOptions {
    */
   readonly namespace: string;
 
+  // prettier-ignore
+
   /**
    * Creates unique public subscription identifiers.
+   *
+   * @returns A unique public subscription identifier.
    */
   readonly nextId: () => string;
 
@@ -61,18 +67,18 @@ export interface DurableSubscriptionBindingsOptions {
 /**
  * Stores private browser-subscription bindings in a supplied record store.
  *
- * This first durable registry preserves bindings through one gateway restart.
- * Cross-gateway lease coordination and retained-record cleanup are added by
- * the following Wave 5 slice.
+ * The registry preserves bindings through one gateway restart. Later gateway
+ * coordination extends this contract without changing the stored public ID.
  */
 export class DurableSubscriptionBindings implements SubscriptionBindings {
+  // prettier-ignore
+
   /**
    * Identifies durable registry capability for production host admission.
    */
   readonly durable = true;
   readonly #dispose: OnBackendSubscription;
   readonly #cleanupBatchSize: number;
-  readonly #leaseMs: number;
   readonly #maxRecordBytes: number;
   readonly #nextId: () => string;
   readonly #recordLimit: number;
@@ -89,7 +95,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     DurableBindingValues.options(options);
     this.#dispose = options.dispose;
     this.#cleanupBatchSize = options.cleanupBatchSize;
-    this.#leaseMs = options.leaseMs;
     this.#maxRecordBytes = options.maxRecordBytes;
     this.#nextId = options.nextId;
     this.#recordLimit = options.recordLimit;
@@ -99,8 +104,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     );
   }
 
+  // prettier-ignore
+
   /**
-   * Reserves one local admission slot for a pending backend Subscribe operation.
+   * Acquires one local admission slot for a pending backend Subscribe operation.
    *
    * @returns Resolves to an exactly-once releasable reservation.
    */
@@ -136,25 +143,29 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }): Promise<{ readonly id: string }> {
     this.#requireOpen();
     DurableBindingValues.createInput(input);
-    const id = this.#nextId();
-    if (!DurableBindingValues.token(id)) throw new Error("subscription ID must be unique");
-    const record = DurableBindingValues.write({
-      id,
-      backend: input.backend.bytes,
-      principalFingerprint: input.principalFingerprint,
-      tenant: input.tenant,
-      expiresAtMs: input.expiresAtMs,
-      lifecycle: "inactive",
-      leaseUntilMs: 0,
-      cancellationFence: 0,
-      version: recordVersion,
-    });
-    if (record.value.byteLength > this.#maxRecordBytes)
-      throw new Error("backend-envelope-too-large");
-    if (!(await this.#storage.compareAndSet(id, undefined, record)))
-      throw new Error("subscription ID must be unique");
-    input.reservation?.release();
-    return Object.freeze({ id });
+    const reservation = input.reservation ?? (await this.reserveCapacity());
+    try {
+      const id = this.#nextId();
+      if (!DurableBindingValues.token(id)) throw new Error("subscription ID must be unique");
+      const record = DurableBindingValues.write({
+        id,
+        backend: input.backend.bytes,
+        principalFingerprint: input.principalFingerprint,
+        tenant: input.tenant,
+        expiresAtMs: input.expiresAtMs,
+        lifecycle: "inactive",
+        leaseUntilMs: 0,
+        cancellationFence: 0,
+        version: recordVersion,
+      });
+      if (record.value.byteLength > this.#maxRecordBytes)
+        throw new Error("backend-envelope-too-large");
+      if (!(await this.#storage.compareAndSet(id, undefined, record)))
+        throw new Error("subscription ID must be unique");
+      return Object.freeze({ id });
+    } finally {
+      reservation.release();
+    }
   }
 
   /**
@@ -173,7 +184,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }): Promise<SubscriptionBindingTransition> {
     if (input.signal.aborted) return { kind: "denied" };
     const stored = await this.#owned(input);
-    if (stored === undefined || stored.lifecycle !== "inactive") return { kind: "denied" };
+    if (stored?.lifecycle !== "inactive") return { kind: "denied" };
     const privateCopy = DurableBindingValues.envelope(stored.backend);
     try {
       await input.onBackend(privateCopy, input.signal);
@@ -203,7 +214,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     const privateCopy = DurableBindingValues.envelope(stored.backend);
     try {
       await input.onBackend(privateCopy, new AbortController().signal);
-      if (!(await this.#storage.compareAndSet(input.id, record, undefined))) return { kind: "denied" };
+      if (!(await this.#storage.compareAndSet(input.id, record, undefined)))
+        return { kind: "denied" };
       return { kind: "closed" };
     } finally {
       privateCopy.bytes.fill(0);
@@ -241,10 +253,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    *
    * @returns Completes after future registry operations are refused.
    */
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.#closed = true;
     this.#reservations.clear();
     this.#storage.close();
+    return Promise.resolve();
   }
 
   async #owned(input: {
@@ -273,11 +286,43 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 }
 
-const durableSubscriptionBindingSpec = new RecordSpec<string, Any>({
+// prettier-ignore
+
+/**
+ * Determines whether bindings persist beyond one process.
+ *
+ * @param value Supplies the candidate subscription bindings.
+ * @returns Whether the candidate declares durable registry capability.
+ */
+export function isDurableSubscriptionBindings(
+  value: SubscriptionBindings | undefined,
+): value is SubscriptionBindings & { readonly durable: true } {
+  return value !== undefined && "durable" in value && value.durable === true;
+}
+
+/**
+ * Defines the private physical layout of gateway-owned subscription records.
+ *
+ * @internal
+ */
+export const durableSubscriptionBindingSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
   storageKey: registryStorageKey,
   idKind: "string",
   extractId: (record) => DurableBindingValues.read(record, undefined, Number.MAX_SAFE_INTEGER).id,
+});
+
+/**
+ * Validates private gateway records without exposing their backend envelopes.
+ *
+ * @internal
+ */
+export const DurableSubscriptionBindingRecords: Readonly<{
+  validate(record: Any, expectedId?: string, maxBytes?: number): void;
+}> = Object.freeze({
+  validate(record: Any, expectedId?: string, maxBytes: number = Number.MAX_SAFE_INTEGER): void {
+    DurableBindingValues.read(record, expectedId, maxBytes).backend.fill(0);
+  },
 });
 
 interface StoredBinding {
@@ -345,7 +390,8 @@ const DurableBindingValues = Object.freeze({
     )
       throw new Error("Durable subscription registry record is invalid.");
     const backend = Uint8Array.from(Buffer.from(source.backend, "base64"));
-    if (backend.byteLength === 0) throw new Error("Durable subscription registry record is invalid.");
+    if (backend.byteLength === 0)
+      throw new Error("Durable subscription registry record is invalid.");
     return Object.freeze({
       id: source.id,
       backend,

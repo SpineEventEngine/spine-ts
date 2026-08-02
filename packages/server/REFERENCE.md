@@ -105,6 +105,25 @@ bindings so active streams settle, awaits listener closure, then closes the
 native backend. Concurrent calls share an attempt; a failed unfinished phase
 can be retried without repeating completed native cleanup.
 
+Browser subscription bindings are separate from service-owned subscription
+records. `BrowserServerOptions.bindings` accepts the `SubscriptionBindings`
+contract from `@spine-event-engine/auth`. Production browser assembly requires
+`DurableSubscriptionBindings`; it rejects a missing or volatile in-memory
+binding store before listener open. The durable registry receives an explicit
+application namespace, storage factory, identifier source, disposal callback,
+and finite lease, cleanup, record, and byte limits. It owns and closes only
+its independently opened record-storage handle, not the application storage
+factory or a Spine JVM/TS backend. It copies backend envelopes on read, write,
+and callbacks and never returns them through public subscription responses.
+
+The initial durable registry preserves opaque records through a process restart.
+It validates version, type, storage key identity, owner fingerprint, tenant,
+expiry, lifecycle, lease placeholder, cancellation fence, byte accounting, and
+record version before use. Invalid data fails closed with a generic registry
+error. Two-gateway leases, fencing, global admission races, and scheduled
+retention cleanup are intentionally not provided by this slice; they are
+introduced by the next Wave 5 coordination task.
+
 ## Delivery and environment
 
 `Inbox`, `InboxStorage`, `ShardIndex`, and `ShardedWorkRegistry` provide the

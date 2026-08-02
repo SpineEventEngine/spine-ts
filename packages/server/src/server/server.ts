@@ -7,6 +7,7 @@ import type {
   ContextResolver,
   OpaqueSessionCookies,
   SessionResolver,
+  SubscriptionBindings,
 } from "@spine-event-engine/auth";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 import type { TypeRegistryLookup } from "@spine-event-engine/core";
@@ -27,6 +28,7 @@ import type {
 import { ProcessServerCoordinator } from "./process-server-coordinator.js";
 import { CloseErrors, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment, serverEnvironmentAccess } from "./server-environment.js";
+import { EnvironmentType } from "./environment.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
@@ -204,6 +206,11 @@ export class Server {
   }
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
+    if (this.#browser !== undefined)
+      BrowserServer.requireDurableBindings(
+        this.#browser,
+        this.#environment.environment.type === EnvironmentType.Production,
+      );
     const contexts = await ServerValues.buildContexts(
       this.#contexts,
       this.#environment.storageFactory,
@@ -304,6 +311,7 @@ export class Server {
         port: browser.port ?? this.#port,
         readMaxBytes: this.#readMaxBytes,
         writeMaxBytes: this.#writeMaxBytes,
+        production: this.#environment.environment.type === EnvironmentType.Production,
       });
     } catch (error) {
       try {
@@ -603,6 +611,15 @@ export interface BrowserServerOptions {
    * @returns The stable ownership identity.
    */
   readonly fingerprint: (principal: { readonly id: string }) => string;
+
+  /**
+   * Supplies the registry that owns opaque browser-subscription bindings.
+   *
+   * Production requires a durable registry created by
+   * {@link DurableSubscriptionBindings}. Local development may omit it and
+   * use an explicit in-memory registry.
+   */
+  readonly bindings?: SubscriptionBindings;
 
   /**
    * Enables strict opaque-cookie extraction alongside bearer credentials.

@@ -314,21 +314,23 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
    * Acquires one finite slot before an asynchronous backend Subscribe effect.
    * @returns Returns the reservation to release when unused.
    */
-  async reserveCapacity(): Promise<SubscriptionCapacityReservation> {
-    if (this.#closed) throw new Error("subscription bindings are closed");
-    if (this.#bindings.size + this.#reservations.size >= this.#limits.bindingLimit)
-      throw new Error("binding-capacity-exceeded");
-    let released = false;
-    const reservation: SubscriptionCapacityReservation = {
-      release: () => {
-        if (!released) {
-          released = true;
-          this.#reservations.delete(reservation);
-        }
-      },
-    };
-    this.#reservations.add(reservation);
-    return reservation;
+  reserveCapacity(): Promise<SubscriptionCapacityReservation> {
+    return Promise.resolve().then(() => {
+      if (this.#closed) throw new Error("subscription bindings are closed");
+      if (this.#bindings.size + this.#reservations.size >= this.#limits.bindingLimit)
+        throw new Error("binding-capacity-exceeded");
+      let released = false;
+      const reservation: SubscriptionCapacityReservation = {
+        release: () => {
+          if (!released) {
+            released = true;
+            this.#reservations.delete(reservation);
+          }
+        },
+      };
+      this.#reservations.add(reservation);
+      return reservation;
+    });
   }
 
   /**

@@ -437,6 +437,10 @@ close retries only unfinished cleanup. The API deliberately hides ZeroMQ, IPC
 endpoint names, worker/process supervision, durable scheduling, and Java-style
 delivery-topology configuration; it intentionally exposes this one JVM-style
 global process environment configuration.
+`DurableSubscriptionBindings` and `DurableSubscriptionBindingsOptions` configure
+the gateway-owned storage registry used by production browser access.
+`isDurableSubscriptionBindings` lets hosting code check that a supplied
+`SubscriptionBindings` implementation declares this durable capability.
 `@spine-event-engine/testing` exports exactly `BlackBox`, `BlackBoxOptions`,
 `BlackBoxScope`, `BlackBoxTimeoutError`, and `BlackBoxClosedError`. `BlackBox`
 starts an owned ephemeral `Server` from a built context or builder and provides
