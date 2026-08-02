@@ -226,6 +226,39 @@ describe("EnvironmentDeliveryWorker", () => {
     await worker.retire();
   });
 
+  it("uses configured ports for finite and supervisor environment delivery", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor("ConfiguredPorts", "type.example.dev/ConfiguredPorts", storageFactory);
+    const scope = runScope("configured-ports-owner", target.ready);
+    const base = new Delivery({ context: target.context, storageFactory });
+    let calls = 0;
+    const inbox = Object.create(base.inbox) as typeof base.inbox;
+    const registry = Object.create(base.shards) as typeof base.shards;
+    inbox.read = async (...args) => {
+      calls += 1;
+      return base.inbox.read(...args);
+    };
+    registry.pickUp = async (...args) => {
+      calls += 1;
+      return base.shards.pickUp(...args);
+    };
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly ports: { readonly inbox: typeof inbox; readonly workRegistry: typeof registry };
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({ ports: { inbox, workRegistry: registry } });
+    worker.add({ owner: scope.owner, descriptor: target.value, storageFactory, tenant: {}, context: target.context, scopes: [scope] });
+    await base.inbox.receive(message(target.ready, "configured-finite"));
+    await worker.start(Object.freeze({ scopes: Object.freeze([scope]) }), [target.ready.shard]);
+    expect(calls).toBeGreaterThan(0);
+    await base.inbox.receive(message(target.ready, "configured-supervisor"));
+    worker.notify(target.ready);
+    await Promise.resolve();
+    expect(calls).toBeGreaterThan(1);
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
   it("routes post-start work through the real runtime supervisor", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const target = descriptor(
