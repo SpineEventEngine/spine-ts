@@ -311,7 +311,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     if (
       old.lifecycle === "cancelling" &&
       old.ownerId === this.#owner &&
-      old.leaseUntilMs! > input.nowMs
+      (old.leaseUntilMs ?? 0) > input.nowMs
     ) {
       next = old;
     } else {
@@ -454,8 +454,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       }
     }
     const active = this.#active.get(id);
-    if (active !== undefined && active.fence === fence && !controller.signal.aborted)
-      this.#scheduleRenew(id, active);
+    if (active?.fence === fence && !controller.signal.aborted) this.#scheduleRenew(id, active);
   }
   #scheduleRenew(
     id: string,

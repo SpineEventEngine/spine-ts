@@ -407,7 +407,7 @@ describe("DurableSubscriptionBindings", () => {
         tenant: undefined,
         nowMs: 1_000,
         signal: new AbortController().signal,
-        onBackend: (_value, current, _guard) =>
+        onBackend: (_value, current) =>
           new Promise<void>((resolve) => {
             signal = current;
             finish = resolve;
