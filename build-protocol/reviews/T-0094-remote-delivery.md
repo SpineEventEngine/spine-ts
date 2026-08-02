@@ -67,8 +67,13 @@ created.
   was clean. Configured role/profile was
   `performance_reliability_reviewer`, `gpt-5.6-terra` / high. Runtime
   self-introspection was unavailable.
-- Documentation: pending.
+- Documentation: clean. README/REFERENCE/TSDoc, links, examples,
+  lifecycle/ownership claims, failure/retry behavior, wiring limitations, and
+  public terminology match the implementation. The existing
+  `documentation_reviewer` role fixes `gpt-5.6-luna` / medium; the dispatch
+  surface could not override or introspect that immutable model, and no visible
+  mismatch or inherited fallback occurred.
 
 The completed lanes overlap on the lifecycle race, stale close documentation,
-and missing real wiring coverage. They will be deduplicated into one correction
-batch after the documentation lane completes.
+and missing real wiring coverage. They are deduplicated into one correction
+batch for the existing implementation owner.
