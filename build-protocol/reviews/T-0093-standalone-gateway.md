@@ -85,3 +85,29 @@ accepted metadata and no visible mismatch or fallback occurred.
 One consolidated correction batch returns to the existing implementation
 owner. All four concerns are materially affected and receive one targeted
 re-review after deterministic correction and pinned Envoy validation.
+
+## Correction Evidence And Targeted Re-review
+
+Correction endpoint: `0ea2e20d` plus record formatting `2ba5a97f`.
+
+- Auth routes validate GET/POST and one method per canonical path.
+- Standalone mode rejects local contexts/services/resources before taking
+  ownership or opening a listener.
+- One deadline spans body intake, handler work, and bounded response transfer;
+  `writeMaxBytes` bounds response bodies and late handlers cannot start.
+- Aggregate auth admission has a finite default of 64, validated configuration,
+  fixed 503 refusal, and recovery after completion.
+- Envoy uses the supported HTTP buffer filter with per-route `BufferPerRoute`
+  request limits. Auth milliseconds render as valid fractional seconds.
+  Pinned Envoy v1.38.3 validation passes; the earlier unsupported route field
+  and invalid `1200ms` duration failures are recorded honestly.
+- The human-imposed ledger and all reviewed README/REFERENCE/Envoy limitations
+  are corrected, including explicit standalone bindings, partial/static JVM
+  evidence, GET/POST, Origin-before-404 ordering, and OAuth state ownership.
+
+The complete scoped task gate passed 420 tests. Changed-runtime coverage is
+95.08% statements, 90.87% branches, 96.22% functions, and 96.33% lines. All
+mechanical, generated, documentation, Proto, and release-readiness checks pass.
+
+All four concerns receive one targeted re-review using their previously
+recorded explicit profiles. Runtime self-introspection remains unavailable.
