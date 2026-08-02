@@ -56,6 +56,7 @@ export const BrowserServer: Readonly<{
     response: http.ServerResponse,
     route: BrowserAuthRoute,
     active: Set<AbortController>,
+    writeMaxBytes: number,
   ): Promise<void>;
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
@@ -113,7 +114,7 @@ export const BrowserServer: Readonly<{
       const path = request.url ?? "";
       const auth = authRoutes.get(path);
       if (auth !== undefined && request.method === auth.method) {
-        void BrowserServer.dispatchAuth(request, response, auth, activeAuth);
+        void BrowserServer.dispatchAuth(request, response, auth, activeAuth, options.writeMaxBytes);
         return;
       }
       if (auth !== undefined) {
@@ -281,7 +282,8 @@ export const BrowserServer: Readonly<{
   ): ReadonlyMap<string, BrowserAuthRoute> {
     const result = new Map<string, BrowserAuthRoute>();
     for (const route of routes ?? []) {
-      if (route.method !== "GET" && route.method !== "POST")
+      const method = (route as { readonly method: string }).method;
+      if (method !== "GET" && method !== "POST")
         throw new Error("Browser auth routes must use GET or POST.");
       if (!/^\/(?!\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(route.path))
         throw new Error("Browser auth routes must use exact canonical non-root paths.");
@@ -313,6 +315,7 @@ export const BrowserServer: Readonly<{
     response: http.ServerResponse,
     route: BrowserAuthRoute,
     active: Set<AbortController>,
+    writeMaxBytes: number,
   ): Promise<void> {
     const origin = request.headers.origin;
     if (
@@ -333,6 +336,7 @@ export const BrowserServer: Readonly<{
     active.add(controller);
     const timer = setTimeout(() => {
       controller.abort();
+      request.destroy();
     }, route.timeoutMs);
     const abort = () => {
       controller.abort();
@@ -340,9 +344,10 @@ export const BrowserServer: Readonly<{
     request.once("aborted", abort);
     response.once("close", abort);
     try {
-      const chunks: Uint8Array[] = [];
+      const requestChunks: Uint8Array[] = [];
       let size = 0;
       for await (const chunk of request) {
+        if (controller.signal.aborted) throw new Error("browser auth request aborted");
         const bytes = Buffer.from(chunk);
         size += bytes.byteLength;
         if (size > route.maxRequestBytes) {
@@ -350,7 +355,7 @@ export const BrowserServer: Readonly<{
           response.end();
           return;
         }
-        chunks.push(bytes);
+        requestChunks.push(bytes);
       }
       const url = new URL(
         request.url ?? route.path,
@@ -359,7 +364,7 @@ export const BrowserServer: Readonly<{
       const input = new Request(url, {
         method: route.method,
         headers: request.headers as HeadersInit,
-        ...(size === 0 ? {} : { body: Buffer.concat(chunks) }),
+        ...(size === 0 ? {} : { body: Buffer.concat(requestChunks) }),
         signal: controller.signal,
       });
       const result = await Promise.race([
@@ -383,7 +388,38 @@ export const BrowserServer: Readonly<{
       }
       response.statusCode = result.status;
       result.headers.forEach((value, key) => response.setHeader(key, value));
-      response.end(Buffer.from(await result.arrayBuffer()));
+      const reader = result.body?.getReader();
+      const responseChunks: Uint8Array[] = [];
+      let responseBytes = 0;
+      if (reader !== undefined) {
+        let reading = true;
+        while (reading) {
+          const next = await Promise.race([
+            reader.read(),
+            new Promise<never>((_resolve, reject) => {
+              controller.signal.addEventListener(
+                "abort",
+                () => {
+                  reject(new Error("browser auth request aborted"));
+                },
+                { once: true },
+              );
+            }),
+          ]);
+          if (next.done) {
+            reading = false;
+            continue;
+          }
+          responseBytes += next.value.byteLength;
+          if (responseBytes > writeMaxBytes) {
+            response.statusCode = 413;
+            response.end();
+            return;
+          }
+          responseChunks.push(next.value);
+        }
+      }
+      response.end(Buffer.concat(responseChunks));
     } catch {
       if (!response.writableEnded) {
         response.statusCode = controller.signal.aborted ? 504 : 500;

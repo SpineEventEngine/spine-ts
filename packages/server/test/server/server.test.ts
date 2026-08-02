@@ -689,6 +689,101 @@ describe("Server", () => {
     }
   });
 
+  it("bounds auth response transfer with the server write limit", async () => {
+    const server = await new Server({
+      writeMaxBytes: 8,
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "GET",
+            path: "/auth/response-limit",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 16,
+            timeoutMs: 1000,
+            onRequest: () => new Response("response-too-large"),
+          },
+        ],
+      },
+    }).start();
+    try {
+      const response = await fetch(`${server.baseUrl}/auth/response-limit`, {
+        headers: { origin: "http://127.0.0.1:5173" },
+      });
+      expect(response.status).toBe(413);
+      await expect(response.text()).resolves.toBe("");
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("applies the auth deadline while response transfer is pending", async () => {
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "GET",
+            path: "/auth/response-timeout",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 16,
+            timeoutMs: 5,
+            onRequest: () =>
+              new Response(
+                new ReadableStream<Uint8Array>({ pull: () => new Promise<void>(() => undefined) }),
+              ),
+          },
+        ],
+      },
+    }).start();
+    try {
+      await expect(
+        fetch(`${server.baseUrl}/auth/response-timeout`, {
+          headers: { origin: "http://127.0.0.1:5173" },
+        }),
+      ).resolves.toMatchObject({ status: 504 });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("times out body intake before invoking an auth handler", async () => {
+    let calls = 0;
+    const server = await new Server({
+      browser: {
+        port: 0,
+        ...browserGateway(),
+        authRoutes: [
+          {
+            method: "POST",
+            path: "/auth/drip",
+            origins: ["http://127.0.0.1:5173"],
+            maxRequestBytes: 16,
+            timeoutMs: 5,
+            onRequest: () => ((calls += 1), new Response()),
+          },
+        ],
+      },
+    }).start();
+    try {
+      await new Promise<void>((resolve) => {
+        const request = http.request(`${server.baseUrl}/auth/drip`, {
+          method: "POST",
+          headers: { origin: "http://127.0.0.1:5173", "transfer-encoding": "chunked" },
+        });
+        request.once("error", () => {
+          resolve();
+        });
+        request.write("a");
+      });
+      expect(calls).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("rejects noncanonical and unbounded auth route registrations before listening", () => {
     const route = {
       method: "POST" as const,
