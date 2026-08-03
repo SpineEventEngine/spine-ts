@@ -29,11 +29,25 @@ two application processes, two gateways, Envoy, one shared registry namespace,
 and exactly one in-memory delivery server. Stop either topology with the same
 command plus `down --volumes --remove-orphans`.
 
-The Kubernetes YAML files are storage-neutral references. Build/publish the
-`spine-ts/*:local` images to a registry reachable by the cluster, then replace
-the image names. Before applying, create `message-board-storage` with the
-application-selected storage values, `message-board-runtime` with the shared
-P-256 session key, and `message-board-envoy-tls` with `tls.crt` and `tls.key`.
+The Kubernetes YAML files are storage-neutral references. Image distribution is
+operator-owned and out of scope: for Kind, load local images instead of
+publishing them; for Minikube, load the same local tags:
+
+```bash
+kind load docker-image spine-ts/message-board:local spine-ts/standalone-gateway:local spine-ts/simple-delivery-server:local
+minikube image load spine-ts/message-board:local spine-ts/standalone-gateway:local spine-ts/simple-delivery-server:local
+```
+
+Create the operator-owned prerequisites in the target namespace before applying
+the references:
+
+```bash
+kubectl create secret generic message-board-storage --from-literal=DATASTORE_PROJECT_ID=message-board-production
+# Add DATASTORE_EMULATOR_HOST only for a local emulator test.
+kubectl create secret generic message-board-runtime --from-file=MESSAGE_BOARD_SESSION_PRIVATE_KEY=session-key.pem
+kubectl create secret tls message-board-envoy-tls --cert=tls.crt --key=tls.key
+```
+
 Every application and gateway uses the same issuer, audience, key ID, private
 key, and registry namespace; separate values break authenticated failover.
 

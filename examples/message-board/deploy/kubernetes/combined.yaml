@@ -10,17 +10,6 @@ data:
   MESSAGE_BOARD_SESSION_ISSUER: message-board
   MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
   MESSAGE_BOARD_SESSION_KEY_ID: replace-on-rotation
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: message-board-runtime
-type: Opaque
-# Application storage remains application-owned. Supply its environment values
-# through a separately managed `message-board-storage` Secret.
-stringData:
-  MESSAGE_BOARD_SESSION_PRIVATE_KEY: replace-with-a-P-256-PKCS8-PEM
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:

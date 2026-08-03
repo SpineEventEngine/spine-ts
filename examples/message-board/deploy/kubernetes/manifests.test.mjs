@@ -27,7 +27,8 @@ for (const mode of ["combined", "standalone"]) {
     assert.match(document, /secretRef:/u);
     assert.match(document, /configMapRef:/u);
     assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER/u);
-    assert.match(document, /MESSAGE_BOARD_SESSION_PRIVATE_KEY/u);
+    assert.match(document, /secretRef: \{ name: message-board-runtime \}/u);
+    assert.doesNotMatch(document, /kind: Secret[\s\S]*name: message-board-runtime/u);
     assert.match(document, /name: message-board-envoy-config/u);
     assert.match(document, /mountPath: \/etc\/envoy\/envoy.yaml/u);
     assert.match(document, /kind: Service[\s\S]*name: message-board-envoy/u);
@@ -52,14 +53,35 @@ test("standalone reference binds replica count and delivery waits to each Deploy
 });
 
 function assertEnvoy(document, origin) {
-  const routes = [...document.matchAll(/path: "([^"]+)"[\s\S]*?timeout: (\S+)/gu)].map(
-    ([, path, timeout]) => [path, timeout],
-  );
+  const routes = envoyRoutes(document);
   assert.deepEqual(new Map(routes), browserRoutes);
   assert.doesNotMatch(document, /prefix: "\/"/u);
   assert.match(document, new RegExp(`exact: ${origin}`, "u"));
   assert.match(document, /envoy\.filters\.http\.cors/u);
   assert.match(document, /allow_methods: "POST, OPTIONS"/u);
+}
+
+function envoyRoutes(document) {
+  const lines = document.split("\n");
+  const routes = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const route = /^\s*- match: \{ path: "([^"]+)" \}$/.exec(line);
+    if (route === null) continue;
+    const indent = line.length - line.trimStart().length;
+    let timeout;
+    for (index += 1; index < lines.length; index += 1) {
+      const next = lines[index];
+      const nextIndent = next.length - next.trimStart().length;
+      if (nextIndent === indent && next.trimStart().startsWith("- match:")) break;
+      const candidate = /(?:^\s*timeout: |\btimeout: )(\S+?)(?: \}|$)/.exec(next);
+      if (candidate !== null) timeout = candidate[1];
+    }
+    assert.notEqual(timeout, undefined, `route ${route[1]} must declare a timeout`);
+    routes.push([route[1], timeout]);
+    index -= 1;
+  }
+  return routes;
 }
 
 function deployment(document, name) {
