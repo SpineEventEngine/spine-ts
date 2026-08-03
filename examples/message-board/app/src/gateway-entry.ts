@@ -12,7 +12,7 @@ const bindings = new DurableSubscriptionBindings({
   storageFactory: MessageBoardDeployment.storage(config),
   namespace: config.subscriptionNamespace,
   nextId: randomUUID,
-  dispose: async () => undefined,
+  dispose: () => Promise.resolve(),
   leaseMs: 60_000,
   cleanupBatchSize: 100,
   recordLimit: 10_000,
