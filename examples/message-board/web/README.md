@@ -50,6 +50,16 @@ React-specific `use...` names are hooks from
 `@spine-event-engine/client-react`. The framework-neutral browser client keeps
 the action verbs `post`, `send`, `createSubscription`, `activate`, and `cancel`.
 
+Open the browser console while learning locally to see structured messages for
+activation, connection, reconnects, received server updates, command sending,
+and command results. They include the board, subscription target, complete
+local command/outcome, and received server update so a beginner can inspect the
+flow; they never include the bearer credential or request metadata. Treat the
+local console like other local diagnostics because commands and updates may
+contain user-visible message text. One initial `Activate` belongs to the page's
+logical subscription; another means a reconnect. Each accepted server
+subscription is cancelled once when it is replaced or the page closes.
+
 ## ✅ Validation belongs to the server
 
 `PostMessage` declares both required fields and their messages in Proto:
@@ -91,10 +101,11 @@ Install Playwright browsers once with
 
 ## ⚠️ Development session
 
-The visible demo uses a fixed, non-secret bearer for loopback development. A
-real host signs the user in, creates a new request scope, and selects gRPC-Web
-or Connect explicitly. The session object shown to React is informational and
-is never itself a credential.
+The visible demo uses a fixed, non-secret bearer and an eight-hour in-memory
+session for loopback development, so normal local use does not renew it every
+minute. A real host signs the user in, creates a new request scope, and selects
+gRPC-Web or Connect explicitly. The session object shown to React is
+informational and is never itself a credential.
 
 ## 🔗 Learn more
 

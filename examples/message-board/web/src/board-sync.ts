@@ -53,6 +53,19 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
   const lifecycle = useSubscriptionLifecycle(subscription);
   const delivery = useSubscriptionDelivery(subscription);
 
+  useEffect(() => {
+    console.info("MessageBoard is activating live updates.", {
+      board,
+      target: view.topic().target,
+    });
+    return () => {
+      console.info("MessageBoard is cancelling live updates.", {
+        board,
+        target: view.topic().target,
+      });
+    };
+  }, [board, view]);
+
   const refresh = useCallback(() => {
     refreshRequest.current += 1;
     if (refreshInFlight.current) return;
@@ -95,14 +108,46 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
   );
 
   useEffect(() => {
-    if (lifecycle?.state === "gapPossible") refresh();
-  }, [lifecycle, refresh]);
+    if (lifecycle === undefined) return;
+    if (lifecycle.state === "connecting") {
+      const details = { board, target: view.topic().target, generation: lifecycle.generation };
+      if (lifecycle.attempt === 0)
+        console.info("MessageBoard live updates are connecting.", details);
+      else console.warn("MessageBoard live updates are reconnecting.", details);
+    } else if (lifecycle.state === "connected") {
+      console.info("MessageBoard live updates are connected.", {
+        board,
+        target: view.topic().target,
+        generation: lifecycle.generation,
+      });
+    } else if (lifecycle.state === "failed") {
+      console.error("MessageBoard live updates failed.", {
+        board,
+        target: view.topic().target,
+        generation: lifecycle.generation,
+      });
+    }
+    if (lifecycle.state === "gapPossible") refresh();
+  }, [board, lifecycle, refresh, view]);
 
   useEffect(() => {
     if (delivery === undefined) return;
-    if (delivery.kind === "resynchronization") setRecovered(delivery.response);
-    else refresh();
-  }, [delivery, refresh]);
+    if (delivery.kind === "resynchronization") {
+      console.info("MessageBoard received authoritative board state after reconnecting.", {
+        board,
+        target: view.topic().target,
+        response: delivery.response,
+      });
+      setRecovered(delivery.response);
+    } else {
+      console.info("MessageBoard received a server update and is refreshing the board.", {
+        board,
+        target: view.topic().target,
+        update: delivery.update,
+      });
+      refresh();
+    }
+  }, [board, delivery, refresh, view]);
 
   const response = recovered ?? refreshed ?? (query.status === "success" ? query.value : undefined);
   return {

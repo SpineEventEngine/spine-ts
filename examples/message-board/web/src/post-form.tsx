@@ -99,10 +99,12 @@ export const PostForm = (props: PostFormProps): ReactElement => {
     const controller = new AbortController();
     const generation = postGeneration.current;
     postController.current = controller;
+    console.info("MessageBoard is sending a post command.", { board, command: next });
     void request.post(PostMessageSchema, next, { signal: controller.signal }).then(
       (outcome) => {
         if (generation !== postGeneration.current) return;
         if (outcome.kind !== "ok") {
+          console.warn("MessageBoard post command was rejected.", { board, outcome });
           const nextFeedback = PostFeedback.from(outcome);
           setFeedback(nextFeedback);
           if (Object.keys(nextFeedback.fields).length > 0) pendingPost.current = undefined;
@@ -116,10 +118,12 @@ export const PostForm = (props: PostFormProps): ReactElement => {
         setText("");
         setFeedback({ fields: {} });
         setPosting(false);
+        console.info("MessageBoard post command was accepted.", { board, outcome });
         onPosted();
       },
       () => {
         if (generation !== postGeneration.current) return;
+        console.error("MessageBoard post command could not be sent.", { board });
         setFeedback({ fields: {}, general: "Message was not posted. Please retry." });
         setPosting(false);
       },

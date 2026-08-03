@@ -90,6 +90,12 @@ The `Updating live` badge appears only while the subscription is connected.
 Otherwise, `No live updates` accurately describes the subscription without
 blocking posts or their authoritative refresh.
 
+The browser starts one logical board subscription. Its initial `Activate` is
+expected; a later `Activate` is a reconnect after the previous stream ended.
+Each accepted server subscription receives one `Cancel` when it is replaced or
+when the page closes. The browser console narrates these lifecycle changes,
+server update hints, and command outcomes for local learning and diagnosis.
+
 MessageBoard messages are entities, not domain-event subscriptions. Reusing a
 `MessageId` leaves the first message unchanged and records the generated
 `MessageAlreadyPosted` rejection.

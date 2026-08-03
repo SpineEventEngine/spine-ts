@@ -46,10 +46,11 @@ try {
 
 ## 🔐 Authentication boundary
 
-The local command uses a fixed in-memory session for `ada` and admits only board
-`general`. The bounded context never reads credentials. The framework gateway
-authenticates first, replaces caller-supplied actor and tenant data with trusted
-values, then forwards the request.
+The local command uses a fixed eight-hour in-memory session for `ada` and admits
+only board `general`. It avoids routine local session renewal traffic; it is not
+a production sign-in policy. The bounded context never reads credentials. The
+framework gateway authenticates first, replaces caller-supplied actor and tenant
+data with trusted values, then forwards the request.
 
 ## 🧪 Test the application
 

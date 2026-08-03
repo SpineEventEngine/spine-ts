@@ -1798,6 +1798,121 @@ describe("Client", () => {
     await client.close();
   });
 
+  it("starts a fresh retry episode after a stream remains healthy for the retry window", async () => {
+    let now = 0;
+    let subscribes = 0;
+    const endings: PromiseWithResolvers<undefined>[] = [];
+    const topic = create(TopicSchema);
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: `episode-${String(subscribes)}` }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => {
+            const ending = Promise.withResolvers<undefined>();
+            endings.push(ending);
+            return (async function* () {
+              await ending.promise;
+              yield* emptyUpdates();
+            })();
+          },
+        ),
+        createRequestId: () => "retry-episode",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 10, delayMs: () => 1 },
+          scheduler: { now: () => now, wait: () => Promise.resolve() },
+        },
+      },
+    );
+    const subscription = await client.asGuest().createSubscription(topic, eventSubscription);
+
+    await subscription.activate();
+    now = 10;
+    endings[0]?.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(subscribes).toBe(2);
+    });
+    now = 20;
+    endings[1]?.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(subscribes).toBe(3);
+    });
+
+    await subscription.cancel();
+    await client.close();
+  });
+
+  it("exhausts recovery retries after a stable stream when later Subscribe calls fail rapidly", async () => {
+    let now = 0;
+    let subscribes = 0;
+    let endStream: ((value: undefined) => void) | undefined;
+    let waits = 0;
+    const client = Client.usingTransport(
+      {
+        transport: unaryTransport(
+          (method, input) => {
+            if (method.name === "Subscribe") {
+              subscribes++;
+              if (subscribes > 1) throw new Error("recovery subscribe failed");
+              return create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "stable-then-failing" }),
+                topic: input as Topic,
+              });
+            }
+            return create(ResponseSchema);
+          },
+          undefined,
+          () => {
+            const ending = Promise.withResolvers<undefined>();
+            endStream = ending.resolve;
+            return (async function* () {
+              await ending.promise;
+              yield* emptyUpdates();
+            })();
+          },
+        ),
+        createRequestId: () => "stable-then-failing",
+      },
+      {
+        subscriptions: {
+          retryPolicy: { maxAttempts: 1, maxElapsedMs: 10, delayMs: () => 1 },
+          scheduler: {
+            now: () => now,
+            wait: () => {
+              waits++;
+              if (waits === 1) return Promise.resolve();
+              return never<undefined>();
+            },
+          },
+        },
+      },
+    );
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const updates = subscription.updates[Symbol.asyncIterator]();
+
+    await subscription.activate();
+    now = 10;
+    endStream?.(undefined);
+
+    await expect(updates.next()).rejects.toThrow("recovery subscribe failed");
+    expect(subscribes).toBe(2);
+    expect(waits).toBe(1);
+    await client.close();
+  });
+
   it("reauthenticates with the live cancellation signal before reconnecting", async () => {
     let subscribes = 0;
     const reauthenticate = vi.fn((signal: AbortSignal) => {
