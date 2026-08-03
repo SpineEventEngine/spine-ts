@@ -27,6 +27,15 @@ interface PackedPackage {
   readonly tarball: string;
 }
 
+describe("Windows spine-proto shim", () => {
+  it("requires one quoted command string for a shim path containing spaces", () => {
+    const shim = "C:\\temporary files\\node_modules\\.bin\\spine-proto.cmd";
+    const command = ["/d", "/s", "/c", windowsShimCommand(shim)];
+
+    expect(command).toEqual(["/d", "/s", "/c", `"${shim}" unsupported-command`]);
+  });
+});
+
 function writeJson(directory: string, path: string, value: unknown): void {
   const target = join(directory, path);
   mkdirSync(dirname(target), { recursive: true });
@@ -108,6 +117,10 @@ function installedDependency(name: string): string {
   return `file:${join(store, entry, "node_modules", name)}`;
 }
 
+function windowsShimCommand(shim: string): string {
+  return `"${shim.replaceAll('"', '""')}" unsupported-command`;
+}
+
 function runInstalledShim(directory: string): void {
   const shim = join(
     directory,
@@ -116,7 +129,7 @@ function runInstalledShim(directory: string): void {
   );
   expect(existsSync(shim)).toBe(true);
   if (process.platform === "win32") {
-    run("cmd.exe", ["/d", "/s", "/c", shim, "unsupported-command"], directory);
+    run("cmd.exe", ["/d", "/s", "/c", windowsShimCommand(shim)], directory);
   } else {
     run(shim, ["unsupported-command"], directory);
   }

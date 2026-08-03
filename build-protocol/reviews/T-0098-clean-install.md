@@ -79,3 +79,16 @@ packages/proto-tools/test/external-consumer.test.ts` passed (1 file, 1 test).
 - Return only this deterministic portability correction to the same existing
   implementation owner. The reliability lane remains open; all other lanes
   remain closed.
+
+## Windows shim correction evidence
+
+- Runtime self-introspection remains unavailable. The immutable configured
+  implementation owner profile is explicitly `gpt-5.6-terra` / medium.
+- RED: a host-neutral assertion with a shim path containing spaces failed
+  because `cmd.exe /d /s /c` received the path and unsupported command as
+  separate arguments.
+- GREEN: the bounded `windowsShimCommand()` builder returns one quoted command
+  string, escaping embedded quotes and appending only `unsupported-command`.
+  The Windows branch passes it as the one `/c` argument. `corepack pnpm exec
+vitest run packages/proto-tools/test/external-consumer.test.ts` passed 1 file
+  / 2 tests. Reliability is ready for its targeted re-review.
