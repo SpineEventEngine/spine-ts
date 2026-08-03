@@ -10,7 +10,7 @@ describe("LocalBoardGateway", () => {
     );
   });
 
-  it.each(["https://127.0.0.1:8090", "http://localhost:8090", "http://127.0.0.1:0"])(
+  it.each(["not-a-url", "https://127.0.0.1:8090", "http://localhost:8090", "http://127.0.0.1:0"])(
     "rejects %s",
     (value) => {
       expect(() => LocalBoardGateway.url({ VITE_MESSAGE_BOARD_GATEWAY_URL: value })).toThrow();
