@@ -1,4 +1,4 @@
-# MessageBoard deployment reference
+# Message Board deployment reference
 
 This reference records the deployment contract. Beginners should start with the
 [deployment guide](README.md).

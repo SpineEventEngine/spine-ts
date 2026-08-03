@@ -1,7 +1,23 @@
-# MessageBoard deployment references
+# Message Board deployment references
 
-This guide is for people running the local MessageBoard deployment examples.
+This guide is for people running the local Message Board deployment examples.
 Agents should use the nearby [reference](REFERENCE.md) for exact guarantees.
+
+## 🧭 Choose a topology
+
+Combined mode runs one Message Board application and authenticated browser
+gateway in the same process. Use it to understand the smallest browser-facing
+deployment. Standalone mode runs application replicas separately from gateway
+replicas; Envoy is the only public service and gateways reach private native
+gRPC backends. Choose standalone mode when applications must scale separately.
+
+Both modes require application-selected storage and a delivery server. Browser
+processes share the session signing values and subscription-registry namespace.
+The registry is durable and cancellation-fenced, but update delivery is best
+effort: reconnecting clients re-query authoritative state. The supplied simple
+delivery server is in-memory and not highly available.
+
+## 🚀 Run the references
 
 Build the local-only images first:
 
@@ -26,10 +42,8 @@ docker compose --file examples/message-board/deploy/compose/combined.compose.yam
 
 Use `standalone.compose.yaml` when running two application replicas. It starts
 two application processes, two gateways, Envoy, one shared registry namespace,
-and exactly one in-memory, non-HA delivery server. Combined mode is for one
-application/gateway process; multiple application replicas require standalone
-mode. Stop either topology with the same command plus `down --volumes
---remove-orphans`.
+and exactly one in-memory delivery server. Stop either topology with the same
+command plus `down --volumes --remove-orphans`.
 
 The Kubernetes YAML files are storage-neutral references. Image distribution is
 operator-owned and out of scope: for Kind, load local images instead of

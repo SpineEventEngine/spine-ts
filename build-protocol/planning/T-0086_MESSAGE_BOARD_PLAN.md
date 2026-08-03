@@ -1,8 +1,8 @@
-# T-0086 MessageBoard Plan
+# T-0086 Message Board Plan
 
 ## Outcome
 
-The current Chat example becomes MessageBoard everywhere in active source,
+The current Chat example becomes Message Board everywhere in active source,
 package coordinates, generated code, startup tooling, and beginner-facing
 documentation. A signed-in visitor supplies a display username and message.
 The server validates both fields from authored Proto rules; the browser unpacks

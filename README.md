@@ -48,7 +48,7 @@ to events, and Projections provide query-side views.
 - Google Cloud Datastore and MySQL adapters for application-selected
   persistence.
 
-## 🚀 Try the MessageBoard application
+## 🚀 Try the Message Board application
 
 Install the workspace dependencies:
 
@@ -62,7 +62,7 @@ Build the generated model, handlers, and TypeScript once:
 pnpm typecheck:build
 ```
 
-Start the MessageBoard server in one terminal:
+Start the Message Board server in one terminal:
 
 ```bash
 pnpm --dir examples/message-board/app start
@@ -78,7 +78,7 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The example uses
 in-memory storage and a local development identity, so it is safe to explore
 without cloud credentials.
 
-See the [MessageBoard guide](examples/message-board/README.md) for a beginner walkthrough.
+See the [Message Board guide](examples/message-board/README.md) for a beginner walkthrough.
 
 ## 📦 Workspace map
 
@@ -108,7 +108,7 @@ Start with these packages:
 ## 🎓 Documentation
 
 - [End-user guide](docs/USER_GUIDE.md)
-- [MessageBoard example](examples/message-board/README.md)
+- [Message Board example](examples/message-board/README.md)
 - [Browser authentication and extension guide](docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Generated API documentation](docs/api/README.md)
 - [Reference for coding agents](REFERENCE.md)

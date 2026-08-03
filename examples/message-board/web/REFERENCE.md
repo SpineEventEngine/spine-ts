@@ -1,7 +1,7 @@
-# MessageBoard web reference
+# Message Board web reference
 
 This reference is for coding agents and maintainers. Beginners should start
-with the [MessageBoard web README](README.md).
+with the [Message Board web README](README.md).
 
 ## Composition
 

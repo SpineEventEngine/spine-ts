@@ -1,8 +1,8 @@
-# MessageBoard server application
+# Message Board server application
 
-This package turns the MessageBoard model into a runnable Spine bounded context.
+This package turns the Message Board model into a runnable Spine bounded context.
 The framework owns the network and process plumbing; the example contains only
-MessageBoard domain code, local session policy, and concise server configuration.
+Message Board domain code, local session policy, and concise server configuration.
 
 ## 💡 What is here?
 
@@ -82,7 +82,7 @@ commands, fixed image tags, and runtime values.
 
 ## 🔗 Learn more
 
-- [Complete MessageBoard example](../README.md)
+- [Complete Message Board example](../README.md)
 - [Server package](../../../packages/server/README.md)
 - [Authentication package](../../../packages/auth/README.md)
 - [Reference for coding agents](REFERENCE.md)

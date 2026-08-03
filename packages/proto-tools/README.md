@@ -90,5 +90,5 @@ imports the generated model module and registry; it does not invoke the CLI.
 
 - [Spine Protobuf package](../proto/README.md)
 - [Core message tools](../core/README.md)
-- [MessageBoard model example](../../examples/message-board/model/README.md)
+- [Message Board model example](../../examples/message-board/model/README.md)
 - [Reference for coding agents](REFERENCE.md)

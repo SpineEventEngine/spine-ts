@@ -26,7 +26,7 @@ preserving each README's current visual structure and beginner-friendly style.
 2. The existing Spine TS README look and feel—titles, emoji section headings,
    short paragraphs, check-mark lists, examples, warnings, and audience split—
    must remain recognizable.
-3. Legitimate domain vocabulary remains legitimate. MessageBoard messages,
+3. Legitimate domain vocabulary remains legitimate. Message Board messages,
    Protobuf message types, validation messages, transport messages, and exact
    code/API terms must not be mechanically renamed.
 4. Every repository README must receive an explicit reviewed/changed or

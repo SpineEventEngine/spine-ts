@@ -46,7 +46,7 @@ contexts or domain code.
 - Infrastructure never selects MySQL, Datastore, or another application
   storage engine. Every replica runs the same application code and therefore
   uses the storage configured by that application. Acceptance may configure a
-  Datastore emulator in MessageBoard; Kubernetes remains storage-neutral.
+  Datastore emulator in Message Board; Kubernetes remains storage-neutral.
 - Combined and standalone gateway modes are both valid for small production
   deployments. Multi-instance deployments require standalone mode.
 - A standalone gateway owns its listener. Spine RPC routes and application-
@@ -108,7 +108,7 @@ contexts or domain code.
   `@spine-event-engine/auth`, `RecordStorage`, and `SubscriptionGateway` rather
   than adding parallel lifecycle or hosting abstractions.
 - Reuse the existing Envoy renderer, delivery client/simple-server fixture,
-  and MessageBoard example.
+  and Message Board example.
 - Use the backend subscription record and `RecordStorage.compareAndSet`
   behavior as the starting point for durable gateway coordination; do not
   duplicate an unrelated persistence mechanism.

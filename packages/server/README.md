@@ -252,5 +252,5 @@ re-query entity state after reconnecting.
 - [Authentication](../auth/README.md)
 - [Node client](../client-node/README.md)
 - [Browser client](../client-web/README.md)
-- [MessageBoard application](../../examples/message-board/README.md)
+- [Message Board application](../../examples/message-board/README.md)
 - [Reference for coding agents](REFERENCE.md)

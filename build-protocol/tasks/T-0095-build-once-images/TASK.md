@@ -13,7 +13,7 @@ production entrypoints, container process ownership, and release verification.
 ## Objective
 
 Builds Spine TS application and infrastructure artifacts exactly once, then
-starts combined or application-only MessageBoard runtime and standalone gateway
+starts combined or application-only Message Board runtime and standalone gateway
 or simple delivery-server images without generation, compilation, workspace
 traversal, or monorepo rebuild at startup.
 
@@ -22,11 +22,11 @@ traversal, or monorepo rebuild at startup.
 - A fresh application repository installed from packed dependencies must run
   `spine-proto generate`, `compose`, and `handlers` during its build and start
   installed runtime output without relying on this monorepo.
-- The same MessageBoard application code and artifacts must support combined
+- The same Message Board application code and artifacts must support combined
   gateway/application and application-only modes through explicit entrypoints.
 - Storage remains selected by application code. Container or deployment
   infrastructure must not choose MySQL, Datastore, or in-memory storage.
-- MessageBoard may use the Datastore emulator in tests; production configuration
+- Message Board may use the Datastore emulator in tests; production configuration
   remains an application concern.
 - Build standalone gateway and the existing in-memory simple delivery server as
   local images from pinned workspace artifacts. Do not publish packages/images.
@@ -42,7 +42,7 @@ traversal, or monorepo rebuild at startup.
 
 1. Packed-tarball acceptance proves a fresh install can generate/compose
    Protobuf and handlers at build time, compile once, and start installed output.
-2. One MessageBoard artifact starts in combined or application-only mode without
+2. One Message Board artifact starts in combined or application-only mode without
    domain-code changes or runtime build tools.
 3. Standalone gateway and simple delivery server local images build and pass
    bounded start/stop checks from pinned artifacts.
@@ -75,8 +75,8 @@ traversal, or monorepo rebuild at startup.
 - The accepted split is
   `build-protocol/planning/T-0095_BUILD_ONCE_IMAGES_SPLIT.md`. It keeps E1 as one
   implementation slice with four ordered checkpoints: fresh packed build; one
-  MessageBoard artifact with combined/application-only entrypoints; local
-  MessageBoard, standalone-gateway, and simple-delivery-server images; and
+  Message Board artifact with combined/application-only entrypoints; local
+  Message Board, standalone-gateway, and simple-delivery-server images; and
   review/release convergence.
 - No governing conflict or blocker was found. T-0096 exclusively owns
   Compose/Kubernetes and production topology acceptance.
@@ -100,7 +100,7 @@ traversal, or monorepo rebuild at startup.
 
 - Packed build-once package and image contracts pass without runtime generation,
   compilation, workspace traversal, or publication.
-- MessageBoard application-only, combined, and standalone gateway processes plus
+- Message Board application-only, combined, and standalone gateway processes plus
   the simple delivery server run as Node PID 1 and close under `SIGINT` and
   `SIGTERM` within ten seconds.
 - Combined and standalone gateways use a durable Datastore-backed subscription

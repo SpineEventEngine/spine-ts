@@ -16,7 +16,7 @@ Candidate: `3a62e475`
   deployment-entrypoint tests, and three image-builder cleanup tests.
 - All three fixed local images rebuild from the offline, digest-pinned package
   set. The seven-case image contract passes artifact inspection, runtime-only
-  content checks, shared MessageBoard artifact identity, authenticated durable
+  content checks, shared Message Board artifact identity, authenticated durable
   subscription activation/cancellation, PID 1, both process signals, and the
   ten-second shutdown bound.
 - Documentation API/audience checks and release-readiness checks pass with 67
@@ -75,7 +75,7 @@ cleanup and TSDoc enforcement, formatting, API documentation, documentation
 audience, Proto integrity, release readiness, and full coverage all pass.
 
 The separate real-container gate also passes all seven cases for fixed image
-artifacts, runtime-only contents, shared MessageBoard artifact identity,
+artifacts, runtime-only contents, shared Message Board artifact identity,
 durable subscription activation/cancellation, PID 1, both process signals, and
 the ten-second shutdown bound.
 

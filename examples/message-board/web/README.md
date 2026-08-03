@@ -1,6 +1,6 @@
-# MessageBoard web UI
+# Message Board web UI
 
-This React application posts MessageBoard commands and reads the board’s
+This React application posts Message Board commands and reads the board’s
 query-side Projection through the real Spine browser client. It uses owned
 Shadcn components and Tailwind CSS. It contains no fallback data: if the server
 is down, the UI reports the failure.
@@ -19,7 +19,7 @@ is down, the UI reports the failure.
 
 ## 🚀 Start the UI
 
-Start the [MessageBoard server](../app/README.md) first. Then run:
+Start the [Message Board server](../app/README.md) first. Then run:
 
 ```bash
 pnpm --dir examples/message-board/web start
@@ -110,7 +110,7 @@ informational and is never itself a credential.
 
 ## 🔗 Learn more
 
-- [Complete MessageBoard example](../README.md)
+- [Complete Message Board example](../README.md)
 - [Browser client](../../../packages/client-web/README.md)
 - [React adapter](../../../packages/client-react/README.md)
 - [Browser authentication guide](../../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)

@@ -168,6 +168,11 @@ its audience; the reference records the current detailed contract, entrypoints,
 guarantees, limits, and applicable lifecycle or error behavior without
 implementation-history narrative.
 
+Human READMEs teach in reader order: explain what the subject is and the
+smallest useful start before architecture, source-backed behavior, tests,
+limits, and deployment or image operations. Keep the `README.md` approachable
+and move exhaustive contracts to its sibling `REFERENCE.md`.
+
 ## Review Standards
 
 Every task records a disposition for these concerns, but invokes only the

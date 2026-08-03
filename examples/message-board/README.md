@@ -1,131 +1,193 @@
-# MessageBoard — A complete Spine TS web application
+# Message Board — A complete Spine TS web application
 
-MessageBoard is the easiest place to see a complete Spine TS web application.
-You can enter a username and message in React, send a real Spine command, and
-see the saved message appear on the board.
+Message Board is a small, complete Spine TS application: enter a username and
+message in React, send a real command, and see the saved message on a board.
+It is the repository's best place to learn how a browser client, a bounded
+context, and a query-side view fit together.
 
-## 💡 What will you learn?
+## 💡 What you will learn
 
-- ✅ How a Proto model is shared by a Node server and browser UI.
-- ✅ How an Aggregate protects write-side consistency and a Projection builds
-  the message board’s query-side view.
-- ✅ How the framework serves Connect and gRPC-Web without application-owned
-  listener, router, CORS, or signal-handling code.
-- ✅ How authentication policy stays outside the bounded context.
-- ✅ How a React client re-reads current state after a possible subscription gap.
-- ✅ How Proto validation messages travel from the server to the form.
-- ✅ How Shadcn components produce an accessible, responsive interface.
+- ✅ How one Proto model is shared by the Node application and React UI.
+- ✅ How an Aggregate accepts a write and a Projection builds the read model.
+- ✅ Why browser traffic goes through an authenticated gateway while native
+  gRPC remains private.
+- ✅ Why queries are authoritative and subscription updates only prompt refresh.
 
-## 📦 Application map
+## 🗺️ Application map
 
 ```text
 message-board/
-├── model/    # MessageBoard messages, commands, events, and rejections
+├── model/    # Message Board messages, commands, events, and rejections
 ├── app/      # Bounded context, domain handlers, policy, and server
 ├── web/      # React UI and browser client
 └── README.md # You are here
 ```
 
 These are private workspace packages. Generated model and handler files are
-build outputs. Build them once before starting the local processes.
+build outputs, so build them once before starting local processes.
 
-## 🐳 Build local images
+## 🚀 Start locally
 
-`pnpm images:build:local` creates three local-only, unpublished images. Node is
-PID 1 in each image and handles `SIGTERM`/`SIGINT`. Production application and
-combined commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, and
-`SPINE_IPC_DIRECTORY`; combined also needs `BROWSER_ORIGIN`. The gateway also
-requires `BACKEND_URL`, and both browser modes require
-`SUBSCRIPTION_REGISTRY_NAMESPACE`. Datastore remains application-selected;
-gateway registry storage is a separate durable concern.
-
-See the [container image guide](deploy/container/README.md) for the fixed tags,
-runtime commands, complete environment table, shutdown behavior, and limits.
-
-## 🚀 Run MessageBoard locally
-
-Install dependencies once from the repository root:
+Install and build from the repository root:
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm typecheck:build
 ```
 
-Start the server in one terminal:
+Start the server, then the UI, in separate terminals:
 
 ```bash
 pnpm --dir examples/message-board/app start
-```
-
-Start the React UI in another terminal:
-
-```bash
 pnpm --dir examples/message-board/web start
 ```
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), enter a username and a
-message, and post it to board `general`. In the message textarea, Command+Enter
-on macOS or Control+Enter elsewhere posts while plain Enter adds a line. Stop
-either process with `Ctrl-C`.
+message, and post it to `general`. Command+Enter on macOS, or Control+Enter
+elsewhere, posts; plain Enter adds a line. Stop either process with `Ctrl-C`.
 
-Leave either field empty to see the validation text declared in
-[`commands.proto`](model/proto/spine/examples/messageboard/commands.proto). The
-browser does not keep a second copy of those rules; it displays the structured
-validation response returned by the server.
+Empty fields demonstrate the validation text declared in
+[`commands.proto`](model/proto/spine/examples/messageboard/commands.proto): the
+browser displays the server's structured response instead of duplicating rules.
 
-## 🧭 Follow one message
+## 🧭 How it works locally
 
-1. The browser creates `PostMessage` and sends it through the authenticated
-   browser endpoint.
-2. `BoardMessageAggregate` guards write-side consistency, stores one message,
-   and emits `MessagePosted` as a domain fact.
-3. `BoardViewProjection` creates the board’s query-side message row, including
-   the display username and posting time.
-4. The browser queries rows from oldest to newest and treats subscription updates as hints to
-   refresh that state.
+```mermaid
+flowchart LR
+  React[React in the browser] -->|gRPC-Web or Connect| Gateway[Authenticated gateway]
+  Gateway -->|trusted context| Native[Private native gRPC services]
+  Native --> Context[Message Board bounded context]
+  Context --> Aggregate[BoardMessageAggregate]
+  Aggregate -->|MessagePosted| Projection[BoardViewProjection]
+  Aggregate --> Storage[(Application-selected storage)]
+  Projection --> Storage
+  Gateway --> Registry[(Gateway subscription registry)]
+  React -->|authoritative query| Gateway
+  Native -->|query response| Gateway
+  Gateway -->|query response| React
+  Projection -->|best-effort update hint| Native
+  Native -->|subscription hint| Gateway
+  Gateway -->|subscription hint| React
+```
 
-The interface shows approximate ages such as `just now` and `3 hours ago`.
-When two rows share the same timestamp, the message identifier provides a
-stable tie-break so a refresh cannot shuffle them.
+The browser never receives the native backend address. For local development,
+`Server` starts a private native HTTP/2 backend and a public loopback browser
+gateway on port 8090. The gateway authenticates first, resolves a trusted actor
+context, then forwards approved traffic; the bounded context does not read
+credentials. The React client may use either gRPC-Web or Connect at that public
+boundary.
 
-The `Updating live` badge appears only while the subscription is connected.
-Otherwise, `No live updates` accurately describes the subscription without
-blocking posts or their authoritative refresh.
+`BoardMessageAggregate` owns one message ID and refuses a duplicate before it
+changes state. This is the `postMessage()` handler excerpt from
+[`BoardMessageAggregate`](app/src/index.ts); imports and the class declaration
+are omitted to focus on the handler. Its return value feeds the read model:
 
-The browser starts one logical board subscription. Its initial `Activate` is
-expected; a later `Activate` is a reconnect after the previous stream ended.
-Each accepted server subscription receives one `Cancel` when it is replaced or
-when the page closes. The browser console narrates these lifecycle changes,
-server update hints, and command outcomes for local learning and diagnosis.
+```ts
+@Assign
+postMessage(command: PostMessage): MessagePosted {
+  if (this.state.board !== undefined) throw MessageAlreadyPosted.create({ id: this.id });
+  const id = clone(MessageIdSchema, this.id);
+  this.update((draft) =>
+    Object.assign(draft, create(BoardMessageSchema, {
+      id, board: command.board, author: command.author, username: command.username,
+      text: command.text, postedAt: command.postedAt,
+    })),
+  );
+  return create(MessagePostedSchema, {
+    id, board: command.board, author: command.author, username: command.username,
+    text: command.text, postedAt: command.postedAt,
+  });
+}
+```
 
-MessageBoard messages are entities, not domain-event subscriptions. Reusing a
-`MessageId` leaves the first message unchanged and records the generated
+`BoardViewProjection.onMessagePosted()` turns that event into a
+`BoardMessageView` row. The UI queries rows oldest-first and listens to the
+same Projection topic. Its `useBoardSync` hook deliberately treats every
+delivery as a reason to re-query: notices can be duplicated, reordered, or
+missed, while the query result is authoritative. `Updating live` means the
+subscription is connected; posting and the follow-up query remain available
+when it is not.
+
+Message Board messages are entities, not domain-event subscriptions. Reusing a
+`MessageId` leaves the first message unchanged and yields the generated
 `MessageAlreadyPosted` rejection.
 
-## 🧪 Run the tests
+## 🧪 Tests and local limits
 
 ```bash
 pnpm --config.verify-deps-before-run=false exec vitest run \
   examples/message-board/app/test \
   examples/message-board/web/test/message-board.test.tsx
-
 pnpm --config.verify-deps-before-run=false --dir examples/message-board/web test:browser
 ```
 
-The browser suite requires Playwright browsers. Install them once with
+The browser suite needs Playwright browsers; install them once with
 `pnpm exec playwright install chromium firefox webkit`.
 
-## ⚠️ Local authentication and delivery
-
-The demo uses in-memory storage and a fixed, non-secret local identity for
-`ada`. It is not a production sign-in flow. Subscription notices can be
-duplicated, reordered, or missed; after reconnecting, the UI re-queries the
-authoritative Projection state.
+Local mode uses in-memory application storage, sessions, and subscription
+bindings plus a fixed, non-secret identity for `ada`. It is not a sign-in flow.
+After a reconnect, the UI must re-query; no subscription stream supplies a
+complete historical record.
 
 ## 🔗 Learn more
 
-- [MessageBoard server](app/README.md)
-- [MessageBoard model](model/README.md)
-- [MessageBoard web UI](web/README.md)
-- [browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+- [Message Board server](app/README.md)
+- [Message Board model](model/README.md)
+- [Message Board web UI](web/README.md)
+- [Browser client, authentication, and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
 - [Reference for coding agents](REFERENCE.md)
+
+## Deployment
+
+The same Message Board application image runs in two production alternatives.
+In **combined** mode one process owns both the application and browser gateway.
+In **standalone** mode that image runs application-only private native gRPC
+processes, while the separate gateway image accepts browser traffic behind
+Envoy.
+
+```mermaid
+flowchart LR
+  Browser[Browser] --> Envoy[Envoy / public TLS edge]
+  D[Simple delivery server]
+  subgraph Combined[Combined topology]
+    C[Message Board app + authenticated gateway]
+    C --> CS[(Application storage)]
+    C --> CR[(Subscription registry)]
+    C --> D
+  end
+  Envoy -->|combined alternative| C
+  subgraph Standalone[Standalone topology]
+    Envoy --> G1[Gateway replica]
+    Envoy --> G2[Gateway replica]
+    G1 --> R[(Durable registry)]
+    G2 --> R
+    G1 --> Apps[Private application service]
+    G2 --> Apps
+    Apps --> A1[Application replica]
+    Apps --> A2[Application replica]
+    A1 --> S[(Application-selected storage)]
+    A2 --> S
+    A1 --> D
+    A2 --> D
+    G1 --> D
+    G2 --> D
+  end
+```
+
+Application code selects and owns its storage, including logical session
+revocation records. Gateway code owns the separate durable subscription
+registry and all browser-capable replicas must share its namespace and the
+session signing values. Operators own TLS, identity-provider setup, secrets,
+image distribution, network policy, and production delivery infrastructure.
+The reference simple delivery server is in-memory and not highly available;
+delivery remains best effort, so clients still re-query after gaps.
+
+### Build local images
+
+```bash
+pnpm typecheck:build
+pnpm images:build:local
+```
+
+See the [deployment guide](deploy/README.md) and [container image guide](deploy/container/README.md)
+for topology commands, required environment values, and limits.

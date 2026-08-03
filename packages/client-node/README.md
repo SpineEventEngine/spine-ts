@@ -43,7 +43,7 @@ const result = await request.post(
     board: create(BoardIdSchema, { value: "general" }),
     author: create(UserIdSchema, { value: "alice" }),
     username: "Alice",
-    text: "Hello, MessageBoard.",
+    text: "Hello, Message Board.",
     postedAt: timestampFromDate(new Date()),
   }),
 );

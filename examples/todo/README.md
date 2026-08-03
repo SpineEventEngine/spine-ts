@@ -35,6 +35,36 @@ pnpm --filter @spine-event-engine/example-todo smoke
 The smoke client posts one `CreateTask` command and waits for the matching
 `TaskList` row. Stop the server with `Ctrl-C`.
 
+## 🧭 How it works
+
+```mermaid
+flowchart LR
+  Command[CreateTask command] --> Task[TaskAggregate]
+  Task -->|TaskCreated| List[TaskListProjection]
+  Task --> Events[(In-memory event storage)]
+  List --> Client[Smoke client query]
+```
+
+The command handler owns one task's write-side state and returns the domain
+event that describes a successful creation. This is the `createTask()` handler
+excerpt from [`TaskAggregate`](src/index.ts); imports and the class declaration
+are omitted to focus on the handler:
+
+```ts
+@Assign
+createTask(command: CreateTask): TaskCreated {
+  const id = clone(TaskIdSchema, this.id);
+  this.update((draft) => Object.assign(draft, create(TaskSchema, {
+    id, title: command.title, completed: false,
+  })));
+  return create(TaskCreatedSchema, { id, title: command.title });
+}
+```
+
+`TaskListProjection.onTaskCreated()` adds that task to the list and increments
+the open-task count. The smoke client waits for this Projection row, which is
+why the example demonstrates a command followed by an observable read model.
+
 ## 🧪 Run the focused tests
 
 ```bash
