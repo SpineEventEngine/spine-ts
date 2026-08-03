@@ -1,6 +1,6 @@
 # T-0095: Build-once packages and local images
 
-Status: Blocked at checkpoint 3 by Docker engine context ingestion
+Status: Checkpoint 3 active
 Start: `2026-08-02`
 Baseline: `1c53cbdf`
 Branch: `task/T-0095-build-once-images`
@@ -90,3 +90,8 @@ traversal, or monorepo rebuild at startup.
 - Expected reasoning: medium.
 - Both fields are explicit in dispatch. The owner must not spawn subagents,
   cross into T-0096 topology paths, or touch protected human-review files.
+
+## Checkpoint 3 Recovery
+
+- Docker client/server `29.6.2` on `linux/aarch64` can now pull the official
+  pinned Node base image. Resume real local image acceptance with normal BuildKit.
