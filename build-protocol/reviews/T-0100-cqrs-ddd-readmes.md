@@ -47,5 +47,5 @@ All applicable review concerns are resolved. Final branch
 `pnpm verify:task --no-tests` passed after convergence, including generated
 Proto integrity, TypeScript builds, ESLint, cleanup and TSDoc rules, formatting,
 API docs, Buf lint, generated cleanliness, 67 package imports, 44 package
-assets, and 279 relative Markdown links. Post-merge verification remains
-required before closure.
+assets, and 279 relative Markdown links. The identical merged tree passed the
+same post-merge profile and was pushed to `origin/main` as `f15da527`.

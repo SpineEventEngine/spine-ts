@@ -1142,6 +1142,16 @@ post-merge verification passed 29 focused tests plus Chromium, Firefox, and
 WebKit acceptance. It merged as `b9e3fdf5`. Its canonical ledger is in
 `build-protocol/tasks/T-0087-message-board-live-status/TASK.md`.
 
+### T-0100: DDD And CQRS README Vocabulary
+
+T-0100 is complete. The repository entry point and relevant package and example
+READMEs now introduce Spine TS through Bounded Contexts, commands, events,
+Aggregates, Process Managers, and query-side Projections while preserving the
+existing beginner-friendly visual style. All 34 READMEs received an explicit
+changed or no-change disposition. The reviewed tree and identical merged tree
+passed `pnpm verify:task --no-tests`; it merged as `f15da527`. Its canonical
+ledger is in `build-protocol/tasks/T-0100-cqrs-ddd-readmes/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:

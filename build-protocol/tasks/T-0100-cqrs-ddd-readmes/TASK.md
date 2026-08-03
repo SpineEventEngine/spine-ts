@@ -1,6 +1,6 @@
 # T-0100: DDD and CQRS README vocabulary
 
-Status: Ready to merge
+Status: Complete
 Start: `2026-08-03`
 Baseline: `d4c3915a`
 Branch: `task/T-0100-cqrs-ddd-readmes`
@@ -75,3 +75,8 @@ copying JVM-specific APIs or website prose.
 5. Deterministic README/link/audience/prohibited-wording checks and focused
    reader testing pass.
 6. The reviewed task is merged, post-merge verified, and pushed.
+
+## Completion
+
+Merged into `main` as `f15da527`. The merged tree passed
+`pnpm verify:task --no-tests` and was pushed to `origin/main`.
