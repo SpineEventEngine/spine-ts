@@ -27,6 +27,15 @@ interface PackedPackage {
   readonly tarball: string;
 }
 
+describe("Windows spine-proto shim", () => {
+  it("requires one quoted command string for a shim path containing spaces", () => {
+    const shim = "C:\\temporary files\\node_modules\\.bin\\spine-proto.cmd";
+    const command = ["/d", "/s", "/c", windowsShimCommand(shim)];
+
+    expect(command).toEqual(["/d", "/s", "/c", `"${shim}" unsupported-command`]);
+  });
+});
+
 function writeJson(directory: string, path: string, value: unknown): void {
   const target = join(directory, path);
   mkdirSync(dirname(target), { recursive: true });
@@ -55,6 +64,7 @@ function packSpinePackages(destination: string): readonly PackedPackage[] {
   const sources = [
     "packages/proto-tools",
     "packages/server",
+    "packages/auth",
     "packages/proto",
     "packages/core",
     "packages/storage",
@@ -75,6 +85,54 @@ function packSpinePackages(destination: string): readonly PackedPackage[] {
       const packageName = readPackedName(tarball);
       return { name: packageName, tarball };
     });
+}
+
+function installTarballsWithPnpm(directory: string, packages: readonly PackedPackage[]): void {
+  const dependencies = Object.fromEntries(
+    packages.map(({ name, tarball }) => [name, `file:${tarball}`]),
+  );
+  const overrides = {
+    ...dependencies,
+    "node-addon-api": installedDependency("node-addon-api"),
+  };
+  writeJson(directory, "package.json", {
+    name: "@external/proto-tools-cli",
+    private: true,
+    type: "module",
+    dependencies,
+  });
+  writeFileSync(
+    join(directory, "pnpm-workspace.yaml"),
+    `overrides:\n${Object.entries(overrides)
+      .map(([name, tarball]) => `  ${JSON.stringify(name)}: ${JSON.stringify(tarball)}`)
+      .join("\n")}\n`,
+  );
+  run("pnpm", ["install", "--offline", "--ignore-scripts"], directory);
+}
+
+function installedDependency(name: string): string {
+  const store = join(repositoryRoot, "node_modules/.pnpm");
+  const entry = readdirSync(store).find((candidate) => candidate.startsWith(`${name}@`));
+  if (entry === undefined) throw new Error(`Missing installed dependency ${name}.`);
+  return `file:${join(store, entry, "node_modules", name)}`;
+}
+
+function windowsShimCommand(shim: string): string {
+  return `"${shim.replaceAll('"', '""')}" unsupported-command`;
+}
+
+function runInstalledShim(directory: string): void {
+  const shim = join(
+    directory,
+    "node_modules/.bin",
+    process.platform === "win32" ? "spine-proto.cmd" : "spine-proto",
+  );
+  expect(existsSync(shim)).toBe(true);
+  if (process.platform === "win32") {
+    run("cmd.exe", ["/d", "/s", "/c", windowsShimCommand(shim)], directory);
+  } else {
+    run(shim, ["unsupported-command"], directory);
+  }
 }
 
 function readPackedName(tarball: string): string {
@@ -245,7 +303,7 @@ function generateBuildAndPack(directory: string, destination: string): PackedPac
   run(
     process.execPath,
     [
-      join(directory, "node_modules/@spine-event-engine/proto-tools/dist/src/cli/spine-proto.js"),
+      join(directory, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
       "generate",
     ],
     directory,
@@ -305,6 +363,13 @@ describe("packed external model consumer", () => {
       const tarballs = join(root, "tarballs");
       mkdirSync(tarballs);
       const spinePackages = packSpinePackages(tarballs);
+
+      const cli = join(root, "proto-tools-cli");
+      mkdirSync(cli);
+      installTarballsWithPnpm(cli, spinePackages);
+      expect(() => {
+        runInstalledShim(cli);
+      }).toThrow("spine-proto: unsupported command unsupported-command");
 
       const users = join(root, "users-model");
       mkdirSync(users);
@@ -437,10 +502,7 @@ describe("packed external model consumer", () => {
       mkdirSync(join(app, "src"));
       run(
         process.execPath,
-        [
-          join(app, "node_modules/@spine-event-engine/proto-tools/dist/src/cli/spine-proto.js"),
-          "compose",
-        ],
+        [join(app, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"), "compose"],
         app,
       );
       writeFileSync(
