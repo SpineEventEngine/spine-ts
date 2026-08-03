@@ -1,6 +1,6 @@
 # T-0100: DDD and CQRS README vocabulary
 
-Status: In progress
+Status: Ready for final verification
 Start: `2026-08-03`
 Baseline: `d4c3915a`
 Branch: `task/T-0100-cqrs-ddd-readmes`
@@ -57,10 +57,10 @@ copying JVM-specific APIs or website prose.
 - TypeScript/API, style/maintainability, and performance/reliability concerns
   receive concrete N/A dispositions unless the implementation changes code,
   commands, snippets, or behavioral/API claims that activate them.
-- Reader testing uses a fresh read-only agent after documentation review, as
-  required by the selected documentation workflow. Expected explicit
-  `gpt-5.6-terra`, reasoning `medium`, because Luna cannot be selected directly
-  on the current spawn surface.
+- Reader testing uses a fresh read-only documentation-reviewer instance after
+  documentation review, as required by the selected documentation workflow.
+  The general-agent surface rejected Luna; the existing immutable role retained
+  the required `gpt-5.6-luna` / `medium` profile without inherited fallback.
 
 ## Acceptance criteria
 
