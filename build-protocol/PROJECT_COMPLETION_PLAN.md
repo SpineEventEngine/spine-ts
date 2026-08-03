@@ -1,17 +1,17 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release, post-release JVM parity Waves 1 through 4, and T-0080
+Status: Initial release, post-release JVM parity Waves 1 through 5, and T-0080
 authored-API/example quality correction complete
 
 Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Wave 5 packaging and deployment is the active implementation frontier under
-`T-0089`. Its approved scope and optimized execution sequence are recorded in
-`build-protocol/planning/WAVE_5_PACKAGING_DEPLOYMENT_PLAN.md`. Execution
-continues autonomously through reviewed, verified, merged, and pushed closure
-unless a genuine protocol or environmental blocker requires the human.
+Wave 5 packaging and deployment is complete under `T-0089`. Its approved scope
+and optimized execution sequence are recorded in
+`build-protocol/planning/WAVE_5_PACKAGING_DEPLOYMENT_PLAN.md`. The next feature
+frontier is Wave 6, which requires a separate human Q&A before planning or
+implementation begins.
 
 ## Purpose
 

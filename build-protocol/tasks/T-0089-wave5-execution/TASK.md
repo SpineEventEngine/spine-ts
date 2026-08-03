@@ -1,6 +1,6 @@
 # T-0089: Wave 5 packaging and deployment
 
-Status: Active
+Status: Complete
 Start: `2026-08-02`
 Baseline: `9540390f121da37010c48295f67ef63adb11b2aa`
 Branch: `task/T-0089-wave5-execution`

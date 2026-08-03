@@ -1,6 +1,6 @@
 # T-0097: Wave 5 documentation and release closure
 
-Status: Ready for integration
+Status: Complete
 Start: `2026-08-03`
 Baseline: `0f47c634`
 Branch: `task/T-0097-wave5-closure`
