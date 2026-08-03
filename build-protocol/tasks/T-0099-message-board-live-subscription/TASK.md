@@ -1,6 +1,6 @@
 # T-0099: Message Board live subscription
 
-Status: In progress
+Status: Final verification passed; ready for merge
 Start: `2026-08-03`
 Baseline: `49b6b358`
 Branch: `task/T-0099-live-subscription`
@@ -105,3 +105,14 @@ before changing runtime code. Use `verify:release` if shared client runtime
 changes; use source-scoped `verify:task` only if evidence proves the correction
 is confined to the example. Real Chromium acceptance must exercise sustained
 updates, posting, console logging, and cleanup.
+
+## Completion Evidence
+
+- Root cause, implementation, review findings, corrections, and re-reviews are
+  recorded in `build-protocol/work-logs/T-0099.md` and
+  `build-protocol/reviews/T-0099-message-board-live-subscription.md`.
+- Final `pnpm verify:release` passed: 178 test files passed, 3 skipped; 3,504
+  tests passed, 25 skipped; 90.01% branch coverage and at least 94% statements,
+  functions, and lines.
+- Merge, post-merge verification, and remote synchronization remain closure
+  operations and must be appended to the work log before deleting the worktree.
