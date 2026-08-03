@@ -34,4 +34,12 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(deployment).toContain('"SPINE_IPC_DIRECTORY"');
     expect(deployment).toContain("createZeroMqTransport");
   });
+
+  it("connects production MessageBoard processes to the configured delivery server", () => {
+    const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
+
+    expect(deployment).toContain("RemoteDelivery.connectTo");
+    expect(deployment).toContain('"DELIVERY_SERVER_URL"');
+    expect(deployment).toContain("DeliveryQuarantine");
+  });
 });

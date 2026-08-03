@@ -20,6 +20,15 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8484
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "const client=require(''node:http2'').connect(''http://127.0.0.1:8484'');client.on(''connect'',()=>{client.close();process.exit(0)});client.on(''error'',()=>process.exit(1));setTimeout(()=>process.exit(1),1000)"',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
 
   combined:
     image: spine-ts/message-board:local
@@ -31,9 +40,12 @@ services:
       SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-combined
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
+      DELIVERY_SERVER_URL: http://delivery:8484
       SPINE_IPC_DIRECTORY: /tmp/spine-ipc
     depends_on:
       datastore:
+        condition: service_healthy
+      delivery:
         condition: service_healthy
 
   envoy:

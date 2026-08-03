@@ -20,24 +20,38 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8484
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "const client=require(''node:http2'').connect(''http://127.0.0.1:8484'');client.on(''connect'',()=>{client.close();process.exit(0)});client.on(''error'',()=>process.exit(1));setTimeout(()=>process.exit(1),1000)"',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
 
   application-1:
     image: spine-ts/message-board:local
-    command: ["node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js"]
+    command:
+      ["node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js"]
     environment: &application-environment
       HOST: 0.0.0.0
       PORT: 8080
       NODE_ENV: production
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
+      DELIVERY_SERVER_URL: http://delivery:8484
       SPINE_IPC_DIRECTORY: /tmp/spine-ipc
     depends_on:
       datastore:
         condition: service_healthy
+      delivery:
+        condition: service_healthy
 
   application-2:
     image: spine-ts/message-board:local
-    command: ["node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js"]
+    command:
+      ["node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js"]
     environment: *application-environment
     depends_on:
       datastore:
@@ -54,6 +68,7 @@ services:
       SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
+      DELIVERY_SERVER_URL: http://delivery:8484
       SPINE_IPC_DIRECTORY: /tmp/spine-ipc
     networks:
       default:
@@ -61,6 +76,8 @@ services:
           - gateway
     depends_on:
       datastore:
+        condition: service_healthy
+      delivery:
         condition: service_healthy
       application-1:
         condition: service_started

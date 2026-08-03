@@ -1,13 +1,15 @@
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import {
   DurableSubscriptionBindings,
   EnvironmentType,
   ServerEnvironment,
 } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { ZeroMqConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
 import { randomUUID } from "node:crypto";
 
+import { DeliveryQuarantine } from "./delivery-quarantine.js";
 import type { BoardServerOptions } from "./index.js";
 
 interface DeploymentConfig extends BoardServerOptions {
@@ -61,9 +63,8 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   },
 
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig {
-    const combined = MessageBoardDeployment.combined(environment);
     return {
-      ...combined,
+      ...MessageBoardDeployment.combined(environment),
       backendUrl: DeploymentValues.required(environment, "BACKEND_URL"),
     };
   },
@@ -98,6 +99,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
           ipcDirectory: DeploymentValues.required(environment, "SPINE_IPC_DIRECTORY"),
         }),
       ),
+      delivery: RemoteDelivery.connectTo({
+        endpoint: DeploymentValues.url(
+          DeploymentValues.required(environment, "DELIVERY_SERVER_URL"),
+        ),
+        removalQuarantine: new DeliveryQuarantine(storageFactory),
+      }),
     });
     return storageFactory;
   },
@@ -134,5 +141,23 @@ const DeploymentValues = Object.freeze({
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535)
       throw new Error("Invalid required configuration: PORT.");
     return parsed;
+  },
+
+  /**
+   * Validates one delivery-server endpoint.
+   *
+   * @param value The configured endpoint value.
+   * @returns The normalized HTTP(S) endpoint.
+   */
+  url(value: string): string {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error("Invalid required configuration: DELIVERY_SERVER_URL.");
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:")
+      throw new Error("Invalid required configuration: DELIVERY_SERVER_URL.");
+    return url.toString().replace(/\/$/u, "");
   },
 });
