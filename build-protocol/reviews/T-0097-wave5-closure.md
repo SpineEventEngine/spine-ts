@@ -1,6 +1,6 @@
 # T-0097 Wave 5 Closure Review
 
-Status: Specialist review in progress
+Status: Specialist correction in progress
 Baseline: `0f47c634`
 Candidate: `543917c4`
 
@@ -35,8 +35,20 @@ visible mismatch, or inherited fallback.
 
 ## Dispositions
 
-- Style/maintainability: pending.
-- Documentation: pending.
-- TypeScript/API: pending.
-- Performance/reliability: pending.
+- Style/maintainability: clean; no P0-P3 findings.
+- Documentation: clean; no P0-P3 findings.
+- TypeScript/API: accepted one P2 wording correction. Shared signing and the
+  registry namespace belong to browser-capable combined/gateway processes, not
+  application-only replicas; registry and revocation are distinct logical
+  records over the same application-selected storage.
+- Performance/reliability: accepted two P1 Envoy findings. Every RPC route must
+  require `:method = POST`; CORS preflight policy alone does not restrict direct
+  requests. Activate's disabled route timeout must be paired with explicit
+  `stream_idle_timeout: 0s` to make the documented quiet-stream policy true.
 - Final security: pending.
+
+No P0 or P3 finding was reported. Assign the complete two-P1/one-P2 batch to the
+existing implementation context. Corrections must update all four Envoy copies,
+the structural policy tests, a data-plane non-POST rejection, the quiet-stream
+policy evidence, and the narrow storage/session wording. Re-review only API and
+reliability after focused verification.
