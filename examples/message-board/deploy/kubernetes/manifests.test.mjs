@@ -18,6 +18,13 @@ for (const mode of ["combined", "standalone"]) {
     assert.match(document, /terminationGracePeriodSeconds:/u);
     assert.match(document, /secretRef:/u);
     assert.match(document, /configMapRef:/u);
+    assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER/u);
+    assert.match(document, /MESSAGE_BOARD_SESSION_PRIVATE_KEY/u);
+    assert.match(document, /name: message-board-envoy-config/u);
+    assert.match(document, /mountPath: \/etc\/envoy\/envoy.yaml/u);
+    assert.match(document, /kind: Service[\s\S]*name: message-board-envoy/u);
+    assert.match(document, /secretName: message-board-envoy-tls/u);
+    assert.match(document, /route: \{ cluster: gateway/u);
     assert.doesNotMatch(document, /kind: (Datastore|MySQL|Postgres|Redis|Hazelcast)/u);
     assert.doesNotMatch(document, /helm|operator/iu);
   });

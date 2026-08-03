@@ -1,4 +1,5 @@
 import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { SignedSessions } from "@spine-event-engine/auth";
 import {
   DurableSubscriptionBindings,
   EnvironmentType,
@@ -8,8 +9,10 @@ import type { StorageFactory } from "@spine-event-engine/storage";
 import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { ZeroMqConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
 import { randomUUID } from "node:crypto";
+import { createPrivateKey } from "node:crypto";
 
 import { DeliveryQuarantine } from "./delivery-quarantine.js";
+import { MessageBoardSessionRevocations } from "./session-revocations.js";
 import type { BoardServerOptions } from "./index.js";
 
 interface DeploymentConfig extends BoardServerOptions {
@@ -33,6 +36,17 @@ interface DeploymentContract {
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
   storage(config: DeploymentConfig): StorageFactory;
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
+  /**
+   * Creates production browser sessions that share signing and revocation configuration.
+   *
+   * The supplied factory owns the underlying revocation handle for the process
+   * lifetime. Closing that factory makes later revocation reads fail closed.
+   *
+   * @param storageFactory The application-selected storage factory.
+   * @param environment The process environment that supplies shared settings.
+   * @returns The configured signed-session resolver and issuer.
+   */
+  sessions(storageFactory: StorageFactory, environment: NodeJS.ProcessEnv): SignedSessions;
   configureServer(
     config: DeploymentConfig,
     environment: NodeJS.ProcessEnv,
@@ -83,6 +97,25 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
       cleanupBatchSize: 100,
       recordLimit: 10_000,
       maxRecordBytes: 1_048_576,
+    });
+  },
+
+  sessions(storageFactory: StorageFactory, environment: NodeJS.ProcessEnv): SignedSessions {
+    if (environment.NODE_ENV !== "production")
+      throw new Error("Signed MessageBoard sessions require production configuration.");
+    return new SignedSessions({
+      issuer: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_ISSUER"),
+      audience: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_AUDIENCE"),
+      activeKey: {
+        kid: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_KEY_ID"),
+        privateKey: createPrivateKey(
+          DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_PRIVATE_KEY"),
+        ),
+      },
+      revocation: new MessageBoardSessionRevocations(
+        storageFactory,
+        DeploymentValues.required(environment, "SUBSCRIPTION_REGISTRY_NAMESPACE"),
+      ),
     });
   },
 

@@ -7,6 +7,9 @@ data:
   SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-production
   DELIVERY_SERVER_URL: http://simple-delivery-server:8484
   SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+  MESSAGE_BOARD_SESSION_ISSUER: message-board
+  MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
+  MESSAGE_BOARD_SESSION_KEY_ID: replace-on-rotation
 ---
 apiVersion: v1
 kind: Secret
@@ -14,7 +17,7 @@ metadata:
   name: message-board-runtime
 type: Opaque
 stringData:
-  DATASTORE_PROJECT_ID: replace-me
+  MESSAGE_BOARD_SESSION_PRIVATE_KEY: replace-with-a-P-256-PKCS8-PEM
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -39,6 +42,7 @@ spec:
             [
               { configMapRef: { name: message-board-config } },
               { secretRef: { name: message-board-runtime } },
+              { secretRef: { name: message-board-storage } },
             ]
           env:
             [
@@ -74,6 +78,7 @@ spec:
             [
               { configMapRef: { name: message-board-config } },
               { secretRef: { name: message-board-runtime } },
+              { secretRef: { name: message-board-storage } },
             ]
           env:
             [
@@ -124,5 +129,69 @@ spec:
       containers:
         - name: envoy
           image: envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb
+          args: ["-c", "/etc/envoy/envoy.yaml"]
+          volumeMounts:
+            - { name: envoy-config, mountPath: /etc/envoy/envoy.yaml, subPath: envoy.yaml, readOnly: true }
+            - { name: envoy-tls, mountPath: /run/tls, readOnly: true }
           startupProbe: { tcpSocket: { port: 8443 }, failureThreshold: 30, periodSeconds: 2 }
           readinessProbe: { tcpSocket: { port: 8443 }, periodSeconds: 2 }
+      volumes:
+        - { name: envoy-config, configMap: { name: message-board-envoy-config } }
+        - { name: envoy-tls, secret: { secretName: message-board-envoy-tls } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: message-board-gateway }
+spec:
+  selector: { app: message-board-gateway }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: message-board-envoy }
+spec:
+  type: LoadBalancer
+  selector: { app: message-board-envoy }
+  ports: [{ port: 443, targetPort: 8443 }]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: message-board-envoy-config }
+data:
+  envoy.yaml: |
+    static_resources:
+      listeners:
+        - name: browser_gateway
+          address: { socket_address: { address: 0.0.0.0, port_value: 8443 } }
+          filter_chains:
+            - transport_socket:
+                name: envoy.transport_sockets.tls
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.transport_sockets.tls.v3.DownstreamTlsContext
+                  common_tls_context:
+                    tls_certificates:
+                      - certificate_chain: { filename: /run/tls/tls.crt }
+                        private_key: { filename: /run/tls/tls.key }
+              filters:
+                - name: envoy.filters.network.http_connection_manager
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                    stat_prefix: browser_gateway
+                    codec_type: AUTO
+                    route_config:
+                      name: gateway_only
+                      virtual_hosts:
+                        - name: gateway
+                          domains: ["*"]
+                          routes: [{ match: { prefix: "/" }, route: { cluster: gateway, timeout: 0s } }]
+                    http_filters: [{ name: envoy.filters.http.router }]
+      clusters:
+        - name: gateway
+          connect_timeout: 5s
+          type: STRICT_DNS
+          http2_protocol_options: {}
+          load_assignment:
+            cluster_name: gateway
+            endpoints:
+              - lb_endpoints:
+                  - endpoint: { address: { socket_address: { address: message-board-gateway, port_value: 8080 } } }

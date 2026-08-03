@@ -42,6 +42,15 @@ services:
       DATASTORE_EMULATOR_HOST: datastore:8081
       DELIVERY_SERVER_URL: http://delivery:8484
       SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+      MESSAGE_BOARD_SESSION_ISSUER: message-board
+      MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
+      MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
+      MESSAGE_BOARD_SESSION_PRIVATE_KEY: |-
+        -----BEGIN PRIVATE KEY-----
+        MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguffSvDX1/JxpSa58
+        umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
+        WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
+        -----END PRIVATE KEY-----
     depends_on:
       datastore:
         condition: service_healthy
