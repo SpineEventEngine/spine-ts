@@ -1,6 +1,6 @@
 # T-0102: Preserve Message Board username after posting
 
-Status: In progress
+Status: Reviewed; ready for integration
 Start: `2026-08-03`
 Baseline: `b41f527c`
 Branch: `task/T-0102-preserve-message-board-username`
