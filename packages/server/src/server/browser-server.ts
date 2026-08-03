@@ -23,7 +23,7 @@ import { isDurableSubscriptionBindings } from "./durable-subscription-bindings.j
 import reservedSpineRpcPaths from "./reserved-spine-rpc-paths.json" with { type: "json" };
 
 const gracefulBrowserDrainMs = 100;
-const reservedSpineRpcPathSet = new Set(reservedSpineRpcPaths);
+const reservedPathSet = new Set(reservedSpineRpcPaths);
 
 interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port"> {
   readonly host: string;
@@ -295,7 +295,7 @@ export const BrowserServer: Readonly<{
       const method = (route as { readonly method: string }).method;
       if (method !== "GET" && method !== "POST")
         throw new Error("Browser auth routes must use GET or POST.");
-      if (reservedSpineRpcPathSet.has(route.path))
+      if (reservedPathSet.has(route.path))
         throw new Error("Browser auth routes must not use reserved Spine RPC paths.");
       if (!/^\/(?!\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(route.path))
         throw new Error("Browser auth routes must use exact canonical non-root paths.");
