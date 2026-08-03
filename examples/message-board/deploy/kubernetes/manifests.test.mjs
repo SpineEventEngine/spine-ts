@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseAllDocuments, parseDocument } from "yaml";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const browserRoutes = [
@@ -54,17 +55,19 @@ test("standalone reference binds replica count and delivery waits to each Deploy
 
 test("Envoy policy rejects non-path and duplicate route items", () => {
   assert.throws(
-    () => envoyRoutes('- match: { prefix: "/" }\n  route: { cluster: gateway, timeout: 30s }'),
+    () =>
+      envoyRoutes(
+        envoyWithRoutes('- name: x\n  match: { prefix: "/" }\n  route: { timeout: 30s }'),
+      ),
     /must use an approved match\.path/u,
   );
   assert.throws(
     () =>
       assert.deepEqual(
         envoyRoutes(
-          '- match: { path: "/spine.client.CommandService/Post" }\n' +
-            "  route: { cluster: gateway, timeout: 30s }\n" +
-            '- match: { path: "/spine.client.CommandService/Post" }\n' +
-            "  route: { cluster: gateway, timeout: 30s }",
+          envoyWithRoutes(
+            '- match: { path: "/spine.client.CommandService/Post" }\n  route: { timeout: 30s }\n- match: { path: "/spine.client.CommandService/Post" }\n  route: { timeout: 30s }',
+          ),
         ),
         browserRoutes,
       ),
@@ -73,7 +76,13 @@ test("Envoy policy rejects non-path and duplicate route items", () => {
 });
 
 function assertEnvoy(document, origin) {
-  const routes = envoyRoutes(document);
+  const manifests = parseAllDocuments(document).map((manifest) => manifest.toJSON());
+  const configMap = manifests.find(
+    (manifest) =>
+      manifest?.kind === "ConfigMap" && manifest.metadata?.name === "message-board-envoy-config",
+  );
+  assert.notEqual(configMap, undefined, "missing Envoy ConfigMap");
+  const routes = envoyRoutes(configMap.data?.["envoy.yaml"]);
   assert.deepEqual(routes, browserRoutes);
   assert.match(document, new RegExp(`exact: ${origin}`, "u"));
   assert.match(document, /envoy\.filters\.http\.cors/u);
@@ -81,27 +90,36 @@ function assertEnvoy(document, origin) {
 }
 
 function envoyRoutes(document) {
-  const lines = document.split("\n");
+  const envoy = parseDocument(document).toJSON();
   const routes = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (!line.trimStart().startsWith("- match:")) continue;
-    const route = /^\s*- match: \{ path: "([^"]+)" \}$/.exec(line);
-    if (route === null) assert.fail(`Envoy route ${line.trim()} must use an approved match.path.`);
-    const indent = line.length - line.trimStart().length;
-    let timeout;
-    for (index += 1; index < lines.length; index += 1) {
-      const next = lines[index];
-      const nextIndent = next.length - next.trimStart().length;
-      if (nextIndent === indent && next.trimStart().startsWith("- match:")) break;
-      const candidate = /(?:^\s*timeout: |\btimeout: )(\S+?)(?: \}|$)/.exec(next);
-      if (candidate !== null) timeout = candidate[1];
+  for (const listener of envoy.static_resources?.listeners ?? []) {
+    for (const chain of listener.filter_chains ?? []) {
+      for (const filter of chain.filters ?? []) {
+        const hosts = filter.typed_config?.route_config?.virtual_hosts ?? [];
+        for (const host of hosts) {
+          for (const item of host.routes ?? []) {
+            assert.deepEqual(
+              Object.keys(item.match ?? {}),
+              ["path"],
+              "Envoy route must use an approved match.path.",
+            );
+            assert.equal(typeof item.match.path, "string", "Envoy route path must be text.");
+            assert.equal(
+              typeof item.route?.timeout,
+              "string",
+              `route ${item.match.path} must declare a timeout`,
+            );
+            routes.push([item.match.path, item.route.timeout]);
+          }
+        }
+      }
     }
-    assert.notEqual(timeout, undefined, `route ${route[1]} must declare a timeout`);
-    routes.push([route[1], timeout]);
-    index -= 1;
   }
   return routes;
+}
+
+function envoyWithRoutes(routes) {
+  return `static_resources:\n  listeners:\n    - filter_chains:\n        - filters:\n            - typed_config:\n                route_config:\n                  virtual_hosts:\n                    - routes:\n                        ${routes.replaceAll("\n", "\n                        ")}`;
 }
 
 function deployment(document, name) {
