@@ -16,6 +16,8 @@ FROM ${BASE_IMAGE} AS runtime
 
 WORKDIR /app
 COPY --from=packages /app/node_modules ./node_modules
+RUN find ./node_modules -type f \( -name '*.ts' -o -name '*.map' -o -name '*.proto' -o -name '*.tsbuildinfo' \) -delete \
+  && find ./node_modules -type d \( -name test -o -name tests \) -prune -exec rm -rf {} +
 ENTRYPOINT ["node"]
 
 FROM runtime AS message-board

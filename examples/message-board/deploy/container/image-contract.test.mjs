@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -21,4 +24,34 @@ test("local images have a fixed build contract", () => {
   assert.match(helper, /-exec", "xattr", "-c"/u);
   assert.match(helper, /-exec", "xattr", "-s", "-c"/u);
   assert.match(datastoreEmulator, /@sha256:[a-f0-9]{64}$/u);
+});
+
+test("final images contain only runtime artifacts and no runtime secret", () => {
+  const directory = mkdtempSync(join(tmpdir(), "spine-t0095-image-inspection-"));
+  const sentinel = "spine-t0095-runtime-secret-sentinel";
+  const images = ["message-board", "standalone-gateway", "simple-delivery-server"];
+  try {
+    for (const target of images) {
+      const image = `spine-ts/${target}:local`;
+      const config = execFileSync("docker", ["image", "inspect", image], { encoding: "utf8" });
+      assert.doesNotMatch(config, new RegExp(sentinel, "u"));
+      assert.match(config, /"Entrypoint":\s*\[\s*"node"/u);
+      const history = execFileSync("docker", ["history", "--no-trunc", image], { encoding: "utf8" });
+      assert.doesNotMatch(history, new RegExp(sentinel, "u"));
+      const container = execFileSync("docker", ["create", "--env", `T0095_SECRET=${sentinel}`, image], {
+        encoding: "utf8",
+      }).trim();
+      const archive = join(directory, `${target}.tar`);
+      try {
+        execFileSync("sh", ["-c", `docker export ${container} > ${archive}`]);
+        const files = execFileSync("tar", ["-tf", archive], { encoding: "utf8" });
+        assert.doesNotMatch(files, /(^|\/)(tarballs|\.git|pnpm-store|tests?)(\/|$)|\.ts(?:$|\n)|\.map(?:$|\n)|\.proto(?:$|\n)/u);
+        assert.doesNotMatch(files, new RegExp(sentinel, "u"));
+      } finally {
+        execFileSync("docker", ["container", "rm", "-f", container]);
+      }
+    }
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
 });
