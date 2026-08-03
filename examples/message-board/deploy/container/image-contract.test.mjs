@@ -271,7 +271,6 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
     "--env",
     "DELIVERY_SERVER_URL=http://delivery:18083",
-    ...sessionEnvironment(),
     messageBoard,
   ]);
   waitForLog(combined, /MessageBoard combined server ready/u);
@@ -302,6 +301,7 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
     "--env",
     "DELIVERY_SERVER_URL=http://delivery:18083",
+    ...sessionEnvironment(),
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
