@@ -30,6 +30,10 @@ spec:
     metadata: { labels: { app: message-board-application } }
     spec:
       terminationGracePeriodSeconds: 10
+      initContainers:
+        - name: wait-for-delivery
+          image: busybox:1.37.0
+          command: ["sh", "-c", "until nc -z simple-delivery-server 8484; do sleep 1; done"]
       containers:
         - name: application
           image: spine-ts/message-board:local
@@ -71,6 +75,10 @@ spec:
     metadata: { labels: { app: message-board-gateway } }
     spec:
       terminationGracePeriodSeconds: 10
+      initContainers:
+        - name: wait-for-delivery
+          image: busybox:1.37.0
+          command: ["sh", "-c", "until nc -z simple-delivery-server 8484; do sleep 1; done"]
       containers:
         - name: gateway
           image: spine-ts/standalone-gateway:local
@@ -146,8 +154,9 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata: { name: message-board-gateway }
+metadata: { name: message-board-gateway-headless }
 spec:
+  clusterIP: None
   selector: { app: message-board-gateway }
   ports: [{ port: 8080, targetPort: 8080 }]
 ---
@@ -189,10 +198,40 @@ data:
                         - name: gateway
                           domains: ["*"]
                           routes:
-                            - match: { prefix: "/" }
+                            - match: { path: "/spine.auth.AuthenticationService/ResolveContext" }
+                              route:
+                                cluster: gateway
+                                timeout: 30s
+                                hash_policy:
+                                  - header: { header_name: authorization }
+                            - match: { path: "/spine.client.CommandService/Post" }
+                              route:
+                                cluster: gateway
+                                timeout: 30s
+                                hash_policy:
+                                  - header: { header_name: authorization }
+                            - match: { path: "/spine.client.QueryService/Read" }
+                              route:
+                                cluster: gateway
+                                timeout: 30s
+                                hash_policy:
+                                  - header: { header_name: authorization }
+                            - match: { path: "/spine.client.SubscriptionService/Subscribe" }
+                              route:
+                                cluster: gateway
+                                timeout: 30s
+                                hash_policy:
+                                  - header: { header_name: authorization }
+                            - match: { path: "/spine.client.SubscriptionService/Activate" }
                               route:
                                 cluster: gateway
                                 timeout: 0s
+                                hash_policy:
+                                  - header: { header_name: authorization }
+                            - match: { path: "/spine.client.SubscriptionService/Cancel" }
+                              route:
+                                cluster: gateway
+                                timeout: 30s
                                 hash_policy:
                                   - header: { header_name: authorization }
                     http_filters: [{ name: envoy.filters.http.router }]
@@ -205,4 +244,4 @@ data:
             cluster_name: gateway
             endpoints:
               - lb_endpoints:
-                  - endpoint: { address: { socket_address: { address: message-board-gateway, port_value: 8080 } } }
+                  - endpoint: { address: { socket_address: { address: message-board-gateway-headless, port_value: 8080 } } }

@@ -32,6 +32,10 @@ spec:
     metadata: { labels: { app: message-board-combined } }
     spec:
       terminationGracePeriodSeconds: 10
+      initContainers:
+        - name: wait-for-delivery
+          image: busybox:1.37.0
+          command: ["sh", "-c", "until nc -z simple-delivery-server 8484; do sleep 1; done"]
       containers:
         - name: message-board
           image: spine-ts/message-board:local
@@ -148,7 +152,19 @@ data:
                       virtual_hosts:
                         - name: gateway
                           domains: ["*"]
-                          routes: [{ match: { prefix: "/" }, route: { cluster: gateway, timeout: 0s } }]
+                          routes:
+                            - match: { path: "/spine.auth.AuthenticationService/ResolveContext" }
+                              route: { cluster: gateway, timeout: 30s }
+                            - match: { path: "/spine.client.CommandService/Post" }
+                              route: { cluster: gateway, timeout: 30s }
+                            - match: { path: "/spine.client.QueryService/Read" }
+                              route: { cluster: gateway, timeout: 30s }
+                            - match: { path: "/spine.client.SubscriptionService/Subscribe" }
+                              route: { cluster: gateway, timeout: 30s }
+                            - match: { path: "/spine.client.SubscriptionService/Activate" }
+                              route: { cluster: gateway, timeout: 0s }
+                            - match: { path: "/spine.client.SubscriptionService/Cancel" }
+                              route: { cluster: gateway, timeout: 30s }
                     http_filters: [{ name: envoy.filters.http.router }]
       clusters:
         - name: gateway
