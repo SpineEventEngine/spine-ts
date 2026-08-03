@@ -55,5 +55,7 @@ Reviewed endpoint: `bcdf6af0`, with dispatch/result records finalized by
   protocol records only; no runtime, public contract, dependency, generated
   source, or deployment manifest changed.
 
-All applicable concerns are resolved. Integration and post-merge evidence are
-recorded here after the reviewed tree reaches `main`.
+All applicable concerns are resolved. The reviewed task merged without
+conflicts as `c476a599`. The clean no-commit merged tree passed the same
+`pnpm verify:task --no-tests` profile before that merge commit was created and
+pushed to `origin/main`.

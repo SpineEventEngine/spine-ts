@@ -1152,6 +1152,17 @@ changed or no-change disposition. The reviewed tree and identical merged tree
 passed `pnpm verify:task --no-tests`; it merged as `f15da527`. Its canonical
 ledger is in `build-protocol/tasks/T-0100-cqrs-ddd-readmes/TASK.md`.
 
+### T-0101: Beginner-Oriented README Journeys
+
+T-0101 is complete. All 34 repository READMEs received an explicit beginner-
+usability disposition; the Message Board guide now teaches local startup,
+CQRS flow, browser and native-gRPC topology, live-update limits, and production
+deployment in a gradual reader journey. Orders, Projects, and To-Do now include
+source-backed flow diagrams and handler excerpts. The reviewed branch and its
+clean integrated tree passed `pnpm verify:task --no-tests`; it merged as
+`c476a599`. Its canonical ledger is in
+`build-protocol/tasks/T-0101-beginner-readmes/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:
