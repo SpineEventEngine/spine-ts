@@ -1,6 +1,6 @@
 # T-0096 Compose and Kubernetes Review
 
-Status: Correction in progress
+Status: Affected-concern re-review in progress
 Baseline: `0e06800b`
 Candidate: `f089d075`
 
@@ -60,3 +60,16 @@ No reviewer reported a P0 or P3 finding. The overlapping Kubernetes routing
 finding is one correction. Every accepted P1 and P2 is assigned together to one
 implementation owner; affected concern re-review is required after focused
 verification.
+
+## Correction Evidence
+
+- `bc833b07` replaces unrestricted Kubernetes routing with the explicit RPC
+  allowlist, finite unary timeouts, Activate-only streaming timeout, and
+  replica-aware headless gateway discovery.
+- `e34b6484` completes the accepted runtime, acceptance, ownership, error,
+  TSDoc, and beginner-documentation corrections.
+- Focused runtime tests pass 99/99; topology/manifest tests pass 5/5. Real
+  Compose lifecycle and image-level fail-closed acceptance pass with bounded
+  resource cleanup. Prettier and `git diff --check` are clean.
+- All four concerns changed substantively and therefore receive one targeted
+  re-review. The original explicit model/reasoning assignments remain binding.
