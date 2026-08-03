@@ -11,6 +11,11 @@ import { URL } from "node:url";
 const containerRoot = new URL(".", import.meta.url);
 const datastoreEmulator =
   "gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4";
+const sessionPrivateKey = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguffSvDX1/JxpSa58
+umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
+WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
+-----END PRIVATE KEY-----`;
 
 test("local images have a fixed build contract", () => {
   assert.equal(existsSync(new URL("Dockerfile", containerRoot)), true);
@@ -240,12 +245,14 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "BROWSER_ORIGIN=http://localhost:18081",
     "--env",
     `SUBSCRIPTION_REGISTRY_NAMESPACE=message-board-combined-${signal}`,
+    ...sessionEnvironment(),
     "--env",
     "DATASTORE_PROJECT_ID=spine-t0095",
     "--env",
     "DATASTORE_EMULATOR_HOST=datastore:8081",
     "--env",
     `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
+    ...sessionEnvironment(),
     messageBoard,
   ]);
   waitForLog(combined, /MessageBoard combined server ready/u);
@@ -379,7 +386,16 @@ function exerciseRegistry(network, target, origin, image) {
       context: create(ActorContextSchema),
       target,
     });
-    const session = BrowserSession.bearer({ token: "message-board-local-fixture" });
+    const { createPrivateKey } = await import("node:crypto");
+    const { SignedSessions } = await import("@spine-event-engine/auth");
+    const signer = new SignedSessions({
+      issuer: "message-board",
+      audience: "message-board-web",
+      activeKey: { kid: "compose-fixture", privateKey: createPrivateKey(process.env.SESSION_PRIVATE_KEY) },
+    });
+    const issued = await signer.issue({ id: "ada", attributes: { boards: "general" } });
+    if (issued.kind !== "issued") throw new Error("Could not issue a fixture browser session.");
+    const session = BrowserSession.bearer({ token: issued.credential.value });
     const client = Client.forConnect(process.env.TARGET, {
       credentials: session.credentials,
       onRequestMetadata: () => {
@@ -406,6 +422,8 @@ function exerciseRegistry(network, target, origin, image) {
     `TARGET=${target}`,
     "--env",
     `ORIGIN=${origin}`,
+    "--env",
+    `SESSION_PRIVATE_KEY=${sessionPrivateKey}`,
     "--workdir",
     "/app/node_modules/@spine-event-engine/example-message-board-app",
     "--entrypoint",
@@ -415,6 +433,19 @@ function exerciseRegistry(network, target, origin, image) {
     "-e",
     script,
   ]);
+}
+
+function sessionEnvironment() {
+  return [
+    "--env",
+    "MESSAGE_BOARD_SESSION_ISSUER=message-board",
+    "--env",
+    "MESSAGE_BOARD_SESSION_AUDIENCE=message-board-web",
+    "--env",
+    "MESSAGE_BOARD_SESSION_KEY_ID=compose-fixture",
+    "--env",
+    `MESSAGE_BOARD_SESSION_PRIVATE_KEY=${sessionPrivateKey}`,
+  ];
 }
 
 function containerImage(container) {
