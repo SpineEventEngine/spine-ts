@@ -18,6 +18,11 @@ interface RevocationRecord {
  * Stores a bounded, durable set of immediately revoked MessageBoard session IDs.
  */
 export class MessageBoardSessionRevocations implements SignedTokenRevocation {
+  // prettier-ignore
+
+  /**
+   * Indicates that durable session revocation is available.
+   */
   readonly kind = "supported" as const;
   readonly #storage: RecordStorage<string, Any>;
 
@@ -55,7 +60,7 @@ export class MessageBoardSessionRevocations implements SignedTokenRevocation {
   }
 
   /**
-   * Retains a session identifier through its signed expiry.
+   * Records a session identifier through its signed expiry.
    *
    * @param jti The exact signed session identifier.
    * @param expiresAt The signed token expiry.

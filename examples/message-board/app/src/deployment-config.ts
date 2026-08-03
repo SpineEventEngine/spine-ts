@@ -36,6 +36,7 @@ interface DeploymentContract {
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
   storage(config: DeploymentConfig): StorageFactory;
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
+
   /**
    * Creates production browser sessions that share signing and revocation configuration.
    *
