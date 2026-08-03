@@ -1,6 +1,6 @@
 # T-0096 Compose and Kubernetes Review
 
-Status: Review in progress
+Status: Correction in progress
 Baseline: `0e06800b`
 Candidate: `f089d075`
 
@@ -41,7 +41,22 @@ Final security remains the Wave 5 release-readiness gate in T-0097.
 
 ## Concern Dispositions
 
-- Style/maintainability: pending.
-- Documentation completeness: pending.
-- TypeScript/API documentation: pending.
-- Performance/reliability: pending.
+- Style/maintainability: accepted two P1 findings for unrestricted Kubernetes
+  routing and over-broad cancellation-error suppression, plus one P2 finding
+  for three duplicate declarations of the environment delivery-port contract.
+- Documentation completeness: accepted P1 findings for missing runnable Compose
+  and Kubernetes guidance, plus P2 findings for an incomplete production
+  reference and local-only defaults described without a clear scope.
+- TypeScript/API documentation: accepted P1 findings for ambiguous legacy target
+  ID detection and unnormalized malformed StringValue payloads, plus one P2
+  finding for missing semantic documentation of the environment-owned ports.
+- Performance/reliability: accepted five P1 findings. Kubernetes installed an
+  unrestricted route and an ordinary ClusterIP that bypassed Envoy's hash ring;
+  application replica 2 lacked the delivery health dependency; remote workers
+  reused a context name instead of the process node ID; and deployment-level
+  missing-registry fail-closed acceptance was absent.
+
+No reviewer reported a P0 or P3 finding. The overlapping Kubernetes routing
+finding is one correction. Every accepted P1 and P2 is assigned together to one
+implementation owner; affected concern re-review is required after focused
+verification.
