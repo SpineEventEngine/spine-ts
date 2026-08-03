@@ -66,7 +66,7 @@ test("Envoy policy rejects non-path and duplicate route items", () => {
       assert.deepEqual(
         envoyRoutes(
           envoyWithRoutes(
-            '- match: { path: "/spine.client.CommandService/Post" }\n  route: { timeout: 30s }\n- match: { path: "/spine.client.CommandService/Post" }\n  route: { timeout: 30s }',
+            '- match: { path: "/spine.client.CommandService/Post", headers: [{ name: ":method", exact_match: POST }] }\n  route: { timeout: 30s }\n- match: { path: "/spine.client.CommandService/Post", headers: [{ name: ":method", exact_match: POST }] }\n  route: { timeout: 30s }',
           ),
         ),
         browserRoutes,
@@ -84,6 +84,10 @@ function assertEnvoy(document, origin) {
   assert.notEqual(configMap, undefined, "missing Envoy ConfigMap");
   const routes = envoyRoutes(configMap.data?.["envoy.yaml"]);
   assert.deepEqual(routes, browserRoutes);
+  assert.equal(
+    httpConnectionManagers(configMap.data?.["envoy.yaml"]).at(0)?.stream_idle_timeout,
+    "0s",
+  );
   assert.match(document, new RegExp(`exact: ${origin}`, "u"));
   assert.match(document, /envoy\.filters\.http\.cors/u);
   assert.match(document, /allow_methods: "POST, OPTIONS"/u);
@@ -98,12 +102,13 @@ function envoyRoutes(document) {
         const hosts = filter.typed_config?.route_config?.virtual_hosts ?? [];
         for (const host of hosts) {
           for (const item of host.routes ?? []) {
-            assert.deepEqual(
-              Object.keys(item.match ?? {}),
-              ["path"],
-              "Envoy route must use an approved match.path.",
-            );
-            assert.equal(typeof item.match.path, "string", "Envoy route path must be text.");
+            if (
+              Object.keys(item.match ?? {}).join(",") !== "path,headers" ||
+              typeof item.match.path !== "string"
+            ) {
+              assert.fail("Envoy route must use an approved match.path and :method POST.");
+            }
+            assert.deepEqual(item.match.headers, [{ name: ":method", exact_match: "POST" }]);
             assert.equal(
               typeof item.route?.timeout,
               "string",
@@ -116,6 +121,20 @@ function envoyRoutes(document) {
     }
   }
   return routes;
+}
+
+function httpConnectionManagers(document) {
+  const envoy = parseDocument(document).toJSON();
+  return (envoy.static_resources?.listeners ?? []).flatMap((listener) =>
+    (listener.filter_chains ?? [])
+      .flatMap((chain) => chain.filters ?? [])
+      .map((filter) => filter.typed_config)
+      .filter(
+        (typedConfig) =>
+          typedConfig?.["@type"] ===
+          "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+      ),
+  );
 }
 
 function envoyWithRoutes(routes) {

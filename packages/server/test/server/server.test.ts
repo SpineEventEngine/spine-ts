@@ -176,6 +176,45 @@ describe("Server", () => {
     }).toThrow("sessions");
   });
 
+  it.each([
+    ["authorization", { authorize: undefined }, "authorization"],
+    ["context resolution", { contexts: undefined }, "context resolution"],
+    ["clock", { clock: undefined }, "clock"],
+    ["fingerprint", { fingerprint: undefined }, "fingerprint"],
+  ] as const)(
+    "rejects a standalone browser gateway missing %s before listener startup",
+    (_name, missing, expected) => {
+      expect(() => {
+        BrowserServer.requireDurableBindings(
+          {
+            ...browserGateway(),
+            backend: { baseUrl: "https://backend.example.test" },
+            ...missing,
+          } as unknown as BrowserServerOptions,
+          false,
+        );
+      }).toThrow(expected);
+    },
+  );
+
+  it.each([0, 0.5])(
+    "rejects an invalid browser auth admission limit before listener startup: %s",
+    async (maxActiveAuthRequests) => {
+      const starting = BrowserServer.open("http://127.0.0.1:65534", {
+        ...browserGateway(),
+        host: "127.0.0.1",
+        port: 0,
+        readMaxBytes: 1_048_576,
+        writeMaxBytes: 1_048_576,
+        production: false,
+        bindings: inMemoryBindings(),
+        maxActiveAuthRequests,
+      });
+
+      await expect(starting).rejects.toThrow("maxActiveAuthRequests");
+    },
+  );
+
   it("requires explicit standalone subscription bindings outside production", () => {
     expect(() => {
       BrowserServer.requireDurableBindings(
@@ -899,6 +938,32 @@ describe("Server", () => {
       "one method per canonical path",
     );
   });
+
+  it.each(["GET", "POST"] as const)(
+    "rejects a %s auth route collision with a reserved RPC path before listener startup",
+    async (method) => {
+      let calls = 0;
+      const starting = new Server({
+        browser: {
+          port: 0,
+          ...browserGateway(),
+          authRoutes: [
+            {
+              method,
+              path: "/spine.client.CommandService/Post",
+              origins: ["http://127.0.0.1:5173"],
+              maxRequestBytes: 16,
+              timeoutMs: 1000,
+              onRequest: () => ((calls += 1), new Response()),
+            },
+          ],
+        },
+      }).start();
+
+      await expect(starting).rejects.toThrow("reserved Spine RPC paths");
+      expect(calls).toBe(0);
+    },
+  );
 
   it("rejects a chunked auth body that exceeds its bound before handler work", async () => {
     let calls = 0;

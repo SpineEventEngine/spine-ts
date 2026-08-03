@@ -50,6 +50,11 @@ test("combined Compose serves signed MessageBoard behavior through Envoy", () =>
     const output = client(project, "envoy", "full");
     assert.match(output, /query-ok/u);
     assert.match(output, /full-ok/u);
+    assert.equal(
+      envoyMethodStatus(project, "GET", "/spine.client.CommandService/Post"),
+      404,
+      "Envoy must reject a non-POST reserved RPC path before upstream work.",
+    );
     run(project, combined, ["kill", "--signal", "SIGTERM", "combined"]);
     waitStopped(project, combined, "combined");
     const combinedState = status(project, combined, true).get("combined");
@@ -222,6 +227,40 @@ function client(project, service, mode, subscription) {
       "/app/node_modules/@spine-event-engine/example-message-board-app/compose-rpc-client.mjs",
     ],
     { encoding: "utf8", timeout: 30_000 },
+  );
+}
+
+function envoyMethodStatus(project, method, path) {
+  const program = `
+    import http from "node:http";
+    const request = http.request({ hostname: "envoy", port: 8080, path: process.env.PATHNAME, method: process.env.METHOD }, (response) => {
+      console.log(response.statusCode);
+      response.resume();
+    });
+    request.on("error", (error) => { throw error; });
+    request.end();
+  `;
+  return Number(
+    execFileSync(
+      "docker",
+      [
+        "run",
+        "--rm",
+        "--network",
+        `${project}_default`,
+        "--env",
+        `METHOD=${method}`,
+        "--env",
+        `PATHNAME=${path}`,
+        "--entrypoint",
+        "node",
+        "spine-ts/message-board:local",
+        "--input-type=module",
+        "--eval",
+        program,
+      ],
+      { encoding: "utf8", timeout: 30_000 },
+    ).trim(),
   );
 }
 

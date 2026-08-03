@@ -63,6 +63,28 @@ test("renders supplied auth endpoints as exact finite routes", () => {
   assert.match(rendered, /BufferPerRoute[\s\S]*max_request_bytes: 4096/);
 });
 
+for (const method of ["GET", "POST"]) {
+  test(`rejects a ${method} auth route collision with a reserved RPC path`, () => {
+    assert.throws(
+      () =>
+        renderEnvoy({
+          browserOrigin: "https://chat.example.test",
+          tlsCertificate: "/cert",
+          tlsKey: "/key",
+          authRoutes: [
+            {
+              method,
+              path: "/spine.client.CommandService/Post",
+              timeoutMs: 1200,
+              maxRequestBytes: 4096,
+            },
+          ],
+        }),
+      /reserved Spine RPC paths/,
+    );
+  });
+}
+
 test("rejects an insecure or incomplete public topology", () => {
   assert.throws(() => renderEnvoy({ browserOrigin: "http://chat.example.test" }), /HTTPS/);
   assert.throws(

@@ -182,6 +182,7 @@ data:
                   typed_config:
                     "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                     stat_prefix: browser_gateway
+                    stream_idle_timeout: 0s
                     codec_type: AUTO
                     route_config:
                       name: gateway_only
@@ -197,37 +198,37 @@ data:
                               expose_headers: "grpc-status,grpc-message"
                               max_age: "86400"
                           routes:
-                            - match: { path: "/spine.auth.AuthenticationService/ResolveContext" }
+                            - match: { path: "/spine.auth.AuthenticationService/ResolveContext", headers: [{ name: ":method", exact_match: POST }] }
                               route:
                                 cluster: gateway
                                 timeout: 30s
                                 hash_policy:
                                   - header: { header_name: authorization }
-                            - match: { path: "/spine.client.CommandService/Post" }
+                            - match: { path: "/spine.client.CommandService/Post", headers: [{ name: ":method", exact_match: POST }] }
                               route:
                                 cluster: gateway
                                 timeout: 30s
                                 hash_policy:
                                   - header: { header_name: authorization }
-                            - match: { path: "/spine.client.QueryService/Read" }
+                            - match: { path: "/spine.client.QueryService/Read", headers: [{ name: ":method", exact_match: POST }] }
                               route:
                                 cluster: gateway
                                 timeout: 30s
                                 hash_policy:
                                   - header: { header_name: authorization }
-                            - match: { path: "/spine.client.SubscriptionService/Subscribe" }
+                            - match: { path: "/spine.client.SubscriptionService/Subscribe", headers: [{ name: ":method", exact_match: POST }] }
                               route:
                                 cluster: gateway
                                 timeout: 30s
                                 hash_policy:
                                   - header: { header_name: authorization }
-                            - match: { path: "/spine.client.SubscriptionService/Activate" }
+                            - match: { path: "/spine.client.SubscriptionService/Activate", headers: [{ name: ":method", exact_match: POST }] }
                               route:
                                 cluster: gateway
                                 timeout: 0s
                                 hash_policy:
                                   - header: { header_name: authorization }
-                            - match: { path: "/spine.client.SubscriptionService/Cancel" }
+                            - match: { path: "/spine.client.SubscriptionService/Cancel", headers: [{ name: ":method", exact_match: POST }] }
                               route:
                                 cluster: gateway
                                 timeout: 30s
@@ -235,7 +236,11 @@ data:
                                   - header: { header_name: authorization }
                     http_filters:
                       - name: envoy.filters.http.cors
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
                       - name: envoy.filters.http.router
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
       clusters:
         - name: gateway
           connect_timeout: 5s

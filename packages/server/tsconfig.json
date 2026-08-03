@@ -8,7 +8,7 @@
     "types": ["node"],
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "src/**/*.json"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
     { "path": "../auth" },

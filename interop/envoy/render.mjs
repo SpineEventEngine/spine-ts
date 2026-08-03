@@ -1,6 +1,8 @@
 /**
  * Renders the reference public route; applications own the gateway listener.
  */
+import reservedSpineRpcPaths from "../../packages/server/src/server/reserved-spine-rpc-paths.json" with { type: "json" };
+
 export function renderEnvoy(options) {
   const topology = normalize(options);
   const routes = [...spineRoutes, ...topology.authRoutes]
@@ -94,6 +96,8 @@ function normalize(options) {
     tlsCertificate: options.tlsCertificate,
     tlsKey: options.tlsKey,
     authRoutes: (options.authRoutes ?? []).map((route) => {
+      if (reservedSpineRpcPaths.includes(route.path))
+        throw new Error("auth routes must not use reserved Spine RPC paths");
       if (
         !/^[A-Z]+$/.test(route.method) ||
         !/^\/(?!\/)(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+$/.test(route.path)
@@ -113,41 +117,9 @@ function normalize(options) {
   };
 }
 
-const spineRoutes = [
-  {
-    path: "/spine.auth.AuthenticationService/ResolveContext",
-    method: "POST",
-    timeout: "30s",
-    maxRequestBytes: 1048576,
-  },
-  {
-    path: "/spine.client.CommandService/Post",
-    method: "POST",
-    timeout: "30s",
-    maxRequestBytes: 1048576,
-  },
-  {
-    path: "/spine.client.QueryService/Read",
-    method: "POST",
-    timeout: "30s",
-    maxRequestBytes: 1048576,
-  },
-  {
-    path: "/spine.client.SubscriptionService/Subscribe",
-    method: "POST",
-    timeout: "30s",
-    maxRequestBytes: 1048576,
-  },
-  {
-    path: "/spine.client.SubscriptionService/Activate",
-    method: "POST",
-    timeout: "0s",
-    maxRequestBytes: 1048576,
-  },
-  {
-    path: "/spine.client.SubscriptionService/Cancel",
-    method: "POST",
-    timeout: "30s",
-    maxRequestBytes: 1048576,
-  },
-];
+const spineRoutes = reservedSpineRpcPaths.map((path) => ({
+  path,
+  method: "POST",
+  timeout: path.endsWith("/Activate") ? "0s" : "30s",
+  maxRequestBytes: 1048576,
+}));

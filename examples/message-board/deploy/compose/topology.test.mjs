@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { parseDocument } from "yaml";
 
 const composeRoot = dirname(fileURLToPath(import.meta.url));
 const combined = join(composeRoot, "combined.compose.yaml");
@@ -60,10 +61,42 @@ test("declares a two-gateway and two-application standalone topology", () => {
 
 for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
   test(`${envoy.split("/").at(-1)} admits only browser RPCs and restricted preflight`, () => {
-    const document = readFileSync(envoy, "utf8");
-    assert.match(document, /envoy\.filters\.http\.cors/u);
-    assert.match(document, /exact: "http:\/\/localhost:18080"/u);
-    assert.match(document, /allow_methods: "POST, OPTIONS"/u);
-    assert.doesNotMatch(document, /prefix: "\/"/u);
+    const configuration = parseDocument(readFileSync(envoy, "utf8")).toJSON();
+    const httpConnectionManager = httpConnectionManagers(configuration).at(0);
+    assert.notEqual(httpConnectionManager, undefined, "missing HTTP connection manager");
+    assert.equal(httpConnectionManager.stream_idle_timeout, "0s");
+    assert.deepEqual(routes(httpConnectionManager), browserRoutes);
   });
+}
+
+const browserRoutes = [
+  ["/spine.auth.AuthenticationService/ResolveContext", "30s"],
+  ["/spine.client.CommandService/Post", "30s"],
+  ["/spine.client.QueryService/Read", "30s"],
+  ["/spine.client.SubscriptionService/Subscribe", "30s"],
+  ["/spine.client.SubscriptionService/Activate", "0s"],
+  ["/spine.client.SubscriptionService/Cancel", "30s"],
+];
+
+function httpConnectionManagers(configuration) {
+  return (configuration.static_resources?.listeners ?? []).flatMap((listener) =>
+    (listener.filter_chains ?? [])
+      .flatMap((chain) => chain.filters ?? [])
+      .map((filter) => filter.typed_config)
+      .filter(
+        (typedConfig) =>
+          typedConfig?.["@type"] ===
+          "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+      ),
+  );
+}
+
+function routes(httpConnectionManager) {
+  return (httpConnectionManager.route_config?.virtual_hosts ?? []).flatMap((host) =>
+    (host.routes ?? []).map((route) => {
+      assert.deepEqual(Object.keys(route.match ?? {}), ["path", "headers"]);
+      assert.deepEqual(route.match.headers, [{ name: ":method", exact_match: "POST" }]);
+      return [route.match.path, route.route?.timeout];
+    }),
+  );
 }
