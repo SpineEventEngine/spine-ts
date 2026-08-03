@@ -123,18 +123,22 @@ function archiveStore() {
     "-c",
     `cd ${JSON.stringify(store)} && find . -print | LC_ALL=C sort > ${JSON.stringify(list)}`,
   ]);
-  execFileSync("tar", [
-    "--no-mac-metadata",
-    "--disable-copyfile",
-    "--options",
-    "gzip:timestamp=0",
-    "-czf",
-    join(context, "pnpm-store.tgz"),
-    "-C",
-    store,
-    "-T",
-    list,
-  ], { env: { ...process.env, COPYFILE_DISABLE: "1" } });
+  execFileSync(
+    "tar",
+    [
+      "--no-mac-metadata",
+      "--disable-copyfile",
+      "--options",
+      "gzip:timestamp=0",
+      "-czf",
+      join(context, "pnpm-store.tgz"),
+      "-C",
+      store,
+      "-T",
+      list,
+    ],
+    { env: { ...process.env, COPYFILE_DISABLE: "1" } },
+  );
   rmSync(store, { force: true, recursive: true });
   rmSync(list, { force: true });
 }
