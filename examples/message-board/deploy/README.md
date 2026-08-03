@@ -50,10 +50,12 @@ kubectl create secret generic message-board-runtime --from-file=MESSAGE_BOARD_SE
 kubectl create secret tls message-board-envoy-tls --cert=tls.crt --key=tls.key
 ```
 
-Every application and gateway uses the same issuer, audience, key ID, private
-key, and registry namespace; separate values break authenticated failover.
-The registry is gateway-owned durable storage, separate from the
-application-selected MessageBoard data and session-revocation storage.
+Every browser-capable combined process and standalone gateway uses the same
+issuer, audience, key ID, private key, and registry namespace; separate values
+break authenticated failover. Application-only standalone processes do not
+configure browser sessions or the subscription registry. The gateway-owned
+registry and application-owned session revocations are distinct logical records
+with distinct owners, even when both use the same application-selected storage.
 
 ```bash
 kubectl apply --filename examples/message-board/deploy/kubernetes/combined.yaml
