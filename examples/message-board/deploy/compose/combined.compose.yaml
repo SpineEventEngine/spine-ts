@@ -45,12 +45,7 @@ services:
       MESSAGE_BOARD_SESSION_ISSUER: message-board
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
       MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
-      MESSAGE_BOARD_SESSION_PRIVATE_KEY: |-
-        -----BEGIN PRIVATE KEY-----
-        MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguffSvDX1/JxpSa58
-        umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
-        WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
-        -----END PRIVATE KEY-----
+      MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set MESSAGE_BOARD_SESSION_PRIVATE_KEY to a P-256 PKCS8 PEM.}
     depends_on:
       datastore:
         condition: service_healthy

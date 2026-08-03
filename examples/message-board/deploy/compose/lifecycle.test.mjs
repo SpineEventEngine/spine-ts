@@ -7,6 +7,11 @@ import test from "node:test";
 
 const root = dirname(fileURLToPath(import.meta.url));
 const compose = join(root, "standalone.compose.yaml");
+const sessionKey = `-----BEGIN PRIVATE KEY-----
+MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguffSvDX1/JxpSa58
+umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
+WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
+-----END PRIVATE KEY-----`;
 
 test("standalone Compose keeps the second gateway available after the first is terminated", () => {
   const project = `spine-t0096-${String(process.pid)}-${String(Date.now())}`;
@@ -34,6 +39,7 @@ function run(project, arguments_, ignoreFailure = false) {
       ["compose", "--project-name", project, "--file", compose, ...arguments_],
       {
         encoding: "utf8",
+        env: { ...process.env, MESSAGE_BOARD_SESSION_PRIVATE_KEY: sessionKey },
         timeout: 90_000,
       },
     );
