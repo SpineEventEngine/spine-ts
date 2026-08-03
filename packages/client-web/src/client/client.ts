@@ -156,7 +156,9 @@ export interface SubscriptionRetryPolicy {
   readonly maxAttempts: number;
 
   /**
-   * Limits total retry duration in milliseconds.
+   * Limits one recovery episode in milliseconds. A stream that remains
+   * connected for at least this duration starts a fresh episode on its next
+   * failure.
    */
   readonly maxElapsedMs: number;
 
@@ -797,6 +799,7 @@ class TopicSubscription implements Subscription {
   #streamIterator: AsyncIterator<SubscriptionUpdate> | undefined;
   #retryAttempt = 0;
   #retryStartedAt: number | undefined;
+  #connectedAt: number | undefined;
 
   constructor(
     owner: ClientOwner,
@@ -881,6 +884,7 @@ class TopicSubscription implements Subscription {
         throw new ClientProtocolError("subscription is cancelled.");
       }
       this.#pushLifecycle({ state: "connected", generation });
+      this.#connectedAt = this.#runtime.scheduler.now();
     } catch (error) {
       if (this.#cancelled) throw error;
       if (this.#retryable(error) && this.#canRetry()) {
@@ -986,6 +990,12 @@ class TopicSubscription implements Subscription {
 
   #canRetry(): boolean {
     const now = this.#runtime.scheduler.now();
+    const connectedAt = this.#connectedAt;
+    this.#connectedAt = undefined;
+    if (connectedAt !== undefined && now - connectedAt >= this.#runtime.retryPolicy.maxElapsedMs) {
+      this.#retryAttempt = 0;
+      this.#retryStartedAt = undefined;
+    }
     this.#retryStartedAt ??= now;
     return this.#retryAttempt < this.#runtime.retryPolicy.maxAttempts && !this.#elapsed();
   }
@@ -1052,6 +1062,7 @@ class TopicSubscription implements Subscription {
           if (this.#options.kind === "event")
             this.#pushLifecycle({ state: "gapPossible", generation });
           this.#pushLifecycle({ state: "connected", generation });
+          this.#connectedAt = this.#runtime.scheduler.now();
           return;
         } catch (retryFailure) {
           failure = retryFailure;

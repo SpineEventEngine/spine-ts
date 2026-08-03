@@ -3,6 +3,7 @@ import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Clock, SessionResolver } from "@spine-event-engine/auth";
 
 const localBearer = "message-board-local-fixture";
+const localSessionLifetimeSeconds = 8 * 60 * 60;
 
 /**
  * Local-only MessageBoard session policy used by the example browser server.
@@ -27,7 +28,7 @@ export const LocalBoardSession: Readonly<{
           credential.kind === "bearer" && credential.value === localBearer
             ? {
                 principal: { id: "ada", attributes: { boards: "general" } },
-                expiresAt: LocalBoardSession.timestamp(60),
+                expiresAt: LocalBoardSession.timestamp(localSessionLifetimeSeconds),
               }
             : undefined,
         ),

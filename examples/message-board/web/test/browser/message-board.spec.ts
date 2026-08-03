@@ -29,3 +29,32 @@ test("posts and reads a real MessageBoard Projection through the local gateway",
   await expect(posted.getByText("just now")).toBeVisible();
   await expect(messages.getByRole("listitem").last()).toContainText(message);
 });
+
+test("keeps live updates connected beyond the former local session boundary", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "This timed acceptance is required only in Chromium.",
+  );
+  test.setTimeout(90_000);
+
+  await page.goto("/");
+  await expect(page.getByRole("status")).toHaveText("Updating live");
+  await page.waitForTimeout(61_000);
+  await expect(page.getByRole("status")).toHaveText("Updating live");
+
+  const sender = await page.context().newPage();
+  try {
+    await sender.goto("/");
+    await expect(sender.getByRole("status")).toHaveText("Updating live");
+    const username = `boundary-${String(Date.now())}`;
+    const message = `after former boundary ${String(Date.now())}`;
+    await sender.getByRole("textbox", { name: "Username" }).fill(username);
+    await sender.getByRole("textbox", { name: "Message" }).fill(message);
+    await sender.getByRole("button", { name: "Post message" }).click();
+    await expect(page.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible();
+  } finally {
+    await sender.close();
+  }
+});
