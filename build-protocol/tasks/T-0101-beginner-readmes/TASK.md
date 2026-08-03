@@ -20,10 +20,11 @@ code, and only then operations or deployment.
 
 ## Human-Imposed Requirements Ledger
 
-1. Human prose in documentation and Markdown uses “Message Board”, not
-   “MessageBoard”. Exact code identifiers, package/path names, and truthful
-   quoted output remain unchanged where spelling them with a space would be
-   technically false.
+1. Human prose in all authored Markdown—including protocol planning and
+   historical narration—uses “Message Board”, not “MessageBoard”. Exact code
+   identifiers, package/path names, domain slugs, explicit historical
+   requirement literals, and truthful quoted output remain unchanged where
+   spelling them with a space would be technically false.
 2. The Message Board guide moves image-building material to the end under a
    `Deployment` section, with `Build local images` as a subsection.
 3. The Deployment section first explains the larger production context and
@@ -92,4 +93,3 @@ code, and only then operations or deployment.
 5. Every added or retained command, link, snippet, and diagram is mechanically
    valid and conceptually reviewed.
 6. The reviewed branch is merged, post-merge verified, pushed, and cleaned up.
-
