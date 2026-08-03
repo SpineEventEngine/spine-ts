@@ -24,7 +24,7 @@ for (const mode of ["combined", "standalone"]) {
     assert.match(document, /mountPath: \/etc\/envoy\/envoy.yaml/u);
     assert.match(document, /kind: Service[\s\S]*name: message-board-envoy/u);
     assert.match(document, /secretName: message-board-envoy-tls/u);
-    assert.match(document, /route: \{ cluster: gateway/u);
+    assert.match(document, /route:(?: \{)?\s*cluster: gateway/u);
     assert.doesNotMatch(document, /kind: (Datastore|MySQL|Postgres|Redis|Hazelcast)/u);
     assert.doesNotMatch(document, /helm|operator/iu);
   });
@@ -36,4 +36,6 @@ test("standalone reference has two application replicas and a separately scaled 
   assert.match(document, /name: message-board-gateway/u);
   assert.match(document, /replicas: 2/u);
   assert.match(document, /name: simple-delivery-server/u);
+  assert.match(document, /hash_policy:[\s\S]*header_name: authorization/u);
+  assert.match(document, /lb_policy: RING_HASH/u);
 });

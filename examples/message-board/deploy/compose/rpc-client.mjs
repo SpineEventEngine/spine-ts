@@ -33,7 +33,9 @@ import {
   MessageIdSchema,
 } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import { UserIdSchema as BoardUserIdSchema } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/user_pb.js";
+import { Buffer } from "node:buffer";
 import { createPrivateKey } from "node:crypto";
+import process from "node:process";
 
 const target = required("TARGET");
 const origin = required("ORIGIN");
@@ -110,7 +112,7 @@ async function fullFlow() {
   await post("initial", "Compose public query");
   await authoritativeQuery();
   const subscription = await subscriptions.subscribe(topic);
-  const controller = new AbortController();
+  const controller = new globalThis.AbortController();
   const updates = subscriptions
     .activate(subscription, { signal: controller.signal })
     [Symbol.asyncIterator]();
@@ -148,7 +150,7 @@ async function assertCancelled() {
     SubscriptionSchema,
     Buffer.from(required("SUBSCRIPTION"), "base64"),
   );
-  const controller = new AbortController();
+  const controller = new globalThis.AbortController();
   const updates = subscriptions
     .activate(subscription, { signal: controller.signal })
     [Symbol.asyncIterator]();
@@ -203,7 +205,7 @@ async function eventually(operation) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const result = await operation();
     if (result !== undefined) return result;
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   }
   throw new Error("Compose authoritative query did not observe the posted message.");
 }
@@ -214,11 +216,14 @@ async function deadline(operation, milliseconds, name) {
     return await Promise.race([
       operation,
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`Timed out waiting for ${name}.`)), milliseconds);
+        timer = globalThis.setTimeout(
+          () => reject(new Error(`Timed out waiting for ${name}.`)),
+          milliseconds,
+        );
       }),
     ]);
   } finally {
-    clearTimeout(timer);
+    globalThis.clearTimeout(timer);
   }
 }
 

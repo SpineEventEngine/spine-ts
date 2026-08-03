@@ -13,10 +13,10 @@ test("declares a combined topology with its durable registry and one delivery se
   const document = readFileSync(combined, "utf8");
 
   assert.match(document, /^services:/mu);
-  assert.match(document, /^  combined:/mu);
-  assert.match(document, /^  envoy:/mu);
-  assert.match(document, /^  delivery:/mu);
-  assert.match(document, /^  datastore:/mu);
+  assert.match(document, /^ {2}combined:/mu);
+  assert.match(document, /^ {2}envoy:/mu);
+  assert.match(document, /^ {2}delivery:/mu);
+  assert.match(document, /^ {2}datastore:/mu);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-combined/mu);
   assert.match(document, /spine-ts\/simple-delivery-server:local/u);
   assert.match(
@@ -31,12 +31,12 @@ test("declares a two-gateway and two-application standalone topology", () => {
   assert.equal(existsSync(standalone), true, "standalone Compose reference must exist");
   const document = readFileSync(standalone, "utf8");
 
-  assert.match(document, /^  application-1:/mu);
-  assert.match(document, /^  application-2:/mu);
-  assert.match(document, /^  gateway-1:/mu);
-  assert.match(document, /^  gateway-2:/mu);
-  assert.match(document, /^  envoy:/mu);
-  assert.match(document, /^  delivery:/mu);
+  assert.match(document, /^ {2}application-1:/mu);
+  assert.match(document, /^ {2}application-2:/mu);
+  assert.match(document, /^ {2}gateway-1:/mu);
+  assert.match(document, /^ {2}gateway-2:/mu);
+  assert.match(document, /^ {2}envoy:/mu);
+  assert.match(document, /^ {2}delivery:/mu);
   assert.match(document, /BACKEND_URL: http:\/\/application-1:8080/mu);
   assert.match(document, /BACKEND_URL: http:\/\/application-2:8080/mu);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
