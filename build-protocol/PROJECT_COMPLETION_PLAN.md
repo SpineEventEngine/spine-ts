@@ -1165,10 +1165,12 @@ clean integrated tree passed `pnpm verify:task --no-tests`; it merged as
 
 ### T-0102: Preserve Message Board Username After Posting
 
-T-0102 is active. A successful Message Board post must preserve the username
-while clearing the message text, with focused React regression coverage. Its
-canonical ledger is in
-`build-protocol/tasks/T-0102-preserve-message-board-username/TASK.md`.
+T-0102 is complete. A successful Message Board post now preserves the username
+while clearing the message text. The focused React suite passes all 31 tests,
+with 98.5% statement, 97.14% branch, and 100% function/line coverage for the
+changed source. The reviewed task and its clean integrated tree passed the
+coverage-enabled task profile; it merged as `8491d9bc`. Its canonical ledger is
+in `build-protocol/tasks/T-0102-preserve-message-board-username/TASK.md`.
 
 ## Parallelism Without Rework
 

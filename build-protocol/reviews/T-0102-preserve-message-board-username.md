@@ -41,5 +41,7 @@ examples/message-board/web/src/post-form.tsx` passed all generated, build,
 - Changed-source coverage: 98.5% statements, 97.14% branches, 100% functions,
   and 100% lines.
 
-All applicable concerns are resolved. Merge and post-merge evidence are added
-after integration.
+All applicable concerns are resolved. The reviewed task merged without
+conflicts as `8491d9bc`. Before committing, the clean integrated tree passed
+the same coverage-enabled task profile with all 31 tests and unchanged-source
+coverage. The merge commit was pushed to `origin/main`.
