@@ -5,14 +5,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const browserRoutes = new Map([
+const browserRoutes = [
   ["/spine.auth.AuthenticationService/ResolveContext", "30s"],
   ["/spine.client.CommandService/Post", "30s"],
   ["/spine.client.QueryService/Read", "30s"],
   ["/spine.client.SubscriptionService/Subscribe", "30s"],
   ["/spine.client.SubscriptionService/Activate", "0s"],
   ["/spine.client.SubscriptionService/Cancel", "30s"],
-]);
+];
 
 for (const mode of ["combined", "standalone"]) {
   test(`${mode} reference is storage-neutral and uses listener-only probes`, () => {
@@ -52,10 +52,29 @@ test("standalone reference binds replica count and delivery waits to each Deploy
   assert.match(document, /message-board-gateway-headless, port_value: 8080/u);
 });
 
+test("Envoy policy rejects non-path and duplicate route items", () => {
+  assert.throws(
+    () => envoyRoutes('- match: { prefix: "/" }\n  route: { cluster: gateway, timeout: 30s }'),
+    /must use an approved match\.path/u,
+  );
+  assert.throws(
+    () =>
+      assert.deepEqual(
+        envoyRoutes(
+          '- match: { path: "/spine.client.CommandService/Post" }\n' +
+            "  route: { cluster: gateway, timeout: 30s }\n" +
+            '- match: { path: "/spine.client.CommandService/Post" }\n' +
+            "  route: { cluster: gateway, timeout: 30s }",
+        ),
+        browserRoutes,
+      ),
+    /strictly deep-equal/u,
+  );
+});
+
 function assertEnvoy(document, origin) {
   const routes = envoyRoutes(document);
-  assert.deepEqual(new Map(routes), browserRoutes);
-  assert.doesNotMatch(document, /prefix: "\/"/u);
+  assert.deepEqual(routes, browserRoutes);
   assert.match(document, new RegExp(`exact: ${origin}`, "u"));
   assert.match(document, /envoy\.filters\.http\.cors/u);
   assert.match(document, /allow_methods: "POST, OPTIONS"/u);
@@ -66,8 +85,9 @@ function envoyRoutes(document) {
   const routes = [];
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
+    if (!line.trimStart().startsWith("- match:")) continue;
     const route = /^\s*- match: \{ path: "([^"]+)" \}$/.exec(line);
-    if (route === null) continue;
+    if (route === null) assert.fail(`Envoy route ${line.trim()} must use an approved match.path.`);
     const indent = line.length - line.trimStart().length;
     let timeout;
     for (index += 1; index < lines.length; index += 1) {
