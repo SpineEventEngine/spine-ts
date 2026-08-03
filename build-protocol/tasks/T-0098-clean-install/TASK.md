@@ -1,6 +1,6 @@
 # T-0098: Clean first installation
 
-Status: In progress
+Status: Ready for integration
 Start: `2026-08-03`
 Baseline: `af72de4b`
 Branch: `task/T-0098-clean-install`

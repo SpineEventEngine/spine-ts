@@ -101,3 +101,15 @@ vitest run packages/proto-tools/test/external-consumer.test.ts` passed 1 file
 - Style/maintainability and TypeScript/API remain clean and were not reopened.
 - All applicable review lanes are closed. The definitive release verification
   is the next gate.
+
+## Definitive verification
+
+- `pnpm --config.verify-deps-before-run=false verify:release` passed after
+  review convergence.
+- 178 test files passed and 3 were skipped; 3,498 tests passed and 25 were
+  skipped.
+- Coverage passed at 94.03% statements, exactly 90.00% branches, 94.52%
+  functions, and 94.90% lines.
+- All generated build, tooling type-check, lint/TSDoc, formatting,
+  documentation, Proto-current, package-readiness, and release-readiness gates
+  passed in the same run.
