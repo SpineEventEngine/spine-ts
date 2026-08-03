@@ -10,6 +10,7 @@ const completeEnvironment: NodeJS.ProcessEnv = {
   BROWSER_ORIGIN: "https://board.example.com",
   SUBSCRIPTION_REGISTRY_NAMESPACE: "message-board-subscriptions",
   BACKEND_URL: "http://application:8081",
+  DELIVERY_SERVER_URL: "http://delivery:8484",
 };
 
 afterEach(async () => {
@@ -70,6 +71,22 @@ describe("MessageBoard deployment configuration", () => {
     });
 
     expect(storage?.isOpen()).toBe(true);
+  });
+
+  it.each([
+    [undefined, "Missing required configuration: DELIVERY_SERVER_URL."],
+    ["ftp://delivery:8484", "Invalid required configuration: DELIVERY_SERVER_URL."],
+  ])("rejects invalid production delivery configuration %s", (deliveryUrl, expected) => {
+    const config = MessageBoardDeployment.application(completeEnvironment);
+
+    expect(() =>
+      MessageBoardDeployment.configureServer(config, {
+        ...completeEnvironment,
+        NODE_ENV: "production",
+        SPINE_IPC_DIRECTORY: "/tmp/spine-message-board-config-test",
+        DELIVERY_SERVER_URL: deliveryUrl,
+      }),
+    ).toThrow(expected);
   });
 
   it("assembles a closeable durable registry over application-selected storage", async () => {

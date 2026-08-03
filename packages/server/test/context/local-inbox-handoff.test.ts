@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 
 import { type DeliveryReady, DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
+import { Delivery } from "../../src/delivery/delivery.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 
 describe("DeliveryReadiness", () => {
@@ -203,6 +205,35 @@ describe("DeliveryReadiness", () => {
 
     expect(routed).toEqual([scope]);
     expect(replaced).toEqual([]);
+  });
+
+  it("routes inbox writes and shard work through transferred environment ports", async () => {
+    const localStorage = new InMemoryStorageFactory();
+    const remoteStorage = new InMemoryStorageFactory();
+    const local = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: localStorage,
+    });
+    const remote = new Delivery({
+      context: { name: "Remote", multitenant: false },
+      storageFactory: remoteStorage,
+    });
+    const readiness = new DeliveryReadiness();
+
+    expect(readiness.route(local)).toBe(local);
+    await readiness.transition([ready()], () => undefined, {
+      ports: { inbox: remote.inbox, workRegistry: remote.shards },
+    });
+
+    const routed = readiness.route(local);
+    expect(routed).not.toBe(local);
+    expect(routed.context).toEqual(local.context);
+    expect(routed.storageFactory).toBe(local.storageFactory);
+    expect(routed.inbox).toBe(remote.inbox);
+    expect(routed.shards).toBe(remote.shards);
+
+    localStorage.close();
+    remoteStorage.close();
   });
 
   it("fails a stalled transition finitely for arbitrary unconfigured scopes", async () => {

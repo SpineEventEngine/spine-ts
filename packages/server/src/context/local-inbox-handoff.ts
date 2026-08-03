@@ -1,4 +1,5 @@
 import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js";
+import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
@@ -50,6 +51,25 @@ export interface DeliveryReady extends DeliveryEndpoint {
 export type OnDeliveryReady = (ready: DeliveryReady) => unknown;
 
 /**
+ * Groups the inbox and shard registry selected by a server environment.
+ *
+ * @internal
+ */
+export interface EnvironmentDeliveryPorts {
+  // prettier-ignore
+
+  /**
+   * Persists and reads environment-owned delivery messages.
+   */
+  readonly inbox: DeliveryInbox;
+
+  /**
+   * Coordinates environment-owned shard work.
+   */
+  readonly workRegistry: DeliveryWorkRegistry;
+}
+
+/**
  * Coordinates readiness notifications while delivery ownership changes hands.
  */
 export class DeliveryReadiness {
@@ -59,6 +79,7 @@ export class DeliveryReadiness {
   #configured = new Map<string, DeliveryReady>();
   #buffered = new Map<string, DeliveryReady>();
   #invalidTransition = false;
+  #ports: EnvironmentDeliveryPorts | undefined;
 
   /**
    * Creates a readiness coordinator.
@@ -117,6 +138,31 @@ export class DeliveryReadiness {
   }
 
   /**
+   * Routes a context-created delivery through the attached environment ports.
+   *
+   * Direct local delivery remains unchanged. Once ownership is transferred,
+   * inbox writes and workers must use the same environment-owned facility.
+   *
+   * @param delivery Supplies the context-created delivery configuration.
+   * @returns The delivery selected for the current ownership mode.
+   * @internal
+   */
+  route(delivery: Delivery): Delivery {
+    const ports = this.#ports;
+    if (ports === undefined) return delivery;
+    return new Delivery({
+      context: delivery.context,
+      storageFactory: delivery.storageFactory,
+      strategy: delivery.strategy,
+      node: delivery.node,
+      pageSize: delivery.pageSize,
+      batchSize: delivery.batchSize,
+      inbox: ports.inbox,
+      workRegistry: ports.workRegistry,
+    });
+  }
+
+  /**
    * Updates readiness ownership to use configured delivery routes.
    *
    * @param scopes Lists the routes that may receive buffered readiness.
@@ -127,7 +173,10 @@ export class DeliveryReadiness {
   transition(
     scopes: readonly DeliveryReady[],
     onReady: OnDeliveryReady,
-    options: { readonly allowEmpty?: boolean } = {},
+    options: {
+      readonly allowEmpty?: boolean;
+      readonly ports?: EnvironmentDeliveryPorts;
+    } = {},
   ): Promise<void> {
     if (this.#mode !== "direct" && this.#mode !== "failed") {
       return Promise.reject(new Error("Delivery readiness ownership is already transferred."));
@@ -152,6 +201,7 @@ export class DeliveryReadiness {
         throw new Error("Delivery readiness transition received an unconfigured scope.");
       }
       this.#onReady = onReady;
+      this.#ports = options.ports;
       this.#mode = "routed";
       for (const ready of this.#buffered.values()) {
         this.#notify(ready);

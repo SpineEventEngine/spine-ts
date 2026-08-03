@@ -1,4 +1,5 @@
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
   InboxMessageIdSchema,
@@ -13,7 +14,7 @@ import {
   RemoteInbox,
 } from "../src/index.js";
 import { DeliveryMessageCodec } from "../src/wire/codec.js";
-import { message, transport } from "./shared-fixtures.js";
+import { domainMessage, message, transport } from "./shared-fixtures.js";
 
 describe("delivery codec and immutable snapshots", () => {
   it("requires a durable removal quarantine before admitting remote inbox work", () => {
@@ -47,5 +48,47 @@ describe("delivery codec and immutable snapshots", () => {
 
     expect(second.whenReceived.getTime()).toBe(1_000);
     expect(Array.from(second.signal?.value ?? [])).toEqual(expectedPayload);
+  });
+
+  it("preserves plain framework target IDs across the frozen wire EntityId", () => {
+    const source = domainMessage();
+    const plain = { ...source, inboxId: { ...source.inboxId, targetId: "message-1" } };
+
+    const decoded = DeliveryMessageCodec.decode(
+      DeliveryMessageCodec.encode(plain),
+      ShardIndex.single(),
+    );
+
+    expect(decoded.inboxId).toEqual(plain.inboxId);
+  });
+
+  it("encodes packed-looking framework target IDs as explicit StringValue payloads", () => {
+    const source = domainMessage();
+    const targetId = "type.spine.io/test.EntityId:cm91dGluZy1rZXk=";
+    const wire = DeliveryMessageCodec.encode({
+      ...source,
+      inboxId: { ...source.inboxId, targetId },
+    });
+
+    expect(wire.inboxId?.entityId?.id?.typeUrl).toBe(
+      "type.googleapis.com/google.protobuf.StringValue",
+    );
+    expect(DeliveryMessageCodec.decode(wire, ShardIndex.single()).inboxId.targetId).toBe(targetId);
+  });
+
+  it("normalizes malformed StringValue target bytes to the delivery protocol error", () => {
+    expect(() =>
+      DeliveryMessageCodec.decodeTarget(
+        "type.googleapis.com/google.protobuf.StringValue",
+        new Uint8Array([0xff]),
+      ),
+    ).toThrow(DeliveryProtocolError);
+
+    expect(
+      DeliveryMessageCodec.decodeTarget(
+        "type.spine.io/test.EntityId",
+        toBinary(StringValueSchema, create(StringValueSchema, { value: "legacy" })),
+      ),
+    ).toBe("type.spine.io/test.EntityId:CgZsZWdhY3k=");
   });
 });

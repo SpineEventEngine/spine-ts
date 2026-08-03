@@ -1,5 +1,5 @@
 import { clone, create } from "@bufbuild/protobuf";
-import type { SubscriptionBindings } from "@spine-event-engine/auth";
+import type { SessionResolver, SubscriptionBindings } from "@spine-event-engine/auth";
 import {
   Aggregate,
   Assign,
@@ -136,6 +136,14 @@ export interface BoardServerOptions {
    * in-memory implementation.
    */
   readonly bindings?: SubscriptionBindings;
+
+  /**
+   * Resolves browser credentials for this server process.
+   *
+   * Local startup uses the built-in local fixture when this option is omitted.
+   * Production supplies shared signed sessions from deployment configuration.
+   */
+  readonly sessions?: SessionResolver;
 }
 
 /**
@@ -223,7 +231,7 @@ export class MessageBoardApplication {
             browser: {
               origins: [options.webOrigin ?? "http://127.0.0.1:5173"],
               registry: typeRegistry,
-              sessions: LocalBoardSession.resolver(),
+              sessions: options.sessions ?? LocalBoardSession.resolver(),
               authorize: policy.authorize.bind(policy),
               contexts: new BoardContextResolver(),
               clock: LocalBoardSession.clock,

@@ -1,0 +1,63 @@
+services:
+  datastore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4
+    command:
+      - gcloud
+      - emulators
+      - firestore
+      - start
+      - --database-mode=datastore-mode
+      - --host-port=0.0.0.0:8081
+      - --quiet
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8081'"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  delivery:
+    image: spine-ts/simple-delivery-server:local
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8484
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'node -e "const client=require(''node:http2'').connect(''http://127.0.0.1:8484'');client.on(''connect'',()=>{client.close();process.exit(0)});client.on(''error'',()=>process.exit(1));setTimeout(()=>process.exit(1),1000)"',
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  combined:
+    image: spine-ts/message-board:local
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      NODE_ENV: production
+      BROWSER_ORIGIN: http://localhost:18080
+      SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-combined
+      DATASTORE_PROJECT_ID: message-board-compose
+      DATASTORE_EMULATOR_HOST: datastore:8081
+      DELIVERY_SERVER_URL: http://delivery:8484
+      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+      MESSAGE_BOARD_SESSION_ISSUER: message-board
+      MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
+      MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
+      MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set MESSAGE_BOARD_SESSION_PRIVATE_KEY to a P-256 PKCS8 PEM.}
+    depends_on:
+      datastore:
+        condition: service_healthy
+      delivery:
+        condition: service_healthy
+
+  envoy:
+    image: envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb
+    command: ["-c", "/etc/envoy/envoy.yaml"]
+    ports:
+      - "18080:8080"
+    volumes:
+      - ./combined-envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - combined

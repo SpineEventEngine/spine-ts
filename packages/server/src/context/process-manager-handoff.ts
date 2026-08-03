@@ -90,10 +90,11 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    const routed = this.#readiness.route(delivery);
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
       key: InboxHandoff.key(input, deliveryTenantId),
-      onHandoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
+      onHandoff: () => this.#receiveAndDrain(routed, input, deliveryTenantId),
     });
   }
 
@@ -109,6 +110,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     inputs: ProcessManagerInputs,
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
+    const routed = this.#readiness.route(delivery);
     const key = this.#batchKey(inputs, deliveryTenantId);
     const inFlightHandoff = this.#inFlightBatchHandoffs.get(key);
 
@@ -116,7 +118,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       return await inFlightHandoff;
     }
 
-    const handoff = this.#receiveAndDrainAll(delivery, inputs, deliveryTenantId);
+    const handoff = this.#receiveAndDrainAll(routed, inputs, deliveryTenantId);
     this.#inFlightBatchHandoffs.set(key, handoff);
     try {
       return await handoff;

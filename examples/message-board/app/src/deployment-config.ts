@@ -1,13 +1,18 @@
-import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
+import { RemoteDelivery } from "@spine-event-engine/delivery-client";
+import { SignedSessions } from "@spine-event-engine/auth";
 import {
   DurableSubscriptionBindings,
   EnvironmentType,
   ServerEnvironment,
 } from "@spine-event-engine/server";
 import type { StorageFactory } from "@spine-event-engine/storage";
+import { DatastoreStorageFactory } from "@spine-event-engine/storage-datastore";
 import { ZeroMqConfig, createZeroMqTransport } from "@spine-event-engine/transport/zeromq";
 import { randomUUID } from "node:crypto";
+import { createPrivateKey } from "node:crypto";
 
+import { DeliveryQuarantine } from "./delivery-quarantine.js";
+import { MessageBoardSessionRevocations } from "./session-revocations.js";
 import type { BoardServerOptions } from "./index.js";
 
 interface DeploymentConfig extends BoardServerOptions {
@@ -31,6 +36,18 @@ interface DeploymentContract {
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
   storage(config: DeploymentConfig): StorageFactory;
   bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
+
+  /**
+   * Creates production browser sessions that share signing and revocation configuration.
+   *
+   * The supplied factory owns the underlying revocation handle for the process
+   * lifetime. Closing that factory makes later revocation reads fail closed.
+   *
+   * @param storageFactory The application-selected storage factory.
+   * @param environment The process environment that supplies shared settings.
+   * @returns The configured signed-session resolver and issuer.
+   */
+  sessions(storageFactory: StorageFactory, environment: NodeJS.ProcessEnv): SignedSessions;
   configureServer(
     config: DeploymentConfig,
     environment: NodeJS.ProcessEnv,
@@ -61,9 +78,8 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   },
 
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig {
-    const combined = MessageBoardDeployment.combined(environment);
     return {
-      ...combined,
+      ...MessageBoardDeployment.combined(environment),
       backendUrl: DeploymentValues.required(environment, "BACKEND_URL"),
     };
   },
@@ -85,6 +101,25 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     });
   },
 
+  sessions(storageFactory: StorageFactory, environment: NodeJS.ProcessEnv): SignedSessions {
+    if (environment.NODE_ENV !== "production")
+      throw new Error("Signed MessageBoard sessions require production configuration.");
+    return new SignedSessions({
+      issuer: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_ISSUER"),
+      audience: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_AUDIENCE"),
+      activeKey: {
+        kid: DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_KEY_ID"),
+        privateKey: createPrivateKey(
+          DeploymentValues.required(environment, "MESSAGE_BOARD_SESSION_PRIVATE_KEY"),
+        ),
+      },
+      revocation: new MessageBoardSessionRevocations(
+        storageFactory,
+        DeploymentValues.required(environment, "SUBSCRIPTION_REGISTRY_NAMESPACE"),
+      ),
+    });
+  },
+
   configureServer(
     config: DeploymentConfig,
     environment: NodeJS.ProcessEnv,
@@ -98,6 +133,12 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
           ipcDirectory: DeploymentValues.required(environment, "SPINE_IPC_DIRECTORY"),
         }),
       ),
+      delivery: RemoteDelivery.connectTo({
+        endpoint: DeploymentValues.url(
+          DeploymentValues.required(environment, "DELIVERY_SERVER_URL"),
+        ),
+        removalQuarantine: new DeliveryQuarantine(storageFactory),
+      }),
     });
     return storageFactory;
   },
@@ -134,5 +175,23 @@ const DeploymentValues = Object.freeze({
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535)
       throw new Error("Invalid required configuration: PORT.");
     return parsed;
+  },
+
+  /**
+   * Validates one delivery-server endpoint.
+   *
+   * @param value The configured endpoint value.
+   * @returns The normalized HTTP(S) endpoint.
+   */
+  url(value: string): string {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new Error("Invalid required configuration: DELIVERY_SERVER_URL.");
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:")
+      throw new Error("Invalid required configuration: DELIVERY_SERVER_URL.");
+    return url.toString().replace(/\/$/u, "");
   },
 });

@@ -1,6 +1,7 @@
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
+import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import {
   deliveryRunWorkers,
   type DeliveryRunObligation,
@@ -9,7 +10,6 @@ import {
   type DeliveryRunWorker,
 } from "../delivery/delivery-run-coordinator.js";
 import { DeliveryBuilder, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
-import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import { Delivery, type OnDeliveryMessage } from "../delivery/delivery.js";
 import type { DeliveryOperationOptions } from "../delivery/delivery-ports.js";
 import { DeliverySupervisor, type DeliveryShardUpdate } from "../delivery/delivery-supervisor.js";
@@ -113,9 +113,10 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   readonly #createWorker: (
     runtime: EnvironmentDeliveryRuntime,
     ports?: EnvironmentDeliveryPorts,
+    nodeId?: string,
   ) => DeliveryRunWorker;
-  readonly #ports:
-    { readonly inbox: DeliveryInbox; readonly workRegistry: DeliveryWorkRegistry } | undefined;
+  readonly #nodeId: string | undefined;
+  readonly #ports: EnvironmentDeliveryPorts | undefined;
 
   /**
    * Creates an environment delivery worker.
@@ -125,6 +126,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
   constructor(options: EnvironmentDeliveryWorkerOptions = {}) {
     this.#createWorker = options.createWorker ?? EnvironmentDeliveryValues.createWorker;
     this.#ports = options.ports;
+    this.#nodeId = options.nodeId;
   }
 
   /**
@@ -135,8 +137,12 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     if (this.#workers.has(runtime.owner.key)) {
       throw new Error("Environment delivery owner is already configured.");
     }
-    const worker = this.#createWorker(runtime, this.#ports);
-    const supervisor = EnvironmentDeliveryValues.createSupervisor(runtime, this.#ports);
+    const worker = this.#createWorker(runtime, this.#ports, this.#nodeId);
+    const supervisor = EnvironmentDeliveryValues.createSupervisor(
+      runtime,
+      this.#ports,
+      this.#nodeId,
+    );
     this.#workers.set(runtime.owner.key, worker);
     this.#supervisors.set(runtime.owner.key, supervisor);
     void supervisor.start();
@@ -353,14 +359,11 @@ interface EnvironmentDeliveryWorkerOptions {
   readonly createWorker?: (
     runtime: EnvironmentDeliveryRuntime,
     ports?: EnvironmentDeliveryPorts,
+    nodeId?: string,
   ) => DeliveryRunWorker;
   readonly ports?: EnvironmentDeliveryPorts;
+  readonly nodeId?: string;
 }
-interface EnvironmentDeliveryPorts {
-  readonly inbox: DeliveryInbox;
-  readonly workRegistry: DeliveryWorkRegistry;
-}
-
 class RuntimeDeliverySupervisor {
   readonly #groups: readonly RuntimeDeliverySupervisorGroup[];
 
@@ -510,6 +513,7 @@ const EnvironmentDeliveryValues = Object.freeze({
   createWorker(
     runtime: EnvironmentDeliveryRuntime,
     ports?: EnvironmentDeliveryPorts,
+    nodeId?: string,
   ): DeliveryRunWorker {
     const delivery = new Delivery({
       context: runtime.context,
@@ -519,7 +523,7 @@ const EnvironmentDeliveryValues = Object.freeze({
     const worker = new DeliveryWorker({
       delivery,
       shards: EnvironmentDeliveryValues.uniqueShards(runtime.scopes),
-      node: runtime.context.name,
+      node: nodeId ?? runtime.context.name,
       onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
     });
     return deliveryRunWorkers.worker(worker);
@@ -527,6 +531,7 @@ const EnvironmentDeliveryValues = Object.freeze({
   createSupervisor(
     runtime: EnvironmentDeliveryRuntime,
     ports?: EnvironmentDeliveryPorts,
+    nodeId?: string,
   ): RuntimeDeliverySupervisor {
     const shards = EnvironmentDeliveryValues.uniqueShards(runtime.scopes);
     if (shards.length === 0) {
@@ -544,7 +549,7 @@ const EnvironmentDeliveryValues = Object.freeze({
           .withContext(runtime.context)
           .withStorageFactory(runtime.storageFactory)
           .withStrategy(UniformAcrossAllShards.forNumber(shardCount))
-          .withNode(runtime.context.name);
+          .withNode(nodeId ?? runtime.context.name);
         if (ports !== undefined)
           builder.withInbox(ports.inbox).withWorkRegistry(ports.workRegistry);
         const delivery = builder.build();

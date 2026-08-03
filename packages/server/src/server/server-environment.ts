@@ -11,6 +11,7 @@ import type {
 } from "@spine-event-engine/transport";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
+import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import { EnvironmentDeliveryWorker } from "./environment-delivery-worker.js";
 import {
@@ -156,8 +157,12 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       new EnvironmentAttachments({
         createWorker: () => {
           const ports = ServerEnvironmentValues.ports(this.delivery);
-          return new EnvironmentDeliveryWorker(ports === undefined ? {} : { ports });
+          return new EnvironmentDeliveryWorker({
+            ...(ports === undefined ? {} : { ports }),
+            nodeId: this.nodeId,
+          });
         },
+        deliveryPorts: () => ServerEnvironmentValues.ports(this.delivery),
       }),
     );
     deliveryOpeners.set(this, () => this.#openDelivery());
@@ -447,9 +452,7 @@ const ServerEnvironmentValues = Object.freeze({
     }
     return candidate as ServerEnvironmentDelivery;
   },
-  ports(
-    delivery: ServerEnvironmentCloseable | undefined,
-  ): { readonly inbox: DeliveryInbox; readonly workRegistry: DeliveryWorkRegistry } | undefined {
+  ports(delivery: ServerEnvironmentCloseable | undefined): EnvironmentDeliveryPorts | undefined {
     const remote = ServerEnvironmentValues.openableDelivery(delivery);
     if (remote === undefined) return undefined;
     return { inbox: remote.inbox, workRegistry: remote.workRegistry };

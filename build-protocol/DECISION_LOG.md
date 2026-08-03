@@ -4914,6 +4914,22 @@ Consequences:
   limits, Envoy customization, and backend-bypass consequences.
 - Wave 4 creates and tests the Envoy template; Wave 5 productionizes it.
 
+## D-0107: Parse Deployment YAML Structurally In Policy Tests
+
+Status: Accepted
+
+Date: 2026-08-03
+
+Task: `T-0096`
+
+Decision: Add the maintained `yaml` package as a root development dependency
+for deployment-policy tests. Tests parse the Kubernetes multi-document resource,
+locate the Envoy ConfigMap, and parse its embedded Envoy YAML before inspecting
+route objects.
+
+Reasoning: Indentation-aware parsing rejects non-path route shapes, duplicates,
+and hidden extra route items that a text scanner can skip.
+
 ## D-0106: Support Durable Gateway Coordination In Both Deployment Modes
 
 Status: Accepted

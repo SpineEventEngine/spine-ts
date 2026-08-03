@@ -178,6 +178,42 @@ describe("startup obligations", () => {
 });
 
 describe("EnvironmentDeliveryWorker", () => {
+  it("uses the process node identity for remote worker ownership", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const target = descriptor("ProcessNode", "type.example.dev/ProcessNode", storageFactory);
+    const scope = runScope("process-node-owner", target.ready);
+    let node: string | undefined;
+    const Worker = EnvironmentDeliveryWorker as unknown as new (options: {
+      readonly nodeId: string;
+      readonly createWorker: (
+        runtime: EnvironmentDeliveryRuntime,
+        ports: undefined,
+        nodeId: string,
+      ) => DeliveryRunWorker;
+    }) => EnvironmentDeliveryWorker;
+    const worker = new Worker({
+      nodeId: "process-node-42",
+      createWorker: (_runtime, _ports, nodeId) => {
+        node = nodeId;
+        return new LifecycleWorker();
+      },
+    });
+
+    worker.add({
+      owner: scope.owner,
+      descriptor: target.value,
+      storageFactory,
+      tenant: {},
+      context: target.context,
+      scopes: [scope],
+    });
+
+    expect(node).toBe("process-node-42");
+    worker.stop();
+    await worker.awaitSettled();
+    await worker.retire();
+  });
+
   it("constructs production delivery from the captured runtime storage factory", async () => {
     const capturedStorageFactory = new InMemoryStorageFactory();
     const target = descriptor(

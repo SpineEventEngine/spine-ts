@@ -11,13 +11,14 @@ const storage =
   MessageBoardDeployment.storage(config);
 const policy = new BoardAccessPolicy();
 const bindings = MessageBoardDeployment.bindings(config, storage);
+const sessions = MessageBoardDeployment.sessions(storage, process.env);
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {
     backend: { baseUrl: config.backendUrl },
     origins: [config.webOrigin],
     registry: typeRegistry,
-    sessions: LocalBoardSession.resolver(),
+    sessions,
     authorize: policy.authorize.bind(policy),
     contexts: new BoardContextResolver(),
     clock: LocalBoardSession.clock,

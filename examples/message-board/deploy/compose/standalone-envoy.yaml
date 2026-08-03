@@ -1,0 +1,61 @@
+static_resources:
+  listeners:
+    - name: browser_gateway
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8080 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: browser_gateway
+                route_config:
+                  name: gateway_only
+                  virtual_hosts:
+                    - name: gateway
+                      domains: ["*"]
+                      typed_per_filter_config:
+                        envoy.filters.http.cors:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.CorsPolicy
+                          allow_origin_string_match: [{ exact: "http://localhost:18080" }]
+                          allow_methods: "POST, OPTIONS"
+                          allow_headers: "content-type,x-grpc-web,authorization,x-user-agent,grpc-timeout"
+                          expose_headers: "grpc-status,grpc-message"
+                          max_age: "86400"
+                      routes:
+                        - match: { path: "/spine.auth.AuthenticationService/ResolveContext" }
+                          route: &session_route
+                            cluster: gateway
+                            timeout: 30s
+                            hash_policy: &session_hash
+                              - header: { header_name: authorization }
+                        - match: { path: "/spine.client.CommandService/Post" }
+                          route: *session_route
+                        - match: { path: "/spine.client.QueryService/Read" }
+                          route: *session_route
+                        - match: { path: "/spine.client.SubscriptionService/Subscribe" }
+                          route: *session_route
+                        - match: { path: "/spine.client.SubscriptionService/Activate" }
+                          route:
+                            cluster: gateway
+                            timeout: 0s
+                            hash_policy: *session_hash
+                        - match: { path: "/spine.client.SubscriptionService/Cancel" }
+                          route: *session_route
+                http_filters:
+                  - name: envoy.filters.http.cors
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+  clusters:
+    - name: gateway
+      connect_timeout: 2s
+      type: STRICT_DNS
+      lb_policy: RING_HASH
+      load_assignment:
+        cluster_name: gateway
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address: { address: gateway, port_value: 8080 }

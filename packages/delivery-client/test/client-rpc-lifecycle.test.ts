@@ -515,7 +515,7 @@ describe("DeliveryClient RPC and lifecycle", () => {
       { ...value, shard: new ShardIndex(0, 2) },
       { ...value, id: { ...value.id, value: " " } },
       { ...value, signalId: " " },
-      { ...value, inboxId: { ...value.inboxId, targetId: "missing-separator" } },
+      { ...value, inboxId: { ...value.inboxId, targetId: " " } },
       { ...value, label: "UNKNOWN" as never },
       { ...value, status: "UNKNOWN" as never },
       { ...value, whenReceived: new Date("invalid") },
