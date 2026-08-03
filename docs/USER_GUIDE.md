@@ -595,11 +595,14 @@ The server gives the singleton storage factory to added builders unless a
 builder explicitly selected a storage factory. Closing a caller-managed
 `start()` server never closes process facilities; call
 `await ServerEnvironment.instance().close()` during explicit process shutdown.
+The environment owns its configured delivery, transport, tracing, and storage
+facilities and closes them after server intake and attachments have retired.
 
 ## 6. Start and close the server
 
 Use `run()` for a standalone application. It starts the server, reports
-readiness only after the listener binds, and closes it on `SIGINT` or
+readiness only after the TCP listener binds (not after an application health
+check), and closes it on `SIGINT` or
 `SIGTERM`. Run-managed siblings share one generation; the final run-managed
 server permanently closes its environment, with a failed final close retryable
 through a later signal or `close()`:
@@ -703,9 +706,9 @@ void result;
 ```
 
 `onRequestMetadata` runs synchronously for every outbound call and returns
-fresh application-owned headers. It is the A3 extension point for adding a
-credential header, but it is not a session, cookie, or identity-provider
-implementation; C5 integrates the auth gateway, sessions, and provider flows.
+fresh application-owned headers. It can add a credential header, but it is not
+a session, cookie, or identity-provider implementation; compose those pieces
+at the application gateway.
 The client never logs these header values or uses them in request IDs. Request
 IDs require Web Crypto: it prefers `crypto.randomUUID()`, falls back to
 `crypto.getRandomValues()`, and rejects before transport invocation when
@@ -786,8 +789,9 @@ provides a customizable Envoy reference that accepts only `ResolveContext`,
 over HTTP/2, and supports gRPC-Web plus explicitly selected binary Connect.
 It is a template, not a deployment policy or managed service.
 
-The gateway owns its listener lifecycle, credential resolution, trusted context,
-TLS files, and network controls. Do not add a browser-to-backend bypass. See
+The gateway owns its listener lifecycle, credential resolution, and trusted
+context. The application deployment owns TLS files and network controls. Do
+not add a browser-to-backend bypass. See
 [the Envoy reference](../interop/envoy/README.md) for its required render inputs,
 TLS mount, exact pinned-image validation command, and customization boundaries.
 The DSL supports IDs, nested `all()` / `either()`, equality and range helpers,
