@@ -131,3 +131,10 @@ the two documentation findings. Do not start another complete review wave.
 - Return this single deterministic correction to the existing implementer.
   After the focused test passes, perform only the same single-finding style
   confirmation; no other concern reopens.
+
+The line-oriented correction remains bypassable when a valid YAML route item
+places another key before `match`. This P1 establishes that a handwritten
+partial YAML parser is not sufficient. The final correction must parse the
+embedded Envoy document with the maintained `yaml` package, inspect the actual
+route objects, and cover the key-order bypass. Record the test-only dependency
+choice, rerun dependency/preflight checks, and perform one exact confirmation.
