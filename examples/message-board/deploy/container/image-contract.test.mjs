@@ -141,29 +141,35 @@ test("MessageBoard commands share one artifact and required compiled modules imp
 });
 
 test("combined deployment fails closed before opening a listener without a registry namespace", () => {
-  const result = spawnSync(
-    "docker",
-    [
-      "run",
-      "--rm",
-      "--env",
-      "HOST=0.0.0.0",
-      "--env",
-      "PORT=18081",
-      "--env",
-      "DATASTORE_PROJECT_ID=message-board-missing-registry",
-      "--env",
-      "BROWSER_ORIGIN=https://message-board.example.test",
-      "spine-ts/message-board:local",
-    ],
-    { encoding: "utf8", timeout: 30_000 },
-  );
+  const container = `spine-t0096-missing-registry-${process.pid}-${Date.now()}`;
+  try {
+    const result = spawnSync(
+      "docker",
+      [
+        "run",
+        "--name",
+        container,
+        "--env",
+        "HOST=0.0.0.0",
+        "--env",
+        "PORT=18081",
+        "--env",
+        "DATASTORE_PROJECT_ID=message-board-missing-registry",
+        "--env",
+        "BROWSER_ORIGIN=https://message-board.example.test",
+        "spine-ts/message-board:local",
+      ],
+      { encoding: "utf8", timeout: 30_000 },
+    );
 
-  assert.notEqual(result.status, 0);
-  assert.match(
-    `${result.stdout}${result.stderr}`,
-    /Missing required configuration: SUBSCRIPTION_REGISTRY_NAMESPACE\./u,
-  );
+    assert.notEqual(result.status, 0);
+    assert.match(
+      `${result.stdout}${result.stderr}`,
+      /Missing required configuration: SUBSCRIPTION_REGISTRY_NAMESPACE\./u,
+    );
+  } finally {
+    execFileSync("docker", ["container", "rm", "--force", container], { stdio: "ignore" });
+  }
 });
 
 test("runtime commands keep Node as PID 1 and stop cleanly", () => {

@@ -70,7 +70,7 @@ describe("delivery codec and immutable snapshots", () => {
       inboxId: { ...source.inboxId, targetId },
     });
 
-    expect(wire.inboxId?.entityId?.id.typeUrl).toBe(
+    expect(wire.inboxId?.entityId?.id?.typeUrl).toBe(
       "type.googleapis.com/google.protobuf.StringValue",
     );
     expect(DeliveryMessageCodec.decode(wire, ShardIndex.single()).inboxId.targetId).toBe(targetId);

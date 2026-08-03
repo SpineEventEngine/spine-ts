@@ -197,6 +197,14 @@ data:
                       virtual_hosts:
                         - name: gateway
                           domains: ["*"]
+                          typed_per_filter_config:
+                            envoy.filters.http.cors:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.CorsPolicy
+                              allow_origin_string_match: [{ exact: https://message-board.example.test }]
+                              allow_methods: "POST, OPTIONS"
+                              allow_headers: "content-type,x-grpc-web,authorization,x-user-agent,grpc-timeout"
+                              expose_headers: "grpc-status,grpc-message"
+                              max_age: "86400"
                           routes:
                             - match: { path: "/spine.auth.AuthenticationService/ResolveContext" }
                               route:
@@ -234,7 +242,9 @@ data:
                                 timeout: 30s
                                 hash_policy:
                                   - header: { header_name: authorization }
-                    http_filters: [{ name: envoy.filters.http.router }]
+                    http_filters:
+                      - name: envoy.filters.http.cors
+                      - name: envoy.filters.http.router
       clusters:
         - name: gateway
           connect_timeout: 5s

@@ -60,6 +60,8 @@ services:
     depends_on:
       datastore:
         condition: service_healthy
+      delivery:
+        condition: service_healthy
 
   gateway-1:
     image: spine-ts/standalone-gateway:local

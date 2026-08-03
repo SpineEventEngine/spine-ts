@@ -1,6 +1,7 @@
 import type { StorageContext, StorageFactory } from "@spine-event-engine/storage";
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
+import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import {
   deliveryRunWorkers,
   type DeliveryRunObligation,
@@ -9,7 +10,6 @@ import {
   type DeliveryRunWorker,
 } from "../delivery/delivery-run-coordinator.js";
 import { DeliveryBuilder, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
-import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import { Delivery, type OnDeliveryMessage } from "../delivery/delivery.js";
 import type { DeliveryOperationOptions } from "../delivery/delivery-ports.js";
 import { DeliverySupervisor, type DeliveryShardUpdate } from "../delivery/delivery-supervisor.js";
@@ -116,8 +116,7 @@ export class EnvironmentDeliveryWorker implements EnvironmentGenerationWorker {
     nodeId?: string,
   ) => DeliveryRunWorker;
   readonly #nodeId: string | undefined;
-  readonly #ports:
-    { readonly inbox: DeliveryInbox; readonly workRegistry: DeliveryWorkRegistry } | undefined;
+  readonly #ports: EnvironmentDeliveryPorts | undefined;
 
   /**
    * Creates an environment delivery worker.
@@ -365,11 +364,6 @@ interface EnvironmentDeliveryWorkerOptions {
   readonly ports?: EnvironmentDeliveryPorts;
   readonly nodeId?: string;
 }
-interface EnvironmentDeliveryPorts {
-  readonly inbox: DeliveryInbox;
-  readonly workRegistry: DeliveryWorkRegistry;
-}
-
 class RuntimeDeliverySupervisor {
   readonly #groups: readonly RuntimeDeliverySupervisorGroup[];
 

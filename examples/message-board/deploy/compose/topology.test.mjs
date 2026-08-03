@@ -7,6 +7,8 @@ import { dirname, join } from "node:path";
 const composeRoot = dirname(fileURLToPath(import.meta.url));
 const combined = join(composeRoot, "combined.compose.yaml");
 const standalone = join(composeRoot, "standalone.compose.yaml");
+const combinedEnvoy = join(composeRoot, "combined-envoy.yaml");
+const standaloneEnvoy = join(composeRoot, "standalone-envoy.yaml");
 
 test("declares a combined topology with its durable registry and one delivery server", () => {
   assert.equal(existsSync(combined), true, "combined Compose reference must exist");
@@ -46,8 +48,22 @@ test("declares a two-gateway and two-application standalone topology", () => {
   assert.match(document, /MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture/mu);
   assert.match(
     document,
+    /application-2:[\s\S]*?depends_on:[\s\S]*?delivery:[\s\S]*?condition: service_healthy/mu,
+  );
+  assert.match(
+    document,
     /MESSAGE_BOARD_SESSION_PRIVATE_KEY: \$\{MESSAGE_BOARD_SESSION_PRIVATE_KEY:\?/u,
   );
   assert.doesNotMatch(document, /BEGIN PRIVATE KEY/u);
   assert.equal((document.match(/spine-ts\/simple-delivery-server:local/gu) ?? []).length, 1);
 });
+
+for (const envoy of [combinedEnvoy, standaloneEnvoy]) {
+  test(`${envoy.split("/").at(-1)} admits only browser RPCs and restricted preflight`, () => {
+    const document = readFileSync(envoy, "utf8");
+    assert.match(document, /envoy\.filters\.http\.cors/u);
+    assert.match(document, /exact: "http:\/\/localhost:18080"/u);
+    assert.match(document, /allow_methods: "POST, OPTIONS"/u);
+    assert.doesNotMatch(document, /prefix: "\/"/u);
+  });
+}

@@ -41,6 +41,12 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | Gateway          | Combined values plus `BACKEND_URL`                                             |
 | Delivery server  | `HOST`, `PORT`                                                                 |
 
+Every browser process additionally requires one shared
+`MESSAGE_BOARD_SESSION_ISSUER`, `MESSAGE_BOARD_SESSION_AUDIENCE`,
+`MESSAGE_BOARD_SESSION_KEY_ID`, and `MESSAGE_BOARD_SESSION_PRIVATE_KEY`.
+Application-selected storage holds session revocations under the shared
+registry namespace, so replicas must use identical values.
+
 `DELIVERY_SERVER_URL` is the sole application and gateway delivery setting. In
 these references it is `http://delivery:8484` for Compose and
 `http://simple-delivery-server:8484` for Kubernetes; `8484` is the delivery
