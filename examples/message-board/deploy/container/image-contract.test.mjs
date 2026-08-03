@@ -247,7 +247,7 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     messageBoard,
   ]);
   waitForLog(combined, /MessageBoard combined server ready/u);
-  exerciseRegistry(network, "http://combined:18081", messageBoard);
+  exerciseRegistry(network, "http://combined:18081", "http://localhost:18081", messageBoard);
   owned.unshift(gateway);
   start([
     "--name",
@@ -275,7 +275,7 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
-  exerciseRegistry(network, "http://gateway:18082", messageBoard);
+  exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
   owned.unshift(delivery);
   start([
     "--name",
@@ -328,7 +328,7 @@ function stopWithin(container, signal) {
   }
 }
 
-function exerciseRegistry(network, target, image) {
+function exerciseRegistry(network, target, origin, image) {
   const script = `
     import { create } from "@bufbuild/protobuf";
     import { BrowserSession, Client } from "@spine-event-engine/client-web";
@@ -380,12 +380,17 @@ function exerciseRegistry(network, target, image) {
     const session = BrowserSession.bearer({ token: "message-board-local-fixture" });
     const client = Client.forConnect(process.env.TARGET, {
       credentials: session.credentials,
-      onRequestMetadata: () => session.requestMetadata(),
+      onRequestMetadata: () => {
+        const metadata = session.requestMetadata();
+        metadata.set("origin", process.env.ORIGIN);
+        return metadata;
+      },
     });
     const subscription = await client.onBehalfOf("ada").createSubscription(topic, {
       kind: "entity",
       authoritativeQuery: () => query,
     });
+    await subscription.activate();
     await subscription.cancel();
     await client.close();
     await session.close();
@@ -397,6 +402,8 @@ function exerciseRegistry(network, target, image) {
     network,
     "--env",
     `TARGET=${target}`,
+    "--env",
+    `ORIGIN=${origin}`,
     "--workdir",
     "/app/node_modules/@spine-event-engine/example-message-board-app",
     "--entrypoint",
