@@ -1,13 +1,19 @@
 # T-0097 Wave 5 Closure Review
 
-Status: Envoy correction before review
+Status: Specialist review in progress
 Baseline: `0f47c634`
+Candidate: `543917c4`
 
 ## Requirements And Evidence
 
 - Task ledger: `build-protocol/tasks/T-0097-wave5-closure/TASK.md`.
 - Accepted split: `build-protocol/planning/WAVE_5_EXECUTION_SPLIT.md`, G1.
 - Evidence log: `build-protocol/work-logs/T-0097.md`.
+- Mechanical preflight passes through the complete `verify:task -- --no-tests`
+  profile after dependency alignment.
+- Final native acceptance passes pinned Envoy validation 1/1 for four configs,
+  topology/policy 8/8, local-image contracts 8/8, and real Compose lifecycle
+  3/3 with leak-free cleanup.
 
 ## Assignments
 
