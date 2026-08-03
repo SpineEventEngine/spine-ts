@@ -1,11 +1,11 @@
-# MessageBoard example reference
+# Message Board example reference
 
 This reference is for coding agents and maintainers. Beginners should start
-with the [MessageBoard README](README.md).
+with the [Message Board README](README.md).
 
 ## Package ownership
 
-- `model` owns authored MessageBoard Proto sources, the single `UserId` definition,
+- `model` owns authored Message Board Proto sources, the single `UserId` definition,
   generated Protobuf-ES code, typed rejections, and its `ProtoModule`.
 - `app` owns the bounded context, Aggregate, Projection, generated application
   registry and handler registry, local session policy, and executable server.
@@ -74,4 +74,4 @@ Envoy, and Playwright browsers:
 pnpm exec node examples/message-board/web/test/interop/browser/run.mjs
 ```
 
-It is the only MessageBoard command that exercises the HTTPS browser-to-Envoy path.
+It is the only Message Board command that exercises the HTTPS browser-to-Envoy path.

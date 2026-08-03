@@ -19,7 +19,7 @@ publisher, deployment CLI, generic application runner, or second gateway.
 
 The build/runtime boundary is:
 
-1. pack the exact local Spine TS packages and MessageBoard model package;
+1. pack the exact local Spine TS packages and Message Board model package;
 2. install those tarballs into a fresh application repository outside the
    workspace;
 3. run `spine-proto generate` for the model, then `compose` and `handlers` for
@@ -28,13 +28,13 @@ The build/runtime boundary is:
 5. start only compiled JavaScript. Runtime must not contain or invoke the Proto
    CLI, TypeScript compiler, workspace traversal, or a repository build.
 
-One compiled MessageBoard application artifact owns separate, explicit
-combined and application-only Node entrypoints. A third MessageBoard-specific
+One compiled Message Board application artifact owns separate, explicit
+combined and application-only Node entrypoints. A third Message Board-specific
 entrypoint assembles the already-implemented standalone browser gateway. The
 existing `spine-delivery-server` bin remains the simple delivery-server
 entrypoint. No framework public API is added merely to start a container.
 
-The same locally built MessageBoard image contains the combined and
+The same locally built Message Board image contains the combined and
 application-only entrypoints. Selecting the container command changes process
 assembly only; it does not rebuild the image, regenerate code, change bounded
 contexts, or fork domain source. The standalone gateway and delivery server are
@@ -51,10 +51,10 @@ separate local images made from the same exact-version package set.
 - `examples/message-board/model` already owns the model manifest, generated
   module export, and packed Proto payload. `examples/message-board/app` already
   composes `typeRegistry`, discovers `dist/generated/handler`, and owns the
-  MessageBoard bounded context.
+  Message Board bounded context.
 - `MessageBoardApplication.createContext(storageFactory)` is the application
   storage seam. Deployment/container code may pass configuration and secrets,
-  but only MessageBoard application code may instantiate/select its
+  but only Message Board application code may instantiate/select its
   `StorageFactory`. Do not add a framework provider selector.
 - `Server.run()` and `ProcessServerCoordinator` already install direct
   `SIGINT`/`SIGTERM` handling and retire the final `ServerEnvironment`.
@@ -74,14 +74,14 @@ The contract is application-specific and compiled-output-first. Exact source
 filenames may use the existing `*-entry.ts` convention, but their built targets
 and behavior are fixed:
 
-| Process                         | Required compiled command                                                                 | Contract                                                                                                                                                                                                          |
-| ------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MessageBoard combined           | `node dist/src/combined-entry.js`                                                         | Application code selects storage, assembles the MessageBoard context and existing browser gateway, then calls `Server.run()`.                                                                                     |
-| MessageBoard application-only   | `node dist/src/application-entry.js`                                                      | The same application artifact and context start the native Spine listener without a browser gateway, then call `Server.run()`.                                                                                    |
-| MessageBoard standalone gateway | `node dist/src/gateway-entry.js`                                                          | MessageBoard supplies its existing registry, session, authorization, context, clock, fingerprint, and durable-binding collaborators to `Server` with `browser.backend.baseUrl`; it owns no local bounded context. |
-| Simple delivery server          | `node node_modules/@spine-event-engine/delivery-server/dist/bin/spine-delivery-server.js` | Preserve the existing `HOST`, `PORT`, `MAX_INBOUND_MESSAGE_SIZE`, `SHARD_PROCESSING_TIMEOUT`, `MAX_RETAINED_MESSAGES`, `MAX_RETAINED_BYTES`, and `MAX_TRACKED_SHARDS` contract.                                   |
+| Process                          | Required compiled command                                                                 | Contract                                                                                                                                                                                                           |
+| -------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Message Board combined           | `node dist/src/combined-entry.js`                                                         | Application code selects storage, assembles the Message Board context and existing browser gateway, then calls `Server.run()`.                                                                                     |
+| Message Board application-only   | `node dist/src/application-entry.js`                                                      | The same application artifact and context start the native Spine listener without a browser gateway, then call `Server.run()`.                                                                                     |
+| Message Board standalone gateway | `node dist/src/gateway-entry.js`                                                          | Message Board supplies its existing registry, session, authorization, context, clock, fingerprint, and durable-binding collaborators to `Server` with `browser.backend.baseUrl`; it owns no local bounded context. |
+| Simple delivery server           | `node node_modules/@spine-event-engine/delivery-server/dist/bin/spine-delivery-server.js` | Preserve the existing `HOST`, `PORT`, `MAX_INBOUND_MESSAGE_SIZE`, `SHARD_PROCESSING_TIMEOUT`, `MAX_RETAINED_MESSAGES`, `MAX_RETAINED_BYTES`, and `MAX_TRACKED_SHARDS` contract.                                    |
 
-The three MessageBoard entrypoints accept configuration only from a small,
+The three Message Board entrypoints accept configuration only from a small,
 application-owned environment reader. It must fail before listener work when a
 required value is absent or malformed, use the current server option names,
 and redact values from errors. At minimum it owns canonical `HOST`, `PORT`,
@@ -90,7 +90,7 @@ gateway production mode, and runtime-only authentication/storage collaborators.
 Do not introduce arbitrary module loading, unrestricted flags, config-file
 discovery, or a provider-name switch in Docker/Compose code.
 
-Application storage selection remains in MessageBoard source. The accepted
+Application storage selection remains in Message Board source. The accepted
 production acceptance provider is the existing Datastore adapter, which may be
 pointed at the Datastore emulator by standard runtime configuration. Both
 combined and application-only entrypoints call the same application-owned
@@ -100,7 +100,7 @@ Local unit/browser entrypoints may keep explicit in-memory storage for their
 existing local-only contract, but no production image may silently select it.
 
 Gateway registry storage is a distinct gateway lifecycle dependency, not
-MessageBoard application-data selection. The gateway entrypoint may assemble
+Message Board application-data selection. The gateway entrypoint may assemble
 the existing `DurableSubscriptionBindings` from explicitly supplied registry
 configuration and an existing `StorageFactory`; it must keep namespace and
 finite lease/cleanup/record limits explicit and fail closed in production.
@@ -148,11 +148,11 @@ pnpm --config.verify-deps-before-run=false exec vitest run \
 ```
 
 `scripts/build-once-package.test.mjs` is initially RED because the current
-MessageBoard `start` script traverses the monorepo and no installed runtime
+Message Board `start` script traverses the monorepo and no installed runtime
 artifact/entrypoints exist. The test must prove all of the following in one
 temporary root outside the repository:
 
-1. Pack every local runtime/build dependency needed by the MessageBoard model
+1. Pack every local runtime/build dependency needed by the Message Board model
    and app at the root version. Inspect tarball manifests and reject
    `workspace:`, `link:`, `portal:`, repository-absolute paths, mismatched local
    versions, or undeclared local imports.
@@ -164,7 +164,7 @@ temporary root outside the repository:
    `compose`, app `handlers`, then one TypeScript compilation. Record command
    invocations so a missing, repeated, or runtime invocation fails.
 4. Assert generated model JavaScript/type declarations, composed
-   `typeRegistry`, compiled handler registry, and both compiled MessageBoard
+   `typeRegistry`, compiled handler registry, and both compiled Message Board
    application entrypoints exist in the artifact. Generated source stays
    untracked in this repository.
 5. Pack/install the built application runtime, remove the fresh repository's
@@ -198,7 +198,7 @@ application-owned deployment configuration do not exist. GREEN acceptance:
 - combined starts the existing browser/native assembly; application-only opens
   only the native application listener; neither performs generation,
   compilation, package installation, or workspace access;
-- both modes use the same MessageBoard-owned storage selection and explicit
+- both modes use the same Message Board-owned storage selection and explicit
   Datastore-emulator acceptance can write through one app-selected factory;
 - missing production storage, remote facility, browser origin, or other
   required configuration fails before listener bind and does not log values;
@@ -242,7 +242,7 @@ The deterministic acceptance must:
 
 1. build all three fixed local tags from tarballs whose package names, versions,
    and SHA-256 values were captured before Docker build;
-2. prove the MessageBoard combined and application-only commands use the same
+2. prove the Message Board combined and application-only commands use the same
    image ID and the same compiled domain/registry hashes;
 3. start the standalone gateway against a bounded test backend through the
    current `browser.backend` seam, and start the simple delivery server through
@@ -300,7 +300,7 @@ Run one complete relevant specialist wave after mechanical convergence:
 - style/maintainability: applicable to entrypoint/configuration structure,
   package/build scripts, Dockerfile depth, and avoidance of a runner/provider
   framework;
-- documentation completeness: applicable to changed MessageBoard/package
+- documentation completeness: applicable to changed Message Board/package
   commands, image contract, lifecycle, storage ownership, and local-only limits;
 - TypeScript/API docs: applicable to package manifests/exports and any authored
   declarations, but reviewers must reject unnecessary new public framework API;
@@ -346,7 +346,7 @@ together. Its write boundary is limited to:
 - `examples/message-board/deploy/container/**` for the Dockerfile, fixed local
   build helper, image acceptance, and narrowly scoped container README if a
   command needs explanation; and
-- focused MessageBoard/package README or REFERENCE claims required by changed
+- focused Message Board/package README or REFERENCE claims required by changed
   commands. Broad deployment guidance stays in T-0097.
 
 The owner must not edit `interop/envoy/**`, `compatibility-tests/jvm/**`,
@@ -362,7 +362,7 @@ decision; it is not silently absorbed.
   is insufficient.
 - **Build work at runtime:** reduce the runtime tree, record command counts,
   remove build inputs/tools, and start only installed JavaScript.
-- **Two artifacts drifting:** hash one built MessageBoard image/artifact and
+- **Two artifacts drifting:** hash one built Message Board image/artifact and
   run both commands without a rebuild.
 - **Storage ownership inversion:** tests scan deployment/container code for
   provider branching and assert both modes call the same application-owned
@@ -388,6 +388,6 @@ Helm, operators, or rollout policy.
 T-0096 consumes the fixed local tags and runtime inputs to prove combined and
 two-gateway/two-application topologies and minimal Kubernetes references. It
 must not repair build-once behavior by compiling/generating at startup or by
-forking the MessageBoard artifact.
+forking the Message Board artifact.
 
 No governing contradiction or architecture blocker is established.

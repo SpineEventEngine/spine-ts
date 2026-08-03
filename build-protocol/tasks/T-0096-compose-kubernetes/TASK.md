@@ -45,7 +45,7 @@ references that preserve the approved Wave 5 lifecycle and trust boundaries.
    combined application/gateway process, explicit durable registry state, and
    exactly one simple delivery server.
 2. One command starts and accepts the standalone topology with Envoy, two
-   gateways, two MessageBoard application replicas sharing the same
+   gateways, two Message Board application replicas sharing the same
    application-selected storage, one registry namespace, shared session
    configuration, and exactly one simple delivery server.
 3. End-to-end acceptance covers authenticated Post, Query, Subscribe, Activate,

@@ -1,4 +1,4 @@
-# MessageBoard container images
+# Message Board container images
 
 These local images demonstrate how a Spine TS application can be built once
 and started without generating Protobuf code or compiling TypeScript at
@@ -23,7 +23,7 @@ temporary context after success, failure, `SIGINT`, or `SIGTERM`.
 | `spine-ts/standalone-gateway:local`     | Browser gateway for a separate application      |
 | `spine-ts/simple-delivery-server:local` | The in-memory simple delivery server            |
 
-The MessageBoard image also contains the application-only entrypoint. A
+The Message Board image also contains the application-only entrypoint. A
 deployment can override its command with:
 
 ```text
@@ -57,7 +57,7 @@ delivery host or port variables.
 
 `SPINE_IPC_DIRECTORY` is an absolute, container-local directory used by the
 existing same-host ZeroMQ transport. Application code selects Datastore for
-MessageBoard data. The standalone gateway creates a separate Datastore-backed
+Message Board data. The standalone gateway creates a separate Datastore-backed
 subscription registry and isolates its records with the required namespace.
 Infrastructure passes these values; it does not choose a storage provider.
 

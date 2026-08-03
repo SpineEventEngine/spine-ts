@@ -31,6 +31,33 @@ runs the scenario, prints one JSON result, and closes the server.
 Choose `10`, `100`, or `1000` users by changing
 `SPINE_DATASTORE_ORDERS_LOAD_USERS`.
 
+## 🧭 How it works
+
+```mermaid
+flowchart LR
+  Command[CreateOrder command] --> Order[OrderAggregate]
+  Order -->|OrderCreated| Views[Order and sales Projections]
+  Order --> Events[(Event storage)]
+  Views --> Queries[Queries and subscriptions]
+```
+
+The load runner posts `CreateOrder` through the local server. `OrderAggregate`
+stores the order state and returns `OrderCreated`; the registered Projections
+turn that fact into the fixed read-side topology used by the scenario.
+
+```ts
+@Assign createOrder(command: CreateOrder): OrderCreated {
+  this.update((draft) =>
+    Object.assign(draft, create(OrderSchema, { id: this.id, skuId: command.skuId })),
+  );
+  return create(OrderCreatedSchema, { id: this.id, skuId: command.skuId });
+}
+```
+
+`SkuAggregate` follows the same pattern for SKU registration. The example's
+many Projections and Process Managers are deliberately a topology exercise,
+not a claim that every application needs that many read models.
+
 ## 🧪 Run the example tests
 
 ```bash

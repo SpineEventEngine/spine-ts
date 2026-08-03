@@ -21,8 +21,8 @@ example `@acme/users-model` and `@acme/chat-model`. A model package can import
 canonical Proto source from another installed model package; it must not copy
 that dependency's Proto source or generated output.
 
-The repository MessageBoard example uses one `@spine-event-engine/example-message-board-model`
-package that owns `UserId` directly with the rest of its MessageBoard messages.
+The repository Message Board example uses one `@spine-event-engine/example-message-board-model`
+package that owns `UserId` directly with the rest of its Message Board messages.
 
 The packages in this source repository are currently private and use the root
 package version. They are not published to npm. Tarball tests pack and extract local artifacts
@@ -252,9 +252,9 @@ void dynamicSpine;
 `AnyMessages.pack` and `AnyMessages.unpack` require the expected schema and are the normal choice
 at typed boundaries. `AnyMessages.unpackUsing` is for a value whose schema is selected
 at runtime; it returns `undefined` for a type URL absent from the registry.
-The generated MessageBoard application is the runnable in-repository example of this
+The generated Message Board application is the runnable in-repository example of this
 layout: it composes the single `@spine-event-engine/example-message-board-model`, which
-owns `UserId` directly, and runs an in-memory MessageBoard server.
+owns `UserId` directly, and runs an in-memory Message Board server.
 
 ## 2. Model domain messages
 

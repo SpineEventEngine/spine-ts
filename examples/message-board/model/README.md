@@ -1,6 +1,6 @@
-# MessageBoard Protobuf model
+# Message Board Protobuf model
 
-This package contains the vocabulary shared by the MessageBoard server and
+This package contains the vocabulary shared by the Message Board server and
 browser: user, board, and message IDs; commands that request posting; events
 that record postings; visible query-side state; and domain rejections.
 
@@ -37,6 +37,6 @@ The package has no server, UI, storage, or process lifecycle.
 
 ## 🔗 Learn more
 
-- [Complete MessageBoard example](../README.md)
+- [Complete Message Board example](../README.md)
 - [Protobuf tooling](../../../packages/proto-tools/README.md)
 - [Reference for coding agents](REFERENCE.md)

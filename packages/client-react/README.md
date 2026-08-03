@@ -94,5 +94,5 @@ a possible gap.
 ## 🔗 Learn more
 
 - [Browser client](../client-web/README.md)
-- [MessageBoard web example](../../examples/message-board/web/README.md)
+- [Message Board web example](../../examples/message-board/web/README.md)
 - [Reference for coding agents](REFERENCE.md)

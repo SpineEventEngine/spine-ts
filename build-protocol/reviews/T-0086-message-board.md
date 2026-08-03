@@ -113,7 +113,7 @@ occurred.
 - Style/maintainability (`gpt-5.6-terra` / high): three P2 findings.
   Remove the unreferenced `browser-fixture.tsx`; split the 257-line `Board`
   component across synchronization, message-list, and post-form semantics; and
-  reverse the stale Chat-to-MessageBoard immutable-baseline mapper with a
+  reverse the stale Chat-to-Message Board immutable-baseline mapper with a
   regression test.
 - Documentation (`gpt-5.6-luna` / medium): one P2 finding. Clarify that blank
   text is submitted to the server for validation but cannot be accepted. All
@@ -137,18 +137,18 @@ unchanged and retains its existing tests.
 - Deleted the unused browser fixture and split synchronization, query-row
   ordering, message rendering, and posting into small semantic modules.
 - Reversed the immutable baseline migration mapper to map each current
-  MessageBoard family path to its actual historical Chat path. A deterministic
+  Message Board family path to its actual historical Chat path. A deterministic
   regression proves all three exact mappings.
 - Preserved raw username and message values through the browser command path.
   A focused regression proves whitespace reaches the server unchanged.
 - Added an authoritative refresh after every successful post. A focused
   regression proves the row appears without a subscription update.
 - Corrected the browser reference wording and generated registry TSDoc source,
-  then regenerated the MessageBoard registry.
+  then regenerated the Message Board registry.
 - Converted the Shadcn wrappers to documented React component constants and
   completed TSDoc layout/parameter coverage found by deterministic enforcement.
 
-Focused correction evidence is clean: MessageBoard web tests 25/25,
+Focused correction evidence is clean: Message Board web tests 25/25,
 Proto-tools tests 87/87, cleanup-rule tests 108/108, generated TypeScript build,
 tooling typecheck, ESLint, TSDoc enforcement, cleanup enforcement, docs/API,
 Buf lint, generated cleanliness, format, and `git diff --check`. Live

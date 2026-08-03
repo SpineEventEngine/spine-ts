@@ -41,8 +41,8 @@ public assembly, and production deployment contracts.
   acceptance only. Shutdown closes intake before resource teardown.
 - Application code selects its storage provider. Infrastructure passes
   endpoints, namespaces, configuration, and secrets but never selects MySQL,
-  Datastore, or another application provider. MessageBoard acceptance may
-  explicitly select a Datastore emulator in MessageBoard code.
+  Datastore, or another application provider. Message Board acceptance may
+  explicitly select a Datastore emulator in Message Board code.
 - Packages and images are built and tested locally only. Wave 5 publishes
   neither. No deployment CLI, new application runner, storage-selection
   framework, operator, Helm chart, default application health API, or parallel
@@ -84,7 +84,7 @@ public assembly, and production deployment contracts.
   Because delivery-client already depends on server, server must not acquire a
   reverse dependency.
 - Build/deployment work reuses `spine-proto generate`, `compose`, `handlers`,
-  packed-tarball acceptance, package metadata checks, MessageBoard, the Envoy
+  packed-tarball acceptance, package metadata checks, Message Board, the Envoy
   renderer, and the existing simple delivery server.
 
 ## Ordered task map
@@ -265,7 +265,7 @@ then `verify:release` once.
 ## E1 — Build-once and local images
 
 Ownership: package/root build scripts and metadata only where required;
-MessageBoard production entrypoints/provider selection; and
+Message Board production entrypoints/provider selection; and
 `examples/message-board/deploy/container/**` Dockerfiles, entrypoint checks, and
 local image tests. F1 exclusively owns Compose/Kubernetes paths.
 
@@ -281,7 +281,7 @@ RED tests and acceptance:
   generated/manifests and avoid build caches/dev-only inputs where practical.
 - Node receives process signals directly, shutdown is bounded, runtime secrets
   are not baked into images, and no script publishes packages/images.
-- MessageBoard code, not image/deployment infrastructure, explicitly selects
+- Message Board code, not image/deployment infrastructure, explicitly selects
   application storage and any Datastore emulator adapter.
 
 Review: all four canonical lanes. Gate: capability precheck, packed-tarball and

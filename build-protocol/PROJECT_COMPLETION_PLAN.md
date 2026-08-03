@@ -111,7 +111,7 @@ durably closed.
   universal gRPC-Web with optional Connect optimization, a standalone
   provider-neutral authentication gateway, opaque and signed application
   sessions, OIDC/Google/GitHub sign-in, a configurable Envoy reference, and the
-  Projection-based MessageBoard example. Subscriptions are explicitly best-effort
+  Projection-based Message Board example. Subscriptions are explicitly best-effort
   notifications with reconnect/re-query behavior and no completeness promise.
 - **Wave 5:** storage-neutral application packaging/deployment contracts,
   combined and standalone production gateways, a durable subscription
@@ -1113,17 +1113,17 @@ The project is complete only after the closure commit itself is verified on
 ### T-0084: Application Hosting And Beginner Documentation
 
 T-0084 is complete. It adds one concise framework-owned host for native gRPC
-and browser HTTP transports, removes generic hosting boilerplate from MessageBoard,
+and browser HTTP transports, removes generic hosting boilerplate from Message Board,
 splits human READMEs from agent references across all modules, verifies every
-example startup, and leaves the MessageBoard server and UI running after reviewed
+example startup, and leaves the Message Board server and UI running after reviewed
 integration. Its reviewed tree passed the release profile with 3,250 tests and
 90.01% branch coverage, merged as `2a911ba0`, and passed focused post-merge and
 live browser acceptance. Its canonical ledger is in
 `build-protocol/tasks/T-0084-app-host-docs/TASK.md`.
 
-### T-0086: MessageBoard Example
+### T-0086: Message Board Example
 
-T-0086 is complete. It renames Chat to MessageBoard, adds Proto-owned username
+T-0086 is complete. It renames Chat to Message Board, adds Proto-owned username
 and message validation with server-derived UI feedback, displays messages
 oldest-first with relative times, and supplies a polished Shadcn-based browser
 interface. The reviewed task tree passes 3,265 tests with exactly 90.00% global

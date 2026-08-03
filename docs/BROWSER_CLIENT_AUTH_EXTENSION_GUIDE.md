@@ -424,7 +424,7 @@ Use this test matrix before changing an extension:
 | Provider callbacks | PKCE/state/nonce, one-time callback/exchange, redirect allowlist, provider/JWKS failure, token redaction.                    |
 | Browser client     | Chromium, Firefox, WebKit; reconnect/entity re-query, event `gapPossible`, cancellation and Strict Mode cleanup.             |
 | Gateway/Envoy      | Browser → TLS Envoy → standalone gateway → real backend; unauthorized rooms, forged context, relay/queue cleanup.            |
-| MessageBoard       | Query and subscribe Projection-backed `BoardMessageView`; never treat board messages as domain events.                       |
+| Message Board      | Query and subscribe Projection-backed `BoardMessageView`; never treat board messages as domain events.                       |
 
 ### Safe diagnostics
 

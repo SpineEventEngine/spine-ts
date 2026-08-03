@@ -21,7 +21,7 @@ code, and only then operations or deployment.
 ## Human-Imposed Requirements Ledger
 
 1. Human prose in all authored Markdown—including protocol planning and
-   historical narration—uses “Message Board”, not “MessageBoard”. Exact code
+   historical narration—uses “Message Board”, not the historical literal “MessageBoard”. Exact code
    identifiers, package/path names, domain slugs, explicit historical
    requirement literals, and truthful quoted output remain unchanged where
    spelling them with a space would be technically false.
@@ -49,7 +49,7 @@ code, and only then operations or deployment.
 
 ## Scope And Method
 
-- Inventory all authored `*.md` occurrences of `MessageBoard`; change prose,
+- Inventory all authored `*.md` occurrences of the historical literal `MessageBoard`; change prose,
   headings, and link labels while preserving exact identifiers and historical
   evidence that must remain literal.
 - Restructure `examples/message-board/README.md` as the primary application
@@ -68,7 +68,7 @@ code, and only then operations or deployment.
 - Selected final profile: `pnpm verify:task --no-tests`, because changes are
   authored Markdown and protocol records only. Deterministic preflight also
   checks formatting, links, documentation audience, Mermaid/code fences,
-  prohibited unqualified `MessageBoard` prose, and `git diff --check`.
+  prohibited unqualified historical `MessageBoard` prose, and `git diff --check`.
 - Documentation review is required for teaching quality and completeness.
 - TypeScript/API review is required if public code snippets or package/API
   claims change.
@@ -82,7 +82,7 @@ code, and only then operations or deployment.
 
 ## Acceptance Criteria
 
-1. No human-facing authored Markdown uses `MessageBoard` as the product name.
+1. No human-facing authored Markdown uses the literal `MessageBoard` as the product name.
 2. The Message Board README follows the requested learning order and places
    Deployment last with Build local images beneath it.
 3. Its diagrams and prose explain browser and native gRPC paths, authoritative

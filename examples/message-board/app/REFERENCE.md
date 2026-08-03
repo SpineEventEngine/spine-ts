@@ -1,7 +1,7 @@
-# MessageBoard app reference
+# Message Board app reference
 
 This reference is for coding agents and maintainers. Beginners should start
-with the [MessageBoard app README](README.md).
+with the [Message Board app README](README.md).
 
 ## Assembly
 
@@ -10,7 +10,7 @@ with the [MessageBoard app README](README.md).
 and one Projection. `start()` embeds the server and leaves close ownership to
 the caller. `run()` delegates `SIGINT` and `SIGTERM` shutdown to `Server`.
 
-Browser configuration supplies the MessageBoard type registry, `LocalBoardSession`
+Browser configuration supplies the Message Board type registry, `LocalBoardSession`
 resolver and clock, `BoardAccessPolicy`, `BoardContextResolver`, exact
 Vite origin, and stable principal fingerprint. Generic listener, CORS, router,
 subscription-binding, rollback, and lifecycle modules must remain in the

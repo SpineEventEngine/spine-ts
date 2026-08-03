@@ -51,13 +51,13 @@ reviewed, verified, merged, and remotely synchronized dependency-sized tasks.
 - Do not add application health endpoints by default. Use the approved TCP
   startup/readiness semantics and no default liveness probe.
 - Keep storage selection in application code. A Datastore emulator may be used
-  only by acceptance configuration in MessageBoard.
+  only by acceptance configuration in Message Board.
 - Build and test packages and images locally. Publish neither npm packages nor
   images; revisit publication only after all accepted waves.
 - Do not add a deployment CLI, new application runner abstraction, operator,
   Helm chart, storage-selection framework, or unrestricted HTTP router.
 - Reuse current app startup, Proto packaging, registry, Envoy, auth, storage,
-  delivery, and MessageBoard foundations before adding a new abstraction.
+  delivery, and Message Board foundations before adding a new abstraction.
 - Follow test-first implementation. Keep one writer on overlapping production
   files and aggregate one relevant reviewer wave per slice.
 - Push every feature-branch commit immediately. Merge, post-merge verify, and

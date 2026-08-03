@@ -1,4 +1,4 @@
-# T-0086: MessageBoard example
+# T-0086: Message Board example
 
 Status: Complete
 Start: `2026-07-31`
@@ -12,7 +12,7 @@ example.
 
 ## Objective
 
-Renames the Chat example and product vocabulary to MessageBoard. Adds required
+Renames the Chat example and product vocabulary to Message Board. Adds required
 username and message inputs whose validation rules and messages originate in
 Proto and whose server validation failures are rendered by the UI. Orders
 messages from oldest to newest, shows approximate age, and replaces the current
