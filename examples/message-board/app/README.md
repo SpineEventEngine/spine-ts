@@ -6,8 +6,9 @@ MessageBoard domain code, local session policy, and concise server configuration
 
 ## 💡 What is here?
 
-- ✅ `BoardMessageAggregate` stores one posted message.
-- ✅ `BoardViewProjection` creates the browser’s board view.
+- ✅ `BoardMessageAggregate` guards write-side consistency for one posted
+  message.
+- ✅ `BoardViewProjection` creates the browser’s query-side board view.
 - ✅ `BoardAccessPolicy` protects boards and message authors.
 - ✅ `MessageBoardApplication` builds the context and starts the framework server.
 - ✅ Framework validation rejects missing usernames and messages before a

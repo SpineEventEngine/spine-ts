@@ -1,8 +1,9 @@
 # Protobuf tooling for Spine applications
 
 This package generates TypeScript from application-owned Proto models and
-assembles those models into an application registry. It runs at build time, not
-inside a server process.
+assembles those models into an application registry. Those models can define
+commands, events, and state used by Aggregates or Projections. It runs at build
+time, not inside a server process.
 
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).

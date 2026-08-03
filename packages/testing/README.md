@@ -10,7 +10,8 @@ For detailed contracts intended for coding agents, see the
 ## 💡 Why use it?
 
 - ✅ Tests a complete bounded context through real Spine services.
-- ✅ Posts commands, sends queries, and observes subscriptions as a user.
+- ✅ Posts commands, reads query-side views, and observes subscriptions as a
+  user.
 - ✅ Runs on an ephemeral local server with predictable cleanup.
 - ✅ Waits for genuinely asynchronous results with bounded polling.
 

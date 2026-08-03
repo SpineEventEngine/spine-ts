@@ -1,8 +1,8 @@
 # Spine client for web browsers
 
 Use this browser-safe package to post commands, send queries, and create Spine
-subscriptions. It is framework-neutral: React support is in
-`@spine-event-engine/client-react`.
+subscriptions for query-side views. It is framework-neutral: React support is
+in `@spine-event-engine/client-react`.
 
 For detailed protocol, browser-session, reconnect, and security limits, read
 the [reference for agents](REFERENCE.md).

@@ -1,7 +1,11 @@
-# Spine TS — Event-driven applications in TypeScript
+# Spine TS — DDD and CQRS applications in TypeScript
 
-Spine TS helps Node.js applications process commands, store entity state, build
-read models, and notify clients through typed Protobuf contracts.
+Spine TS helps Node.js applications apply Domain-Driven Design (DDD) and CQRS
+with typed Protobuf contracts. A command requests a business action; an event
+records a domain fact. A Bounded Context is a boundary around one domain model,
+vocabulary, and set of rules. Aggregates protect write-side consistency, Process
+Managers coordinate multi-step work across entities or Aggregates in response
+to events, and Projections provide query-side views.
 
 > **🔧 Spine TS is an experimental snapshot.** Its public API may change before
 > the first stable release.
@@ -10,8 +14,10 @@ read models, and notify clients through typed Protobuf contracts.
 
 - ✅ **Keep contracts in Protobuf.** Commands, events, entities, validation, and
   query columns share one model.
-- ✅ **Write focused domain code.** Aggregates, Process Managers, and Projections
-  receive signals through generated, type-safe handlers.
+- ✅ **Write focused domain code.** Aggregates protect write-side consistency,
+  Process Managers coordinate multi-step work across Aggregates in response to
+  events, and Projections provide query-side views through generated, type-safe
+  handlers.
 - ✅ **Choose storage in application code.** Start in memory, then configure
   Google Cloud Datastore or MySQL without changing domain handlers.
 - ✅ **Serve Node and browser clients.** Native gRPC, Connect, and gRPC-Web use
@@ -23,8 +29,8 @@ read models, and notify clients through typed Protobuf contracts.
 
 **Application runtime**
 
-- Bounded contexts, entities, generated handlers, validation, rejections, and
-  event-driven state changes.
+- Bounded Contexts, Aggregates, Process Managers, Projections, generated
+  handlers, validation, and rejections.
 - A `Server` that owns startup, readiness, shutdown, and optional authenticated
   browser access.
 - In-memory delivery coordination for one process or a trusted local network.
@@ -87,15 +93,17 @@ spine-ts/
 
 Start with these packages:
 
-| Goal                            | Package                                                               |
-| ------------------------------- | --------------------------------------------------------------------- |
-| Build and run a bounded context | [`@spine-event-engine/server`](packages/server/README.md)             |
-| Connect from Node.js            | [`@spine-event-engine/client-node`](packages/client-node/README.md)   |
-| Connect from a browser          | [`@spine-event-engine/client-web`](packages/client-web/README.md)     |
-| Use React hooks                 | [`@spine-event-engine/client-react`](packages/client-react/README.md) |
-| Configure authentication        | [`@spine-event-engine/auth`](packages/auth/README.md)                 |
-| Choose a storage backend        | [`@spine-event-engine/storage`](packages/storage/README.md)           |
-| Generate application model code | [`@spine-event-engine/proto-tools`](packages/proto-tools/README.md)   |
+| Goal                            | Package                                                                                |
+| ------------------------------- | -------------------------------------------------------------------------------------- |
+| Build and run a bounded context | [`@spine-event-engine/server`](packages/server/README.md)                              |
+| Define Proto contracts          | Application model packages use [`@spine-event-engine/proto`](packages/proto/README.md) |
+| Generate application model code | [`@spine-event-engine/proto-tools`](packages/proto-tools/README.md)                    |
+| Connect from Node.js            | [`@spine-event-engine/client-node`](packages/client-node/README.md)                    |
+| Connect from a browser          | [`@spine-event-engine/client-web`](packages/client-web/README.md)                      |
+| Use React hooks                 | [`@spine-event-engine/client-react`](packages/client-react/README.md)                  |
+| Test a bounded context          | [`@spine-event-engine/testing`](packages/testing/README.md) `BlackBox` tests           |
+| Configure authentication        | [`@spine-event-engine/auth`](packages/auth/README.md)                                  |
+| Choose a storage backend        | [`@spine-event-engine/storage`](packages/storage/README.md)                            |
 
 ## 🎓 Documentation
 

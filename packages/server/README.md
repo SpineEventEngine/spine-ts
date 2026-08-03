@@ -1,8 +1,8 @@
 # Spine application server for Node.js
 
 This package runs a Spine bounded context in Node. It assembles entities,
-handlers, storage, command/event processing, queries, subscriptions, and a
-local Connect/gRPC-compatible server.
+handlers, storage, command/event processing, query-side Projections,
+subscriptions, and a local Connect/gRPC-compatible server.
 
 For a standalone application, use `await server.run()` to let the framework
 close the server on `SIGINT` or `SIGTERM` and permanently close the environment
@@ -20,7 +20,8 @@ For detailed contracts intended for coding agents, see the
 
 ## 💡 Why use it?
 
-- ✅ Builds bounded contexts with Aggregates, Process Managers, and Projections.
+- ✅ Builds bounded contexts with Aggregates, Process Managers, and query-side
+  Projections.
 - ✅ Validates commands before application handlers run.
 - ✅ Exposes Command, Query, and Subscription services over native gRPC.
 - ✅ Optionally exposes authenticated Connect and gRPC-Web browser access.

@@ -1,18 +1,18 @@
 # Protobuf contracts used by Spine TS
 
 `@spine-event-engine/proto` supplies the generated Protobuf schemas that Spine
-TS itself uses: signal envelopes, contexts, validation messages, options, and
-the schemas needed by the supported client and delivery packages. Most
-applications use it as a dependency of their own model package rather than
-calling it directly.
+TS itself uses: command and event envelopes, query, subscription, and context
+schemas, validation messages, options, and schemas needed by the supported
+client and delivery packages. Most applications use it as a dependency of their
+own model package rather than calling it directly.
 
 For the complete export map and model-package contract, see
 [REFERENCE documentation for agents](REFERENCE.md).
 
 ## 💡 Why use it?
 
-- ✅ Supplies the standard command, event, query, subscription, and context
-  schemas used across Spine TS.
+- ✅ Supplies standard command, event, query, subscription, and context schemas
+  used across Spine TS.
 - ✅ Supplies Spine Protobuf options for entities, validation, and type URLs.
 - ✅ Gives application model packages one stable dependency for Spine imports.
 

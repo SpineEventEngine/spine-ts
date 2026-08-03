@@ -1,8 +1,9 @@
 # React adapter for the Spine browser client
 
-Use this optional React adapter to observe work started through an
-application-owned `@spine-event-engine/client-web` request scope. It does not
-create clients, define queries, cache data, or provide an authentication system.
+Use this optional React adapter to observe query-side views and subscriptions
+through an application-owned `@spine-event-engine/client-web` request scope. It
+does not create clients, define queries, cache data, or provide an authentication
+system.
 
 For detailed hook lifecycles and error behavior, read the [reference for
 agents](REFERENCE.md).
