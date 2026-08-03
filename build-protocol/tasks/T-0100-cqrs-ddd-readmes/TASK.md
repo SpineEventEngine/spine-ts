@@ -1,6 +1,6 @@
 # T-0100: DDD and CQRS README vocabulary
 
-Status: Ready for final verification
+Status: Ready to merge
 Start: `2026-08-03`
 Baseline: `d4c3915a`
 Branch: `task/T-0100-cqrs-ddd-readmes`

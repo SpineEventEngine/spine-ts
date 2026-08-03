@@ -43,5 +43,9 @@ Reviewed commits: `d814bb73`, corrected by `9ad84340`.
 - Correction checks passed, and the affected documentation concern re-reviewed
   cleanly.
 
-All applicable review concerns are resolved. Final task and post-merge
-verification remain required before closure.
+All applicable review concerns are resolved. Final branch
+`pnpm verify:task --no-tests` passed after convergence, including generated
+Proto integrity, TypeScript builds, ESLint, cleanup and TSDoc rules, formatting,
+API docs, Buf lint, generated cleanliness, 67 package imports, 44 package
+assets, and 279 relative Markdown links. Post-merge verification remains
+required before closure.
