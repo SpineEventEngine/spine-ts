@@ -1,6 +1,6 @@
 # T-0097 Wave 5 Closure Review
 
-Status: Affected API/reliability re-review in progress
+Status: API wording follow-up in progress; reliability clean
 Baseline: `0f47c634`
 Candidate: `543917c4`
 
@@ -64,3 +64,22 @@ reliability after focused verification.
 - The three-case Compose lifecycle suite passes with leak-free cleanup.
 - Formatting and `git diff --check` pass.
 - Only the TypeScript/API and performance/reliability concerns are reopened.
+
+## Affected Re-review
+
+- Performance/reliability: clean; no P0-P3 findings. All four Envoy
+  configurations enforce the exact six POST-only routes, Activate retains an
+  unlimited route timeout, every HTTP connection manager has an unlimited
+  stream idle timeout, and the structural plus data-plane evidence passes.
+- TypeScript/API documentation: one remaining P2 wording inconsistency was
+  accepted. The container and application READMEs still described revocations
+  as living under the shared registry namespace instead of as distinct
+  application-owned logical records.
+- Both assignments explicitly used their recorded existing roles with
+  `gpt-5.6-terra` / high. Runtime self-introspection was unavailable, and no
+  visible role or profile mismatch occurred.
+- The two README descriptions now distinguish application-owned revocations
+  from the gateway-owned subscription registry and identify the configuration
+  that browser-capable replicas must share. Formatting, generated-document,
+  audience, and diff checks pass. Only this wording receives final API
+  confirmation.
