@@ -1,6 +1,6 @@
 # T-0097 Wave 5 Closure Review
 
-Status: API wording follow-up in progress; reliability clean
+Status: Specialist concerns converged; final security review pending
 Baseline: `0f47c634`
 Candidate: `543917c4`
 
@@ -83,3 +83,6 @@ reliability after focused verification.
   that browser-capable replicas must share. Formatting, generated-document,
   audience, and diff checks pass. Only this wording receives final API
   confirmation.
+- Final TypeScript/API confirmation: clean; no P0-P3 findings. Both corrected
+  guides accurately state the browser-capable process scope and the distinct
+  registry-versus-revocation ownership model.
