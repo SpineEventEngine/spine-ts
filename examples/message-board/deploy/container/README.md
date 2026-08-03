@@ -41,6 +41,12 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | Gateway          | Combined values plus `BACKEND_URL`                                             |
 | Delivery server  | `HOST`, `PORT`                                                                 |
 
+`DELIVERY_SERVER_URL` is the sole application and gateway delivery setting. In
+these references it is `http://delivery:8484` for Compose and
+`http://simple-delivery-server:8484` for Kubernetes; `8484` is the delivery
+server listener port, not an application browser port. Do not add separate
+delivery host or port variables.
+
 `SPINE_IPC_DIRECTORY` is an absolute, container-local directory used by the
 existing same-host ZeroMQ transport. Application code selects Datastore for
 MessageBoard data. The standalone gateway creates a separate Datastore-backed

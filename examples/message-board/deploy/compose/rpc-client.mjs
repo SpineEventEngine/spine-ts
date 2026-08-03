@@ -1,6 +1,6 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { createGrpcWebTransport } from "@connectrpc/connect-web";
 import { SignedSessions } from "@spine-event-engine/auth";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
@@ -158,17 +158,16 @@ async function assertCancelled() {
     const result = await deadline(updates.next(), 5_000, "cancelled subscription closure");
     if (!result.done) throw new Error("Cancelled Compose subscription delivered an update.");
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.startsWith("Timed out waiting") ||
-        error.message === "Cancelled Compose subscription delivered an update.")
-    )
-      throw error;
+    if (!isCancelledSubscriptionClosure(error)) throw error;
   } finally {
     controller.abort();
     await updates.return?.();
   }
   process.stdout.write("cancelled-ok\n");
+}
+
+function isCancelledSubscriptionClosure(error) {
+  return error instanceof ConnectError && error.code === Code.NotFound;
 }
 
 async function authoritativeQuery() {

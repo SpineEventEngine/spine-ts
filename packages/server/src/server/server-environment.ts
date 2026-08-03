@@ -156,7 +156,10 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
       new EnvironmentAttachments({
         createWorker: () => {
           const ports = ServerEnvironmentValues.ports(this.delivery);
-          return new EnvironmentDeliveryWorker(ports === undefined ? {} : { ports });
+          return new EnvironmentDeliveryWorker({
+            ...(ports === undefined ? {} : { ports }),
+            nodeId: this.nodeId,
+          });
         },
         deliveryPorts: () => ServerEnvironmentValues.ports(this.delivery),
       }),

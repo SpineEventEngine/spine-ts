@@ -140,6 +140,32 @@ test("MessageBoard commands share one artifact and required compiled modules imp
   );
 });
 
+test("combined deployment fails closed before opening a listener without a registry namespace", () => {
+  const result = spawnSync(
+    "docker",
+    [
+      "run",
+      "--rm",
+      "--env",
+      "HOST=0.0.0.0",
+      "--env",
+      "PORT=18081",
+      "--env",
+      "DATASTORE_PROJECT_ID=message-board-missing-registry",
+      "--env",
+      "BROWSER_ORIGIN=https://message-board.example.test",
+      "spine-ts/message-board:local",
+    ],
+    { encoding: "utf8", timeout: 30_000 },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    `${result.stdout}${result.stderr}`,
+    /Missing required configuration: SUBSCRIPTION_REGISTRY_NAMESPACE\./u,
+  );
+});
+
 test("runtime commands keep Node as PID 1 and stop cleanly", () => {
   const suffix = `${String(process.pid)}-${String(Date.now())}`;
   const network = `spine-t0095-${suffix}`;

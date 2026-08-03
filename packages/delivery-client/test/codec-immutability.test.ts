@@ -1,4 +1,5 @@
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { StringValueSchema } from "@bufbuild/protobuf/wkt";
 import { ShardIndex } from "@spine-event-engine/server";
 import {
   InboxMessageIdSchema,
@@ -59,5 +60,35 @@ describe("delivery codec and immutable snapshots", () => {
     );
 
     expect(decoded.inboxId).toEqual(plain.inboxId);
+  });
+
+  it("encodes packed-looking framework target IDs as explicit StringValue payloads", () => {
+    const source = domainMessage();
+    const targetId = "type.spine.io/test.EntityId:cm91dGluZy1rZXk=";
+    const wire = DeliveryMessageCodec.encode({
+      ...source,
+      inboxId: { ...source.inboxId, targetId },
+    });
+
+    expect(wire.inboxId?.entityId?.id.typeUrl).toBe(
+      "type.googleapis.com/google.protobuf.StringValue",
+    );
+    expect(DeliveryMessageCodec.decode(wire, ShardIndex.single()).inboxId.targetId).toBe(targetId);
+  });
+
+  it("normalizes malformed StringValue target bytes to the delivery protocol error", () => {
+    expect(() =>
+      DeliveryMessageCodec.decodeTarget(
+        "type.googleapis.com/google.protobuf.StringValue",
+        new Uint8Array([0xff]),
+      ),
+    ).toThrow(DeliveryProtocolError);
+
+    expect(
+      DeliveryMessageCodec.decodeTarget(
+        "type.spine.io/test.EntityId",
+        toBinary(StringValueSchema, create(StringValueSchema, { value: "legacy" })),
+      ),
+    ).toBe("type.spine.io/test.EntityId:CgZsZWdhY3k=");
   });
 });

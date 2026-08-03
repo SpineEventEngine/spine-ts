@@ -320,11 +320,6 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       throw new TypeError("Delivery inbox ID is invalid.");
     if (!DeliveryValues.hasText(inbox.targetId))
       throw new TypeError("Delivery inbox ID is invalid.");
-    const separator = inbox.targetId.indexOf(":");
-    const typeUrl = inbox.targetId.slice(0, separator);
-    if (separator > 0 && typeUrl.includes("/")) {
-      return { typeUrl, value: Buffer.from(inbox.targetId.slice(separator + 1), "base64") };
-    }
     return {
       typeUrl: stringTargetTypeUrl,
       value: toBinary(StringValueSchema, create(StringValueSchema, { value: inbox.targetId })),
@@ -341,7 +336,12 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
   decodeTarget(typeUrl: string, value: Uint8Array): string {
     if (typeUrl !== stringTargetTypeUrl)
       return `${typeUrl}:${Buffer.from(value).toString("base64")}`;
-    const decoded = fromBinary(StringValueSchema, value).value;
+    let decoded: string;
+    try {
+      decoded = fromBinary(StringValueSchema, value).value;
+    } catch {
+      throw DeliveryRequestCodec.protocol();
+    }
     if (!DeliveryValues.hasText(decoded)) throw DeliveryRequestCodec.protocol();
     return decoded;
   },
