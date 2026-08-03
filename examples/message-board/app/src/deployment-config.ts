@@ -43,17 +43,20 @@ interface DeploymentContract {
 export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   application(environment: NodeJS.ProcessEnv): DeploymentConfig {
     return {
-      host: required(environment, "HOST"),
-      port: port(required(environment, "PORT")),
-      projectId: required(environment, "DATASTORE_PROJECT_ID"),
+      host: DeploymentValues.required(environment, "HOST"),
+      port: DeploymentValues.port(DeploymentValues.required(environment, "PORT")),
+      projectId: DeploymentValues.required(environment, "DATASTORE_PROJECT_ID"),
     };
   },
 
   combined(environment: NodeJS.ProcessEnv): CombinedConfig {
     return {
       ...MessageBoardDeployment.application(environment),
-      webOrigin: required(environment, "BROWSER_ORIGIN"),
-      subscriptionNamespace: required(environment, "SUBSCRIPTION_REGISTRY_NAMESPACE"),
+      webOrigin: DeploymentValues.required(environment, "BROWSER_ORIGIN"),
+      subscriptionNamespace: DeploymentValues.required(
+        environment,
+        "SUBSCRIPTION_REGISTRY_NAMESPACE",
+      ),
     };
   },
 
@@ -61,7 +64,7 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     const combined = MessageBoardDeployment.combined(environment);
     return {
       ...combined,
-      backendUrl: required(environment, "BACKEND_URL"),
+      backendUrl: DeploymentValues.required(environment, "BACKEND_URL"),
     };
   },
 
@@ -91,23 +94,45 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     ServerEnvironment.when(EnvironmentType.Production).use({
       storageFactory,
       transport: createZeroMqTransport(
-        ZeroMqConfig.create({ ipcDirectory: required(environment, "SPINE_IPC_DIRECTORY") }),
+        ZeroMqConfig.create({
+          ipcDirectory: DeploymentValues.required(environment, "SPINE_IPC_DIRECTORY"),
+        }),
       ),
     });
     return storageFactory;
   },
 });
 
-function required(environment: NodeJS.ProcessEnv, name: string): string {
-  const value = environment[name];
-  if (value === undefined || value.length === 0)
-    throw new Error(`Missing required configuration: ${name}.`);
-  return value;
-}
+/**
+ * Reads and validates primitive deployment configuration values.
+ */
+const DeploymentValues = Object.freeze({
+  // prettier-ignore
 
-function port(value: string): number {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535)
-    throw new Error("Invalid required configuration: PORT.");
-  return parsed;
-}
+  /**
+   * Reads one required non-empty environment value.
+   *
+   * @param environment The process environment that supplies configuration.
+   * @param name The required environment variable name.
+   * @returns The configured non-empty value.
+   */
+  required(environment: NodeJS.ProcessEnv, name: string): string {
+    const value = environment[name];
+    if (value === undefined || value.length === 0)
+      throw new Error(`Missing required configuration: ${name}.`);
+    return value;
+  },
+
+  /**
+   * Parses one valid TCP port.
+   *
+   * @param value The required decimal port value.
+   * @returns The validated TCP port number.
+   */
+  port(value: string): number {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535)
+      throw new Error("Invalid required configuration: PORT.");
+    return parsed;
+  },
+});
