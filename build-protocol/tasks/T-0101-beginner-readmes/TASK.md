@@ -1,6 +1,6 @@
 # T-0101: Beginner-oriented README journeys
 
-Status: In progress
+Status: Reviewed; ready for integration
 Start: `2026-08-03`
 Baseline: `df9234f1`
 Branch: `task/T-0101-beginner-readmes`
