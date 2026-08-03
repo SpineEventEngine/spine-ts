@@ -1,7 +1,9 @@
-# Spine TS — Event-driven applications in TypeScript
+# Spine TS — DDD and CQRS applications in TypeScript
 
-Spine TS helps Node.js applications process commands, store entity state, build
-read models, and notify clients through typed Protobuf contracts.
+Spine TS helps Node.js applications apply Domain-Driven Design (DDD) and CQRS
+with typed Protobuf contracts. A command requests a business action; an event
+records a domain fact. Aggregates protect write-side consistency, Process
+Managers coordinate longer flows, and Projections provide query-side views.
 
 > **🔧 Spine TS is an experimental snapshot.** Its public API may change before
 > the first stable release.
@@ -10,8 +12,9 @@ read models, and notify clients through typed Protobuf contracts.
 
 - ✅ **Keep contracts in Protobuf.** Commands, events, entities, validation, and
   query columns share one model.
-- ✅ **Write focused domain code.** Aggregates, Process Managers, and Projections
-  receive signals through generated, type-safe handlers.
+- ✅ **Write focused domain code.** Aggregates protect write-side consistency,
+  Process Managers coordinate longer flows, and Projections provide query-side
+  views through generated, type-safe handlers.
 - ✅ **Choose storage in application code.** Start in memory, then configure
   Google Cloud Datastore or MySQL without changing domain handlers.
 - ✅ **Serve Node and browser clients.** Native gRPC, Connect, and gRPC-Web use
@@ -23,8 +26,8 @@ read models, and notify clients through typed Protobuf contracts.
 
 **Application runtime**
 
-- Bounded contexts, entities, generated handlers, validation, rejections, and
-  event-driven state changes.
+- Bounded Contexts, Aggregates, Process Managers, Projections, generated
+  handlers, validation, and rejections.
 - A `Server` that owns startup, readiness, shutdown, and optional authenticated
   browser access.
 - In-memory delivery coordination for one process or a trusted local network.

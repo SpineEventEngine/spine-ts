@@ -1,8 +1,8 @@
 # To-Do — Your first Spine TS application
 
 The To-Do example is the smallest complete Node application in this repository.
-It accepts task commands, updates a task-list Projection, and exposes commands,
-queries, and subscriptions through a real local server.
+It accepts task commands, records events, updates a task-list Projection, and
+exposes commands, queries, and subscriptions through a real local server.
 
 ## 💡 What will you learn?
 

@@ -1,7 +1,7 @@
 # Projects — Project management in Spine TS
 
 This example creates projects through a real local Spine server and follows the
-result through a query and a Projection subscription.
+creation event through a query-side Projection subscription.
 
 ## 💡 What will you learn?
 

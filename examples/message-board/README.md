@@ -7,7 +7,8 @@ see the saved message appear on the board.
 ## 💡 What will you learn?
 
 - ✅ How a Proto model is shared by a Node server and browser UI.
-- ✅ How an Aggregate accepts a command and a Projection builds the message board view.
+- ✅ How an Aggregate protects write-side consistency and a Projection builds
+  the message board’s query-side view.
 - ✅ How the framework serves Connect and gRPC-Web without application-owned
   listener, router, CORS, or signal-handling code.
 - ✅ How authentication policy stays outside the bounded context.
@@ -76,9 +77,10 @@ validation response returned by the server.
 
 1. The browser creates `PostMessage` and sends it through the authenticated
    browser endpoint.
-2. `BoardMessageAggregate` stores one message and emits `MessagePosted`.
-3. `BoardViewProjection` creates the board’s visible message row, including the
-   display username and posting time.
+2. `BoardMessageAggregate` guards write-side consistency, stores one message,
+   and emits `MessagePosted` as a domain fact.
+3. `BoardViewProjection` creates the board’s query-side message row, including
+   the display username and posting time.
 4. The browser queries rows from oldest to newest and treats subscription updates as hints to
    refresh that state.
 

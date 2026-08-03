@@ -1,8 +1,8 @@
 # Spine client for Node.js
 
-Use this package from a Node.js application that sends Spine commands, reads
-queries, or maintains subscriptions. It creates the Node HTTP/2 transport; the
-same request and subscription API is shared with the browser client.
+Use this package from a Node.js application to post commands, send queries, or
+create subscriptions for query-side views. It creates the Node HTTP/2 transport;
+the same request and subscription API is shared with the browser client.
 
 For detailed public contracts and limits, read the [reference for
 agents](REFERENCE.md).

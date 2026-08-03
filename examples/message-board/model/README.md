@@ -1,8 +1,8 @@
 # MessageBoard Protobuf model
 
 This package contains the vocabulary shared by the MessageBoard server and
-browser: user, board, and message IDs; commands; events; visible message state;
-and domain rejections.
+browser: user, board, and message IDs; commands that request posting; events
+that record postings; visible query-side state; and domain rejections.
 
 ## 💡 Why is the model separate?
 

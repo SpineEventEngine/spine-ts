@@ -1,9 +1,9 @@
 # MessageBoard web UI
 
-This React application posts MessageBoard commands and reads board messages
-through the real Spine browser client. It uses owned Shadcn components and
-Tailwind CSS. It contains no fallback data: if the server is down, the UI
-reports the failure.
+This React application posts MessageBoard commands and reads the board’s
+query-side Projection through the real Spine browser client. It uses owned
+Shadcn components and Tailwind CSS. It contains no fallback data: if the server
+is down, the UI reports the failure.
 
 ## 💡 What does it demonstrate?
 
@@ -31,10 +31,11 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI connects to
 
 ## 🔄 How updates work
 
-The page posts `PostMessage`, queries `BoardMessageView` entities for board
-`general`, and subscribes to the same Projection topic. An update tells the UI
-to refresh; it is not a complete message history. Duplicate, reordered, and
-missing notices are allowed, so authoritative query results always win.
+The page posts `PostMessage`, queries the `BoardMessageView` read-side
+Projection for board `general`, and subscribes to the same Projection topic.
+An update tells the UI to refresh; it is not a complete message history.
+Duplicate, reordered, and missing notices are allowed, so authoritative query
+results always win.
 
 The Message label describes the keyboard shortcut. In the textarea, press
 Command+Enter on macOS or Control+Enter on other platforms to post; plain Enter
