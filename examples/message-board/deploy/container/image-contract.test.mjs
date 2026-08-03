@@ -55,3 +55,31 @@ test("final images contain only runtime artifacts and no runtime secret", () => 
     rmSync(directory, { force: true, recursive: true });
   }
 });
+
+test("MessageBoard commands share one artifact and required compiled modules import", () => {
+  const messageBoard = "spine-ts/message-board:local";
+  const identity = execFileSync("docker", ["image", "inspect", messageBoard, "--format", "{{.Id}}"], {
+    encoding: "utf8",
+  }).trim();
+  assert.match(identity, /^sha256:[a-f0-9]{64}$/u);
+  const hashes = execFileSync(
+    "docker",
+    [
+      "run", "--rm", "--entrypoint", "sha256sum", messageBoard,
+      "node_modules/@spine-event-engine/example-message-board-app/dist/src/model-registry.js",
+      "node_modules/@spine-event-engine/example-message-board-app/dist/generated/handler/generated-handler-registry.js",
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(hashes.trim().split("\n").length, 2);
+  for (const image of [messageBoard, "spine-ts/standalone-gateway:local"]) {
+    execFileSync("docker", [
+      "run", "--rm", "--entrypoint", "node", image, "--input-type=module", "-e",
+      "await import('@spine-event-engine/example-message-board-model'); await import('/app/node_modules/@spine-event-engine/example-message-board-app/dist/src/model-registry.js');",
+    ], { stdio: "inherit" });
+  }
+  execFileSync("docker", [
+    "run", "--rm", "--entrypoint", "node", "spine-ts/simple-delivery-server:local", "--input-type=module", "-e",
+    "await import('@spine-event-engine/delivery-server');",
+  ], { stdio: "inherit" });
+});
