@@ -1,6 +1,6 @@
 # T-0096 Compose and Kubernetes Review
 
-Status: Affected-concern re-review in progress
+Status: Final correction in progress
 Baseline: `0e06800b`
 Candidate: `f089d075`
 
@@ -73,3 +73,30 @@ verification.
   resource cleanup. Prettier and `git diff --check` are clean.
 - All four concerns changed substantively and therefore receive one targeted
   re-review. The original explicit model/reasoning assignments remain binding.
+
+## Affected-Concern Re-review
+
+- TypeScript/API documentation is clean. Explicit StringValue encoding,
+  protocol-error normalization, and the relevant documented contracts are
+  accepted.
+- Style/maintainability retains two P2 findings: one canonical delivery-port
+  type is not yet used at all three sites, and the manifest policy test must
+  parse and assert the exact route/timeout allowlist rather than reject one
+  textual catch-all spelling.
+- Performance/reliability retains one P1 and two P2 findings: public Envoy
+  references need restricted CORS preflight support; manifest tests must bind
+  replicas and delivery waits to both standalone Deployments; and the
+  missing-registry image test must forcibly remove its named container on a
+  timeout. The CORS correction applies to both equivalent Compose and
+  Kubernetes public Envoy references.
+- Documentation retains three P1 and two P2 findings: exact clean-checkout
+  Compose commands and key creation; Kubernetes image/Secret prerequisites;
+  mandatory shared signed-session configuration; durable registry/fencing and
+  reconnect/re-query limits; and explicit shared application-selected storage.
+- Mechanical preflight also found one optional-field narrowing error in the new
+  codec regression test. It is included in the same final correction batch.
+
+No P0 or P3 remains. The final batch contains four P1, six P2, and one
+mechanical TypeScript correction. Re-review after correction is limited to the
+substantively changed style, reliability, and documentation concerns; the clean
+API concern reopens only if its contract changes.
