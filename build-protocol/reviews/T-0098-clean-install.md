@@ -92,3 +92,12 @@ packages/proto-tools/test/external-consumer.test.ts` passed (1 file, 1 test).
   The Windows branch passes it as the one `/c` argument. `corepack pnpm exec
 vitest run packages/proto-tools/test/external-consumer.test.ts` passed 1 file
   / 2 tests. Reliability is ready for its targeted re-review.
+
+## Final convergence
+
+- Performance/reliability re-review at `2d5cb5be` is clean with no P0-P3
+  findings. One quoted `/c` command string handles spaced temporary paths while
+  retaining offline, bounded, cleanup-safe installed-shim coverage.
+- Style/maintainability and TypeScript/API remain clean and were not reopened.
+- All applicable review lanes are closed. The definitive release verification
+  is the next gate.
