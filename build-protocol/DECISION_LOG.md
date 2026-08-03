@@ -4922,10 +4922,11 @@ Date: 2026-08-03
 
 Task: `T-0096`
 
-Decision: Add the maintained `yaml` package as a root development dependency
-for deployment-policy tests. Tests parse the Kubernetes multi-document resource,
-locate the Envoy ConfigMap, and parse its embedded Envoy YAML before inspecting
-route objects.
+Decision: Add the maintained `yaml@2.9.0` package as a root development
+dependency for deployment-policy tests. This is the version already selected by
+the Vite toolchain, so one compatible Vite type identity is installed. Tests
+parse the Kubernetes multi-document resource, locate the Envoy ConfigMap, and
+parse its embedded Envoy YAML before inspecting route objects.
 
 Reasoning: Indentation-aware parsing rejects non-path route shapes, duplicates,
 and hidden extra route items that a text scanner can skip.
