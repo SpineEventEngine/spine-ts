@@ -437,7 +437,8 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(info).toHaveBeenCalledTimes(3));
     request.subscription.emitUpdate();
     await waitFor(() => expect(info).toHaveBeenCalledTimes(4));
-    request.subscription.emitRecovery(responseRows("recovered console message"));
+    const recovery = responseRows("recovered console message");
+    request.subscription.emitRecovery(recovery);
     await waitFor(() => expect(info).toHaveBeenCalledTimes(5));
     request.subscription.emitLifecycle({
       state: "failed",
@@ -472,7 +473,7 @@ describe("MessageBoardApp", () => {
     );
     expect(info).toHaveBeenCalledWith(
       "MessageBoard received authoritative board state after reconnecting.",
-      expect.objectContaining({ board: "general" }),
+      expect.objectContaining({ board: "general", response: recovery }),
     );
     expect(error).toHaveBeenCalledWith(
       "MessageBoard live updates failed.",
@@ -487,7 +488,7 @@ describe("MessageBoardApp", () => {
     );
     expect(info).toHaveBeenCalledWith(
       "MessageBoard post command was accepted.",
-      expect.objectContaining({ board: "general" }),
+      expect.objectContaining({ board: "general", outcome: { kind: "ok" } }),
     );
     expect(info).toHaveBeenCalledWith(
       "MessageBoard is cancelling live updates.",
@@ -513,6 +514,24 @@ describe("MessageBoardApp", () => {
         board: "general",
         outcome: { kind: "rejection", rejection: {} },
       }),
+    );
+  });
+
+  it("reports a post transport failure in the browser console", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const request = requestFixture({ postFailure: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+
+    await screen.findByText("general message");
+    fillPost("failed console message");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await screen.findByRole("alert");
+
+    expect(error).toHaveBeenCalledWith(
+      "MessageBoard post command could not be sent.",
+      expect.objectContaining({ board: "general" }),
     );
   });
 

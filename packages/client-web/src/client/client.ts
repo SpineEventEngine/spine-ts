@@ -156,7 +156,9 @@ export interface SubscriptionRetryPolicy {
   readonly maxAttempts: number;
 
   /**
-   * Limits total retry duration in milliseconds.
+   * Limits one recovery episode in milliseconds. A stream that remains
+   * connected for at least this duration starts a fresh episode on its next
+   * failure.
    */
   readonly maxElapsedMs: number;
 

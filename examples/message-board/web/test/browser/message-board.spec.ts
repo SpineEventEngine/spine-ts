@@ -44,10 +44,17 @@ test("keeps live updates connected beyond the former local session boundary", as
   await page.waitForTimeout(61_000);
   await expect(page.getByRole("status")).toHaveText("Updating live");
 
-  const username = `boundary-${String(Date.now())}`;
-  const message = `after former boundary ${String(Date.now())}`;
-  await page.getByRole("textbox", { name: "Username" }).fill(username);
-  await page.getByRole("textbox", { name: "Message" }).fill(message);
-  await page.getByRole("button", { name: "Post message" }).click();
-  await expect(page.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible();
+  const sender = await page.context().newPage();
+  try {
+    await sender.goto("/");
+    await expect(sender.getByRole("status")).toHaveText("Updating live");
+    const username = `boundary-${String(Date.now())}`;
+    const message = `after former boundary ${String(Date.now())}`;
+    await sender.getByRole("textbox", { name: "Username" }).fill(username);
+    await sender.getByRole("textbox", { name: "Message" }).fill(message);
+    await sender.getByRole("button", { name: "Post message" }).click();
+    await expect(page.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible();
+  } finally {
+    await sender.close();
+  }
 });
