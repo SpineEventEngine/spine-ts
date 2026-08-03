@@ -114,7 +114,6 @@ export const PostForm = (props: PostFormProps): ReactElement => {
           return;
         }
         pendingPost.current = undefined;
-        setUsername("");
         setText("");
         setFeedback({ fields: {} });
         setPosting(false);
