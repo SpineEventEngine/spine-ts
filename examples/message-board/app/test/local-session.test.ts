@@ -14,4 +14,10 @@ describe("LocalBoardSession", () => {
       attributes: { boards: "general" },
     });
   });
+
+  it("rejects credentials that do not match the local bearer", async () => {
+    await expect(
+      LocalBoardSession.resolver().resolve({ kind: "bearer", value: "wrong" }),
+    ).resolves.toBeUndefined();
+  });
 });

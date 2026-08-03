@@ -26,7 +26,7 @@ describe("example executable commands", () => {
 });
 
 describe("MessageBoard app manifest", () => {
-  it("keeps the composed MessageBoard model versioned while runtime packages use their established declarations", async () => {
+  it("keeps exact runtime versions and starts already-built local output", async () => {
     const manifest = JSON.parse(
       await readFile("examples/message-board/app/package.json", "utf8"),
     ) as {
@@ -43,7 +43,7 @@ describe("MessageBoard app manifest", () => {
     expect(manifest.dependencies["@spine-event-engine/proto"]).toBe("2.0.0-snapshot.1");
     expect(manifest.dependencies["@spine-event-engine/server"]).toBe("2.0.0-snapshot.1");
     expect(manifest.devDependencies?.["@spine-event-engine/proto-tools"]).toBe("2.0.0-snapshot.1");
-    expect(manifest.scripts.start).toContain("typecheck:build");
+    expect(manifest.scripts.start).toBe("node dist/src/local-entry.js");
   });
 
   it("makes the MessageBoard web start command own workspace preparation", async () => {

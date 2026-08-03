@@ -346,6 +346,21 @@ describe("MessageBoard gateway policy", () => {
     await expect(policy.authorize(principal, boardRequestWithComposites(9))).resolves.toBe(false);
   });
 
+  it("stops the parent traversal when a nested child exhausts the composite budget", async () => {
+    const policy = new BoardAccessPolicy();
+    let nested = boardComposite(CompositeFilter_CompositeOperator.ALL, ["board-a"]);
+    for (let index = 0; index < 8; index += 1) {
+      nested = create(CompositeFilterSchema, {
+        operator: CompositeFilter_CompositeOperator.ALL,
+        compositeFilter: [nested],
+      });
+    }
+
+    await expect(policy.authorize(principal, nestedBoardRequest("query", nested))).resolves.toBe(
+      false,
+    );
+  });
+
   it("accepts sixteen simple filters and denies a seventeenth", async () => {
     const policy = new BoardAccessPolicy();
     await expect(

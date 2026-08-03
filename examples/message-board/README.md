@@ -26,7 +26,20 @@ message-board/
 ```
 
 These are private workspace packages. Generated model and handler files are
-build outputs; the startup commands create them when needed.
+build outputs. Build them once before starting the local processes.
+
+## 🐳 Build local images
+
+`pnpm images:build:local` creates three local-only, unpublished images. Node is
+PID 1 in each image and handles `SIGTERM`/`SIGINT`. Production application and
+combined commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, and
+`SPINE_IPC_DIRECTORY`; combined also needs `BROWSER_ORIGIN`. The gateway also
+requires `BACKEND_URL`, and both browser modes require
+`SUBSCRIPTION_REGISTRY_NAMESPACE`. Datastore remains application-selected;
+gateway registry storage is a separate durable concern.
+
+See the [container image guide](deploy/container/README.md) for the fixed tags,
+runtime commands, complete environment table, shutdown behavior, and limits.
 
 ## 🚀 Run MessageBoard locally
 
@@ -34,6 +47,7 @@ Install dependencies once from the repository root:
 
 ```bash
 pnpm install --frozen-lockfile
+pnpm typecheck:build
 ```
 
 Start the server in one terminal:
