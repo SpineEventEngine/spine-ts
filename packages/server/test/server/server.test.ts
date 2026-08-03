@@ -900,6 +900,32 @@ describe("Server", () => {
     );
   });
 
+  it.each(["GET", "POST"] as const)(
+    "rejects a %s auth route collision with a reserved RPC path before listener startup",
+    async (method) => {
+      let calls = 0;
+      const starting = new Server({
+        browser: {
+          port: 0,
+          ...browserGateway(),
+          authRoutes: [
+            {
+              method,
+              path: "/spine.client.CommandService/Post",
+              origins: ["http://127.0.0.1:5173"],
+              maxRequestBytes: 16,
+              timeoutMs: 1000,
+              onRequest: () => ((calls += 1), new Response()),
+            },
+          ],
+        },
+      }).start();
+
+      await expect(starting).rejects.toThrow("reserved Spine RPC paths");
+      expect(calls).toBe(0);
+    },
+  );
+
   it("rejects a chunked auth body that exceeds its bound before handler work", async () => {
     let calls = 0;
     const server = await new Server({

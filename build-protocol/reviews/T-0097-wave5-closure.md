@@ -108,3 +108,23 @@ reliability after focused verification.
 - Assign both findings as one bounded batch to the existing implementer role,
   explicit `gpt-5.6-terra` / medium. Re-review only security after focused
   deterministic verification.
+
+## Final Security Correction Evidence
+
+- Existing implementer assignment used explicit configured `gpt-5.6-terra` /
+  medium fields. Runtime self-introspection is unavailable on this surface; no
+  visible role/profile mismatch occurred.
+- Resolved P1: one internal six-path JSON definition is consumed by browser
+  auth-route validation and Envoy rendering/validation. Browser and Envoy GET
+  and POST collision regressions reject `/spine.client.CommandService/Post`;
+  browser rejection occurs before listener startup and its auth handler is not
+  invoked.
+- Resolved P2: the workspace-only `brace-expansion@2.1.2 -> 2.1.3` override
+  regenerates the frozen lockfile. The Datastore production chain now resolves
+  `brace-expansion@2.1.3`; `pnpm audit --prod --audit-level=high` reports no
+  known vulnerabilities.
+- Focused deterministic evidence: `pnpm exec tsc -b packages/server`, browser
+  server suite 87/87, Envoy suite 6/6 with pinned image validation, frozen
+  install, formatting, and diff checks pass. Security re-review remains the
+  only reopened concern; no limitation beyond unavailable runtime profile
+  introspection is known.
