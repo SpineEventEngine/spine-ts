@@ -1,8 +1,8 @@
 # T-0097 Wave 5 Closure Review
 
-Status: All reviews converged; release verification pending
+Status: Complete
 Baseline: `0f47c634`
-Candidate: `543917c4`
+Verified candidate: `2b0a88fc`
 
 ## Requirements And Evidence
 
@@ -117,6 +117,20 @@ reliability after focused verification.
 - The re-review used the same explicit `security_reviewer`,
   `gpt-5.6-terra` / high assignment. Runtime introspection remained
   unavailable, with no visible mismatch.
+
+## Release Verification
+
+- `pnpm --config.verify-deps-before-run=false verify:release` passes on
+  `2b0a88fc`.
+- All 177 runnable test files pass; 3 are intentionally skipped. All 3,496
+  runnable tests pass; 25 are intentionally skipped.
+- Branch coverage is 90.00% (10,995/12,216), meeting the release threshold.
+  Statements are 94.03%, functions 94.52%, and lines 94.90%.
+- Build, tooling typecheck, lint, cleanup and TSDoc enforcement, formatting,
+  API/audience documentation, Proto lint/current generation, 67 package
+  imports, 44 package assets, and 277 relative Markdown links pass.
+- No unresolved P0-P3 review finding remains. The reviewed and verified tree is
+  ready for isolated integration into `main`.
 
 ## Final Security Correction Evidence
 
