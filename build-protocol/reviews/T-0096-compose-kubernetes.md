@@ -120,3 +120,14 @@ API concern reopens only if its contract changes.
 
 After this bounded batch, re-review only the structural policy assertion and
 the two documentation findings. Do not start another complete review wave.
+
+## Last Policy-Test Correction
+
+- Documentation is clean. Local image loading, external Secret creation, and
+  the publication/storage/session/durability limits are accepted.
+- Style retains one P2 in the policy test: it must reject every non-path Envoy
+  route item and preserve duplicate/count detection instead of filtering only
+  known inline paths and comparing a `Map`.
+- Return this single deterministic correction to the existing implementer.
+  After the focused test passes, perform only the same single-finding style
+  confirmation; no other concern reopens.
