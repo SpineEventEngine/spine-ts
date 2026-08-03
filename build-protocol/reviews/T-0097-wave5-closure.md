@@ -1,6 +1,6 @@
 # T-0097 Wave 5 Closure Review
 
-Status: Final security correction in progress
+Status: All reviews converged; release verification pending
 Baseline: `0f47c634`
 Candidate: `543917c4`
 
@@ -108,6 +108,15 @@ reliability after focused verification.
 - Assign both findings as one bounded batch to the existing implementer role,
   explicit `gpt-5.6-terra` / medium. Re-review only security after focused
   deterministic verification.
+- Correction commit `66ece082` shares the exact reserved-path source across
+  browser and Envoy validation, rejects GET and POST collisions before serving
+  or rendering, and pins the production graph to `brace-expansion@2.1.3`.
+- Final security re-review: clean; no P0-P3 findings. Collision regressions,
+  JSON packaging, frozen install, production dependency resolution, and the
+  high-severity production audit all pass.
+- The re-review used the same explicit `security_reviewer`,
+  `gpt-5.6-terra` / high assignment. Runtime introspection remained
+  unavailable, with no visible mismatch.
 
 ## Final Security Correction Evidence
 
