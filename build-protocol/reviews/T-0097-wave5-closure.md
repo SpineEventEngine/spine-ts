@@ -137,3 +137,16 @@ reliability after focused verification.
   install, formatting, and diff checks pass. Security re-review remains the
   only reopened concern; no limitation beyond unavailable runtime profile
   introspection is known.
+
+## Release Coverage Correction
+
+- Release-gate evidence recorded a global branch shortfall: 89.96%
+  (10,990/12,216), despite 177 files (3 skipped) and 3,490 tests (25 skipped).
+  No threshold or exclusion is changed.
+- The same explicit implementer assignment (`gpt-5.6-terra` / medium) added
+  focused existing-behavior tests for standalone browser-host collaborators and
+  auth-admission bounds; runtime metadata remains unavailable with no visible
+  mismatch.
+- Focused server suite: 93/93. Targeted `browser-server.ts` V8 coverage is
+  94.21% branches (179/190), restoring more than the five needed exercised
+  branches. The final full release rerun remains owned by the parent.
