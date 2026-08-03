@@ -100,3 +100,23 @@ No P0 or P3 remains. The final batch contains four P1, six P2, and one
 mechanical TypeScript correction. Re-review after correction is limited to the
 substantively changed style, reliability, and documentation concerns; the clean
 API concern reopens only if its contract changes.
+
+## Final Targeted Findings
+
+- Performance/reliability is clean. The corrected CORS/preflight, exact RPC
+  routes, Deployment-specific readiness, and forced timeout cleanup are
+  accepted.
+- Style/maintainability accepts the canonical port contract but retains one P2:
+  the policy test must structurally parse every Envoy route and reject any
+  non-approved match, rather than combine regex extraction with one literal
+  catch-all spelling.
+- Documentation retains two P1 findings: remove the contradictory instruction
+  to publish local images, and provide concrete storage/runtime/TLS Secret and
+  local-image prerequisites so the reference can be applied without hidden
+  inputs. Operator image distribution remains explicitly out of scope.
+- The embedded placeholder runtime Secret cannot overwrite the documented
+  operator-created Secret. Remove that placeholder resource while retaining the
+  external Secret reference in both manifests.
+
+After this bounded batch, re-review only the structural policy assertion and
+the two documentation findings. Do not start another complete review wave.
