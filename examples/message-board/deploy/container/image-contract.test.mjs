@@ -42,6 +42,7 @@ test("final images contain only runtime artifacts and no runtime secret", () => 
       const config = execFileSync("docker", ["image", "inspect", image], { encoding: "utf8" });
       assert.doesNotMatch(config, new RegExp(sentinel, "u"));
       assert.match(config, /"Entrypoint":\s*\[\s*"node"/u);
+      assert.match(config, /"NODE_ENV=production"/u);
       const history = execFileSync("docker", ["history", "--no-trunc", image], {
         encoding: "utf8",
       });
@@ -165,8 +166,7 @@ test("runtime commands keep Node as PID 1 and stop cleanly", () => {
       for (const name of containers.toReversed()) {
         const executable = docker(["exec", name, "readlink", "/proc/1/exe"]).trim();
         assert.match(executable, /\/node$/u);
-        docker(["kill", `--signal=${signal}`, name]);
-        assert.equal(docker(["wait", name]).trim(), "0");
+        stopWithin(name, signal);
         docker(["container", "rm", name]);
         owned.splice(owned.indexOf(name), 1);
       }
@@ -216,6 +216,8 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "DATASTORE_PROJECT_ID=spine-t0095",
     "--env",
     "DATASTORE_EMULATOR_HOST=datastore:8081",
+    "--env",
+    `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
     messageBoard,
     "node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js",
   ]);
@@ -233,9 +235,13 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "--env",
     "BROWSER_ORIGIN=http://localhost:18081",
     "--env",
+    `SUBSCRIPTION_REGISTRY_NAMESPACE=message-board-combined-${signal}`,
+    "--env",
     "DATASTORE_PROJECT_ID=spine-t0095",
     "--env",
     "DATASTORE_EMULATOR_HOST=datastore:8081",
+    "--env",
+    `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
     messageBoard,
   ]);
   waitForLog(combined, /MessageBoard combined server ready/u);
@@ -259,6 +265,8 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "DATASTORE_EMULATOR_HOST=datastore:8081",
     "--env",
     `SUBSCRIPTION_REGISTRY_NAMESPACE=message-board-smoke-${signal}`,
+    "--env",
+    `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
@@ -296,6 +304,22 @@ function containerLogs(container) {
   });
   assert.equal(result.status, 0, result.stderr);
   return `${result.stdout}${result.stderr}`;
+}
+
+function stopWithin(container, signal) {
+  docker(["kill", `--signal=${signal}`, container]);
+  try {
+    const exitCode = execFileSync("docker", ["wait", container], {
+      encoding: "utf8",
+      timeout: 10_000,
+    }).trim();
+    assert.equal(exitCode, "0");
+  } catch (error) {
+    assert.fail(
+      `${container} did not stop successfully within 10 seconds after SIG${signal}.\n` +
+        `${containerLogs(container)}\n${String(error)}`,
+    );
+  }
 }
 
 function containerImage(container) {

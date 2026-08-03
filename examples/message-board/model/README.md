@@ -13,8 +13,9 @@ and domain rejections.
 
 ## 🚀 Generate the model
 
-The normal MessageBoard startup commands generate the model automatically. To
-run the workspace generation directly:
+Workspace development generates the model before local startup. Production
+images contain prebuilt compiled artifacts and never generate the model. To run
+workspace generation directly:
 
 ```bash
 pnpm proto:generate

@@ -1,5 +1,4 @@
-import { DurableSubscriptionBindings, Server } from "@spine-event-engine/server";
-import { randomUUID } from "node:crypto";
+import { Server } from "@spine-event-engine/server";
 
 import { MessageBoardDeployment } from "./deployment-config.js";
 import { BoardAccessPolicy, BoardContextResolver } from "./board-access.js";
@@ -7,17 +6,9 @@ import { LocalBoardSession } from "./local-session.js";
 import { typeRegistry } from "./model-registry.js";
 
 const config = MessageBoardDeployment.gateway(process.env);
+MessageBoardDeployment.configureServer(config, process.env);
 const policy = new BoardAccessPolicy();
-const bindings = new DurableSubscriptionBindings({
-  storageFactory: MessageBoardDeployment.storage(config),
-  namespace: config.subscriptionNamespace,
-  nextId: randomUUID,
-  dispose: () => Promise.resolve(),
-  leaseMs: 60_000,
-  cleanupBatchSize: 100,
-  recordLimit: 10_000,
-  maxRecordBytes: 1_048_576,
-});
+const bindings = MessageBoardDeployment.bindings(config);
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {

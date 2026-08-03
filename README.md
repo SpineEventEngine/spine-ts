@@ -50,6 +50,12 @@ Install the workspace dependencies:
 pnpm install --frozen-lockfile
 ```
 
+Build the generated model, handlers, and TypeScript once:
+
+```bash
+pnpm typecheck:build
+```
+
 Start the MessageBoard server in one terminal:
 
 ```bash

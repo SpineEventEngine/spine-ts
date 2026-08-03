@@ -12,12 +12,26 @@ describe("MessageBoard deployment entrypoints", () => {
     expect(existsSync(join(sourceRoot, "combined-entry.ts"))).toBe(true);
   });
 
-  it("configures standalone gateway durable bindings from named runtime input", () => {
+  it("configures both browser modes with one named durable binding assembly", () => {
     const gateway = readFileSync(join(sourceRoot, "gateway-entry.ts"), "utf8");
+    const combined = readFileSync(join(sourceRoot, "combined-entry.ts"), "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
-    expect(gateway).toContain("new DurableSubscriptionBindings");
-    expect(gateway).toContain("storageFactory: MessageBoardDeployment.storage(config)");
+    expect(deployment).toContain("new DurableSubscriptionBindings");
+    expect(deployment).toContain("storageFactory: MessageBoardDeployment.storage(config)");
+    expect(gateway).toContain("MessageBoardDeployment.bindings(config)");
+    expect(combined).toContain("bindings: MessageBoardDeployment.bindings(config)");
     expect(gateway).toContain("bindings,");
     expect(deployment).toContain('"SUBSCRIPTION_REGISTRY_NAMESPACE"');
+  });
+
+  it("configures production storage and transport before resolving a server", () => {
+    const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
+    for (const entrypoint of ["application-entry.ts", "combined-entry.ts", "gateway-entry.ts"]) {
+      const source = readFileSync(join(sourceRoot, entrypoint), "utf8");
+      expect(source).toContain("MessageBoardDeployment.configureServer(config, process.env)");
+    }
+    expect(deployment).toContain("ServerEnvironment.when(EnvironmentType.Production)");
+    expect(deployment).toContain('"SPINE_IPC_DIRECTORY"');
+    expect(deployment).toContain("createZeroMqTransport");
   });
 });

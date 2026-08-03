@@ -4,8 +4,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
+import { BuildContextCleanup } from "./build-context-cleanup.mjs";
+
 const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const containerRoot = dirname(fileURLToPath(import.meta.url));
+const subprocessTimeoutMs = 120_000;
+const packageManager = JSON.parse(
+  readFileSync(join(repositoryRoot, "package.json"), "utf8"),
+).packageManager;
 const context = mkdtempSync(join(tmpdir(), "spine-message-board-images-"));
 const tarballs = join(context, "tarballs");
 const store = join(context, "pnpm-store");
@@ -25,7 +31,9 @@ const packages = [
   "examples/message-board/app",
 ];
 const targets = ["message-board", "standalone-gateway", "simple-delivery-server"];
+const cleanup = new BuildContextCleanup(context);
 
+cleanup.install();
 try {
   mkdirSync(tarballs);
   phase("pack local artifacts");
@@ -43,7 +51,8 @@ try {
   stageOfflineInstaller();
   for (const target of targets) build(target);
 } finally {
-  rmSync(context, { force: true, recursive: true });
+  cleanup.clean();
+  cleanup.uninstall();
 }
 
 function phase(name) {
@@ -51,10 +60,17 @@ function phase(name) {
 }
 
 function run(command, arguments_, environment = {}) {
-  execFileSync(command, arguments_, {
+  execute(command, arguments_, {
     cwd: repositoryRoot,
     env: { ...process.env, ...environment },
     stdio: "inherit",
+  });
+}
+
+function execute(command, arguments_, options = {}) {
+  return execFileSync(command, arguments_, {
+    timeout: subprocessTimeoutMs,
+    ...options,
   });
 }
 
@@ -64,7 +80,7 @@ function stageOfflineInstaller() {
       .filter((name) => name.endsWith(".tgz"))
       .map((name) => {
         const manifest = JSON.parse(
-          execFileSync("tar", ["-xOf", join(tarballs, name), "package/package.json"], {
+          execute("tar", ["-xOf", join(tarballs, name), "package/package.json"], {
             encoding: "utf8",
           }),
         );
@@ -77,7 +93,7 @@ function stageOfflineInstaller() {
       {
         name: "spine-ts-local-images",
         private: true,
-        packageManager: "pnpm@11.9.0",
+        packageManager,
         dependencies,
       },
       null,
@@ -94,19 +110,19 @@ function stageOfflineInstaller() {
     join(context, ".npmrc"),
     "supportedArchitectures.os[]=darwin\nsupportedArchitectures.os[]=linux\nsupportedArchitectures.cpu[]=arm64\n",
   );
-  execFileSync("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], {
+  execute("pnpm", ["install", "--lockfile-only", "--ignore-scripts"], {
     cwd: context,
     stdio: "inherit",
   });
   assertPortableLock(Object.keys(dependencies));
-  execFileSync("pnpm", ["fetch", "--prod", "--store-dir", store], {
+  execute("pnpm", ["fetch", "--prod", "--store-dir", store], {
     cwd: context,
     stdio: "inherit",
   });
   rmSync(join(context, "node_modules"), { force: true, recursive: true });
   archiveStore();
   guardContext();
-  execFileSync("corepack", ["pack", "pnpm@11.9.0", "--output", join(context, "pnpm.tgz")], {
+  execute("corepack", ["pack", packageManager, "--output", join(context, "pnpm.tgz")], {
     cwd: context,
     stdio: "inherit",
   });
@@ -116,14 +132,14 @@ function archiveStore() {
   const list = join(context, "pnpm-store.files");
   // The store is transient staging data. Clear Finder/provenance attributes before
   // archiving it so Linux tar extraction does not receive macOS PAX metadata.
-  execFileSync("find", [store, "-type", "f", "-exec", "xattr", "-c", "{}", "+"]);
-  execFileSync("find", [store, "-type", "d", "-exec", "xattr", "-c", "{}", "+"]);
-  execFileSync("find", [store, "-type", "l", "-exec", "xattr", "-s", "-c", "{}", "+"]);
-  execFileSync("sh", [
+  execute("find", [store, "-type", "f", "-exec", "xattr", "-c", "{}", "+"]);
+  execute("find", [store, "-type", "d", "-exec", "xattr", "-c", "{}", "+"]);
+  execute("find", [store, "-type", "l", "-exec", "xattr", "-s", "-c", "{}", "+"]);
+  execute("sh", [
     "-c",
     `cd ${JSON.stringify(store)} && find . -print | LC_ALL=C sort > ${JSON.stringify(list)}`,
   ]);
-  execFileSync(
+  execute(
     "tar",
     [
       "--no-mac-metadata",
@@ -145,12 +161,12 @@ function archiveStore() {
 
 function guardContext() {
   const files = Number(
-    execFileSync("sh", ["-c", `find ${JSON.stringify(context)} -type f | wc -l`], {
+    execute("sh", ["-c", `find ${JSON.stringify(context)} -type f | wc -l`], {
       encoding: "utf8",
     }),
   );
   const kilobytes = Number(
-    execFileSync("du", ["-sk", context], { encoding: "utf8" }).split(/\s/u, 1)[0],
+    execute("du", ["-sk", context], { encoding: "utf8" }).split(/\s/u, 1)[0],
   );
   console.log(`Local image context: ${String(files)} files, ${String(kilobytes)} KiB.`);
   if (files > 100 || kilobytes > 350_000)
@@ -171,10 +187,9 @@ function build(target) {
     context,
   ];
   console.log(`Building local image target: ${target}`);
-  execFileSync("docker", arguments_, {
+  execute("docker", arguments_, {
     cwd: repositoryRoot,
     stdio: "inherit",
-    timeout: 120_000,
   });
 }
 

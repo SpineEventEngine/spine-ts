@@ -18,10 +18,11 @@ MessageBoard domain code, local session policy, and concise server configuration
 From the repository root:
 
 ```bash
+pnpm typecheck:build
 pnpm --dir examples/message-board/app start
 ```
 
-The command generates and builds the required code, then prints
+This workspace command uses the explicit local in-memory entrypoint. It prints
 `MessageBoard local server ready at http://127.0.0.1:8090` after the public
 browser listener is ready. Stop it with `Ctrl-C`.
 
@@ -59,9 +60,14 @@ pnpm exec vitest run examples/message-board/app/test
 
 ## ⚠️ Local-only defaults
 
-Storage, sessions, and subscription bindings are in memory. Production code
-must select durable storage and sessions, real identity integration, TLS, and
-network policy.
+Storage, sessions, and subscription bindings are in memory. Prebuilt production
+commands require `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, and
+`SPINE_IPC_DIRECTORY`; combined mode also requires `BROWSER_ORIGIN` and
+`SUBSCRIPTION_REGISTRY_NAMESPACE`, while the standalone gateway additionally
+requires `BACKEND_URL`. Application data uses application-owned
+Datastore storage; gateway subscription registry storage is separately owned.
+The [container image guide](../deploy/container/README.md) lists the production
+commands, fixed image tags, and runtime values.
 
 ## 🔗 Learn more
 

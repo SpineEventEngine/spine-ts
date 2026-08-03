@@ -15,6 +15,7 @@ RUN mkdir /pnpm-store \
 FROM ${BASE_IMAGE} AS runtime
 
 WORKDIR /app
+ENV NODE_ENV=production
 COPY --from=packages /app/node_modules ./node_modules
 RUN find ./node_modules -type f \( -name '*.ts' -o -name '*.map' -o -name '*.tsbuildinfo' \) -delete \
   && find ./node_modules -type f -name '*.proto' ! -path '*/@google-cloud/datastore/build/protos/*' -delete \
