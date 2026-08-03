@@ -207,6 +207,21 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
   const combined = `spine-t0095-combined-${signal}-${suffix}`;
   const gateway = `spine-t0095-gateway-${signal}-${suffix}`;
   const delivery = `spine-t0095-delivery-${signal}-${suffix}`;
+  owned.unshift(delivery);
+  start([
+    "--name",
+    delivery,
+    "--network",
+    network,
+    "--network-alias",
+    "delivery",
+    "--env",
+    "HOST=0.0.0.0",
+    "--env",
+    "PORT=18083",
+    "spine-ts/simple-delivery-server:local",
+  ]);
+  waitForLog(delivery, /Delivery server listening/u);
   owned.unshift(application);
   start([
     "--name",
@@ -225,6 +240,8 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "DATASTORE_EMULATOR_HOST=datastore:8081",
     "--env",
     `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
+    "--env",
+    "DELIVERY_SERVER_URL=http://delivery:18083",
     messageBoard,
     "node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js",
   ]);
@@ -252,6 +269,8 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "DATASTORE_EMULATOR_HOST=datastore:8081",
     "--env",
     `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
+    "--env",
+    "DELIVERY_SERVER_URL=http://delivery:18083",
     ...sessionEnvironment(),
     messageBoard,
   ]);
@@ -281,23 +300,12 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     `SUBSCRIPTION_REGISTRY_NAMESPACE=message-board-smoke-${signal}`,
     "--env",
     `SPINE_IPC_DIRECTORY=/tmp/spine-ipc-${signal}`,
+    "--env",
+    "DELIVERY_SERVER_URL=http://delivery:18083",
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
   exerciseRegistry(network, "http://gateway:18082", "http://localhost:18082", messageBoard);
-  owned.unshift(delivery);
-  start([
-    "--name",
-    delivery,
-    "--network",
-    network,
-    "--env",
-    "HOST=0.0.0.0",
-    "--env",
-    "PORT=18083",
-    "spine-ts/simple-delivery-server:local",
-  ]);
-  waitForLog(delivery, /Delivery server listening/u);
   return [application, combined, gateway, delivery];
 }
 
