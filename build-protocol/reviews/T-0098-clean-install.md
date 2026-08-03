@@ -113,3 +113,15 @@ vitest run packages/proto-tools/test/external-consumer.test.ts` passed 1 file
 - All generated build, tooling type-check, lint/TSDoc, formatting,
   documentation, Proto-current, package-readiness, and release-readiness gates
   passed in the same run.
+
+## Deterministic post-merge correction
+
+- Final install audit found pnpm changed the tracked launcher from `100644` to
+  `100755`, dirtying an otherwise fresh checkout. A POSIX executable-mode
+  assertion failed against the old committed mode and passed after committing
+  the launcher as `100755`.
+- A subsequent frozen install emitted zero bin warnings, preserved mode `755`,
+  and introduced no additional working-tree difference.
+- This file-mode correction is the package metadata pnpm already applies. It
+  changes no CLI behavior, API, dependency, or trust boundary, so it does not
+  reopen the converged review lanes.

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,9 @@ const bin = packageJson.bin["spine-proto"];
 describe("spine-proto package binary", () => {
   it("exists before build and is included in the packed package", () => {
     expect(existsSync(join(packageRoot, bin))).toBe(true);
+    if (process.platform !== "win32") {
+      expect(statSync(join(packageRoot, bin)).mode & 0o111).not.toBe(0);
+    }
 
     const destination = mkdtempSync(join(tmpdir(), "spine-proto-pack-"));
     try {
