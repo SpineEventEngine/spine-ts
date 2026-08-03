@@ -67,3 +67,15 @@ Only performance/reliability is reopened by the accepted correction.
 packages/proto-tools/test/external-consumer.test.ts` passed (1 file, 1 test).
 - The accepted P2 correction is ready for the reopened performance/reliability
   re-review. No other lane is substantively affected.
+
+## Reliability re-review result
+
+- The real offline install, POSIX public-shim execution, fixture bounds, and
+  cleanup are sound.
+- One Windows-only P2 remains: `cmd.exe /s /c` receives the absolute `.cmd`
+  path as a separate unquoted command argument. Windows `/s` quote handling can
+  split a temporary path containing spaces. Supply one correctly quoted command
+  string or another invocation that preserves the `.cmd` path.
+- Return only this deterministic portability correction to the same existing
+  implementation owner. The reliability lane remains open; all other lanes
+  remain closed.
