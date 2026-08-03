@@ -1,6 +1,6 @@
 # T-0095: Build-once packages and local images
 
-Status: Checkpoint 3 active
+Status: Complete; ready for integration
 Start: `2026-08-02`
 Baseline: `1c53cbdf`
 Branch: `task/T-0095-build-once-images`
@@ -95,3 +95,19 @@ traversal, or monorepo rebuild at startup.
 
 - Docker client/server `29.6.2` on `linux/aarch64` can now pull the official
   pinned Node base image. Resume real local image acceptance with normal BuildKit.
+
+## Acceptance
+
+- Packed build-once package and image contracts pass without runtime generation,
+  compilation, workspace traversal, or publication.
+- MessageBoard application-only, combined, and standalone gateway processes plus
+  the simple delivery server run as Node PID 1 and close under `SIGINT` and
+  `SIGTERM` within ten seconds.
+- Combined and standalone gateways use a durable Datastore-backed subscription
+  registry and perform authenticated remote subscribe, activate, and cancel in
+  real-container acceptance.
+- Every relevant reviewer concern is resolved in
+  `build-protocol/reviews/T-0095-build-once-images.md`.
+- Final `verify:release` passes 175 test files and 3,473 tests, with 3 files and
+  25 tests skipped. Coverage passes at 94.09% statements, 90.04% branches,
+  94.51% functions, and 94.96% lines.

@@ -1,8 +1,8 @@
 # T-0095 Build-once Images Review
 
-Status: Review complete; final release verification pending
+Status: Complete; ready for integration
 Baseline: `1c53cbdf`
-Candidate: `a5e5a39d`
+Candidate: `3a62e475`
 
 ## Requirements And Evidence
 
@@ -67,4 +67,14 @@ carried by this task.
 
 ## Final Verification
 
-The required single `verify:release` run is pending after review convergence.
+`pnpm --config.verify-deps-before-run=false verify:release` passes at
+`3a62e475`: 175 test files and 3,473 tests pass, with 3 files and 25 tests
+skipped. Coverage passes at 94.09% statements, 90.04% branches, 94.51%
+functions, and 94.96% lines. Generated builds, tooling typecheck, ESLint,
+cleanup and TSDoc enforcement, formatting, API documentation, documentation
+audience, Proto integrity, release readiness, and full coverage all pass.
+
+The separate real-container gate also passes all seven cases for fixed image
+artifacts, runtime-only contents, shared MessageBoard artifact identity,
+durable subscription activation/cancellation, PID 1, both process signals, and
+the ten-second shutdown bound.
