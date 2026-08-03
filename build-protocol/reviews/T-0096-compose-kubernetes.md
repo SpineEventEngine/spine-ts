@@ -1,8 +1,8 @@
 # T-0096 Compose and Kubernetes Review
 
-Status: Final correction in progress
+Status: Complete; all concerns converged
 Baseline: `0e06800b`
-Candidate: `f089d075`
+Candidate: `64e20117`
 
 ## Requirements And Evidence
 
@@ -138,3 +138,21 @@ partial YAML parser is not sufficient. The final correction must parse the
 embedded Envoy document with the maintained `yaml` package, inspect the actual
 route objects, and cover the key-order bypass. Record the test-only dependency
 choice, rerun dependency/preflight checks, and perform one exact confirmation.
+
+## Final Disposition
+
+- Style/maintainability: clean after maintained YAML parsing covered outer
+  manifests, embedded Envoy configuration, every route object, key order,
+  exact timeouts, duplicates, and non-path matches.
+- Documentation completeness: clean. Runnable Compose/Kubernetes guidance,
+  external Secrets, local image loading, shared session/storage ownership, and
+  durability/reconnect limits are accepted.
+- TypeScript/API documentation: clean. Target IDs, protocol errors, internal
+  port ownership, and documented contracts are accepted.
+- Performance/reliability: clean. Routing, CORS, discovery, replica readiness,
+  worker identity, registry fail-closed behavior, cleanup, and lifecycle are
+  accepted.
+
+No P0, P1, P2, or carried P3 remains. Runtime self-introspection was unavailable
+for reviewers; every immutable configured role/profile matched its explicit
+dispatch with no visible fallback.

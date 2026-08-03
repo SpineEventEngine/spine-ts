@@ -1,6 +1,6 @@
 # T-0096: Compose and Kubernetes deployment topology
 
-Status: Active
+Status: Complete; ready for integration
 Start: `2026-08-03`
 Baseline: `0e06800b`
 Branch: `task/T-0096-compose-kubernetes`
