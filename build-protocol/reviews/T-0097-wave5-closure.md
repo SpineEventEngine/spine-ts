@@ -1,6 +1,6 @@
 # T-0097 Wave 5 Closure Review
 
-Status: Pending implementation and mechanical verification
+Status: Mechanical correction before review
 Baseline: `0f47c634`
 
 ## Requirements And Evidence
