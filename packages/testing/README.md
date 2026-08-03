@@ -1,7 +1,7 @@
 # Black-box testing for Spine applications
 
-Use this package to test a bounded context through the same local server
-and Node client boundary used by an application. `BlackBox` is the end-user test
+Use this package to test a bounded context through the same local server and
+Node client boundary used by an application. `BlackBox` is the end-user test
 API; applications do not need internal test utilities.
 
 For detailed contracts intended for coding agents, see the
@@ -10,7 +10,8 @@ For detailed contracts intended for coding agents, see the
 ## 💡 Why use it?
 
 - ✅ Tests a complete bounded context through real Spine services.
-- ✅ Posts commands, reads query-side views, and observes subscriptions as a user.
+- ✅ Posts commands, reads query-side views, and observes subscriptions as a
+  user.
 - ✅ Runs on an ephemeral local server with predictable cleanup.
 - ✅ Waits for genuinely asynchronous results with bounded polling.
 
