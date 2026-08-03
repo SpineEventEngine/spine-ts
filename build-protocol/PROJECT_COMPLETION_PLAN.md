@@ -1163,6 +1163,13 @@ clean integrated tree passed `pnpm verify:task --no-tests`; it merged as
 `c476a599`. Its canonical ledger is in
 `build-protocol/tasks/T-0101-beginner-readmes/TASK.md`.
 
+### T-0102: Preserve Message Board Username After Posting
+
+T-0102 is active. A successful Message Board post must preserve the username
+while clearing the message text, with focused React regression coverage. Its
+canonical ledger is in
+`build-protocol/tasks/T-0102-preserve-message-board-username/TASK.md`.
+
 ## Parallelism Without Rework
 
 Use parallelism only where outputs do not block or overwrite each other:

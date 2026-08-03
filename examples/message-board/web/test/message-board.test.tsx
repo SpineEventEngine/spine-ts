@@ -151,6 +151,14 @@ describe("MessageBoardApp", () => {
       expect.objectContaining({ column: "posted_at", direction: 1 }),
     ]);
     expect(request.post.mock.calls[0]?.[1]).toMatchObject({ username: "Ada", text: "Hello board" });
+    await waitFor(() => {
+      expect((screen.getByRole("textbox", { name: "Username" }) as HTMLInputElement).value).toBe(
+        "Ada",
+      );
+      expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toBe(
+        "",
+      );
+    });
     expect(screen.getByText("general message")).toBeTruthy();
     expect(screen.queryByText("other board message")).toBeNull();
   });
