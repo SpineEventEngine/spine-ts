@@ -1,6 +1,6 @@
 # T-0097 Wave 5 Closure Review
 
-Status: Specialist concerns converged; final security review pending
+Status: Final security correction in progress
 Baseline: `0f47c634`
 Candidate: `543917c4`
 
@@ -45,7 +45,8 @@ visible mismatch, or inherited fallback.
   require `:method = POST`; CORS preflight policy alone does not restrict direct
   requests. Activate's disabled route timeout must be paired with explicit
   `stream_idle_timeout: 0s` to make the documented quiet-stream policy true.
-- Final security: pending.
+- Final security: accepted one P1 reserved-route collision and one P2
+  production dependency advisory; correction in progress.
 
 No P0 or P3 finding was reported. Assign the complete two-P1/one-P2 batch to the
 existing implementation context. Corrections must update all four Envoy copies,
@@ -86,3 +87,24 @@ reliability after focused verification.
 - Final TypeScript/API confirmation: clean; no P0-P3 findings. Both corrected
   guides accurately state the browser-capable process scope and the distinct
   registry-versus-revocation ownership model.
+
+## Final Security Review
+
+- Existing role `security_reviewer` ran with explicit `gpt-5.6-terra` / high.
+  Runtime self-introspection was unavailable, with no visible mismatch.
+- P1 accepted: browser-server and Envoy auth-route validation must reject the
+  six reserved Spine RPC paths before startup/rendering. Auth handlers run
+  before Connect dispatch, so a collision could otherwise replace the
+  authenticated RPC pipeline or expose another method. Share one reserved-path
+  definition and add GET/POST collision regressions proving rejection and no
+  handler invocation.
+- P2 accepted: the production lockfile contains `brace-expansion@2.1.2` through
+  the Datastore runtime dependency graph. GHSA-mh99-v99m-4gvg is fixed in
+  2.1.3. Override to a maintained fixed version, regenerate the frozen lock,
+  and require the production high-severity audit to pass.
+- No additional P0-P3 findings were confirmed in session revocation,
+  actor/tenant rewriting, bounded Any decoding, registry fencing and
+  retention, logging, or reviewed deployment exposure.
+- Assign both findings as one bounded batch to the existing implementer role,
+  explicit `gpt-5.6-terra` / medium. Re-review only security after focused
+  deterministic verification.
