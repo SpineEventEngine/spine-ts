@@ -1,7 +1,8 @@
 # T-0099: Message Board live subscription
 
-Status: Final verification passed; ready for merge
+Status: Complete; merged, post-merge verified, and pushed to `main`
 Start: `2026-08-03`
+Completed: `2026-08-03`
 Baseline: `49b6b358`
 Branch: `task/T-0099-live-subscription`
 Worktree: `.worktrees/T-0099-live-subscription`
@@ -114,5 +115,6 @@ updates, posting, console logging, and cleanup.
 - Final `pnpm verify:release` passed: 178 test files passed, 3 skipped; 3,504
   tests passed, 25 skipped; 90.01% branch coverage and at least 94% statements,
   functions, and lines.
-- Merge, post-merge verification, and remote synchronization remain closure
-  operations and must be appended to the work log before deleting the worktree.
+- Merge commit `f34febcd` passed post-merge `pnpm verify:release` and was pushed
+  to `origin/main`. The final remote-ref confirmation is recorded in the work
+  log.
