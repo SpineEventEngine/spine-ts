@@ -1,0 +1,92 @@
+services:
+  datastore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4
+    command:
+      - gcloud
+      - emulators
+      - firestore
+      - start
+      - --database-mode=datastore-mode
+      - --host-port=0.0.0.0:8081
+      - --quiet
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8081'"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  delivery:
+    image: spine-ts/simple-delivery-server:local
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8484
+
+  application-1:
+    image: spine-ts/message-board:local
+    command: ["node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js"]
+    environment: &application-environment
+      HOST: 0.0.0.0
+      PORT: 8080
+      NODE_ENV: production
+      DATASTORE_PROJECT_ID: message-board-compose
+      DATASTORE_EMULATOR_HOST: datastore:8081
+      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+    depends_on:
+      datastore:
+        condition: service_healthy
+
+  application-2:
+    image: spine-ts/message-board:local
+    command: ["node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js"]
+    environment: *application-environment
+    depends_on:
+      datastore:
+        condition: service_healthy
+
+  gateway-1:
+    image: spine-ts/standalone-gateway:local
+    environment: &gateway-environment
+      HOST: 0.0.0.0
+      PORT: 8080
+      NODE_ENV: production
+      BROWSER_ORIGIN: http://localhost:18080
+      BACKEND_URL: http://application-1:8080
+      SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone
+      DATASTORE_PROJECT_ID: message-board-compose
+      DATASTORE_EMULATOR_HOST: datastore:8081
+      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+    networks:
+      default:
+        aliases:
+          - gateway
+    depends_on:
+      datastore:
+        condition: service_healthy
+      application-1:
+        condition: service_started
+
+  gateway-2:
+    image: spine-ts/standalone-gateway:local
+    environment:
+      <<: *gateway-environment
+      BACKEND_URL: http://application-2:8080
+    networks:
+      default:
+        aliases:
+          - gateway
+    depends_on:
+      datastore:
+        condition: service_healthy
+      application-2:
+        condition: service_started
+
+  envoy:
+    image: envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb
+    command: ["-c", "/etc/envoy/envoy.yaml"]
+    ports:
+      - "18080:8080"
+    volumes:
+      - ./standalone-envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      - gateway-1
+      - gateway-2
