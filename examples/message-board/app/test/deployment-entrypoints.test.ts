@@ -17,9 +17,9 @@ describe("MessageBoard deployment entrypoints", () => {
     const combined = readFileSync(join(sourceRoot, "combined-entry.ts"), "utf8");
     const deployment = readFileSync(join(sourceRoot, "deployment-config.ts"), "utf8");
     expect(deployment).toContain("new DurableSubscriptionBindings");
-    expect(deployment).toContain("storageFactory: MessageBoardDeployment.storage(config)");
-    expect(gateway).toContain("MessageBoardDeployment.bindings(config)");
-    expect(combined).toContain("bindings: MessageBoardDeployment.bindings(config)");
+    expect(deployment).toContain("storageFactory,");
+    expect(gateway).toContain("MessageBoardDeployment.bindings(config, storage)");
+    expect(combined).toContain("bindings: MessageBoardDeployment.bindings(config, storage)");
     expect(gateway).toContain("bindings,");
     expect(deployment).toContain('"SUBSCRIPTION_REGISTRY_NAMESPACE"');
   });

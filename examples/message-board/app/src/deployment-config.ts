@@ -30,7 +30,7 @@ interface DeploymentContract {
   combined(environment: NodeJS.ProcessEnv): CombinedConfig;
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig;
   storage(config: DeploymentConfig): StorageFactory;
-  bindings(config: CombinedConfig): DurableSubscriptionBindings;
+  bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings;
   configureServer(
     config: DeploymentConfig,
     environment: NodeJS.ProcessEnv,
@@ -69,9 +69,9 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
     return DatastoreStorageFactory.create({ projectId: config.projectId });
   },
 
-  bindings(config: CombinedConfig): DurableSubscriptionBindings {
+  bindings(config: CombinedConfig, storageFactory: StorageFactory): DurableSubscriptionBindings {
     return new DurableSubscriptionBindings({
-      storageFactory: MessageBoardDeployment.storage(config),
+      storageFactory,
       namespace: config.subscriptionNamespace,
       nextId: randomUUID,
       dispose: () => Promise.resolve(),

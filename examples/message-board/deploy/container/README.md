@@ -47,6 +47,35 @@ MessageBoard data. The standalone gateway creates a separate Datastore-backed
 subscription registry and isolates its records with the required namespace.
 Infrastructure passes these values; it does not choose a storage provider.
 
+For example, start the native application against a disposable Datastore
+emulator:
+
+```bash
+docker network create message-board-local
+
+docker run --detach --name message-board-datastore \
+  --network message-board-local --network-alias datastore \
+  gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4 \
+  gcloud emulators firestore start \
+  --database-mode=datastore-mode --host-port=0.0.0.0:8081 --quiet
+
+docker run --rm --name message-board-app \
+  --network message-board-local --publish 8080:8080 \
+  --env HOST=0.0.0.0 --env PORT=8080 \
+  --env DATASTORE_PROJECT_ID=message-board-local \
+  --env DATASTORE_EMULATOR_HOST=datastore:8081 \
+  --env SPINE_IPC_DIRECTORY=/tmp/spine-ipc \
+  spine-ts/message-board:local \
+  node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js
+```
+
+Stop the application with `Ctrl-C`, then remove the emulator and network:
+
+```bash
+docker rm --force message-board-datastore
+docker network rm message-board-local
+```
+
 Node runs as PID 1. `SIGINT` and `SIGTERM` stop intake, close the server-owned
 environment facilities, and must finish within ten seconds. The images do not
 add application health endpoints. Readiness is the process listener becoming

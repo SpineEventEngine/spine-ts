@@ -130,7 +130,10 @@ export interface BoardServerOptions {
   readonly webOrigin?: string;
 
   /**
-   * Supplies durable browser-subscription coordination for production hosting.
+   * Supplies browser-subscription coordination.
+   *
+   * Production requires durable bindings. Local development may use an
+   * in-memory implementation.
    */
   readonly bindings?: SubscriptionBindings;
 }

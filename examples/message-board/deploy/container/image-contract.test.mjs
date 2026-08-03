@@ -228,6 +228,8 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     combined,
     "--network",
     network,
+    "--network-alias",
+    "combined",
     "--env",
     "HOST=0.0.0.0",
     "--env",
@@ -245,12 +247,15 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     messageBoard,
   ]);
   waitForLog(combined, /MessageBoard combined server ready/u);
+  exerciseRegistry(network, "http://combined:18081", messageBoard);
   owned.unshift(gateway);
   start([
     "--name",
     gateway,
     "--network",
     network,
+    "--network-alias",
+    "gateway",
     "--env",
     "HOST=0.0.0.0",
     "--env",
@@ -270,6 +275,7 @@ function startRuntimeMatrix({ messageBoard, network, owned, signal, suffix }) {
     "spine-ts/standalone-gateway:local",
   ]);
   waitForLog(gateway, /MessageBoard gateway ready/u);
+  exerciseRegistry(network, "http://gateway:18082", messageBoard);
   owned.unshift(delivery);
   start([
     "--name",
@@ -320,6 +326,86 @@ function stopWithin(container, signal) {
         `${containerLogs(container)}\n${String(error)}`,
     );
   }
+}
+
+function exerciseRegistry(network, target, image) {
+  const script = `
+    import { create } from "@bufbuild/protobuf";
+    import { BrowserSession, Client } from "@spine-event-engine/client-web";
+    import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+    import { ActorContextSchema } from "@spine-event-engine/proto";
+    import {
+      CompositeFilterSchema,
+      CompositeFilter_CompositeOperator,
+      FilterSchema,
+      Filter_Operator,
+      QueryIdSchema,
+      QuerySchema,
+      TargetFiltersSchema,
+      TargetSchema,
+      TopicIdSchema,
+      TopicSchema,
+    } from "@spine-event-engine/proto/client";
+    import {
+      BoardIdSchema,
+      BoardMessageViewSchema,
+    } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
+    const board = create(BoardIdSchema, { value: "general" });
+    const target = create(TargetSchema, {
+      type: TypeUrls.derive(BoardMessageViewSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          filter: [create(CompositeFilterSchema, {
+            operator: CompositeFilter_CompositeOperator.ALL,
+            filter: [create(FilterSchema, {
+              fieldPath: { fieldName: ["board"] },
+              operator: Filter_Operator.EQUAL,
+              value: AnyMessages.pack(BoardIdSchema, board),
+            })],
+          })],
+        }),
+      },
+    });
+    const query = create(QuerySchema, {
+      id: create(QueryIdSchema, { value: "image-registry-check" }),
+      context: create(ActorContextSchema),
+      target,
+    });
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "image-registry-check" }),
+      context: create(ActorContextSchema),
+      target,
+    });
+    const session = BrowserSession.bearer({ token: "message-board-local-fixture" });
+    const client = Client.forConnect(process.env.TARGET, {
+      credentials: session.credentials,
+      onRequestMetadata: () => session.requestMetadata(),
+    });
+    const subscription = await client.onBehalfOf("ada").createSubscription(topic, {
+      kind: "entity",
+      authoritativeQuery: () => query,
+    });
+    await subscription.cancel();
+    await client.close();
+    await session.close();
+  `;
+  docker([
+    "run",
+    "--rm",
+    "--network",
+    network,
+    "--env",
+    `TARGET=${target}`,
+    "--workdir",
+    "/app/node_modules/@spine-event-engine/example-message-board-app",
+    "--entrypoint",
+    "node",
+    image,
+    "--input-type=module",
+    "-e",
+    script,
+  ]);
 }
 
 function containerImage(container) {

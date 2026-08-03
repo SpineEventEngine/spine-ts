@@ -6,9 +6,11 @@ import { LocalBoardSession } from "./local-session.js";
 import { typeRegistry } from "./model-registry.js";
 
 const config = MessageBoardDeployment.gateway(process.env);
-MessageBoardDeployment.configureServer(config, process.env);
+const storage =
+  MessageBoardDeployment.configureServer(config, process.env) ??
+  MessageBoardDeployment.storage(config);
 const policy = new BoardAccessPolicy();
-const bindings = MessageBoardDeployment.bindings(config);
+const bindings = MessageBoardDeployment.bindings(config, storage);
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {
