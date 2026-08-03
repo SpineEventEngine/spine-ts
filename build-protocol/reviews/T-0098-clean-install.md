@@ -32,3 +32,20 @@ Baseline: `af72de4b`
 All model and reasoning fields are explicit before dispatch. Runtime metadata
 will be recorded if exposed; otherwise the immutable configured role/profile
 and surface limitation are recorded honestly.
+
+## Review wave result
+
+- Style/maintainability: clean, no P0-P3 findings.
+- TypeScript/API documentation: clean, no P0-P3 findings. The stable command,
+  CLI behavior, exports, declarations, and existing public documentation remain
+  compatible.
+- Performance/reliability: one accepted P2. Current packed-consumer coverage
+  extracts packages manually and executes the launcher by internal path, so it
+  does not prove a package manager creates and runs the public
+  `node_modules/.bin/spine-proto` shim. Add one installed-tarball regression
+  through pnpm or npm and execute that public shim after the normal build.
+- Runtime self-introspection was unavailable for all three reviewers. Their
+  immutable configured roles and explicitly dispatched `gpt-5.6-terra` / high
+  profiles are accepted; no mismatch or inherited fallback was visible.
+
+Only performance/reliability is reopened by the accepted correction.
