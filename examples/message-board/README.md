@@ -78,7 +78,9 @@ credentials. The React client may use either gRPC-Web or Connect at that public
 boundary.
 
 `BoardMessageAggregate` owns one message ID and refuses a duplicate before it
-changes state. Its return value is the event that feeds the read model:
+changes state. This is the `postMessage()` handler excerpt from
+[`BoardMessageAggregate`](app/src/index.ts); imports and the class declaration
+are omitted to focus on the handler. Its return value feeds the read model:
 
 ```ts
 @Assign

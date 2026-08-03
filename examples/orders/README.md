@@ -45,6 +45,10 @@ The load runner posts `CreateOrder` through the local server. `OrderAggregate`
 stores the order state and returns `OrderCreated`; the registered Projections
 turn that fact into the fixed read-side topology used by the scenario.
 
+This is the `createOrder()` handler excerpt from
+[`OrderAggregate`](src/index.ts); imports and the class declaration are omitted
+to focus on the handler.
+
 ```ts
 @Assign createOrder(command: CreateOrder): OrderCreated {
   this.update((draft) =>

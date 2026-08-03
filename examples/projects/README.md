@@ -45,6 +45,10 @@ The load scenario sends `CreateProject`, then queries and subscribes through
 the local server. The Aggregate writes only its own state and returns the
 event; generated handlers deliver that event to the registered read models.
 
+This is the `createProject()` handler excerpt from
+[`ProjectAggregate`](src/index.ts); imports and the class declaration are
+omitted to focus on the handler.
+
 ```ts
 @Assign
 createProject(command: CreateProject): ProjectCreated {
