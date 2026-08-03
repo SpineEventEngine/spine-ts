@@ -245,7 +245,7 @@ function generateBuildAndPack(directory: string, destination: string): PackedPac
   run(
     process.execPath,
     [
-      join(directory, "node_modules/@spine-event-engine/proto-tools/dist/src/cli/spine-proto.js"),
+      join(directory, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"),
       "generate",
     ],
     directory,
@@ -437,10 +437,7 @@ describe("packed external model consumer", () => {
       mkdirSync(join(app, "src"));
       run(
         process.execPath,
-        [
-          join(app, "node_modules/@spine-event-engine/proto-tools/dist/src/cli/spine-proto.js"),
-          "compose",
-        ],
+        [join(app, "node_modules/@spine-event-engine/proto-tools/bin/spine-proto.mjs"), "compose"],
         app,
       );
       writeFileSync(
