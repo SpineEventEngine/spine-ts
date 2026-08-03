@@ -1,0 +1,128 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: message-board-config
+data:
+  BROWSER_ORIGIN: https://message-board.example.test
+  SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-production
+  DELIVERY_SERVER_URL: http://simple-delivery-server:8484
+  SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: message-board-runtime
+type: Opaque
+stringData:
+  DATASTORE_PROJECT_ID: replace-me
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-board-application
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: message-board-application } }
+  template:
+    metadata: { labels: { app: message-board-application } }
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: application
+          image: spine-ts/message-board:local
+          command:
+            [
+              node,
+              node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js,
+            ]
+          envFrom:
+            [
+              { configMapRef: { name: message-board-config } },
+              { secretRef: { name: message-board-runtime } },
+            ]
+          env:
+            [
+              { name: HOST, value: 0.0.0.0 },
+              { name: PORT, value: "8080" },
+              { name: NODE_ENV, value: production },
+            ]
+          startupProbe: { tcpSocket: { port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
+          readinessProbe: { tcpSocket: { port: 8080 }, periodSeconds: 2 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: message-board-application }
+spec:
+  selector: { app: message-board-application }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-board-gateway
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: message-board-gateway } }
+  template:
+    metadata: { labels: { app: message-board-gateway } }
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: gateway
+          image: spine-ts/standalone-gateway:local
+          envFrom:
+            [
+              { configMapRef: { name: message-board-config } },
+              { secretRef: { name: message-board-runtime } },
+            ]
+          env:
+            [
+              { name: HOST, value: 0.0.0.0 },
+              { name: PORT, value: "8080" },
+              { name: NODE_ENV, value: production },
+              { name: BACKEND_URL, value: http://message-board-application:8080 },
+            ]
+          startupProbe: { tcpSocket: { port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
+          readinessProbe: { tcpSocket: { port: 8080 }, periodSeconds: 2 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-delivery-server
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: simple-delivery-server } }
+  template:
+    metadata: { labels: { app: simple-delivery-server } }
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: delivery
+          image: spine-ts/simple-delivery-server:local
+          env: [{ name: HOST, value: 0.0.0.0 }, { name: PORT, value: "8484" }]
+          startupProbe: { tcpSocket: { port: 8484 }, failureThreshold: 30, periodSeconds: 2 }
+          readinessProbe: { tcpSocket: { port: 8484 }, periodSeconds: 2 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: simple-delivery-server }
+spec:
+  selector: { app: simple-delivery-server }
+  ports: [{ port: 8484, targetPort: 8484 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: message-board-envoy
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: message-board-envoy } }
+  template:
+    metadata: { labels: { app: message-board-envoy } }
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: envoy
+          image: envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb
+          startupProbe: { tcpSocket: { port: 8443 }, failureThreshold: 30, periodSeconds: 2 }
+          readinessProbe: { tcpSocket: { port: 8443 }, periodSeconds: 2 }
