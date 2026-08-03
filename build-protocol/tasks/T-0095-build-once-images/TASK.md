@@ -1,6 +1,6 @@
 # T-0095: Build-once packages and local images
 
-Status: Complete; ready for integration
+Status: Complete; integrated and post-merge verified
 Start: `2026-08-02`
 Baseline: `1c53cbdf`
 Branch: `task/T-0095-build-once-images`
@@ -111,3 +111,6 @@ traversal, or monorepo rebuild at startup.
 - Final `verify:release` passes 175 test files and 3,473 tests, with 3 files and
   25 tests skipped. Coverage passes at 94.09% statements, 90.04% branches,
   94.51% functions, and 94.96% lines.
+- The conflict-free merge is `1bfbd5ae` on `main`. Its tree exactly matches the
+  verified task tree, and post-merge `verify:task -- --no-tests` passes all
+  change-sensitive mechanical, documentation, Proto, package, and link gates.

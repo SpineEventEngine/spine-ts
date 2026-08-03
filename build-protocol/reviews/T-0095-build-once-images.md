@@ -1,6 +1,6 @@
 # T-0095 Build-once Images Review
 
-Status: Complete; ready for integration
+Status: Complete; integrated and post-merge verified
 Baseline: `1c53cbdf`
 Candidate: `3a62e475`
 
@@ -78,3 +78,8 @@ The separate real-container gate also passes all seven cases for fixed image
 artifacts, runtime-only contents, shared MessageBoard artifact identity,
 durable subscription activation/cancellation, PID 1, both process signals, and
 the ten-second shutdown bound.
+
+The conflict-free merge `1bfbd5ae` has the same tree as the verified task
+endpoint. Post-merge `verify:task -- --no-tests` passes TypeScript, ESLint,
+cleanup/TSDoc, formatting, API documentation, documentation audience, Proto,
+generated cleanliness, 67 package imports, 44 assets, and 275 links.
