@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
+import console from "node:console";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import process from "node:process";
 import { fileURLToPath, URL } from "node:url";
 
 import { BuildContextCleanup } from "./build-context-cleanup.mjs";

@@ -4,7 +4,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
+import { URL } from "node:url";
 
 const containerRoot = new URL(".", import.meta.url);
 const datastoreEmulator =

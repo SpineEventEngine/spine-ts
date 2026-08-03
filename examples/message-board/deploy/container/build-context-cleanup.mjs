@@ -1,4 +1,5 @@
 import { rmSync } from "node:fs";
+import process from "node:process";
 
 /**
  * Removes one temporary image-build directory on completion or process interruption.
