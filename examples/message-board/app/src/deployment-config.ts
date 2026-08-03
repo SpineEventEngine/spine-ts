@@ -12,6 +12,8 @@ interface GatewayConfig {
   readonly port: number;
   readonly webOrigin: string;
   readonly backendUrl: string;
+  readonly projectId: string;
+  readonly subscriptionNamespace: string;
 }
 
 interface DeploymentContract {
@@ -46,6 +48,8 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
       port: port(required(environment, "PORT")),
       webOrigin: required(environment, "BROWSER_ORIGIN"),
       backendUrl: required(environment, "BACKEND_URL"),
+      projectId: required(environment, "DATASTORE_PROJECT_ID"),
+      subscriptionNamespace: required(environment, "SUBSCRIPTION_REGISTRY_NAMESPACE"),
     };
   },
 

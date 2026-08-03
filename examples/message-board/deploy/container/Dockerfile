@@ -2,14 +2,14 @@ ARG BASE_IMAGE=node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527
 FROM ${BASE_IMAGE} AS packages
 
 WORKDIR /app
-COPY package.json pnpm-lock.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY tarballs/ ./tarballs/
 COPY pnpm-store.tgz /tools/pnpm-store.tgz
 COPY pnpm.tgz /tools/pnpm.tgz
 RUN mkdir /pnpm-store \
   && tar -xzf /tools/pnpm-store.tgz -C /pnpm-store \
   && corepack install -g --cache-only /tools/pnpm.tgz \
-  && pnpm install --offline --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm-store \
+  && corepack pnpm install --offline --frozen-lockfile --prod --ignore-scripts --store-dir /pnpm-store \
   && rm -rf /pnpm-store tarballs /tools
 
 FROM ${BASE_IMAGE} AS runtime
