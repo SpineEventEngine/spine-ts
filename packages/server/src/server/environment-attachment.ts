@@ -2,6 +2,7 @@ import type { StorageContext, StorageFactory } from "@spine-event-engine/storage
 
 import type { ContextDeliveryDescriptor, DeliveryTenantScope } from "../context/bounded-context.js";
 import type { DeliveryEndpoint, DeliveryReady } from "../context/local-inbox-handoff.js";
+import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import {
   DeliveryRunCoordinator,
   type DeliveryRunOwner,
@@ -132,6 +133,13 @@ export interface EnvironmentAttachmentsOptions {
   readonly createWorker?: () => EnvironmentGenerationWorker;
 
   /**
+   * Resolves the environment-owned delivery ports after its facility opens.
+   *
+   * @returns The selected remote ports, or `undefined` for local delivery.
+   */
+  readonly deliveryPorts?: () => EnvironmentDeliveryPorts | undefined;
+
+  /**
    * Calls the retained lifecycle failure reporter.
    *
    * @param causes Lists the failures to report.
@@ -258,6 +266,7 @@ export class EnvironmentAttachments {
   readonly #registrations = new EnvironmentRegistrations();
   readonly #generations = new Map<EnvironmentGeneration, DeliveryGeneration>();
   readonly #createWorker: () => EnvironmentGenerationWorker;
+  readonly #deliveryPorts: () => EnvironmentDeliveryPorts | undefined;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
   readonly #transitionFaults: EnvironmentAttachmentsOptions["transitionFaults"];
   readonly #handles = new WeakMap<EnvironmentAttachmentHandle, AttachedHandle>();
@@ -276,6 +285,7 @@ export class EnvironmentAttachments {
    */
   constructor(options: EnvironmentAttachmentsOptions = {}) {
     this.#createWorker = options.createWorker ?? (() => new EnvironmentDeliveryWorker());
+    this.#deliveryPorts = options.deliveryPorts ?? (() => undefined);
     this.#report = options.report ?? (() => Promise.resolve());
     this.#transitionFaults = options.transitionFaults;
   }
@@ -478,7 +488,11 @@ export class EnvironmentAttachments {
     let generation = this.#generations.get(claim.generation);
     if (generation === undefined) {
       try {
-        generation = new DeliveryGeneration(this.#createWorker(), this.#report);
+        generation = new DeliveryGeneration(
+          this.#createWorker(),
+          this.#report,
+          this.#deliveryPorts(),
+        );
       } catch (error) {
         if (this.#registrations.remove(claim.token) === 0) {
           this.#registrations.clear(claim.generation);
@@ -1450,6 +1464,7 @@ class RegistrationOwnership {
 
 class DeliveryGeneration {
   readonly #worker: EnvironmentGenerationWorker;
+  readonly #ports: EnvironmentDeliveryPorts | undefined;
   readonly #report: (causes: readonly unknown[]) => Promise<void>;
   readonly #descriptors = new WeakSet<ContextDeliveryDescriptor>();
   readonly #runtimes = new WeakMap<
@@ -1470,9 +1485,11 @@ class DeliveryGeneration {
   constructor(
     worker: EnvironmentGenerationWorker,
     report: (causes: readonly unknown[]) => Promise<void>,
+    ports?: EnvironmentDeliveryPorts,
   ) {
     this.#worker = worker;
     this.#report = report;
+    this.#ports = ports;
   }
 
   get replacementSafe(): boolean {
@@ -1879,7 +1896,10 @@ class DeliveryGeneration {
           (ready) => {
             readiness.notify(descriptor, ready);
           },
-          { allowEmpty: true },
+          {
+            allowEmpty: true,
+            ...(this.#ports === undefined ? {} : { ports: this.#ports }),
+          },
         ),
       ),
     );

@@ -91,7 +91,12 @@ spec:
           image: envoyproxy/envoy:v1.38.3@sha256:5f7c43e1147412fdb3af578c651c67478a3df818eae89d2261e707e06c209cdb
           args: ["-c", "/etc/envoy/envoy.yaml"]
           volumeMounts:
-            - { name: envoy-config, mountPath: /etc/envoy/envoy.yaml, subPath: envoy.yaml, readOnly: true }
+            - {
+                name: envoy-config,
+                mountPath: /etc/envoy/envoy.yaml,
+                subPath: envoy.yaml,
+                readOnly: true,
+              }
             - { name: envoy-tls, mountPath: /run/tls, readOnly: true }
           startupProbe: { tcpSocket: { port: 8443 }, failureThreshold: 30, periodSeconds: 2 }
           readinessProbe: { tcpSocket: { port: 8443 }, periodSeconds: 2 }
@@ -149,7 +154,6 @@ data:
         - name: gateway
           connect_timeout: 5s
           type: STRICT_DNS
-          http2_protocol_options: {}
           load_assignment:
             cluster_name: gateway
             endpoints:

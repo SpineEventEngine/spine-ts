@@ -28,9 +28,6 @@ static_resources:
                         - match: { path: "/spine.client.SubscriptionService/Cancel" }
                           route: { cluster: gateway, timeout: 30s }
                 http_filters:
-                  - name: envoy.filters.http.grpc_web
-                    typed_config:
-                      "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -38,11 +35,6 @@ static_resources:
     - name: gateway
       connect_timeout: 2s
       type: LOGICAL_DNS
-      typed_extension_protocol_options:
-        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
-          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-          explicit_http_config:
-            http2_protocol_options: {}
       load_assignment:
         cluster_name: gateway
         endpoints:

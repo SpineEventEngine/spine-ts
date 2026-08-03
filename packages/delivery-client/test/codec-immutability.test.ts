@@ -13,7 +13,7 @@ import {
   RemoteInbox,
 } from "../src/index.js";
 import { DeliveryMessageCodec } from "../src/wire/codec.js";
-import { message, transport } from "./shared-fixtures.js";
+import { domainMessage, message, transport } from "./shared-fixtures.js";
 
 describe("delivery codec and immutable snapshots", () => {
   it("requires a durable removal quarantine before admitting remote inbox work", () => {
@@ -47,5 +47,17 @@ describe("delivery codec and immutable snapshots", () => {
 
     expect(second.whenReceived.getTime()).toBe(1_000);
     expect(Array.from(second.signal?.value ?? [])).toEqual(expectedPayload);
+  });
+
+  it("preserves plain framework target IDs across the frozen wire EntityId", () => {
+    const source = domainMessage();
+    const plain = { ...source, inboxId: { ...source.inboxId, targetId: "message-1" } };
+
+    const decoded = DeliveryMessageCodec.decode(
+      DeliveryMessageCodec.encode(plain),
+      ShardIndex.single(),
+    );
+
+    expect(decoded.inboxId).toEqual(plain.inboxId);
   });
 });

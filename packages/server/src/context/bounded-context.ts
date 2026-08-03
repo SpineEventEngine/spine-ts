@@ -294,7 +294,10 @@ export interface ContextDeliveryDescriptor {
   transition(
     scopes: readonly DeliveryReady[],
     onReady: OnDeliveryReady,
-    options?: { readonly allowEmpty?: boolean },
+    options?: {
+      readonly allowEmpty?: boolean;
+      readonly ports?: import("./local-inbox-handoff.js").EnvironmentDeliveryPorts;
+    },
   ): Promise<void>;
 }
 

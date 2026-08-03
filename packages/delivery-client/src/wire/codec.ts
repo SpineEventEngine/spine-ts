@@ -1,5 +1,5 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 
 import type { InboxMessage, InboxMessageId } from "@spine-event-engine/server";
 import { ShardIndex } from "@spine-event-engine/server";
@@ -105,6 +105,8 @@ const DeliveryValues = Object.freeze({
   },
 });
 
+const stringTargetTypeUrl = "type.googleapis.com/google.protobuf.StringValue";
+
 type DeliveryMessageCodecApi = Readonly<{
   encodeBatch(messages: readonly InboxMessage[]): {
     readonly ids: readonly string[];
@@ -116,6 +118,7 @@ type DeliveryMessageCodecApi = Readonly<{
   encodeId(id: InboxMessageId): string;
   snapshot(value: InboxMessage): InboxMessage;
   target(inbox: InboxMessage["inboxId"]): { typeUrl: string; value: Uint8Array };
+  decodeTarget(typeUrl: string, value: Uint8Array): string;
   payload(signal: InboxMessage["signal"]): WireInboxMessage["payload"];
   label(value: InboxMessage["label"]): InboxLabel;
   status(value: InboxMessage["status"]): InboxMessageStatus;
@@ -236,10 +239,11 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       message.keepUntil === undefined ? undefined : DeliveryShardCodec.date(message.keepUntil);
     if (!Number.isSafeInteger(message.version) || message.version < 0)
       throw DeliveryRequestCodec.protocol();
+    const targetId = DeliveryMessageCodec.decodeTarget(entityId.typeUrl, entityId.value);
     return DeliveryValues.freeze({
       id: DeliveryValues.freeze({ value: id.uuid, shard }),
       inboxId: DeliveryValues.freeze({
-        targetId: `${entityId.typeUrl}:${Buffer.from(entityId.value).toString("base64")}`,
+        targetId,
         targetTypeUrl: inboxId.typeUrl,
       }),
       signalId: message.signalId.value,
@@ -314,14 +318,32 @@ const DeliveryMessageCodec: DeliveryMessageCodecApi = Object.freeze({
       !DeliveryValues.hasText(inbox.targetTypeUrl)
     )
       throw new TypeError("Delivery inbox ID is invalid.");
-    const separator = inbox.targetId.indexOf(":");
-    if (separator <= 0) throw new TypeError("Delivery inbox ID is invalid.");
-    const typeUrl = inbox.targetId.slice(0, separator);
-    try {
-      return { typeUrl, value: Buffer.from(inbox.targetId.slice(separator + 1), "base64") };
-    } catch {
+    if (!DeliveryValues.hasText(inbox.targetId))
       throw new TypeError("Delivery inbox ID is invalid.");
+    const separator = inbox.targetId.indexOf(":");
+    const typeUrl = inbox.targetId.slice(0, separator);
+    if (separator > 0 && typeUrl.includes("/")) {
+      return { typeUrl, value: Buffer.from(inbox.targetId.slice(separator + 1), "base64") };
     }
+    return {
+      typeUrl: stringTargetTypeUrl,
+      value: toBinary(StringValueSchema, create(StringValueSchema, { value: inbox.targetId })),
+    };
+  },
+
+  /**
+   * Decodes an inbox target identifier while preserving plain framework IDs.
+   *
+   * @param typeUrl Identifies the wire entity-ID message.
+   * @param value Contains the serialized entity-ID message.
+   * @returns The framework target identifier.
+   */
+  decodeTarget(typeUrl: string, value: Uint8Array): string {
+    if (typeUrl !== stringTargetTypeUrl)
+      return `${typeUrl}:${Buffer.from(value).toString("base64")}`;
+    const decoded = fromBinary(StringValueSchema, value).value;
+    if (!DeliveryValues.hasText(decoded)) throw DeliveryRequestCodec.protocol();
+    return decoded;
   },
 
   /**

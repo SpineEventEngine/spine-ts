@@ -88,10 +88,11 @@ export class LocalProjectionInbox implements ProjectionInbox {
     input: ProjectionInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    const routed = this.#readiness.route(delivery);
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
       key: InboxHandoff.key(input, deliveryTenantId),
-      onHandoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
+      onHandoff: () => this.#receiveAndDrain(routed, input, deliveryTenantId),
     });
   }
 

@@ -16,33 +16,33 @@ static_resources:
                       domains: ["*"]
                       routes:
                         - match: { path: "/spine.auth.AuthenticationService/ResolveContext" }
-                          route: { cluster: gateway, timeout: 30s }
+                          route: &session_route
+                            cluster: gateway
+                            timeout: 30s
+                            hash_policy: &session_hash
+                              - header: { header_name: authorization }
                         - match: { path: "/spine.client.CommandService/Post" }
-                          route: { cluster: gateway, timeout: 30s }
+                          route: *session_route
                         - match: { path: "/spine.client.QueryService/Read" }
-                          route: { cluster: gateway, timeout: 30s }
+                          route: *session_route
                         - match: { path: "/spine.client.SubscriptionService/Subscribe" }
-                          route: { cluster: gateway, timeout: 30s }
+                          route: *session_route
                         - match: { path: "/spine.client.SubscriptionService/Activate" }
-                          route: { cluster: gateway, timeout: 0s }
+                          route:
+                            cluster: gateway
+                            timeout: 0s
+                            hash_policy: *session_hash
                         - match: { path: "/spine.client.SubscriptionService/Cancel" }
-                          route: { cluster: gateway, timeout: 30s }
+                          route: *session_route
                 http_filters:
-                  - name: envoy.filters.http.grpc_web
-                    typed_config:
-                      "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
   clusters:
     - name: gateway
       connect_timeout: 2s
-      type: LOGICAL_DNS
-      typed_extension_protocol_options:
-        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
-          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-          explicit_http_config:
-            http2_protocol_options: {}
+      type: STRICT_DNS
+      lb_policy: RING_HASH
       load_assignment:
         cluster_name: gateway
         endpoints:
