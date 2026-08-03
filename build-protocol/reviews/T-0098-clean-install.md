@@ -49,3 +49,21 @@ and surface limitation are recorded honestly.
   profiles are accepted; no mismatch or inherited fallback was visible.
 
 Only performance/reliability is reopened by the accepted correction.
+
+## Reliability correction evidence
+
+- RED: the manually extracted external-consumer tree has no
+  `node_modules/.bin/spine-proto` shim, as expected; the added assertion failed
+  with `expected false to be true`.
+- GREEN: the correction reuses the existing normal build and packed tarballs,
+  then installs a small separate consumer with `pnpm install --offline
+--ignore-scripts`. Its fixture-local `pnpm-workspace.yaml` overrides internal
+  package dependencies to those tarballs and the already installed
+  `node-addon-api`, so no network is needed.
+- The regression asserts pnpm creates `spine-proto` on POSIX or
+  `spine-proto.cmd` on Windows and executes it through the host-appropriate
+  launcher. It reaches the existing CLI and observes the established
+  unsupported-command error. `corepack pnpm exec vitest run
+packages/proto-tools/test/external-consumer.test.ts` passed (1 file, 1 test).
+- The accepted P2 correction is ready for the reopened performance/reliability
+  re-review. No other lane is substantively affected.

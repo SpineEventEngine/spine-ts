@@ -55,6 +55,7 @@ function packSpinePackages(destination: string): readonly PackedPackage[] {
   const sources = [
     "packages/proto-tools",
     "packages/server",
+    "packages/auth",
     "packages/proto",
     "packages/core",
     "packages/storage",
@@ -75,6 +76,50 @@ function packSpinePackages(destination: string): readonly PackedPackage[] {
       const packageName = readPackedName(tarball);
       return { name: packageName, tarball };
     });
+}
+
+function installTarballsWithPnpm(directory: string, packages: readonly PackedPackage[]): void {
+  const dependencies = Object.fromEntries(
+    packages.map(({ name, tarball }) => [name, `file:${tarball}`]),
+  );
+  const overrides = {
+    ...dependencies,
+    "node-addon-api": installedDependency("node-addon-api"),
+  };
+  writeJson(directory, "package.json", {
+    name: "@external/proto-tools-cli",
+    private: true,
+    type: "module",
+    dependencies,
+  });
+  writeFileSync(
+    join(directory, "pnpm-workspace.yaml"),
+    `overrides:\n${Object.entries(overrides)
+      .map(([name, tarball]) => `  ${JSON.stringify(name)}: ${JSON.stringify(tarball)}`)
+      .join("\n")}\n`,
+  );
+  run("pnpm", ["install", "--offline", "--ignore-scripts"], directory);
+}
+
+function installedDependency(name: string): string {
+  const store = join(repositoryRoot, "node_modules/.pnpm");
+  const entry = readdirSync(store).find((candidate) => candidate.startsWith(`${name}@`));
+  if (entry === undefined) throw new Error(`Missing installed dependency ${name}.`);
+  return `file:${join(store, entry, "node_modules", name)}`;
+}
+
+function runInstalledShim(directory: string): void {
+  const shim = join(
+    directory,
+    "node_modules/.bin",
+    process.platform === "win32" ? "spine-proto.cmd" : "spine-proto",
+  );
+  expect(existsSync(shim)).toBe(true);
+  if (process.platform === "win32") {
+    run("cmd.exe", ["/d", "/s", "/c", shim, "unsupported-command"], directory);
+  } else {
+    run(shim, ["unsupported-command"], directory);
+  }
 }
 
 function readPackedName(tarball: string): string {
@@ -305,6 +350,13 @@ describe("packed external model consumer", () => {
       const tarballs = join(root, "tarballs");
       mkdirSync(tarballs);
       const spinePackages = packSpinePackages(tarballs);
+
+      const cli = join(root, "proto-tools-cli");
+      mkdirSync(cli);
+      installTarballsWithPnpm(cli, spinePackages);
+      expect(() => {
+        runInstalledShim(cli);
+      }).toThrow("spine-proto: unsupported command unsupported-command");
 
       const users = join(root, "users-model");
       mkdirSync(users);
