@@ -1,6 +1,6 @@
 # T-0097 Wave 5 Closure Review
 
-Status: Specialist correction in progress
+Status: Affected API/reliability re-review in progress
 Baseline: `0f47c634`
 Candidate: `543917c4`
 
@@ -52,3 +52,15 @@ existing implementation context. Corrections must update all four Envoy copies,
 the structural policy tests, a data-plane non-POST rejection, the quiet-stream
 policy evidence, and the narrow storage/session wording. Re-review only API and
 reliability after focused verification.
+
+## Correction Evidence
+
+- Commit `17eece42` requires exact path plus `POST` matching for every browser
+  RPC route, disables the HTTP connection manager idle timeout for quiet
+  subscription streams, adds a GET rejection regression, and corrects the
+  gateway/session storage wording.
+- The Compose/Kubernetes policy and topology suite passes 8/8.
+- Pinned real-image Envoy validation passes 1/1 for all four configurations.
+- The three-case Compose lifecycle suite passes with leak-free cleanup.
+- Formatting and `git diff --check` pass.
+- Only the TypeScript/API and performance/reliability concerns are reopened.
