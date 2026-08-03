@@ -15,11 +15,38 @@ umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
 WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
 -----END PRIVATE KEY-----`;
 
+test("Compose readiness ignores a prior container incarnation's readiness log", () => {
+  const startedAt = "2026-08-03T12:00:00.000Z";
+  const readiness = /MessageBoard gateway ready/u;
+
+  assert.equal(
+    hasReadinessLog(
+      "2026-08-03T11:59:59.999Z MessageBoard gateway ready at http://0.0.0.0:8080\n",
+      startedAt,
+      readiness,
+    ),
+    false,
+  );
+  assert.equal(
+    hasReadinessLog(
+      "2026-08-03T12:00:00.000Z MessageBoard gateway ready at http://0.0.0.0:8080\n",
+      startedAt,
+      readiness,
+    ),
+    true,
+  );
+});
+
 test("combined Compose serves signed MessageBoard behavior through Envoy", () => {
   const project = projectName();
   try {
     run(project, combined, ["up", "--detach"]);
-    waitFor(project, combined, ["combined", "delivery", "envoy"]);
+    waitFor(
+      project,
+      combined,
+      ["combined", "delivery", "envoy"],
+      new Map([["combined", /MessageBoard combined server ready/u]]),
+    );
     const output = client(project, "envoy", "full");
     assert.match(output, /query-ok/u);
     assert.match(output, /full-ok/u);
@@ -37,14 +64,17 @@ test("standalone Compose preserves public behavior and cancellation across gatew
   const project = projectName();
   try {
     run(project, standalone, ["up", "--detach"]);
-    waitFor(project, standalone, [
-      "application-1",
-      "application-2",
-      "gateway-1",
-      "gateway-2",
-      "delivery",
-      "envoy",
-    ]);
+    waitFor(
+      project,
+      standalone,
+      ["application-1", "application-2", "gateway-1", "gateway-2", "delivery", "envoy"],
+      new Map([
+        ["application-1", /MessageBoard application ready/u],
+        ["application-2", /MessageBoard application ready/u],
+        ["gateway-1", /MessageBoard gateway ready/u],
+        ["gateway-2", /MessageBoard gateway ready/u],
+      ]),
+    );
 
     assert.match(client(project, "envoy", "full"), /full-ok/u);
     const subscription = client(project, "gateway-1", "subscribe").trim();
@@ -59,7 +89,12 @@ test("standalone Compose preserves public behavior and cancellation across gatew
     assert.match(client(project, "gateway-2", "cancel", subscription), /cancel-ok/u);
 
     run(project, standalone, ["up", "--detach", "gateway-1"]);
-    waitFor(project, standalone, ["gateway-1"]);
+    waitFor(
+      project,
+      standalone,
+      ["gateway-1"],
+      new Map([["gateway-1", /MessageBoard gateway ready/u]]),
+    );
     assert.match(client(project, "gateway-1", "assert-cancelled", subscription), /cancelled-ok/u);
     assert.match(client(project, "envoy", "query"), /query-ok/u);
 
@@ -98,18 +133,50 @@ function status(project, compose, all = false) {
   return new Map(
     records.map((record) => [
       record.Service,
-      { state: record.State, exitCode: Number(record.ExitCode) },
+      { id: record.ID, state: record.State, exitCode: Number(record.ExitCode) },
     ]),
   );
 }
 
-function waitFor(project, compose, services) {
+function waitFor(project, compose, services, readiness = new Map()) {
   for (let attempt = 0; attempt < 45; attempt += 1) {
     const state = status(project, compose);
-    if (services.every((service) => state.get(service)?.state === "running")) return;
+    if (
+      services.every((service) => state.get(service)?.state === "running") &&
+      [...readiness].every(([service, expected]) => serviceIsReady(state.get(service), expected))
+    ) {
+      return;
+    }
     execFileSync("sleep", ["1"]);
   }
   assert.fail(`Compose topology did not start: ${diagnostics(project, compose)}`);
+}
+
+function serviceIsReady(service, expected) {
+  if (service?.id === undefined) return false;
+  const startedAt = execFileSync(
+    "docker",
+    ["inspect", service.id, "--format", "{{.State.StartedAt}}"],
+    { encoding: "utf8", timeout: 30_000 },
+  ).trim();
+  const logs = execFileSync("docker", ["logs", "--timestamps", service.id], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  return hasReadinessLog(logs, startedAt, expected);
+}
+
+function hasReadinessLog(logs, startedAt, expected) {
+  const start = Date.parse(startedAt);
+  if (Number.isNaN(start)) return false;
+  return logs.split("\n").some((line) => {
+    const separator = line.indexOf(" ");
+    if (separator === -1) return false;
+    const timestamp = Date.parse(line.slice(0, separator));
+    return (
+      !Number.isNaN(timestamp) && timestamp >= start && expected.test(line.slice(separator + 1))
+    );
+  });
 }
 
 function waitStopped(project, compose, service) {
