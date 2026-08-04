@@ -199,3 +199,20 @@ one distributed transaction. This task retains the accepted immediate
 pre-commit probe with no intervening asynchronous boundary and must not claim a
 stronger linearizable revocation guarantee. A storage-transaction fencing token
 would be a separate serialized/storage design requiring a future human choice.
+
+## Final Correction Endpoint
+
+- Corrected implementation endpoint: `d55e52cc`, clean and pushed.
+- Focused correction evidence passes 65/65 with no skipped test; package output
+  was rebuilt before child-process fixtures, and delivery-client/server
+  typechecks, ESLint, Prettier, and diff checks pass.
+- The final affected re-review uses the existing concern roles only:
+  style/maintainability, TypeScript/API, and performance/reliability use
+  explicit `gpt-5.6-terra` / `high`; documentation uses its immutable
+  `gpt-5.6-luna` / `medium` profile. Runtime self-introspection is unavailable,
+  so explicit dispatch plus immutable role configuration are the metadata
+  evidence unless a visible mismatch occurs.
+- Re-review is limited to the six recorded findings and corrections: frozen
+  wire compatibility, canonical session ownership, bounded uncancelled release
+  and failure-safe teardown, environment-path overflow convergence, enabled
+  builder-path evidence, and drain-until-empty/linearizability documentation.
