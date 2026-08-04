@@ -739,14 +739,38 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   close(): Promise<void> {
     if (this.#closePromise !== undefined) return this.#closePromise;
     this.#closed = true;
-    this.#closePromise = new Promise<void>((resolve) => {
+    if (this.#activeOperations === 0) {
+      try {
+        this.#closeHandles();
+        this.#closePromise = Promise.resolve();
+      } catch (error) {
+        this.#closePromise = Promise.reject(
+          error instanceof Error ? error : new Error("Stand subscription registry close failed."),
+        );
+      }
+      return this.#closePromise;
+    }
+    const settled = new Promise<void>((resolve) => {
       this.#closeWaiter = resolve;
-      if (this.#activeOperations === 0) resolve();
-    }).then(() => {
-      this.#storage.close();
-      this.#control.close();
+    });
+    this.#closePromise = settled.then(() => {
+      this.#closeHandles();
     });
     return this.#closePromise;
+  }
+
+  #closeHandles(): void {
+    const errors: unknown[] = [];
+    for (const storage of [this.#storage, this.#control]) {
+      try {
+        storage.close();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "Stand subscription registry close failed.");
+    }
   }
 
   static #id(subscription: Subscription): string {

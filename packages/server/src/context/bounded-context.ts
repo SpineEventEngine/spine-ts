@@ -1316,13 +1316,7 @@ export class BoundedContextBuilder {
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
   ): BoundedContext {
-    const registry =
-      this.#subscriptionRegistry ??
-      new StorageSubscriptionRegistry(
-        ContextParts.createStorageContext(this.#specSnapshot),
-        storageFactory,
-        this.#subscriptionLimit,
-      );
+    let registry = this.#subscriptionRegistry;
     this.#subscriptionRegistry = undefined;
 
     const registeredRepositories = [...repositories];
@@ -1347,6 +1341,11 @@ export class BoundedContextBuilder {
         context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
+      registry ??= new StorageSubscriptionRegistry(
+        ContextParts.createStorageContext(this.#specSnapshot),
+        storageFactory,
+        this.#subscriptionLimit,
+      );
       return ContextParts.createBoundedContext(
         this.#specSnapshot,
         commandBus,
@@ -1358,8 +1357,8 @@ export class BoundedContextBuilder {
         this.#deliveryStrategy,
       );
     } catch (error) {
-      void registry.close();
-      void stand?.close();
+      void registry?.close().catch(() => undefined);
+      void stand?.close().catch(() => undefined);
       if (eventStore !== undefined) {
         ContextParts.closeEventStore(eventStore, error);
       }
