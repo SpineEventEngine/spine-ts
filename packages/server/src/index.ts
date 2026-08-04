@@ -27,6 +27,16 @@ export {
   type StandUpdate,
   type StandUpdateOptions,
 } from "./stand/stand.js";
+export {
+  InMemorySubscriptionRegistry,
+  StandCapacityError,
+  StandConflictError,
+  type StandSubscriptionActivateResult,
+  type StandSubscriptionCreateResult,
+  type StandSubscriptionDeleteResult,
+  type StandSubscriptionEntry,
+  type StandSubscriptionRegistry,
+} from "./stand/subscription-registry.js";
 
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
 export {

@@ -6,6 +6,7 @@ import {
   InMemorySubscriptionRegistry,
   StandCapacityError,
 } from "../../src/stand/subscription-registry.js";
+import { StandSubscriptionRecords } from "../../src/stand/subscription-records.js";
 
 describe("InMemorySubscriptionRegistry", () => {
   it("creates a pending definition, activates it, and physically deletes it", async () => {
@@ -28,5 +29,11 @@ describe("InMemorySubscriptionRegistry", () => {
     await expect(
       registry.create(create(SubscriptionSchema, { id: { value: "full" }, topic: { type: "topic" } })),
     ).rejects.toBeInstanceOf(StandCapacityError);
+  });
+
+  it("rejects a stored record without a creation time", () => {
+    expect(() => StandSubscriptionRecords.read(create(StandSubscriptionRecords.schema, {}), "sub-1")).toThrow(
+      "Malformed Stand subscription record.",
+    );
   });
 });
