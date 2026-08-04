@@ -1,6 +1,6 @@
 # T-0106 Review Record
 
-Status: Corrections Ready For Re-review
+Status: Final Corrections Required
 
 ## Review Assignments And Results
 
@@ -51,12 +51,14 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
 
 ## Current Dispositions
 
-- Style/maintainability: corrections required for follow-up scope, shard
-  resolution, and generic ownership naming.
-- Documentation: corrections required for distinctions, default, and example.
-- TypeScript/API docs: corrections required for API name and replay type.
-- Performance/reliability: corrections required for shard validation,
-  follow-up chaining/scope, and focused multi-shard coverage.
+- Style/maintainability: re-review accepted findings 1 and 3; one P2 naming
+  remainder persists because generic command handoff still calls
+  `processManagerDeliveryContext()` and `requireProcessManagerTenant()`.
+- Documentation: wording/default/ports claims are accepted; one P2 example
+  remainder constructs protected `BoundedContextBuilder` directly.
+- TypeScript/API docs: replay type is accepted; the same unusable builder
+  example remains.
+- Performance/reliability: clean after correction re-review.
 - Security: N/A unless implementation changes a trust boundary.
 
 ## Correction Checkpoints
@@ -82,3 +84,7 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
   ESLint, cleanup, TSDoc, format, documentation/API, Proto, generated
   cleanliness, release readiness, and 229/229 focused tests. All four affected
   concerns require one re-review against this correction set.
+- Re-review at `f6a43e89` accepted reliability completely and accepted all
+  style/API/documentation findings except two deterministic P2 corrections:
+  finish generic naming on the shared command tenant/context helpers, and use
+  `BoundedContext.singleTenant(...)` in the README/REFERENCE strategy example.
