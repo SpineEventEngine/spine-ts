@@ -468,8 +468,8 @@ function workerTransport(
   revalidationOutcome?: "refreshed" | "picked",
 ): Transport {
   let pickups = 0;
-  return {
-    unary: async (method, _signal, _timeoutMs, header, input) => {
+  const unaryTransport: Pick<Transport, "unary"> = {
+    unary: (method, _signal, _timeoutMs, header, input) => {
       if (method.name === "PickShard") {
         const request = input as {
           shard: unknown;
@@ -481,11 +481,11 @@ function workerTransport(
         };
         workers.push(worker);
         pickups += 1;
-        return {
+        return Promise.resolve({
           stream: false,
           method,
           header: new Headers(
-            pickups > 1 && header?.get("x-spine-delivery-revalidate") === "true"
+            pickups > 1 && new Headers(header).get("x-spine-delivery-revalidate") === "true"
               ? [["x-spine-delivery-revalidation", revalidationOutcome ?? "refreshed"]]
               : [],
           ),
@@ -504,16 +504,17 @@ function workerTransport(
               }),
             },
           }),
-        } as never;
+        } as never);
       }
-      return {
+      return Promise.resolve({
         stream: false,
         method,
         header: new Headers(),
         trailer: new Headers(),
         service: method.parent,
         message: create(EmptySchema),
-      } as never;
+      } as never);
     },
-  } as Transport;
+  };
+  return unaryTransport as unknown as Transport;
 }
