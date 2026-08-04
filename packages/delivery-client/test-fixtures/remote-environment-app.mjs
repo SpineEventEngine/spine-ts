@@ -29,7 +29,38 @@ const delivery = RemoteDelivery.connectTo({
   },
   clientOptions: { observationBufferSize, observationReconnects: 0 },
 });
-ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
+await delivery.open();
+const sourceEvidence = { snapshots: 0, watches: 0, failures: 0 };
+let holdSource = false;
+let releaseSource = Promise.withResolvers();
+const source = {
+  async shardSnapshot(options) {
+    sourceEvidence.snapshots += 1;
+    return delivery.source.shardSnapshot(options);
+  },
+  async *observeShardUpdates(options) {
+    sourceEvidence.watches += 1;
+    try {
+      for await (const update of delivery.source.observeShardUpdates(options)) {
+        if (holdSource) await releaseSource.promise;
+        yield update;
+      }
+    } catch (error) {
+      sourceEvidence.failures += 1;
+      throw error;
+    }
+  },
+  releaseExpired: (inactivityMs, options) => delivery.source.releaseExpired(inactivityMs, options),
+};
+ServerEnvironment.when(EnvironmentType.Local).use({
+  delivery: {
+    open: () => delivery.open(),
+    close: () => delivery.close(),
+    inbox: delivery.inbox,
+    workRegistry: delivery.workRegistry,
+    source,
+  },
+});
 const environment = ServerEnvironment.instance();
 const ready = {
   label: "HANDLE_COMMAND",
@@ -73,9 +104,17 @@ let releaseFirst = Promise.withResolvers();
 process.on("message", async (frame) => {
   if (isControl(frame)) {
     if (frame.command === "block-first") holdFirst = true;
-    else {
+    else if (frame.command === "release-first") {
       holdFirst = false;
       releaseFirst.resolve();
+    } else if (frame.command === "hold-source") {
+      holdSource = true;
+    } else if (frame.command === "release-source") {
+      holdSource = false;
+      releaseSource.resolve();
+    } else {
+      process.send({ type: "result", id: frame.id, ...sourceEvidence });
+      return;
     }
     process.send({ type: "result", id: frame.id });
     return;
@@ -122,6 +161,8 @@ async function close() {
 process.once("SIGTERM", () => {
   holdFirst = false;
   releaseFirst.resolve();
+  holdSource = false;
+  releaseSource.resolve();
   void close().finally(() => process.exit(0));
 });
 process.send({ type: "ready" });
@@ -140,7 +181,11 @@ function isControl(frame) {
   return (
     typeof frame === "object" &&
     frame !== null &&
-    (frame.command === "block-first" || frame.command === "release-first") &&
+    (frame.command === "block-first" ||
+      frame.command === "release-first" ||
+      frame.command === "hold-source" ||
+      frame.command === "release-source" ||
+      frame.command === "source-evidence") &&
     typeof frame.id === "string"
   );
 }

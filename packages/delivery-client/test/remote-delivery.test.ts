@@ -11,6 +11,8 @@ const remote = vi.hoisted(() => ({
   closeFailures: [] as (Error | undefined)[],
   readiness: [] as (() => Promise<readonly unknown[]>)[],
   observations: [] as (() => AsyncIterable<unknown>)[],
+  releases: [] as unknown[][],
+  reconciled: [] as unknown[],
 }));
 
 vi.mock("../src/client/client.js", () => ({
@@ -41,6 +43,9 @@ vi.mock("../src/remote/adapters.js", () => ({
   RemoteWorkRegistry: class {
     constructor(readonly client: FakeClient) {
       remote.workRegistries.push(this);
+    }
+    reconcile(observation: unknown): void {
+      remote.reconciled.push(observation);
     }
   },
 }));
@@ -78,6 +83,11 @@ class FakeClient {
     return this.observations();
   }
 
+  releaseExpired(inactivityMs: number, options?: unknown): Promise<readonly unknown[]> {
+    remote.releases.push([inactivityMs, options]);
+    return Promise.resolve([]);
+  }
+
   close(): void {
     if (this.#closed) return;
     remote.closeEvents.push("client");
@@ -113,6 +123,8 @@ describe("RemoteDelivery", () => {
     remote.closeFailures = [];
     remote.readiness = [];
     remote.observations = [];
+    remote.releases = [];
+    remote.reconciled = [];
   });
 
   it("creates one client and publishes its exact remote adapters", async () => {
@@ -137,7 +149,8 @@ describe("RemoteDelivery", () => {
       observations += 1;
       return {
         async *[Symbol.asyncIterator]() {
-          throw broken;
+          await Promise.reject(broken);
+          yield undefined;
         },
       };
     });
@@ -153,6 +166,33 @@ describe("RemoteDelivery", () => {
       broken,
     );
     expect(observations).toBe(1);
+  });
+
+  it("forwards release bounds and reconciles snapshot and live Admin facts before yielding", async () => {
+    const snapshot = Object.freeze({ shard: "snapshot", status: "NOT_PICKED", messages: 0 });
+    const update = Object.freeze({ shard: "update", status: "PICKED", messages: 1 });
+    remote.readiness.push(() => Promise.resolve([snapshot]));
+    remote.observations.push(async function* () {
+      await Promise.resolve();
+      yield update;
+    });
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+    });
+
+    await delivery.open();
+    await expect(delivery.source.shardSnapshot()).resolves.toEqual([snapshot]);
+    await expect(
+      delivery.source.observeShardUpdates()[Symbol.asyncIterator]().next(),
+    ).resolves.toMatchObject({
+      value: update,
+    });
+    const controller = new AbortController();
+    await delivery.source.releaseExpired(123, { signal: controller.signal, timeoutMs: 456 });
+
+    expect(remote.reconciled).toEqual([snapshot, update]);
+    expect(remote.releases).toEqual([[123, { signal: controller.signal, timeoutMs: 456 }]]);
   });
 
   it("fails closed before readiness then exposes its exact remote adapters", async () => {

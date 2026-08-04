@@ -137,9 +137,17 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
         inbox,
         workRegistry,
         source: {
-          shardSnapshot: (options) => client.shardSnapshot(options),
-          observeShardUpdates: (options) => deliveryClientAccess.observeOnce(client, options),
-          releaseExpired: (options) => client.releaseExpired(options),
+          shardSnapshot: async (options) => {
+            const snapshot = await client.shardSnapshot(options);
+            for (const observation of snapshot) workRegistry.reconcile(observation);
+            return snapshot;
+          },
+          observeShardUpdates: (options) =>
+            RemoteDelivery.#reconcileUpdates(
+              workRegistry,
+              deliveryClientAccess.observeOnce(client, options),
+            ),
+          releaseExpired: (inactivityMs, options) => client.releaseExpired(inactivityMs, options),
         },
       };
     } catch (error) {
@@ -148,6 +156,16 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
         if (this.#client === client) this.#client = undefined;
       }
       throw error;
+    }
+  }
+
+  static async *#reconcileUpdates(
+    registry: RemoteWorkRegistry,
+    updates: AsyncIterable<Awaited<ReturnType<DeliveryClient["shardSnapshot"]>>[number]>,
+  ): AsyncIterable<Awaited<ReturnType<DeliveryClient["shardSnapshot"]>>[number]> {
+    for await (const observation of updates) {
+      registry.reconcile(observation);
+      yield observation;
     }
   }
 

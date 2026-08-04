@@ -177,6 +177,7 @@ it("recovers an overflowed tiny-buffer RemoteDelivery source through its environ
   await eventually(() => {
     expect(dispatched.filter((event) => event.signalId === "first-started")).toHaveLength(1);
   });
+  await command(alpha, { command: "hold-source" });
 
   await Promise.all(
     Array.from({ length: 12 }, (_, index) =>
@@ -186,6 +187,17 @@ it("recovers an overflowed tiny-buffer RemoteDelivery source through its environ
       }),
     ),
   );
+  await command(alpha, { command: "release-source" });
+  await eventuallyAsync(async () => {
+    const evidence = await command(alpha, { command: "source-evidence" });
+    if (
+      !isSourceEvidence(evidence) ||
+      evidence.failures < 1 ||
+      evidence.snapshots < 2 ||
+      evidence.watches < 2
+    )
+      throw new Error(`Tiny source did not recover: ${JSON.stringify(evidence)}`);
+  });
 
   await Promise.all([
     command(alpha, { command: "release-first" }),
@@ -226,7 +238,10 @@ function command(
   child: ChildProcess,
   request:
     | { readonly command: "write"; readonly signalId: string }
-    | { readonly command: "block-first" | "release-first" },
+    | {
+        readonly command:
+          "block-first" | "release-first" | "hold-source" | "release-source" | "source-evidence";
+      },
 ) {
   const id = crypto.randomUUID();
   const result = receive(child, "result", id);
@@ -261,14 +276,27 @@ function receive(child: ChildProcess, type: string, id?: string): Promise<unknow
 async function stop(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGTERM");
-  await Promise.race([
+  try {
+    await exitWithin(child, 5_000);
+  } catch (gracefulFailure) {
+    child.kill("SIGKILL");
+    try {
+      await exitWithin(child, 5_000);
+    } catch (forcedFailure) {
+      throw new AggregateError([gracefulFailure, forcedFailure], "Fixture shutdown failed.");
+    }
+  }
+}
+
+function exitWithin(child: ChildProcess, timeoutMs: number): Promise<void> {
+  return Promise.race([
     new Promise<void>((resolve) => {
       child.once("exit", resolve);
     }),
     new Promise<void>((_, reject) => {
       setTimeout(() => {
         reject(new Error("Fixture shutdown timed out."));
-      }, 5_000);
+      }, timeoutMs);
     }),
   ]);
 }
@@ -279,6 +307,17 @@ function isDispatch(value: unknown): value is { readonly node: string; readonly 
     value.type === "dispatched" &&
     typeof value.node === "string" &&
     typeof value.signalId === "string"
+  );
+}
+
+function isSourceEvidence(
+  value: unknown,
+): value is { readonly snapshots: number; readonly watches: number; readonly failures: number } {
+  return (
+    isRecord(value) &&
+    typeof value.snapshots === "number" &&
+    typeof value.watches === "number" &&
+    typeof value.failures === "number"
   );
 }
 
