@@ -200,9 +200,8 @@ class RemoteInboxWork implements DeliveryInboxWork {
       !RemoteValues.sameShard(session.shard, this.snapshot.shard)
     )
       throw new DeliveryProtocolError();
-    const registry = remoteWorkRegistries.get(this.client);
-    if (registry === undefined || !(await registry.synchronize(session, options)))
-      throw new DeliveryProtocolError();
+    const owner = RemoteSessionOwner.for(this.client);
+    if (!(await owner.synchronize(session, options))) throw new DeliveryProtocolError();
   }
   async complete(options?: DeliveryOperationOptions): Promise<boolean> {
     if (!this.#active) return false;
@@ -225,13 +224,12 @@ class RemoteInboxWork implements DeliveryInboxWork {
 /**
  * Adapts remote exclusive shard sessions to the server work registry.
  */
-export class RemoteWorkRegistry implements DeliveryWorkRegistry {
+class RemoteSessionOwner {
   // prettier-ignore
 
   /**
    * Frozen remote pickup produces non-renewable exclusive sessions.
    */
-  readonly sessionKind = "EXCLUSIVE" as const;
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
   readonly #sessionsByShard = new Map<string, Set<ExclusiveDeliveryWorkSession>>();
   readonly #releasesInFlight = new Set<string>();
@@ -242,10 +240,14 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    *
    * @param client Sends shard operations to the delivery server.
    */
-  constructor(private readonly client: DeliveryClient) {
-    conditionalPickUp.register(this, (shard, node, options) => this.#pickUp(shard, node, options));
-    remoteWorkRegistries.set(client, this);
-    Object.freeze(this);
+  private constructor(private readonly client: DeliveryClient) {}
+
+  static for(client: DeliveryClient): RemoteSessionOwner {
+    const current = remoteSessionOwners.get(client);
+    if (current !== undefined) return current;
+    const owner = new RemoteSessionOwner(client);
+    remoteSessionOwners.set(client, owner);
+    return owner;
   }
 
   /**
@@ -403,9 +405,46 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
 }
 
 /**
+ * Adapts the one per-client remote session owner to the server work-registry port.
+ */
+export class RemoteWorkRegistry implements DeliveryWorkRegistry {
+  readonly sessionKind = "EXCLUSIVE" as const;
+  readonly #owner: RemoteSessionOwner;
+
+  /**
+   * Creates a registry backed by the supplied delivery client.
+   *
+   * @param client Sends shard operations to the delivery server.
+   */
+  constructor(client: DeliveryClient) {
+    this.#owner = RemoteSessionOwner.for(client);
+    conditionalPickUp.register(this, (shard, node, options) =>
+      this.#owner.pickUp(shard, node, options),
+    );
+    Object.freeze(this);
+  }
+
+  pickUp(
+    shardIndex: ShardIndex,
+    node: string,
+    options?: DeliveryOperationOptions,
+  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    return this.#owner.pickUp(shardIndex, node, options);
+  }
+
+  release(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<boolean> {
+    return this.#owner.release(session, options);
+  }
+
+  reconcile(observation: RemoteShardObservation): void {
+    this.#owner.reconcile(observation);
+  }
+}
+
+/**
  * Groups immutable remote-adapter value operations.
  */
-const remoteWorkRegistries = new WeakMap<DeliveryClient, RemoteWorkRegistry>();
+const remoteSessionOwners = new WeakMap<DeliveryClient, RemoteSessionOwner>();
 
 const RemoteValues = Object.freeze({
   receiveMessage(input: InboxMessageInput): InboxMessage {
