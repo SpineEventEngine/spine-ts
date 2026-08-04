@@ -408,6 +408,11 @@ class RemoteSessionOwner {
  * Adapts the one per-client remote session owner to the server work-registry port.
  */
 export class RemoteWorkRegistry implements DeliveryWorkRegistry {
+  // prettier-ignore
+
+  /**
+   * Identifies the exclusive session model used by the remote registry.
+   */
   readonly sessionKind = "EXCLUSIVE" as const;
   readonly #owner: RemoteSessionOwner;
 
@@ -424,6 +429,14 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     Object.freeze(this);
   }
 
+  /**
+   * Acquires a remote shard for an application node.
+   *
+   * @param shardIndex Identifies the shard to acquire.
+   * @param node Identifies the application node requesting the shard.
+   * @param options Bounds or cancels the remote operation.
+   * @returns The acquired exclusive session, or `undefined` when unavailable.
+   */
   pickUp(
     shardIndex: ShardIndex,
     node: string,
@@ -432,10 +445,22 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     return this.#owner.pickUp(shardIndex, node, options);
   }
 
+  /**
+   * Removes a remote shard session owned by this registry.
+   *
+   * @param session Identifies the session to release.
+   * @param options Bounds or cancels the remote operation.
+   * @returns Whether the registry recognized and released the session.
+   */
   release(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<boolean> {
     return this.#owner.release(session, options);
   }
 
+  /**
+   * Applies an Admin shard observation to local ownership.
+   *
+   * @param observation Describes the current remote shard state.
+   */
   reconcile(observation: RemoteShardObservation): void {
     this.#owner.reconcile(observation);
   }
