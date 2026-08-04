@@ -216,3 +216,29 @@ would be a separate serialized/storage design requiring a future human choice.
   wire compatibility, canonical session ownership, bounded uncancelled release
   and failure-safe teardown, environment-path overflow convergence, enabled
   builder-path evidence, and drain-until-empty/linearizability documentation.
+
+## Final Re-review Results
+
+Documentation is clean. The other lanes confirmed the frozen-wire probe,
+canonical session owner, exact release/ABA handling, bounded shutdown release,
+enabled builder evidence, public source contract, and failure-safe cleanup
+ordering. Four final corrections remain:
+
+1. P1 API: `RemoteDelivery.source.releaseExpired` forwards only its first
+   argument and drops the supervisor's operation controls. Forward inactivity
+   and cancellation/deadline options and cover the adapter.
+2. P1 maintainability/reliability: Admin observations never call the live
+   `RemoteWorkRegistry.reconcile`, so an outcome-unknown quarantine can remain
+   permanent after authoritative `NOT_PICKED`. Route every source snapshot/live
+   observation through the canonical owner before supervisor notification.
+3. P2 reliability: capacity one plus a write flood does not prove the active
+   environment source overflowed or that supervisor snapshot/watch recovery ran.
+   Add a deterministic observable recovery discriminator in the actual
+   environment path; ordinary retained-row convergence is insufficient.
+4. P2 style: a five-second child-stop timeout rejects but leaves the process
+   alive. Escalate to a bounded forceful termination and wait for exit so no
+   fixture can contaminate later tests.
+
+These findings are one final bounded implementation batch. Only API,
+style/maintainability, and performance/reliability require re-review afterward;
+documentation remains accepted unless its files or claims change.
