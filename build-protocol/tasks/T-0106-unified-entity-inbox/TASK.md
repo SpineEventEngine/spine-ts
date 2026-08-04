@@ -1,6 +1,6 @@
 # T-0106: Unified Entity Inbox Handoff
 
-Status: In Progress
+Status: Complete
 
 ## Objective
 
@@ -91,3 +91,8 @@ fields and rejects any visible mismatch.
 Run focused repository, context, Inbox, delivery, typecheck, lint, formatting,
 and documentation checks before review. After one converged review wave, run
 `verify:release` once because shared server runtime and public API change.
+
+The final `verify:release` passed on 2026-08-04. Repository-wide coverage is
+94.03% statements (19,481/20,717), 90.00% branches (11,045/12,272), 94.54%
+functions (4,597/4,862), and 94.90% lines (18,348/19,333). All required review
+concerns are accepted with no open finding.
