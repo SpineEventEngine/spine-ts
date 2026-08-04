@@ -157,7 +157,7 @@ export class LocalEntityInbox implements EntityInbox {
     input: RoutedEntityInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    await this.#awaitFollowUp(input, deliveryTenantId);
+    await this.#followUpFor(input, deliveryTenantId);
     await this.#keepDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
@@ -172,7 +172,10 @@ export class LocalEntityInbox implements EntityInbox {
     inputs: readonly RoutedEntityInput[],
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
-    await Promise.all(inputs.map((input) => this.#awaitFollowUp(input, deliveryTenantId)));
+    const followUps = inputs
+      .map((input) => this.#followUpFor(input, deliveryTenantId))
+      .filter((followUp): followUp is Promise<void> => followUp !== undefined);
+    if (followUps.length > 0) await Promise.all(followUps);
     await this.#keepDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const whenReceived = new Date();
@@ -350,9 +353,9 @@ export class LocalEntityInbox implements EntityInbox {
     return JSON.stringify(inputs.map((input) => InboxHandoff.key(input, deliveryTenantId)));
   }
 
-  async #awaitFollowUp(input: RoutedEntityInput, tenantId?: string): Promise<void> {
-    if (this.#followUpScope.getStore() === this.#followUpToken) return;
-    await this.#followUps.get(this.#followUpKey(input.shard, tenantId));
+  #followUpFor(input: RoutedEntityInput, tenantId?: string): Promise<void> | undefined {
+    if (this.#followUpScope.getStore() === this.#followUpToken) return undefined;
+    return this.#followUps.get(this.#followUpKey(input.shard, tenantId));
   }
 
   #chainFollowUp(message: InboxMessage, tenantId: string | undefined, callback: EntityInboxFollowUp): void {
@@ -384,7 +387,10 @@ export class LocalEntityInbox implements EntityInbox {
       );
     }
 
-    if (message.shard.index !== this.#strategy.shardFor(message.inboxId.targetId, message.inboxId.targetTypeUrl).index || message.shard.ofTotal !== this.#strategy.shardFor(message.inboxId.targetId, message.inboxId.targetTypeUrl).ofTotal) throw new Error("Entity Inbox replay stored shard does not match the routed target.");
+    const expectedShard = this.#strategy.shardFor(message.inboxId.targetId, message.inboxId.targetTypeUrl);
+    if (message.shard.index !== expectedShard.index || message.shard.ofTotal !== expectedShard.ofTotal) {
+      throw new Error("Entity Inbox replay stored shard does not match the routed target.");
+    }
     const followUp = await target.replay(message, deliveryTenantId);
     const callback = typeof followUp === "function" ? (followUp as EntityInboxFollowUp) : undefined;
     if (callback !== undefined && runFollowUp) await callback();
