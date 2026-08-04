@@ -1429,19 +1429,23 @@ describe("LocalEntityInbox", () => {
 
     await inbox.receive(delivery, processInput(targetTypeUrl, "first"));
     const secondReceive = inbox.receive(delivery, processInput(targetTypeUrl, "second"));
-    await expect(Promise.race([secondReceive.then(() => "resolved"), pause(25).then(() => "pending")]))
-      .resolves.toBe("pending");
+    await expect(
+      Promise.race([secondReceive.then(() => "resolved"), pause(25).then(() => "pending")]),
+    ).resolves.toBe("pending");
     first.resolve(undefined);
     await secondReceive;
 
     const laterReceive = inbox.receive(delivery, processInput(targetTypeUrl, "later"));
-    await expect(Promise.race([laterReceive.then(() => "resolved"), pause(25).then(() => "pending")]))
-      .resolves.toBe("pending");
+    await expect(
+      Promise.race([laterReceive.then(() => "resolved"), pause(25).then(() => "pending")]),
+    ).resolves.toBe("pending");
     second.resolve(undefined);
     await laterReceive;
     expect(followUps).toEqual(["first", "second", "later"]);
 
-    await expect(inbox.receive(delivery, processInput(targetTypeUrl, "after-settle"))).resolves.toBeDefined();
+    await expect(
+      inbox.receive(delivery, processInput(targetTypeUrl, "after-settle")),
+    ).resolves.toBeDefined();
   });
 
   it("does not block a different tenant or shard behind a gated follow-up", async () => {
@@ -1468,8 +1472,9 @@ describe("LocalEntityInbox", () => {
     });
 
     await inbox.receive(blockedDelivery, processInput(targetTypeUrl, "even"), "tenant-a");
-    await expect(inbox.receive(freeDelivery, processInput(targetTypeUrl, "odd"), "tenant-b"))
-      .resolves.toMatchObject({ shard: { index: 1, ofTotal: 2 } });
+    await expect(
+      inbox.receive(freeDelivery, processInput(targetTypeUrl, "odd"), "tenant-b"),
+    ).resolves.toMatchObject({ shard: { index: 1, ofTotal: 2 } });
     gate.resolve(undefined);
   });
 
@@ -1482,13 +1487,17 @@ describe("LocalEntityInbox", () => {
     });
     const inbox = new LocalEntityInbox("Tasks", undefined, undefined, strategy);
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
-    inbox.register({ targetTypeUrl, labels: ["HANDLE_COMMAND"], replay: () => Promise.resolve(undefined) });
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.resolve(undefined),
+    });
 
     const single = await inbox.receive(delivery, processInput(targetTypeUrl, "odd"));
-    const batch = await inbox.receiveAll(
-      delivery,
-      [processInput(targetTypeUrl, "even"), processInput(targetTypeUrl, "three")],
-    );
+    const batch = await inbox.receiveAll(delivery, [
+      processInput(targetTypeUrl, "even"),
+      processInput(targetTypeUrl, "three"),
+    ]);
 
     expect(shardFor).toHaveBeenCalledTimes(3);
     expect([single, ...batch].map(({ shard }) => shard)).toEqual([

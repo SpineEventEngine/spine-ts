@@ -96,7 +96,9 @@ export class LocalEntityInbox implements EntityInbox {
    * @returns A promise that resolves after the inbox row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    return this.#replay(message, deliveryTenantId, true, this.#expectedShard(message)).then(() => undefined);
+    return this.#replay(message, deliveryTenantId, true, this.#expectedShard(message)).then(
+      () => undefined,
+    );
   }
 
   /**
@@ -364,18 +366,24 @@ export class LocalEntityInbox implements EntityInbox {
     return this.#followUps.get(this.#followUpKey(input.shard, tenantId));
   }
 
-  #chainFollowUp(message: InboxMessage, tenantId: string | undefined, callback: EntityInboxFollowUp): void {
+  #chainFollowUp(
+    message: InboxMessage,
+    tenantId: string | undefined,
+    callback: EntityInboxFollowUp,
+  ): void {
     const key = this.#followUpKey(message.shard, tenantId);
     const prior = this.#followUps.get(key) ?? Promise.resolve();
     const next: Promise<void> = prior
       .then(() => this.#followUpScope.run(this.#followUpToken, callback))
       .catch(() => undefined);
     this.#followUps.set(key, next);
-    void next.finally(() => { if (this.#followUps.get(key) === next) this.#followUps.delete(key); });
+    void next.finally(() => {
+      if (this.#followUps.get(key) === next) this.#followUps.delete(key);
+    });
   }
 
   #followUpKey(shard: ShardIndex, tenantId?: string): string {
-    return `${tenantId ?? ""}:${shard.index}:${shard.ofTotal}`;
+    return `${tenantId ?? ""}:${String(shard.index)}:${String(shard.ofTotal)}`;
   }
 
   async #replay(
@@ -394,7 +402,10 @@ export class LocalEntityInbox implements EntityInbox {
       );
     }
 
-    if (message.shard.index !== expectedShard.index || message.shard.ofTotal !== expectedShard.ofTotal) {
+    if (
+      message.shard.index !== expectedShard.index ||
+      message.shard.ofTotal !== expectedShard.ofTotal
+    ) {
       throw new Error("Entity Inbox replay stored shard does not match the routed target.");
     }
     const followUp = await target.replay(message, deliveryTenantId);
