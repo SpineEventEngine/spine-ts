@@ -17,6 +17,11 @@ service contracts. `@spine-event-engine/proto/generated/*.js` is supported for
 generated schema subpaths. `./proto/*`, `spine-proto-manifest.json`, and the
 model metadata files are package assets used by model generation.
 
+Generated wildcard paths also contain internal `spine/system/server` schemas
+used by the server runtime. They are intentionally absent from the root and
+named public subpaths: application code must not depend on them as a stable
+API.
+
 ## Model modules
 
 An application model uses `spine-proto.json` with `mode: "model"`, its package

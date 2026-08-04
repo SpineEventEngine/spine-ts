@@ -8,7 +8,9 @@ Plan date: 2026-07-12
 Starting `main`: `40329cad`
 
 Wave 5 packaging and deployment is complete under `T-0089`. Wave 6 Q&A and
-T-0104 planning are complete; autonomous runtime implementation follows
+T-0104 planning are complete. T-0105 exact system-event and Inbox contracts are
+reviewed and verified; T-0106 follows after integration. Autonomous runtime
+implementation follows
 `build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 
 ## Purpose
@@ -124,7 +126,8 @@ durably closed.
   cluster-complete guarantee; queries remain authoritative. Its Q&A must also
   decide application redeployment and update behavior.
 
-Wave 6 Q&A is complete and autonomous execution is approved. Wave 7 still
+Wave 6 Q&A and T-0104 planning are complete. T-0105 begins the autonomous
+runtime sequence with exact system-event and Inbox contracts. Wave 7 still
 requires a separate human Q&A. Do not publish packages to npm until all waves
 are complete and publication is revisited with the human.
 
