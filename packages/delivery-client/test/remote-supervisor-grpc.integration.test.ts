@@ -167,9 +167,8 @@ it("bounds a paused RemoteDelivery Admin source then lets an environment drain i
   await eventuallyAsync(async () => {
     await expect(iterator.next()).rejects.toBeInstanceOf(ShardObservationOverflowError);
   });
-  await expect(delivery.source.shardSnapshot()).resolves.toEqual(
-    expect.arrayContaining([expect.objectContaining({ messages: expect.any(Number) })]),
-  );
+  const snapshot = await delivery.source.shardSnapshot();
+  expect(snapshot.some((shard) => shard.messages >= 0)).toBe(true);
 
   await Promise.all([
     command(alpha, { command: "release-first" }),
