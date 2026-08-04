@@ -71,7 +71,7 @@ describe("DeliveryClient shard observation", () => {
 
   it("yields only validated Admin updates after exactly one successful ACK", async () => {
     const fake = transport();
-    fake.streamReply([
+    fake.streamReplyAndHold([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
       create(SubscriptionResponseSchema, {
         value: {
@@ -172,7 +172,7 @@ describe("DeliveryClient shard observation", () => {
     fake.streamReply([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
     ]);
-    fake.streamReply([
+    fake.streamReplyAndHold([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
       create(SubscriptionResponseSchema, {
         value: {
@@ -194,6 +194,33 @@ describe("DeliveryClient shard observation", () => {
     });
     expect(fake.stream).toHaveBeenCalledTimes(2);
     stream.cancel();
+  });
+
+  it("keeps public Admin observation reconnect configured for direct clients", async () => {
+    const fake = transport();
+    fake.streamReply([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+    ]);
+    fake.streamReply([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+      create(SubscriptionResponseSchema, {
+        value: {
+          case: "update",
+          value: create(ShardInfoUpdateSchema, {
+            index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+            newStatus: ShardStatus.NOT_PICKED,
+            newMessagesCount: 1,
+          }),
+        },
+      }),
+    ]);
+    const client = DeliveryClient.usingTransport(fake.transport, { observationReconnects: 2 });
+
+    await expect(client.observeShardUpdates()[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+      value: { status: "NOT_PICKED", messages: 1 },
+    });
+    expect(fake.stream).toHaveBeenCalledTimes(2);
+    client.close();
   });
 
   it.each(["cancel", "return", "close"] as const)(

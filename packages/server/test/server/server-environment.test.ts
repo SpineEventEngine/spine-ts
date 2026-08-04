@@ -139,6 +139,43 @@ describe("ServerEnvironment delivery lifecycle", () => {
     expect(observations).toBeGreaterThan(0);
   });
 
+  it.each([
+    ["null", null],
+    ["empty object", {}],
+    ["missing shard snapshot", { observeShardUpdates: () => [], releaseExpired: () => [] }],
+    ["missing shard updates", { shardSnapshot: () => [], releaseExpired: () => [] }],
+    ["missing expired release", { shardSnapshot: () => [], observeShardUpdates: () => [] }],
+  ])("rejects a dynamic %s delivery source after opening delivery", async (_name, source) => {
+    let opens = 0;
+    const environment = configured({
+      open: () => {
+        opens += 1;
+      },
+      close: () => undefined,
+      inbox: {
+        sessionKind: "EXCLUSIVE" as const,
+        receive: () => Promise.resolve({}),
+        read: () => Promise.resolve([]),
+        readMessage: () => Promise.resolve(undefined),
+        begin: () => Promise.resolve(undefined),
+      },
+      workRegistry: {
+        sessionKind: "EXCLUSIVE" as const,
+        pickUp: () => Promise.resolve(undefined),
+        release: () => Promise.resolve(false),
+      },
+      source,
+    });
+
+    await expect(
+      serverEnvironmentAccess.attach(environment, {
+        ownership: "caller",
+        descriptors: [environmentDescriptor(environment)],
+      }),
+    ).rejects.toThrow("Environment delivery source is invalid.");
+    expect(opens).toBe(1);
+  });
+
   it("does not expose the internal delivery opener on the environment instance", () => {
     const environment = configured({ close: () => undefined });
 

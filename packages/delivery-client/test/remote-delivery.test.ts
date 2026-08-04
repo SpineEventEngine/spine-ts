@@ -10,12 +10,16 @@ const remote = vi.hoisted(() => ({
   closeEvents: [] as string[],
   closeFailures: [] as (Error | undefined)[],
   readiness: [] as (() => Promise<readonly unknown[]>)[],
+  observations: [] as (() => AsyncIterable<unknown>)[],
 }));
 
 vi.mock("../src/client/client.js", () => ({
   DeliveryClient: {
     connectTo: vi.fn(() => {
-      const client = new FakeClient(remote.readiness.shift() ?? (() => Promise.resolve([])));
+      const client = new FakeClient(
+        remote.readiness.shift() ?? (() => Promise.resolve([])),
+        remote.observations.shift() ?? (() => emptyUpdates()),
+      );
       remote.clients.push(client);
       return client;
     }),
@@ -45,10 +49,30 @@ interface CloseableQuarantine extends RemovalQuarantine {
 class FakeClient {
   #closed = false;
 
-  constructor(private readonly readiness: () => Promise<readonly unknown[]>) {}
+  constructor(
+    private readonly readiness: () => Promise<readonly unknown[]>,
+    private readonly observations: () => AsyncIterable<unknown>,
+  ) {}
 
   shardSnapshot(): Promise<readonly unknown[]> {
     return this.readiness();
+  }
+
+  observeShardUpdates(): AsyncIterable<unknown> {
+    const observations = this.observations;
+    return {
+      async *[Symbol.asyncIterator]() {
+        try {
+          yield* observations();
+        } catch {
+          yield "reconnected";
+        }
+      },
+    };
+  }
+
+  observeShardUpdatesOnce(): AsyncIterable<unknown> {
+    return this.observations();
   }
 
   close(): void {
@@ -58,6 +82,10 @@ class FakeClient {
     if (failure !== undefined) throw failure;
     this.#closed = true;
   }
+}
+
+async function* emptyUpdates(): AsyncIterable<never> {
+  // The default source remains idle for lifecycle tests that do not observe it.
 }
 
 function quarantine(): CloseableQuarantine {
@@ -81,6 +109,7 @@ describe("RemoteDelivery", () => {
     remote.closeEvents = [];
     remote.closeFailures = [];
     remote.readiness = [];
+    remote.observations = [];
   });
 
   it("creates one client and publishes its exact remote adapters", async () => {
@@ -96,6 +125,31 @@ describe("RemoteDelivery", () => {
     expect(remote.workRegistries).toHaveLength(1);
     expect(delivery.inbox).toBe(remote.inboxes[0]);
     expect(delivery.workRegistry).toBe(remote.workRegistries[0]);
+  });
+
+  it("exposes the first Admin stream break to its supervisor source without client reconnect", async () => {
+    const broken = new Error("Admin stream ended");
+    let observations = 0;
+    remote.observations.push(() => {
+      observations += 1;
+      return {
+        async *[Symbol.asyncIterator]() {
+          throw broken;
+        },
+      };
+    });
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+      clientOptions: { observationReconnects: 2 },
+    });
+
+    await delivery.open();
+
+    await expect(delivery.source.observeShardUpdates()[Symbol.asyncIterator]().next()).rejects.toBe(
+      broken,
+    );
+    expect(observations).toBe(1);
   });
 
   it("fails closed before readiness then exposes its exact remote adapters", async () => {
