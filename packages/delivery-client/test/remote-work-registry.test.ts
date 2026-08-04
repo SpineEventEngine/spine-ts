@@ -22,9 +22,58 @@ import {
   RemoteInbox,
   RemoteWorkRegistry,
 } from "../src/index.js";
+import { deliveryClientAccess } from "../src/client/client.js";
 import { echoPickup, message, quarantine, transport } from "./shared-fixtures.js";
 
 describe("RemoteWorkRegistry", () => {
+  it("fails closed when package-internal client access is unavailable", () => {
+    const unavailable = {} as DeliveryClient;
+
+    expect(() =>
+      deliveryClientAccess.probePickUp(
+        unavailable,
+        ShardIndex.single(),
+        { nodeId: "node", value: "worker" },
+        {},
+      ),
+    ).toThrow("Delivery client probe access is unavailable.");
+    expect(() => deliveryClientAccess.observeOnce(unavailable)).toThrow(
+      "Delivery client observation access is unavailable.",
+    );
+  });
+
+  it("refuses unknown and incompatible local sessions without a remote release", async () => {
+    const fake = transport();
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+
+    await expect(
+      registry.release({ kind: "LEASED", shard: ShardIndex.single() } as never),
+    ).resolves.toBe(false);
+    await expect(registry.release({ kind: "EXCLUSIVE", shard: ShardIndex.single() })).resolves.toBe(
+      false,
+    );
+    expect(fake.unary).not.toHaveBeenCalled();
+  });
+
+  it("forwards both operation bounds when acquiring a remote shard", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const registry = new RemoteWorkRegistry(client);
+    const controller = new AbortController();
+    echoPickup(fake);
+
+    await expect(
+      registry.pickUp(ShardIndex.single(), "node", { signal: controller.signal, timeoutMs: 123 }),
+    ).resolves.toMatchObject({ kind: "EXCLUSIVE" });
+    expect(fake.unary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "PickShard" }),
+      expect.any(AbortSignal),
+      123,
+      undefined,
+      expect.anything(),
+    );
+  });
+
   it("uses a distinct opaque worker value for each remote pickup while retaining the node", async () => {
     const workers: { nodeId: string; value: string }[] = [];
     const client = DeliveryClient.usingTransport(workerTransport(workers));

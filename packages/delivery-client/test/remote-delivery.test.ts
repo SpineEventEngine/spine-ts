@@ -203,10 +203,12 @@ describe("RemoteDelivery", () => {
       open(): Promise<void>;
       readonly inbox: unknown;
       readonly workRegistry: unknown;
+      readonly source: unknown;
     };
 
     expect(() => delivery.inbox).toThrow("Remote delivery is not open.");
     expect(() => delivery.workRegistry).toThrow("Remote delivery is not open.");
+    expect(() => delivery.source).toThrow("Remote delivery is not open.");
     await delivery.open();
 
     expect(delivery.inbox).toBeInstanceOf(Object);
