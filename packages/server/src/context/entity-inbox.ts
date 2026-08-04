@@ -96,7 +96,7 @@ export class LocalEntityInbox implements EntityInbox {
    * @returns A promise that resolves after the inbox row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    return this.#replay(message, deliveryTenantId).then(() => undefined);
+    return this.#replay(message, deliveryTenantId, true, this.#expectedShard(message)).then(() => undefined);
   }
 
   /**
@@ -162,7 +162,7 @@ export class LocalEntityInbox implements EntityInbox {
     const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
     await written.handoff.complete(() =>
-      this.#drainInboxRow(delivery, written.message, deliveryTenantId),
+      this.#drainInboxRow(delivery, written.message, deliveryTenantId, input.shard),
     );
     return written.message;
   }
@@ -246,7 +246,7 @@ export class LocalEntityInbox implements EntityInbox {
       }
       try {
         await written.handoff.complete(() =>
-          this.#drainInboxRow(delivery, written.message, deliveryTenantId),
+          this.#drainInboxRow(delivery, written.message, deliveryTenantId, row.input.shard),
         );
         LocalEntityInbox.#resolve(row.owner, written.message);
       } catch (error) {
@@ -294,6 +294,7 @@ export class LocalEntityInbox implements EntityInbox {
     delivery: Delivery,
     message: InboxMessage,
     deliveryTenantId?: string,
+    expectedShard?: ShardIndex,
   ): Promise<void> {
     let followUp: (() => Promise<void>) | undefined;
     await InboxHandoff.drain({
@@ -301,7 +302,12 @@ export class LocalEntityInbox implements EntityInbox {
       received: message,
       node: this.#contextName,
       onReplay: async (nextMessage) => {
-        followUp = await this.#replay(nextMessage, deliveryTenantId, false);
+        followUp = await this.#replay(
+          nextMessage,
+          deliveryTenantId,
+          false,
+          expectedShard ?? this.#expectedShard(nextMessage),
+        );
       },
       replayFailureMessage: "Entity Inbox replay failed.",
       skippedMessage: "Entity Inbox delivery was skipped before the target row was delivered.",
@@ -376,6 +382,7 @@ export class LocalEntityInbox implements EntityInbox {
     message: InboxMessage,
     deliveryTenantId?: string,
     runFollowUp = true,
+    expectedShard = this.#expectedShard(message),
   ): Promise<(() => Promise<void>) | undefined> {
     LocalEntityInbox.#assert(message);
 
@@ -387,14 +394,17 @@ export class LocalEntityInbox implements EntityInbox {
       );
     }
 
-    const expectedShard = this.#strategy.shardFor(message.inboxId.targetId, message.inboxId.targetTypeUrl);
     if (message.shard.index !== expectedShard.index || message.shard.ofTotal !== expectedShard.ofTotal) {
       throw new Error("Entity Inbox replay stored shard does not match the routed target.");
     }
     const followUp = await target.replay(message, deliveryTenantId);
-    const callback = typeof followUp === "function" ? (followUp as EntityInboxFollowUp) : undefined;
+    const callback = typeof followUp === "function" ? followUp : undefined;
     if (callback !== undefined && runFollowUp) await callback();
     return callback;
+  }
+
+  #expectedShard(message: InboxMessage): ShardIndex {
+    return this.#strategy.shardFor(message.inboxId.targetId, message.inboxId.targetTypeUrl);
   }
 
   static #deferred(): InboxDeferred {
