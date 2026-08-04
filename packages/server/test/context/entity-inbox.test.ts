@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
+import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
@@ -1402,6 +1403,100 @@ describe("LocalEntityInbox", () => {
     ]);
     expect(ready).toEqual([]);
   });
+
+  it("chains same-scope follow-ups before admitting a later receive", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalEntityInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
+    const first = Promise.withResolvers<void>();
+    const second = Promise.withResolvers<void>();
+    const followUps: string[] = [];
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay(message) {
+        const targetId = message.inboxId.targetId;
+        return Promise.resolve(async () => {
+          followUps.push(targetId);
+          if (targetId === "first") await first.promise;
+          if (targetId === "second") await second.promise;
+        });
+      },
+    });
+
+    await inbox.receive(delivery, processInput(targetTypeUrl, "first"));
+    const secondReceive = inbox.receive(delivery, processInput(targetTypeUrl, "second"));
+    await expect(Promise.race([secondReceive.then(() => "resolved"), pause(25).then(() => "pending")]))
+      .resolves.toBe("pending");
+    first.resolve();
+    await secondReceive;
+
+    const laterReceive = inbox.receive(delivery, processInput(targetTypeUrl, "later"));
+    await expect(Promise.race([laterReceive.then(() => "resolved"), pause(25).then(() => "pending")]))
+      .resolves.toBe("pending");
+    second.resolve();
+    await laterReceive;
+    expect(followUps).toEqual(["first", "second", "later"]);
+
+    await expect(inbox.receive(delivery, processInput(targetTypeUrl, "after-settle"))).resolves.toBeDefined();
+  });
+
+  it("does not block a different tenant or shard behind a gated follow-up", async () => {
+    const strategy = twoShardStrategy();
+    const blockedDelivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const freeDelivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalEntityInbox("Tasks", undefined, undefined, strategy);
+    const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
+    const gate = Promise.withResolvers<void>();
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay(message) {
+        return Promise.resolve(async () => {
+          if (message.inboxId.targetId === "even") await gate.promise;
+        });
+      },
+    });
+
+    await inbox.receive(blockedDelivery, processInput(targetTypeUrl, "even"), "tenant-a");
+    await expect(inbox.receive(freeDelivery, processInput(targetTypeUrl, "odd"), "tenant-b"))
+      .resolves.toMatchObject({ shard: { index: 1, ofTotal: 2 } });
+    gate.resolve();
+  });
+
+  it("resolves each input shard once and persists that resolved shard", async () => {
+    const shardFor = vi.fn((targetId: string) => new ShardIndex(targetId.length % 2, 2));
+    const strategy: DeliveryStrategy = { shardCount: 2, shardFor };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalEntityInbox("Tasks", undefined, undefined, strategy);
+    const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
+    inbox.register({ targetTypeUrl, labels: ["HANDLE_COMMAND"], replay: () => Promise.resolve() });
+
+    const single = await inbox.receive(delivery, processInput(targetTypeUrl, "odd"));
+    const batch = await inbox.receiveAll(
+      delivery,
+      [processInput(targetTypeUrl, "even"), processInput(targetTypeUrl, "three")],
+    );
+
+    expect(shardFor).toHaveBeenCalledTimes(3);
+    expect([single, ...batch].map(({ shard }) => shard)).toEqual([
+      new ShardIndex(1, 2),
+      new ShardIndex(0, 2),
+      new ShardIndex(1, 2),
+    ]);
+  });
 });
 
 function processInput(targetTypeUrl: string, targetId: string): ReceiveInput {
@@ -1410,6 +1505,15 @@ function processInput(targetTypeUrl: string, targetId: string): ReceiveInput {
     signalId: `signal-${targetId}`,
     label: "HANDLE_COMMAND",
     status: "TO_DELIVER",
+  };
+}
+
+function twoShardStrategy(): DeliveryStrategy {
+  return {
+    shardCount: 2,
+    shardFor(targetId: string): ShardIndex {
+      return new ShardIndex(targetId === "even" ? 0 : 1, 2);
+    },
   };
 }
 
