@@ -10,9 +10,10 @@ Baseline: `origin/main@59fb286c`
 
 Wave 6 makes the existing delivery, Stand, and Gateway pieces cooperate across
 multiple identical application nodes. One shard owner dispatches an Entity's
-Inbox messages. Every node observes the same durable Stand subscriptions. One
-Gateway can listen to every available application node. Subscription notices
-remain best effort; queries remain authoritative.
+Inbox messages. With the built-in durable registry, every node observes the
+same Stand subscription definitions; an explicitly selected in-memory registry
+remains local. One Gateway listens to every configured application node.
+Subscription notices remain best effort; queries remain authoritative.
 
 The prior horizontal-subscription hardening scope is Wave 7. Wave 7 must include
 a new Q&A about application redeployment and update behavior.
@@ -29,7 +30,7 @@ a new Q&A about application redeployment and update behavior.
 | Event subscriptions | SubscriptionService registers callbacks directly.                                                                                             | Stand observes subscribed events from the EventBus and emits event updates.                                              |
 | Stand registry      | Local callback sets plus service-owned inactive/claim/cancel rows.                                                                            | One configurable registry stores subscription definitions for every node; no per-node claim owns a definition.           |
 | Cancellation        | Service and Gateway records may retain cancel/retired states.                                                                                 | Stand registry cancellation physically deletes the definition; Gateway stops its streams without waiting for every node. |
-| Gateway backend     | One configured backend URL.                                                                                                                   | One logical Gateway fans out native subscription activation to all discovered application nodes and merges notices.      |
+| Gateway backend     | One configured backend URL.                                                                                                                   | One logical Gateway fans out native subscription activation to a fixed configured application-node set.                  |
 | Example topology    | Simple Message Board and deployment templates.                                                                                                | Add Distributed Message Board with two application nodes, one Gateway, and one simple delivery server.                   |
 
 ## Target Message Sequence
@@ -41,8 +42,10 @@ a new Q&A about application redeployment and update behavior.
    nodes through `AdminService.SubscribeToShardUpdates`.
 4. Nodes A and B attempt the shard. Exactly one acquires the delivery-server
    shard lease.
-5. The owner dispatches Inbox messages in stored order. It continues until no
-   deliverable message remains, including messages added while it was draining.
+5. The owner dispatches deliverable Inbox messages using the existing durable
+   Inbox selection contract. It continues until no deliverable message remains,
+   including messages added while it was draining. Wave 6 adds no stronger
+   cross-node arrival-order guarantee.
 6. The Aggregate or Process Manager commits state and emitted events in its
    framework-owned transaction.
 7. The EventBus dispatches domain events. A subscribed Projection handles the
@@ -51,22 +54,46 @@ a new Q&A about application redeployment and update behavior.
 9. The local Stand observes domain/system events. If a durable subscription
    matches, the node emits a native subscription update.
 10. The Gateway has active native streams to both nodes. It forwards received
-    best-effort notices to the browser and suppresses only mechanically
-    identical duplicates. The browser re-queries authoritative Entity state.
+    best-effort notices, including possible duplicates, to the browser. The
+    browser re-queries authoritative Entity state.
+
+## Frozen JVM System Event
+
+T-0105 freezes `SpineEventEngine/core-java@461a8281e484c12636d8cf660a1d6c929fbbd7ec`
+without building JVM. The source is
+`server/src/main/proto/spine/system/server/entity_log_events.proto`.
+`EntityStateChanged` has package `spine.system.server`, type URL
+`type.spine.io/spine.system.server.EntityStateChanged`, and the exact fields:
+
+| Field         | Tag | Type                            | Requirement            |
+| ------------- | --: | ------------------------------- | ---------------------- |
+| `entity`      |   1 | `spine.core.MessageId`          | required               |
+| `new_state`   |   2 | `google.protobuf.Any`           | required               |
+| `signal_id`   |   3 | repeated `spine.core.MessageId` | required and validated |
+| `when`        |   4 | `google.protobuf.Timestamp`     | optional               |
+| `new_version` |   5 | `spine.core.Version`            | optional               |
+| `old_state`   |   6 | `google.protobuf.Any`           | optional               |
+
+Copy the frozen source and its required `entity_type.proto` dependency through
+the existing frozen-Proto manifest rather than recreating a similar TS-only
+message. The package root does not re-export this internal system event.
 
 ## Subscription Storage
 
-Define an internal Protobuf record owned by the server module. One logical
-subscription occupies one row:
+Define an internal Protobuf wire record at
+`packages/proto/proto/spine/system/server/stand_subscription.proto`. Runtime
+storage/codec ownership remains in the server package. The file uses package
+`spine.system.server`, prefix `type.spine.io`, and internal generation only; it
+is not re-exported from the public Proto package root. One logical subscription
+occupies one row:
 
 ```proto
 message StandSubscriptionRecord {
   spine.client.Subscription subscription = 1;
-  spine.client.Topic topic = 2;
-  SubscriptionPhase phase = 3;
-  google.protobuf.Timestamp created_at = 4;
-  google.protobuf.Timestamp pending_until = 5;
-  uint64 revision = 6;
+  SubscriptionPhase phase = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp pending_until = 4;
+  uint64 revision = 5;
 }
 
 enum SubscriptionPhase {
@@ -76,22 +103,37 @@ enum SubscriptionPhase {
 }
 ```
 
-The storage key is the subscription ID. Tenant and target details remain in the
-existing Topic/Subscription messages rather than duplicated columns. A
-provider may index `phase` and `pending_until` for cleanup. Fifty active
+The storage key is the subscription ID. `Subscription.topic` is the sole topic
+representation; the record does not duplicate it. A provider may index `phase`
+and `pending_until` for cleanup. Fifty active
 subscriptions therefore produce fifty subscription rows, not fifty ownership
 rows plus claims/tombstones. MySQL stores fifty records in one logical record
 table; Datastore stores fifty entities in one logical kind.
 
+The registry has a shared atomic capacity counter, following the existing
+durable Gateway quota pattern. The default and maximum active/pending definition
+count is the current SubscriptionService limit of 100 unless application code
+configures a lower positive value. Concurrent create attempts at capacity admit
+at most the remaining slots and leak no row or local listener. Each serialized
+record is capped at 1,048,576 bytes, matching the current Gateway subscription
+request bound. Snapshot size is therefore bounded by the configured definition
+count and returned in one complete registry result; cleanup alone is paged.
+
 `PENDING` is written by Subscribe and must become `ACTIVE` through Activate.
 Pending rows expire after 30 seconds. Every node runs the same finite,
 idempotent cleanup page; revision-aware deletion makes concurrent cleanup safe.
-Active rows have no framework TTL. Cancel physically deletes the row.
+Active rows have no framework TTL. Cancel physically deletes the row and
+releases its capacity slot atomically/idempotently.
 
-Every node reads a complete snapshot at startup and every 10 seconds. A node
-adds missing local listeners, replaces changed revisions, and removes local
-listeners absent from the snapshot. It never polls Entity state. A cancelled
-listener may remain locally visible for at most the reconciliation interval;
+Every node reads a complete bounded snapshot at startup and every 10 seconds.
+T-0109 owns the reconciliation loop and local listener lifecycle; T-0108 only
+provides snapshot/persistence/cleanup operations. Reconciliation runs are
+serialized. Before attaching a definition from a snapshot, the node revalidates
+its ID and revision; a missing or changed row is not attached. A monotonically
+increasing local sweep removes listeners absent from the latest completed
+snapshot and prevents an older run from applying after a newer run. It never
+polls Entity state. Deletion converges after the first completed reconciliation
+cycle that begins after deletion; no stricter wall-clock bound is promised.
 Gateway cancellation still completes after durable deletion and local stream
 stop.
 
@@ -99,15 +141,22 @@ stop.
 
 Introduce one server-internal/public-contract pair:
 
-- `StandSubscriptionRegistry` describes create, activate, delete, snapshot,
-  finite pending cleanup, and close behavior.
+- Public `StandSubscriptionRegistry` describes create, activate, delete,
+  complete bounded snapshot, finite pending cleanup, `persistent`, and close
+  behavior. It is exported from `@spine-event-engine/server`.
 - The built-in storage-backed registry uses the Bounded Context's configured
   `StorageFactory` and tenant context.
-- `BoundedContextBuilder` accepts a complete custom registry implementation.
-  Entity registration remains `.add(...)`.
+- `BoundedContextBuilder.withSubscriptionRegistry(registry)` accepts a complete
+  custom implementation. Entity registration remains `.add(...)`.
 - The Bounded Context owns and closes the selected registry.
-- An in-memory implementation remains valid. Selecting it in a production
-  Environment emits one WARN-level log message and does not fail startup.
+- An in-memory implementation remains valid and reports `persistent === false`.
+  During context attachment, `ServerEnvironment` knows its Environment type and
+  emits one WARN-level message per context when production attaches a
+  non-persistent registry. It does not fail startup.
+
+T-0108 updates public TSDoc, the server README/reference, and TypeDoc checks for
+this extension point; T-0112 later reconciles the wider guides after all runtime
+interfaces stabilize.
 
 Do not reuse the Gateway durable binding registry as the Stand registry. The
 Gateway registry owns browser-session coordination; the Stand registry owns
@@ -115,32 +164,48 @@ native subscription definitions visible to application nodes.
 
 ## Gateway Boundary
 
-Replace the single backend URL assumption with a bounded backend set supplied
-by configuration/discovery. Commands and queries use one available backend per
-request; they are not broadcast. Subscription Subscribe/Activate/Cancel is
-coordinated across all current backends:
+Replace `BrowserServerOptions.backend` directly with
+`BrowserServerOptions.backends`, a non-empty fixed array of at most 32 entries
+containing stable `id` and canonical `baseUrl` values. There is no deprecation
+cycle because Spine TS has no external users. Combined mode supplies one
+implicit loopback entry. Commands and queries select one entry by bounded
+round-robin and are not broadcast or automatically retried. Subscription
+Subscribe/Activate/Cancel is coordinated across every configured backend:
 
 - create one logical client subscription;
 - activate a native stream on every application node using the same durable
   definition;
-- merge best-effort updates and notify the client when a backend stream is
-  lost;
-- reconcile backend additions/removals without promising stream continuity;
+- merge best-effort updates without retaining deduplication history and notify
+  the client when a backend stream is lost;
 - cancel by deleting the logical definition and stopping every local stream.
 
-Backend discovery is an extension boundary with a static-list implementation
-for Wave 6. Kubernetes/service discovery products are not framework policy.
+Replace the exported single-backend `SubscriptionCreator` with
+`ClusterSubscriptionCreator`. Subscribe chooses one configured backend and
+persists its canonical `BackendSubscriptionEnvelope`; because the Stand
+definition is shared, Activate sends that same Subscription envelope to each
+backend. Runtime stream controllers are keyed by backend ID but are not durable
+identities. Existing durable Gateway bindings retain one canonical envelope and
+add the fixed backend-set fingerprint needed to reject incompatible restart
+configuration. Per-backend operations retain the existing request, lease,
+queue, cancellation, and shutdown bounds. Fence late activation/retry results;
+after Cancel or close, no backend reconnect may start. Partial activation
+failure closes already-started streams and reports the existing gap/lifecycle
+notification without retrying a command.
+
+Backend discovery, backend additions/removals, and scaling reconciliation are
+Wave 7. Kubernetes/service discovery products are not framework policy.
 
 ## Dependency-Ordered Tasks
 
 ### T-0105: System Event And Inbox Contracts
 
-Owns the smallest serialized/public foundations: the frozen-compatible
+Owns the smallest serialized/public foundations: the exactly frozen
 `EntityStateChanged` system event, internal Stand subscription record, and
 Aggregate/Process Manager Inbox labels needed by later tasks.
 
-- RED: wire/type URL compatibility, invalid record rejection, target/shard
-  preservation, no generated output tracked.
+- RED: exact pinned file/checksum/type URL/field compatibility, invalid record
+  rejection, canonical non-duplicated topic, target/shard preservation, no
+  generated output tracked.
 - Review: TypeScript/API and reliability required; style/docs as affected.
 - Verification: focused Proto/generation tests, generated typecheck, then
   `verify:release` because serialized contracts change.
@@ -174,11 +239,14 @@ snapshot before resuming updates.
 ### T-0108: Configurable Durable Stand Registry
 
 Adds the registry contract, storage-backed and in-memory implementations,
-builder configuration, default StorageFactory ownership, 10-second snapshot,
-30-second pending cleanup, physical deletion, and production warning.
+builder configuration, default StorageFactory ownership, bounded complete
+snapshot API, 30-second pending cleanup, physical deletion, and production
+warning. It does not own local listener reconciliation.
 
-- RED: 50 rows for 50 active subscriptions, concurrent cleanup, delete without
-  tombstone, restart recovery, custom implementation ownership, close ordering,
+- RED: 50 rows for 50 active subscriptions, atomic cross-node admission at the
+  100-definition default capacity, record/snapshot bounds, concurrent cleanup,
+  capacity release, delete without tombstone, activate/delete and snapshot/delete
+  races, restart recovery, custom implementation ownership, close ordering,
   production warning/no failure.
 - Review: all four concerns; persistence/lifecycle at Terra/high.
 - Verification: memory/MySQL/Datastore conformance where configured, focused
@@ -189,25 +257,30 @@ builder configuration, default StorageFactory ownership, 10-second snapshot,
 Makes Stand an EventBus observer. Entity commits publish
 `EntityStateChanged`; plain events and Entity changes are matched against the
 reconciled registry. SubscriptionService uses the registry rather than local
-claim/cancel definitions.
+claim/cancel definitions. This task owns the startup and 10-second serialized
+snapshot reconciliation loop, revision revalidation, local sweep, and listener
+lifecycle.
 
 - RED: event and Entity subscriptions, Projection updates, Aggregate/Process
   Manager update visibility, tenant/filter matching, duplicate/reordered notice
-  tolerance, cancellation convergence, shutdown.
+  tolerance, stale-sweep fencing, delete during snapshot, convergence after a
+  post-delete cycle, cancellation convergence, shutdown.
 - Review: all four concerns; serialized/reliability concerns at Terra/high.
 - Verification: command-event-projection-subscription black-box coverage and
   `verify:release`.
 
 ### T-0110: Multi-Node Gateway Fan-In
 
-Adds static multi-backend configuration/discovery, one-backend command/query
-routing, all-backend subscription activation, merged notices, backend lifecycle
-notifications, and cancellation fan-out. Authentication remains solely at the
-Gateway.
+Adds fixed bounded multi-backend configuration, one-backend round-robin
+command/query routing, all-backend subscription activation, merged notices,
+backend lifecycle notifications, and cancellation fan-out. Authentication
+remains solely at the Gateway. Dynamic discovery is Wave 7.
 
-- RED: two app nodes/one Gateway, node add/remove, one request dispatch,
-  all-node activation, duplicate suppression, stream loss notification,
-  cancellation deletion and local abort, actor/tenant preservation.
+- RED: two app nodes/one Gateway, 32-backend bound, one request dispatch with no
+  command retry, all-node activation, partial activation cleanup, duplicate
+  forwarding without retained dedupe state, stream loss notification,
+  cancellation/close races, no reconnect after cancellation, binding restart
+  with the same fixed backend fingerprint, actor/tenant preservation.
 - Review: all four concerns, plus the final security reviewer only if this task
   exposes a new authentication trust boundary.
 - Verification: native and browser interoperability plus `verify:release`.

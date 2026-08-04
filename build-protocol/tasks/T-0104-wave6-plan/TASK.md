@@ -62,9 +62,9 @@ and topology across the server, storage, delivery, and browser gateway packages.
 9. Cancellation physically deletes the durable subscription by default.
    Cancellation completes after durable deletion and Gateway-side stream stop;
    it does not wait for every application node to observe the deletion.
-10. One standalone Gateway connects as a gRPC client to all available nodes of
-    the same application. Multi-instance deployment does not require one
-    Gateway per application node.
+10. One standalone Gateway connects as a gRPC client to the fixed configured
+    set of application nodes. Multi-instance deployment does not require one
+    Gateway per application node. Dynamic node discovery belongs to Wave 7.
 11. Subscription notifications remain best effort and queries remain
     authoritative. Wave 7 will separately address stronger horizontal
     semantics and application redeployment/update behavior.
@@ -87,8 +87,9 @@ and topology across the server, storage, delivery, and browser gateway packages.
   Process Manager delivery mechanisms.
 - A full durable-registry snapshot plus local reconciliation can converge after
   deletion without tombstones and without retaining cancelled subscriptions.
-- Gateway fan-in can deduplicate application-node notifications while keeping
-  query results authoritative and avoiding a completeness promise.
+- Gateway fan-in can forward application-node notifications, including possible
+  duplicates, while keeping queries authoritative and avoiding a completeness
+  promise or unbounded deduplication history.
 - Existing storage factories can host subscription records without weakening
   tenant isolation or transaction ownership.
 
