@@ -714,10 +714,7 @@ export interface EntityInboxTarget {
   readonly labels: readonly EntityInboxLabel[];
 
   /** Replays one durable Entity Inbox message. */
-  replay(
-    message: EntityInboxMessage,
-    deliveryTenantId?: string,
-  ): Promise<void | (() => void)>;
+  replay(message: EntityInboxMessage, deliveryTenantId?: string): Promise<void>;
 }
 
 /**
@@ -1191,15 +1188,13 @@ class AggregateExecutionSupport {
     version: bigint,
     events: readonly Event[],
     dispatch: (event: Event) => Promise<void>,
-  ): Promise<() => void> {
+  ): Promise<void> {
     await this.persistAggregateUpdate(loaded, entityId, version, events);
-    return () => {
-      for (const event of events) {
-        void dispatch(event).catch((error: unknown) => {
-          this.#runtime.recordDispatchFailure(event, error);
-        });
-      }
-    };
+    for (const event of events) {
+      void dispatch(event).catch((error: unknown) => {
+        this.#runtime.recordDispatchFailure(event, error);
+      });
+    }
   }
 
   #instantiateAggregate(
@@ -1282,7 +1277,7 @@ class AggregateCommandExecution {
     );
   }
 
-  async run(): Promise<void | (() => void)> {
+  async run(): Promise<void> {
     void RepositorySignals.requireCommandId(this.#command);
 
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
@@ -1330,7 +1325,7 @@ class AggregateCommandExecution {
     }
 
     const committedVersion = loaded.version + BigInt(events.length);
-    return await this.#support.persistAggregateAndDispatch(
+    await this.#support.persistAggregateAndDispatch(
       loaded,
       route.entityId,
       committedVersion,
@@ -1530,14 +1525,13 @@ class AggregateEventExecution {
     }
 
     if (produced.events.length > 0) {
-      const dispatch = await this.#support.persistAggregateAndDispatch(
+      await this.#support.persistAggregateAndDispatch(
         loaded,
         entityId,
         loaded.version + BigInt(produced.events.length),
         produced.events,
         (event) => this.#runtime.dispatchStoredFollowUp(event),
       );
-      dispatch();
     }
 
     await this.#support.appendDiagnosticEvent(
@@ -3890,7 +3884,7 @@ const InboxReplay = {
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: string,
-  ): Promise<void | (() => void)> {
+  ): Promise<void> {
     const runtime = repositoryRuntimes.get(repository);
 
     if (runtime === undefined) {
@@ -3905,7 +3899,7 @@ const InboxReplay = {
     InboxReplay.validateReplayedCommandPayload(routing, command);
     InboxReplay.validateReplayTarget(repository, message, command);
 
-    return await new AggregateCommandExecution(repository, routing, runtime, command).run();
+    await new AggregateCommandExecution(repository, routing, runtime, command).run();
   },
 
   async replayPmInbox(
@@ -4402,7 +4396,7 @@ const RepositoryDispatch = {
           ? (["REACT_UPON_EVENT"] as const)
           : []),
       ]),
-      replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void | (() => void)> =>
+      replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void> =>
         repository.entityFamily === "aggregate"
           ? InboxReplay.replayAggregateCommand(repository, routing, message, deliveryTenantId)
           : InboxReplay.replayPmInbox(repository, routing, message, deliveryTenantId),

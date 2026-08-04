@@ -90,7 +90,7 @@ export class LocalEntityInbox implements EntityInbox {
    * @returns A promise that resolves after the inbox row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    return this.#replay(message, deliveryTenantId).then(() => undefined);
+    return this.#replay(message, deliveryTenantId);
   }
 
   /**
@@ -283,21 +283,17 @@ export class LocalEntityInbox implements EntityInbox {
     message: InboxMessage,
     deliveryTenantId?: string,
   ): Promise<void> {
-    let followUp: (() => void) | undefined;
     await InboxHandoff.drain({
       delivery,
       received: message,
       node: this.#contextName,
-      onReplay: async (nextMessage) => {
-        followUp = await this.#replay(nextMessage, deliveryTenantId, false);
-      },
+      onReplay: (nextMessage) => this.#replay(nextMessage, deliveryTenantId),
       replayFailureMessage: "Entity Inbox replay failed.",
       skippedMessage:
         "Entity Inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
         "Entity Inbox delivery did not reach the target row before the local drain finished.",
     });
-    followUp?.();
   }
 
   #claimRows(inputs: EntityInputs, deliveryTenantId?: string): BatchRow[] {
@@ -341,11 +337,7 @@ export class LocalEntityInbox implements EntityInbox {
     );
   }
 
-  async #replay(
-    message: InboxMessage,
-    deliveryTenantId?: string,
-    runFollowUp = true,
-  ): Promise<(() => void) | undefined> {
+  async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
     LocalEntityInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
@@ -356,9 +348,7 @@ export class LocalEntityInbox implements EntityInbox {
       );
     }
 
-    const followUp = await target.replay(message, deliveryTenantId);
-    if (typeof followUp === "function" && runFollowUp) followUp();
-    return typeof followUp === "function" ? followUp : undefined;
+    await target.replay(message, deliveryTenantId);
   }
 
   static #deferred(): InboxDeferred {
