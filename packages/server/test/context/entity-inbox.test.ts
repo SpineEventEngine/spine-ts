@@ -21,7 +21,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(),
+      replay: () => Promise.resolve(undefined),
     });
 
     expect(inbox.endpoints()).toContainEqual(
@@ -41,7 +41,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(),
+      replay: () => Promise.resolve(undefined),
     });
 
     const receiving = inbox.receiveAll(
@@ -49,7 +49,7 @@ describe("LocalEntityInbox", () => {
       ["first", "second"].map((targetId) => processInput(targetTypeUrl, targetId)),
       "tenant-dynamic",
     );
-    await Promise.resolve();
+    await Promise.resolve(undefined);
 
     expect(keep).toHaveBeenCalledExactlyOnceWith("tenant-dynamic");
     await expect(
@@ -93,7 +93,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
-      replay: () => Promise.resolve(),
+      replay: () => Promise.resolve(undefined),
     });
 
     await expect(inbox.receiveAll(delivery, inputs)).rejects.toBe(writeFailure);
@@ -119,7 +119,7 @@ describe("LocalEntityInbox", () => {
         replayed.push(message.inboxId.targetId);
         return message.inboxId.targetId === "first"
           ? Promise.reject(drainFailure)
-          : Promise.resolve();
+          : Promise.resolve(undefined);
       },
     });
 
@@ -264,7 +264,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: ["REACT_UPON_EVENT"],
-      replay: () => Promise.resolve(),
+      replay: () => Promise.resolve(undefined),
     });
 
     await expect(inbox.receiveAll(delivery, inputs, "tenant-a")).rejects.toThrow(
@@ -293,7 +293,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay: () => Promise.resolve(),
+      replay: () => Promise.resolve(undefined),
     });
     const endpoints = vi.spyOn(inbox, "endpoints");
 
@@ -343,7 +343,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message.inboxId.targetId);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
 
@@ -390,7 +390,7 @@ describe("LocalEntityInbox", () => {
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
-      replay: () => Promise.resolve(),
+      replay: () => Promise.resolve(undefined),
     });
 
     const receive = inbox.receive(delivery, {
@@ -400,7 +400,7 @@ describe("LocalEntityInbox", () => {
       status: "TO_DELIVER",
     });
     await observed;
-    await Promise.resolve();
+    await Promise.resolve(undefined);
 
     expect(then).toHaveBeenCalledOnce();
     foreign.reject(new Error("foreign observer failed"));
@@ -494,7 +494,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
 
@@ -556,7 +556,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
 
@@ -607,7 +607,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
 
@@ -737,7 +737,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
 
@@ -817,7 +817,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
 
@@ -905,7 +905,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
 
@@ -969,7 +969,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
 
@@ -1043,7 +1043,7 @@ describe("LocalEntityInbox", () => {
       labels: processManagerLabels,
       replay(message) {
         seen.push(message);
-        return Promise.resolve();
+        return Promise.resolve(undefined);
       },
     });
     inbox.register({
@@ -1411,8 +1411,8 @@ describe("LocalEntityInbox", () => {
     });
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
-    const first = Promise.withResolvers<void>();
-    const second = Promise.withResolvers<void>();
+    const first = Promise.withResolvers<undefined>();
+    const second = Promise.withResolvers<undefined>();
     const followUps: string[] = [];
     inbox.register({
       targetTypeUrl,
@@ -1431,13 +1431,13 @@ describe("LocalEntityInbox", () => {
     const secondReceive = inbox.receive(delivery, processInput(targetTypeUrl, "second"));
     await expect(Promise.race([secondReceive.then(() => "resolved"), pause(25).then(() => "pending")]))
       .resolves.toBe("pending");
-    first.resolve();
+    first.resolve(undefined);
     await secondReceive;
 
     const laterReceive = inbox.receive(delivery, processInput(targetTypeUrl, "later"));
     await expect(Promise.race([laterReceive.then(() => "resolved"), pause(25).then(() => "pending")]))
       .resolves.toBe("pending");
-    second.resolve();
+    second.resolve(undefined);
     await laterReceive;
     expect(followUps).toEqual(["first", "second", "later"]);
 
@@ -1456,7 +1456,7 @@ describe("LocalEntityInbox", () => {
     });
     const inbox = new LocalEntityInbox("Tasks", undefined, undefined, strategy);
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
-    const gate = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<undefined>();
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
@@ -1470,7 +1470,7 @@ describe("LocalEntityInbox", () => {
     await inbox.receive(blockedDelivery, processInput(targetTypeUrl, "even"), "tenant-a");
     await expect(inbox.receive(freeDelivery, processInput(targetTypeUrl, "odd"), "tenant-b"))
       .resolves.toMatchObject({ shard: { index: 1, ofTotal: 2 } });
-    gate.resolve();
+    gate.resolve(undefined);
   });
 
   it("resolves each input shard once and persists that resolved shard", async () => {
@@ -1482,7 +1482,7 @@ describe("LocalEntityInbox", () => {
     });
     const inbox = new LocalEntityInbox("Tasks", undefined, undefined, strategy);
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
-    inbox.register({ targetTypeUrl, labels: ["HANDLE_COMMAND"], replay: () => Promise.resolve() });
+    inbox.register({ targetTypeUrl, labels: ["HANDLE_COMMAND"], replay: () => Promise.resolve(undefined) });
 
     const single = await inbox.receive(delivery, processInput(targetTypeUrl, "odd"));
     const batch = await inbox.receiveAll(

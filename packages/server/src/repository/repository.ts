@@ -693,7 +693,7 @@ Object.freeze(Repository);
 
 type EntityInboxLabel = "HANDLE_COMMAND" | "REACT_UPON_EVENT";
 type EntityInboxFollowUp = () => Promise<void>;
-type EntityInboxReplay = Promise<unknown>;
+type EntityInboxReplay = Promise<EntityInboxFollowUp | undefined>;
 type EntityInboxMessage = InboxMessage & {
   readonly label: EntityInboxLabel;
   readonly status: "TO_DELIVER";
@@ -1312,7 +1312,7 @@ class AggregateCommandExecution {
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
 
     if (assignee === undefined) {
-      return;
+      return undefined;
     }
 
     const loaded = await this.#support.loadAggregate(route.entityId);
@@ -1331,7 +1331,7 @@ class AggregateCommandExecution {
         throw error;
       }
       RepositorySignals.postRejectionEvent(this.#runtime, this.#command, route.entityId, error);
-      return;
+      return undefined;
     }
     const events = this.#bindProducedEvents(
       this.#support.normalizeProducedSignals(produced),
@@ -3925,14 +3925,14 @@ const InboxReplay = {
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: string,
-  ): Promise<void> {
+  ): Promise<undefined> {
     if (message.label === "HANDLE_COMMAND") {
       await InboxReplay.replayProcessManagerCommand(repository, routing, message, deliveryTenantId);
-      return;
+      return undefined;
     }
     if (message.label === "REACT_UPON_EVENT") {
       await InboxReplay.replayProcessManagerEvent(repository, routing, message, deliveryTenantId);
-      return;
+      return undefined;
     }
 
     throw new Error(`Entity Inbox replay does not handle "${message.label}" messages.`);
