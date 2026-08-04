@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { Delivery } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import type { InboxMessage } from "../delivery/inbox.js";
@@ -24,6 +26,8 @@ export class LocalEntityInbox implements EntityInbox {
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
   #followUp = Promise.resolve();
+  readonly #followUpScope = new AsyncLocalStorage<symbol>();
+  readonly #followUpToken = Symbol("entity-inbox-follow-up");
   #nextVersion = 0n;
 
   /**
@@ -151,7 +155,7 @@ export class LocalEntityInbox implements EntityInbox {
     input: EntityInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    await this.#followUp;
+    if (this.#followUpScope.getStore() !== this.#followUpToken) await this.#followUp;
     await this.#keepDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
@@ -166,7 +170,7 @@ export class LocalEntityInbox implements EntityInbox {
     inputs: EntityInputs,
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
-    await this.#followUp;
+    if (this.#followUpScope.getStore() !== this.#followUpToken) await this.#followUp;
     await this.#keepDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const whenReceived = new Date();
@@ -300,7 +304,12 @@ export class LocalEntityInbox implements EntityInbox {
       unfinishedMessage:
         "Entity Inbox delivery did not reach the target row before the local drain finished.",
     });
-    if (followUp !== undefined) this.#followUp = followUp().catch(() => undefined);
+    if (followUp !== undefined) {
+      const nextFollowUp = followUp;
+      this.#followUp = this.#followUpScope.run(this.#followUpToken, () =>
+        nextFollowUp().catch(() => undefined),
+      );
+    }
   }
 
   #claimRows(inputs: EntityInputs, deliveryTenantId?: string): BatchRow[] {
