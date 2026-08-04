@@ -90,7 +90,7 @@ export class LocalEntityInbox implements EntityInbox {
    * @returns A promise that resolves after the inbox row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    return this.#replay(message, deliveryTenantId);
+    return this.#replay(message, deliveryTenantId).then(() => undefined);
   }
 
   /**
@@ -283,17 +283,21 @@ export class LocalEntityInbox implements EntityInbox {
     message: InboxMessage,
     deliveryTenantId?: string,
   ): Promise<void> {
+    let followUp: (() => void) | undefined;
     await InboxHandoff.drain({
       delivery,
       received: message,
       node: this.#contextName,
-      onReplay: (nextMessage) => this.#replay(nextMessage, deliveryTenantId),
+      onReplay: async (nextMessage) => {
+        followUp = await this.#replay(nextMessage, deliveryTenantId, false);
+      },
       replayFailureMessage: "Entity Inbox replay failed.",
       skippedMessage:
         "Entity Inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
         "Entity Inbox delivery did not reach the target row before the local drain finished.",
     });
+    followUp?.();
   }
 
   #claimRows(inputs: EntityInputs, deliveryTenantId?: string): BatchRow[] {
@@ -337,7 +341,11 @@ export class LocalEntityInbox implements EntityInbox {
     );
   }
 
-  async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
+  async #replay(
+    message: InboxMessage,
+    deliveryTenantId?: string,
+    runFollowUp = true,
+  ): Promise<(() => void) | undefined> {
     LocalEntityInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
@@ -348,7 +356,9 @@ export class LocalEntityInbox implements EntityInbox {
       );
     }
 
-    await target.replay(message, deliveryTenantId);
+    const followUp = await target.replay(message, deliveryTenantId);
+    if (typeof followUp === "function" && runFollowUp) followUp();
+    return typeof followUp === "function" ? followUp : undefined;
   }
 
   static #deferred(): InboxDeferred {
