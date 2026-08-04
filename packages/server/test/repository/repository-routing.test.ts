@@ -4172,7 +4172,7 @@ describe("repository signal routing", () => {
       "Entity Inbox replay stored target type does not match the routed repository.",
     );
     await expect(target.replay(malformed)).rejects.toThrow(
-      "Process-manager inbox replay requires a readable stored event.",
+      "Entity Inbox replay requires a readable stored event.",
     );
     await expect(target.replay(wrongLabel)).rejects.toThrow(
       'Process-manager inbox replay does not handle "UPDATE_SUBSCRIBER" messages.',
