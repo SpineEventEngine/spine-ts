@@ -242,3 +242,14 @@ ordering. Four final corrections remain:
 These findings are one final bounded implementation batch. Only API,
 style/maintainability, and performance/reliability require re-review afterward;
 documentation remains accepted unless its files or claims change.
+
+## Closure Re-review Endpoint
+
+- Final corrected code endpoint: `09c17e5b`, clean and pushed.
+- Focused typechecks, ESLint, Prettier, diff checks, and affected suites pass
+  78/78 with no skipped acceptance.
+- Only the affected API, style/maintainability, and reliability concerns are
+  assigned for closure re-review, each to its existing reviewer with explicit
+  `gpt-5.6-terra` / `high`. Runtime self-introspection is unavailable; immutable
+  configured role/profile plus explicit dispatch are accepted unless a visible
+  mismatch occurs.
