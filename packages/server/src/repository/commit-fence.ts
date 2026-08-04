@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-type Commit = { readonly status: string };
+interface Commit {
+  readonly status: string;
+}
 type Guard = () => Promise<void>;
 
 const fences = new AsyncLocalStorage<Guard>();

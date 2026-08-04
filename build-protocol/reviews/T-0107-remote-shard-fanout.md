@@ -299,3 +299,13 @@ resolved at pushed endpoint `2a5fcacc`. Security remains N/A for the recorded
 reason. Reviewer runtime self-introspection was unavailable throughout; every
 accepted result used the immutable existing role/profile and explicit dispatch
 with no visible mismatch.
+
+## Release-Gate Correction
+
+The first converged `verify:release` attempt stopped at ESLint before coverage:
+one internal type alias violated the interface rule, five commit callbacks
+triggered the unbound-method rule, and one test guard was unnecessarily async.
+The orchestrator applied this deterministic, review-neutral correction directly.
+Affected ESLint/format checks and the delivery-fencing suite pass 9/9. The
+release gate must be rerun after this correction; specialist concerns are not
+reopened because behavior and public contracts did not change.

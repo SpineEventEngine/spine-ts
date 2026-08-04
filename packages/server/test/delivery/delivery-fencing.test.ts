@@ -27,9 +27,7 @@ describe("Delivery operation fencing", () => {
     let committed = false;
     const entity = {};
     await withDeliveryCommitFence(
-      async () => {
-        if (!active) throw new Error("Shard lease was lost.");
-      },
+      () => (active ? Promise.resolve() : Promise.reject(new Error("Shard lease was lost."))),
       async () => {
         active = false;
         await expect(

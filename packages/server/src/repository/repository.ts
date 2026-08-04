@@ -1371,7 +1371,9 @@ class AggregateCommandExecution {
         parameterCount,
         context,
       );
-      const commit = await commitFenced(entity, transactionalEntityAccess.commit);
+      const commit = await commitFenced(entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
@@ -1612,7 +1614,9 @@ class AggregateEventExecution {
         );
       }
 
-      const commit = await commitFenced(loaded.entity, transactionalEntityAccess.commit);
+      const commit = await commitFenced(loaded.entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
@@ -1856,7 +1860,9 @@ class ProjectionEventExecution {
           eventContext,
         );
       }
-      const commit = await commitFenced(entity, transactionalEntityAccess.commit);
+      const commit = await commitFenced(entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
@@ -2113,7 +2119,9 @@ class ProcessManagerCommandExecution {
         assignee.handler.parameterCount,
         EntityInvocation.commandHandlerContext(this.#command),
       );
-      const commit = await commitFenced(entity, transactionalEntityAccess.commit);
+      const commit = await commitFenced(entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
@@ -2341,7 +2349,9 @@ class ProcessManagerEventExecution {
         commands.push(...this.#support.normalizeProducedSignals(produced));
       }
 
-      const commit = await commitFenced(entity, transactionalEntityAccess.commit);
+      const commit = await commitFenced(entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
