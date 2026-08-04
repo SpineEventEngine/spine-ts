@@ -13,6 +13,7 @@ import {
   ActorContextSchema,
   CommandContextSchema,
   CommandIdSchema,
+  CommandSchema,
   type Event,
   EventContextSchema,
   EventIdSchema,
@@ -51,6 +52,7 @@ import {
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { Delivery } from "../../src/delivery/delivery.js";
+import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import { ServerEnvironment } from "../../src/server/server-environment.js";
@@ -149,6 +151,17 @@ const ProcessManagerStateSchema = messageDesc(
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class DuplicateTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+class ReplayTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  assignTask(command: ProjectionState): ProjectionState {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(AggregateStateSchema, { id: command.id, name: command.name, archived: false }),
+      ),
+    );
+    return create(ProjectionStateSchema, { id: command.id, name: command.name, priority: 1 });
+  }
+}
 class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignProjection(command: ProjectionState): ProjectionState {
     this.update((draft) =>
@@ -201,6 +214,38 @@ class GeneratedTaskProcessManager extends ProcessManager<
       name: `${command.name} event`,
       priority: 1,
     });
+  }
+}
+
+class ReplayTaskProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  assignTask(command: AggregateState): ProjectionState {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: command.id,
+          queue: `${command.name} command replayed`,
+        }),
+      ),
+    );
+    return create(ProjectionStateSchema, { id: command.id, name: command.name, priority: 1 });
+  }
+
+  reactToProjection(event: ProjectionState): ProjectionState {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: event.id,
+          queue: `${event.name} event replayed`,
+        }),
+      ),
+    );
+    return create(ProjectionStateSchema, event);
   }
 }
 
@@ -503,6 +548,259 @@ describe("BoundedContext assembly", () => {
         shard: { index, ofTotal: 3 },
       })),
     ]);
+  });
+
+  it("replays nonzero-shard Aggregate and Process Manager descriptor rows", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const strategy = UniformAcrossAllShards.forNumber(3);
+    const registry = createGeneratedRegistryFixture([
+      aggregateReplayRegistry(ReplayTaskAggregate),
+      replayProcessManagerRegistry(ReplayTaskProcessManager),
+    ]);
+    const context = await BoundedContext.singleTenant("DescriptorReplay")
+      .withStorageFactory(storageFactory)
+      .withDeliveryStrategy(strategy)
+      .withGeneratedRegistryRoot(registry.root)
+      .add(ReplayTaskAggregate)
+      .add(ReplayTaskProcessManager)
+      .buildAsync();
+
+    try {
+      const descriptor = internalDeliveryDescriptor(context);
+      const aggregateType = TypeUrls.derive(AggregateStateSchema);
+      const processManagerType = TypeUrls.derive(ProcessManagerStateSchema);
+      const aggregateId = targetForShard(strategy, aggregateType, 1, "aggregate");
+      const commandId = targetForShard(strategy, processManagerType, 2, "pm-command");
+      const eventId = targetForShard(strategy, processManagerType, 1, "pm-event");
+      const aggregateCommand = createProjectionCommand("aggregate-row", aggregateId);
+      const processManagerCommand = createAggregateCommand("pm-command-row", commandId);
+      const processManagerEvent = createProjectionEvent("pm-event-row", eventId);
+
+      const aggregateRow = await persistDescriptorRow({
+        descriptor,
+        storageFactory,
+        targetTypeUrl: aggregateType,
+        targetId: aggregateId,
+        signalId: "aggregate-row",
+        label: "HANDLE_COMMAND",
+        signal: AnyMessages.pack(CommandSchema, aggregateCommand, { validate: false }),
+        shard: strategy.shardFor(aggregateId, aggregateType),
+      });
+      const processManagerCommandRow = await persistDescriptorRow({
+        descriptor,
+        storageFactory,
+        targetTypeUrl: processManagerType,
+        targetId: commandId,
+        signalId: "pm-command-row",
+        label: "HANDLE_COMMAND",
+        signal: AnyMessages.pack(CommandSchema, processManagerCommand, { validate: false }),
+        shard: strategy.shardFor(commandId, processManagerType),
+      });
+      const processManagerEventRow = await persistDescriptorRow({
+        descriptor,
+        storageFactory,
+        targetTypeUrl: processManagerType,
+        targetId: eventId,
+        signalId: "pm-event-row",
+        label: "REACT_UPON_EVENT",
+        signal: AnyMessages.pack(EventSchema, processManagerEvent, { validate: false }),
+        shard: strategy.shardFor(eventId, processManagerType),
+      });
+
+      await descriptor.replay(aggregateRow);
+      await descriptor.replay(processManagerCommandRow);
+      await descriptor.replay(processManagerEventRow);
+
+      await expect(context.stand().read(AggregateStateSchema, aggregateId)).resolves.toMatchObject({
+        id: aggregateId,
+        name: "Task",
+      });
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, commandId),
+      ).resolves.toMatchObject({
+        id: commandId,
+        queue: "Task Ready command replayed",
+      });
+      await expect(context.stand().read(ProcessManagerStateSchema, eventId)).resolves.toMatchObject(
+        {
+          id: eventId,
+          queue: "Task event replayed",
+        },
+      );
+    } finally {
+      await context.close();
+      removeGeneratedRegistry(registry);
+    }
+  });
+
+  it("rejects forged Aggregate and Process Manager descriptor shards before handlers run", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const strategy = UniformAcrossAllShards.forNumber(3);
+    const registry = createGeneratedRegistryFixture([
+      aggregateReplayRegistry(ReplayTaskAggregate),
+      replayProcessManagerRegistry(ReplayTaskProcessManager),
+    ]);
+    const context = await BoundedContext.singleTenant("ForgedDescriptorShard")
+      .withStorageFactory(storageFactory)
+      .withDeliveryStrategy(strategy)
+      .withGeneratedRegistryRoot(registry.root)
+      .add(ReplayTaskAggregate)
+      .add(ReplayTaskProcessManager)
+      .buildAsync();
+
+    try {
+      const descriptor = internalDeliveryDescriptor(context);
+      const aggregateType = TypeUrls.derive(AggregateStateSchema);
+      const processManagerType = TypeUrls.derive(ProcessManagerStateSchema);
+      const aggregateId = targetForShard(strategy, aggregateType, 1, "forged-aggregate");
+      const processManagerId = targetForShard(strategy, processManagerType, 2, "forged-pm");
+      const aggregateRow = await persistDescriptorRow({
+        descriptor,
+        storageFactory,
+        targetTypeUrl: aggregateType,
+        targetId: aggregateId,
+        signalId: "forged-aggregate",
+        label: "HANDLE_COMMAND",
+        signal: AnyMessages.pack(
+          CommandSchema,
+          createProjectionCommand("forged-aggregate", aggregateId),
+          {
+            validate: false,
+          },
+        ),
+        shard: new ShardIndex(0, 3),
+      });
+      const processManagerRow = await persistDescriptorRow({
+        descriptor,
+        storageFactory,
+        targetTypeUrl: processManagerType,
+        targetId: processManagerId,
+        signalId: "forged-pm",
+        label: "HANDLE_COMMAND",
+        signal: AnyMessages.pack(
+          CommandSchema,
+          createAggregateCommand("forged-pm", processManagerId),
+          { validate: false },
+        ),
+        shard: new ShardIndex(0, 3),
+      });
+
+      await expect(descriptor.replay(aggregateRow)).rejects.toThrow(
+        "Entity Inbox replay stored shard does not match the routed target.",
+      );
+      await expect(descriptor.replay(processManagerRow)).rejects.toThrow(
+        "Entity Inbox replay stored shard does not match the routed target.",
+      );
+      await expect(
+        context.stand().read(AggregateStateSchema, aggregateId),
+      ).resolves.toBeUndefined();
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, processManagerId),
+      ).resolves.toBeUndefined();
+    } finally {
+      await context.close();
+      removeGeneratedRegistry(registry);
+    }
+  });
+
+  it("recovers every configured Process Manager shard and label through a fresh descriptor", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const strategy = UniformAcrossAllShards.forNumber(3);
+    const contextName = "FreshMultiShardDescriptor";
+    const registry = createGeneratedRegistryFixture([
+      replayProcessManagerRegistry(ReplayTaskProcessManager),
+    ]);
+    let first: BoundedContext | undefined;
+    let recovered: BoundedContext | undefined;
+
+    try {
+      first = await BoundedContext.singleTenant(contextName)
+        .withStorageFactory(storageFactory)
+        .withDeliveryStrategy(strategy)
+        .withGeneratedRegistryRoot(registry.root)
+        .add(ReplayTaskProcessManager)
+        .buildAsync();
+      const firstDescriptor = internalDeliveryDescriptor(first);
+      const targetTypeUrl = TypeUrls.derive(ProcessManagerStateSchema);
+      const rows: InboxMessage[] = [];
+
+      for (const label of ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const) {
+        for (const index of [0, 1, 2]) {
+          const targetId = targetForShard(strategy, targetTypeUrl, index, `${label}-${index}`);
+          const signalId = `${label}-${index}`;
+          const signal =
+            label === "HANDLE_COMMAND"
+              ? AnyMessages.pack(CommandSchema, createAggregateCommand(signalId, targetId), {
+                  validate: false,
+                })
+              : AnyMessages.pack(EventSchema, createProjectionEvent(signalId, targetId), {
+                  validate: false,
+                });
+          rows.push(
+            await persistDescriptorRow({
+              descriptor: firstDescriptor,
+              storageFactory,
+              targetTypeUrl,
+              targetId,
+              signalId,
+              label,
+              signal,
+              shard: strategy.shardFor(targetId, targetTypeUrl),
+            }),
+          );
+        }
+      }
+      await first.close();
+      first = undefined;
+
+      recovered = await BoundedContext.singleTenant(contextName)
+        .withStorageFactory(storageFactory)
+        .withDeliveryStrategy(strategy)
+        .withGeneratedRegistryRoot(registry.root)
+        .add(ReplayTaskProcessManager)
+        .buildAsync();
+      const descriptor = internalDeliveryDescriptor(recovered);
+      expect(descriptor.endpoints()).toEqual(
+        ["HANDLE_COMMAND", "REACT_UPON_EVENT"].flatMap((label) =>
+          [0, 1, 2].map((index) => ({
+            label,
+            targetTypeUrl,
+            shard: { index, ofTotal: 3 },
+          })),
+        ),
+      );
+      const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.instance(), {
+        ownership: "caller",
+        descriptors: [boundedContextAccess.delivery(recovered)],
+      });
+      try {
+        await waitForCondition(
+          async () =>
+            (
+              await Promise.all(
+                rows.map((row) =>
+                  recovered?.stand().read(ProcessManagerStateSchema, row.inboxId.targetId),
+                ),
+              )
+            ).every((state) => state !== undefined),
+          "fresh multi-shard descriptor recovery",
+        );
+        for (const row of rows) {
+          await expect(
+            new Delivery({
+              context: descriptor.storageContext({}),
+              storageFactory,
+            }).inbox.readMessage(row.id),
+          ).resolves.toMatchObject({ status: "DELIVERED" });
+        }
+      } finally {
+        await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
+      }
+    } finally {
+      await first?.close();
+      await recovered?.close();
+      removeGeneratedRegistry(registry);
+    }
   });
 
   it("recovers a durable dynamic-tenant row through a fresh same-storage descriptor", async () => {
@@ -1705,7 +2003,7 @@ function createEventDispatcher(
   };
 }
 
-function createProjectionCommand(id: string) {
+function createProjectionCommand(id: string, targetId = "task-1") {
   return SignalEnvelopes.command({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
@@ -1715,7 +2013,7 @@ function createProjectionCommand(id: string) {
     }),
     schema: ProjectionStateSchema,
     message: create(ProjectionStateSchema, {
-      id: "task-1",
+      id: targetId,
       name: "Task",
       priority: 1,
     }),
@@ -1746,7 +2044,7 @@ function createAggregateCommand(id: string, targetId = "task-ready", tenantId?: 
   });
 }
 
-function createProjectionEvent(id: string) {
+function createProjectionEvent(id: string, targetId = "task-1") {
   return SignalEnvelopes.event({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
@@ -1755,7 +2053,7 @@ function createProjectionEvent(id: string) {
     }),
     schema: ProjectionStateSchema,
     message: create(ProjectionStateSchema, {
-      id: "task-1",
+      id: targetId,
       name: "Task",
       priority: 1,
     }),
@@ -1818,6 +2116,87 @@ function processManagerRegistry(
       },
     ],
   };
+}
+
+function aggregateReplayRegistry(entityType: typeof ReplayTaskAggregate) {
+  return {
+    entityType,
+    stateSchema: AggregateStateSchema,
+    handlers: [
+      {
+        kind: "command-assignment" as const,
+        methodName: "assignTask",
+        signalSchema: ProjectionStateSchema,
+        emittedSchemas: [ProjectionStateSchema],
+        parameterCount: 1 as const,
+      },
+    ],
+  };
+}
+
+function replayProcessManagerRegistry(entityType: typeof ReplayTaskProcessManager) {
+  return {
+    entityType,
+    stateSchema: ProcessManagerStateSchema,
+    handlers: [
+      {
+        kind: "command-assignment" as const,
+        methodName: "assignTask",
+        signalSchema: AggregateStateSchema,
+        emittedSchemas: [ProjectionStateSchema],
+        parameterCount: 1 as const,
+      },
+      {
+        kind: "event-reaction" as const,
+        methodName: "reactToProjection",
+        signalSchema: ProjectionStateSchema,
+        emittedSchemas: [ProjectionStateSchema],
+        parameterCount: 1 as const,
+      },
+    ],
+  };
+}
+
+function targetForShard(
+  strategy: DeliveryStrategy,
+  targetTypeUrl: string,
+  index: number,
+  prefix: string,
+): string {
+  for (let suffix = 0; suffix < 1_000; suffix += 1) {
+    const targetId = `${prefix}-${suffix}`;
+    if (strategy.shardFor(targetId, targetTypeUrl).index === index) return targetId;
+  }
+  throw new Error(`Could not find target for shard ${index}.`);
+}
+
+async function persistDescriptorRow(input: {
+  readonly descriptor: InternalDeliveryDescriptor;
+  readonly storageFactory: InMemoryStorageFactory;
+  readonly targetTypeUrl: string;
+  readonly targetId: string;
+  readonly signalId: string;
+  readonly label: "HANDLE_COMMAND" | "REACT_UPON_EVENT";
+  readonly signal: ReturnType<typeof AnyMessages.pack>;
+  readonly shard: ShardIndex;
+}): Promise<InboxMessage> {
+  const written = await new Delivery({
+    context: input.descriptor.storageContext({}),
+    storageFactory: input.storageFactory,
+  }).inbox.receive({
+    inboxId: { targetTypeUrl: input.targetTypeUrl, targetId: input.targetId },
+    signalId: input.signalId,
+    label: input.label,
+    signal: input.signal,
+    shard: input.shard,
+    status: "TO_DELIVER",
+    whenReceived: new Date("2026-08-04T12:00:00.000Z"),
+    version: 1n,
+  });
+  if (written.outcome !== "WRITTEN") {
+    throw new Error("Expected descriptor fixture row to be written.");
+  }
+  return written.message;
 }
 
 function removeGeneratedRegistry(fixture: { readonly registryPath: string }): void {

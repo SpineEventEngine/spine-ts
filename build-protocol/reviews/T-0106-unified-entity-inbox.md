@@ -71,3 +71,12 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
   both the explicit union of promise containers and a narrowed result union for
   existing callback implementations. Descriptor coverage and deterministic
   preflight remain in progress; no review lane is yet closed.
+- Finding 8 descriptor evidence is ready for re-review: focused
+  `bounded-context.test.ts` coverage uses durable low-level Inbox rows and the
+  real bounded-context descriptor to prove valid nonzero-shard Aggregate,
+  Process Manager command, and Process Manager event replay; forged Aggregate
+  and PM stored shards reject before handler-visible state changes; and a fresh
+  same-storage descriptor enumerates all configured PM shard/label endpoints
+  and replays every pending row once. The focused suite passes 55/55. This does
+  not close any review lane; deterministic preflight and affected reliability
+  re-review remain required.
