@@ -1,8 +1,8 @@
 # T-0106 Review Record
 
-Status: Implementation Complete; Mechanical Preflight Pending Review
+Status: Corrections Required
 
-## Planned Review Assignments
+## Review Assignments And Results
 
 - Style/maintainability: existing `style_maintainability_reviewer`, explicit
   `gpt-5.6-terra` / `high`.
@@ -13,16 +13,48 @@ Status: Implementation Complete; Mechanical Preflight Pending Review
 - Performance/reliability: existing `performance_reliability_reviewer`,
   explicit `gpt-5.6-terra` / `high`.
 
-Dispatch occurs only after deterministic mechanical checks. Every dispatch
-must name its expected model/reasoning. Runtime self-introspection is
-unavailable, so the immutable configured role/profile and explicit dispatch
-fields are the accepted actual-metadata evidence unless a visible mismatch or
-fallback occurs.
+All four lanes completed against `6926ff26` after deterministic preflight.
+Every dispatch named its expected role, model, and reasoning. The documentation
+role's Luna/medium profile is immutable and was selected explicitly; the active
+surface exposes no Luna override. Runtime self-introspection is unavailable,
+so immutable role profiles plus explicit dispatch fields are the accepted
+actual-metadata evidence. No visible mismatch or fallback occurred.
+
+## Accepted Findings
+
+1. P1 style/reliability: one global follow-up promise blocks unrelated shards
+   and tenants, while direct assignment can overwrite an earlier live tail.
+   Key and chain live follow-ups by tenant/shard delivery scope, preserve causal
+   re-entry, and remove settled map entries.
+2. P1 reliability: replay does not verify that a stored row's shard equals the
+   configured strategy result for its target ID/type. Reject mismatches before
+   Aggregate or Process Manager handler invocation.
+3. P2 style: one input resolves its shard repeatedly for coordination and
+   persistence. Resolve once into an internal routed input and reuse it.
+4. P2 style: generic ownership still uses PM-only registry/factory/tenant names.
+   Rename shared command/Inbox paths to Entity Inbox terminology; retain PM
+   names only for PM event behavior.
+5. P2 API: README/REFERENCE name nonexistent
+   `BoundedContext.withDeliveryStrategy(...)`; the method belongs to the
+   builder chain.
+6. P2 API: `EntityInboxReplay = Promise<unknown>` hides the optional async
+   follow-up protocol. Model the two valid promise shapes explicitly without
+   weakening the result or suppressing lint.
+7. Documentation: distinguish Aggregate command handoff from Process Manager
+   command/event handoff, and add the one-shard default plus a concrete
+   `UniformAcrossAllShards.forNumber(...)` example to README, REFERENCE, and
+   affected TSDoc.
+8. Reliability coverage: add nonzero/mismatched-shard Aggregate and Process
+   Manager replay coverage through the context descriptor and prove fresh
+   multi-shard recovery. Add a gated two-drain regression for chained tails and
+   a different-shard/tenant non-blocking regression.
 
 ## Current Dispositions
 
-- Style/maintainability: pending focused review of the Entity Inbox boundary.
-- Documentation: pending focused review of delivery and builder claims.
-- TypeScript/API docs: pending focused review of internal replay contracts.
-- Performance/reliability: pending focused review of shard, follow-up, and replay behavior.
+- Style/maintainability: corrections required for follow-up scope, shard
+  resolution, and generic ownership naming.
+- Documentation: corrections required for distinctions, default, and example.
+- TypeScript/API docs: corrections required for API name and replay type.
+- Performance/reliability: corrections required for shard validation,
+  follow-up chaining/scope, and focused multi-shard coverage.
 - Security: N/A unless implementation changes a trust boundary.
