@@ -253,3 +253,19 @@ documentation remains accepted unless its files or claims change.
   `gpt-5.6-terra` / `high`. Runtime self-introspection is unavailable; immutable
   configured role/profile plus explicit dispatch are accepted unless a visible
   mismatch occurs.
+
+## Closure Re-review Results
+
+- TypeScript/API: clean. Both cleanup arguments are forwarded and covered; no
+  public or serialized contract changed.
+- Performance/reliability: the actual environment recovery sequence is proven
+  across repeated real-gRPC runs, but the parent `exitWithin` race retains its
+  losing timer or listener.
+- Style/maintainability: reconciliation and forced termination are correct, but
+  the child SIGTERM handler always exits zero and masks aggregated cleanup
+  failures from the parent.
+
+The same implementation context receives only these two fixture-cleanup P2
+corrections: one settle path must clear the timer and listener, with forced-path
+coverage, and child cleanup failure must propagate through a nonzero exit or
+IPC failure. Only style and reliability reopen after correction.
