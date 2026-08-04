@@ -42,7 +42,7 @@ describe("RemoteWorkRegistry", () => {
     expect(workers[0]?.value).not.toBe(workers[1]?.value);
   });
 
-  it("authorizes live inbox synchronization when a header-ignorant frozen probe reports the original session", async () => {
+  it("authorizes live synchronization when a frozen probe reports the original session", async () => {
     const workers: { nodeId: string; value: string }[] = [];
     const client = DeliveryClient.usingTransport(workerTransport(workers, "already-held"));
     const registry = new RemoteWorkRegistry(client);
