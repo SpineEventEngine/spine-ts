@@ -300,8 +300,7 @@ export class LocalEntityInbox implements EntityInbox {
         followUp = await this.#replay(nextMessage, deliveryTenantId, false);
       },
       replayFailureMessage: "Entity Inbox replay failed.",
-      skippedMessage:
-        "Entity Inbox delivery was skipped before the target row was delivered.",
+      skippedMessage: "Entity Inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
         "Entity Inbox delivery did not reach the target row before the local drain finished.",
     });

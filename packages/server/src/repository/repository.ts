@@ -709,7 +709,6 @@ type EntityInboxInput = Omit<InboxMessageInput, "whenReceived" | "version" | "sh
  * @internal
  */
 export interface EntityInboxTarget {
-
   /**
    * Target state type URL routed by this replay target.
    */
@@ -727,10 +726,7 @@ export interface EntityInboxTarget {
    * @param deliveryTenantId Identifies the active delivery tenant.
    * @returns Resolves after replay, optionally with an async follow-up callback.
    */
-  replay(
-    message: EntityInboxMessage,
-    deliveryTenantId?: string,
-  ): EntityInboxReplay;
+  replay(message: EntityInboxMessage, deliveryTenantId?: string): EntityInboxReplay;
 }
 
 /**
@@ -2908,9 +2904,7 @@ const RepositoryTenants = {
 
     const tid = tenantId;
     if (tid === undefined) {
-      throw new Error(
-        `Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`,
-      );
+      throw new Error(`Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`);
     }
 
     return Object.freeze({
@@ -2963,9 +2957,7 @@ const RepositoryTenants = {
     const tenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
 
     if (tenantId === undefined || tenantId.trim() === "") {
-      throw new Error(
-        `Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`,
-      );
+      throw new Error(`Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`);
     }
 
     return tenantId;
@@ -2979,9 +2971,7 @@ const RepositoryTenants = {
     const tenantId = RepositoryTenants.readCommandTenant(command);
 
     if (tenantId === undefined || tenantId.trim() === "") {
-      throw new Error(
-        `Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`,
-      );
+      throw new Error(`Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`);
     }
 
     return tenantId;
@@ -4074,9 +4064,7 @@ const InboxReplay = {
     }
 
     if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
-      throw new Error(
-        `Multitenant Entity Inbox replay for "${context.name}" requires tenantId.`,
-      );
+      throw new Error(`Multitenant Entity Inbox replay for "${context.name}" requires tenantId.`);
     }
 
     const envelopeTenantId = RepositoryTenants.readCommandTenant(command);
@@ -4124,9 +4112,7 @@ const InboxReplay = {
     }
 
     if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
-      throw new Error(
-        `Multitenant Entity Inbox replay for "${context.name}" requires tenantId.`,
-      );
+      throw new Error(`Multitenant Entity Inbox replay for "${context.name}" requires tenantId.`);
     }
 
     const envelopeTenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
@@ -4158,9 +4144,7 @@ const InboxReplay = {
     const expectedTargetId = InboxMessages.inboxTargetId(route.entityId);
 
     if (message.inboxId.targetId !== expectedTargetId) {
-      throw new Error(
-        "Entity Inbox replay stored target ID does not match the routed command.",
-      );
+      throw new Error("Entity Inbox replay stored target ID does not match the routed command.");
     }
   },
 
@@ -4185,9 +4169,7 @@ const InboxReplay = {
     );
 
     if (entityId === undefined) {
-      throw new Error(
-        "Entity Inbox replay stored target ID does not match the routed event.",
-      );
+      throw new Error("Entity Inbox replay stored target ID does not match the routed event.");
     }
 
     return entityId;
@@ -4419,10 +4401,7 @@ const RepositoryDispatch = {
           ? (["REACT_UPON_EVENT"] as const)
           : []),
       ]),
-      replay: (
-        message: InboxMessage,
-        deliveryTenantId?: string,
-      ): EntityInboxReplay =>
+      replay: (message: InboxMessage, deliveryTenantId?: string): EntityInboxReplay =>
         repository.entityFamily === "aggregate"
           ? InboxReplay.replayAggregateCommand(repository, routing, message, deliveryTenantId)
           : InboxReplay.replayPmInbox(repository, routing, message, deliveryTenantId),

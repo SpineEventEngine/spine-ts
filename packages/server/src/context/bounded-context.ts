@@ -698,7 +698,7 @@ export class BoundedContext {
       storageContext: ContextParts.createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
       stand: this.#stand,
-        entityInbox: this.#entityInbox,
+      entityInbox: this.#entityInbox,
       projectionInbox: this.#projectionInbox,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
       dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
