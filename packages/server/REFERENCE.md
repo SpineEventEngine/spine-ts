@@ -165,6 +165,12 @@ updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
 lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
 
+`BoundedContext.withDeliveryStrategy(strategy)` snapshots a validated immutable
+strategy for its Entity Inbox. Aggregate and Process Manager rows derive their
+target shard internally and persist their envelope before replay. Direct local
+delivery drains in the post request; attached environment ports acknowledge
+persisted work and replay it in a worker. Projection rows remain separate.
+
 `DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
 receives `{ source, delivery, onMessage }`, owns bounded shard notifications
 from that structural source, and must start after endpoints are ready and close
