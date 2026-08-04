@@ -60,7 +60,11 @@ exactly-once effects, or a production topology.
 creates one lazy `ServerEnvironmentDelivery`. The supplied durable quarantine
 transfers to that owner. Its `open()` creates one client plus one remote inbox
 and work registry, then completes the client's bounded `shardSnapshot()`
-readiness call before publishing those generic ports. Concurrent opens share an
+readiness call before publishing those generic ports and its Admin source.
+Every attached environment supervisor takes bounded snapshots, consumes later
+updates as wake-up hints, and takes a fresh snapshot after a watch failure or
+bounded observation overflow before consuming updates again. Durable Inbox rows
+and exclusive shard pickup remain authoritative. Concurrent opens share an
 attempt. A failed attempt closes only its client, does not close the quarantine,
 and a later open creates a fresh client.
 
