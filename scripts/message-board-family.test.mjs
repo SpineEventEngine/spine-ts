@@ -52,9 +52,9 @@ describe("MessageBoard family workspace migration", () => {
     expect(browserTypeScript).toContain('"extends": "../../../../../tsconfig.base.json"');
     expect(interopBrowserTypeScript).toContain('"extends": "../../../../../../tsconfig.base.json"');
     expect(familyReadme).toContain(
-      "[browser client, authentication, and gateway extension guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)",
+      "[Browser client, authentication, and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)",
     );
-    expect(familyReadme).toContain("Proto model is shared by a Node server and browser UI");
+    expect(familyReadme).toContain("Proto model is shared by the Node application and React UI");
     expect(references.map(({ path }) => path)).toEqual(
       expect.arrayContaining(
         familyPackages.map(([directory]) => `./examples/message-board/${directory}`),
