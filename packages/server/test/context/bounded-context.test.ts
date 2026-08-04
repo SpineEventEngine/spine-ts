@@ -42,6 +42,7 @@ import {
   ProcessManager,
   Projection,
   Repository,
+  UniformAcrossAllShards,
   type CommandEndpoint,
   type CommandDispatcher,
   type EventEndpoint,
@@ -471,6 +472,37 @@ describe("BoundedContext assembly", () => {
       "attached environment delivery",
     );
     await serverEnvironmentAccess.detach(ServerEnvironment.instance(), attachment);
+  });
+
+  it("enumerates every configured entity inbox shard from the context delivery strategy", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskProcessManager,
+        stateSchema: ProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignTask",
+            signalSchema: AggregateStateSchema,
+            emittedSchemas: [ProjectionStateSchema],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    const context = await BoundedContext.singleTenant("Tasks")
+      .withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))
+      .withGeneratedRegistryRoot(registryRoot)
+      .add(GeneratedTaskProcessManager)
+      .buildAsync();
+
+    expect(internalDeliveryDescriptor(context).endpoints()).toEqual([
+      ...[0, 1, 2].map((index) => ({
+        label: "HANDLE_COMMAND" as const,
+        targetTypeUrl: TypeUrls.derive(ProcessManagerStateSchema),
+        shard: { index, ofTotal: 3 },
+      })),
+    ]);
   });
 
   it("recovers a durable dynamic-tenant row through a fresh same-storage descriptor", async () => {
