@@ -1,6 +1,6 @@
 # T-0106 Review Record
 
-Status: Final Corrections Required
+Status: Accepted; Final Verification Pending
 
 ## Review Assignments And Results
 
@@ -51,12 +51,10 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
 
 ## Current Dispositions
 
-- Style/maintainability: corrections ready for final re-review; generic command
-  handoff now uses Entity Inbox terminology while PM event helpers remain PM-named.
-- Documentation: corrections ready for final re-review; README/REFERENCE use a
-  complete public `BoundedContext.singleTenant(...).withDeliveryStrategy(...)` example.
-- TypeScript/API docs: corrections ready for final re-review; the builder example
-  now matches the public API.
+- Style/maintainability: clean after final generic command-helper rename.
+- Documentation: clean after the public builder-chain example correction.
+- TypeScript/API docs: clean; replay typing and the executable public example
+  are accepted.
 - Performance/reliability: clean after correction re-review.
 - Security: N/A unless implementation changes a trust boundary.
 
@@ -87,3 +85,7 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
   style/API/documentation findings except two deterministic P2 corrections:
   finish generic naming on the shared command tenant/context helpers, and use
   `BoundedContext.singleTenant(...)` in the README/REFERENCE strategy example.
+- Final re-review at `19f7af15` returned style, TypeScript/API, and
+  documentation clean. The API reviewer executed the corrected public builder
+  example successfully against the built package. No concern remains open;
+  final `verify:release` is pending.
