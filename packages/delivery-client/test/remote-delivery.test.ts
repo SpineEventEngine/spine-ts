@@ -292,6 +292,18 @@ describe("RemoteDelivery", () => {
     expect(remote.clients).toHaveLength(1);
   });
 
+  it("reuses the published facility after readiness has completed", async () => {
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+    });
+
+    await delivery.open();
+    await delivery.open();
+
+    expect(remote.clients).toHaveLength(1);
+  });
+
   it("rolls back a failed open and retries with a fresh client without closing the quarantine", async () => {
     remote.readiness.push(
       () => Promise.reject(new Error("readiness failed")),

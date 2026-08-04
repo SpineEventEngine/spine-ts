@@ -74,6 +74,16 @@ describe("RemoteWorkRegistry", () => {
     );
   });
 
+  it("rejects a blank worker node before attempting remote ownership", async () => {
+    const fake = transport();
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+
+    await expect(registry.pickUp(ShardIndex.single(), "   ")).rejects.toThrow(
+      "Delivery worker node is invalid.",
+    );
+    expect(fake.unary).not.toHaveBeenCalled();
+  });
+
   it("uses a distinct opaque worker value for each remote pickup while retaining the node", async () => {
     const workers: { nodeId: string; value: string }[] = [];
     const client = DeliveryClient.usingTransport(workerTransport(workers));

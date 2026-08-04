@@ -48,6 +48,46 @@ describe("RemoteInbox and remote work adapters", () => {
     expect(fake.unary).toHaveBeenCalledTimes(5);
   });
 
+  it("forwards caller read bounds and clears a quarantined row that no longer exists", async () => {
+    const fake = transport();
+    const controller = new AbortController();
+    const key = "0/1:missing";
+    const records = new Map([[key, { id: key, phase: "REMOVING" as const, fingerprint: "known" }]]);
+    const quarantineWithMissingRow = {
+      get: (id: string) => Promise.resolve(records.get(id)),
+      put: () => Promise.resolve(),
+      delete: (id: string) => {
+        records.delete(id);
+        return Promise.resolve();
+      },
+      close: () => Promise.resolve(),
+    };
+    const inbox = new RemoteInbox(
+      DeliveryClient.usingTransport(fake.transport),
+      quarantineWithMissingRow,
+    );
+    fake.reply(create(PageOfMessagesSchema));
+
+    await expect(
+      inbox.read(ShardIndex.single(), { signal: controller.signal, timeoutMs: 321 }),
+    ).resolves.toEqual([]);
+    expect(fake.unary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "FindManyInShard" }),
+      expect.any(AbortSignal),
+      321,
+      undefined,
+      expect.anything(),
+    );
+    fake.reply(create(OptionalInboxMessageSchema));
+    await expect(
+      inbox.begin(
+        { ...domainMessage("missing"), id: { value: "missing", shard: ShardIndex.single() } },
+        { kind: "EXCLUSIVE", shard: ShardIndex.single() },
+      ),
+    ).resolves.toBeUndefined();
+    expect(records).toEqual(new Map());
+  });
+
   it("fails closed at a timestamp-tied remote page boundary and quarantines unknown shard release", async () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport, { pageSize: 2 });
