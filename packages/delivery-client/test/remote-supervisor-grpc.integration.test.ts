@@ -1,10 +1,12 @@
 import { DeliveryServer } from "../../delivery-server/src/index.js";
+import { DeliveryClient } from "../src/index.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 
 const servers: DeliveryServer[] = [];
 const applications = new Set<ChildProcess>();
+const clients: DeliveryClient[] = [];
 const applicationFixture = resolve(
   "packages/delivery-client/test-fixtures/remote-environment-app.mjs",
 );
@@ -12,7 +14,43 @@ const applicationFixture = resolve(
 afterEach(async () => {
   await Promise.all([...applications].map(stop));
   applications.clear();
+  for (const client of clients.splice(0)) client.close();
   await Promise.all(servers.splice(0).map((server) => server.close()));
+});
+
+it("fences an expired blocked owner before its delayed commit can disturb a replacement", async () => {
+  const server = trackedServer();
+  await server.start();
+  const alpha = application(server.baseUrl, "alpha");
+  const beta = application(server.baseUrl, "beta");
+  const events: { readonly node: string; readonly signalId: string }[] = [];
+  for (const child of [alpha, beta])
+    child.on("message", (frame: unknown) => {
+      if (isDispatch(frame)) events.push(frame);
+    });
+  await Promise.all([ready(alpha), ready(beta)]);
+  await Promise.all([
+    command(alpha, { command: "block-first" }),
+    command(beta, { command: "block-first" }),
+  ]);
+  await command(alpha, { command: "write", signalId: "first" });
+  await eventually(() => {
+    expect(events.filter((event) => event.signalId === "first-started")).toHaveLength(1);
+  });
+  const owner = events.find((event) => event.signalId === "first-started")?.node;
+  const replacement = owner === "alpha" ? beta : alpha;
+  const admin = DeliveryClient.connectTo(server.baseUrl);
+  clients.push(admin);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await admin.releaseExpired(1);
+  await eventually(() => {
+    expect(events.filter((event) => event.node !== owner && event.signalId === "committed")).toHaveLength(1);
+  });
+  await Promise.all([command(alpha, { command: "release-first" }), command(beta, { command: "release-first" })]);
+  await eventually(() => {
+    expect(events.filter((event) => event.node === owner && event.signalId === "fenced")).toHaveLength(1);
+  });
+  expect(replacement.exitCode).toBeNull();
 });
 
 it("fans out one real Admin shard update through two remote ServerEnvironment assemblies", async () => {
