@@ -24,6 +24,7 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-event-engine/proto";
+import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -58,6 +59,7 @@ import type { InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import { ServerEnvironment } from "../../src/server/server-environment.js";
+import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 interface InternalSystemPairing {
@@ -1728,6 +1730,73 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
+  it("transfers and closes a custom subscription registry on a failed first build", async () => {
+    const registry = new ObservingSubscriptionRegistry();
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const existing = BoundedContext.singleTenant("Existing").add(repository).build();
+    const builder = BoundedContext.singleTenant("Tasks")
+      .withSubscriptionRegistry(registry)
+      .add(repository);
+
+    try {
+      expect(() => builder.build()).toThrow("already registered with Bounded Context");
+      expect(registry.closeCalls).toBe(1);
+
+      builder.remove(repository);
+      const rebuilt = builder.build();
+      expect(boundedContextAccess.subscriptionRegistry(rebuilt)).not.toBe(registry);
+      await rebuilt.close();
+    } finally {
+      await existing.close();
+    }
+  });
+
+  it("rejects combining a custom subscription registry and a built-in limit in either order", () => {
+    expect(() =>
+      BoundedContext.singleTenant("Tasks")
+        .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
+        .withSubscriptionLimit(1),
+    ).toThrow("A custom subscription registry cannot use a subscription limit.");
+    expect(() =>
+      BoundedContext.singleTenant("Tasks")
+        .withSubscriptionLimit(1)
+        .withSubscriptionRegistry(new InMemorySubscriptionRegistry()),
+    ).toThrow("A custom subscription registry cannot use a subscription limit.");
+  });
+
+  it("builds the limited default registry from the configured storage factory", async () => {
+    const storageFactory = new ObservingStorageFactory([]);
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .withSubscriptionLimit(1)
+      .build();
+    const registry = boundedContextAccess.subscriptionRegistry(context);
+
+    try {
+      await registry.create(
+        create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: "one" }),
+          topic: { id: { value: "tasks" } },
+        }),
+      );
+      await expect(
+        registry.create(
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: "two" }),
+            topic: { id: { value: "tasks" } },
+          }),
+        ),
+      ).rejects.toThrow("Stand subscription capacity of 1 is exhausted.");
+      expect(registry.persistent).toBe(true);
+      expect(storageFactory.creations).toHaveLength(3);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("waits for in-flight direct Stand updates before closing subscriptions", async () => {
     const storageFactory = new DelayingStorageFactory();
     const repository = new Repository({
@@ -1910,6 +1979,15 @@ class DelayingStorageFactory extends InMemoryStorageFactory {
         storage.close();
       },
     };
+  }
+}
+
+class ObservingSubscriptionRegistry extends InMemorySubscriptionRegistry {
+  closeCalls = 0;
+
+  override async close(): Promise<void> {
+    this.closeCalls += 1;
+    await super.close();
   }
 }
 

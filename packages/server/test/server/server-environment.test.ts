@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { StorageContext } from "@spine-event-engine/storage";
+import { InMemoryStorageFactory, type StorageContext } from "@spine-event-engine/storage";
 
 import {
   ServerEnvironment,
@@ -10,7 +10,10 @@ import type { ContextDeliveryDescriptor } from "../../src/context/bounded-contex
 import { DeliveryBuilder } from "../../src/delivery/delivery-builder.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
-import { EnvironmentType } from "../../src/server/environment.js";
+import { EnvironmentTests, EnvironmentType } from "../../src/server/environment.js";
+import { BoundedContext } from "../../src/context/bounded-context.js";
+import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
+import { Server } from "../../src/server/server.js";
 import { resetServerEnvironmentForTest } from "../../src/testing/index.js";
 
 afterEach(async () => {
@@ -25,6 +28,70 @@ function configured(
 }
 
 describe("ServerEnvironment delivery lifecycle", () => {
+  it("warns once for a volatile registry in production and never in local", async () => {
+    const warnings: string[] = [];
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      warn: (message) => warnings.push(message),
+    });
+    const production = ServerEnvironment.instance();
+    const context = BoundedContext.singleTenant("Tasks")
+      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
+      .build();
+
+    try {
+      serverEnvironmentAccess.warnVolatileRegistry(production, context);
+      serverEnvironmentAccess.warnVolatileRegistry(production, context);
+      expect(warnings).toEqual([
+        'Stand subscription registry for context "Tasks" is not persistent.',
+      ]);
+    } finally {
+      await context.close();
+      await production.close();
+    }
+  });
+
+  it("does not warn for a volatile registry in a local environment", async () => {
+    const warnings: string[] = [];
+    ServerEnvironment.when(EnvironmentType.Local).use({
+      warn: (message) => warnings.push(message),
+    });
+    const environment = ServerEnvironment.instance();
+    const context = BoundedContext.singleTenant("Tasks")
+      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
+      .build();
+
+    try {
+      serverEnvironmentAccess.warnVolatileRegistry(environment, context);
+      expect(warnings).toEqual([]);
+    } finally {
+      await context.close();
+      await environment.close();
+    }
+  });
+
+  it("warns before Server.start attaches a production context", async () => {
+    const warnings: string[] = [];
+    EnvironmentTests.use(EnvironmentType.Production);
+    ServerEnvironment.when(EnvironmentType.Production).use({
+      storageFactory: new InMemoryStorageFactory(),
+      transport: { close: () => undefined } as never,
+      warn: (message) => warnings.push(message),
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .withSubscriptionRegistry(new InMemorySubscriptionRegistry())
+      .build();
+    const server = new Server({ contexts: [context], port: 0 });
+
+    const running = await server.start();
+    expect(warnings).toEqual([
+      'Stand subscription registry for context "Tasks" is not persistent.',
+    ]);
+    await running.close();
+  });
+
   it("routes configured ports through the real attachment factory to finite and supervisor delivery", async () => {
     let finiteReads = 0;
     let finitePickups = 0;

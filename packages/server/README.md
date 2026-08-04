@@ -45,6 +45,34 @@ Use `withStorageFactory()` to choose storage. Use
 register explicitly assembled repositories with `add()`. `buildAsync()` is the
 normal choice for an application that uses generated handlers.
 
+### Keep Stand subscription definitions
+
+Stand subscription definitions use your context storage by default. The default
+registry keeps up to 100 definitions; choose a smaller limit when that better
+fits the application.
+
+```ts
+import { BoundedContext } from "@spine-event-engine/server";
+
+const context = BoundedContext.singleTenant("Tasks").withSubscriptionLimit(25).build();
+```
+
+For an application-specific registry, provide one complete implementation.
+The built context owns and closes it. Do not combine a custom registry with
+`withSubscriptionLimit()`.
+
+```ts
+import { BoundedContext, type StandSubscriptionRegistry } from "@spine-event-engine/server";
+
+declare const registry: StandSubscriptionRegistry;
+
+const context = BoundedContext.singleTenant("Tasks").withSubscriptionRegistry(registry).build();
+```
+
+An in-memory registry is useful in local development and tests. When a
+production server attaches a context with one, it emits one warning naming the
+context because definitions disappear on restart; startup still continues.
+
 An aggregate receives a generated command type in an `@Assign` method. The
 generator discovers this method and writes the registry used by `buildAsync()`;
 run `spine-proto handlers` after changing it.

@@ -1316,15 +1316,25 @@ export class BoundedContextBuilder {
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
   ): BoundedContext {
-    const registeredRepositories = [...repositories];
-    ContextParts.preflightRepositories(registeredRepositories);
-    const commandBus = new CommandBus([
-      ...this.#commandDispatchers,
-      ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
-    ]);
-    const eventStore = this.createEventStore(storageFactory);
+    const registry =
+      this.#subscriptionRegistry ??
+      new StorageSubscriptionRegistry(
+        ContextParts.createStorageContext(this.#specSnapshot),
+        storageFactory,
+        this.#subscriptionLimit,
+      );
+    this.#subscriptionRegistry = undefined;
 
+    const registeredRepositories = [...repositories];
+    let eventStore: EventStore | undefined;
+    let stand: Stand | undefined;
     try {
+      ContextParts.preflightRepositories(registeredRepositories);
+      const commandBus = new CommandBus([
+        ...this.#commandDispatchers,
+        ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
+      ]);
+      eventStore = this.createEventStore(storageFactory);
       const eventBus = new EventBus(eventStore, [
         ...ContextParts.repositoryEventDispatchers(registeredRepositories),
         ...this.#eventDispatchers,
@@ -1333,18 +1343,10 @@ export class BoundedContextBuilder {
         eventBus,
         ContextParts.repositoryProducedEventSchemas(registeredRepositories),
       );
-      const stand = new Stand({
+      stand = new Stand({
         context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
-      const registry =
-        this.#subscriptionRegistry ??
-        new StorageSubscriptionRegistry(
-          ContextParts.createStorageContext(this.#specSnapshot),
-          storageFactory,
-          this.#subscriptionLimit,
-        );
-      this.#subscriptionRegistry = undefined;
       return ContextParts.createBoundedContext(
         this.#specSnapshot,
         commandBus,
@@ -1356,7 +1358,11 @@ export class BoundedContextBuilder {
         this.#deliveryStrategy,
       );
     } catch (error) {
-      ContextParts.closeEventStore(eventStore, error);
+      void registry.close();
+      void stand?.close();
+      if (eventStore !== undefined) {
+        ContextParts.closeEventStore(eventStore, error);
+      }
       throw error;
     }
   }

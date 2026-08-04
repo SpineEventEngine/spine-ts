@@ -13,6 +13,36 @@ handler registry for classes registered with `add(EntityClass)`;
 explicit `Repository` registration. A built context owns `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 
+### Stand subscription registry
+
+Each built context also owns one `StandSubscriptionRegistry`. By default the
+builder creates a storage-backed registry from the resolved context
+`StorageFactory` (including the `ServerEnvironment` factory used for a builder
+added to a server). Its capacity is 100 definitions, or a configured positive
+safe-integer lower limit through `withSubscriptionLimit(limit)`. A complete
+custom implementation can instead be supplied with
+`withSubscriptionRegistry(registry)`; the two options are mutually exclusive,
+and builder ownership transfers on the first build attempt.
+
+Create records begin `pending` and expire after 30 seconds unless activated.
+Active records have no framework TTL. Cancellation physically deletes the
+definition and releases capacity; no tombstone remains. A stored definition is
+at most 1 MiB (1,048,576 bytes). `cleanup()` visits a finite page of at most 25
+expired pending definitions, and can run idempotently on every node.
+
+Context close drains and closes Stand before its registry, then closes tenant,
+repository, and storage resources; it attempts every close and reports
+aggregate failures. An in-memory registry reports `persistent === false`.
+Attaching such a context to a production `ServerEnvironment` emits one
+context-name-only warning without failing startup; Local environments do not
+warn.
+
+The generic storage seam has no native two-row transaction. A crash can leave a
+staged control operation that the registry settles during its next
+startup/operation. T-0109 is required for cross-node polling and listener
+reconciliation: this registry alone provides no cross-node polling or listener
+completeness guarantee.
+
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
 `@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. In a transactional
