@@ -25,7 +25,7 @@ export class LocalEntityInbox implements EntityInbox {
   readonly #strategy: DeliveryStrategy;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
-  #followUp = Promise.resolve();
+  readonly #followUps = new Map<string, Promise<void>>();
   readonly #followUpScope = new AsyncLocalStorage<symbol>();
   readonly #followUpToken = Symbol("entity-inbox-follow-up");
   #nextVersion = 0n;
@@ -111,7 +111,7 @@ export class LocalEntityInbox implements EntityInbox {
     input: EntityInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    const routedInput = this.#withShard(input);
+    const routedInput = this.#route(input);
     const routed = this.#readiness.route(delivery);
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
@@ -133,14 +133,15 @@ export class LocalEntityInbox implements EntityInbox {
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
     const routed = this.#readiness.route(delivery);
-    const key = this.#batchKey(inputs, deliveryTenantId);
+    const routedInputs = inputs.map((input) => this.#route(input));
+    const key = this.#batchKey(routedInputs, deliveryTenantId);
     const inFlightHandoff = this.#inFlightBatchHandoffs.get(key);
 
     if (inFlightHandoff !== undefined) {
       return await inFlightHandoff;
     }
 
-    const handoff = this.#receiveAndDrainAll(routed, inputs, deliveryTenantId);
+    const handoff = this.#receiveAndDrainAll(routed, routedInputs, deliveryTenantId);
     this.#inFlightBatchHandoffs.set(key, handoff);
     try {
       return await handoff;
@@ -153,10 +154,10 @@ export class LocalEntityInbox implements EntityInbox {
 
   async #receiveAndDrain(
     delivery: Delivery,
-    input: EntityInput,
+    input: RoutedEntityInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
-    if (this.#followUpScope.getStore() !== this.#followUpToken) await this.#followUp;
+    await this.#awaitFollowUp(input, deliveryTenantId);
     await this.#keepDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
@@ -168,10 +169,10 @@ export class LocalEntityInbox implements EntityInbox {
 
   async #receiveAndDrainAll(
     delivery: Delivery,
-    inputs: EntityInputs,
+    inputs: readonly RoutedEntityInput[],
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
-    if (this.#followUpScope.getStore() !== this.#followUpToken) await this.#followUp;
+    await Promise.all(inputs.map((input) => this.#awaitFollowUp(input, deliveryTenantId)));
     await this.#keepDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const whenReceived = new Date();
@@ -254,7 +255,7 @@ export class LocalEntityInbox implements EntityInbox {
 
   async #writeInboxRow(
     delivery: Delivery,
-    input: EntityInput,
+    input: RoutedEntityInput,
     whenReceived: Date,
     deliveryTenantId?: string,
   ): Promise<InboxWrite> {
@@ -263,7 +264,7 @@ export class LocalEntityInbox implements EntityInbox {
       signalId: input.signalId,
       label: input.label,
       status: input.status,
-      shard: this.#strategy.shardFor(input.inboxId.targetId, input.inboxId.targetTypeUrl),
+      shard: input.shard,
       whenReceived,
       version: this.#takeVersion(),
       ...(input.signal === undefined ? {} : { signal: input.signal }),
@@ -306,15 +307,13 @@ export class LocalEntityInbox implements EntityInbox {
     });
     if (followUp !== undefined) {
       const nextFollowUp = followUp;
-      this.#followUp = this.#followUpScope.run(this.#followUpToken, () =>
-        nextFollowUp().catch(() => undefined),
-      );
+      this.#chainFollowUp(message, deliveryTenantId, nextFollowUp);
     }
   }
 
-  #claimRows(inputs: EntityInputs, deliveryTenantId?: string): BatchRow[] {
+  #claimRows(inputs: readonly RoutedEntityInput[], deliveryTenantId?: string): BatchRow[] {
     return inputs.map((input) => {
-      const key = InboxHandoff.key(this.#withShard(input), deliveryTenantId);
+      const key = InboxHandoff.key(input, deliveryTenantId);
       const inFlight = this.#inFlightHandoffs.get(key);
 
       if (inFlight !== undefined) {
@@ -340,17 +339,34 @@ export class LocalEntityInbox implements EntityInbox {
     return this.#nextVersion;
   }
 
-  #withShard(input: EntityInput): EntityInput & { readonly shard: ShardIndex } {
+  #route(input: EntityInput): RoutedEntityInput {
     return Object.freeze({
       ...input,
       shard: this.#strategy.shardFor(input.inboxId.targetId, input.inboxId.targetTypeUrl),
     });
   }
 
-  #batchKey(inputs: EntityInputs, deliveryTenantId?: string): string {
-    return JSON.stringify(
-      inputs.map((input) => InboxHandoff.key(this.#withShard(input), deliveryTenantId)),
-    );
+  #batchKey(inputs: readonly RoutedEntityInput[], deliveryTenantId?: string): string {
+    return JSON.stringify(inputs.map((input) => InboxHandoff.key(input, deliveryTenantId)));
+  }
+
+  async #awaitFollowUp(input: RoutedEntityInput, tenantId?: string): Promise<void> {
+    if (this.#followUpScope.getStore() === this.#followUpToken) return;
+    await this.#followUps.get(this.#followUpKey(input.shard, tenantId));
+  }
+
+  #chainFollowUp(message: InboxMessage, tenantId: string | undefined, callback: EntityInboxFollowUp): void {
+    const key = this.#followUpKey(message.shard, tenantId);
+    const prior = this.#followUps.get(key) ?? Promise.resolve();
+    const next: Promise<void> = prior
+      .then(() => this.#followUpScope.run(this.#followUpToken, callback))
+      .catch(() => undefined);
+    this.#followUps.set(key, next);
+    void next.finally(() => { if (this.#followUps.get(key) === next) this.#followUps.delete(key); });
+  }
+
+  #followUpKey(shard: ShardIndex, tenantId?: string): string {
+    return `${tenantId ?? ""}:${shard.index}:${shard.ofTotal}`;
   }
 
   async #replay(
@@ -368,8 +384,9 @@ export class LocalEntityInbox implements EntityInbox {
       );
     }
 
+    if (message.shard.index !== this.#strategy.shardFor(message.inboxId.targetId, message.inboxId.targetTypeUrl).index || message.shard.ofTotal !== this.#strategy.shardFor(message.inboxId.targetId, message.inboxId.targetTypeUrl).ofTotal) throw new Error("Entity Inbox replay stored shard does not match the routed target.");
     const followUp = await target.replay(message, deliveryTenantId);
-    const callback = typeof followUp === "function" ? (followUp as () => Promise<void>) : undefined;
+    const callback = typeof followUp === "function" ? (followUp as EntityInboxFollowUp) : undefined;
     if (callback !== undefined && runFollowUp) await callback();
     return callback;
   }
@@ -410,6 +427,8 @@ export class LocalEntityInbox implements EntityInbox {
 type EntityInput = Parameters<EntityInbox["receive"]>[1];
 type EntityInputs = Parameters<EntityInbox["receiveAll"]>[1];
 type EntityMessage = Parameters<EntityInboxTarget["replay"]>[0];
+type EntityInboxFollowUp = () => Promise<void>;
+type RoutedEntityInput = EntityInput & { readonly shard: ShardIndex };
 
 interface InboxDeferred {
   readonly promise: Promise<InboxMessage>;
@@ -426,7 +445,7 @@ interface InboxWrite {
 
 interface BatchRow {
   readonly key: string;
-  readonly input: EntityInput;
+  readonly input: RoutedEntityInput;
   readonly promise: Promise<InboxMessage>;
   readonly owner?: InboxDeferred;
 }
