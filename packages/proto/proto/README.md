@@ -15,8 +15,9 @@ the same commands, events, queries, subscriptions, and context messages.
 - ✅ Generated TypeScript always comes from a known contract set.
 
 The complete inventory is [`spine-sources.json`](spine-sources.json). It pins
-39 source files. Buf adds standard imported descriptors while compiling them,
-producing the 48-file descriptor set checked by this repository.
+41 frozen source files and two Spine TS-owned internal schemas. Buf adds
+standard imported descriptors while compiling them, producing the 52-file
+descriptor set checked by this repository.
 
 ## 🚀 Verify and generate
 
@@ -50,6 +51,9 @@ Some copied Spine files use legacy enum, field, package, or version names. They
 remain unchanged because they are wire contracts shared with Spine JVM. New
 application Proto packages should follow the current naming guidance in the
 [end-user guide](../../../docs/USER_GUIDE.md).
+
+The `spine/system/server` schemas are framework-internal contracts. They are
+generated for Spine TS runtime packages but are not curated end-user exports.
 
 ## 🔗 Learn more
 

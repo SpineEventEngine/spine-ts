@@ -54,6 +54,19 @@ provenance, generated package metadata, and package compatibility policy.
 9. Update the Proto human/reference documentation in the same slice, without
    end-user Wave/task jargon.
 
+## Stand Record Validation Boundary
+
+`StandSubscriptionRecord` deliberately records the serialized storage shape;
+it does not declare `(required)` or `(validate)` options on its lifecycle
+fields. A valid record depends on lifecycle semantics that Protobuf options
+cannot express: `subscription` must carry a usable identifier and topic,
+`phase` must be a known lifecycle value, `created_at` must be present, and
+`pending_until` is allowed only while pending. T-0108 owns that codec and
+registry validation boundary, including rejecting malformed records before
+they enter storage. This task proves the wire fields, the required/validated
+constraints frozen on `EntityStateChanged`, and that `pending_until` remains
+optional; it does not introduce a partial parallel validator.
+
 ## Explicit Exclusions
 
 - No Stand registry persistence or codec implementation; T-0108 owns it.

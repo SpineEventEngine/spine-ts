@@ -309,6 +309,24 @@
       "sha256": "7d2dda37e838108b1594ca51730c945feed38d4478697c44639df221c3f370c7"
     },
     {
+      "localPath": "packages/proto/proto/spine/system/server/entity_log_events.proto",
+      "repository": "SpineEventEngine/core-java",
+      "commit": "461a8281e484c12636d8cf660a1d6c929fbbd7ec",
+      "upstreamPath": "server/src/main/proto/spine/system/server/entity_log_events.proto",
+      "sourceUrl": "https://github.com/SpineEventEngine/core-java/blob/461a8281e484c12636d8cf660a1d6c929fbbd7ec/server/src/main/proto/spine/system/server/entity_log_events.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/core-java/461a8281e484c12636d8cf660a1d6c929fbbd7ec/server/src/main/proto/spine/system/server/entity_log_events.proto",
+      "sha256": "2f8be499197294340eac652eb38bb14357ff93cabef957daee7f57109f1a07cc"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/system/server/entity_type.proto",
+      "repository": "SpineEventEngine/core-java",
+      "commit": "461a8281e484c12636d8cf660a1d6c929fbbd7ec",
+      "upstreamPath": "server/src/main/proto/spine/system/server/entity_type.proto",
+      "sourceUrl": "https://github.com/SpineEventEngine/core-java/blob/461a8281e484c12636d8cf660a1d6c929fbbd7ec/server/src/main/proto/spine/system/server/entity_type.proto",
+      "rawUrl": "https://raw.githubusercontent.com/SpineEventEngine/core-java/461a8281e484c12636d8cf660a1d6c929fbbd7ec/server/src/main/proto/spine/system/server/entity_type.proto",
+      "sha256": "840c597d31c9cbcbd54709c42cba046e02d25523816476190e3966a624b90fc4"
+    },
+    {
       "localPath": "packages/proto/proto/spine/string/template_string.proto",
       "repository": "SpineEventEngine/base",
       "commit": "43b55858c410eaf79fc594ca6f3f3eab0daca027",
@@ -358,6 +376,10 @@
     {
       "localPath": "packages/proto/proto/spine/auth/authentication_service.proto",
       "sha256": "a28d10348b25d64bd5ff1c2ae1beb61d2cfb0775e708dcd5ffa487d91f705a9a"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/system/server/stand_subscription.proto",
+      "sha256": "791149c01793bc7cafdcdad009f01e12a7fbeabaeecf656de153ddd89ed5cd69"
     }
   ]
 }

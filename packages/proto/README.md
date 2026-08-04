@@ -41,6 +41,11 @@ The package root exports commonly used Spine schemas such as `CommandSchema`,
 `EventSchema`, `ActorContextSchema`, `TenantIdSchema`, and the Spine option
 extensions.
 
+Some generated schemas are internal runtime plumbing. For example, the system
+entity-change and Stand subscription records are available to framework
+packages through their generated paths, but are deliberately not part of the
+curated package API for application code.
+
 ## 📦 Depend on it from an application model
 
 An application-owned model package declares this package both as an npm

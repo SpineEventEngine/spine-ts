@@ -110,6 +110,12 @@ enum SubscriptionPhase {
 }
 ```
 
+The record intentionally has no partial Proto-option validator. Its valid
+lifecycle requires a usable subscription identifier/topic, a known phase, a
+creation time, a pending deadline only for `PENDING`, and coherent revision
+semantics. T-0105 proves the exact wire/descriptor shape; T-0108 owns
+executable malformed-record and lifecycle rejection in the registry codec.
+
 The storage key is the subscription ID. `Subscription.topic` is the sole topic
 representation; the record does not duplicate it. A provider may index `phase`
 and `pending_until` for cleanup. Fifty active
@@ -264,8 +270,10 @@ warning. It does not own local listener reconciliation.
 - RED: 50 rows for 50 active subscriptions, atomic cross-node admission at the
   100-definition default capacity, record/snapshot bounds, concurrent cleanup,
   capacity release, delete without tombstone, activate/delete and snapshot/delete
-  races, restart recovery, custom implementation ownership, close ordering,
-  production warning/no failure.
+  races, malformed-record rejection (usable identifier/topic, known phase,
+  creation time, pending deadline only while `PENDING`, and revision semantics),
+  restart recovery, custom implementation ownership, close ordering, production
+  warning/no failure.
 - Review: all four concerns; persistence/lifecycle at Terra/high.
 - Verification: memory/MySQL/Datastore conformance where configured, focused
   context lifecycle tests, then `verify:release`.
