@@ -211,6 +211,29 @@ it("recovers an overflowed tiny-buffer RemoteDelivery source through its environ
   });
 }, 15_000);
 
+it("surfaces a child aggregated close failure instead of accepting a zero exit", async () => {
+  const server = trackedServer();
+  await server.start();
+  const child = application(server.baseUrl, "close-failure", {
+    DELIVERY_FIXTURE_CLOSE_FAILURE: "true",
+  });
+  await ready(child);
+
+  await expect(stop(child, 1_000)).rejects.toThrow("Fixture process exited unsuccessfully.");
+});
+
+it("forces a child that ignores graceful shutdown and settles its forced exit", async () => {
+  const child = spawn(process.execPath, [
+    "-e",
+    "setInterval(() => undefined, 1000); process.on('SIGTERM', () => undefined)",
+  ]);
+  applications.add(child);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  await expect(stop(child, 10)).resolves.toBeUndefined();
+  expect(child.signalCode).toBe("SIGKILL");
+});
+
 function trackedServer(port = 0): DeliveryServer {
   const server = new DeliveryServer({ host: "127.0.0.1", port });
   servers.push(server);
@@ -273,15 +296,16 @@ function receive(child: ChildProcess, type: string, id?: string): Promise<unknow
   });
 }
 
-async function stop(child: ChildProcess): Promise<void> {
+async function stop(child: ChildProcess, timeoutMs = 5_000): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGTERM");
   try {
-    await exitWithin(child, 5_000);
+    await exitWithin(child, timeoutMs);
   } catch (gracefulFailure) {
+    if (gracefulFailure instanceof FixtureExitError) throw gracefulFailure;
     child.kill("SIGKILL");
     try {
-      await exitWithin(child, 5_000);
+      await exitWithin(child, timeoutMs);
     } catch (forcedFailure) {
       throw new AggregateError([gracefulFailure, forcedFailure], "Fixture shutdown failed.");
     }
@@ -289,16 +313,31 @@ async function stop(child: ChildProcess): Promise<void> {
 }
 
 function exitWithin(child: ChildProcess, timeoutMs: number): Promise<void> {
-  return Promise.race([
-    new Promise<void>((resolve) => {
-      child.once("exit", resolve);
-    }),
-    new Promise<void>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error("Fixture shutdown timed out."));
-      }, timeoutMs);
-    }),
-  ]);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off("exit", onExit);
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      if (code === 0 || signal !== null) finish();
+      else finish(new FixtureExitError());
+    };
+    const timer = setTimeout(() => {
+      finish(new Error("Fixture shutdown timed out."));
+    }, timeoutMs);
+    child.once("exit", onExit);
+  });
+}
+
+class FixtureExitError extends Error {
+  constructor() {
+    super("Fixture process exited unsuccessfully.");
+  }
 }
 
 function isDispatch(value: unknown): value is { readonly node: string; readonly signalId: string } {

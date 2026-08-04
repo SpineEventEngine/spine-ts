@@ -10,6 +10,7 @@ import process from "node:process";
 const endpoint = process.env.DELIVERY_SERVER_URL;
 const node = process.env.DELIVERY_NODE;
 const observationBufferSize = Number(process.env.DELIVERY_OBSERVATION_BUFFER ?? "100");
+const forceCloseFailure = process.env.DELIVERY_FIXTURE_CLOSE_FAILURE === "true";
 if (endpoint === undefined || node === undefined || process.send === undefined) process.exit(1);
 
 const quarantine = new Map();
@@ -25,7 +26,10 @@ const delivery = RemoteDelivery.connectTo({
       quarantine.delete(id);
       return Promise.resolve();
     },
-    close: () => Promise.resolve(),
+    close: () =>
+      forceCloseFailure
+        ? Promise.reject(new Error("Fixture close failure requested."))
+        : Promise.resolve(),
   },
   clientOptions: { observationBufferSize, observationReconnects: 0 },
 });
@@ -146,12 +150,12 @@ process.on("message", async (frame) => {
 async function close() {
   const failures = [];
   try {
-    await environment.close();
+    await serverEnvironmentAccess.detach(environment, attachment);
   } catch (error) {
     failures.push(error);
   }
   try {
-    await serverEnvironmentAccess.detach(environment, attachment);
+    await environment.close();
   } catch (error) {
     failures.push(error);
   }
@@ -163,7 +167,16 @@ process.once("SIGTERM", () => {
   releaseFirst.resolve();
   holdSource = false;
   releaseSource.resolve();
-  void close().finally(() => process.exit(0));
+  void close().then(
+    () => process.exit(0),
+    (error) => {
+      process.send({
+        type: "error",
+        error: error instanceof Error ? error.message : "Fixture close failed.",
+      });
+      process.exit(1);
+    },
+  );
 });
 process.send({ type: "ready" });
 
