@@ -1,96 +1,224 @@
-import { create } from "@bufbuild/protobuf";
-import { SubscriptionSchema } from "@spine-event-engine/proto/client";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
-import { describe, expect, it } from "vitest";
+import { create, toBinary } from "@bufbuild/protobuf";
+import {
+  SubscriptionIdSchema,
+  SubscriptionSchema,
+  type Subscription,
+  type SubscriptionId,
+} from "@spine-event-engine/proto/client";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   InMemorySubscriptionRegistry,
-  StorageSubscriptionRegistry,
   StandCapacityError,
-} from "../../src/stand/subscription-registry.js";
+  StandConflictError,
+  type StandActivateResult,
+  type StandCleanupResult,
+  type StandCreateResult,
+  type StandDeleteResult,
+  type StandSubscriptionEntry,
+  type StandSubscriptionRegistry,
+} from "../../src/index.js";
 import { StandSubscriptionRecords } from "../../src/stand/subscription-records.js";
-import { BoundedContext } from "../../src/index.js";
+
+const start = 1_000_000;
+
+function id(value: string): SubscriptionId {
+  return create(SubscriptionIdSchema, { value });
+}
+
+function subscription(value: string, topic = "topic"): Subscription {
+  return create(SubscriptionSchema, { id: id(value), topic: { id: { value: topic } } });
+}
 
 describe("InMemorySubscriptionRegistry", () => {
-  it("creates a pending definition, activates it, and physically deletes it", async () => {
-    const registry = new InMemorySubscriptionRegistry();
-    const subscription = create(SubscriptionSchema, {
-      id: { value: "sub-1" },
-      topic: { type: "topic" },
-    });
+  it("creates a pending definition with the exact 30-second deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const registry = new InMemorySubscriptionRegistry();
+      const result = await registry.create(subscription("one"));
 
-    const created = await registry.create(subscription);
-    expect(created.entry.phase).toBe("PENDING");
-    expect((await registry.activate("sub-1")).entry?.phase).toBe("ACTIVE");
-    expect((await registry.delete("sub-1")).deleted).toBe(true);
-    expect(await registry.get("sub-1")).toBeUndefined();
-  });
-
-  it("refuses the 101st definition", async () => {
-    const registry = new InMemorySubscriptionRegistry();
-    for (let value = 0; value < 100; value += 1) {
-      await registry.create(
-        create(SubscriptionSchema, {
-          id: { value: `sub-${String(value)}` },
-          topic: { type: "topic" },
-        }),
-      );
+      expect(result).toMatchObject({ kind: "created" });
+      expect(result.entry).toMatchObject({
+        phase: "pending",
+        createdAt: start,
+        pendingUntil: start + 30_000,
+        revision: 1n,
+      });
+    } finally {
+      vi.useRealTimers();
     }
-
-    await expect(
-      registry.create(
-        create(SubscriptionSchema, { id: { value: "full" }, topic: { type: "topic" } }),
-      ),
-    ).rejects.toBeInstanceOf(StandCapacityError);
   });
 
-  it("rejects a stored record without a creation time", () => {
-    expect(() =>
-      StandSubscriptionRecords.read(create(StandSubscriptionRecords.schema, {}), "sub-1"),
-    ).toThrow("Stand subscription record is invalid.");
+  it("returns existing only for byte-equivalent definitions and rejects a conflict", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    await registry.create(subscription("one"));
+
+    await expect(registry.create(subscription("one"))).resolves.toMatchObject({ kind: "existing" });
+    await expect(registry.create(subscription("one", "other"))).rejects.toBeInstanceOf(
+      StandConflictError,
+    );
   });
 
-  it("transfers a custom registry to its built context", async () => {
+  it("activates once and reports missing, expired, and already-active definitions", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const registry = new InMemorySubscriptionRegistry();
+      await expect(registry.activate(id("missing"))).resolves.toEqual({ kind: "missing" });
+
+      await registry.create(subscription("active"));
+      await expect(registry.activate(id("active"))).resolves.toMatchObject({
+        kind: "activated",
+        entry: { phase: "active", revision: 2n },
+      });
+      await expect(registry.activate(id("active"))).resolves.toMatchObject({
+        kind: "active",
+        entry: { phase: "active", revision: 2n },
+      });
+
+      await registry.create(subscription("expired"));
+      vi.setSystemTime(start + 30_000);
+      await expect(registry.activate(id("expired"))).resolves.toEqual({ kind: "expired" });
+      await expect(registry.get(id("expired"))).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("physically deletes definitions and distinguishes stale revisions", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    await registry.create(subscription("one"));
+
+    await expect(registry.delete(id("missing"))).resolves.toBe("missing");
+    await expect(registry.delete(id("one"), 2n)).resolves.toBe("changed");
+    await expect(registry.delete(id("one"), 1n)).resolves.toBe("deleted");
+    await expect(registry.get(id("one"))).resolves.toBeUndefined();
+  });
+
+  it("enforces positive safe lower limits and the 100-definition maximum", async () => {
+    expect(() => new InMemorySubscriptionRegistry(0)).toThrow(RangeError);
+    expect(() => new InMemorySubscriptionRegistry(1.5)).toThrow(RangeError);
+    expect(() => new InMemorySubscriptionRegistry(101)).toThrow(RangeError);
     const registry = new InMemorySubscriptionRegistry(1);
-    const context = BoundedContext.singleTenant("registry-test")
-      .withSubscriptionRegistry(registry)
-      .build();
-    await context.close();
+    await registry.create(subscription("one"));
+    await expect(registry.create(subscription("two"))).rejects.toBeInstanceOf(StandCapacityError);
+  });
+
+  it("rejects malformed public inputs with TypeError or RangeError", async () => {
+    const registry = new InMemorySubscriptionRegistry();
     await expect(
-      registry.create(create(SubscriptionSchema, { id: { value: "after-close" } })),
-    ).rejects.toThrow("closed");
-  });
-});
-
-describe("StorageSubscriptionRegistry", () => {
-  it("shares one durable capacity control across independently opened handles", async () => {
-    const factory = new InMemoryStorageFactory();
-    const context = { name: "registry-test", multitenant: false };
-    const first = new StorageSubscriptionRegistry(context, factory, 1);
-    const second = new StorageSubscriptionRegistry(context, factory, 1);
-
-    const [one, two] = await Promise.allSettled([
-      first.create(create(SubscriptionSchema, { id: { value: "one" }, topic: { type: "topic" } })),
-      second.create(create(SubscriptionSchema, { id: { value: "two" }, topic: { type: "topic" } })),
-    ]);
-
-    expect([one, two].filter((result) => result.status === "fulfilled")).toHaveLength(1);
-    expect(await first.snapshot()).toHaveLength(1);
-    await first.close();
-    await second.close();
+      registry.create(create(SubscriptionSchema, { id: id("missing-topic") })),
+    ).rejects.toBeInstanceOf(TypeError);
+    await expect(registry.activate(id("  "))).rejects.toBeInstanceOf(TypeError);
+    await registry.create(subscription("one"));
+    await expect(registry.delete(id("one"), -1n)).rejects.toBeInstanceOf(RangeError);
   });
 
-  it("releases durable capacity after physical deletion", async () => {
-    const factory = new InMemoryStorageFactory();
-    const context = { name: "registry-delete-test", multitenant: false };
-    const registry = new StorageSubscriptionRegistry(context, factory, 1);
-    const first = create(SubscriptionSchema, { id: { value: "one" }, topic: { type: "topic" } });
-    const second = create(SubscriptionSchema, { id: { value: "two" }, topic: { type: "topic" } });
+  it("accepts an encoded record at the 1 MiB boundary and rejects the next byte", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      let low = 1;
+      let high = 1_048_576;
+      while (low < high) {
+        const length = Math.ceil((low + high) / 2);
+        const entry = {
+          subscription: subscription("x".repeat(length)),
+          phase: "pending" as const,
+          createdAt: start,
+          pendingUntil: start + 30_000,
+          revision: 1n,
+        };
+        try {
+          toBinary(StandSubscriptionRecords.schema, StandSubscriptionRecords.write(entry));
+          low = length;
+        } catch {
+          high = length - 1;
+        }
+      }
 
-    await registry.create(first);
-    await expect(registry.create(second)).rejects.toBeInstanceOf(StandCapacityError);
-    expect(await registry.delete("one")).toEqual({ deleted: true });
-    await expect(registry.create(second)).resolves.toMatchObject({ created: true });
-    await registry.close();
+      const registry = new InMemorySubscriptionRegistry();
+      await expect(registry.create(subscription("x".repeat(low)))).resolves.toMatchObject({
+        kind: "created",
+      });
+      await expect(registry.create(subscription("x".repeat(low + 1)))).rejects.toThrow(RangeError);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns a deterministic bounded snapshot of cloned frozen entries", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    await registry.create(subscription("z"));
+    await registry.create(subscription("a"));
+
+    const snapshot = await registry.snapshot();
+    expect(snapshot.map((entry) => entry.subscription.id?.value)).toEqual(["a", "z"]);
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot[0])).toBe(true);
+    expect(Object.isFrozen(snapshot[0].subscription)).toBe(true);
+    expect(snapshot[0]).not.toBe(await registry.get(id("a")));
+  });
+
+  it("cleans exactly one sorted page of expired pending entries", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const registry = new InMemorySubscriptionRegistry();
+      for (let index = 29; index >= 0; index -= 1)
+        await registry.create(subscription(`s-${String(index)}`));
+      vi.setSystemTime(start + 30_000);
+
+      await expect(registry.cleanup()).resolves.toEqual({ scanned: 25, deleted: 25, more: true });
+      expect(await registry.snapshot()).toHaveLength(5);
+      await expect(registry.cleanup()).resolves.toEqual({ scanned: 5, deleted: 5, more: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("freezes clone-safe result objects and closes through one shared promise", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const result = await registry.create(subscription("one"));
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(Object.isFrozen(result.entry)).toBe(true);
+    expect(Object.isFrozen(result.entry.subscription)).toBe(true);
+
+    const firstClose = registry.close();
+    expect(registry.close()).toBe(firstClose);
+    await firstClose;
+    await expect(registry.create(subscription("after-close"))).rejects.toThrow("closed");
+    await expect(registry.snapshot()).rejects.toThrow("closed");
+  });
+
+  it("exports the exact public registry contract", () => {
+    expectTypeOf<StandSubscriptionEntry>().toEqualTypeOf<{
+      readonly subscription: Subscription;
+      readonly phase: "pending" | "active";
+      readonly createdAt: number;
+      readonly pendingUntil?: number;
+      readonly revision: bigint;
+    }>();
+    expectTypeOf<StandCreateResult>().toEqualTypeOf<
+      | { readonly kind: "created"; readonly entry: StandSubscriptionEntry }
+      | {
+          readonly kind: "existing";
+          readonly entry: StandSubscriptionEntry;
+        }
+    >();
+    expectTypeOf<StandActivateResult>().toEqualTypeOf<
+      | { readonly kind: "activated"; readonly entry: StandSubscriptionEntry }
+      | { readonly kind: "active"; readonly entry: StandSubscriptionEntry }
+      | { readonly kind: "missing" }
+      | { readonly kind: "expired" }
+    >();
+    expectTypeOf<StandDeleteResult>().toEqualTypeOf<"deleted" | "missing" | "changed">();
+    expectTypeOf<StandCleanupResult>().toEqualTypeOf<{
+      readonly scanned: number;
+      readonly deleted: number;
+      readonly more: boolean;
+    }>();
+    expectTypeOf<InMemorySubscriptionRegistry>().toExtend<StandSubscriptionRegistry>();
   });
 });

@@ -32,9 +32,10 @@ export {
   StorageSubscriptionRegistry,
   StandCapacityError,
   StandConflictError,
-  type StandSubscriptionActivateResult,
-  type StandSubscriptionCreateResult,
-  type StandSubscriptionDeleteResult,
+  type StandActivateResult,
+  type StandCleanupResult,
+  type StandCreateResult,
+  type StandDeleteResult,
   type StandSubscriptionEntry,
   type StandSubscriptionRegistry,
 } from "./stand/subscription-registry.js";

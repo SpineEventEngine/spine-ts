@@ -1,6 +1,10 @@
 import { clone, create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { SubscriptionSchema, type Subscription } from "@spine-event-engine/proto/client";
+import {
+  SubscriptionSchema,
+  type Subscription,
+  type SubscriptionId,
+} from "@spine-event-engine/proto/client";
 import {
   RecordSpec,
   type RecordStorage,
@@ -18,35 +22,44 @@ const pendingMilliseconds = 30_000;
  * A durable Stand subscription definition.
  */
 export interface StandSubscriptionEntry {
-  readonly id: string;
   readonly subscription: Subscription;
-  readonly phase: "PENDING" | "ACTIVE";
-  readonly createdAtMs: number;
-  readonly pendingUntilMs?: number;
-  readonly revision: number;
+  readonly phase: "pending" | "active";
+  readonly createdAt: number;
+  readonly pendingUntil?: number;
+  readonly revision: bigint;
 }
 
 /**
  * Result returned after a create attempt.
  */
-export interface StandSubscriptionCreateResult {
-  readonly entry: StandSubscriptionEntry;
-  readonly created: boolean;
-}
+export type StandCreateResult =
+  | Readonly<{ kind: "created"; entry: StandSubscriptionEntry }>
+  | Readonly<{ kind: "existing"; entry: StandSubscriptionEntry }>;
 
 /**
  * Result returned after an activate attempt.
  */
-export interface StandSubscriptionActivateResult {
-  readonly entry?: StandSubscriptionEntry;
-  readonly activated: boolean;
-}
+export type StandActivateResult =
+  | Readonly<{ kind: "activated"; entry: StandSubscriptionEntry }>
+  | Readonly<{ kind: "active"; entry: StandSubscriptionEntry }>
+  | Readonly<{ kind: "missing" }>
+  | Readonly<{ kind: "expired" }>;
 
 /**
  * Result returned after a delete attempt.
  */
-export interface StandSubscriptionDeleteResult {
-  readonly deleted: boolean;
+export type StandDeleteResult = "deleted" | "missing" | "changed";
+
+// Compatibility aliases retained only while the durable implementation is converted.
+type StandSubscriptionCreateResult = StandCreateResult;
+type StandSubscriptionActivateResult = StandActivateResult;
+type StandSubscriptionDeleteResult = StandDeleteResult;
+
+/** Reports the work performed by one bounded expired-pending cleanup page. */
+export interface StandCleanupResult {
+  readonly scanned: number;
+  readonly deleted: number;
+  readonly more: boolean;
 }
 
 /**
@@ -82,12 +95,12 @@ export class StandConflictError extends Error {
  */
 export interface StandSubscriptionRegistry {
   readonly persistent: boolean;
-  create(subscription: Subscription): Promise<StandSubscriptionCreateResult>;
-  activate(id: string): Promise<StandSubscriptionActivateResult>;
-  delete(id: string): Promise<StandSubscriptionDeleteResult>;
-  get(id: string): Promise<StandSubscriptionEntry | undefined>;
+  create(subscription: Subscription): Promise<StandCreateResult>;
+  activate(id: SubscriptionId): Promise<StandActivateResult>;
+  delete(id: SubscriptionId, expectedRevision?: bigint): Promise<StandDeleteResult>;
+  get(id: SubscriptionId): Promise<StandSubscriptionEntry | undefined>;
   snapshot(): Promise<readonly StandSubscriptionEntry[]>;
-  cleanupExpiredPending(nowMs?: number): Promise<number>;
+  cleanup(): Promise<StandCleanupResult>;
   close(): Promise<void>;
 }
 
@@ -99,6 +112,9 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
   readonly #entries = new Map<string, StandSubscriptionEntry>();
   readonly #limit: number;
   #closed = false;
+  #activeOperations = 0;
+  #closePromise: Promise<void> | undefined;
+  #finishClose: (() => void) | undefined;
 
   /**
    * Creates an in-memory registry.
@@ -113,110 +129,163 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     this.#limit = limit;
   }
 
-  async create(subscription: Subscription): Promise<StandSubscriptionCreateResult> {
-    await Promise.resolve();
-    this.#requireOpen();
-    const id = InMemorySubscriptionRegistry.#id(subscription);
-    const existing = this.#entries.get(id);
-    if (existing !== undefined) {
-      if (JSON.stringify(existing.subscription) !== JSON.stringify(subscription))
-        throw new StandConflictError(id);
-      return Object.freeze({
-        entry: InMemorySubscriptionRegistry.#clone(existing),
-        created: false,
+  create(subscription: Subscription): Promise<StandCreateResult> {
+    return this.#operation(() => {
+      const id = InMemorySubscriptionRegistry.#subscriptionId(subscription);
+      const existing = this.#entries.get(id);
+      if (existing !== undefined) {
+        if (!sameSubscription(existing.subscription, subscription))
+          throw new StandConflictError(id);
+        return Object.freeze({
+          kind: "existing" as const,
+          entry: InMemorySubscriptionRegistry.#clone(existing),
+        });
+      }
+      if (this.#entries.size >= this.#limit) throw new StandCapacityError(this.#limit);
+      const createdAt = Date.now();
+      const entry = InMemorySubscriptionRegistry.#freezeEntry({
+        subscription: clone(SubscriptionSchema, subscription),
+        phase: "pending",
+        createdAt,
+        pendingUntil: createdAt + pendingMilliseconds,
+        revision: 1n,
       });
-    }
-    if (this.#entries.size >= this.#limit) throw new StandCapacityError(this.#limit);
-    const nowMs = Date.now();
-    const entry: StandSubscriptionEntry = Object.freeze({
-      id,
-      subscription: clone(SubscriptionSchema, subscription),
-      phase: "PENDING",
-      createdAtMs: nowMs,
-      pendingUntilMs: nowMs + pendingMilliseconds,
-      revision: 1,
+      StandSubscriptionRecords.write(entry);
+      this.#entries.set(id, entry);
+      return Object.freeze({
+        kind: "created" as const,
+        entry: InMemorySubscriptionRegistry.#clone(entry),
+      });
     });
-    this.#entries.set(id, entry);
-    return Object.freeze({ entry: InMemorySubscriptionRegistry.#clone(entry), created: true });
   }
 
-  async activate(id: string): Promise<StandSubscriptionActivateResult> {
-    await Promise.resolve();
-    this.#requireOpen();
-    const entry = this.#entries.get(id);
-    if (entry === undefined) return Object.freeze({ activated: false });
-    if (entry.phase === "ACTIVE")
-      return Object.freeze({ entry: InMemorySubscriptionRegistry.#clone(entry), activated: false });
-    const active: StandSubscriptionEntry = Object.freeze({
-      id: entry.id,
-      subscription: entry.subscription,
-      phase: "ACTIVE",
-      createdAtMs: entry.createdAtMs,
-      revision: entry.revision + 1,
+  activate(id: SubscriptionId): Promise<StandActivateResult> {
+    return this.#operation(() => {
+      const value = subscriptionIdValue(id);
+      const entry = this.#entries.get(value);
+      if (entry === undefined) return Object.freeze({ kind: "missing" as const });
+      if (entry.phase === "active")
+        return Object.freeze({
+          kind: "active" as const,
+          entry: InMemorySubscriptionRegistry.#clone(entry),
+        });
+      if (entry.pendingUntil !== undefined && entry.pendingUntil <= Date.now()) {
+        this.#entries.delete(value);
+        return Object.freeze({ kind: "expired" as const });
+      }
+      const active = InMemorySubscriptionRegistry.#freezeEntry({
+        subscription: entry.subscription,
+        phase: "active",
+        createdAt: entry.createdAt,
+        revision: entry.revision + 1n,
+      });
+      this.#entries.set(value, active);
+      return Object.freeze({
+        kind: "activated" as const,
+        entry: InMemorySubscriptionRegistry.#clone(active),
+      });
     });
-    this.#entries.set(id, active);
-    return Object.freeze({ entry: InMemorySubscriptionRegistry.#clone(active), activated: true });
   }
 
-  async delete(id: string): Promise<StandSubscriptionDeleteResult> {
-    await Promise.resolve();
-    this.#requireOpen();
-    return Object.freeze({ deleted: this.#entries.delete(id) });
+  delete(id: SubscriptionId, expectedRevision?: bigint): Promise<StandDeleteResult> {
+    return this.#operation(() => {
+      const value = subscriptionIdValue(id);
+      if (expectedRevision !== undefined && expectedRevision < 1n)
+        throw new RangeError("Stand subscription revision must be positive.");
+      const entry = this.#entries.get(value);
+      if (entry === undefined) return "missing";
+      if (expectedRevision !== undefined && expectedRevision !== entry.revision) return "changed";
+      this.#entries.delete(value);
+      return "deleted";
+    });
   }
 
-  async get(id: string): Promise<StandSubscriptionEntry | undefined> {
-    await Promise.resolve();
-    this.#requireOpen();
-    const entry = this.#entries.get(id);
-    return entry === undefined ? undefined : InMemorySubscriptionRegistry.#clone(entry);
+  get(id: SubscriptionId): Promise<StandSubscriptionEntry | undefined> {
+    return this.#operation(() => {
+      const entry = this.#entries.get(subscriptionIdValue(id));
+      return entry === undefined ? undefined : InMemorySubscriptionRegistry.#clone(entry);
+    });
   }
 
-  async snapshot(): Promise<readonly StandSubscriptionEntry[]> {
-    await Promise.resolve();
-    this.#requireOpen();
-    return Object.freeze(
-      [...this.#entries.values()]
-        .sort((left, right) => left.id.localeCompare(right.id))
-        .map((entry: StandSubscriptionEntry) => InMemorySubscriptionRegistry.#clone(entry)),
+  snapshot(): Promise<readonly StandSubscriptionEntry[]> {
+    return this.#operation(() =>
+      Object.freeze(
+        [...this.#entries.entries()]
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([, entry]) => InMemorySubscriptionRegistry.#clone(entry)),
+      ),
     );
   }
 
-  async cleanupExpiredPending(nowMs: number = Date.now()): Promise<number> {
-    await Promise.resolve();
-    this.#requireOpen();
-    let deleted = 0;
-    for (const [id, entry] of this.#entries) {
-      if (
-        entry.phase === "PENDING" &&
-        entry.pendingUntilMs !== undefined &&
-        entry.pendingUntilMs <= nowMs
-      ) {
-        this.#entries.delete(id);
-        deleted += 1;
+  cleanup(): Promise<StandCleanupResult> {
+    return this.#operation(() => {
+      const page = [...this.#entries.entries()]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .slice(0, 25);
+      let deleted = 0;
+      const now = Date.now();
+      for (const [id, entry] of page) {
+        if (
+          entry.phase === "pending" &&
+          entry.pendingUntil !== undefined &&
+          entry.pendingUntil <= now
+        ) {
+          this.#entries.delete(id);
+          deleted += 1;
+        }
       }
-    }
-    return deleted;
+      return Object.freeze({
+        scanned: page.length,
+        deleted,
+        more: this.#entries.size > page.length - deleted,
+      });
+    });
   }
 
-  async close(): Promise<void> {
-    await Promise.resolve();
+  close(): Promise<void> {
+    if (this.#closePromise !== undefined) return this.#closePromise;
     this.#closed = true;
-    this.#entries.clear();
+    this.#closePromise = new Promise<void>((resolve) => {
+      this.#finishClose = resolve;
+    });
+    if (this.#activeOperations === 0) this.#completeClose();
+    return this.#closePromise;
   }
 
-  static #id(subscription: Subscription): string {
-    const id = subscription.id?.value;
-    if (typeof id !== "string" || id.trim() === "")
+  static #subscriptionId(subscription: Subscription): string {
+    if (subscription.id === undefined)
       throw new TypeError("Stand subscription ID must be non-blank.");
-    return id;
+    if (subscription.topic === undefined)
+      throw new TypeError("Stand subscription topic must be present.");
+    return subscriptionIdValue(subscription.id);
   }
 
   static #clone(entry: StandSubscriptionEntry): StandSubscriptionEntry {
-    return Object.freeze({ ...entry, subscription: clone(SubscriptionSchema, entry.subscription) });
+    return InMemorySubscriptionRegistry.#freezeEntry({
+      ...entry,
+      subscription: clone(SubscriptionSchema, entry.subscription),
+    });
   }
 
-  #requireOpen(): void {
-    if (this.#closed) throw new Error("Stand subscription registry is closed.");
+  static #freezeEntry(entry: StandSubscriptionEntry): StandSubscriptionEntry {
+    return Object.freeze({ ...entry, subscription: deepFreeze(entry.subscription) });
+  }
+
+  #operation<T>(action: () => T | Promise<T>): Promise<T> {
+    if (this.#closed) return Promise.reject(new Error("Stand subscription registry is closed."));
+    this.#activeOperations += 1;
+    return Promise.resolve()
+      .then(action)
+      .finally(() => {
+        this.#activeOperations -= 1;
+        if (this.#closed && this.#activeOperations === 0) this.#completeClose();
+      });
+  }
+
+  #completeClose(): void {
+    this.#entries.clear();
+    this.#finishClose?.();
+    this.#finishClose = undefined;
   }
 }
 
@@ -255,7 +324,8 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         schema: StandSubscriptionRecords.schema,
         storageKey: "spine.server.StandSubscriptionRecord:definition",
         idKind: "string",
-        extractId: (record: StandSubscriptionRecord) => StandSubscriptionRecords.read(record).id,
+        extractId: (record: StandSubscriptionRecord) =>
+          subscriptionEntryId(StandSubscriptionRecords.read(record)),
       }),
     );
     this.#control = storageFactory.createRecordStorage(
@@ -277,14 +347,13 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   async create(subscription: Subscription): Promise<StandSubscriptionCreateResult> {
     return await this.#operation(async () => {
       const id = StorageSubscriptionRegistry.#id(subscription);
-      const nowMs = Date.now();
+      const createdAt = Date.now();
       const proposed: StandSubscriptionEntry = Object.freeze({
-        id,
         subscription: clone(SubscriptionSchema, subscription),
-        phase: "PENDING",
-        createdAtMs: nowMs,
-        pendingUntilMs: nowMs + pendingMilliseconds,
-        revision: 1,
+        phase: "pending",
+        createdAt,
+        pendingUntil: createdAt + pendingMilliseconds,
+        revision: 1n,
       });
       const next = StandSubscriptionRecords.write(proposed);
       const digest = recordDigest(next);
@@ -295,8 +364,8 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           const entry = StandSubscriptionRecords.read(existing, id);
           if (!sameSubscription(entry.subscription, subscription)) throw new StandConflictError(id);
           return Object.freeze({
+            kind: "existing" as const,
             entry: StorageSubscriptionRegistry.#clone(entry),
-            created: false,
           });
         }
         const control = await this.#controlState();
@@ -314,49 +383,56 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         }
         await this.#recover();
         return Object.freeze({
+          kind: "created" as const,
           entry: StorageSubscriptionRegistry.#clone(proposed),
-          created: true,
         });
       }
     });
   }
 
-  async activate(id: string): Promise<StandSubscriptionActivateResult> {
+  async activate(
+    subscriptionId: SubscriptionId | string,
+  ): Promise<StandSubscriptionActivateResult> {
     return await this.#operation(async () => {
+      const id = registryId(subscriptionId);
       for (;;) {
         await this.#recover();
         const record = await this.#storage.read(id);
-        if (record === undefined) return Object.freeze({ activated: false });
+        if (record === undefined) return Object.freeze({ kind: "missing" as const });
         const entry = StandSubscriptionRecords.read(record, id);
-        if (entry.phase === "ACTIVE")
+        if (entry.phase === "active")
           return Object.freeze({
+            kind: "active" as const,
             entry: StorageSubscriptionRegistry.#clone(entry),
-            activated: false,
           });
         const active: StandSubscriptionEntry = Object.freeze({
-          id,
           subscription: entry.subscription,
-          phase: "ACTIVE",
-          createdAtMs: entry.createdAtMs,
-          revision: entry.revision + 1,
+          phase: "active",
+          createdAt: entry.createdAt,
+          revision: entry.revision + 1n,
         });
         if (await this.#storage.compareAndSet(id, record, StandSubscriptionRecords.write(active))) {
           return Object.freeze({
+            kind: "activated" as const,
             entry: StorageSubscriptionRegistry.#clone(active),
-            activated: true,
           });
         }
       }
     });
   }
 
-  async delete(id: string): Promise<StandSubscriptionDeleteResult> {
+  async delete(
+    subscriptionId: SubscriptionId | string,
+    expectedRevision?: bigint,
+  ): Promise<StandSubscriptionDeleteResult> {
     return await this.#operation(async () => {
+      const id = registryId(subscriptionId);
       for (;;) {
         await this.#recover();
         const record = await this.#storage.read(id);
-        if (record === undefined) return Object.freeze({ deleted: false });
-        StandSubscriptionRecords.read(record, id);
+        if (record === undefined) return "missing";
+        const entry = StandSubscriptionRecords.read(record, id);
+        if (expectedRevision !== undefined && expectedRevision !== entry.revision) return "changed";
         const control = await this.#controlState();
         if (control.count < 1) throw new Error("Malformed Stand subscription control record.");
         const staged = controlWithOperation(control, control.count, {
@@ -368,13 +444,14 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           continue;
         const deleted = await this.#storage.compareAndSet(id, record, undefined);
         await this.#recover();
-        return Object.freeze({ deleted });
+        return deleted ? "deleted" : "changed";
       }
     });
   }
 
-  async get(id: string): Promise<StandSubscriptionEntry | undefined> {
+  async get(subscriptionId: SubscriptionId | string): Promise<StandSubscriptionEntry | undefined> {
     return await this.#operation(async () => {
+      const id = registryId(subscriptionId);
       await this.#recover();
       const record = await this.#storage.read(id);
       return record === undefined
@@ -394,21 +471,22 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
-  async cleanupExpiredPending(nowMs: number = Date.now()): Promise<number> {
+  async cleanup(): Promise<StandCleanupResult> {
     return await this.#operation(async () => {
       await this.#recover();
       let deleted = 0;
-      for (const row of await this.#storage.queryEntries({ sort: [{ field: "id" }], limit: 25 })) {
+      const rows = await this.#storage.queryEntries({ sort: [{ field: "id" }], limit: 25 });
+      for (const row of rows) {
         const entry = StandSubscriptionRecords.read(row.record, row.id);
         if (
-          entry.phase === "PENDING" &&
-          entry.pendingUntilMs !== undefined &&
-          entry.pendingUntilMs <= nowMs
+          entry.phase === "pending" &&
+          entry.pendingUntil !== undefined &&
+          entry.pendingUntil <= Date.now()
         ) {
           if (await this.#deleteCurrent(row.id, row.record)) deleted += 1;
         }
       }
-      return deleted;
+      return Object.freeze({ scanned: rows.length, deleted, more: rows.length === 25 });
     });
   }
 
@@ -431,7 +509,10 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   }
 
   static #clone(entry: StandSubscriptionEntry): StandSubscriptionEntry {
-    return Object.freeze({ ...entry, subscription: clone(SubscriptionSchema, entry.subscription) });
+    return Object.freeze({
+      ...entry,
+      subscription: deepFreeze(clone(SubscriptionSchema, entry.subscription)),
+    });
   }
 
   #requireOpen(): void {
@@ -612,4 +693,29 @@ function sameSubscription(left: Subscription, right: Subscription): boolean {
     leftBytes.length === rightBytes.length &&
     leftBytes.every((byte, index) => byte === rightBytes[index])
   );
+}
+
+function subscriptionIdValue(id: SubscriptionId): string {
+  if (typeof id.value !== "string" || id.value.trim() === "")
+    throw new TypeError("Stand subscription ID must be non-blank.");
+  return id.value;
+}
+
+function subscriptionEntryId(entry: StandSubscriptionEntry): string {
+  if (entry.subscription.id === undefined) throw new Error("Stand subscription record is invalid.");
+  return subscriptionIdValue(entry.subscription.id);
+}
+
+function registryId(id: SubscriptionId | string): string {
+  if (typeof id === "string") {
+    if (id.trim() === "") throw new TypeError("Stand subscription ID must be non-blank.");
+    return id;
+  }
+  return subscriptionIdValue(id);
+}
+
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
 }

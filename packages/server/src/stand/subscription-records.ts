@@ -46,22 +46,20 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
           Math.floor(record.pendingUntil.nanos / 1_000_000);
         if (!Number.isSafeInteger(pendingUntilMs) || pendingUntilMs < createdAtMs) throw Error();
         return Object.freeze({
-          id,
           subscription,
-          phase: "PENDING",
-          createdAtMs,
-          pendingUntilMs,
-          revision: Number(record.revision),
+          phase: "pending",
+          createdAt: createdAtMs,
+          pendingUntil: pendingUntilMs,
+          revision: record.revision,
         });
       }
       if (record.phase !== SubscriptionPhase.ACTIVE || record.pendingUntil !== undefined)
         throw Error();
       return Object.freeze({
-        id,
         subscription,
-        phase: "ACTIVE",
-        createdAtMs,
-        revision: Number(record.revision),
+        phase: "active",
+        createdAt: createdAtMs,
+        revision: record.revision,
       });
     } catch {
       throw new Error("Stand subscription record is invalid.");
@@ -71,14 +69,12 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
   write(entry: StandSubscriptionEntry): StandSubscriptionRecord {
     const record = create(StandSubscriptionRecordSchema, {
       subscription: entry.subscription,
-      phase: entry.phase === "PENDING" ? SubscriptionPhase.PENDING : SubscriptionPhase.ACTIVE,
-      createdAt: timestamp(entry.createdAtMs),
-      ...(entry.pendingUntilMs === undefined
-        ? {}
-        : { pendingUntil: timestamp(entry.pendingUntilMs) }),
-      revision: BigInt(entry.revision),
+      phase: entry.phase === "pending" ? SubscriptionPhase.PENDING : SubscriptionPhase.ACTIVE,
+      createdAt: timestamp(entry.createdAt),
+      ...(entry.pendingUntil === undefined ? {} : { pendingUntil: timestamp(entry.pendingUntil) }),
+      revision: entry.revision,
     });
-    StandSubscriptionRecords.read(record, entry.id);
+    StandSubscriptionRecords.read(record, entry.subscription.id?.value);
     if (toBinary(StandSubscriptionRecordSchema, record).byteLength > maximumBytes) {
       throw new RangeError("Stand subscription record exceeds 1048576 bytes.");
     }
