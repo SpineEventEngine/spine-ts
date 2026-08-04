@@ -49,6 +49,18 @@ function ownedSource(manifest: SourceManifest, localPath: string): { readonly sh
   return entry;
 }
 
+function field<T extends { readonly name: string }>(
+  fields: readonly T[],
+  name: string,
+  message: string,
+): T {
+  const descriptor = fields.find((candidate) => candidate.name === name);
+  if (descriptor === undefined) {
+    throw new Error(`Expected ${message} field ${name}.`);
+  }
+  return descriptor;
+}
+
 describe("distributed delivery system contracts", () => {
   it("pins the JVM EntityStateChanged event and its dependency byte-for-byte", () => {
     const manifest = JSON.parse(
@@ -140,26 +152,23 @@ describe("distributed delivery system contracts", () => {
     expect(SubscriptionPhase.PENDING).toBe(1);
     expect(SubscriptionPhase.ACTIVE).toBe(2);
     expect(
+      getOption(field(EntityStateChangedSchema.fields, "entity", "EntityStateChanged"), required),
+    ).toBe(true);
+    expect(
       getOption(
-        EntityStateChangedSchema.fields.find((field) => field.name === "entity"),
+        field(EntityStateChangedSchema.fields, "signal_id", "EntityStateChanged"),
         required,
       ),
     ).toBe(true);
     expect(
       getOption(
-        EntityStateChangedSchema.fields.find((field) => field.name === "signal_id"),
-        required,
-      ),
-    ).toBe(true);
-    expect(
-      getOption(
-        EntityStateChangedSchema.fields.find((field) => field.name === "signal_id"),
+        field(EntityStateChangedSchema.fields, "signal_id", "EntityStateChanged"),
         validate,
       ),
     ).toBe(true);
     expect(
       getOption(
-        StandSubscriptionRecordSchema.fields.find((field) => field.name === "pending_until"),
+        field(StandSubscriptionRecordSchema.fields, "pending_until", "StandSubscriptionRecord"),
         required,
       ),
     ).toBe(false);
