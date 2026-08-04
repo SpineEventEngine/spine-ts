@@ -303,9 +303,10 @@ async function stop(child: ChildProcess, timeoutMs = 5_000): Promise<void> {
     await exitWithin(child, timeoutMs);
   } catch (gracefulFailure) {
     if (gracefulFailure instanceof FixtureExitError) throw gracefulFailure;
+    const forcedExit = exitWithin(child, timeoutMs);
     child.kill("SIGKILL");
     try {
-      await exitWithin(child, timeoutMs);
+      await forcedExit;
     } catch (forcedFailure) {
       throw new AggregateError([gracefulFailure, forcedFailure], "Fixture shutdown failed.");
     }
@@ -313,6 +314,10 @@ async function stop(child: ChildProcess, timeoutMs = 5_000): Promise<void> {
 }
 
 function exitWithin(child: ChildProcess, timeoutMs: number): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null)
+    return child.exitCode === 0 || child.signalCode !== null
+      ? Promise.resolve()
+      : Promise.reject(new FixtureExitError());
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = (error?: Error) => {

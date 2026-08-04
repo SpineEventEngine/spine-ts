@@ -279,3 +279,14 @@ IPC failure. Only style and reliability reopen after correction.
   performance/reliability reviewers, each explicit `gpt-5.6-terra` / `high`.
   Runtime self-introspection is unavailable; immutable role/profile and
   explicit dispatch remain the accepted metadata evidence.
+
+## Forced-Exit Handoff Correction
+
+Style confirmation is clean. Reliability found a fixture-only P2 race between
+removing the graceful-exit listener, sending `SIGKILL`, and installing the
+forced-exit listener. The orchestrator applied the permitted micro correction:
+the forced observer is installed before the signal, and already-terminal child
+state is handled immediately. ESLint, strict delivery-client TypeScript, diff
+checks, and three consecutive real-gRPC file runs pass 6/6 each. Final
+confirmation is assigned only to the existing reliability reviewer, explicit
+`gpt-5.6-terra` / `high`.
