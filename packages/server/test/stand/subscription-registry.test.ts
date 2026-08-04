@@ -7,6 +7,7 @@ import {
   StandCapacityError,
 } from "../../src/stand/subscription-registry.js";
 import { StandSubscriptionRecords } from "../../src/stand/subscription-records.js";
+import { BoundedContext } from "../../src/index.js";
 
 describe("InMemorySubscriptionRegistry", () => {
   it("creates a pending definition, activates it, and physically deletes it", async () => {
@@ -35,5 +36,12 @@ describe("InMemorySubscriptionRegistry", () => {
     expect(() => StandSubscriptionRecords.read(create(StandSubscriptionRecords.schema, {}), "sub-1")).toThrow(
       "Malformed Stand subscription record.",
     );
+  });
+
+  it("transfers a custom registry to its built context", async () => {
+    const registry = new InMemorySubscriptionRegistry(1);
+    const context = BoundedContext.singleTenant("registry-test").withSubscriptionRegistry(registry).build();
+    await context.close();
+    await expect(registry.create(create(SubscriptionSchema, { id: { value: "after-close" } }))).rejects.toThrow("closed");
   });
 });

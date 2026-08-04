@@ -94,7 +94,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
    * Creates an in-memory registry.
    * @param limit Maximum number of definitions, from one through 100.
    */
-  constructor(limit = defaultLimit) {
+  constructor(limit: number = defaultLimit) {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > defaultLimit) {
       throw new RangeError("Stand subscription limit must be a positive safe integer no greater than 100.");
     }
@@ -128,7 +128,13 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     const entry = this.#entries.get(id);
     if (entry === undefined) return Object.freeze({ activated: false });
     if (entry.phase === "ACTIVE") return Object.freeze({ entry: InMemorySubscriptionRegistry.#clone(entry), activated: false });
-    const active = Object.freeze({ ...entry, phase: "ACTIVE" as const, pendingUntilMs: undefined, revision: entry.revision + 1 });
+    const active: StandSubscriptionEntry = Object.freeze({
+      id: entry.id,
+      subscription: entry.subscription,
+      phase: "ACTIVE",
+      createdAtMs: entry.createdAtMs,
+      revision: entry.revision + 1,
+    });
     this.#entries.set(id, active);
     return Object.freeze({ entry: InMemorySubscriptionRegistry.#clone(active), activated: true });
   }
@@ -146,10 +152,14 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
 
   async snapshot(): Promise<readonly StandSubscriptionEntry[]> {
     this.#requireOpen();
-    return Object.freeze([...this.#entries.values()].sort((left, right) => left.id.localeCompare(right.id)).map(InMemorySubscriptionRegistry.#clone));
+    return Object.freeze(
+      [...this.#entries.values()]
+        .sort((left, right) => left.id.localeCompare(right.id))
+        .map((entry: StandSubscriptionEntry) => InMemorySubscriptionRegistry.#clone(entry)),
+    );
   }
 
-  async cleanupExpiredPending(nowMs = Date.now()): Promise<number> {
+  async cleanupExpiredPending(nowMs: number = Date.now()): Promise<number> {
     this.#requireOpen();
     let deleted = 0;
     for (const [id, entry] of this.#entries) {

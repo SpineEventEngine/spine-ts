@@ -12,13 +12,21 @@ const maximumBytes = 1_048_576;
 /**
  * Encodes the frozen Stand subscription record with lifecycle validation.
  */
-export const StandSubscriptionRecords = Object.freeze({
+interface StandSubscriptionRecordCodec {
+  readonly schema: typeof StandSubscriptionRecordSchema;
+  read(record: StandSubscriptionRecord, expectedId?: string): StandSubscriptionEntry;
+  write(entry: StandSubscriptionEntry): StandSubscriptionRecord;
+  decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry;
+}
+
+export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.freeze({
   schema: StandSubscriptionRecordSchema,
 
   read(record: StandSubscriptionRecord, expectedId?: string): StandSubscriptionEntry {
     try {
       const subscription = record.subscription;
-      const id = subscription?.id?.value;
+      if (subscription === undefined) throw Error();
+      const id = subscription.id?.value;
       if (typeof id !== "string" || id.trim() === "" || (expectedId !== undefined && id !== expectedId)) throw Error();
       if (subscription.topic === undefined) throw Error();
       if (record.createdAt === undefined || record.createdAt.seconds < 0n) throw Error();

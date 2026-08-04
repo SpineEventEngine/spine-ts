@@ -64,6 +64,7 @@ import {
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
+import { InMemorySubscriptionRegistry, type StandSubscriptionRegistry } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -488,6 +489,7 @@ const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>
 const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
+const contextSubscriptionRegistries = new WeakMap<BoundedContext, StandSubscriptionRegistry>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
   (defaultStorageFactory: StorageFactory) => Promise<BoundedContext>
@@ -507,6 +509,7 @@ interface BoundedContextAccess {
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
   tenantIndex(context: BoundedContext): TenantIndex;
   storageFactory(context: BoundedContext): StorageFactory;
+  subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -515,6 +518,7 @@ let constructBoundedContext:
       commandBus: CommandBus,
       eventBus: EventBus,
       stand: Stand,
+      registry: StandSubscriptionRegistry,
       storageFactory: StorageFactory,
       repositories: readonly RepositoryView[],
       deliveryStrategy: DeliveryStrategy,
@@ -545,6 +549,7 @@ export class BoundedContext {
   readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
+  readonly #subscriptionRegistry: StandSubscriptionRegistry;
   #closed: Promise<void> | undefined;
 
   /**
@@ -556,6 +561,7 @@ export class BoundedContext {
       commandBus,
       eventBus,
       stand,
+      registry,
       storageFactory,
       repositories,
       deliveryStrategy,
@@ -566,6 +572,7 @@ export class BoundedContext {
         commandBus,
         eventBus,
         stand,
+        registry,
         storageFactory,
         repositories,
         deliveryStrategy,
@@ -590,6 +597,7 @@ export class BoundedContext {
     commandBus: CommandBus,
     eventBus: EventBus,
     stand: Stand,
+    subscriptionRegistry: StandSubscriptionRegistry,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
@@ -603,6 +611,7 @@ export class BoundedContext {
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
     this.#stand = stand;
+    this.#subscriptionRegistry = subscriptionRegistry;
     this.#storageFactory = storageFactory;
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
@@ -637,6 +646,7 @@ export class BoundedContext {
     contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
+    contextSubscriptionRegistries.set(this, subscriptionRegistry);
     contextDeliveryDescriptors.set(
       this,
       ContextParts.createDeliveryDescriptor(
@@ -936,6 +946,7 @@ export class BoundedContext {
     );
     await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await ContextParts.closeContextPart(() => this.#stand.close(), errors);
+    await ContextParts.closeContextPart(() => this.#subscriptionRegistry.close(), errors);
     await ContextParts.closeContextPart(() => {
       ContextParts.requireTenantIndex(this).close();
     }, errors);
@@ -1030,6 +1041,14 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return storageFactory;
   },
 
+  subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry {
+    const registry = contextSubscriptionRegistries.get(context);
+    if (registry === undefined) {
+      throw new TypeError("Subscription registry access requires a built BoundedContext instance.");
+    }
+    return registry;
+  },
+
   delivery(context: BoundedContext): ContextDeliveryDescriptor {
     const descriptor = contextDeliveryDescriptors.get(context);
 
@@ -1052,6 +1071,8 @@ export class BoundedContextBuilder {
   readonly #entityTypes = new Set<RepositoryEntityType>();
   #deliveryStrategy: DeliveryStrategy = UniformAcrossAllShards.singleShard();
   #storageFactory: StorageFactory | undefined;
+  #subscriptionRegistry: StandSubscriptionRegistry | undefined;
+  #subscriptionLimit: number | undefined;
   #generatedRegistryRoot: string | URL | undefined;
 
   /**
@@ -1203,6 +1224,35 @@ export class BoundedContextBuilder {
   }
 
   /**
+   * Supplies a complete subscription registry which the built context closes.
+   * @param registry Stores this context's Stand subscription definitions.
+   * @returns This builder.
+   */
+  withSubscriptionRegistry(registry: StandSubscriptionRegistry): this {
+    if (this.#subscriptionLimit !== undefined) {
+      throw new Error("A custom subscription registry cannot use a subscription limit.");
+    }
+    this.#subscriptionRegistry = registry;
+    return this;
+  }
+
+  /**
+   * Configures the built-in registry capacity from one through 100.
+   * @param limit Maximum admitted subscription definitions.
+   * @returns This builder.
+   */
+  withSubscriptionLimit(limit: number): this {
+    if (this.#subscriptionRegistry !== undefined) {
+      throw new Error("A custom subscription registry cannot use a subscription limit.");
+    }
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+      throw new RangeError("Stand subscription limit must be from 1 through 100.");
+    }
+    this.#subscriptionLimit = limit;
+    return this;
+  }
+
+  /**
    * Sets the target-to-shard strategy for the context-owned Entity Inbox.
    *
    * @param strategy Selects the durable shard for Aggregate and Process Manager targets.
@@ -1283,11 +1333,14 @@ export class BoundedContextBuilder {
         context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
+      const registry = this.#subscriptionRegistry ?? new InMemorySubscriptionRegistry(this.#subscriptionLimit);
+      this.#subscriptionRegistry = undefined;
       return ContextParts.createBoundedContext(
         this.#specSnapshot,
         commandBus,
         eventBus,
         stand,
+        registry,
         storageFactory,
         registeredRepositories,
         this.#deliveryStrategy,
@@ -1473,6 +1526,7 @@ const ContextParts = Object.freeze({
     commandBus: CommandBus,
     eventBus: EventBus,
     stand: Stand,
+    registry: StandSubscriptionRegistry,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
@@ -1486,6 +1540,7 @@ const ContextParts = Object.freeze({
       commandBus,
       eventBus,
       stand,
+      registry,
       storageFactory,
       repositories,
       deliveryStrategy,
