@@ -709,6 +709,8 @@ type EntityInboxInput = Omit<InboxMessageInput, "whenReceived" | "version" | "sh
  * @internal
  */
 export interface EntityInboxTarget {
+  // prettier-ignore
+
   /**
    * Target state type URL routed by this replay target.
    */
