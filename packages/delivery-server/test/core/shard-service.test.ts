@@ -31,8 +31,12 @@ describe("in-memory Shards", () => {
     const firstPickup = create(PickUpShardSchema, { shard, worker: first });
     const secondPickup = create(PickUpShardSchema, { shard, worker: second });
 
+    const revalidate = {
+      signal: new AbortController().signal,
+      requestHeader: new Headers([["x-spine-delivery-revalidate", "true"]]),
+    } as never;
     await core.shards.pickShard(firstPickup, context);
-    await expect(core.shards.pickShard(firstPickup, context)).resolves.toMatchObject({
+    await expect(core.shards.pickShard(firstPickup, revalidate)).resolves.toMatchObject({
       value: { case: "pickedUp", value: { worker: first } },
     });
     await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker: first }), context);
@@ -40,7 +44,7 @@ describe("in-memory Shards", () => {
     await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker: first }), context);
 
     await expect(core.shards.pickShard(secondPickup, context)).resolves.toMatchObject({
-      value: { case: "pickedUp", value: { worker: second } },
+      value: { case: "alreadyPickedUp", value: { worker: second } },
     });
   });
 
