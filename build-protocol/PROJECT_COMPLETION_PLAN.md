@@ -124,7 +124,8 @@ durably closed.
   cluster-complete guarantee; queries remain authoritative. Its Q&A must also
   decide application redeployment and update behavior.
 
-Wave 6 Q&A is complete and autonomous execution is approved. Wave 7 still
+Wave 6 Q&A and T-0104 planning are complete. T-0105 begins the autonomous
+runtime sequence with exact system-event and Inbox contracts. Wave 7 still
 requires a separate human Q&A. Do not publish packages to npm until all waves
 are complete and publication is revisited with the human.
 
