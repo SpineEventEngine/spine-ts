@@ -6,6 +6,7 @@ import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
 import {
   LiquorPickUpOutcomeSchema,
   OptionalInboxMessageSchema,
+  ShardAlreadyPickedUpSchema,
   ShardPickedUpSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
@@ -29,6 +30,7 @@ export function transport(): {
   readonly streamFinished: number;
   reply(value: Message): void;
   replyPickup(): void;
+  replyAlreadyPicked(): void;
   replyAndHold(value: Message): { release(): void };
   fail(error: Error): void;
   streamReply(values: readonly Message[]): void;
@@ -36,19 +38,41 @@ export function transport(): {
   closed: boolean;
 } {
   const replies: (
-    Message | Error | { readonly value: Message; readonly held: Promise<void> } | "PICKUP"
+    | Message
+    | Error
+    | { readonly value: Message; readonly held: Promise<void> }
+    | "PICKUP"
+    | "ALREADY_PICKED"
   )[] = [];
+  const pickedWorkers = new Map<string, unknown>();
   const unary = vi.fn(async (...args: unknown[]) => {
     await Promise.resolve();
     const reply = replies.shift() ?? create(OptionalInboxMessageSchema);
     if (reply === "PICKUP") {
       const request = args[4] as { shard: unknown; worker: unknown };
+      const shard = request.shard as { index?: number; ofTotal?: number };
+      pickedWorkers.set(`${String(shard.index)}/${String(shard.ofTotal)}`, request.worker);
       return create(LiquorPickUpOutcomeSchema, {
         value: {
           case: "pickedUp",
           value: create(ShardPickedUpSchema, {
             shard: request.shard as never,
             worker: request.worker as never,
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
+        },
+      });
+    }
+    if (reply === "ALREADY_PICKED") {
+      const request = args[4] as { shard: { index?: number; ofTotal?: number } };
+      const key = `${String(request.shard.index)}/${String(request.shard.ofTotal)}`;
+      const worker = pickedWorkers.get(key);
+      if (worker === undefined) throw new Error("No prior picked worker.");
+      return create(LiquorPickUpOutcomeSchema, {
+        value: {
+          case: "alreadyPickedUp",
+          value: create(ShardAlreadyPickedUpSchema, {
+            worker: worker as never,
             whenPicked: { seconds: 1n, nanos: 0 },
           }),
         },
@@ -141,6 +165,7 @@ export function transport(): {
   const result = Object.assign(fake, {
     reply: (value: Message) => replies.push(value),
     replyPickup: () => replies.push("PICKUP"),
+    replyAlreadyPicked: () => replies.push("ALREADY_PICKED"),
     replyAndHold: (value: Message) => {
       let release: (() => void) | undefined;
       const held = new Promise<void>((resolve) => {
