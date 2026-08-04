@@ -89,6 +89,56 @@ describe("ServerEnvironment delivery lifecycle", () => {
     }
   });
 
+  it("uses the configured remote Admin source for supervisor recovery and observation", async () => {
+    let snapshots = 0;
+    let observations = 0;
+    const inbox = {
+      sessionKind: "EXCLUSIVE" as const,
+      receive: () => Promise.resolve({}),
+      read: () => Promise.resolve([]),
+      readMessage: () => Promise.resolve(undefined),
+      begin: () => Promise.resolve(undefined),
+    };
+    const workRegistry = {
+      sessionKind: "EXCLUSIVE" as const,
+      pickUp: () => Promise.resolve(undefined),
+      release: () => Promise.resolve(false),
+    };
+    const environment = configured({
+      open: () => undefined,
+      close: () => undefined,
+      inbox,
+      workRegistry,
+      source: {
+        shardSnapshot: () => {
+          snapshots += 1;
+          return Promise.resolve([]);
+        },
+        observeShardUpdates: () => {
+          observations += 1;
+          return { [Symbol.asyncIterator]: () => ({ next: () => new Promise(() => undefined) }) };
+        },
+        releaseExpired: () => Promise.resolve([]),
+      },
+    });
+
+    let attachment: EnvironmentAttachmentHandle | undefined;
+    try {
+      attachment = await serverEnvironmentAccess.attach(environment, {
+        ownership: "caller",
+        descriptors: [environmentDescriptor(environment)],
+      });
+      await waitFor(() => snapshots > 0 && observations > 0);
+      await serverEnvironmentAccess.detach(environment, attachment);
+      attachment = undefined;
+    } finally {
+      if (attachment !== undefined) await serverEnvironmentAccess.detach(environment, attachment);
+    }
+
+    expect(snapshots).toBeGreaterThan(0);
+    expect(observations).toBeGreaterThan(0);
+  });
+
   it("does not expose the internal delivery opener on the environment instance", () => {
     const environment = configured({ close: () => undefined });
 
