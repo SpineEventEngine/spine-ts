@@ -19,6 +19,9 @@ interface StandSubscriptionRecordCodec {
   decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry;
 }
 
+/**
+ * Encodes and validates durable Stand subscription records.
+ */
 export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.freeze({
   schema: StandSubscriptionRecordSchema,
 

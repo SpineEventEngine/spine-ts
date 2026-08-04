@@ -11,7 +11,10 @@ import {
   type StorageContext,
   type StorageFactory,
 } from "@spine-event-engine/storage";
-import type { StandSubscriptionRecord } from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
+// prettier-ignore
+import type {
+  StandSubscriptionRecord,
+} from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
 
 import { StandSubscriptionRecords } from "./subscription-records.js";
 
@@ -22,10 +25,31 @@ const pendingMilliseconds = 30_000;
  * A durable Stand subscription definition.
  */
 export interface StandSubscriptionEntry {
+  // prettier-ignore
+
+  /**
+   * Stores the canonical subscription definition.
+   */
   readonly subscription: Subscription;
+
+  /**
+   * Identifies the current lifecycle phase.
+   */
   readonly phase: "pending" | "active";
+
+  /**
+   * Records the creation time in milliseconds since the Unix epoch.
+   */
   readonly createdAt: number;
+
+  /**
+   * Records the pending activation deadline in milliseconds.
+   */
   readonly pendingUntil?: number;
+
+  /**
+   * Coordinates lifecycle changes.
+   */
   readonly revision: bigint;
 }
 
@@ -33,17 +57,79 @@ export interface StandSubscriptionEntry {
  * Result returned after a create attempt.
  */
 export type StandCreateResult =
-  | Readonly<{ kind: "created"; entry: StandSubscriptionEntry }>
-  | Readonly<{ kind: "existing"; entry: StandSubscriptionEntry }>;
+  | Readonly<{
+      // prettier-ignore
+
+      /**
+       * Identifies a newly created definition.
+       */
+      kind: "created";
+
+      /**
+       * Stores the created definition.
+       */
+      entry: StandSubscriptionEntry;
+    }>
+  | Readonly<{
+      // prettier-ignore
+
+      /**
+       * Identifies an idempotently existing definition.
+       */
+      kind: "existing";
+
+      /**
+       * Stores the existing definition.
+       */
+      entry: StandSubscriptionEntry;
+    }>;
 
 /**
  * Result returned after an activate attempt.
  */
 export type StandActivateResult =
-  | Readonly<{ kind: "activated"; entry: StandSubscriptionEntry }>
-  | Readonly<{ kind: "active"; entry: StandSubscriptionEntry }>
-  | Readonly<{ kind: "missing" }>
-  | Readonly<{ kind: "expired" }>;
+  | Readonly<{
+      // prettier-ignore
+
+      /**
+       * Identifies a transitioned definition.
+       */
+      kind: "activated";
+
+      /**
+       * Stores the active definition.
+       */
+      entry: StandSubscriptionEntry;
+    }>
+  | Readonly<{
+      // prettier-ignore
+
+      /**
+       * Identifies an already-active definition.
+       */
+      kind: "active";
+
+      /**
+       * Stores the active definition.
+       */
+      entry: StandSubscriptionEntry;
+    }>
+  | Readonly<{
+      // prettier-ignore
+
+      /**
+       * Identifies an absent definition.
+       */
+      kind: "missing";
+    }>
+  | Readonly<{
+      // prettier-ignore
+
+      /**
+       * Identifies a physically removed expired definition.
+       */
+      kind: "expired";
+    }>;
 
 /**
  * Result returned after a delete attempt.
@@ -55,10 +141,25 @@ type StandSubscriptionCreateResult = StandCreateResult;
 type StandSubscriptionActivateResult = StandActivateResult;
 type StandSubscriptionDeleteResult = StandDeleteResult;
 
-/** Reports the work performed by one bounded expired-pending cleanup page. */
+/**
+ * Reports the work performed by one bounded expired-pending cleanup page.
+ */
 export interface StandCleanupResult {
+  // prettier-ignore
+
+  /**
+   * Counts expired pending entries inspected in this page.
+   */
   readonly scanned: number;
+
+  /**
+   * Counts expired pending entries physically deleted in this page.
+   */
   readonly deleted: number;
+
+  /**
+   * Reports whether another expired pending page remains.
+   */
   readonly more: boolean;
 }
 
@@ -66,6 +167,8 @@ export interface StandCleanupResult {
  * Reports capacity exhaustion while admitting a definition.
  */
 export class StandCapacityError extends Error {
+  // prettier-ignore
+
   /**
    * Creates the capacity failure.
    * @param limit The configured admission limit.
@@ -80,6 +183,8 @@ export class StandCapacityError extends Error {
  * Reports an ID reused with distinct subscription content.
  */
 export class StandConflictError extends Error {
+  // prettier-ignore
+
   /**
    * Creates the conflict failure.
    * @param id The conflicting subscription ID.
@@ -94,13 +199,65 @@ export class StandConflictError extends Error {
  * Stores Stand subscription definitions independently from listener delivery.
  */
 export interface StandSubscriptionRegistry {
+  // prettier-ignore
+
+  /**
+   * Reports whether definitions survive process restarts.
+   */
   readonly persistent: boolean;
+
+  /**
+   * Creates a definition or returns its canonical equivalent.
+   *
+   * @param subscription Defines the subscription to retain.
+   * @returns Resolves to the creation result.
+   */
   create(subscription: Subscription): Promise<StandCreateResult>;
+
+  /**
+   * Activates a pending definition.
+   *
+   * @param id Identifies the definition to activate.
+   * @returns Resolves to the activation result.
+   */
   activate(id: SubscriptionId): Promise<StandActivateResult>;
+
+  /**
+   * Deletes a definition when its revision matches.
+   *
+   * @param id Identifies the definition to delete.
+   * @param expectedRevision Limits deletion to the observed revision.
+   * @returns Resolves to the deletion result.
+   */
   delete(id: SubscriptionId, expectedRevision?: bigint): Promise<StandDeleteResult>;
+
+  /**
+   * Finds one definition.
+   *
+   * @param id Identifies the definition to find.
+   * @returns Resolves to a clone or undefined.
+   */
   get(id: SubscriptionId): Promise<StandSubscriptionEntry | undefined>;
+
+  /**
+   * Lists bounded definitions in deterministic identifier order.
+   *
+   * @returns Resolves to cloned definitions.
+   */
   snapshot(): Promise<readonly StandSubscriptionEntry[]>;
+
+  /**
+   * Deletes one bounded page of expired pending definitions.
+   *
+   * @returns Resolves to cleanup work counts.
+   */
   cleanup(): Promise<StandCleanupResult>;
+
+  /**
+   * Closes the registry after admitted operations settle.
+   *
+   * @returns Resolves after closure completes.
+   */
   close(): Promise<void>;
 }
 
@@ -108,6 +265,11 @@ export interface StandSubscriptionRegistry {
  * Keeps bounded subscription definitions in process memory.
  */
 export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
+  // prettier-ignore
+
+  /**
+   * Reports that this registry is process-local.
+   */
   readonly persistent = false;
   readonly #entries = new Map<string, StandSubscriptionEntry>();
   readonly #limit: number;
@@ -129,6 +291,12 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     this.#limit = limit;
   }
 
+  /**
+   * Creates a process-local definition.
+   *
+   * @param subscription Defines the subscription to retain.
+   * @returns Resolves to the creation result.
+   */
   create(subscription: Subscription): Promise<StandCreateResult> {
     return this.#operation(() => {
       const id = InMemorySubscriptionRegistry.#subscriptionId(subscription);
@@ -159,6 +327,12 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Activates a pending process-local definition.
+   *
+   * @param id Identifies the definition to activate.
+   * @returns Resolves to the activation result.
+   */
   activate(id: SubscriptionId): Promise<StandActivateResult> {
     return this.#operation(() => {
       const value = subscriptionIdValue(id);
@@ -187,6 +361,13 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Deletes a process-local definition.
+   *
+   * @param id Identifies the definition to delete.
+   * @param expectedRevision Limits deletion to the observed revision.
+   * @returns Resolves to the deletion result.
+   */
   delete(id: SubscriptionId, expectedRevision?: bigint): Promise<StandDeleteResult> {
     return this.#operation(() => {
       const value = subscriptionIdValue(id);
@@ -200,6 +381,12 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Finds a process-local definition.
+   *
+   * @param id Identifies the definition to find.
+   * @returns Resolves to a clone or undefined.
+   */
   get(id: SubscriptionId): Promise<StandSubscriptionEntry | undefined> {
     return this.#operation(() => {
       const entry = this.#entries.get(subscriptionIdValue(id));
@@ -207,6 +394,11 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Lists process-local definitions in identifier order.
+   *
+   * @returns Resolves to cloned definitions.
+   */
   snapshot(): Promise<readonly StandSubscriptionEntry[]> {
     return this.#operation(() =>
       Object.freeze(
@@ -217,31 +409,37 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
     );
   }
 
+  /**
+   * Deletes one page of expired pending process-local definitions.
+   *
+   * @returns Resolves to cleanup work counts.
+   */
   cleanup(): Promise<StandCleanupResult> {
     return this.#operation(() => {
-      const page = [...this.#entries.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .slice(0, 25);
-      let deleted = 0;
       const now = Date.now();
-      for (const [id, entry] of page) {
-        if (
-          entry.phase === "pending" &&
-          entry.pendingUntil !== undefined &&
-          entry.pendingUntil <= now
-        ) {
-          this.#entries.delete(id);
-          deleted += 1;
-        }
-      }
+      const expired = [...this.#entries.entries()]
+        .filter(
+          ([, entry]) =>
+            entry.phase === "pending" &&
+            entry.pendingUntil !== undefined &&
+            entry.pendingUntil <= now,
+        )
+        .sort(([left], [right]) => left.localeCompare(right));
+      const page = expired.slice(0, 25);
+      for (const [id] of page) this.#entries.delete(id);
       return Object.freeze({
         scanned: page.length,
-        deleted,
-        more: this.#entries.size > page.length - deleted,
+        deleted: page.length,
+        more: expired.length > page.length,
       });
     });
   }
 
+  /**
+   * Closes this registry after admitted operations settle.
+   *
+   * @returns Resolves after closure completes.
+   */
   close(): Promise<void> {
     if (this.#closePromise !== undefined) return this.#closePromise;
     this.#closed = true;
@@ -293,6 +491,11 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
  * Stores one durable subscription definition per storage key.
  */
 export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
+  // prettier-ignore
+
+  /**
+   * Reports that this registry stores definitions durably.
+   */
   readonly persistent = true;
   readonly #storage: RecordStorage<string, StandSubscriptionRecord>;
   readonly #control: RecordStorage<string, Any>;
@@ -344,6 +547,12 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     }
   }
 
+  /**
+   * Creates a durable definition or returns its canonical equivalent.
+   *
+   * @param subscription Defines the subscription to retain.
+   * @returns Resolves to the creation result.
+   */
   async create(subscription: Subscription): Promise<StandSubscriptionCreateResult> {
     return await this.#operation(async () => {
       const id = StorageSubscriptionRegistry.#id(subscription);
@@ -390,6 +599,12 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Activates a durable pending definition.
+   *
+   * @param subscriptionId Identifies the definition to activate.
+   * @returns Resolves to the activation result.
+   */
   async activate(
     subscriptionId: SubscriptionId | string,
   ): Promise<StandSubscriptionActivateResult> {
@@ -421,6 +636,13 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Deletes a durable definition when its revision matches.
+   *
+   * @param subscriptionId Identifies the definition to delete.
+   * @param expectedRevision Limits deletion to the observed revision.
+   * @returns Resolves to the deletion result.
+   */
   async delete(
     subscriptionId: SubscriptionId | string,
     expectedRevision?: bigint,
@@ -449,6 +671,12 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Finds one durable definition.
+   *
+   * @param subscriptionId Identifies the definition to find.
+   * @returns Resolves to a clone or undefined.
+   */
   async get(subscriptionId: SubscriptionId | string): Promise<StandSubscriptionEntry | undefined> {
     return await this.#operation(async () => {
       const id = registryId(subscriptionId);
@@ -460,6 +688,11 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Lists durable definitions in identifier order.
+   *
+   * @returns Resolves to cloned definitions.
+   */
   async snapshot(): Promise<readonly StandSubscriptionEntry[]> {
     return await this.#operation(async () => {
       await this.#recover();
@@ -471,6 +704,11 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Deletes one bounded page of expired durable pending definitions.
+   *
+   * @returns Resolves to cleanup work counts.
+   */
   async cleanup(): Promise<StandCleanupResult> {
     return await this.#operation(async () => {
       await this.#recover();
@@ -490,6 +728,11 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     });
   }
 
+  /**
+   * Closes durable storage after admitted operations settle.
+   *
+   * @returns Resolves after closure completes.
+   */
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;

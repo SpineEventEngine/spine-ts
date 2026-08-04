@@ -64,7 +64,10 @@ import {
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
-import { StorageSubscriptionRegistry, type StandSubscriptionRegistry } from "../stand/subscription-registry.js";
+import {
+  StorageSubscriptionRegistry,
+  type StandSubscriptionRegistry,
+} from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -587,6 +590,7 @@ export class BoundedContext {
    * @param commandBus Dispatches commands accepted by this context.
    * @param eventBus Dispatches events accepted by this context.
    * @param stand Stores read-side state for this context.
+   * @param subscriptionRegistry Stores this context's Stand subscription definitions.
    * @param storageFactory Creates context storage.
    * @param repositories Lists repositories to register.
    * @param deliveryStrategy Selects immutable Entity Inbox shards.
@@ -1224,9 +1228,9 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Supplies a complete subscription registry which the built context closes.
+   * Sets the complete subscription registry that the built context closes.
    * @param registry Stores this context's Stand subscription definitions.
-   * @returns This builder.
+   * @returns Returns this builder for further configuration.
    */
   withSubscriptionRegistry(registry: StandSubscriptionRegistry): this {
     if (this.#subscriptionLimit !== undefined) {
@@ -1237,9 +1241,9 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Configures the built-in registry capacity from one through 100.
+   * Sets the built-in registry capacity from one through 100.
    * @param limit Maximum admitted subscription definitions.
-   * @returns This builder.
+   * @returns Returns this builder for further configuration.
    */
   withSubscriptionLimit(limit: number): this {
     if (this.#subscriptionRegistry !== undefined) {
@@ -1333,11 +1337,13 @@ export class BoundedContextBuilder {
         context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
-      const registry = this.#subscriptionRegistry ?? new StorageSubscriptionRegistry(
-        ContextParts.createStorageContext(this.#specSnapshot),
-        storageFactory,
-        this.#subscriptionLimit,
-      );
+      const registry =
+        this.#subscriptionRegistry ??
+        new StorageSubscriptionRegistry(
+          ContextParts.createStorageContext(this.#specSnapshot),
+          storageFactory,
+          this.#subscriptionLimit,
+        );
       this.#subscriptionRegistry = undefined;
       return ContextParts.createBoundedContext(
         this.#specSnapshot,

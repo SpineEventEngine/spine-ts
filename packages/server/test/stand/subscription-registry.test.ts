@@ -178,6 +178,27 @@ describe("InMemorySubscriptionRegistry", () => {
     }
   });
 
+  it("does not let active lexically-first definitions starve expired pending cleanup", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const registry = new InMemorySubscriptionRegistry();
+      for (let index = 0; index < 25; index += 1) {
+        await registry.create(subscription(`active-${String(index)}`));
+        await registry.activate(id(`active-${String(index)}`));
+      }
+      for (let index = 0; index < 27; index += 1)
+        await registry.create(subscription(`expired-${String(index)}`));
+      vi.setSystemTime(start + 30_000);
+
+      await expect(registry.cleanup()).resolves.toEqual({ scanned: 25, deleted: 25, more: true });
+      await expect(registry.cleanup()).resolves.toEqual({ scanned: 2, deleted: 2, more: false });
+      expect(await registry.snapshot()).toHaveLength(25);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("freezes clone-safe result objects and closes through one shared promise", async () => {
     const registry = new InMemorySubscriptionRegistry();
     const result = await registry.create(subscription("one"));

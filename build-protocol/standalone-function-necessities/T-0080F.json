@@ -988,5 +988,95 @@
     "name": "commitFenced",
     "disposition": "necessity",
     "reason": "TypeScript framework boundary: commitFenced awaits the active AsyncLocalStorage guard immediately before a synchronous repository commit."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-records.ts",
+    "kind": "function-declaration",
+    "identity": "timestamp()#1",
+    "name": "timestamp",
+    "disposition": "necessity",
+    "reason": "TypeScript serialization boundary: timestamp converts validated milliseconds into the Protobuf timestamp representation without owning record state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "controlWithOperation()#1",
+    "name": "controlWithOperation",
+    "disposition": "necessity",
+    "reason": "TypeScript serialization boundary: controlWithOperation creates immutable CAS control values without owning registry lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "writeControl()#1",
+    "name": "writeControl",
+    "disposition": "necessity",
+    "reason": "TypeScript serialization boundary: writeControl encodes an internal CAS value for provider-neutral record storage."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "readControl()#1",
+    "name": "readControl",
+    "disposition": "necessity",
+    "reason": "TypeScript serialization boundary: readControl validates a provider-neutral CAS value before registry state uses it."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "recordDigest()#1",
+    "name": "recordDigest",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: recordDigest identifies serialized records across CAS recovery without owning registry state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "sameSubscription()#1",
+    "name": "sameSubscription",
+    "disposition": "necessity",
+    "reason": "TypeScript Protobuf boundary: sameSubscription compares canonical wire bytes without owning subscription lifecycle state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "subscriptionIdValue()#1",
+    "name": "subscriptionIdValue",
+    "disposition": "necessity",
+    "reason": "TypeScript public-value boundary: subscriptionIdValue validates generated SubscriptionId input before registry storage access."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "subscriptionEntryId()#1",
+    "name": "subscriptionEntryId",
+    "disposition": "necessity",
+    "reason": "TypeScript storage boundary: subscriptionEntryId extracts a validated generated identifier from persisted entry data."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "registryId()#1",
+    "name": "registryId",
+    "disposition": "necessity",
+    "reason": "TypeScript public boundary: registryId normalizes generated and string identifiers before durable registry operations."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "deepFreeze()#1",
+    "name": "deepFreeze",
+    "disposition": "necessity",
+    "reason": "TypeScript immutability boundary: deepFreeze protects cloned Protobuf values returned from registry lifecycle operations."
   }
 ]
