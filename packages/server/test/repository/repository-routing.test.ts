@@ -52,7 +52,7 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   Aggregate,
@@ -2394,7 +2394,9 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-async", "task-async", "Async"));
 
-    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(AsyncAssigneeAggregate.resolveCommand).toBeTypeOf("function");
+    });
     await expect(storage.readCurrent("task-async")).resolves.toBeUndefined();
 
     AsyncAssigneeAggregate.resolveCommand?.("Async");
@@ -2453,7 +2455,7 @@ describe("repository signal routing", () => {
     expect(failure?.error).not.toBe(dispatchFailure);
   });
 
-  it("does not wait for stored-event dispatch when completing an outer command", async () => {
+  it("allows a causally nested command while the outer stored-event follow-up remains pending", async () => {
     const factory = new InMemoryStorageFactory();
     const nestedGate = createSignal();
     const nestedPosted = createSignal();
@@ -3113,7 +3115,7 @@ describe("repository signal routing", () => {
     for (let index = 0; index < 100; index += 1) {
       const hh = String(Math.floor(index / 60)).padStart(2, "0");
       const mm = String(index % 60).padStart(2, "0");
-      await storeProcessManagerInboxCommand(
+      await storeEntityInboxCommand(
         delivery,
         createAggregateCommand(
           `command-backlog-${String(index).padStart(3, "0")}`,
@@ -3147,7 +3149,7 @@ describe("repository signal routing", () => {
     ).resolves.not.toContainEqual(expect.objectContaining({ signalId: "command-pm-page-target" }));
   });
 
-  it("rejects process-manager inbox replay when the stored command tenant mismatches delivery tenant", async () => {
+  it("rejects Entity Inbox replay when the stored command tenant mismatches delivery tenant", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3156,8 +3158,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const target = requireEntityInboxTarget(repository);
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand(
         "command-pm-tenant-mismatch",
@@ -3174,7 +3176,7 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.commandCalls).toBe(0);
   });
 
-  it("rejects process-manager inbox replay when stored target metadata does not match the routed command", async () => {
+  it("rejects Entity Inbox replay when stored target metadata does not match the routed command", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3183,9 +3185,9 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
+    const target = requireEntityInboxTarget(repository);
     const command = createAggregateCommand("command-pm-route-mismatch", "pm-routed", "Routed");
-    const wrongId = await storeProcessManagerInboxCommand(
+    const wrongId = await storeEntityInboxCommand(
       delivery,
       command,
       new Date("2026-07-08T09:01:00.000Z"),
@@ -3194,7 +3196,7 @@ describe("repository signal routing", () => {
         targetId: "pm-forged",
       },
     );
-    const wrongType = await storeProcessManagerInboxCommand(
+    const wrongType = await storeEntityInboxCommand(
       delivery,
       command,
       new Date("2026-07-08T09:02:00.000Z"),
@@ -3210,9 +3212,9 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.commandCalls).toBe(0);
   });
 
-  it("rejects process-manager inbox replay before the repository is bound to a runtime", async () => {
+  it("rejects Entity Inbox replay before the repository is bound to a runtime", async () => {
     const repository = createProcessManagerAssignRepository();
-    const target = requireProcessManagerInboxTarget(repository);
+    const target = requireEntityInboxTarget(repository);
 
     await expect(
       target.replay({
@@ -3231,10 +3233,10 @@ describe("repository signal routing", () => {
         whenReceived: new Date("2026-07-08T09:02:30.000Z"),
         version: 1n,
       }),
-    ).rejects.toThrow("Process-manager inbox replay requires a bound repository runtime.");
+    ).rejects.toThrow("Entity Inbox replay requires a bound repository runtime.");
   });
 
-  it("rejects process-manager inbox replay for UPDATE_SUBSCRIBER messages before handler code", async () => {
+  it("rejects Entity Inbox replay for UPDATE_SUBSCRIBER messages before handler code", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3243,8 +3245,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const target = requireEntityInboxTarget(repository);
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand("command-pm-update-subscriber", "pm-update-subscriber", "Update"),
       new Date("2026-07-08T09:03:00.000Z"),
@@ -3261,7 +3263,7 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.commandCalls).toBe(0);
   });
 
-  it("rejects process-manager inbox replay without a signal as invalid payload before handler code", async () => {
+  it("rejects Entity Inbox replay without a signal as invalid payload before handler code", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3270,8 +3272,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const target = requireEntityInboxTarget(repository);
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand("command-pm-no-signal", "pm-no-signal", "No signal"),
       new Date("2026-07-08T09:03:30.000Z"),
@@ -3295,7 +3297,7 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.commandCalls).toBe(0);
   });
 
-  it("rejects multitenant process-manager inbox replay without delivery tenant", async () => {
+  it("rejects multitenant Entity Inbox replay without delivery tenant", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3304,8 +3306,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const target = requireEntityInboxTarget(repository);
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand(
         "command-pm-missing-delivery-tenant",
@@ -3322,7 +3324,7 @@ describe("repository signal routing", () => {
     expect(RoutingProcessManager.commandCalls).toBe(0);
   });
 
-  it("rejects multitenant process-manager inbox replay when stored command tenant metadata is missing", async () => {
+  it("rejects multitenant Entity Inbox replay when stored command tenant metadata is missing", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3331,8 +3333,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const target = requireEntityInboxTarget(repository);
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand(
         "command-pm-missing-stored-tenant",
@@ -3359,8 +3361,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const target = requireEntityInboxTarget(repository);
+    const received = await storeEntityInboxCommand(
       delivery,
       createValidatedCommand("command-pm-invalid-replay", "pm-invalid-replay", ""),
       new Date("2026-07-08T09:03:00.000Z"),
@@ -3375,7 +3377,7 @@ describe("repository signal routing", () => {
     expect(ValidatingProcessManager.commandCalls).toBe(0);
   });
 
-  it("rejects idless process-manager inbox replay before handler or Stand write", async () => {
+  it("rejects idless Entity Inbox replay before handler or Stand write", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3387,8 +3389,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const target = requireEntityInboxTarget(repository);
+    const received = await storeEntityInboxCommand(
       delivery,
       createIdlessAggregateCommand("pm-idless-replay", "Idless replay"),
       new Date("2026-07-08T09:03:15.000Z"),
@@ -3403,7 +3405,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("rejects blank process-manager inbox replay command ids before handler or Stand write", async () => {
+  it("rejects blank Entity Inbox replay command ids before handler or Stand write", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createProcessManagerAssignRepository();
@@ -3415,8 +3417,8 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const target = requireEntityInboxTarget(repository);
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand("   ", "pm-blank-replay", "Blank replay"),
       new Date("2026-07-08T09:03:15.000Z"),
@@ -4084,7 +4086,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
+    const target = requireEntityInboxTarget(repository);
     const blockedRow = await storePmInboxEvent(
       delivery,
       createProjectionEvent("event-guard-lane-one", "pm-guard-lane-one"),
@@ -4121,7 +4123,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
+    const target = requireEntityInboxTarget(repository);
     const event = createProjectionEvent("event-pm-replay", "pm-replay");
     const wrongId = await storePmInboxEvent(
       delivery,
@@ -4166,16 +4168,16 @@ describe("repository signal routing", () => {
     );
 
     await expect(target.replay(wrongId)).rejects.toThrow(
-      "Process-manager inbox replay stored target ID does not match the routed event.",
+      "Entity Inbox replay stored target ID does not match the routed event.",
     );
     await expect(target.replay(wrongType)).rejects.toThrow(
-      "Process-manager inbox replay stored target type does not match the routed repository.",
+      "Entity Inbox replay stored target type does not match the routed repository.",
     );
     await expect(target.replay(malformed)).rejects.toThrow(
-      "Process-manager inbox replay requires a readable stored event.",
+      "Entity Inbox replay requires a readable stored event.",
     );
     await expect(target.replay(wrongLabel)).rejects.toThrow(
-      'Process-manager inbox replay does not handle "UPDATE_SUBSCRIBER" messages.',
+      'Entity Inbox replay does not handle "UPDATE_SUBSCRIBER" messages.',
     );
 
     expect(RoutingProcessManager.eventCalls).toBe(0);
@@ -4190,7 +4192,7 @@ describe("repository signal routing", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: factory,
     });
-    const target = requireProcessManagerInboxTarget(repository);
+    const target = requireEntityInboxTarget(repository);
     const stored = await storePmInboxEvent(
       delivery,
       createProjectionEvent("event-pm-guarded-replay", "pm-guarded-replay"),
@@ -5613,7 +5615,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("uses command tenant over imported tenant metadata when stored aggregate events update projections", async () => {
+  it("delivers an Aggregate-produced Projection update after the shared inbox shard is released", async () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createProjectionProducingRepository())
       .add(createExecutingProjectionRepository())
@@ -7087,12 +7089,12 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
   });
 }
 
-function requireProcessManagerInboxTarget(repository: RepositoryView): {
-  replay(message: InboxMessage, tenantId?: string): Promise<void>;
+function requireEntityInboxTarget(repository: RepositoryView): {
+  replay(message: InboxMessage, tenantId?: string): Promise<unknown>;
 } {
-  const target = repositoryAccess.processManagerInboxTarget(repository);
+  const target = repositoryAccess.entityInboxTarget(repository);
   if (target === undefined) {
-    throw new Error("Expected a process-manager inbox target.");
+    throw new Error("Expected a Entity Inbox target.");
   }
 
   return target;
@@ -7109,7 +7111,7 @@ function requireProjectionInboxTarget(repository: RepositoryView): {
   return target;
 }
 
-async function storeProcessManagerInboxCommand(
+async function storeEntityInboxCommand(
   delivery: Delivery,
   command: SpineCommand,
   whenReceived: Date,

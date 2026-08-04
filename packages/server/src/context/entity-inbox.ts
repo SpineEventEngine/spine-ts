@@ -1,7 +1,10 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { Delivery } from "../delivery/delivery.js";
+import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
-import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
+import type { EntityInbox, EntityInboxTarget } from "../repository/repository.js";
 import {
   type DeliveryHandoff,
   type DeliveryEndpoint,
@@ -11,57 +14,66 @@ import {
 } from "./local-inbox-handoff.js";
 
 /**
- * Persists and replays delivery rows for process-manager handlers.
+ * Persists and replays delivery rows for Aggregate and Process Manager handlers.
  */
-export class LocalProcessManagerInbox implements ProcessManagerInbox {
+export class LocalEntityInbox implements EntityInbox {
   readonly #contextName: string;
-  readonly #targets = new Map<string, ProcessManagerInboxTarget>();
+  readonly #targets = new Map<string, EntityInboxTarget>();
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
   readonly #readiness: DeliveryReadiness;
   readonly #keepTenant: (tenantId: string) => Promise<void>;
+  readonly #strategy: DeliveryStrategy;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
+  readonly #followUps = new Map<string, Promise<void>>();
+  readonly #followUpScope = new AsyncLocalStorage<symbol>();
+  readonly #followUpToken = Symbol("entity-inbox-follow-up");
   #nextVersion = 0n;
 
   /**
-   * Creates a local process-manager inbox.
+   * Creates a local Entity Inbox.
    * @param contextName Names the bounded context that owns this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
    * @param keepTenant Records a tenant before its message is persisted.
+   * @param strategy Derives shard ownership for Entity Inbox targets.
    */
   constructor(
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
     keepTenant: (tenantId: string) => Promise<void> = () => Promise.resolve(),
+    strategy: DeliveryStrategy = UniformAcrossAllShards.singleShard(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
       readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
     this.#keepTenant = keepTenant;
+    this.#strategy = strategy;
   }
 
   /**
-   * Registers a target that replays process-manager messages.
-   * @param target Handles messages for one process-manager type.
+   * Registers a target that replays Entity Inbox messages.
+   * @param target Handles messages for one Entity type.
    */
-  register(target: ProcessManagerInboxTarget): void {
+  register(target: EntityInboxTarget): void {
     this.#targets.set(target.targetTypeUrl, target);
     this.#endpoints.set(
       target.targetTypeUrl,
       Object.freeze(
-        target.labels.map((label) =>
-          InboxHandoff.endpoint({
-            label,
-            inboxId: { targetTypeUrl: target.targetTypeUrl },
-            shard: ShardIndex.single(),
-          }),
+        target.labels.flatMap((label) =>
+          Array.from({ length: this.#strategy.shardCount }, (_, index) =>
+            InboxHandoff.endpoint({
+              label,
+              inboxId: { targetTypeUrl: target.targetTypeUrl },
+              shard: new ShardIndex(index, this.#strategy.shardCount),
+            }),
+          ),
         ),
       ),
     );
   }
 
   /**
-   * Lists endpoints registered for process-manager delivery.
+   * Lists endpoints registered for Entity Inbox delivery.
    * @returns Returns immutable endpoint descriptions.
    */
   endpoints(): readonly DeliveryEndpoint[] {
@@ -69,17 +81,28 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   }
 
   /**
-   * Dispatches a durable inbox row through its process-manager target.
+   * Returns the context-owned target-to-shard strategy.
+   *
+   * @returns The immutable delivery strategy.
+   */
+  strategy(): DeliveryStrategy {
+    return this.#strategy;
+  }
+
+  /**
+   * Dispatches a durable inbox row through its Entity Inbox target.
    * @param message Contains the persisted inbox row to replay.
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
    * @returns A promise that resolves after the inbox row is replayed.
    */
   replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    return this.#replay(message, deliveryTenantId);
+    return this.#replay(message, deliveryTenantId, true, this.#expectedShard(message)).then(
+      () => undefined,
+    );
   }
 
   /**
-   * Persists and drains one process-manager inbox message.
+   * Persists and drains one Entity Inbox message.
    * @param delivery Stores and drains the inbox row.
    * @param input Describes the message to persist.
    * @param deliveryTenantId Identifies the tenant that owns the message when present.
@@ -87,19 +110,20 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
    */
   async receive(
     delivery: Delivery,
-    input: ProcessManagerInput,
+    input: EntityInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    const routedInput = this.#route(input);
     const routed = this.#readiness.route(delivery);
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
-      key: InboxHandoff.key(input, deliveryTenantId),
-      onHandoff: () => this.#receiveAndDrain(routed, input, deliveryTenantId),
+      key: InboxHandoff.key(routedInput, deliveryTenantId),
+      onHandoff: () => this.#receiveAndDrain(routed, routedInput, deliveryTenantId),
     });
   }
 
   /**
-   * Persists and drains a batch of process-manager inbox messages.
+   * Persists and drains a batch of Entity Inbox messages.
    * @param delivery Stores and drains the inbox rows.
    * @param inputs Describe the messages to persist.
    * @param deliveryTenantId Identifies the tenant that owns the messages when present.
@@ -107,18 +131,19 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
    */
   async receiveAll(
     delivery: Delivery,
-    inputs: ProcessManagerInputs,
+    inputs: EntityInputs,
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
     const routed = this.#readiness.route(delivery);
-    const key = this.#batchKey(inputs, deliveryTenantId);
+    const routedInputs = inputs.map((input) => this.#route(input));
+    const key = this.#batchKey(routedInputs, deliveryTenantId);
     const inFlightHandoff = this.#inFlightBatchHandoffs.get(key);
 
     if (inFlightHandoff !== undefined) {
       return await inFlightHandoff;
     }
 
-    const handoff = this.#receiveAndDrainAll(routed, inputs, deliveryTenantId);
+    const handoff = this.#receiveAndDrainAll(routed, routedInputs, deliveryTenantId);
     this.#inFlightBatchHandoffs.set(key, handoff);
     try {
       return await handoff;
@@ -131,23 +156,28 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
   async #receiveAndDrain(
     delivery: Delivery,
-    input: ProcessManagerInput,
+    input: RoutedEntityInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    await this.#followUpFor(input, deliveryTenantId);
     await this.#keepDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
     await written.handoff.complete(() =>
-      this.#drainInboxRow(delivery, written.message, deliveryTenantId),
+      this.#drainInboxRow(delivery, written.message, deliveryTenantId, input.shard),
     );
     return written.message;
   }
 
   async #receiveAndDrainAll(
     delivery: Delivery,
-    inputs: ProcessManagerInputs,
+    inputs: readonly RoutedEntityInput[],
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
+    const followUps = inputs
+      .map((input) => this.#followUpFor(input, deliveryTenantId))
+      .filter((followUp): followUp is Promise<void> => followUp !== undefined);
+    if (followUps.length > 0) await Promise.all(followUps);
     await this.#keepDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const whenReceived = new Date();
@@ -213,24 +243,24 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       }
       const written = row.owner.written;
       if (written === undefined) {
-        LocalProcessManagerInbox.#reject(row.owner, failures[0]);
+        LocalEntityInbox.#reject(row.owner, failures[0]);
         continue;
       }
       try {
         await written.handoff.complete(() =>
-          this.#drainInboxRow(delivery, written.message, deliveryTenantId),
+          this.#drainInboxRow(delivery, written.message, deliveryTenantId, row.input.shard),
         );
-        LocalProcessManagerInbox.#resolve(row.owner, written.message);
+        LocalEntityInbox.#resolve(row.owner, written.message);
       } catch (error) {
         failures.push(error);
-        LocalProcessManagerInbox.#reject(row.owner, error);
+        LocalEntityInbox.#reject(row.owner, error);
       }
     }
   }
 
   async #writeInboxRow(
     delivery: Delivery,
-    input: ProcessManagerInput,
+    input: RoutedEntityInput,
     whenReceived: Date,
     deliveryTenantId?: string,
   ): Promise<InboxWrite> {
@@ -266,21 +296,33 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     delivery: Delivery,
     message: InboxMessage,
     deliveryTenantId?: string,
+    expectedShard?: ShardIndex,
   ): Promise<void> {
+    let followUp: (() => Promise<void>) | undefined;
     await InboxHandoff.drain({
       delivery,
       received: message,
       node: this.#contextName,
-      onReplay: (nextMessage) => this.#replay(nextMessage, deliveryTenantId),
-      replayFailureMessage: "Process-manager inbox replay failed.",
-      skippedMessage:
-        "Process-manager inbox delivery was skipped before the target row was delivered.",
+      onReplay: async (nextMessage) => {
+        followUp = await this.#replay(
+          nextMessage,
+          deliveryTenantId,
+          false,
+          expectedShard ?? this.#expectedShard(nextMessage),
+        );
+      },
+      replayFailureMessage: "Entity Inbox replay failed.",
+      skippedMessage: "Entity Inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
-        "Process-manager inbox delivery did not reach the target row before the local drain finished.",
+        "Entity Inbox delivery did not reach the target row before the local drain finished.",
     });
+    if (followUp !== undefined) {
+      const nextFollowUp = followUp;
+      this.#chainFollowUp(message, deliveryTenantId, nextFollowUp);
+    }
   }
 
-  #claimRows(inputs: ProcessManagerInputs, deliveryTenantId?: string): BatchRow[] {
+  #claimRows(inputs: readonly RoutedEntityInput[], deliveryTenantId?: string): BatchRow[] {
     return inputs.map((input) => {
       const key = InboxHandoff.key(input, deliveryTenantId);
       const inFlight = this.#inFlightHandoffs.get(key);
@@ -289,7 +331,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
         return { key, input, promise: inFlight };
       }
 
-      const owner = LocalProcessManagerInbox.#deferred();
+      const owner = LocalEntityInbox.#deferred();
       this.#inFlightHandoffs.set(key, owner.promise);
       return { key, input, promise: owner.promise, owner };
     });
@@ -308,22 +350,72 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     return this.#nextVersion;
   }
 
-  #batchKey(inputs: ProcessManagerInputs, deliveryTenantId?: string): string {
+  #route(input: EntityInput): RoutedEntityInput {
+    return Object.freeze({
+      ...input,
+      shard: this.#strategy.shardFor(input.inboxId.targetId, input.inboxId.targetTypeUrl),
+    });
+  }
+
+  #batchKey(inputs: readonly RoutedEntityInput[], deliveryTenantId?: string): string {
     return JSON.stringify(inputs.map((input) => InboxHandoff.key(input, deliveryTenantId)));
   }
 
-  async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    LocalProcessManagerInbox.#assert(message);
+  #followUpFor(input: RoutedEntityInput, tenantId?: string): Promise<void> | undefined {
+    if (this.#followUpScope.getStore() === this.#followUpToken) return undefined;
+    return this.#followUps.get(this.#followUpKey(input.shard, tenantId));
+  }
+
+  #chainFollowUp(
+    message: InboxMessage,
+    tenantId: string | undefined,
+    callback: EntityInboxFollowUp,
+  ): void {
+    const key = this.#followUpKey(message.shard, tenantId);
+    const prior = this.#followUps.get(key) ?? Promise.resolve();
+    const next: Promise<void> = prior
+      .then(() => this.#followUpScope.run(this.#followUpToken, callback))
+      .catch(() => undefined);
+    this.#followUps.set(key, next);
+    void next.finally(() => {
+      if (this.#followUps.get(key) === next) this.#followUps.delete(key);
+    });
+  }
+
+  #followUpKey(shard: ShardIndex, tenantId?: string): string {
+    return `${tenantId ?? ""}:${String(shard.index)}:${String(shard.ofTotal)}`;
+  }
+
+  async #replay(
+    message: InboxMessage,
+    deliveryTenantId?: string,
+    runFollowUp = true,
+    expectedShard = this.#expectedShard(message),
+  ): Promise<(() => Promise<void>) | undefined> {
+    LocalEntityInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
 
     if (target === undefined) {
       throw new Error(
-        `BoundedContext delivery has no process-manager target for "${message.inboxId.targetTypeUrl}".`,
+        `BoundedContext delivery has no Entity Inbox target for "${message.inboxId.targetTypeUrl}".`,
       );
     }
 
-    await target.replay(message, deliveryTenantId);
+    if (
+      message.shard.index !== expectedShard.index ||
+      message.shard.ofTotal !== expectedShard.ofTotal
+    ) {
+      throw new Error("Entity Inbox replay stored shard does not match the routed target.");
+    }
+    const followUp = await target.replay(message, deliveryTenantId);
+    const callback = typeof followUp === "function" ? followUp : undefined;
+    if (callback !== undefined && runFollowUp) await callback();
+    return callback;
+  }
+
+  #expectedShard(message: InboxMessage): ShardIndex {
+    return this.#strategy.shardFor(message.inboxId.targetId, message.inboxId.targetTypeUrl);
   }
 
   static #deferred(): InboxDeferred {
@@ -347,21 +439,23 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     owner.reject(reason);
   }
 
-  static #assert(message: InboxMessage): asserts message is ProcessManagerMessage {
+  static #assert(message: InboxMessage): asserts message is EntityMessage {
     if (message.label !== "HANDLE_COMMAND" && message.label !== "REACT_UPON_EVENT") {
       throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
     }
     if (message.status !== "TO_DELIVER") {
       throw new Error(
-        `BoundedContext delivery cannot replay process-manager inbox message with status "${message.status}".`,
+        `BoundedContext delivery cannot replay Entity Inbox message with status "${message.status}".`,
       );
     }
   }
 }
 
-type ProcessManagerInput = Parameters<ProcessManagerInbox["receive"]>[1];
-type ProcessManagerInputs = Parameters<ProcessManagerInbox["receiveAll"]>[1];
-type ProcessManagerMessage = Parameters<ProcessManagerInboxTarget["replay"]>[0];
+type EntityInput = Parameters<EntityInbox["receive"]>[1];
+type EntityInputs = Parameters<EntityInbox["receiveAll"]>[1];
+type EntityMessage = Parameters<EntityInboxTarget["replay"]>[0];
+type EntityInboxFollowUp = () => Promise<void>;
+type RoutedEntityInput = EntityInput & { readonly shard: ShardIndex };
 
 interface InboxDeferred {
   readonly promise: Promise<InboxMessage>;
@@ -378,7 +472,7 @@ interface InboxWrite {
 
 interface BatchRow {
   readonly key: string;
-  readonly input: ProcessManagerInput;
+  readonly input: RoutedEntityInput;
   readonly promise: Promise<InboxMessage>;
   readonly owner?: InboxDeferred;
 }

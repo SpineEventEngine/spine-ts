@@ -165,6 +165,23 @@ updates, and process-manager reactions. Callbacks are at-least-once/replay-safe:
 lost renewal can prevent stale finalization but cannot undo a callback already
 run. The package exposes no general raw worker callback API.
 
+`BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
+immutable strategy for its Entity Inbox; the default is one shard. For example,
+use the public builder chain:
+
+```ts
+import { BoundedContext, UniformAcrossAllShards } from "@spine-event-engine/server";
+
+const context = BoundedContext.singleTenant("Tasks")
+  .withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))
+  .build();
+```
+
+Aggregate commands and Process Manager commands/events derive their target shard
+internally and persist their envelope before replay. Direct local delivery drains
+in the post request; attached `ServerEnvironment` ports acknowledge persisted
+work and replay it in a worker. Projection rows remain separate.
+
 `DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
 receives `{ source, delivery, onMessage }`, owns bounded shard notifications
 from that structural source, and must start after endpoints are ready and close
