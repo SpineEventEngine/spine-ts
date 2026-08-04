@@ -1,58 +1,39 @@
-import { create, toBinary } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { CommandSchema } from "@spine-event-engine/proto";
 import { DeliveryServer } from "../../delivery-server/src/index.js";
-import {
-  DeliveryBuilder,
-  DeliverySupervisor,
-  ShardIndex,
-  UniformAcrossAllShards,
-} from "@spine-event-engine/server";
+import { spawn, type ChildProcess } from "node:child_process";
+import { resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
 
-import { DeliveryClient, RemoteInbox, RemoteWorkRegistry } from "../src/index.js";
-
 const servers: DeliveryServer[] = [];
-const clients: DeliveryClient[] = [];
+const applications = new Set<ChildProcess>();
+const applicationFixture = resolve("packages/delivery-client/test-fixtures/remote-environment-app.mjs");
 
 afterEach(async () => {
-  for (const client of clients.splice(0)) client.close();
+  await Promise.all([...applications].map(stop));
+  applications.clear();
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
-it("fans out one real Admin shard update to two supervisors and drains rows arriving mid-run", async () => {
+it("fans out one real Admin shard update through two remote ServerEnvironment assemblies", async () => {
   const server = trackedServer();
   await server.start();
-  const alpha = node(server.baseUrl, "alpha");
-  const beta = node(server.baseUrl, "beta");
-  const firstStarted = Promise.withResolvers<undefined>();
-  const releaseFirst = Promise.withResolvers<undefined>();
-  const deliveries: string[] = [];
-  const first = supervisor(alpha, (signalId) => {
-    deliveries.push(`alpha:${signalId}`);
-    if (signalId === "first") {
-      firstStarted.resolve(undefined);
-      return releaseFirst.promise;
-    }
-    return Promise.resolve();
-  });
-  const second = supervisor(beta, (signalId) => {
-    deliveries.push(`beta:${signalId}`);
-    return Promise.resolve();
-  });
+  const alpha = application(server.baseUrl, "alpha");
+  const beta = application(server.baseUrl, "beta");
+  const deliveries: { readonly node: string; readonly signalId: string }[] = [];
+  for (const child of [alpha, beta])
+    child.on("message", (frame: unknown) => {
+      if (isDispatch(frame)) deliveries.push(frame);
+    });
+  await Promise.all([ready(alpha), ready(beta)]);
 
-  await Promise.all([first.start(), second.start()]);
-  await alpha.inbox.receive(message("first"));
-  await firstStarted.promise;
-  await alpha.inbox.receive(message("during-drain"));
-  releaseFirst.resolve(undefined);
+  await command(alpha, { command: "write", signalId: "first" });
   await eventually(() => {
-    expect(deliveries).toHaveLength(2);
+    expect(deliveries.filter((delivery) => delivery.signalId === "first")).toHaveLength(1);
   });
-
-  expect(deliveries.filter((value) => value.endsWith(":first"))).toHaveLength(1);
-  expect(deliveries.filter((value) => value.endsWith(":during-drain"))).toHaveLength(1);
-  await Promise.all([first.close({ graceMs: 1_000 }), second.close({ graceMs: 1_000 })]);
+  await command(beta, { command: "write", signalId: "during-drain" });
+  await eventually(() => {
+    expect(deliveries.filter((delivery) => delivery.signalId === "during-drain")).toHaveLength(1);
+  });
+  expect(deliveries).toHaveLength(2);
 });
 
 function trackedServer(): DeliveryServer {
@@ -61,62 +42,63 @@ function trackedServer(): DeliveryServer {
   return server;
 }
 
-function node(baseUrl: string, name: string) {
-  const client = DeliveryClient.connectTo(baseUrl);
-  clients.push(client);
-  const records = new Map();
-  const inbox = new RemoteInbox(client, {
-    get: (id) => Promise.resolve(records.get(id)),
-    put: (record) => {
-      records.set(record.id, record);
-      return Promise.resolve();
-    },
-    delete: (id) => {
-      records.delete(id);
-      return Promise.resolve();
-    },
+function application(baseUrl: string, node: string): ChildProcess {
+  const child = spawn(process.execPath, [applicationFixture], {
+    env: { ...process.env, DELIVERY_SERVER_URL: baseUrl, DELIVERY_NODE: node },
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
-  const delivery = new DeliveryBuilder()
-    .withInbox(inbox)
-    .withWorkRegistry(new RemoteWorkRegistry(client))
-    .withStrategy(UniformAcrossAllShards.singleShard())
-    .withNode(name)
-    .build();
-  return { client, delivery, inbox };
+  applications.add(child);
+  return child;
 }
 
-function supervisor(
-  value: ReturnType<typeof node>,
-  onSignal: (signalId: string) => Promise<void>,
-): DeliverySupervisor {
-  return new DeliverySupervisor({
-    source: value.client,
-    delivery: value.delivery,
-    recoveryMs: 10_000,
-    staleMs: 10_000,
-    watchInitialBackoffMs: 10,
-    watchMaxBackoffMs: 10,
-    onMessage: (value) => onSignal(value.signalId),
+function ready(child: ChildProcess): Promise<void> {
+  return receive(child, "ready").then(() => undefined);
+}
+
+function command(child: ChildProcess, request: { readonly command: "write"; readonly signalId: string }) {
+  const id = crypto.randomUUID();
+  const result = receive(child, "result", id);
+  child.send({ id, ...request });
+  return result;
+}
+
+function receive(child: ChildProcess, type: string, id?: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => finish(new Error("Fixture response timed out.")), 5_000);
+    const onExit = () => finish(new Error("Fixture process exited before response."));
+    const onMessage = (frame: unknown) => {
+      if (!isRecord(frame) || frame.type !== type || (id !== undefined && frame.id !== id)) return;
+      finish(undefined, frame);
+    };
+    const finish = (error?: Error, frame?: unknown) => {
+      clearTimeout(timer);
+      child.off("exit", onExit);
+      child.off("message", onMessage);
+      if (error !== undefined) reject(error);
+      else resolve(frame);
+    };
+    child.once("exit", onExit);
+    child.on("message", onMessage);
   });
 }
 
-function message(signalId: string) {
-  return {
-    inboxId: {
-      targetId: `type.spine.io/test.Id:${signalId}`,
-      targetTypeUrl: "type.spine.io/test.Target",
-    },
-    signalId,
-    signal: create(AnySchema, {
-      typeUrl: "type.spine.io/spine.core.Command",
-      value: toBinary(CommandSchema, create(CommandSchema)),
-    }),
-    label: "HANDLE_COMMAND" as const,
-    status: "TO_DELIVER" as const,
-    shard: ShardIndex.single(),
-    whenReceived: new Date(),
-    version: 1n,
-  };
+async function stop(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill("SIGTERM");
+  await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+}
+
+function isDispatch(value: unknown): value is { readonly node: string; readonly signalId: string } {
+  return (
+    isRecord(value) &&
+    value.type === "dispatched" &&
+    typeof value.node === "string" &&
+    typeof value.signalId === "string"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 async function eventually(assertion: () => void): Promise<void> {
