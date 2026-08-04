@@ -27,22 +27,44 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
       const subscription = record.subscription;
       if (subscription === undefined) throw Error();
       const id = subscription.id?.value;
-      if (typeof id !== "string" || id.trim() === "" || (expectedId !== undefined && id !== expectedId)) throw Error();
+      if (
+        typeof id !== "string" ||
+        id.trim() === "" ||
+        (expectedId !== undefined && id !== expectedId)
+      )
+        throw Error();
       if (subscription.topic === undefined) throw Error();
       if (record.createdAt === undefined || record.createdAt.seconds < 0n) throw Error();
       if (record.revision < 1n || record.revision > BigInt(Number.MAX_SAFE_INTEGER)) throw Error();
-      const createdAtMs = Number(record.createdAt.seconds) * 1000 + Math.floor(record.createdAt.nanos / 1_000_000);
+      const createdAtMs =
+        Number(record.createdAt.seconds) * 1000 + Math.floor(record.createdAt.nanos / 1_000_000);
       if (!Number.isSafeInteger(createdAtMs)) throw Error();
       if (record.phase === SubscriptionPhase.PENDING) {
         if (record.pendingUntil === undefined) throw Error();
-        const pendingUntilMs = Number(record.pendingUntil.seconds) * 1000 + Math.floor(record.pendingUntil.nanos / 1_000_000);
+        const pendingUntilMs =
+          Number(record.pendingUntil.seconds) * 1000 +
+          Math.floor(record.pendingUntil.nanos / 1_000_000);
         if (!Number.isSafeInteger(pendingUntilMs) || pendingUntilMs < createdAtMs) throw Error();
-        return Object.freeze({ id, subscription, phase: "PENDING", createdAtMs, pendingUntilMs, revision: Number(record.revision) });
+        return Object.freeze({
+          id,
+          subscription,
+          phase: "PENDING",
+          createdAtMs,
+          pendingUntilMs,
+          revision: Number(record.revision),
+        });
       }
-      if (record.phase !== SubscriptionPhase.ACTIVE || record.pendingUntil !== undefined) throw Error();
-      return Object.freeze({ id, subscription, phase: "ACTIVE", createdAtMs, revision: Number(record.revision) });
+      if (record.phase !== SubscriptionPhase.ACTIVE || record.pendingUntil !== undefined)
+        throw Error();
+      return Object.freeze({
+        id,
+        subscription,
+        phase: "ACTIVE",
+        createdAtMs,
+        revision: Number(record.revision),
+      });
     } catch {
-      throw new Error("Malformed Stand subscription record.");
+      throw new Error("Stand subscription record is invalid.");
     }
   },
 
@@ -51,7 +73,9 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
       subscription: entry.subscription,
       phase: entry.phase === "PENDING" ? SubscriptionPhase.PENDING : SubscriptionPhase.ACTIVE,
       createdAt: timestamp(entry.createdAtMs),
-      ...(entry.pendingUntilMs === undefined ? {} : { pendingUntil: timestamp(entry.pendingUntilMs) }),
+      ...(entry.pendingUntilMs === undefined
+        ? {}
+        : { pendingUntil: timestamp(entry.pendingUntilMs) }),
       revision: BigInt(entry.revision),
     });
     StandSubscriptionRecords.read(record, entry.id);
@@ -64,7 +88,10 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
   decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry {
     if (bytes.byteLength > maximumBytes) throw new Error("Malformed Stand subscription record.");
     try {
-      return StandSubscriptionRecords.read(fromBinary(StandSubscriptionRecordSchema, bytes), expectedId);
+      return StandSubscriptionRecords.read(
+        fromBinary(StandSubscriptionRecordSchema, bytes),
+        expectedId,
+      );
     } catch {
       throw new Error("Malformed Stand subscription record.");
     }
@@ -72,6 +99,10 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
 });
 
 function timestamp(milliseconds: number): { readonly seconds: bigint; readonly nanos: number } {
-  if (!Number.isSafeInteger(milliseconds) || milliseconds < 0) throw new RangeError("Stand subscription time is invalid.");
-  return { seconds: BigInt(Math.floor(milliseconds / 1000)), nanos: (milliseconds % 1000) * 1_000_000 };
+  if (!Number.isSafeInteger(milliseconds) || milliseconds < 0)
+    throw new RangeError("Stand subscription time is invalid.");
+  return {
+    seconds: BigInt(Math.floor(milliseconds / 1000)),
+    nanos: (milliseconds % 1000) * 1_000_000,
+  };
 }

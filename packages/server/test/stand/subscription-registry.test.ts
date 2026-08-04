@@ -47,7 +47,7 @@ describe("InMemorySubscriptionRegistry", () => {
   it("rejects a stored record without a creation time", () => {
     expect(() =>
       StandSubscriptionRecords.read(create(StandSubscriptionRecords.schema, {}), "sub-1"),
-    ).toThrow("Malformed Stand subscription record.");
+    ).toThrow("Stand subscription record is invalid.");
   });
 
   it("transfers a custom registry to its built context", async () => {
