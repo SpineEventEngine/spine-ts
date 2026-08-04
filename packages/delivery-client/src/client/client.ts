@@ -105,11 +105,8 @@ export class DeliveryClient {
     this.#shards = createClient(ShardService, transport);
     this.#admin = createClient(AdminService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
-    deliveryClientPickups.set(this, (shardIndex, workerId, options) =>
-      this.#pickUp(shardIndex, workerId, options, true),
-    );
-    deliveryClientRevalidations.set(this, (session, options) =>
-      this.#pickUp(session.shard, session.worker, options, false, true),
+    deliveryClientProbes.set(this, (shardIndex, workerId, options) =>
+      this.#probePickUp(shardIndex, workerId, options),
     );
     deliveryClientObservations.set(this, (options) => this.#observeShardUpdates(options, 0));
   }
@@ -388,19 +385,17 @@ export class DeliveryClient {
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<RemoteShardSession | undefined> {
-    return this.#pickUp(shardIndex, workerId, options, false);
+    const result = await this.#probePickUp(shardIndex, workerId, options);
+    return result.kind === "PICKED" ? result.session : undefined;
   }
 
-  async #pickUp(
+  async #probePickUp(
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
-    requirePending: boolean,
-    revalidating = false,
-  ): Promise<RemoteShardSession | undefined> {
+  ): Promise<RemoteShardProbe> {
     const requestedShard = DeliveryShardCodec.encode(shardIndex);
     const requestedWorker = DeliveryShardCodec.encodeWorker(workerId);
-    let responseHeader: Headers | undefined;
     const response = await this.#mutation(
       "PICK_UP_SHARD",
       [DeliveryShardCodec.snapshot(shardIndex)],
@@ -414,50 +409,29 @@ export class DeliveryClient {
         try {
           return {
             kind: "PICKED" as const,
-            value: await this.#shards.pickShard(request, {
-              ...DeliveryRequestCodec.callOptions(signal, timeoutMs),
-              ...(requirePending
-                ? { headers: new Headers([["x-spine-delivery-pickup-mode", "pending"]]) }
-                : {}),
-              ...(requirePending
-                ? {
-                    onHeader: (headers: Headers) => {
-                      responseHeader = headers;
-                    },
-                  }
-                : revalidating
-                  ? {
-                      headers: new Headers([["x-spine-delivery-revalidate", "true"]]),
-                      onHeader: (headers: Headers) => {
-                        responseHeader = headers;
-                      },
-                    }
-                  : {}),
-            }),
+            value: await this.#shards.pickShard(
+              request,
+              DeliveryRequestCodec.callOptions(signal, timeoutMs),
+            ),
           };
         } catch (error) {
-          if (requirePending && DeliveryClient.#isNoPendingWork(error))
-            return { kind: "NO_WORK" as const };
           throw error;
         }
       },
     );
-    if (response.kind === "NO_WORK") return undefined;
-    if (
-      requirePending &&
-      responseHeader?.get("x-spine-delivery-outcome") !== "pending-acknowledged"
-    )
-      throw new DeliveryOutcomeUnknownError("PICK_UP_SHARD", [
-        DeliveryShardCodec.snapshot(shardIndex),
-      ]);
     DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response.value);
     if (response.value.value.case === "alreadyPickedUp") {
-      DeliveryShardCodec.validatePicked(response.value.value.value, shardIndex);
-      if (revalidating && responseHeader?.get("x-spine-delivery-revalidation") !== "lost")
-        throw new DeliveryOutcomeUnknownError("PICK_UP_SHARD", [
-          DeliveryShardCodec.snapshot(shardIndex),
-        ]);
-      return undefined;
+      const held = response.value.value.value;
+      DeliveryShardCodec.validatePicked(held, shardIndex);
+      return Object.freeze({
+        kind: "ALREADY_PICKED" as const,
+        session: Object.freeze({
+          kind: "EXCLUSIVE" as const,
+          shard: DeliveryShardCodec.snapshot(shardIndex),
+          worker: DeliveryShardCodec.decodeWorker(held.worker!),
+          whenPicked: DeliveryShardCodec.date(held.whenPicked!),
+        }),
+      });
     }
     if (response.value.value.case !== "pickedUp") throw DeliveryRequestCodec.protocol();
     const picked = DeliveryShardCodec.decodePicked(
@@ -465,15 +439,7 @@ export class DeliveryClient {
       shardIndex,
       workerId,
     );
-    if (!revalidating) return picked;
-    const outcome = responseHeader?.get("x-spine-delivery-revalidation");
-    if (outcome === "refreshed") return picked;
-    if (outcome !== "picked")
-      throw new DeliveryOutcomeUnknownError("PICK_UP_SHARD", [
-        DeliveryShardCodec.snapshot(shardIndex),
-      ]);
-    await this.release(picked, options);
-    return undefined;
+    return Object.freeze({ kind: "PICKED" as const, session: picked });
   }
 
   /**
@@ -637,21 +603,17 @@ export class DeliveryClient {
   }
 }
 
-const deliveryClientPickups = new WeakMap<
+type RemoteShardProbe =
+  | Readonly<{ readonly kind: "PICKED"; readonly session: RemoteShardSession }>
+  | Readonly<{ readonly kind: "ALREADY_PICKED"; readonly session: RemoteShardSession }>;
+
+const deliveryClientProbes = new WeakMap<
   DeliveryClient,
   (
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardSession | undefined>
->();
-
-const deliveryClientRevalidations = new WeakMap<
-  DeliveryClient,
-  (
-    session: RemoteShardSession,
-    options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardSession | undefined>
+  ) => Promise<RemoteShardProbe>
 >();
 
 const deliveryClientObservations = new WeakMap<
@@ -660,44 +622,29 @@ const deliveryClientObservations = new WeakMap<
 >();
 
 /**
- * Provides package-internal conditional pickup without extending the public client API.
+ * Provides package-internal frozen-wire ownership probes without extending the public client API.
  */
 export const deliveryClientAccess: Readonly<{
-  pickUpPending: (
+  probePickUp: (
     client: DeliveryClient,
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardSession | undefined>;
-  revalidate: (
-    client: DeliveryClient,
-    session: RemoteShardSession,
-    options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardSession | undefined>;
+  ) => Promise<RemoteShardProbe>;
   observeOnce: (
     client: DeliveryClient,
     options?: DeliveryFindOneOptions,
   ) => DeliveryShardObservationStream;
 }> = Object.freeze({
-  pickUpPending(
+  probePickUp(
     client: DeliveryClient,
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
-  ): Promise<RemoteShardSession | undefined> {
-    const pickUp = deliveryClientPickups.get(client);
-    if (pickUp === undefined) throw new TypeError("Delivery client pickup access is unavailable.");
-    return pickUp(shardIndex, workerId, options);
-  },
-  revalidate(
-    client: DeliveryClient,
-    session: RemoteShardSession,
-    options: DeliveryMutationOptions,
-  ): Promise<RemoteShardSession | undefined> {
-    const revalidate = deliveryClientRevalidations.get(client);
-    if (revalidate === undefined)
-      throw new TypeError("Delivery client revalidation access is unavailable.");
-    return revalidate(session, options);
+  ): Promise<RemoteShardProbe> {
+    const probe = deliveryClientProbes.get(client);
+    if (probe === undefined) throw new TypeError("Delivery client probe access is unavailable.");
+    return probe(shardIndex, workerId, options);
   },
   observeOnce(
     client: DeliveryClient,
