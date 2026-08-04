@@ -1890,9 +1890,13 @@ describe("BoundedContext assembly", () => {
       .build();
 
     try {
-      await expect(context.close()).rejects.toMatchObject({ message: "BoundedContext close failed." });
+      await expect(context.close()).rejects.toMatchObject({
+        message: "BoundedContext close failed.",
+      });
       expect(order.indexOf("stand")).toBeLessThan(order.indexOf("registry"));
-      expect(order.indexOf("registry")).toBeLessThan(order.indexOf("storage:__spine/Tasks/tenants"));
+      expect(order.indexOf("registry")).toBeLessThan(
+        order.indexOf("storage:__spine/Tasks/tenants"),
+      );
       expect(order).toContain("storage:Tasks");
     } finally {
       closeStand.mockRestore();
@@ -2042,17 +2046,20 @@ class OrderedStorageFactory extends InMemoryStorageFactory {
 }
 
 class OrderedRecordStorage<I, R extends Message> extends InMemoryRecordStorage<I, R> {
+  readonly #contextName: string;
+
   constructor(
-    private readonly context: StorageContext,
+    context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     private readonly order: string[],
   ) {
     super(context, recordSpec);
+    this.#contextName = context.name;
   }
 
   override close(): void {
     super.close();
-    this.order.push(`storage:${this.context.name}`);
+    this.order.push(`storage:${this.#contextName}`);
   }
 }
 

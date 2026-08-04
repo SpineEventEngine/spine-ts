@@ -173,11 +173,13 @@ describe("InMemorySubscriptionRegistry", () => {
     await registry.create(subscription("a"));
 
     const snapshot = await registry.snapshot();
+    const first = snapshot[0];
+    if (first === undefined) throw new Error("Expected a subscription snapshot entry.");
     expect(snapshot.map((entry) => entry.subscription.id?.value)).toEqual(["a", "z"]);
     expect(Object.isFrozen(snapshot)).toBe(true);
-    expect(Object.isFrozen(snapshot[0])).toBe(true);
-    expect(Object.isFrozen(snapshot[0].subscription)).toBe(true);
-    expect(snapshot[0]).not.toBe(await registry.get(id("a")));
+    expect(Object.isFrozen(first)).toBe(true);
+    expect(Object.isFrozen(first.subscription)).toBe(true);
+    expect(first).not.toBe(await registry.get(id("a")));
   });
 
   it("cleans exactly one sorted page of expired pending entries", async () => {
