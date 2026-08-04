@@ -9,11 +9,26 @@ import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
 import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
+import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
 
 type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
 const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
 describe("LocalProcessManagerInbox", () => {
+  it("exposes the shared entity inbox for Aggregate command labels", () => {
+    const inbox = new LocalEntityInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
+    inbox.register({
+      targetTypeUrl,
+      labels: ["HANDLE_COMMAND"],
+      replay: () => Promise.resolve(),
+    });
+
+    expect(inbox.endpoints()).toContainEqual(
+      expect.objectContaining({ label: "HANDLE_COMMAND", targetTypeUrl }),
+    );
+  });
+
   it("keeps one multitenant descriptor tenant before batch persistence", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: true, tenantId: "tenant-dynamic" },
@@ -992,7 +1007,7 @@ describe("LocalProcessManagerInbox", () => {
         }),
       ),
     ).rejects.toThrow(
-      "Process-manager inbox delivery did not reach the target row before the local drain finished.",
+      "Entity Inbox delivery did not reach the target row before the local drain finished.",
     );
 
     expect(seen).toHaveLength(0);
@@ -1172,7 +1187,7 @@ describe("LocalProcessManagerInbox", () => {
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
       }),
-    ).rejects.toThrow("Process-manager inbox replay failed.");
+    ).rejects.toThrow("Entity Inbox replay failed.");
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([
@@ -1206,7 +1221,7 @@ describe("LocalProcessManagerInbox", () => {
           shard,
         }),
       ).rejects.toThrow(
-        "Process-manager inbox delivery was skipped before the target row was delivered.",
+        "Entity Inbox delivery was skipped before the target row was delivered.",
       );
     } finally {
       await delivery.shards.release(session);
@@ -1244,7 +1259,7 @@ describe("LocalProcessManagerInbox", () => {
         }),
       ),
     ).rejects.toThrow(
-      "Process-manager inbox delivery did not reach the target row before the local drain finished.",
+      "Entity Inbox delivery did not reach the target row before the local drain finished.",
     );
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["SCHEDULED"] }),
@@ -1345,7 +1360,6 @@ describe("LocalProcessManagerInbox", () => {
     const ready: unknown[] = [];
     const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const shard = new ShardIndex(0, 2);
     const replayFailure = new Error("non-configured shard should preserve drain failure");
     inbox.register({
       targetTypeUrl,
@@ -1359,17 +1373,18 @@ describe("LocalProcessManagerInbox", () => {
         signalId: "command-shard-mismatch",
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
-        shard,
       }),
     ).rejects.toBe(replayFailure);
-    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
       {
         signalId: "command-shard-mismatch",
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
       },
     ]);
-    expect(ready).toEqual([]);
+    expect(ready).toMatchObject([{ label: "HANDLE_COMMAND", targetTypeUrl }]);
   });
 
   it("rejects when no process-manager command target is registered", async () => {
@@ -1392,7 +1407,7 @@ describe("LocalProcessManagerInbox", () => {
         shard: ShardIndex.single(),
       }),
     ).rejects.toThrow(
-      'BoundedContext delivery has no process-manager target for "type.example.dev/Tasks.ProcessManager".',
+      'BoundedContext delivery has no Entity Inbox target for "type.example.dev/Tasks.ProcessManager".',
     );
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
