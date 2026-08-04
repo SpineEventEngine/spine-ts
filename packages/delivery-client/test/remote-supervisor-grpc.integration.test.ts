@@ -5,7 +5,9 @@ import { afterEach, expect, it } from "vitest";
 
 const servers: DeliveryServer[] = [];
 const applications = new Set<ChildProcess>();
-const applicationFixture = resolve("packages/delivery-client/test-fixtures/remote-environment-app.mjs");
+const applicationFixture = resolve(
+  "packages/delivery-client/test-fixtures/remote-environment-app.mjs",
+);
 
 afterEach(async () => {
   await Promise.all([...applications].map(stop));
@@ -25,15 +27,23 @@ it("fans out one real Admin shard update through two remote ServerEnvironment as
     });
   await Promise.all([ready(alpha), ready(beta)]);
 
+  await Promise.all([
+    command(alpha, { command: "block-first" }),
+    command(beta, { command: "block-first" }),
+  ]);
   await command(alpha, { command: "write", signalId: "first" });
   await eventually(() => {
-    expect(deliveries.filter((delivery) => delivery.signalId === "first")).toHaveLength(1);
+    expect(deliveries.filter((delivery) => delivery.signalId === "first-started")).toHaveLength(1);
   });
   await command(beta, { command: "write", signalId: "during-drain" });
+  await Promise.all([
+    command(alpha, { command: "release-first" }),
+    command(beta, { command: "release-first" }),
+  ]);
   await eventually(() => {
     expect(deliveries.filter((delivery) => delivery.signalId === "during-drain")).toHaveLength(1);
   });
-  expect(deliveries).toHaveLength(2);
+  expect(deliveries).toHaveLength(3);
 });
 
 function trackedServer(): DeliveryServer {
@@ -55,7 +65,12 @@ function ready(child: ChildProcess): Promise<void> {
   return receive(child, "ready").then(() => undefined);
 }
 
-function command(child: ChildProcess, request: { readonly command: "write"; readonly signalId: string }) {
+function command(
+  child: ChildProcess,
+  request:
+    | { readonly command: "write"; readonly signalId: string }
+    | { readonly command: "block-first" | "release-first" },
+) {
   const id = crypto.randomUUID();
   const result = receive(child, "result", id);
   child.send({ id, ...request });

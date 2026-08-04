@@ -102,6 +102,11 @@ wake-ups. `open()` runs before the first attachment/listener admission. A
 failed bounded readiness check closes its fresh client and can be retried; the
 transferred quarantine stays open until environment shutdown.
 
+When identically configured application nodes share a Delivery server, every
+node observes and attempts each reported shard. The remote registry admits one
+owner for a shard at a time; updates are only hints recovered through a bounded
+snapshot, and the facility makes no ordering promise across different shards.
+
 ```ts
 import { RemoteDelivery, type RemovalQuarantine } from "@spine-event-engine/delivery-client";
 import {

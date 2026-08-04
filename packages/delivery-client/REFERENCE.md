@@ -68,6 +68,11 @@ and exclusive shard pickup remain authoritative. Concurrent opens share an
 attempt. A failed attempt closes only its client, does not close the quarantine,
 and a later open creates a fresh client.
 
+Every identically configured node observes and attempts every reported shard.
+The remote registry admits exactly one current owner per shard; notifications
+are best-effort hints and snapshot recovery is the convergent source after a
+stream break or bounded overflow. There is no ordering guarantee across shards.
+
 Environment shutdown closes the client-owned HTTP/2 session, then quarantine.
 Concurrent/repeated close calls share work; a failed phase is the only phase
 retried. This adds no health route, provider selector, worker, or
