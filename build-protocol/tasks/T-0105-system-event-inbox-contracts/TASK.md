@@ -1,6 +1,6 @@
 # T-0105: System Event And Inbox Contracts
 
-Status: Active
+Status: Complete
 
 ## Objective
 
