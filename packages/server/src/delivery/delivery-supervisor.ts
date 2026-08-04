@@ -109,7 +109,7 @@ export class DeliverySupervisor {
   #closing = false;
   #closed = false;
   #rescanRequired = false;
-  #recovering: Promise<boolean> | undefined;
+  #recovering: Promise<void> | undefined;
   #recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   #watchTimer: ReturnType<typeof setTimeout> | undefined;
   #watchBackoffMs: number;
@@ -169,9 +169,9 @@ export class DeliverySupervisor {
     if (this.#closing || this.#closed) throw new Error("Delivery supervisor is closed.");
     if (this.#started) return;
     this.#started = true;
-    const recovered = await this.#recover();
+    await this.#recover();
     this.#scheduleRecovery();
-    if (recovered) this.#startWatch();
+    this.#startWatch();
   }
 
   /**
@@ -297,7 +297,7 @@ export class DeliverySupervisor {
     this.#idle.clear();
   }
 
-  #recover(): Promise<boolean> {
+  #recover(): Promise<void> {
     if (this.#recovering !== undefined) return this.#recovering;
     const recovering = this.#recoverNow().finally(() => {
       this.#recovering = undefined;
@@ -306,8 +306,8 @@ export class DeliverySupervisor {
     return recovering;
   }
 
-  async #recoverNow(): Promise<boolean> {
-    if (this.#closing || this.#closed) return false;
+  async #recoverNow(): Promise<void> {
+    if (this.#closing || this.#closed) return;
     try {
       // Release is a mutation: a rejection is not treated as a successful release.
       await this.#releaseExpired({ signal: this.#sourceController.signal });
@@ -315,10 +315,8 @@ export class DeliverySupervisor {
       for (const shard of shards) {
         if (shard.status === "NOT_PICKED" && shard.messages > 0) this.notify(shard.shard);
       }
-      return true;
     } catch {
       // A later bounded recovery retries; no unknown mutation outcome is assumed successful.
-      return false;
     }
   }
 
@@ -326,7 +324,9 @@ export class DeliverySupervisor {
     if (this.#closing || this.#closed || this.#recoveryTimer !== undefined) return;
     this.#recoveryTimer = setTimeout(() => {
       this.#recoveryTimer = undefined;
-      void this.#recover().then(() => this.#scheduleRecovery());
+      void this.#recover().finally(() => {
+        this.#scheduleRecovery();
+      });
     }, this.#recoveryMs);
     this.#recoveryTimer.unref();
   }
@@ -362,9 +362,8 @@ export class DeliverySupervisor {
     this.#watchBackoffMs = Math.min(this.#watchMaxBackoffMs, delay * 2);
     this.#watchTimer = setTimeout(() => {
       this.#watchTimer = undefined;
-      void this.#recover().then((recovered) => {
-        if (recovered) this.#startWatch();
-        else this.#scheduleWatchRestart();
+      void this.#recover().finally(() => {
+        this.#startWatch();
       });
     }, delay);
     this.#watchTimer.unref();
