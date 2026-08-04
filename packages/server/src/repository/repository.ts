@@ -485,14 +485,14 @@ export class Repository<
       this,
       RepositoryDispatch.createRepositoryDispatchers(this, this.#routing),
     );
-    const pmInboxTarget = RepositoryDispatch.createPmInboxTarget(this, this.#routing);
+    const entityInboxTarget = RepositoryDispatch.createEntityInboxTarget(this, this.#routing);
     const projectionInboxTarget = RepositoryDispatch.createProjectionInboxTarget(
       this,
       this.#routing,
     );
 
-    if (pmInboxTarget !== undefined) {
-      repositoryPmInboxTargets.set(this, pmInboxTarget);
+    if (entityInboxTarget !== undefined) {
+      repositoryEntityInboxTargets.set(this, entityInboxTarget);
     }
     if (projectionInboxTarget !== undefined) {
       repositoryProjectionInboxTargets.set(this, projectionInboxTarget);
@@ -663,7 +663,7 @@ export interface RepositoryEventRoute<Id = unknown> {
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
 const repositoryProducedEventSchemas = new WeakMap<RepositoryView, readonly MessageSchema[]>();
 const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
-const repositoryPmInboxTargets = new WeakMap<RepositoryView, EntityInboxTarget>();
+const repositoryEntityInboxTargets = new WeakMap<RepositoryView, EntityInboxTarget>();
 const repositoryProjectionInboxTargets = new WeakMap<RepositoryView, ProjectionInboxTarget>();
 const repositoryProjectionDirect = new WeakMap<RepositoryView, (event: Event) => Promise<void>>();
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
@@ -693,7 +693,7 @@ Object.freeze(Repository);
 
 type EntityInboxLabel = "HANDLE_COMMAND" | "REACT_UPON_EVENT";
 type EntityInboxFollowUp = () => Promise<void>;
-type EntityInboxReplay = Promise<unknown>;
+type EntityInboxReplay = Promise<void> | Promise<EntityInboxFollowUp | undefined>;
 type EntityInboxMessage = InboxMessage & {
   readonly label: EntityInboxLabel;
   readonly status: "TO_DELIVER";
@@ -981,7 +981,7 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
   },
 
   entityInboxTarget(repository: RepositoryView): EntityInboxTarget | undefined {
-    return repositoryPmInboxTargets.get(repository);
+    return repositoryEntityInboxTargets.get(repository);
   },
 
   projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined {
@@ -4381,7 +4381,7 @@ const RepositoryDispatch = {
     });
   },
 
-  createPmInboxTarget(
+  createEntityInboxTarget(
     repository: RepositoryView & {
       routeCommand(command: Command): RepositoryCommandRoute;
       routeEvent(event: Event): RepositoryEventRoute;

@@ -231,12 +231,13 @@ the separate public `DeliverySource` used to observe remote shards.
 delivery/tracing facilities, and their process lifecycle. They do not create a
 production transport topology or durable scheduler for you.
 
-Use `BoundedContext.withDeliveryStrategy(strategy)` when a context needs more
-than one Entity Inbox shard. Aggregate and Process Manager handoffs derive a
-target shard themselves and persist before handler replay. Local delivery drains
-in the posting request; after an environment owns delivery ports, posting
-persists and acknowledges while a worker replays later. Projection delivery is
-separate.
+The default Entity Inbox has one shard. Use
+`new BoundedContextBuilder(spec).withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))`
+when a context needs more. Aggregate commands and Process Manager commands/events
+derive a target shard themselves and persist before handler replay. Local delivery
+drains in the posting request; after `ServerEnvironment` supplies delivery ports,
+posting persists and acknowledges while a worker replays later. Projection delivery
+is separate.
 
 An openable `ServerEnvironmentDelivery` is opened before the first environment
 attachment is admitted, then supplies its inbox and work-registry ports to both

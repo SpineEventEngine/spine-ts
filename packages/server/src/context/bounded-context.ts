@@ -173,7 +173,7 @@ interface RepositoryRegistration {
   readonly stand: Stand;
 
   /**
-   * Context-owned local process-manager command inbox handoff.
+   * Context-owned Entity Inbox handoff for Aggregate and Process Manager work.
    */
   readonly entityInbox: EntityInbox;
 
@@ -213,7 +213,7 @@ interface RepositoryRegistration {
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
-interface PmInbox extends EntityInbox {
+interface RegisteredEntityInbox extends EntityInbox {
   register(target: EntityInboxTarget): void;
   endpoints(): readonly DeliveryEndpoint[];
 }
@@ -536,7 +536,7 @@ export class BoundedContext {
   readonly #eventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
-  readonly #entityInbox: PmInbox;
+  readonly #entityInbox: RegisteredEntityInbox;
   readonly #projectionInbox: PrjInbox;
   readonly #deliveryStrategy: DeliveryStrategy;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
@@ -1947,7 +1947,7 @@ const ContextParts = Object.freeze({
     context: BoundedContextSnapshot,
     storageFactory: StorageFactory,
     tenantIndex: TenantIndex,
-    processManagers: PmInbox,
+    entityInbox: RegisteredEntityInbox,
     projections: PrjInbox,
     readiness: DeliveryReadiness,
   ): ContextDeliveryDescriptor {
@@ -1978,12 +1978,12 @@ const ContextParts = Object.freeze({
         return Object.freeze({ name: context.name.value, multitenant: true, tenantId });
       },
       endpoints(): readonly DeliveryEndpoint[] {
-        return Object.freeze([...processManagers.endpoints(), ...projections.endpoints()]);
+        return Object.freeze([...entityInbox.endpoints(), ...projections.endpoints()]);
       },
       replay(message: DeliveryEndpointMessage, tenantId?: string): Promise<void> {
         return message.label === "UPDATE_SUBSCRIBER"
           ? projections.replay(message, tenantId)
-          : processManagers.replay(message, tenantId);
+          : entityInbox.replay(message, tenantId);
       },
       onReady(onReady: (ready: DeliveryReady) => void): () => void {
         return readiness.onReady(onReady);

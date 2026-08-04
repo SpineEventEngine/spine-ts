@@ -1,6 +1,6 @@
 # T-0106 Review Record
 
-Status: Corrections Required
+Status: Corrections In Progress
 
 ## Review Assignments And Results
 
@@ -58,3 +58,13 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
 - Performance/reliability: corrections required for shard validation,
   follow-up chaining/scope, and focused multi-shard coverage.
 - Security: N/A unless implementation changes a trust boundary.
+
+## Correction Checkpoints
+
+- `8b7bf68a` is the pushed RED checkpoint for findings 1, 3, and 8. The focused
+  stateful routing assertion observed six `shardFor` calls for three inputs.
+- `c28f4647` is the pushed GREEN checkpoint. It reuses the routed shard for
+  local drain replay while retained descriptor replay resolves and validates a
+  stored shard. Focused Entity Inbox/context/repository evidence is 226/226.
+- The naming, replay-type, documentation, descriptor-coverage, and deterministic
+  preflight correction work remains in progress; no review lane is yet closed.
