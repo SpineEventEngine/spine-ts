@@ -13,11 +13,37 @@ const applicationFixture = resolve(
 );
 
 afterEach(async () => {
-  await Promise.all([...applications].map(stop));
+  const failures: unknown[] = [];
+  for (const child of applications) {
+    try {
+      await stop(child);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
   applications.clear();
-  for (const client of clients.splice(0)) client.close();
-  await Promise.all(deliveries.splice(0).map((delivery) => delivery.close()));
-  await Promise.all(servers.splice(0).map((server) => server.close()));
+  for (const client of clients.splice(0)) {
+    try {
+      client.close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  for (const delivery of deliveries.splice(0)) {
+    try {
+      await delivery.close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  for (const server of servers.splice(0)) {
+    try {
+      await server.close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "Fixture cleanup failed.");
 });
 
 it("fences an expired blocked owner before its delayed commit can disturb a replacement", async () => {
@@ -254,11 +280,12 @@ function receive(child: ChildProcess, type: string, id?: string): Promise<unknow
 async function stop(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGTERM");
-  await new Promise<void>((resolve) =>
-    child.once("exit", () => {
-      resolve();
-    }),
-  );
+  await Promise.race([
+    new Promise<void>((resolve) => child.once("exit", resolve)),
+    new Promise<void>((_, reject) =>
+      setTimeout(() => reject(new Error("Fixture shutdown timed out.")), 5_000),
+    ),
+  ]);
 }
 
 function isDispatch(value: unknown): value is { readonly node: string; readonly signalId: string } {

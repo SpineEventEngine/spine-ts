@@ -106,6 +106,10 @@ When identically configured application nodes share a Delivery server, every
 node observes and attempts each reported shard. The remote registry admits one
 owner for a shard at a time; updates are only hints recovered through a bounded
 snapshot, and the facility makes no ordering promise across different shards.
+The winning owner repeats finite Inbox drains until no deliverable rows remain,
+including rows that arrive while a drain is active, before it releases the
+shard. A pre-commit ownership probe fences known stale owners, but it is not a
+linearizable distributed transaction with Entity storage.
 
 ```ts
 import { RemoteDelivery, type RemovalQuarantine } from "@spine-event-engine/delivery-client";

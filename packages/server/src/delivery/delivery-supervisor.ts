@@ -241,7 +241,6 @@ export class DeliverySupervisor {
     }
     // Abort is the epoch fence and also stops any lease renewal on the controlled path.
     this.#controller.abort(new Error("Delivery supervisor is closed."));
-    if (this.#active.size > 0) await this.whenIdle();
     let releaseError: unknown;
     try {
       await this.#releaseOnce(graceMs);
@@ -249,6 +248,7 @@ export class DeliverySupervisor {
       releaseError = error;
     }
     if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
+    if (this.#active.size > 0) await this.whenIdle();
     this.#closed = true;
     if (timedOut) throw new DeliveryShutdownTimeoutError();
   }

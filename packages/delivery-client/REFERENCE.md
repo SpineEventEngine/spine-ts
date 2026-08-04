@@ -71,7 +71,12 @@ and a later open creates a fresh client.
 Every identically configured node observes and attempts every reported shard.
 The remote registry admits exactly one current owner per shard; notifications
 are best-effort hints and snapshot recovery is the convergent source after a
-stream break or bounded overflow. There is no ordering guarantee across shards.
+stream break or bounded overflow. The winning owner repeats finite drains until
+no deliverable Inbox row remains, including rows arriving during an active
+drain, before release. There is no ordering guarantee across shards. The
+immediate pre-commit ownership probe fences a detected stale owner, but cannot
+make remote ownership and Entity storage one linearizable distributed
+transaction.
 
 Environment shutdown closes the client-owned HTTP/2 session, then quarantine.
 Concurrent/repeated close calls share work; a failed phase is the only phase

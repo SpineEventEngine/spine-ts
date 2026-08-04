@@ -104,8 +104,18 @@ process.on("message", async (frame) => {
 });
 
 async function close() {
-  await serverEnvironmentAccess.detach(environment, attachment);
-  await environment.close();
+  const failures = [];
+  try {
+    await environment.close();
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
+    await serverEnvironmentAccess.detach(environment, attachment);
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "Fixture close failed.");
 }
 
 process.once("SIGTERM", () => {
