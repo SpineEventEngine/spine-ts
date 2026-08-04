@@ -24,6 +24,36 @@ const shard = create(ShardIndexSchema, { index: 0, ofTotal: 1 });
 const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" });
 
 describe("in-memory Shards", () => {
+  it("refreshes the same live worker but never lets a delayed owner release its replacement", async () => {
+    const core = InMemoryDelivery.create();
+    const first = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "first" });
+    const second = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "second" });
+    const firstPickup = create(PickUpShardSchema, { shard, worker: first });
+    const secondPickup = create(PickUpShardSchema, { shard, worker: second });
+
+    const revalidate = {
+      signal: new AbortController().signal,
+      requestHeader: new Headers([["x-spine-delivery-revalidate", "true"]]),
+      responseHeader: new Headers(),
+    } as never;
+    await core.shards.pickShard(firstPickup, context);
+    await expect(core.shards.pickShard(firstPickup, revalidate)).resolves.toMatchObject({
+      value: { case: "pickedUp", value: { worker: first } },
+    });
+    expect(
+      (revalidate as { responseHeader: Headers }).responseHeader.get(
+        "x-spine-delivery-revalidation",
+      ),
+    ).toBe("refreshed");
+    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker: first }), context);
+    await core.shards.pickShard(secondPickup, context);
+    await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker: first }), context);
+
+    await expect(core.shards.pickShard(secondPickup, context)).resolves.toMatchObject({
+      value: { case: "alreadyPickedUp", value: { worker: second } },
+    });
+  });
+
   it("counts only TO_DELIVER messages across replacement and deletion", async () => {
     const core = InMemoryDelivery.create();
     const pending = {

@@ -970,5 +970,23 @@
     "name": "isDurableSubscriptionBindings",
     "disposition": "necessity",
     "reason": "TypeScript public type-predicate boundary: isDurableSubscriptionBindings narrows an optional binding collaborator at server assembly without owning registry state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/repository/commit-fence.ts",
+    "kind": "function-declaration",
+    "identity": "withDeliveryCommitFence()#1",
+    "name": "withDeliveryCommitFence",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: withDeliveryCommitFence establishes AsyncLocalStorage scope around one asynchronous delivery callback."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/repository/commit-fence.ts",
+    "kind": "function-declaration",
+    "identity": "commitFenced()#1",
+    "name": "commitFenced",
+    "disposition": "necessity",
+    "reason": "TypeScript framework boundary: commitFenced awaits the active AsyncLocalStorage guard immediately before a synchronous repository commit."
   }
 ]

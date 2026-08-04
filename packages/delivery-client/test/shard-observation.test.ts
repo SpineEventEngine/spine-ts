@@ -21,7 +21,7 @@ import {
   ShardObservationOverflowError,
   RemoteWorkRegistry,
 } from "../src/index.js";
-import { transport } from "./shared-fixtures.js";
+import { echoPickup, transport } from "./shared-fixtures.js";
 
 describe("DeliveryClient shard observation", () => {
   it("returns a frozen validated Admin shard snapshot through safe reads", async () => {
@@ -71,7 +71,7 @@ describe("DeliveryClient shard observation", () => {
 
   it("yields only validated Admin updates after exactly one successful ACK", async () => {
     const fake = transport();
-    fake.streamReply([
+    fake.streamReplyAndHold([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
       create(SubscriptionResponseSchema, {
         value: {
@@ -172,7 +172,7 @@ describe("DeliveryClient shard observation", () => {
     fake.streamReply([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
     ]);
-    fake.streamReply([
+    fake.streamReplyAndHold([
       create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
       create(SubscriptionResponseSchema, {
         value: {
@@ -194,6 +194,35 @@ describe("DeliveryClient shard observation", () => {
     });
     expect(fake.stream).toHaveBeenCalledTimes(2);
     stream.cancel();
+  });
+
+  it("keeps public Admin observation reconnect configured for direct clients", async () => {
+    const fake = transport();
+    fake.streamReply([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+    ]);
+    fake.streamReply([
+      create(SubscriptionResponseSchema, { value: { case: "created", value: true } }),
+      create(SubscriptionResponseSchema, {
+        value: {
+          case: "update",
+          value: create(ShardInfoUpdateSchema, {
+            index: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
+            newStatus: ShardStatus.NOT_PICKED,
+            newMessagesCount: 1,
+          }),
+        },
+      }),
+    ]);
+    const client = DeliveryClient.usingTransport(fake.transport, { observationReconnects: 2 });
+
+    await expect(
+      client.observeShardUpdates()[Symbol.asyncIterator]().next(),
+    ).resolves.toMatchObject({
+      value: { status: "NOT_PICKED", messages: 1 },
+    });
+    expect(fake.stream).toHaveBeenCalledTimes(3);
+    client.close();
   });
 
   it.each(["cancel", "return", "close"] as const)(
@@ -324,20 +353,8 @@ describe("DeliveryClient shard observation", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
     await expect(registry.release({ kind: "EXCLUSIVE", shard })).resolves.toBe(false);
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
-      }),
-    );
+    echoPickup(fake);
     const session = await registry.pickUp(shard, "node");
     if (session === undefined) throw new Error("Remote session was not acquired.");
     fake.fail(new Error("release response lost"));
@@ -357,18 +374,7 @@ describe("DeliveryClient shard observation", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" }),
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
-      }),
-    );
+    echoPickup(fake);
     const session = await registry.pickUp(shard, "node");
     if (session === undefined) throw new Error("Remote session was not acquired.");
     let release: (() => void) | undefined;

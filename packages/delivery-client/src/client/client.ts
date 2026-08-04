@@ -105,9 +105,10 @@ export class DeliveryClient {
     this.#shards = createClient(ShardService, transport);
     this.#admin = createClient(AdminService, transport);
     this.#onCloseOwnedTransport = onCloseOwnedTransport;
-    deliveryClientPickups.set(this, (shardIndex, workerId, options) =>
-      this.#pickUp(shardIndex, workerId, options, true),
+    deliveryClientProbes.set(this, (shardIndex, workerId, options) =>
+      this.#probePickUp(shardIndex, workerId, options),
     );
+    deliveryClientObservations.set(this, (options) => this.#observeShardUpdates(options, 0));
   }
 
   /**
@@ -183,6 +184,13 @@ export class DeliveryClient {
    * @returns A cancellable stream of detached shard observations.
    */
   observeShardUpdates(options: DeliveryFindOneOptions = {}): DeliveryShardObservationStream {
+    return this.#observeShardUpdates(options, this.#observationReconnects);
+  }
+
+  #observeShardUpdates(
+    options: DeliveryFindOneOptions,
+    reconnects: number,
+  ): DeliveryShardObservationStream {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
     const controller = new AbortController();
@@ -195,7 +203,7 @@ export class DeliveryClient {
       signal: controller.signal,
       timeoutMs: DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000),
       capacity: this.#observationBufferSize,
-      reconnects: this.#observationReconnects,
+      reconnects,
       reconnectBackoffMs: this.#observationReconnectBackoffMs,
       open: (signal, timeoutMs) =>
         this.#admin.subscribeToShardUpdates(
@@ -377,18 +385,17 @@ export class DeliveryClient {
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions = {},
   ): Promise<RemoteShardSession | undefined> {
-    return this.#pickUp(shardIndex, workerId, options, false);
+    const result = await this.#probePickUp(shardIndex, workerId, options);
+    return result.kind === "PICKED" ? result.session : undefined;
   }
 
-  async #pickUp(
+  async #probePickUp(
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
-    requirePending: boolean,
-  ): Promise<RemoteShardSession | undefined> {
+  ): Promise<RemoteShardProbe> {
     const requestedShard = DeliveryShardCodec.encode(shardIndex);
     const requestedWorker = DeliveryShardCodec.encodeWorker(workerId);
-    let responseHeader: Headers | undefined;
     const response = await this.#mutation(
       "PICK_UP_SHARD",
       [DeliveryShardCodec.snapshot(shardIndex)],
@@ -399,45 +406,38 @@ export class DeliveryClient {
           worker: requestedWorker,
         });
         DeliveryRequestCodec.requestBytes(PickUpShardSchema, request);
-        try {
-          return {
-            kind: "PICKED" as const,
-            value: await this.#shards.pickShard(request, {
-              ...DeliveryRequestCodec.callOptions(signal, timeoutMs),
-              ...(requirePending
-                ? { headers: new Headers([["x-spine-delivery-pickup-mode", "pending"]]) }
-                : {}),
-              ...(requirePending
-                ? {
-                    onHeader: (headers: Headers) => {
-                      responseHeader = headers;
-                    },
-                  }
-                : {}),
-            }),
-          };
-        } catch (error) {
-          if (requirePending && DeliveryClient.#isNoPendingWork(error))
-            return { kind: "NO_WORK" as const };
-          throw error;
-        }
+        return {
+          kind: "PICKED" as const,
+          value: await this.#shards.pickShard(
+            request,
+            DeliveryRequestCodec.callOptions(signal, timeoutMs),
+          ),
+        };
       },
     );
-    if (response.kind === "NO_WORK") return undefined;
-    if (
-      requirePending &&
-      responseHeader?.get("x-spine-delivery-outcome") !== "pending-acknowledged"
-    )
-      throw new DeliveryOutcomeUnknownError("PICK_UP_SHARD", [
-        DeliveryShardCodec.snapshot(shardIndex),
-      ]);
     DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response.value);
     if (response.value.value.case === "alreadyPickedUp") {
-      DeliveryShardCodec.validatePicked(response.value.value.value, shardIndex);
-      return undefined;
+      const held = response.value.value.value;
+      DeliveryShardCodec.validatePicked(held, shardIndex);
+      if (held.worker === undefined || held.whenPicked === undefined)
+        throw DeliveryRequestCodec.protocol();
+      return Object.freeze({
+        kind: "ALREADY_PICKED" as const,
+        session: Object.freeze({
+          kind: "EXCLUSIVE" as const,
+          shard: DeliveryShardCodec.snapshot(shardIndex),
+          worker: DeliveryShardCodec.decodeWorker(held.worker),
+          whenPicked: DeliveryShardCodec.date(held.whenPicked),
+        }),
+      });
     }
     if (response.value.value.case !== "pickedUp") throw DeliveryRequestCodec.protocol();
-    return DeliveryShardCodec.decodePicked(response.value.value.value, shardIndex, workerId);
+    const picked = DeliveryShardCodec.decodePicked(
+      response.value.value.value,
+      shardIndex,
+      workerId,
+    );
+    return Object.freeze({ kind: "PICKED" as const, session: picked });
   }
 
   /**
@@ -591,44 +591,58 @@ export class DeliveryClient {
     if (!(error instanceof ConnectError)) return true;
     return error.code === Code.Unavailable || error.code === Code.DeadlineExceeded;
   }
-
-  static #isNoPendingWork(error: unknown): boolean {
-    return (
-      error instanceof ConnectError &&
-      error.code === Code.FailedPrecondition &&
-      error.metadata.get("x-spine-delivery-outcome") === "no-pending-work"
-    );
-  }
 }
 
-const deliveryClientPickups = new WeakMap<
+type RemoteShardProbe =
+  | Readonly<{ readonly kind: "PICKED"; readonly session: RemoteShardSession }>
+  | Readonly<{ readonly kind: "ALREADY_PICKED"; readonly session: RemoteShardSession }>;
+
+const deliveryClientProbes = new WeakMap<
   DeliveryClient,
   (
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardSession | undefined>
+  ) => Promise<RemoteShardProbe>
+>();
+
+const deliveryClientObservations = new WeakMap<
+  DeliveryClient,
+  (options: DeliveryFindOneOptions) => DeliveryShardObservationStream
 >();
 
 /**
- * Provides package-internal conditional pickup without extending the public client API.
+ * Provides package-internal frozen-wire ownership probes without extending the public client API.
  */
 export const deliveryClientAccess: Readonly<{
-  pickUpPending: (
+  probePickUp: (
     client: DeliveryClient,
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
-  ) => Promise<RemoteShardSession | undefined>;
+  ) => Promise<RemoteShardProbe>;
+  observeOnce: (
+    client: DeliveryClient,
+    options?: DeliveryFindOneOptions,
+  ) => DeliveryShardObservationStream;
 }> = Object.freeze({
-  pickUpPending(
+  probePickUp(
     client: DeliveryClient,
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
-  ): Promise<RemoteShardSession | undefined> {
-    const pickUp = deliveryClientPickups.get(client);
-    if (pickUp === undefined) throw new TypeError("Delivery client pickup access is unavailable.");
-    return pickUp(shardIndex, workerId, options);
+  ): Promise<RemoteShardProbe> {
+    const probe = deliveryClientProbes.get(client);
+    if (probe === undefined) throw new TypeError("Delivery client probe access is unavailable.");
+    return probe(shardIndex, workerId, options);
+  },
+  observeOnce(
+    client: DeliveryClient,
+    options: DeliveryFindOneOptions = {},
+  ): DeliveryShardObservationStream {
+    const observe = deliveryClientObservations.get(client);
+    if (observe === undefined)
+      throw new TypeError("Delivery client observation access is unavailable.");
+    return observe(options);
   },
 });

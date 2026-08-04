@@ -57,9 +57,19 @@ export const ShardHandlers: Readonly<{
           current !== undefined &&
           processingTimeoutMs > 0 &&
           pickedAt - ShardInputs.requireWhenPicked(current) > processingTimeoutMs;
-        if (current === undefined || stale) {
+        const refreshed =
+          current !== undefined &&
+          !stale &&
+          ShardInputs.revalidating(context.requestHeader) &&
+          ShardInputs.sameWorker(current.worker, worker);
+        if (current === undefined || stale || refreshed) {
           if (pendingOnly && !state.hasPending(shard)) throw ShardErrors.noPendingWork();
           state.setSession(shard, worker, pickedAt);
+          if (ShardInputs.revalidating(context.requestHeader))
+            context.responseHeader.set(
+              "x-spine-delivery-revalidation",
+              refreshed ? "refreshed" : "picked",
+            );
           if (pendingOnly)
             context.responseHeader.set("x-spine-delivery-outcome", "pending-acknowledged");
           onTransition?.(shard);
@@ -76,6 +86,8 @@ export const ShardHandlers: Readonly<{
         }
         if (pendingOnly)
           context.responseHeader.set("x-spine-delivery-outcome", "pending-acknowledged");
+        if (ShardInputs.revalidating(context.requestHeader))
+          context.responseHeader.set("x-spine-delivery-revalidation", "lost");
         return create(PickUpOutcomeSchema, {
           value: {
             case: "alreadyPickedUp",
@@ -89,9 +101,13 @@ export const ShardHandlers: Readonly<{
     },
     releaseSession: async (request, context) => {
       const shard = ShardInputs.requireShard(request.shard);
-      ShardInputs.requireWorker(request.worker);
+      const worker = ShardInputs.requireWorker(request.worker);
       await admission.run(context.signal, () => {
-        if (state.release(shard) !== undefined) onTransition?.(shard);
+        const current = state.session(shard);
+        if (current !== undefined && ShardInputs.sameWorker(current.worker, worker)) {
+          state.release(shard);
+          onTransition?.(shard);
+        }
       });
       return {};
     },
@@ -156,6 +172,11 @@ const ShardInputs: Readonly<{
   requireWorker: (worker: WorkerId | undefined) => WorkerId;
 
   /**
+   * Compares complete stable worker identities.
+   */
+  sameWorker: (first: WorkerId | undefined, second: WorkerId) => boolean;
+
+  /**
    * Requires a valid Shard identity.
    *
    * @param shard Holds the candidate Shard identity.
@@ -170,6 +191,11 @@ const ShardInputs: Readonly<{
    * @returns Whether pickup must find pending work.
    */
   pendingOnly: (headers: Headers | undefined) => boolean;
+
+  /**
+   * Determines whether a pickup explicitly refreshes its current worker ownership.
+   */
+  revalidating: (headers: Headers | undefined) => boolean;
 
   /**
    * Validates a protobuf duration.
@@ -204,6 +230,9 @@ const ShardInputs: Readonly<{
     }
     return worker;
   },
+  sameWorker: (first, second): boolean =>
+    first?.nodeId?.value === second.nodeId?.value && first?.value === second.value,
+  revalidating: (headers): boolean => headers?.get("x-spine-delivery-revalidate") === "true",
   requireShard: (shard: ShardIndex | undefined): ShardIndex => {
     if (
       shard === undefined ||

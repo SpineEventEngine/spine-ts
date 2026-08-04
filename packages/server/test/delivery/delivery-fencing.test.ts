@@ -19,8 +19,29 @@ import type {
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import type { InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardSession } from "../../src/delivery/sharded-work-registry.js";
+import { commitFenced, withDeliveryCommitFence } from "../../src/repository/commit-fence.js";
 
 describe("Delivery operation fencing", () => {
+  it("blocks a delivery commit after ownership loss, including an ABA re-acquisition", async () => {
+    let active = true;
+    let committed = false;
+    const entity = {};
+    await withDeliveryCommitFence(
+      () => (active ? Promise.resolve() : Promise.reject(new Error("Shard lease was lost."))),
+      async () => {
+        active = false;
+        await expect(
+          commitFenced(entity, () => {
+            committed = true;
+            return { status: "committed" };
+          }),
+        ).rejects.toThrow("Shard lease was lost.");
+      },
+    );
+    active = true;
+    expect(committed).toBe(false);
+  });
+
   it("does not durably complete a row when its operation is aborted while its endpoint is pending", async () => {
     const controller = new AbortController();
     const endpoint = Promise.withResolvers<undefined>();

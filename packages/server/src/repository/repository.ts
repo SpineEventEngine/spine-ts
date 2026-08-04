@@ -38,6 +38,7 @@ import { CommandValidationError } from "../bus/command-errors.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { Delivery } from "../delivery/delivery.js";
+import { commitFenced } from "./commit-fence.js";
 import type { InboxMessage, InboxMessageInput } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import {
@@ -1370,7 +1371,9 @@ class AggregateCommandExecution {
         parameterCount,
         context,
       );
-      const commit = transactionalEntityAccess.commit(entity);
+      const commit = await commitFenced(entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
@@ -1611,7 +1614,9 @@ class AggregateEventExecution {
         );
       }
 
-      const commit = transactionalEntityAccess.commit(loaded.entity);
+      const commit = await commitFenced(loaded.entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
@@ -1855,7 +1860,9 @@ class ProjectionEventExecution {
           eventContext,
         );
       }
-      const commit = transactionalEntityAccess.commit(entity);
+      const commit = await commitFenced(entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
@@ -2112,7 +2119,9 @@ class ProcessManagerCommandExecution {
         assignee.handler.parameterCount,
         EntityInvocation.commandHandlerContext(this.#command),
       );
-      const commit = transactionalEntityAccess.commit(entity);
+      const commit = await commitFenced(entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }
@@ -2340,7 +2349,9 @@ class ProcessManagerEventExecution {
         commands.push(...this.#support.normalizeProducedSignals(produced));
       }
 
-      const commit = transactionalEntityAccess.commit(entity);
+      const commit = await commitFenced(entity, (current) =>
+        transactionalEntityAccess.commit(current),
+      );
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
       }

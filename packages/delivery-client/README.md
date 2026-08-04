@@ -94,9 +94,22 @@ admission and before removal. An in-memory `Map` is suitable only for a test:
 production recovery needs a durable, capacity-bounded implementation.
 
 For server assembly, pass one `RemoteDelivery` to the environment instead of
-manually wiring adapters. `open()` runs before the first attachment/listener
-admission. A failed bounded readiness check closes its fresh client and can be
-retried; the transferred quarantine stays open until environment shutdown.
+manually wiring adapters. Each attached environment gets a bounded Admin
+snapshot and later shard-update hints; after a stream loss or bounded-buffer
+overflow it takes a fresh snapshot before resuming updates. Inbox rows and the
+exclusive shard session remain authoritative, so notifications are best-effort
+wake-ups. `open()` runs before the first attachment/listener admission. A
+failed bounded readiness check closes its fresh client and can be retried; the
+transferred quarantine stays open until environment shutdown.
+
+When identically configured application nodes share a Delivery server, every
+node observes and attempts each reported shard. The remote registry admits one
+owner for a shard at a time; updates are only hints recovered through a bounded
+snapshot, and the facility makes no ordering promise across different shards.
+The winning owner repeats finite Inbox drains until no deliverable rows remain,
+including rows that arrive while a drain is active, before it releases the
+shard. A pre-commit ownership probe fences known stale owners, but it is not a
+linearizable distributed transaction with Entity storage.
 
 ```ts
 import { RemoteDelivery, type RemovalQuarantine } from "@spine-event-engine/delivery-client";

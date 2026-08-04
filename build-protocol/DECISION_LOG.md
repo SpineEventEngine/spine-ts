@@ -5033,3 +5033,16 @@ Consequences:
 - Wave 7 owns stronger horizontal semantics and redeployment/update behavior.
 - Redis, Hazelcast, durable delivery-server modes, JVM builds, and npm
   publication remain excluded.
+
+## D-0107: Fence Remote Delivery Ownership At Commit
+
+Context: a remote shard session can expire or be released while an application
+callback is running. Admin updates are wake-up hints, not an ownership proof.
+
+Decision: identify every remote acquisition with one opaque worker value,
+match release to that complete worker identity, and revalidate ownership at
+the framework transaction commit boundary. A supervisor owns stream recovery:
+it must complete a fresh snapshot before reopening live observation.
+
+Consequences: no Proto or public method is added; one shard has one owner at a
+time, while different shards retain no ordering guarantee.

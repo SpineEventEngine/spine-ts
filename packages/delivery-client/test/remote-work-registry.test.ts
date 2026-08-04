@@ -1,9 +1,4 @@
-import {
-  create,
-  type DescMessage,
-  type DescMethodUnary,
-  type MessageShape,
-} from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import { ShardIndex } from "@spine-event-engine/server";
@@ -11,6 +6,7 @@ import {
   ExpiredSessionSchema,
   ExpiredSessionsReleasedSchema,
   LiquorPickUpOutcomeSchema,
+  OptionalInboxMessageSchema,
   PickUpShardSchema,
   ReleaseExpiredSessionsSchema,
   ReleaseShardSchema,
@@ -23,155 +19,130 @@ import {
   DeliveryClient,
   DeliveryOutcomeUnknownError,
   DeliveryProtocolError,
+  RemoteInbox,
   RemoteWorkRegistry,
 } from "../src/index.js";
 import { deliveryClientAccess } from "../src/client/client.js";
-import { conditionalPickUp } from "@spine-event-engine/server/internal/conditional-pickup";
-import { transport } from "./shared-fixtures.js";
+import { echoPickup, message, quarantine, transport } from "./shared-fixtures.js";
 
 describe("RemoteWorkRegistry", () => {
-  it("fails closed for missing or altered conditional pickup acknowledgements", async () => {
-    const fake = transport();
-    const shard = ShardIndex.single();
-    const worker = { nodeId: "node", value: "worker" };
-    const reply = create(LiquorPickUpOutcomeSchema, {
-      value: {
-        case: "pickedUp",
-        value: create(ShardPickedUpSchema, {
-          shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-          worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
-          whenPicked: { seconds: 1n, nanos: 0 },
-        }),
-      },
-    });
-    const client = DeliveryClient.usingTransport(fake.transport);
-    fake.reply(reply);
-    await expect(
-      deliveryClientAccess.pickUpPending(client, shard, worker, {}),
-    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    const registry = new RemoteWorkRegistry(client);
-    const conditional = conditionalPickUp.for(registry);
-    if (conditional === undefined) throw new Error("Conditional pickup is unavailable.");
-    fake.reply(reply);
-    await expect(conditional(shard, "node")).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    await expect(registry.pickUp(shard, "node")).resolves.toBeUndefined();
-    expect(fake.unary).toHaveBeenCalledTimes(2);
-  });
+  it("fails closed when package-internal client access is unavailable", () => {
+    const unavailable = {} as DeliveryClient;
 
-  it("accepts only an exact successful conditional pickup acknowledgement", async () => {
-    const fake = transport();
-    const shard = ShardIndex.single();
-    const worker = { nodeId: "node", value: "worker" };
-    const reply = create(LiquorPickUpOutcomeSchema, {
-      value: {
-        case: "pickedUp",
-        value: create(ShardPickedUpSchema, {
-          shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-          worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "worker" }),
-          whenPicked: { seconds: 1n, nanos: 0 },
-        }),
-      },
-    });
-    const withHeader = (value: string): Transport => ({
-      ...fake.transport,
-      unary: async <I extends DescMessage, O extends DescMessage>(
-        method: DescMethodUnary<I, O>,
-        signal: AbortSignal | undefined,
-        timeoutMs: number | undefined,
-        header: HeadersInit | undefined,
-        input: MessageShape<I>,
-        contextValues: Parameters<Transport["unary"]>[5],
-      ) => ({
-        ...(await fake.transport.unary(method, signal, timeoutMs, header, input, contextValues)),
-        header: new Headers([["x-spine-delivery-outcome", value]]),
-      }),
-    });
-    fake.reply(reply);
-    await expect(
-      deliveryClientAccess.pickUpPending(
-        DeliveryClient.usingTransport(withHeader("pending-acknowledged")),
-        shard,
-        worker,
+    expect(() =>
+      deliveryClientAccess.probePickUp(
+        unavailable,
+        ShardIndex.single(),
+        { nodeId: "node", value: "worker" },
         {},
       ),
+    ).toThrow("Delivery client probe access is unavailable.");
+    expect(() => deliveryClientAccess.observeOnce(unavailable)).toThrow(
+      "Delivery client observation access is unavailable.",
+    );
+  });
+
+  it("refuses unknown and incompatible local sessions without a remote release", async () => {
+    const fake = transport();
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
+
+    await expect(
+      registry.release({ kind: "LEASED", shard: ShardIndex.single() } as never),
+    ).resolves.toBe(false);
+    await expect(registry.release({ kind: "EXCLUSIVE", shard: ShardIndex.single() })).resolves.toBe(
+      false,
+    );
+    expect(fake.unary).not.toHaveBeenCalled();
+  });
+
+  it("forwards both operation bounds when acquiring a remote shard", async () => {
+    const fake = transport();
+    const client = DeliveryClient.usingTransport(fake.transport);
+    const registry = new RemoteWorkRegistry(client);
+    const controller = new AbortController();
+    echoPickup(fake);
+
+    await expect(
+      registry.pickUp(ShardIndex.single(), "node", { signal: controller.signal, timeoutMs: 123 }),
     ).resolves.toMatchObject({ kind: "EXCLUSIVE" });
-    fake.reply(reply);
-    await expect(
-      deliveryClientAccess.pickUpPending(
-        DeliveryClient.usingTransport(withHeader("altered")),
-        shard,
-        worker,
-        {},
-      ),
-    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    expect(fake.unary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ name: "PickShard" }),
+      expect.any(AbortSignal),
+      123,
+      undefined,
+      expect.anything(),
+    );
   });
 
-  it("recognizes only the exact conditional no-work outcome", async () => {
+  it("rejects a blank worker node before attempting remote ownership", async () => {
     const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
-    const shard = ShardIndex.single();
-    const worker = { nodeId: "node", value: "worker" };
+    const registry = new RemoteWorkRegistry(DeliveryClient.usingTransport(fake.transport));
 
-    fake.fail(
-      new ConnectError(
-        "No work.",
-        Code.FailedPrecondition,
-        new Headers([["x-spine-delivery-outcome", "no-pending-work"]]),
-      ),
+    await expect(registry.pickUp(ShardIndex.single(), "   ")).rejects.toThrow(
+      "Delivery worker node is invalid.",
     );
-    await expect(
-      deliveryClientAccess.pickUpPending(client, shard, worker, {}),
-    ).resolves.toBeUndefined();
-    expect(pickupMode(fake)).toBe("pending");
-
-    fake.fail(new ConnectError("No work.", Code.FailedPrecondition));
-    await expect(
-      deliveryClientAccess.pickUpPending(client, shard, worker, {}),
-    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
-    fake.fail(
-      new ConnectError(
-        "No work.",
-        Code.FailedPrecondition,
-        new Headers([["x-spine-delivery-outcome", "other"]]),
-      ),
-    );
-    await expect(
-      deliveryClientAccess.pickUpPending(client, shard, worker, {}),
-    ).rejects.toBeInstanceOf(DeliveryOutcomeUnknownError);
+    expect(fake.unary).not.toHaveBeenCalled();
   });
 
-  it("uses conditional pickup through the work-registry port without quarantining no work", async () => {
-    const fake = transport();
-    const client = DeliveryClient.usingTransport(fake.transport);
+  it("uses a distinct opaque worker value for each remote pickup while retaining the node", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const client = DeliveryClient.usingTransport(workerTransport(workers));
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
 
-    fake.fail(
-      new ConnectError(
-        "No work.",
-        Code.FailedPrecondition,
-        new Headers([["x-spine-delivery-outcome", "no-pending-work"]]),
-      ),
-    );
-    const pickUpPending = conditionalPickUp.for(registry);
-    if (pickUpPending === undefined) throw new Error("Conditional pickup is unavailable.");
-    await expect(pickUpPending(shard, "node")).resolves.toBeUndefined();
-    expect(pickupMode(fake)).toBe("pending");
+    const first = await registry.pickUp(shard, "node");
+    if (first === undefined) throw new Error("First remote shard was not acquired.");
+    await registry.release(first);
+    const second = await registry.pickUp(shard, "node");
+    if (second === undefined) throw new Error("Second remote shard was not acquired.");
 
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
-      }),
-    );
-    await expect(registry.pickUp(shard, "node")).resolves.toMatchObject({ kind: "EXCLUSIVE" });
+    expect(workers).toHaveLength(2);
+    expect(workers.map((worker) => worker.nodeId)).toEqual(["node", "node"]);
+    expect(workers[0]?.value).not.toBe(workers[1]?.value);
+  });
+
+  it("authorizes live synchronization when a frozen probe reports the original session", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const client = DeliveryClient.usingTransport(workerTransport(workers, "already-held"));
+    const registry = new RemoteWorkRegistry(client);
+    const session = await registry.pickUp(ShardIndex.single(), "node");
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+    const inbox = new RemoteInbox(client, quarantine());
+    const fake = client;
+    void fake;
+
+    // The transport exposes no private acknowledgement headers. Synchronization must
+    // authorize only the frozen `already_picked_up` worker and generation.
+    const remoteMessage = await client.findOne({
+      value: "synchronize",
+      shard: ShardIndex.single(),
+    });
+    if (remoteMessage === undefined) throw new Error("Remote message was not found.");
+    const work = await inbox.begin(remoteMessage, session);
+    if (work === undefined) throw new Error("Remote work was not created.");
+    await expect(work.synchronize(session)).resolves.toBeUndefined();
+    expect(workers).toHaveLength(2);
+    expect(workers[1]).not.toEqual(workers[0]);
+  });
+
+  it("fences live inbox synchronization and releases a challenger that accidentally acquires", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const client = DeliveryClient.usingTransport(workerTransport(workers, "picked"));
+    const registry = new RemoteWorkRegistry(client);
+    const session = await registry.pickUp(ShardIndex.single(), "node");
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+    const inbox = new RemoteInbox(client, quarantine());
+    const remoteMessage = await client.findOne({
+      value: "synchronize",
+      shard: ShardIndex.single(),
+    });
+    if (remoteMessage === undefined) throw new Error("Remote message was not found.");
+    const work = await inbox.begin(remoteMessage, session);
+    if (work === undefined) throw new Error("Remote work was not created.");
+
+    await expect(work.synchronize(session)).rejects.toBeInstanceOf(DeliveryProtocolError);
+    await expect(registry.release(session)).resolves.toBe(false);
+    expect(workers).toHaveLength(2);
   });
 
   it("keeps pickup blocked through an in-flight or unknown release until its safe resolution", async () => {
@@ -179,21 +150,9 @@ describe("RemoteWorkRegistry", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
-    const pickedUp = () =>
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
-      });
     const notPicked = () => Object.freeze({ shard, status: "NOT_PICKED" as const, messages: 0 });
 
-    fake.reply(pickedUp());
+    echoPickup(fake);
     const firstSession = await registry.pickUp(shard, "node");
     if (firstSession === undefined) throw new Error("Remote shard was not acquired.");
 
@@ -208,7 +167,7 @@ describe("RemoteWorkRegistry", () => {
 
     heldRelease.release();
     await expect(firstRelease).resolves.toBe(true);
-    fake.reply(pickedUp());
+    echoPickup(fake);
     const secondSession = await registry.pickUp(shard, "node");
     if (secondSession === undefined) throw new Error("Remote shard was not reacquired.");
     expect(fake.unary).toHaveBeenCalledTimes(3);
@@ -221,7 +180,7 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).toHaveBeenCalledTimes(4);
 
     registry.reconcile(notPicked());
-    fake.reply(pickedUp());
+    echoPickup(fake);
     await expect(registry.pickUp(shard, "node")).resolves.toMatchObject({
       kind: "EXCLUSIVE",
       shard,
@@ -440,7 +399,85 @@ describe("RemoteWorkRegistry", () => {
   });
 });
 
-function pickupMode(fake: ReturnType<typeof transport>): string | null {
-  const calls = fake.unary.mock.calls as unknown as unknown[][];
-  return (calls.at(-1)?.[3] as Headers | undefined)?.get("x-spine-delivery-pickup-mode") ?? null;
+function workerTransport(
+  workers: { nodeId: string; value: string }[],
+  probeOutcome?: "already-held" | "picked",
+): Transport {
+  let pickups = 0;
+  const unaryTransport: Pick<Transport, "unary"> = {
+    unary: (method, _signal, _timeoutMs, _header, input) => {
+      if (method.name === "FindOne") {
+        return Promise.resolve({
+          stream: false,
+          method,
+          header: new Headers(),
+          trailer: new Headers(),
+          service: method.parent,
+          message: create(OptionalInboxMessageSchema, {
+            message: message("command", "synchronize"),
+          }),
+        } as never);
+      }
+      if (method.name === "ReleaseSession") {
+        return Promise.resolve({
+          stream: false,
+          method,
+          header: new Headers(),
+          trailer: new Headers(),
+          service: method.parent,
+          message: create(EmptySchema),
+        } as never);
+      }
+      if (method.name === "PickShard") {
+        const request = input as {
+          shard: unknown;
+          worker: { nodeId?: { value: string }; value: string };
+        };
+        const worker = {
+          nodeId: request.worker.nodeId?.value ?? "",
+          value: request.worker.value,
+        };
+        workers.push(worker);
+        pickups += 1;
+        return Promise.resolve({
+          stream: false,
+          method,
+          header: new Headers(),
+          trailer: new Headers(),
+          service: method.parent,
+          message: create(
+            LiquorPickUpOutcomeSchema,
+            pickups > 1 && probeOutcome === "already-held"
+              ? {
+                  value: {
+                    case: "alreadyPickedUp",
+                    value: create(ShardAlreadyPickedUpSchema, {
+                      worker: create(WorkerIdSchema, {
+                        nodeId: { value: workers[0]?.nodeId ?? "" },
+                        value: workers[0]?.value ?? "",
+                      }),
+                      whenPicked: { seconds: 1n, nanos: 0 },
+                    }),
+                  },
+                }
+              : {
+                  value: {
+                    case: "pickedUp",
+                    value: create(ShardPickedUpSchema, {
+                      shard: request.shard as never,
+                      worker: create(WorkerIdSchema, {
+                        nodeId: { value: worker.nodeId },
+                        value: worker.value,
+                      }),
+                      whenPicked: { seconds: BigInt(pickups), nanos: 0 },
+                    }),
+                  },
+                },
+          ),
+        } as never);
+      }
+      throw new Error(`Unexpected method ${method.name}`);
+    },
+  };
+  return unaryTransport as unknown as Transport;
 }

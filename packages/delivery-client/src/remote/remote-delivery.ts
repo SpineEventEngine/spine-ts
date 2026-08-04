@@ -1,9 +1,10 @@
 import {
   type ServerEnvironmentCloseable,
   type ServerEnvironmentDelivery,
+  type DeliverySource,
 } from "@spine-event-engine/server";
 
-import { DeliveryClient } from "../client/client.js";
+import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
 import type { DeliveryClientOptions, RemovalQuarantine } from "../client/types.js";
 import { RemoteInbox, RemoteWorkRegistry } from "./adapters.js";
 
@@ -100,6 +101,16 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   }
 
   /**
+   * Returns the ready Admin source used by environment delivery supervisors.
+   *
+   * @returns The source that supplies bounded snapshots and one-attempt shard updates.
+   */
+  get source(): DeliverySource {
+    if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
+    return this.#bundle.source;
+  }
+
+  /**
    * Closes the client-owned HTTP/2 session, then the transferred quarantine.
    *
    * @returns A promise that retries only unfinished close phases after a failure.
@@ -121,13 +132,40 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     try {
       await client.shardSnapshot();
       if (this.#closed) throw new Error("Remote delivery is closed.");
-      this.#bundle = { client, inbox, workRegistry };
+      this.#bundle = {
+        client,
+        inbox,
+        workRegistry,
+        source: {
+          shardSnapshot: async (options) => {
+            const snapshot = await client.shardSnapshot(options);
+            for (const observation of snapshot) workRegistry.reconcile(observation);
+            return snapshot;
+          },
+          observeShardUpdates: (options) =>
+            RemoteDelivery.#reconcileUpdates(
+              workRegistry,
+              deliveryClientAccess.observeOnce(client, options),
+            ),
+          releaseExpired: (inactivityMs, options) => client.releaseExpired(inactivityMs, options),
+        },
+      };
     } catch (error) {
       if (!this.#closed) {
         client.close();
         if (this.#client === client) this.#client = undefined;
       }
       throw error;
+    }
+  }
+
+  static async *#reconcileUpdates(
+    registry: RemoteWorkRegistry,
+    updates: AsyncIterable<Awaited<ReturnType<DeliveryClient["shardSnapshot"]>>[number]>,
+  ): AsyncIterable<Awaited<ReturnType<DeliveryClient["shardSnapshot"]>>[number]> {
+    for await (const observation of updates) {
+      registry.reconcile(observation);
+      yield observation;
     }
   }
 
@@ -165,4 +203,5 @@ interface RemoteDeliveryBundle {
   readonly client: DeliveryClient;
   readonly inbox: RemoteInbox;
   readonly workRegistry: RemoteWorkRegistry;
+  readonly source: DeliverySource;
 }

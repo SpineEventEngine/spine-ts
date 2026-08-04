@@ -12,7 +12,11 @@ import {
 import { DeliveryBuilder, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { Delivery, type OnDeliveryMessage } from "../delivery/delivery.js";
 import type { DeliveryOperationOptions } from "../delivery/delivery-ports.js";
-import { DeliverySupervisor, type DeliveryShardUpdate } from "../delivery/delivery-supervisor.js";
+import {
+  DeliverySupervisor,
+  type DeliveryShardUpdate,
+  type DeliverySource,
+} from "../delivery/delivery-supervisor.js";
 import type { DeliveryWorkerEvidence } from "../delivery/delivery-worker.js";
 import { DeliveryWorker } from "../delivery/delivery-worker.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -414,7 +418,7 @@ class RuntimeDeliverySupervisor {
 }
 
 class RuntimeDeliverySupervisorGroup {
-  readonly #source: LocalDeliverySource;
+  readonly #source: DeliverySource;
   readonly #supervisor: DeliverySupervisor;
   readonly shardCount: number;
   #start: Promise<void> | undefined;
@@ -425,13 +429,17 @@ class RuntimeDeliverySupervisorGroup {
     readonly delivery: ReturnType<DeliveryBuilder["build"]>;
     readonly shards: readonly ShardIndex[];
     readonly onMessage: OnDeliveryMessage;
+    readonly source?: DeliverySource;
   }) {
     const first = options.shards[0];
     if (first === undefined) {
       throw new Error("Environment delivery supervisor group requires at least one shard.");
     }
     this.shardCount = first.ofTotal;
-    this.#source = new LocalDeliverySource(options.shards);
+    this.#source =
+      options.source === undefined
+        ? new LocalDeliverySource(options.shards)
+        : EnvironmentDeliveryValues.requireSource(options.source);
     this.#supervisor = new DeliverySupervisor({
       source: this.#source,
       delivery: options.delivery,
@@ -445,7 +453,7 @@ class RuntimeDeliverySupervisorGroup {
     }
     if (this.#start === undefined) {
       this.#start = this.#supervisor.start().then(() => {
-        this.#source.enableRecovery();
+        if (this.#source instanceof LocalDeliverySource) this.#source.enableRecovery();
       });
     }
     return this.#start;
@@ -510,6 +518,18 @@ class LocalDeliverySource {
  * @internal Groups private delivery-runtime assembly and failure operations.
  */
 const EnvironmentDeliveryValues = Object.freeze({
+  requireSource(source: unknown): DeliverySource {
+    if (
+      source === null ||
+      typeof source !== "object" ||
+      typeof (source as DeliverySource).shardSnapshot !== "function" ||
+      typeof (source as DeliverySource).observeShardUpdates !== "function" ||
+      typeof (source as DeliverySource).releaseExpired !== "function"
+    ) {
+      throw new TypeError("Environment delivery source is invalid.");
+    }
+    return source as DeliverySource;
+  },
   createWorker(
     runtime: EnvironmentDeliveryRuntime,
     ports?: EnvironmentDeliveryPorts,
@@ -557,6 +577,7 @@ const EnvironmentDeliveryValues = Object.freeze({
           delivery,
           shards: exactShards,
           onMessage: (message) => runtime.descriptor.replay(message, runtime.tenant.tenantId),
+          ...(ports?.source === undefined ? {} : { source: ports.source }),
         });
       }),
     );

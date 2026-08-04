@@ -29,6 +29,38 @@ import type {
 } from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
+  it("does not open a replacement watch until failed recovery later succeeds", async () => {
+    let snapshots = 0;
+    let watches = 0;
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => {
+          snapshots += 1;
+          return snapshots === 1
+            ? Promise.reject(new Error("snapshot failed"))
+            : Promise.resolve([]);
+        },
+        observeShardUpdates: (options) => {
+          watches += 1;
+          return updatesUntilAborted(options?.signal);
+        },
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+      recoveryMs: 1,
+      watchInitialBackoffMs: 1,
+      watchMaxBackoffMs: 1,
+    });
+    await supervisor.start();
+    expect(watches).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(watches).toBe(1);
+    await supervisor.close();
+  });
   it.each([
     [{ concurrency: 0 }, "Delivery supervisor concurrency"],
     [{ pendingLimit: 0 }, "Delivery supervisor pending limit"],
@@ -534,9 +566,13 @@ describe("DeliverySupervisor", () => {
     vi.useFakeTimers();
     try {
       let watches = 0;
+      let snapshots = 0;
       const supervisor = new DeliverySupervisor({
         source: {
-          shardSnapshot: () => Promise.resolve([]),
+          shardSnapshot: () => {
+            snapshots += 1;
+            return Promise.resolve([]);
+          },
           observeShardUpdates: () => {
             watches += 1;
             return failingUpdates();
@@ -554,8 +590,10 @@ describe("DeliverySupervisor", () => {
       await supervisor.start();
       vi.runAllTicks();
       expect(watches).toBe(1);
+      expect(snapshots).toBe(1);
       await vi.advanceTimersByTimeAsync(10);
       expect(watches).toBe(2);
+      expect(snapshots).toBe(2);
       await supervisor.close({ graceMs: 10 });
     } finally {
       vi.useRealTimers();

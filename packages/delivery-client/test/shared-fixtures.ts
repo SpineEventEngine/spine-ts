@@ -3,7 +3,12 @@ import { AnySchema } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
 import { type InboxMessage, ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
-import { OptionalInboxMessageSchema } from "@spine-event-engine/proto/delivery-server";
+import {
+  LiquorPickUpOutcomeSchema,
+  OptionalInboxMessageSchema,
+  ShardAlreadyPickedUpSchema,
+  ShardPickedUpSchema,
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxIdSchema,
   InboxLabel,
@@ -24,18 +29,55 @@ export function transport(): {
   readonly streamAborts: number;
   readonly streamFinished: number;
   reply(value: Message): void;
+  replyPickup(): void;
+  replyAlreadyPicked(): void;
   replyAndHold(value: Message): { release(): void };
   fail(error: Error): void;
   streamReply(values: readonly Message[]): void;
   streamReplyAndHold(values: readonly Message[]): void;
   closed: boolean;
 } {
-  const replies: (Message | Error | { readonly value: Message; readonly held: Promise<void> })[] =
-    [];
-  const unary = vi.fn(async (..._ignored: unknown[]) => {
-    void _ignored;
+  const replies: (
+    | Message
+    | Error
+    | { readonly value: Message; readonly held: Promise<void> }
+    | "PICKUP"
+    | "ALREADY_PICKED"
+  )[] = [];
+  const pickedWorkers = new Map<string, unknown>();
+  const unary = vi.fn(async (...args: unknown[]) => {
     await Promise.resolve();
     const reply = replies.shift() ?? create(OptionalInboxMessageSchema);
+    if (reply === "PICKUP") {
+      const request = args[4] as { shard: unknown; worker: unknown };
+      const shard = request.shard as { index?: number; ofTotal?: number };
+      pickedWorkers.set(`${String(shard.index)}/${String(shard.ofTotal)}`, request.worker);
+      return create(LiquorPickUpOutcomeSchema, {
+        value: {
+          case: "pickedUp",
+          value: create(ShardPickedUpSchema, {
+            shard: request.shard as never,
+            worker: request.worker as never,
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
+        },
+      });
+    }
+    if (reply === "ALREADY_PICKED") {
+      const request = args[4] as { shard: { index?: number; ofTotal?: number } };
+      const key = `${String(request.shard.index)}/${String(request.shard.ofTotal)}`;
+      const worker = pickedWorkers.get(key);
+      if (worker === undefined) throw new Error("No prior picked worker.");
+      return create(LiquorPickUpOutcomeSchema, {
+        value: {
+          case: "alreadyPickedUp",
+          value: create(ShardAlreadyPickedUpSchema, {
+            worker: worker as never,
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
+        },
+      });
+    }
     if (typeof reply === "object" && "held" in reply) {
       await reply.held;
       return reply.value;
@@ -103,10 +145,12 @@ export function transport(): {
     stream,
     transport: {
       async unary(method, signal, timeoutMs, header, input) {
+        const revalidating =
+          header instanceof Headers && header.get("x-spine-delivery-revalidate") === "true";
         return {
           stream: false,
           method,
-          header: new Headers(),
+          header: new Headers(revalidating ? [["x-spine-delivery-revalidation", "refreshed"]] : []),
           trailer: new Headers(),
           service: method.parent,
           message: await unary(method, signal, timeoutMs, header, input),
@@ -120,6 +164,8 @@ export function transport(): {
   };
   const result = Object.assign(fake, {
     reply: (value: Message) => replies.push(value),
+    replyPickup: () => replies.push("PICKUP"),
+    replyAlreadyPicked: () => replies.push("ALREADY_PICKED"),
     replyAndHold: (value: Message) => {
       let release: (() => void) | undefined;
       const held = new Promise<void>((resolve) => {
@@ -138,6 +184,24 @@ export function transport(): {
     streamFinished: { get: () => streamFinished },
   });
   return result as unknown as ReturnType<typeof transport>;
+}
+
+export function echoPickup(fake: ReturnType<typeof transport>): void {
+  fake.unary.mockImplementationOnce(
+    (_method: unknown, _signal: unknown, _timeoutMs: unknown, _header: unknown, input: unknown) => {
+      const request = input as { shard: unknown; worker: unknown };
+      return create(LiquorPickUpOutcomeSchema, {
+        value: {
+          case: "pickedUp",
+          value: create(ShardPickedUpSchema, {
+            shard: request.shard as never,
+            worker: request.worker as never,
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
+        },
+      });
+    },
+  );
 }
 
 export function message(kind: "command" | "event", id = "message-1", payloadBytes = 0) {

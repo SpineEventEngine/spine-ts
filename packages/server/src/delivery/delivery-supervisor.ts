@@ -109,7 +109,7 @@ export class DeliverySupervisor {
   #closing = false;
   #closed = false;
   #rescanRequired = false;
-  #recovering: Promise<void> | undefined;
+  #recovering: Promise<boolean> | undefined;
   #recoveryTimer: ReturnType<typeof setTimeout> | undefined;
   #watchTimer: ReturnType<typeof setTimeout> | undefined;
   #watchBackoffMs: number;
@@ -169,9 +169,9 @@ export class DeliverySupervisor {
     if (this.#closing || this.#closed) throw new Error("Delivery supervisor is closed.");
     if (this.#started) return;
     this.#started = true;
-    await this.#recover();
+    const recovered = await this.#recover();
     this.#scheduleRecovery();
-    this.#startWatch();
+    if (recovered) this.#startWatch();
   }
 
   /**
@@ -241,7 +241,6 @@ export class DeliverySupervisor {
     }
     // Abort is the epoch fence and also stops any lease renewal on the controlled path.
     this.#controller.abort(new Error("Delivery supervisor is closed."));
-    if (this.#active.size > 0) await this.whenIdle();
     let releaseError: unknown;
     try {
       await this.#releaseOnce(graceMs);
@@ -249,6 +248,7 @@ export class DeliverySupervisor {
       releaseError = error;
     }
     if (releaseError !== undefined) throw DeliverySupervisor.#releaseError(releaseError);
+    if (this.#active.size > 0) await this.whenIdle();
     this.#closed = true;
     if (timedOut) throw new DeliveryShutdownTimeoutError();
   }
@@ -297,7 +297,7 @@ export class DeliverySupervisor {
     this.#idle.clear();
   }
 
-  #recover(): Promise<void> {
+  #recover(): Promise<boolean> {
     if (this.#recovering !== undefined) return this.#recovering;
     const recovering = this.#recoverNow().finally(() => {
       this.#recovering = undefined;
@@ -306,8 +306,8 @@ export class DeliverySupervisor {
     return recovering;
   }
 
-  async #recoverNow(): Promise<void> {
-    if (this.#closing || this.#closed) return;
+  async #recoverNow(): Promise<boolean> {
+    if (this.#closing || this.#closed) return false;
     try {
       // Release is a mutation: a rejection is not treated as a successful release.
       await this.#releaseExpired({ signal: this.#sourceController.signal });
@@ -315,8 +315,10 @@ export class DeliverySupervisor {
       for (const shard of shards) {
         if (shard.status === "NOT_PICKED" && shard.messages > 0) this.notify(shard.shard);
       }
+      return true;
     } catch {
       // A later bounded recovery retries; no unknown mutation outcome is assumed successful.
+      return false;
     }
   }
 
@@ -324,7 +326,8 @@ export class DeliverySupervisor {
     if (this.#closing || this.#closed || this.#recoveryTimer !== undefined) return;
     this.#recoveryTimer = setTimeout(() => {
       this.#recoveryTimer = undefined;
-      void this.#recover().finally(() => {
+      void this.#recover().then((recovered) => {
+        if (recovered) this.#startWatch();
         this.#scheduleRecovery();
       });
     }, this.#recoveryMs);
@@ -362,7 +365,10 @@ export class DeliverySupervisor {
     this.#watchBackoffMs = Math.min(this.#watchMaxBackoffMs, delay * 2);
     this.#watchTimer = setTimeout(() => {
       this.#watchTimer = undefined;
-      this.#startWatch();
+      void this.#recover().then((recovered) => {
+        if (recovered) this.#startWatch();
+        else this.#scheduleWatchRestart();
+      });
     }, delay);
     this.#watchTimer.unref();
   }

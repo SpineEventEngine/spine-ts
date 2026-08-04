@@ -190,15 +190,18 @@ class RemoteInboxWork implements DeliveryInboxWork {
     if (!this.#active) throw new DeliveryProtocolError();
     return DeliveryMessageCodec.snapshot(this.snapshot);
   }
-  synchronize(session: DeliveryWorkSession, _options?: DeliveryOperationOptions): Promise<void> {
-    void _options;
+  async synchronize(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<void> {
     if (
       !this.#active ||
       session.kind !== "EXCLUSIVE" ||
       !RemoteValues.sameShard(session.shard, this.snapshot.shard)
     )
-      return Promise.reject(new DeliveryProtocolError());
-    return Promise.resolve();
+      throw new DeliveryProtocolError();
+    const owner = RemoteSessionOwner.for(this.client);
+    if (!(await owner.synchronize(session, options))) throw new DeliveryProtocolError();
   }
   async complete(options?: DeliveryOperationOptions): Promise<boolean> {
     if (!this.#active) return false;
@@ -221,13 +224,12 @@ class RemoteInboxWork implements DeliveryInboxWork {
 /**
  * Adapts remote exclusive shard sessions to the server work registry.
  */
-export class RemoteWorkRegistry implements DeliveryWorkRegistry {
+class RemoteSessionOwner {
   // prettier-ignore
 
   /**
    * Frozen remote pickup produces non-renewable exclusive sessions.
    */
-  readonly sessionKind = "EXCLUSIVE" as const;
   readonly #sessions = new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
   readonly #sessionsByShard = new Map<string, Set<ExclusiveDeliveryWorkSession>>();
   readonly #releasesInFlight = new Set<string>();
@@ -238,11 +240,14 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
    *
    * @param client Sends shard operations to the delivery server.
    */
-  constructor(private readonly client: DeliveryClient) {
-    conditionalPickUp.register(this, (shard, node, options) =>
-      this.#pickUp(shard, node, options, true),
-    );
-    Object.freeze(this);
+  private constructor(private readonly client: DeliveryClient) {}
+
+  static for(client: DeliveryClient): RemoteSessionOwner {
+    const current = remoteSessionOwners.get(client);
+    if (current !== undefined) return current;
+    const owner = new RemoteSessionOwner(client);
+    remoteSessionOwners.set(client, owner);
+    return owner;
   }
 
   /**
@@ -258,14 +263,13 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     node: string,
     options?: DeliveryOperationOptions,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
-    return this.#pickUp(shardIndex, node, options, false);
+    return this.#pickUp(shardIndex, node, options);
   }
 
   async #pickUp(
     shardIndex: ShardIndex,
     node: string,
     options: DeliveryOperationOptions | undefined,
-    requirePending: boolean,
   ): Promise<ExclusiveDeliveryWorkSession | undefined> {
     const key = RemoteValues.shardKey(shardIndex);
     if (this.#quarantined.has(key)) return undefined;
@@ -275,14 +279,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
         ...(options?.signal === undefined ? {} : { signal: options.signal }),
         ...(options?.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs }),
       };
-      remote = requirePending
-        ? await deliveryClientAccess.pickUpPending(
-            this.client,
-            shardIndex,
-            RemoteValues.workerFor(node),
-            operation,
-          )
-        : await this.client.pickUp(shardIndex, RemoteValues.workerFor(node), operation);
+      remote = await this.client.pickUp(shardIndex, RemoteValues.workerFor(node), operation);
     } catch (error) {
       if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
       throw error;
@@ -328,6 +325,46 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     }
   }
 
+  async synchronize(
+    session: ExclusiveDeliveryWorkSession,
+    options: DeliveryOperationOptions | undefined,
+  ): Promise<boolean> {
+    const remote = this.#sessions.get(session);
+    if (remote === undefined) return false;
+    const key = RemoteValues.shardKey(session.shard);
+    if (this.#quarantined.has(key)) return false;
+    try {
+      const probe = await deliveryClientAccess.probePickUp(
+        this.client,
+        session.shard,
+        RemoteValues.workerFor(remote.worker.nodeId),
+        options ?? {},
+      );
+      if (
+        probe.kind === "ALREADY_PICKED" &&
+        RemoteValues.sameWorker(probe.session.worker, remote.worker) &&
+        probe.session.whenPicked.getTime() === remote.whenPicked.getTime()
+      ) {
+        return true;
+      }
+      if (probe.kind === "PICKED") await this.#cleanupAccidentalPickup(probe.session);
+      this.#sessions.delete(session);
+      this.#removeSession(key, session);
+      return false;
+    } catch (error) {
+      if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
+      throw error;
+    }
+  }
+
+  async #cleanupAccidentalPickup(session: RemoteShardSession): Promise<void> {
+    try {
+      await this.client.release(session, { timeoutMs: 1_000 });
+    } catch {
+      // The old owner is fenced even if bounded cleanup cannot establish its outcome.
+    }
+  }
+
   /**
    * Applies a validated Admin observation to local remote-session state.
    *
@@ -351,7 +388,9 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     const key = RemoteValues.shardKey(observation.shard);
     const sessions = this.#sessionsByShard.get(key);
     if (sessions !== undefined) {
-      for (const session of sessions) this.#sessions.delete(session);
+      for (const session of sessions) {
+        this.#sessions.delete(session);
+      }
       this.#sessionsByShard.delete(key);
     }
     if (!this.#releasesInFlight.has(key)) this.#quarantined.delete(key);
@@ -366,8 +405,72 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
 }
 
 /**
+ * Adapts the one per-client remote session owner to the server work-registry port.
+ */
+export class RemoteWorkRegistry implements DeliveryWorkRegistry {
+  // prettier-ignore
+
+  /**
+   * Identifies the exclusive session model used by the remote registry.
+   */
+  readonly sessionKind = "EXCLUSIVE" as const;
+  readonly #owner: RemoteSessionOwner;
+
+  /**
+   * Creates a registry backed by the supplied delivery client.
+   *
+   * @param client Sends shard operations to the delivery server.
+   */
+  constructor(client: DeliveryClient) {
+    this.#owner = RemoteSessionOwner.for(client);
+    conditionalPickUp.register(this, (shard, node, options) =>
+      this.#owner.pickUp(shard, node, options),
+    );
+    Object.freeze(this);
+  }
+
+  /**
+   * Acquires a remote shard for an application node.
+   *
+   * @param shardIndex Identifies the shard to acquire.
+   * @param node Identifies the application node requesting the shard.
+   * @param options Bounds or cancels the remote operation.
+   * @returns The acquired exclusive session, or `undefined` when unavailable.
+   */
+  pickUp(
+    shardIndex: ShardIndex,
+    node: string,
+    options?: DeliveryOperationOptions,
+  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    return this.#owner.pickUp(shardIndex, node, options);
+  }
+
+  /**
+   * Removes a remote shard session owned by this registry.
+   *
+   * @param session Identifies the session to release.
+   * @param options Bounds or cancels the remote operation.
+   * @returns Whether the registry recognized and released the session.
+   */
+  release(session: DeliveryWorkSession, options?: DeliveryOperationOptions): Promise<boolean> {
+    return this.#owner.release(session, options);
+  }
+
+  /**
+   * Applies an Admin shard observation to local ownership.
+   *
+   * @param observation Describes the current remote shard state.
+   */
+  reconcile(observation: RemoteShardObservation): void {
+    this.#owner.reconcile(observation);
+  }
+}
+
+/**
  * Groups immutable remote-adapter value operations.
  */
+const remoteSessionOwners = new WeakMap<DeliveryClient, RemoteSessionOwner>();
+
 const RemoteValues = Object.freeze({
   receiveMessage(input: InboxMessageInput): InboxMessage {
     const message = DeliveryMessageCodec.snapshot({
@@ -402,6 +505,10 @@ const RemoteValues = Object.freeze({
 
   sameShard(left: ShardIndex, right: ShardIndex): boolean {
     return left.index === right.index && left.ofTotal === right.ofTotal;
+  },
+
+  sameWorker(left: DeliveryWorkerId, right: DeliveryWorkerId): boolean {
+    return left.nodeId === right.nodeId && left.value === right.value;
   },
 
   exactAfter(page: readonly InboxMessage[], after: NonNullable<InboxReadOptions["after"]>): number {
@@ -487,6 +594,6 @@ const RemoteValues = Object.freeze({
   workerFor(node: string): DeliveryWorkerId {
     if (typeof node !== "string" || node.trim().length === 0)
       throw new TypeError("Delivery worker node is invalid.");
-    return RemoteValues.freeze({ nodeId: node, value: `spine-ts:${node}` });
+    return RemoteValues.freeze({ nodeId: node, value: randomUUID() });
   },
 });

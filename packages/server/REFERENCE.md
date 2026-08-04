@@ -207,3 +207,9 @@ callers; rejection admits no attachment and a later attempt retries open. A
 close-only local delivery remains source-compatible. After attachments retire,
 environment close runs delivery, transport, tracer, then storage and preserves
 retry checkpoints for failed phases.
+
+`ServerEnvironmentDelivery.source` is optional. When present, its Admin source
+is used by the facility-owned environment supervisor for remote snapshots and
+shard-update hints; when absent, the existing local source remains the fallback.
+Applications configure and close only the delivery facility through the
+environment: attachment supervisors and their source reads are facility-owned.

@@ -10,15 +10,24 @@ const remote = vi.hoisted(() => ({
   closeEvents: [] as string[],
   closeFailures: [] as (Error | undefined)[],
   readiness: [] as (() => Promise<readonly unknown[]>)[],
+  observations: [] as (() => AsyncIterable<unknown>)[],
+  releases: [] as unknown[][],
+  reconciled: [] as unknown[],
 }));
 
 vi.mock("../src/client/client.js", () => ({
   DeliveryClient: {
     connectTo: vi.fn(() => {
-      const client = new FakeClient(remote.readiness.shift() ?? (() => Promise.resolve([])));
+      const client = new FakeClient(
+        remote.readiness.shift() ?? (() => Promise.resolve([])),
+        remote.observations.shift() ?? (() => emptyUpdates()),
+      );
       remote.clients.push(client);
       return client;
     }),
+  },
+  deliveryClientAccess: {
+    observeOnce: (client: FakeClient) => client.observeShardUpdatesOnce(),
   },
 }));
 
@@ -35,6 +44,9 @@ vi.mock("../src/remote/adapters.js", () => ({
     constructor(readonly client: FakeClient) {
       remote.workRegistries.push(this);
     }
+    reconcile(observation: unknown): void {
+      remote.reconciled.push(observation);
+    }
   },
 }));
 
@@ -45,10 +57,35 @@ interface CloseableQuarantine extends RemovalQuarantine {
 class FakeClient {
   #closed = false;
 
-  constructor(private readonly readiness: () => Promise<readonly unknown[]>) {}
+  constructor(
+    private readonly readiness: () => Promise<readonly unknown[]>,
+    private readonly observations: () => AsyncIterable<unknown>,
+  ) {}
 
   shardSnapshot(): Promise<readonly unknown[]> {
     return this.readiness();
+  }
+
+  observeShardUpdates(): AsyncIterable<unknown> {
+    const observations = this.observations;
+    return {
+      async *[Symbol.asyncIterator]() {
+        try {
+          yield* observations();
+        } catch {
+          yield "reconnected";
+        }
+      },
+    };
+  }
+
+  observeShardUpdatesOnce(): AsyncIterable<unknown> {
+    return this.observations();
+  }
+
+  releaseExpired(inactivityMs: number, options?: unknown): Promise<readonly unknown[]> {
+    remote.releases.push([inactivityMs, options]);
+    return Promise.resolve([]);
   }
 
   close(): void {
@@ -58,6 +95,10 @@ class FakeClient {
     if (failure !== undefined) throw failure;
     this.#closed = true;
   }
+}
+
+async function* emptyUpdates(): AsyncIterable<never> {
+  // The default source remains idle for lifecycle tests that do not observe it.
 }
 
 function quarantine(): CloseableQuarantine {
@@ -81,6 +122,9 @@ describe("RemoteDelivery", () => {
     remote.closeEvents = [];
     remote.closeFailures = [];
     remote.readiness = [];
+    remote.observations = [];
+    remote.releases = [];
+    remote.reconciled = [];
   });
 
   it("creates one client and publishes its exact remote adapters", async () => {
@@ -98,6 +142,59 @@ describe("RemoteDelivery", () => {
     expect(delivery.workRegistry).toBe(remote.workRegistries[0]);
   });
 
+  it("exposes the first Admin stream break to its supervisor source without client reconnect", async () => {
+    const broken = new Error("Admin stream ended");
+    let observations = 0;
+    remote.observations.push(() => {
+      observations += 1;
+      return {
+        async *[Symbol.asyncIterator]() {
+          await Promise.reject(broken);
+          yield undefined;
+        },
+      };
+    });
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+      clientOptions: { observationReconnects: 2 },
+    });
+
+    await delivery.open();
+
+    await expect(delivery.source.observeShardUpdates()[Symbol.asyncIterator]().next()).rejects.toBe(
+      broken,
+    );
+    expect(observations).toBe(1);
+  });
+
+  it("forwards release bounds and reconciles snapshot and live Admin facts before yielding", async () => {
+    const snapshot = Object.freeze({ shard: "snapshot", status: "NOT_PICKED", messages: 0 });
+    const update = Object.freeze({ shard: "update", status: "PICKED", messages: 1 });
+    remote.readiness.push(() => Promise.resolve([snapshot]));
+    remote.observations.push(async function* () {
+      await Promise.resolve();
+      yield update;
+    });
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+    });
+
+    await delivery.open();
+    await expect(delivery.source.shardSnapshot()).resolves.toEqual([snapshot]);
+    await expect(
+      delivery.source.observeShardUpdates()[Symbol.asyncIterator]().next(),
+    ).resolves.toMatchObject({
+      value: update,
+    });
+    const controller = new AbortController();
+    await delivery.source.releaseExpired(123, { signal: controller.signal, timeoutMs: 456 });
+
+    expect(remote.reconciled).toEqual([snapshot, update]);
+    expect(remote.releases).toEqual([[123, { signal: controller.signal, timeoutMs: 456 }]]);
+  });
+
   it("fails closed before readiness then exposes its exact remote adapters", async () => {
     const delivery = RemoteDelivery.connectTo({
       endpoint: "http://127.0.0.1:8080",
@@ -106,10 +203,12 @@ describe("RemoteDelivery", () => {
       open(): Promise<void>;
       readonly inbox: unknown;
       readonly workRegistry: unknown;
+      readonly source: unknown;
     };
 
     expect(() => delivery.inbox).toThrow("Remote delivery is not open.");
     expect(() => delivery.workRegistry).toThrow("Remote delivery is not open.");
+    expect(() => delivery.source).toThrow("Remote delivery is not open.");
     await delivery.open();
 
     expect(delivery.inbox).toBeInstanceOf(Object);
@@ -189,6 +288,18 @@ describe("RemoteDelivery", () => {
     });
 
     await Promise.all([delivery.open(), delivery.open()]);
+
+    expect(remote.clients).toHaveLength(1);
+  });
+
+  it("reuses the published facility after readiness has completed", async () => {
+    const delivery = RemoteDelivery.connectTo({
+      endpoint: "http://127.0.0.1:8080",
+      removalQuarantine: quarantine(),
+    });
+
+    await delivery.open();
+    await delivery.open();
 
     expect(remote.clients).toHaveLength(1);
   });
