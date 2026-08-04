@@ -90,6 +90,53 @@ patterns, freeze operation semantics and ownership, and expose real blockers
 only. Runtime self-introspection is unavailable; immutable role/profile and
 explicit dispatch are the accepted metadata evidence absent a visible mismatch.
 
+## Architecture Disposition
+
+No human decision or new frozen Protobuf is required. The public contract is
+`StandSubscriptionRegistry` with `persistent`, create, activate, physical
+delete, get, complete bounded snapshot, finite cleanup, and close operations.
+It returns immutable clone-safe entries and explicit idempotent lifecycle
+results. `StandCapacityError` reports exhausted capacity;
+`StandConflictError` reports the same ID with different canonical content.
+
+The built-in durable implementation uses one context-scoped
+`StandSubscriptionRecord` storage with the subscription ID as slot and one
+separate CAS-capable control storage/slot for count and one recoverable staged
+create/delete operation. Both stores must support atomic compare-and-set. The
+control operation serializes capacity changes through existing provider-neutral
+single-slot CAS; it never creates a second subscription-definition row and does
+not reuse Gateway state. Interrupted operations settle at startup or before the
+next registry operation.
+
+The default/largest capacity is 100 and a builder may configure a lower positive
+safe integer. `withSubscriptionRegistry(registry)` transfers a complete custom
+instance to the first build attempt; combining it with a built-in limit is an
+error. Default builds create a new storage-backed registry from the resolved
+context `StorageFactory`. The context closes Stand before the registry, then
+tenant/repository storage, attempting every close hook.
+
+The in-memory implementation follows the same lifecycle/limits and reports
+`persistent === false`. `ServerEnvironment` alone emits one context-name-only
+warning per attached context in `PRODUCTION`, never fails startup, and emits no
+Local warning. Registry access remains package-internal through
+`boundedContextAccess`; there is no public context getter.
+
+The residual limitation is explicit: the generic storage seam has no native
+two-row transaction, so a crash may leave a staged control operation until the
+next startup/operation settles it. The registry API never reports a successful
+over-capacity admission and uses no tombstone. T-0109 still owns polling,
+listeners, EventBus observation, SubscriptionService cutover, and sweep logic.
+
+## Implementation Assignment
+
+One existing `implementer` owns all overlapping registry, storage, context,
+environment, docs, and focused test files, explicitly `gpt-5.6-terra` /
+`medium`. It works RED-first in four slices: contract/in-memory; durable
+storage/races; context/warning; provider conformance. It must push every
+checkpoint, run no JVM build, and spawn no subagents. Runtime
+self-introspection is unavailable; immutable role/profile plus explicit
+dispatch are the acceptance evidence absent a visible mismatch.
+
 ## Review Dispositions
 
 - Style/maintainability: required for the public registry and builder boundary.
