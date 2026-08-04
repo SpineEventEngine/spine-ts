@@ -23,6 +23,7 @@ export class LocalEntityInbox implements EntityInbox {
   readonly #strategy: DeliveryStrategy;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
+  #followUp = Promise.resolve();
   #nextVersion = 0n;
 
   /**
@@ -150,6 +151,7 @@ export class LocalEntityInbox implements EntityInbox {
     input: EntityInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    await this.#followUp;
     await this.#keepDeliveryTenant(deliveryTenantId);
     const written = await this.#writeInboxRow(delivery, input, new Date(), deliveryTenantId);
 
@@ -164,6 +166,7 @@ export class LocalEntityInbox implements EntityInbox {
     inputs: EntityInputs,
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]> {
+    await this.#followUp;
     await this.#keepDeliveryTenant(deliveryTenantId);
     const rows = this.#claimRows(inputs, deliveryTenantId);
     const whenReceived = new Date();
@@ -283,7 +286,7 @@ export class LocalEntityInbox implements EntityInbox {
     message: InboxMessage,
     deliveryTenantId?: string,
   ): Promise<void> {
-    let followUp: (() => void) | undefined;
+    let followUp: (() => Promise<void>) | undefined;
     await InboxHandoff.drain({
       delivery,
       received: message,
@@ -297,7 +300,7 @@ export class LocalEntityInbox implements EntityInbox {
       unfinishedMessage:
         "Entity Inbox delivery did not reach the target row before the local drain finished.",
     });
-    followUp?.();
+    if (followUp !== undefined) this.#followUp = followUp().catch(() => undefined);
   }
 
   #claimRows(inputs: EntityInputs, deliveryTenantId?: string): BatchRow[] {
@@ -345,7 +348,7 @@ export class LocalEntityInbox implements EntityInbox {
     message: InboxMessage,
     deliveryTenantId?: string,
     runFollowUp = true,
-  ): Promise<(() => void) | undefined> {
+  ): Promise<(() => Promise<void>) | undefined> {
     LocalEntityInbox.#assert(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
@@ -357,7 +360,7 @@ export class LocalEntityInbox implements EntityInbox {
     }
 
     const followUp = await target.replay(message, deliveryTenantId);
-    if (typeof followUp === "function" && runFollowUp) followUp();
+    if (typeof followUp === "function" && runFollowUp) await followUp();
     return typeof followUp === "function" ? followUp : undefined;
   }
 

@@ -717,7 +717,7 @@ export interface EntityInboxTarget {
   replay(
     message: EntityInboxMessage,
     deliveryTenantId?: string,
-  ): Promise<void | (() => void)>;
+  ): Promise<void | (() => Promise<void>)>;
 }
 
 /**
@@ -1191,14 +1191,18 @@ class AggregateExecutionSupport {
     version: bigint,
     events: readonly Event[],
     dispatch: (event: Event) => Promise<void>,
-  ): Promise<() => void> {
+  ): Promise<() => Promise<void>> {
     await this.persistAggregateUpdate(loaded, entityId, version, events);
-    return () => {
-      for (const event of events) {
-        void dispatch(event).catch((error: unknown) => {
-          this.#runtime.recordDispatchFailure(event, error);
-        });
-      }
+    return async () => {
+      await Promise.all(
+        events.map(async (event) => {
+          try {
+            await dispatch(event);
+          } catch (error) {
+            this.#runtime.recordDispatchFailure(event, error);
+          }
+        }),
+      );
     };
   }
 
@@ -1282,7 +1286,7 @@ class AggregateCommandExecution {
     );
   }
 
-  async run(): Promise<void | (() => void)> {
+  async run(): Promise<void | (() => Promise<void>)> {
     void RepositorySignals.requireCommandId(this.#command);
 
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
@@ -1537,7 +1541,7 @@ class AggregateEventExecution {
         produced.events,
         (event) => this.#runtime.dispatchStoredFollowUp(event),
       );
-      dispatch();
+      void dispatch();
     }
 
     await this.#support.appendDiagnosticEvent(
@@ -3890,7 +3894,7 @@ const InboxReplay = {
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: string,
-  ): Promise<void | (() => void)> {
+  ): Promise<void | (() => Promise<void>)> {
     const runtime = repositoryRuntimes.get(repository);
 
     if (runtime === undefined) {
@@ -4402,7 +4406,10 @@ const RepositoryDispatch = {
           ? (["REACT_UPON_EVENT"] as const)
           : []),
       ]),
-      replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void | (() => void)> =>
+      replay: (
+        message: InboxMessage,
+        deliveryTenantId?: string,
+      ): Promise<void | (() => Promise<void>)> =>
         repository.entityFamily === "aggregate"
           ? InboxReplay.replayAggregateCommand(repository, routing, message, deliveryTenantId)
           : InboxReplay.replayPmInbox(repository, routing, message, deliveryTenantId),
