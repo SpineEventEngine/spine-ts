@@ -4175,7 +4175,7 @@ describe("repository signal routing", () => {
       "Entity Inbox replay requires a readable stored event.",
     );
     await expect(target.replay(wrongLabel)).rejects.toThrow(
-      'Process-manager inbox replay does not handle "UPDATE_SUBSCRIBER" messages.',
+      'Entity Inbox replay does not handle "UPDATE_SUBSCRIBER" messages.',
     );
 
     expect(RoutingProcessManager.eventCalls).toBe(0);
