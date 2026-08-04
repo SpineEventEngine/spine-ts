@@ -369,8 +369,9 @@ export class LocalEntityInbox implements EntityInbox {
     }
 
     const followUp = await target.replay(message, deliveryTenantId);
-    if (typeof followUp === "function" && runFollowUp) await followUp();
-    return typeof followUp === "function" ? followUp : undefined;
+    const callback = typeof followUp === "function" ? (followUp as () => Promise<void>) : undefined;
+    if (callback !== undefined && runFollowUp) await callback();
+    return callback;
   }
 
   static #deferred(): InboxDeferred {

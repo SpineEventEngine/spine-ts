@@ -692,8 +692,8 @@ const repositoryDispatchGuards = new WeakMap<RepositoryView, RepositoryDispatchG
 Object.freeze(Repository);
 
 type EntityInboxLabel = "HANDLE_COMMAND" | "REACT_UPON_EVENT";
-// eslint-disable-next-line @typescript-eslint/no-invalid-void-type
-type EntityInboxReplay = void | (() => Promise<void>);
+type EntityInboxFollowUp = () => Promise<void>;
+type EntityInboxReplay = Promise<unknown>;
 type EntityInboxMessage = InboxMessage & {
   readonly label: EntityInboxLabel;
   readonly status: "TO_DELIVER";
@@ -719,7 +719,7 @@ export interface EntityInboxTarget {
   replay(
     message: EntityInboxMessage,
     deliveryTenantId?: string,
-  ): Promise<EntityInboxReplay>;
+  ): EntityInboxReplay;
 }
 
 /**
@@ -1288,7 +1288,7 @@ class AggregateCommandExecution {
     );
   }
 
-  async run(): Promise<EntityInboxReplay> {
+  async run(): Promise<EntityInboxFollowUp | undefined> {
     void RepositorySignals.requireCommandId(this.#command);
 
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
@@ -3896,7 +3896,7 @@ const InboxReplay = {
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: string,
-  ): Promise<EntityInboxReplay> {
+  ): Promise<EntityInboxFollowUp | undefined> {
     const runtime = repositoryRuntimes.get(repository);
 
     if (runtime === undefined) {
@@ -4411,12 +4411,10 @@ const RepositoryDispatch = {
       replay: (
         message: InboxMessage,
         deliveryTenantId?: string,
-      ): Promise<EntityInboxReplay> =>
+      ): EntityInboxReplay =>
         repository.entityFamily === "aggregate"
           ? InboxReplay.replayAggregateCommand(repository, routing, message, deliveryTenantId)
-          : InboxReplay
-              .replayPmInbox(repository, routing, message, deliveryTenantId)
-              .then(() => undefined),
+          : InboxReplay.replayPmInbox(repository, routing, message, deliveryTenantId),
     });
   },
 
