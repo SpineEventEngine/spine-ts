@@ -75,6 +75,15 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   }
 
   /**
+   * Returns the context-owned target-to-shard strategy.
+   *
+   * @returns The immutable delivery strategy.
+   */
+  strategy(): DeliveryStrategy {
+    return this.#strategy;
+  }
+
+  /**
    * Dispatches a durable inbox row through its process-manager target.
    * @param message Contains the persisted inbox row to replay.
    * @param deliveryTenantId Identifies the tenant that owns the row when present.
@@ -245,7 +254,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       signalId: input.signalId,
       label: input.label,
       status: input.status,
-      shard: input.shard,
+      shard: this.#strategy.shardFor(input.inboxId.targetId, input.inboxId.targetTypeUrl),
       whenReceived,
       version: this.#takeVersion(),
       ...(input.signal === undefined ? {} : { signal: input.signal }),

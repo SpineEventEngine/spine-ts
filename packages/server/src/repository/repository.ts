@@ -738,6 +738,13 @@ export interface ProcessManagerInbox {
   // prettier-ignore
 
   /**
+   * Returns the context-owned target-to-shard strategy.
+   *
+   * @returns The immutable delivery strategy.
+   */
+  strategy(): import("../delivery/delivery-builder.js").DeliveryStrategy;
+
+  /**
    * Delivers one durable inbox row through registered process-manager targets.
    *
    * @param message The durable inbox row to replay.
@@ -3882,6 +3889,31 @@ Object.freeze(InboxMessages);
  * Internal inbox replay operations.
  */
 const InboxReplay = {
+  async replayAggregateCommand(
+    repository: RepositoryView & {
+      routeCommand(command: Command): RepositoryCommandRoute;
+    },
+    routing: RepositoryRouting,
+    message: InboxMessage,
+    deliveryTenantId?: string,
+  ): Promise<void> {
+    const runtime = repositoryRuntimes.get(repository);
+
+    if (runtime === undefined) {
+      throw new Error("Aggregate inbox replay requires a bound repository runtime.");
+    }
+    if (message.label !== "HANDLE_COMMAND") {
+      throw new Error(`Aggregate inbox replay does not handle "${message.label}" messages.`);
+    }
+
+    const command = InboxMessages.readInboxCommand(message);
+    InboxReplay.validateReplayTenant(runtime.context, deliveryTenantId, command);
+    InboxReplay.validateReplayedCommandPayload(routing, command);
+    InboxReplay.validateReplayTarget(repository, message, command);
+
+    await new AggregateCommandExecution(repository, routing, runtime, command).run();
+  },
+
   async replayPmInbox(
     repository: RepositoryView & {
       routeCommand(command: Command): RepositoryCommandRoute;
@@ -4201,6 +4233,7 @@ const InboxHandoff = {
     const delivery = new Delivery({
       context: RepositoryTenants.processManagerDeliveryContext(runtime.context, deliveryTenantId),
       storageFactory: runtime.storageFactory,
+      strategy: runtime.processManagerInbox.strategy(),
     });
 
     await runtime.processManagerInbox.receive(
@@ -4211,10 +4244,13 @@ const InboxHandoff = {
           targetTypeUrl: TypeUrls.derive(repository.stateSchema),
         },
         signalId: commandId.uuid,
-        signal: AnyMessages.pack(CommandSchema, command),
+        signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
+        shard: runtime.processManagerInbox.strategy().shardFor(
+          InboxMessages.inboxTargetId(route.entityId),
+          TypeUrls.derive(repository.stateSchema),
+        ),
         keepUntil,
       },
       deliveryTenantId,
@@ -4267,6 +4303,7 @@ const InboxHandoff = {
     const delivery = new Delivery({
       context: RepositoryTenants.processManagerDeliveryContext(runtime.context, deliveryTenantId),
       storageFactory: runtime.storageFactory,
+      strategy: runtime.processManagerInbox.strategy(),
     });
 
     await runtime.processManagerInbox.receive(
@@ -4313,7 +4350,10 @@ const InboxHandoff = {
       signal: AnyMessages.pack(EventSchema, event, { validate: false }),
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
-      shard: ShardIndex.single(),
+      shard: runtime.processManagerInbox.strategy().shardFor(
+        InboxMessages.inboxTargetId(entityId),
+        TypeUrls.derive(repository.stateSchema),
+      ),
       keepUntil,
     };
   },
@@ -4361,7 +4401,7 @@ const RepositoryDispatch = {
     routing: RepositoryRouting,
   ): ProcessManagerInboxTarget | undefined {
     if (
-      repository.entityFamily !== "process-manager" ||
+      (repository.entityFamily !== "aggregate" && repository.entityFamily !== "process-manager") ||
       (routing.commandSchemas.length === 0 && routing.eventSchemas.length === 0)
     ) {
       return undefined;
@@ -4371,10 +4411,14 @@ const RepositoryDispatch = {
       targetTypeUrl: TypeUrls.derive(repository.stateSchema),
       labels: Object.freeze([
         ...(routing.commandSchemas.length === 0 ? [] : (["HANDLE_COMMAND"] as const)),
-        ...(routing.eventSchemas.length === 0 ? [] : (["REACT_UPON_EVENT"] as const)),
+        ...(repository.entityFamily === "process-manager" && routing.eventSchemas.length > 0
+          ? (["REACT_UPON_EVENT"] as const)
+          : []),
       ]),
       replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void> =>
-        InboxReplay.replayPmInbox(repository, routing, message, deliveryTenantId),
+        repository.entityFamily === "aggregate"
+          ? InboxReplay.replayAggregateCommand(repository, routing, message, deliveryTenantId)
+          : InboxReplay.replayPmInbox(repository, routing, message, deliveryTenantId),
     });
   },
 
@@ -4475,7 +4519,7 @@ const RepositoryDispatch = {
     }
 
     if (repository.entityFamily === "aggregate") {
-      await new AggregateCommandExecution(repository, routing, runtime, command).run();
+      await InboxHandoff.handoffProcessManagerCommand(repository, runtime, command);
       return;
     }
 
