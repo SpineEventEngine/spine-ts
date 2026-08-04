@@ -89,11 +89,15 @@ immutable role and metadata limitation will be recorded honestly.
   because the deterministic classifier exports did not exist.
 - 2026-08-04 GREEN: `pnpm exec vitest run scripts/verify-task.test.mjs
 scripts/package-metadata.test.mjs` passed 13 tests. The tests prove that
-  known task-record/Markdown-only changes skip Proto and TypeDoc gates while
-  package source, package metadata, and shared tooling retain both gates.
+  Markdown-only changes skip Proto and TypeDoc gates while package source,
+  package metadata, and shared tooling retain both gates.
 - The classifier combines the branch diff from the `origin/main` merge base
-  with unstaged, staged, and untracked paths; Git failure or an empty
-  classification fails closed. Release verification remains unconditional.
+  with unstaged, staged, and untracked paths; rename detection is disabled so
+  both paths are classified. Git failure or an empty classification fails
+  closed. Release verification remains unconditional.
+- 2026-08-04 correction GREEN: 16 focused tests directly prove rename-source,
+  deleted-source, untracked-source, empty-classification, and Git-failure
+  behavior. An executable or JSON file under `build-protocol/` fails closed.
 
 ## Current Status
 

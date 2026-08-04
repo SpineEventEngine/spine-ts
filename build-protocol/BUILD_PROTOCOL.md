@@ -243,7 +243,7 @@ reveals cross-package impact, but must not expand merely from habit.
 
 `verify:task` first classifies the committed branch diff and local/staged diff.
 It may skip Proto generation/lint/cleanliness and TypeDoc API checks only when
-every changed path is known record or Markdown material. Empty, unknown,
+every changed path is Markdown. Empty, unknown,
 package-source, package-metadata, generator, and shared-tooling classifications
 fail closed to the complete task gate. Deterministic human-document audience
 checks still run. `verify:release` remains unconditional.

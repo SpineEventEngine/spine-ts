@@ -47,11 +47,7 @@ export function vitestArgs(choice) {
  * @returns Required Proto and API-documentation gates.
  */
 export function classifyTaskChanges(paths) {
-  const independentlySafe =
-    paths.length > 0 &&
-    paths.every(
-      (path) => path.startsWith("build-protocol/") || path === "README.md" || path.endsWith(".md"),
-    );
+  const independentlySafe = paths.length > 0 && paths.every((path) => path.endsWith(".md"));
   return independentlySafe ? { proto: false, typeDoc: false } : { proto: true, typeDoc: true };
 }
 
@@ -77,25 +73,33 @@ export function taskGateCommands(classification) {
   ];
 }
 
-function changedPaths() {
-  const base = spawnSync("git", ["merge-base", "origin/main", "HEAD"], { encoding: "utf8" });
+/**
+ * Lists changed paths from the branch, worktree, index, and untracked files.
+ *
+ * @param runGit Runs a Git command and returns its status and standard output.
+ * @returns Changed paths, or an empty list when Git cannot classify them.
+ */
+export function changedPaths(runGit = git) {
+  const base = runGit(["merge-base", "origin/main", "HEAD"]);
   if (base.status !== 0) return [];
   const baseRef = base.stdout.trim();
   const ranges = [`${baseRef}...HEAD`, undefined, "--cached"];
   const paths = new Set();
   for (const range of ranges) {
-    const args = ["diff", "--name-only", "--diff-filter=ACMRD"];
+    const args = ["diff", "--name-only", "--no-renames", "--diff-filter=ACMRD"];
     if (range !== undefined) args.push(range);
-    const result = spawnSync("git", args, { encoding: "utf8" });
+    const result = runGit(args);
     if (result.status !== 0) return [];
     for (const path of result.stdout.split("\n")) if (path !== "") paths.add(path);
   }
-  const untracked = spawnSync("git", ["ls-files", "--others", "--exclude-standard"], {
-    encoding: "utf8",
-  });
+  const untracked = runGit(["ls-files", "--others", "--exclude-standard"]);
   if (untracked.status !== 0) return [];
   for (const path of untracked.stdout.split("\n")) if (path !== "") paths.add(path);
   return [...paths];
+}
+
+function git(args) {
+  return spawnSync("git", args, { encoding: "utf8" });
 }
 
 function run(command, args) {
