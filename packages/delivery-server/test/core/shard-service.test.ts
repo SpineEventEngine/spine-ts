@@ -34,11 +34,17 @@ describe("in-memory Shards", () => {
     const revalidate = {
       signal: new AbortController().signal,
       requestHeader: new Headers([["x-spine-delivery-revalidate", "true"]]),
+      responseHeader: new Headers(),
     } as never;
     await core.shards.pickShard(firstPickup, context);
     await expect(core.shards.pickShard(firstPickup, revalidate)).resolves.toMatchObject({
       value: { case: "pickedUp", value: { worker: first } },
     });
+    expect(
+      (revalidate as { responseHeader: Headers }).responseHeader.get(
+        "x-spine-delivery-revalidation",
+      ),
+    ).toBe("refreshed");
     await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker: first }), context);
     await core.shards.pickShard(secondPickup, context);
     await core.shards.releaseSession(create(ReleaseShardSchema, { shard, worker: first }), context);

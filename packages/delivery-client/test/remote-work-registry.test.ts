@@ -26,10 +26,52 @@ import {
   RemoteWorkRegistry,
 } from "../src/index.js";
 import { deliveryClientAccess } from "../src/client/client.js";
+import { remoteWorkRegistryAccess } from "../src/remote/adapters.js";
 import { conditionalPickUp } from "@spine-event-engine/server/internal/conditional-pickup";
 import { transport } from "./shared-fixtures.js";
 
 describe("RemoteWorkRegistry", () => {
+  it("uses a distinct opaque worker value for each remote pickup while retaining the node", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const client = DeliveryClient.usingTransport(workerTransport(workers));
+    const registry = new RemoteWorkRegistry(client);
+    const shard = ShardIndex.single();
+
+    const first = await registry.pickUp(shard, "node");
+    if (first === undefined) throw new Error("First remote shard was not acquired.");
+    await registry.release(first);
+    const second = await registry.pickUp(shard, "node");
+    if (second === undefined) throw new Error("Second remote shard was not acquired.");
+
+    expect(workers).toHaveLength(2);
+    expect(workers.map((worker) => worker.nodeId)).toEqual(["node", "node"]);
+    expect(workers[0]?.value).not.toBe(workers[1]?.value);
+  });
+
+  it("revalidates the exact active worker and retains its local session", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const client = DeliveryClient.usingTransport(workerTransport(workers, "refreshed"));
+    const registry = new RemoteWorkRegistry(client);
+    const session = await registry.pickUp(ShardIndex.single(), "node");
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+
+    await expect(remoteWorkRegistryAccess.revalidate(registry, session)).resolves.toBe(session);
+    expect(workers).toHaveLength(2);
+    expect(workers[1]).toEqual(workers[0]);
+  });
+
+  it("loses the old generation and releases an accidental re-acquisition", async () => {
+    const workers: { nodeId: string; value: string }[] = [];
+    const client = DeliveryClient.usingTransport(workerTransport(workers, "picked"));
+    const registry = new RemoteWorkRegistry(client);
+    const session = await registry.pickUp(ShardIndex.single(), "node");
+    if (session === undefined) throw new Error("Remote shard was not acquired.");
+
+    await expect(remoteWorkRegistryAccess.revalidate(registry, session)).resolves.toBeUndefined();
+    await expect(registry.release(session)).resolves.toBe(false);
+    expect(workers).toHaveLength(2);
+  });
+
   it("fails closed for missing or altered conditional pickup acknowledgements", async () => {
     const fake = transport();
     const shard = ShardIndex.single();
@@ -443,4 +485,56 @@ describe("RemoteWorkRegistry", () => {
 function pickupMode(fake: ReturnType<typeof transport>): string | null {
   const calls = fake.unary.mock.calls as unknown as unknown[][];
   return (calls.at(-1)?.[3] as Headers | undefined)?.get("x-spine-delivery-pickup-mode") ?? null;
+}
+
+function workerTransport(
+  workers: { nodeId: string; value: string }[],
+  revalidationOutcome?: "refreshed" | "picked",
+): Transport {
+  let pickups = 0;
+  return {
+    unary: async (method, _signal, _timeoutMs, header, input) => {
+      if (method.name === "PickShard") {
+        const request = input as { shard: unknown; worker: { nodeId?: { value: string }; value: string } };
+        const worker = {
+          nodeId: request.worker.nodeId?.value ?? "",
+          value: request.worker.value,
+        };
+        workers.push(worker);
+        pickups += 1;
+        return {
+          stream: false,
+          method,
+          header: new Headers(
+            pickups > 1 && header?.get("x-spine-delivery-revalidate") === "true"
+              ? [["x-spine-delivery-revalidation", revalidationOutcome ?? "refreshed"]]
+              : [],
+          ),
+          trailer: new Headers(),
+          service: method.parent,
+          message: create(LiquorPickUpOutcomeSchema, {
+            value: {
+              case: "pickedUp",
+              value: create(ShardPickedUpSchema, {
+                shard: request.shard as never,
+                worker: create(WorkerIdSchema, {
+                  nodeId: { value: worker.nodeId },
+                  value: worker.value,
+                }),
+                whenPicked: { seconds: BigInt(pickups), nanos: 0 },
+              }),
+            },
+          }),
+        } as never;
+      }
+      return {
+        stream: false,
+        method,
+        header: new Headers(),
+        trailer: new Headers(),
+        service: method.parent,
+        message: create(EmptySchema),
+      } as never;
+    },
+  } as Transport;
 }
