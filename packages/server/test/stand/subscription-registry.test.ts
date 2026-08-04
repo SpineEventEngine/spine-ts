@@ -1,11 +1,12 @@
 import { create, toBinary } from "@bufbuild/protobuf";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import {
   SubscriptionIdSchema,
   SubscriptionSchema,
   type Subscription,
   type SubscriptionId,
 } from "@spine-event-engine/proto/client";
-import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { InMemoryStorageFactory, RecordSpec } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -21,6 +22,10 @@ import {
   type StandSubscriptionRegistry,
 } from "../../src/index.js";
 import { StandSubscriptionRecords } from "../../src/stand/subscription-records.js";
+// prettier-ignore
+import type {
+  StandSubscriptionRecord,
+} from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
 
 const start = 1_000_000;
 
@@ -321,6 +326,42 @@ describe("StorageSubscriptionRegistry", () => {
       kind: "existing",
     });
     await expect(restarted.snapshot()).resolves.toHaveLength(1);
+  });
+
+  it("stores fifty active definitions as fifty rows and one separate control record", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "DurableRegistryShape", multitenant: false };
+    const registry = new StorageSubscriptionRegistry(context, factory);
+    for (let index = 0; index < 50; index += 1) {
+      await registry.create(subscription(`subscription-${String(index)}`));
+      await registry.activate(id(`subscription-${String(index)}`));
+    }
+
+    const definitions = factory.createRecordStorage(
+      context,
+      new RecordSpec<string, StandSubscriptionRecord>({
+        schema: StandSubscriptionRecords.schema,
+        storageKey: "spine.server.StandSubscriptionRecord:definition",
+        idKind: "string",
+        extractId: (record) => StandSubscriptionRecords.read(record).subscription.id?.value ?? "",
+      }),
+    );
+    const control = factory.createRecordStorage(
+      context,
+      new RecordSpec<string, Any>({
+        schema: AnySchema,
+        storageKey: "spine.server.StandSubscriptionRecord:control",
+        idKind: "string",
+        extractId: () => "control",
+      }),
+    );
+    try {
+      await expect(definitions.queryEntries({})).resolves.toHaveLength(50);
+      await expect(control.queryEntries({})).resolves.toHaveLength(1);
+    } finally {
+      definitions.close();
+      control.close();
+    }
   });
 
   it("does not reject an activate-delete race as malformed durable control", async () => {
