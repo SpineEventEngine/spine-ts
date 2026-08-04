@@ -3113,7 +3113,7 @@ describe("repository signal routing", () => {
     for (let index = 0; index < 100; index += 1) {
       const hh = String(Math.floor(index / 60)).padStart(2, "0");
       const mm = String(index % 60).padStart(2, "0");
-      await storeProcessManagerInboxCommand(
+      await storeEntityInboxCommand(
         delivery,
         createAggregateCommand(
           `command-backlog-${String(index).padStart(3, "0")}`,
@@ -3157,7 +3157,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand(
         "command-pm-tenant-mismatch",
@@ -3185,7 +3185,7 @@ describe("repository signal routing", () => {
     });
     const target = requireEntityInboxTarget(repository);
     const command = createAggregateCommand("command-pm-route-mismatch", "pm-routed", "Routed");
-    const wrongId = await storeProcessManagerInboxCommand(
+    const wrongId = await storeEntityInboxCommand(
       delivery,
       command,
       new Date("2026-07-08T09:01:00.000Z"),
@@ -3194,7 +3194,7 @@ describe("repository signal routing", () => {
         targetId: "pm-forged",
       },
     );
-    const wrongType = await storeProcessManagerInboxCommand(
+    const wrongType = await storeEntityInboxCommand(
       delivery,
       command,
       new Date("2026-07-08T09:02:00.000Z"),
@@ -3244,7 +3244,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand("command-pm-update-subscriber", "pm-update-subscriber", "Update"),
       new Date("2026-07-08T09:03:00.000Z"),
@@ -3271,7 +3271,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand("command-pm-no-signal", "pm-no-signal", "No signal"),
       new Date("2026-07-08T09:03:30.000Z"),
@@ -3305,7 +3305,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand(
         "command-pm-missing-delivery-tenant",
@@ -3332,7 +3332,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand(
         "command-pm-missing-stored-tenant",
@@ -3360,7 +3360,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const received = await storeEntityInboxCommand(
       delivery,
       createValidatedCommand("command-pm-invalid-replay", "pm-invalid-replay", ""),
       new Date("2026-07-08T09:03:00.000Z"),
@@ -3388,7 +3388,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const received = await storeEntityInboxCommand(
       delivery,
       createIdlessAggregateCommand("pm-idless-replay", "Idless replay"),
       new Date("2026-07-08T09:03:15.000Z"),
@@ -3416,7 +3416,7 @@ describe("repository signal routing", () => {
       storageFactory: factory,
     });
     const target = requireEntityInboxTarget(repository);
-    const received = await storeProcessManagerInboxCommand(
+    const received = await storeEntityInboxCommand(
       delivery,
       createAggregateCommand("   ", "pm-blank-replay", "Blank replay"),
       new Date("2026-07-08T09:03:15.000Z"),
@@ -7109,7 +7109,7 @@ function requireProjectionInboxTarget(repository: RepositoryView): {
   return target;
 }
 
-async function storeProcessManagerInboxCommand(
+async function storeEntityInboxCommand(
   delivery: Delivery,
   command: SpineCommand,
   whenReceived: Date,
