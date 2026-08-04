@@ -120,3 +120,46 @@ existing Terra/medium implementation owner.
 - Runtime self-introspection remains unavailable. The explicit dispatch fields
   and immutable configured profiles are the actual-metadata evidence unless a
   visible mismatch occurs.
+
+## Correction Re-review Results
+
+The complete affected re-review wave requested one consolidated correction
+batch:
+
+1. P1 TypeScript/API: private revalidation request/response headers make the
+   new commit fence depend on an undocumented wire acknowledgement. A server
+   implementing the frozen Protobuf contract but not those headers prevents
+   remote commits. Revalidation must use a compatible, explicitly justified
+   contract rather than silently extending the wire.
+2. P1 reliability: aborting a delivery run lets supervisor closure finish
+   before a blocked drain unwinds, and its eventual remote release inherits the
+   aborted operation signal. The release can therefore be skipped until lease
+   expiry. Shutdown needs bounded, uncancelled ownership cleanup plus real
+   remote failover evidence.
+3. P2 reliability: the real overflow case overflows a separately created
+   source while environment supervisors consume different sources. Install the
+   constrained source in the environment path and prove supervisor snapshot,
+   watch reopening, and retained-row convergence.
+4. P2 style: child fixture teardown awaits detachment before environment close,
+   and parent child-process shutdown is unbounded. Cleanup must attempt every
+   owner in bounded, failure-safe order.
+5. P2 style: revalidation ownership is duplicated between
+   `RemoteSessionValues` and `RemoteWorkRegistry.#sessions`; tests exercise a
+   private registry seam rather than the live commit-fence path. Consolidate
+   the state owner and direct evidence at production synchronization.
+6. P2 documentation: README/reference material must state that the winning
+   owner repeats finite drains until no deliverable Inbox work remains,
+   including rows arriving during the active drain, before releasing.
+
+Confirmed resolved: snapshot-gated watch reopening, one-attempt supervisor
+observation, real `ServerEnvironment` plus `RemoteDelivery` assembly, dynamic
+source validation, public source declarations/TSDoc/reference, bounded queues,
+owner-matched release, unique ownership generation, real restart recovery,
+two-node fan-out, mid-drain wake-up, no cross-shard ordering claim, and the
+human requirements ledger.
+
+The API P1 exposes a high-risk frozen-wire compatibility ambiguity. Before
+returning this one batch to implementation, an existing
+`requirements_splitter` is assigned with explicit `gpt-5.6-sol` / `high` to
+select the smallest compatible design. The other corrections require no human
+decision or new review lane.
