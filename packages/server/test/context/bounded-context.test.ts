@@ -8,6 +8,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import type { Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -53,6 +54,7 @@ import {
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import type { DeliveryStrategy } from "../../src/delivery/delivery-builder.js";
+import type { InboxMessage } from "../../src/delivery/inbox.js";
 import { ShardIndex } from "../../src/delivery/shard-index.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
 import { ServerEnvironment } from "../../src/server/server-environment.js";
@@ -91,6 +93,7 @@ interface InternalDeliveryDescriptor {
   startupScopes(): Promise<readonly InternalDeliveryScope[]>;
   storageContext(scope: InternalDeliveryScope): StorageContext;
   endpoints(): readonly InternalDeliveryEndpoint[];
+  replay(message: InboxMessage, tenantId?: string): Promise<void>;
   onReady(onReady: (ready: unknown) => void): () => void;
   transition(scopes: readonly unknown[], onReady: (ready: unknown) => void): Promise<void>;
 }
@@ -726,8 +729,13 @@ describe("BoundedContext assembly", () => {
 
       for (const label of ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const) {
         for (const index of [0, 1, 2]) {
-          const targetId = targetForShard(strategy, targetTypeUrl, index, `${label}-${index}`);
-          const signalId = `${label}-${index}`;
+          const targetId = targetForShard(
+            strategy,
+            targetTypeUrl,
+            index,
+            `${label}-${String(index)}`,
+          );
+          const signalId = `${label}-${String(index)}`;
           const signal =
             label === "HANDLE_COMMAND"
               ? AnyMessages.pack(CommandSchema, createAggregateCommand(signalId, targetId), {
@@ -779,7 +787,7 @@ describe("BoundedContext assembly", () => {
             (
               await Promise.all(
                 rows.map((row) =>
-                  recovered?.stand().read(ProcessManagerStateSchema, row.inboxId.targetId),
+                  recovered.stand().read(ProcessManagerStateSchema, row.inboxId.targetId),
                 ),
               )
             ).every((state) => state !== undefined),
@@ -2164,10 +2172,10 @@ function targetForShard(
   prefix: string,
 ): string {
   for (let suffix = 0; suffix < 1_000; suffix += 1) {
-    const targetId = `${prefix}-${suffix}`;
+    const targetId = `${prefix}-${String(suffix)}`;
     if (strategy.shardFor(targetId, targetTypeUrl).index === index) return targetId;
   }
-  throw new Error(`Could not find target for shard ${index}.`);
+  throw new Error(`Could not find target for shard ${String(index)}.`);
 }
 
 async function persistDescriptorRow(input: {
@@ -2177,7 +2185,7 @@ async function persistDescriptorRow(input: {
   readonly targetId: string;
   readonly signalId: string;
   readonly label: "HANDLE_COMMAND" | "REACT_UPON_EVENT";
-  readonly signal: ReturnType<typeof AnyMessages.pack>;
+  readonly signal: Any;
   readonly shard: ShardIndex;
 }): Promise<InboxMessage> {
   const written = await new Delivery({
