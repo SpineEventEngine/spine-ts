@@ -1,7 +1,7 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { CommandSchema } from "@spine-event-engine/proto";
-import { DeliveryServer } from "@spine-event-engine/delivery-server";
+import { DeliveryServer } from "../../delivery-server/src/index.js";
 import {
   DeliveryBuilder,
   DeliverySupervisor,
