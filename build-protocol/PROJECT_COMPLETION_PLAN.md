@@ -11,7 +11,9 @@ Wave 5 packaging and deployment is complete under `T-0089`. Wave 6 Q&A and
 T-0104 planning are complete. T-0105 exact system-event and Inbox contracts are
 reviewed, verified, integrated, and pushed. T-0106 unified Entity Inbox handoff
 is reviewed, release-verified, integrated, post-merge verified, and pushed.
-T-0107 remote shard fan-out is the current action. Autonomous implementation follows
+T-0107 remote shard fan-out is reviewed, release-verified, integrated, and
+post-merge verified. T-0108 configurable durable Stand registry is the current
+action. Autonomous implementation follows
 `build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 
 ## Purpose
