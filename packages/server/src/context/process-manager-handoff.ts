@@ -105,11 +105,12 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
+    const routedInput = this.#withShard(input);
     const routed = this.#readiness.route(delivery);
     return await InboxHandoff.coordinate({
       handoffs: this.#inFlightHandoffs,
-      key: InboxHandoff.key(input, deliveryTenantId),
-      onHandoff: () => this.#receiveAndDrain(routed, input, deliveryTenantId),
+      key: InboxHandoff.key(routedInput, deliveryTenantId),
+      onHandoff: () => this.#receiveAndDrain(routed, routedInput, deliveryTenantId),
     });
   }
 
@@ -323,6 +324,13 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     return this.#nextVersion;
   }
 
+  #withShard(input: ProcessManagerInput): ProcessManagerInput & { readonly shard: ShardIndex } {
+    return Object.freeze({
+      ...input,
+      shard: this.#strategy.shardFor(input.inboxId.targetId, input.inboxId.targetTypeUrl),
+    });
+  }
+
   #batchKey(inputs: ProcessManagerInputs, deliveryTenantId?: string): string {
     return JSON.stringify(inputs.map((input) => InboxHandoff.key(input, deliveryTenantId)));
   }
@@ -373,6 +381,11 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     }
   }
 }
+
+/**
+ * Context-owned inbox for Aggregate and Process Manager delivery targets.
+ */
+export class LocalEntityInbox extends LocalProcessManagerInbox {}
 
 type ProcessManagerInput = Parameters<ProcessManagerInbox["receive"]>[1];
 type ProcessManagerInputs = Parameters<ProcessManagerInbox["receiveAll"]>[1];

@@ -32,14 +32,14 @@ import {
   type DeliveryReady,
   type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
-import { LocalProcessManagerInbox } from "./process-manager-handoff.js";
+import { LocalEntityInbox } from "./process-manager-handoff.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantIndexes, type TenantIndex } from "./tenant-index.js";
 import {
   Repository,
   repositoryAccess,
   type ConcreteRepositoryEntityType,
-  type ProcessManagerInbox,
+  type EntityInbox,
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
   type ProcessManagerInboxTarget,
@@ -213,7 +213,7 @@ interface RepositoryRegistration {
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
-interface PmInbox extends ProcessManagerInbox {
+interface PmInbox extends EntityInbox {
   register(target: ProcessManagerInboxTarget): void;
   endpoints(): readonly DeliveryEndpoint[];
 }
@@ -619,7 +619,7 @@ export class BoundedContext {
       storageFactory,
     });
     const keepTenant = (tenantId: string) => tenantIndex.keep(tenantId);
-    this.#processManagerInbox = new LocalProcessManagerInbox(
+    this.#processManagerInbox = new LocalEntityInbox(
       this.#snapshot.name.value,
       deliveryReadiness,
       keepTenant,

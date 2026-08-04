@@ -696,10 +696,17 @@ type ProcessManagerInboxMessage = InboxMessage & {
   readonly label: ProcessManagerInboxLabel;
   readonly status: "TO_DELIVER";
 };
-type ProcessManagerInboxInput = Omit<InboxMessageInput, "whenReceived" | "version"> & {
+type ProcessManagerInboxInput = Omit<InboxMessageInput, "whenReceived" | "version" | "shard"> & {
   readonly label: ProcessManagerInboxLabel;
   readonly status: "TO_DELIVER";
 };
+
+/**
+ * Describes one Aggregate or Process Manager replay target.
+ *
+ * @internal
+ */
+export type EntityInboxTarget = ProcessManagerInboxTarget;
 
 /**
  * Describes a framework-only process-manager inbox replay target.
@@ -781,6 +788,13 @@ export interface ProcessManagerInbox {
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]>;
 }
+
+/**
+ * Defines context-owned Aggregate and Process Manager inbox operations.
+ *
+ * @internal
+ */
+export interface EntityInbox extends ProcessManagerInbox {}
 
 /**
  *
@@ -4247,10 +4261,6 @@ const InboxHandoff = {
         signal: AnyMessages.pack(CommandSchema, command, { validate: false }),
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
-        shard: runtime.processManagerInbox.strategy().shardFor(
-          InboxMessages.inboxTargetId(route.entityId),
-          TypeUrls.derive(repository.stateSchema),
-        ),
         keepUntil,
       },
       deliveryTenantId,
@@ -4350,10 +4360,6 @@ const InboxHandoff = {
       signal: AnyMessages.pack(EventSchema, event, { validate: false }),
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
-      shard: runtime.processManagerInbox.strategy().shardFor(
-        InboxMessages.inboxTargetId(entityId),
-        TypeUrls.derive(repository.stateSchema),
-      ),
       keepUntil,
     };
   },
