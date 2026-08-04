@@ -25,26 +25,30 @@ it("fans out one real Admin shard update to two supervisors and drains rows arri
   await server.start();
   const alpha = node(server.baseUrl, "alpha");
   const beta = node(server.baseUrl, "beta");
-  const firstStarted = Promise.withResolvers<void>();
-  const releaseFirst = Promise.withResolvers<void>();
+  const firstStarted = Promise.withResolvers<undefined>();
+  const releaseFirst = Promise.withResolvers<undefined>();
   const deliveries: string[] = [];
-  const first = supervisor(alpha, async (signalId) => {
+  const first = supervisor(alpha, (signalId) => {
     deliveries.push(`alpha:${signalId}`);
     if (signalId === "first") {
-      firstStarted.resolve();
-      await releaseFirst.promise;
+      firstStarted.resolve(undefined);
+      return releaseFirst.promise;
     }
+    return Promise.resolve();
   });
-  const second = supervisor(beta, async (signalId) => {
+  const second = supervisor(beta, (signalId) => {
     deliveries.push(`beta:${signalId}`);
+    return Promise.resolve();
   });
 
   await Promise.all([first.start(), second.start()]);
   await alpha.inbox.receive(message("first"));
   await firstStarted.promise;
   await alpha.inbox.receive(message("during-drain"));
-  releaseFirst.resolve();
-  await eventually(() => expect(deliveries).toHaveLength(2));
+  releaseFirst.resolve(undefined);
+  await eventually(() => {
+    expect(deliveries).toHaveLength(2);
+  });
 
   expect(deliveries.filter((value) => value.endsWith(":first"))).toHaveLength(1);
   expect(deliveries.filter((value) => value.endsWith(":during-drain"))).toHaveLength(1);
