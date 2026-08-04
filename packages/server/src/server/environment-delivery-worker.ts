@@ -436,7 +436,10 @@ class RuntimeDeliverySupervisorGroup {
       throw new Error("Environment delivery supervisor group requires at least one shard.");
     }
     this.shardCount = first.ofTotal;
-    this.#source = options.source ?? new LocalDeliverySource(options.shards);
+    this.#source =
+      options.source === undefined
+        ? new LocalDeliverySource(options.shards)
+        : EnvironmentDeliveryValues.requireSource(options.source);
     this.#supervisor = new DeliverySupervisor({
       source: this.#source,
       delivery: options.delivery,
@@ -515,6 +518,18 @@ class LocalDeliverySource {
  * @internal Groups private delivery-runtime assembly and failure operations.
  */
 const EnvironmentDeliveryValues = Object.freeze({
+  requireSource(source: unknown): DeliverySource {
+    if (
+      source === null ||
+      typeof source !== "object" ||
+      typeof (source as DeliverySource).shardSnapshot !== "function" ||
+      typeof (source as DeliverySource).observeShardUpdates !== "function" ||
+      typeof (source as DeliverySource).releaseExpired !== "function"
+    ) {
+      throw new TypeError("Environment delivery source is invalid.");
+    }
+    return source as DeliverySource;
+  },
   createWorker(
     runtime: EnvironmentDeliveryRuntime,
     ports?: EnvironmentDeliveryPorts,
