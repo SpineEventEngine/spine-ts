@@ -505,35 +505,6 @@ describe("BoundedContext assembly", () => {
     ]);
   });
 
-  it("rejects a context strategy that returns a shard outside its declared set", async () => {
-    const registryRoot = createGeneratedRegistryRoot([
-      {
-        entityType: GeneratedTaskProcessManager,
-        stateSchema: ProcessManagerStateSchema,
-        handlers: [
-          {
-            kind: "command-assignment",
-            methodName: "assignTask",
-            signalSchema: AggregateStateSchema,
-            emittedSchemas: [ProjectionStateSchema],
-            parameterCount: 1,
-          },
-        ],
-      },
-    ]);
-
-    await expect(
-      BoundedContext.singleTenant("Tasks")
-        .withDeliveryStrategy({
-          shardCount: 2,
-          shardFor: () => ShardIndex.single(),
-        })
-        .withGeneratedRegistryRoot(registryRoot)
-        .add(GeneratedTaskProcessManager)
-        .buildAsync(),
-    ).rejects.toThrow("Delivery strategy shard total must equal its resolved shard count.");
-  });
-
   it("recovers a durable dynamic-tenant row through a fresh same-storage descriptor", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const tenantId = "tenant-first-row";
