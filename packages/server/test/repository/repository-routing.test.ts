@@ -2453,7 +2453,7 @@ describe("repository signal routing", () => {
     expect(failure?.error).not.toBe(dispatchFailure);
   });
 
-  it("does not wait for stored-event dispatch when completing an outer command", async () => {
+  it("allows a causally nested command while the outer stored-event follow-up remains pending", async () => {
     const factory = new InMemoryStorageFactory();
     const nestedGate = createSignal();
     const nestedPosted = createSignal();
@@ -3231,7 +3231,7 @@ describe("repository signal routing", () => {
         whenReceived: new Date("2026-07-08T09:02:30.000Z"),
         version: 1n,
       }),
-    ).rejects.toThrow("Process-manager inbox replay requires a bound repository runtime.");
+    ).rejects.toThrow("Entity Inbox replay requires a bound repository runtime.");
   });
 
   it("rejects Entity Inbox replay for UPDATE_SUBSCRIBER messages before handler code", async () => {
@@ -4166,7 +4166,7 @@ describe("repository signal routing", () => {
     );
 
     await expect(target.replay(wrongId)).rejects.toThrow(
-      "Process-manager inbox replay stored target ID does not match the routed event.",
+      "Entity Inbox replay stored target ID does not match the routed event.",
     );
     await expect(target.replay(wrongType)).rejects.toThrow(
       "Process-manager inbox replay stored target type does not match the routed repository.",
