@@ -1,5 +1,5 @@
 import { DeliveryServer } from "../../delivery-server/src/index.js";
-import { DeliveryClient } from "../src/index.js";
+import { DeliveryClient, RemoteDelivery, ShardObservationOverflowError } from "../src/index.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import { afterEach, expect, it } from "vitest";
 const servers: DeliveryServer[] = [];
 const applications = new Set<ChildProcess>();
 const clients: DeliveryClient[] = [];
+const deliveries: RemoteDelivery[] = [];
 const applicationFixture = resolve(
   "packages/delivery-client/test-fixtures/remote-environment-app.mjs",
 );
@@ -15,6 +16,7 @@ afterEach(async () => {
   await Promise.all([...applications].map(stop));
   applications.clear();
   for (const client of clients.splice(0)) client.close();
+  await Promise.all(deliveries.splice(0).map((delivery) => delivery.close()));
   await Promise.all(servers.splice(0).map((server) => server.close()));
 });
 
@@ -100,10 +102,105 @@ it("fans out one real Admin shard update through two remote ServerEnvironment as
   expect(deliveries.filter((delivery) => delivery.signalId === "during-drain")).toHaveLength(1);
 });
 
-function trackedServer(): DeliveryServer {
-  const server = new DeliveryServer({ host: "127.0.0.1", port: 0 });
+it("recovers work written immediately after a same-endpoint Admin restart through a complete snapshot", async () => {
+  const server = trackedServer();
+  await server.start();
+  const endpoint = server.baseUrl;
+  const alpha = application(endpoint, "alpha");
+  const beta = application(endpoint, "beta");
+  const deliveries: { readonly node: string; readonly signalId: string }[] = [];
+  for (const child of [alpha, beta])
+    child.on("message", (frame: unknown) => {
+      if (isDispatch(frame)) deliveries.push(frame);
+    });
+  await Promise.all([ready(alpha), ready(beta)]);
+
+  await server.close();
+  await eventuallyAsync(async () => {
+    await expect(command(alpha, { command: "write", signalId: "while-down" })).rejects.toThrow();
+  });
+  const replacement = trackedServer(server.port);
+  await replacement.start();
+  expect(replacement.baseUrl).toBe(endpoint);
+
+  await command(alpha, { command: "write", signalId: "after-restart" });
+  await eventually(() => {
+    expect(deliveries.filter((delivery) => delivery.signalId === "after-restart")).toHaveLength(1);
+  });
+  expect(alpha.exitCode).toBeNull();
+  expect(beta.exitCode).toBeNull();
+}, 15_000);
+
+it("bounds a paused RemoteDelivery Admin source then lets an environment drain its retained work", async () => {
+  const server = trackedServer();
+  await server.start();
+  const alpha = application(server.baseUrl, "alpha");
+  const beta = application(server.baseUrl, "beta");
+  const dispatched: { readonly node: string; readonly signalId: string }[] = [];
+  for (const child of [alpha, beta])
+    child.on("message", (frame: unknown) => {
+      if (isDispatch(frame)) dispatched.push(frame);
+    });
+  await Promise.all([ready(alpha), ready(beta)]);
+  await Promise.all([
+    command(alpha, { command: "block-first" }),
+    command(beta, { command: "block-first" }),
+  ]);
+
+  const delivery = RemoteDelivery.connectTo({
+    endpoint: server.baseUrl,
+    removalQuarantine: memoryQuarantine(),
+    clientOptions: { observationBufferSize: 1, observationReconnects: 0 },
+  });
+  deliveries.push(delivery);
+  await delivery.open();
+  const iterator = delivery.source.observeShardUpdates()[Symbol.asyncIterator]();
+  const first = iterator.next();
+  await command(alpha, { command: "write", signalId: "first" });
+  await expect(first).resolves.toMatchObject({ done: false });
+  await eventually(() => {
+    expect(dispatched.filter((event) => event.signalId === "first-started")).toHaveLength(1);
+  });
+
+  await command(alpha, { command: "write", signalId: "overflow-a" });
+  await command(beta, { command: "write", signalId: "overflow-b" });
+  await eventuallyAsync(async () => {
+    await expect(iterator.next()).rejects.toBeInstanceOf(ShardObservationOverflowError);
+  });
+  await expect(delivery.source.shardSnapshot()).resolves.toEqual(
+    expect.arrayContaining([expect.objectContaining({ messages: expect.any(Number) })]),
+  );
+
+  await Promise.all([
+    command(alpha, { command: "release-first" }),
+    command(beta, { command: "release-first" }),
+  ]);
+  await eventually(() => {
+    expect(dispatched.filter((event) => event.signalId === "overflow-a")).toHaveLength(1);
+    expect(dispatched.filter((event) => event.signalId === "overflow-b")).toHaveLength(1);
+  });
+}, 15_000);
+
+function trackedServer(port = 0): DeliveryServer {
+  const server = new DeliveryServer({ host: "127.0.0.1", port });
   servers.push(server);
   return server;
+}
+
+function memoryQuarantine() {
+  const values = new Map();
+  return {
+    get: (id: string) => Promise.resolve(values.get(id)),
+    put: (record: { readonly id: string }) => {
+      values.set(record.id, record);
+      return Promise.resolve();
+    },
+    delete: (id: string) => {
+      values.delete(id);
+      return Promise.resolve();
+    },
+    close: () => Promise.resolve(),
+  };
 }
 
 function application(baseUrl: string, node: string): ChildProcess {
