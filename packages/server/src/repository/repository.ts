@@ -693,7 +693,7 @@ Object.freeze(Repository);
 
 type EntityInboxLabel = "HANDLE_COMMAND" | "REACT_UPON_EVENT";
 type EntityInboxFollowUp = () => Promise<void>;
-type EntityInboxReplay = Promise<void> | Promise<EntityInboxFollowUp | undefined>;
+type EntityInboxReplay = Promise<unknown>;
 type EntityInboxMessage = InboxMessage & {
   readonly label: EntityInboxLabel;
   readonly status: "TO_DELIVER";

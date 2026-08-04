@@ -66,5 +66,8 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
 - `c28f4647` is the pushed GREEN checkpoint. It reuses the routed shard for
   local drain replay while retained descriptor replay resolves and validates a
   stored shard. Focused Entity Inbox/context/repository evidence is 226/226.
-- The naming, replay-type, documentation, descriptor-coverage, and deterministic
-  preflight correction work remains in progress; no review lane is yet closed.
+- Naming and documentation corrections are in progress. The requested replay
+  type needs a compatible no-`void` contract decision: strict tooling rejects
+  both the explicit union of promise containers and a narrowed result union for
+  existing callback implementations. Descriptor coverage and deterministic
+  preflight remain in progress; no review lane is yet closed.
