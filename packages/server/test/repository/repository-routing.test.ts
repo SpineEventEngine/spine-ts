@@ -52,7 +52,7 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   Aggregate,
@@ -2394,7 +2394,7 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-async", "task-async", "Async"));
 
-    await Promise.resolve();
+    await vi.waitFor(() => expect(AsyncAssigneeAggregate.resolveCommand).toBeTypeOf("function"));
     await expect(storage.readCurrent("task-async")).resolves.toBeUndefined();
 
     AsyncAssigneeAggregate.resolveCommand?.("Async");
