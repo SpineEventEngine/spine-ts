@@ -40,6 +40,68 @@ export function vitestArgs(choice) {
   ];
 }
 
+/**
+ * Classifies changed paths conservatively so shared or unknown changes retain every gate.
+ *
+ * @param paths Changed repository paths.
+ * @returns Required Proto and API-documentation gates.
+ */
+export function classifyTaskChanges(paths) {
+  const independentlySafe = paths.length > 0 && paths.every((path) => path.endsWith(".md"));
+  return independentlySafe ? { proto: false, typeDoc: false } : { proto: true, typeDoc: true };
+}
+
+/**
+ * Lists deterministic gates required for a task diff classification.
+ *
+ * @param classification Required Proto and API-documentation gates.
+ * @returns Package scripts that must run for the classification.
+ */
+export function taskGateCommands(classification) {
+  return [
+    ...(classification.proto ? ["proto:generate"] : []),
+    "typecheck:build:generated",
+    "typecheck:tooling",
+    "eslint",
+    "lint:cleanup",
+    "lint:tsdoc",
+    "format:check",
+    "docs:audience:check",
+    ...(classification.typeDoc ? ["docs:api:check"] : []),
+    ...(classification.proto ? ["proto:lint:generated", "proto:check-generated:current"] : []),
+    "check:release-readiness",
+  ];
+}
+
+/**
+ * Lists changed paths from the branch, worktree, index, and untracked files.
+ *
+ * @param runGit Runs a Git command and returns its status and standard output.
+ * @returns Changed paths, or an empty list when Git cannot classify them.
+ */
+export function changedPaths(runGit = git) {
+  const base = runGit(["merge-base", "origin/main", "HEAD"]);
+  if (base.status !== 0) return [];
+  const baseRef = base.stdout.trim();
+  const ranges = [`${baseRef}...HEAD`, undefined, "--cached"];
+  const paths = new Set();
+  for (const range of ranges) {
+    const args = ["diff", "--name-only", "--no-renames", "--diff-filter=ACMRD"];
+    if (range !== undefined) args.push(range);
+    const result = runGit(args);
+    if (result.status !== 0) return [];
+    for (const path of result.stdout.split("\n")) if (path !== "") paths.add(path);
+  }
+  const untracked = runGit(["ls-files", "--others", "--exclude-standard"]);
+  if (untracked.status !== 0) return [];
+  for (const path of untracked.stdout.split("\n")) if (path !== "") paths.add(path);
+  return [...paths];
+}
+
+function git(args) {
+  return spawnSync("git", args, { encoding: "utf8" });
+}
+
 function run(command, args) {
   const result = spawnSync(command, args, { stdio: "inherit" });
   if (result.error !== undefined) throw result.error;
@@ -49,7 +111,9 @@ function run(command, args) {
 function main() {
   const choice = parseTaskVerificationArgs(process.argv.slice(2));
   const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-  run(pnpm, ["verify:generated-gates"]);
+  for (const command of taskGateCommands(classifyTaskChanges(changedPaths()))) {
+    run(pnpm, command === "eslint" ? ["exec", "eslint", "."] : [command]);
+  }
   if (choice.noTests) return;
   run(pnpm, vitestArgs(choice));
 }

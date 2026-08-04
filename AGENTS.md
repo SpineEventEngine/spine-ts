@@ -38,6 +38,14 @@ the normal autonomous cycle.
 Always pass the model and reasoning explicitly when spawning a subagent. Never
 allow the parent model to become the accidental default for a child.
 
+For an approved frozen wave, run one `gpt-5.6-sol` / `high` architecture pass.
+Repeat it only for a material contract change or a demonstrated architecture
+blocker. Persist scripts-first mechanical evidence before asking an agent to
+classify an ordinary failure. Use `gpt-5.6-terra` / `medium` for ordinary
+implementation, and Luna/medium or Terra/medium for ordinary documentation,
+package, and API-documentation work. Reserve Terra/high for public or wire
+contracts and real correctness, persistence, concurrency, or lifecycle risk.
+
 Before accepting child work, record the assignment's existing role or
 orchestrator-dispatched function, expected model, and expected reasoning in the
 task or review log. Confirm that both fields were explicit in the dispatch.
@@ -106,6 +114,10 @@ agent identities.
    coverage checks before review.
 9. Record acceptance, evidence, resolved findings, limitations, and the next
    milestone, then continue automatically.
+
+Keep narrow TSDoc and behavior claims current in each runtime slice. Defer broad
+documentation and all-example execution until the affected runtime interfaces
+stabilize, unless a concrete changed interface requires earlier expansion.
 
 Push every feature-branch commit to `origin` immediately, including checkpoint
 and review-correction commits. After each task is complete, reviewed, merged,

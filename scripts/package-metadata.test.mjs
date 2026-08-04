@@ -296,7 +296,7 @@ describe("package metadata", () => {
     expect(hasAgentReferenceLink(readme)).toBe(false);
   });
 
-  it("keeps standalone commands self-sufficient while release verification reuses generated outputs", () => {
+  it("keeps standalone commands self-sufficient while task verification classifies generated work", () => {
     const rootPackage = readJson("package.json");
 
     expect(rootPackage.scripts["typecheck:build"]).toMatch(/^pnpm proto:generate && /);
@@ -311,8 +311,8 @@ describe("package metadata", () => {
 
     expect(rootPackage.scripts.verify).toBe("pnpm verify:release");
     expect(task).toContain("pnpm check:node");
-    expect(task.match(/pnpm proto:generate/gu)).toHaveLength(1);
     expect(task).toContain("node scripts/verify-task.mjs");
+    expect(task).not.toContain("pnpm proto:generate");
     expect(task).not.toContain("vitest");
 
     expect(release.match(/pnpm proto:generate/gu)).toHaveLength(1);
@@ -321,11 +321,15 @@ describe("package metadata", () => {
     expect(releaseGenerated.match(/vitest run --coverage/gu)).toHaveLength(1);
     expect(generatedGates.match(/pnpm typecheck:build:generated/gu)).toHaveLength(1);
     expect(generatedGates.match(/pnpm docs:check:generated/gu)).toHaveLength(1);
+    expect(generatedGates).toContain("pnpm lint:cleanup");
+    expect(generatedGates).toContain("pnpm lint:tsdoc");
     expect(generatedGates).toContain("pnpm proto:lint:generated");
     expect(generatedGates).toContain("pnpm proto:check-generated:current");
     expect(release).not.toContain("pnpm verify:generated");
+    expect(rootPackage.scripts["docs:api:check"]).toBe("node scripts/check-api-docs.mjs");
+    expect(rootPackage.scripts["docs:audience:check"]).toBe("node scripts/check-doc-audience.mjs");
     expect(rootPackage.scripts["docs:check:generated"]).toBe(
-      "node scripts/check-api-docs.mjs && node scripts/check-doc-audience.mjs",
+      "pnpm docs:api:check && pnpm docs:audience:check",
     );
     expect(rootPackage.scripts["proto:lint:generated"]).toBe("pnpm exec buf lint");
     expect(rootPackage.scripts["proto:check-generated:current"]).toBe(

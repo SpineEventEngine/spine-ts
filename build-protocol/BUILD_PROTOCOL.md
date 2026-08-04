@@ -241,6 +241,22 @@ These rules are execution gates. A task log must record the selected profile
 and why it is sufficient. Review scope or verification may expand when evidence
 reveals cross-package impact, but must not expand merely from habit.
 
+`verify:task` first classifies the committed branch diff and local/staged diff.
+It may skip Proto generation/lint/cleanliness and TypeDoc API checks only when
+every changed path is Markdown. Empty, unknown,
+package-source, package-metadata, generator, and shared-tooling classifications
+fail closed to the complete task gate. Deterministic human-document audience
+checks still run. `verify:release` remains unconditional.
+
+Use scripts-first mechanical checks before LLM failure classification. For a
+frozen approved wave, one Sol/high architecture pass is sufficient; repeat it
+only after a material contract change or demonstrated architecture blocker.
+Ordinary implementation uses Terra/medium, and ordinary documentation or API
+documentation uses Luna/medium or Terra/medium. Preserve Terra/high for public
+or wire contracts and real correctness, persistence, concurrency, or lifecycle
+risk. Keep narrow slice documentation current, but defer broad documentation
+and all-example execution until runtime interfaces stabilize.
+
 The splitter must prefer small task slices. A task should produce a review
 package that one reviewer can inspect carefully in one pass. If the proposed
 diff would mix independent contracts, broad documentation rewrites, generated
