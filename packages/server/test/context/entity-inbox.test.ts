@@ -1206,9 +1206,7 @@ describe("LocalEntityInbox", () => {
           label: "HANDLE_COMMAND",
           status: "TO_DELIVER",
         }),
-      ).rejects.toThrow(
-        "Entity Inbox delivery was skipped before the target row was delivered.",
-      );
+      ).rejects.toThrow("Entity Inbox delivery was skipped before the target row was delivered.");
     } finally {
       await delivery.shards.release(session);
     }
@@ -1430,7 +1428,10 @@ function corruptedInput(input: unknown): ReceiveInput {
   return input as ReceiveInput;
 }
 
-function writtenResult(input: ReceiveInput, version: bigint): { readonly outcome: "WRITTEN"; readonly message: InboxMessage } {
+function writtenResult(
+  input: ReceiveInput,
+  version: bigint,
+): { readonly outcome: "WRITTEN"; readonly message: InboxMessage } {
   return {
     outcome: "WRITTEN" as const,
     message: {
