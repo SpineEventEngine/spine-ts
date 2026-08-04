@@ -32,7 +32,7 @@ import {
   type DeliveryReady,
   type OnDeliveryReady,
 } from "./local-inbox-handoff.js";
-import { LocalEntityInbox } from "./process-manager-handoff.js";
+import { LocalEntityInbox } from "./entity-inbox.js";
 import { LocalProjectionInbox } from "./projection-handoff.js";
 import { TenantIndexes, type TenantIndex } from "./tenant-index.js";
 import {
@@ -42,7 +42,7 @@ import {
   type EntityInbox,
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
-  type ProcessManagerInboxTarget,
+  type EntityInboxTarget,
   type ProjectionInbox,
   type ProjectionInboxTarget,
   type RepositoryView,
@@ -175,7 +175,7 @@ interface RepositoryRegistration {
   /**
    * Context-owned local process-manager command inbox handoff.
    */
-  readonly processManagerInbox: ProcessManagerInbox;
+  readonly entityInbox: EntityInbox;
 
   /**
    * Context-owned local projection subscriber inbox handoff.
@@ -214,7 +214,7 @@ interface RepositoryRegistration {
 }
 
 interface PmInbox extends EntityInbox {
-  register(target: ProcessManagerInboxTarget): void;
+  register(target: EntityInboxTarget): void;
   endpoints(): readonly DeliveryEndpoint[];
 }
 
@@ -536,7 +536,7 @@ export class BoundedContext {
   readonly #eventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
-  readonly #processManagerInbox: PmInbox;
+  readonly #entityInbox: PmInbox;
   readonly #projectionInbox: PrjInbox;
   readonly #deliveryStrategy: DeliveryStrategy;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
@@ -619,7 +619,7 @@ export class BoundedContext {
       storageFactory,
     });
     const keepTenant = (tenantId: string) => tenantIndex.keep(tenantId);
-    this.#processManagerInbox = new LocalEntityInbox(
+    this.#entityInbox = new LocalEntityInbox(
       this.#snapshot.name.value,
       deliveryReadiness,
       keepTenant,
@@ -642,7 +642,7 @@ export class BoundedContext {
         this.#snapshot,
         storageFactory,
         tenantIndex,
-        this.#processManagerInbox,
+        this.#entityInbox,
         this.#projectionInbox,
         deliveryReadiness,
       ),
@@ -677,8 +677,8 @@ export class BoundedContext {
         });
         preparedRepository.commit();
         this.#registeredRepositories.push(preparedRepository.snapshot);
-        if (preparedRepository.processManagerInboxTarget !== undefined) {
-          this.#processManagerInbox.register(preparedRepository.processManagerInboxTarget);
+        if (preparedRepository.entityInboxTarget !== undefined) {
+          this.#entityInbox.register(preparedRepository.entityInboxTarget);
         }
         if (preparedRepository.projectionInboxTarget !== undefined) {
           this.#projectionInbox.register(preparedRepository.projectionInboxTarget);
@@ -697,7 +697,7 @@ export class BoundedContext {
       storageContext: ContextParts.createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
       stand: this.#stand,
-      processManagerInbox: this.#processManagerInbox,
+        entityInbox: this.#entityInbox,
       projectionInbox: this.#projectionInbox,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
       dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
@@ -1409,7 +1409,7 @@ interface PreparedRepository {
   readonly repository: RepositoryView;
   readonly snapshot: RegistrationSnapshot;
   readonly storage: RecordStorage<unknown, Message>;
-  readonly processManagerInboxTarget?: ProcessManagerInboxTarget;
+  readonly entityInboxTarget?: EntityInboxTarget;
   readonly projectionInboxTarget?: ProjectionInboxTarget;
   commit(): void;
   close(): void;
@@ -2067,7 +2067,7 @@ const ContextParts = Object.freeze({
       storageFactory: registration.storageFactory,
       stand: registration.stand,
       signalMetadata: new SignalMetadata(),
-      processManagerInbox: registration.processManagerInbox,
+      entityInbox: registration.entityInbox,
       projectionInbox: registration.projectionInbox,
       dispatchStored: registration.dispatchStored,
       dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
@@ -2077,14 +2077,14 @@ const ContextParts = Object.freeze({
       recordDispatchFailure: registration.recordDispatchFailure,
     });
 
-    const processManagerInboxTarget = repositoryAccess.processManagerInboxTarget(repository);
+    const entityInboxTarget = repositoryAccess.entityInboxTarget(repository);
     const projectionInboxTarget = repositoryAccess.projectionInboxTarget(repository);
 
     return {
       repository,
       snapshot,
       storage,
-      ...(processManagerInboxTarget === undefined ? {} : { processManagerInboxTarget }),
+      ...(entityInboxTarget === undefined ? {} : { entityInboxTarget }),
       ...(projectionInboxTarget === undefined ? {} : { projectionInboxTarget }),
       commit: () => {
         registeredRepositories.set(repository, { name: registration.name });
