@@ -73,3 +73,32 @@ ambiguity. Before correction dispatch, one existing `requirements_splitter`
 pass will determine the smallest compatible fence using explicit
 `gpt-5.6-sol` / `high`. No implementation writer is active during this
 read-only reassessment.
+
+## Architecture Disposition
+
+The bounded Sol/high reassessment completed without a human blocker. Runtime
+self-introspection was unavailable; the immutable splitter profile and explicit
+dispatch fields are accepted, with no visible mismatch.
+
+The frozen wire already carries `WorkerId { nodeId, value }` on pickup outcome,
+session state, and release. Corrections will:
+
+- assign a unique opaque `WorkerId.value` per acquisition while retaining the
+  stable node ID;
+- refresh only the same live worker during revalidation and make release match
+  the complete current worker;
+- treat a newly returned pickup during old-session revalidation as ownership
+  loss and release that accidental acquisition;
+- establish one internal delivery commit-fence scope and revalidate immediately
+  before the existing synchronous Entity transaction commit, with no
+  intervening asynchronous boundary;
+- expose the first stream break for supervisor-owned observations, require a
+  successful complete snapshot before reopening, and retain public client
+  reconnect behavior outside the supervisor source; and
+- replace the raw supervisor fixture with environment/`RemoteDelivery`
+  assembly and failure-safe teardown, adding the required real-gRPC fault and
+  recovery evidence.
+
+No Protobuf, generated-code, or new public method is required. The complete
+review findings plus this blueprint return as one correction batch to the
+existing Terra/medium implementation owner.
