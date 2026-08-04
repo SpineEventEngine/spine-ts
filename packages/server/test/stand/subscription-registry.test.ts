@@ -5,10 +5,12 @@ import {
   type Subscription,
   type SubscriptionId,
 } from "@spine-event-engine/proto/client";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   InMemorySubscriptionRegistry,
+  StorageSubscriptionRegistry,
   StandCapacityError,
   StandConflictError,
   type StandActivateResult,
@@ -243,3 +245,107 @@ describe("InMemorySubscriptionRegistry", () => {
     expectTypeOf<InMemorySubscriptionRegistry>().toExtend<StandSubscriptionRegistry>();
   });
 });
+
+describe("StorageSubscriptionRegistry", () => {
+  it("physically removes an expired pending definition during activation", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const registry = durableRegistry();
+      await registry.create(subscription("expired"));
+      vi.setSystemTime(start + 30_000);
+
+      await expect(registry.activate(id("expired"))).resolves.toEqual({ kind: "expired" });
+      await expect(registry.get(id("expired"))).resolves.toBeUndefined();
+      await expect(registry.snapshot()).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("selects expired pending definitions rather than the first storage rows for cleanup", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const registry = durableRegistry();
+      for (let index = 0; index < 25; index += 1) {
+        await registry.create(subscription(`active-${String(index)}`));
+        await registry.activate(id(`active-${String(index)}`));
+      }
+      for (let index = 0; index < 27; index += 1)
+        await registry.create(subscription(`expired-${String(index)}`));
+      vi.setSystemTime(start + 30_000);
+
+      await expect(registry.cleanup()).resolves.toEqual({ scanned: 25, deleted: 25, more: true });
+      await expect(registry.cleanup()).resolves.toEqual({ scanned: 2, deleted: 2, more: false });
+      await expect(registry.snapshot()).resolves.toHaveLength(25);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shares a close promise and rejects future durable operations", async () => {
+    const registry = durableRegistry();
+    const first = registry.close();
+
+    expect(registry.close()).toBe(first);
+    await first;
+    await expect(registry.create(subscription("after-close"))).rejects.toThrow("closed");
+  });
+
+  it("admits exactly the shared lower capacity across independent handles", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "DurableRegistryCapacity", multitenant: false };
+    const first = new StorageSubscriptionRegistry(context, factory, 1);
+    const second = new StorageSubscriptionRegistry(context, factory, 1);
+
+    const results = await Promise.allSettled([
+      first.create(subscription("one")),
+      second.create(subscription("two")),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    await expect(first.snapshot()).resolves.toHaveLength(1);
+  });
+
+  it("recovers definitions through a replacement registry without adding a second row", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "DurableRegistryRestart", multitenant: false };
+    const first = new StorageSubscriptionRegistry(context, factory);
+    await expect(first.create(subscription("one"))).resolves.toMatchObject({ kind: "created" });
+    await first.close();
+
+    const restarted = new StorageSubscriptionRegistry(context, factory);
+    await expect(restarted.create(subscription("one"))).resolves.toMatchObject({
+      kind: "existing",
+    });
+    await expect(restarted.snapshot()).resolves.toHaveLength(1);
+  });
+
+  it("does not reject an activate-delete race as malformed durable control", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "DurableRegistryRace", multitenant: false };
+    const first = new StorageSubscriptionRegistry(context, factory);
+    const second = new StorageSubscriptionRegistry(context, factory);
+    const created = await first.create(subscription("one"));
+    if (created.kind !== "created") throw new Error("Expected initial creation.");
+
+    const results = await Promise.allSettled([
+      first.activate(id("one")),
+      second.delete(id("one"), created.entry.revision),
+    ]);
+
+    expect(results.filter((result) => result.status === "rejected")).toEqual([]);
+    const snapshot = await first.snapshot();
+    expect(snapshot).toHaveLength(1);
+    expect(snapshot[0]).toMatchObject({ phase: "active", revision: 2n });
+  });
+});
+
+function durableRegistry(): StorageSubscriptionRegistry {
+  return new StorageSubscriptionRegistry(
+    { name: "DurableRegistry", multitenant: false },
+    new InMemoryStorageFactory(),
+  );
+}

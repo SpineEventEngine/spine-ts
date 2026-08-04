@@ -502,6 +502,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   readonly #limit: number;
   #closed = false;
   #activeOperations = 0;
+  #closePromise: Promise<void> | undefined;
   #closeWaiter: (() => void) | undefined;
 
   /**
@@ -620,18 +621,32 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
             kind: "active" as const,
             entry: StorageSubscriptionRegistry.#clone(entry),
           });
+        if (entry.pendingUntil !== undefined && entry.pendingUntil <= Date.now()) {
+          await this.#deleteCurrent(id, record);
+          return Object.freeze({ kind: "expired" as const });
+        }
         const active: StandSubscriptionEntry = Object.freeze({
           subscription: entry.subscription,
           phase: "active",
           createdAt: entry.createdAt,
           revision: entry.revision + 1n,
         });
+        const control = await this.#controlState();
+        const staged = controlWithOperation(control, control.count, {
+          kind: "activate",
+          id,
+          digest: recordDigest(record),
+        });
+        if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
+          continue;
         if (await this.#storage.compareAndSet(id, record, StandSubscriptionRecords.write(active))) {
+          await this.#recover();
           return Object.freeze({
             kind: "activated" as const,
             entry: StorageSubscriptionRegistry.#clone(active),
           });
         }
+        await this.#recover();
       }
     });
   }
@@ -713,18 +728,16 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     return await this.#operation(async () => {
       await this.#recover();
       let deleted = 0;
-      const rows = await this.#storage.queryEntries({ sort: [{ field: "id" }], limit: 25 });
-      for (const row of rows) {
+      const now = Date.now();
+      const expired = (await this.#definitions()).filter((row) => {
         const entry = StandSubscriptionRecords.read(row.record, row.id);
-        if (
-          entry.phase === "pending" &&
-          entry.pendingUntil !== undefined &&
-          entry.pendingUntil <= Date.now()
-        ) {
-          if (await this.#deleteCurrent(row.id, row.record)) deleted += 1;
-        }
-      }
-      return Object.freeze({ scanned: rows.length, deleted, more: rows.length === 25 });
+        return (
+          entry.phase === "pending" && entry.pendingUntil !== undefined && entry.pendingUntil <= now
+        );
+      });
+      const page = expired.slice(0, 25);
+      for (const row of page) if (await this.#deleteCurrent(row.id, row.record)) deleted += 1;
+      return Object.freeze({ scanned: page.length, deleted, more: expired.length > page.length });
     });
   }
 
@@ -733,15 +746,17 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    *
    * @returns Resolves after closure completes.
    */
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#closePromise !== undefined) return this.#closePromise;
     this.#closed = true;
-    if (this.#activeOperations > 0)
-      await new Promise<void>((resolve) => {
-        this.#closeWaiter = resolve;
-      });
-    this.#storage.close();
-    this.#control.close();
+    this.#closePromise = new Promise<void>((resolve) => {
+      this.#closeWaiter = resolve;
+      if (this.#activeOperations === 0) resolve();
+    }).then(() => {
+      this.#storage.close();
+      this.#control.close();
+    });
+    return this.#closePromise;
   }
 
   static #id(subscription: Subscription): string {
@@ -808,11 +823,19 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       }
       const current = await this.#storage.read(control.operation.id);
       const matches = current !== undefined && recordDigest(current) === control.operation.digest;
-      if (current !== undefined && !matches)
+      if (current !== undefined && !matches && control.operation.kind !== "activate")
         throw new Error("Malformed Stand subscription control record.");
       let next: Control;
       if (control.operation.kind === "create") {
         next = controlWithOperation(control, matches ? control.count : control.count - 1);
+      } else if (control.operation.kind === "activate") {
+        if (current === undefined) throw new Error("Malformed Stand subscription control record.");
+        if (!matches) {
+          const entry = StandSubscriptionRecords.read(current, control.operation.id);
+          if (entry.phase !== "active")
+            throw new Error("Malformed Stand subscription control record.");
+        }
+        next = controlWithOperation(control, control.count);
       } else {
         if (
           matches &&
@@ -847,7 +870,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
 const controlSlot = "control";
 const controlTypeUrl = "type.spine.io/stand.subscription.control.v1";
 interface ControlOperation {
-  readonly kind: "create" | "delete";
+  readonly kind: "create" | "activate" | "delete";
   readonly id: string;
   readonly digest: string;
 }
@@ -900,7 +923,9 @@ function readControl(record: Any, limit: number): Control {
       });
     const operation = control.operation as { kind?: unknown; id?: unknown; digest?: unknown };
     if (
-      (operation.kind !== "create" && operation.kind !== "delete") ||
+      (operation.kind !== "create" &&
+        operation.kind !== "activate" &&
+        operation.kind !== "delete") ||
       typeof operation.id !== "string" ||
       operation.id.trim() === "" ||
       typeof operation.digest !== "string" ||
