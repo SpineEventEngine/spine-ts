@@ -1,6 +1,6 @@
 # T-0106 Review Record
 
-Status: Corrections In Progress
+Status: Corrections Ready For Re-review
 
 ## Review Assignments And Results
 
@@ -66,11 +66,8 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
 - `c28f4647` is the pushed GREEN checkpoint. It reuses the routed shard for
   local drain replay while retained descriptor replay resolves and validates a
   stored shard. Focused Entity Inbox/context/repository evidence is 226/226.
-- Naming and documentation corrections are in progress. The requested replay
-  type needs a compatible no-`void` contract decision: strict tooling rejects
-  both the explicit union of promise containers and a narrowed result union for
-  existing callback implementations. Descriptor coverage and deterministic
-  preflight remain in progress; no review lane is yet closed.
+- `9e6725a8` and `4e9e76ba` complete the generic ownership names, public
+  documentation/TSDoc, and narrow explicit-`undefined` replay contract.
 - Finding 8 descriptor evidence is ready for re-review: focused
   `bounded-context.test.ts` coverage uses durable low-level Inbox rows and the
   real bounded-context descriptor to prove valid nonzero-shard Aggregate,
@@ -80,3 +77,8 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
   and replays every pending row once. The focused suite passes 55/55. This does
   not close any review lane; deterministic preflight and affected reliability
   re-review remain required.
+- `dee30db1` is the final correction endpoint before record reconciliation.
+  The complete bounded preflight passes generated/build/tooling typechecks,
+  ESLint, cleanup, TSDoc, format, documentation/API, Proto, generated
+  cleanliness, release readiness, and 229/229 focused tests. All four affected
+  concerns require one re-review against this correction set.
