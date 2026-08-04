@@ -101,5 +101,5 @@ scripts/package-metadata.test.mjs` passed 13 tests. The tests prove that
 
 ## Current Status
 
-Implementation, specialist review, and release verification are complete.
-Integration remains. No Wave 6 implementation has started.
+Implementation, specialist review, release verification, integration, and
+remote publication are complete. No Wave 6 implementation has started.
