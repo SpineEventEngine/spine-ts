@@ -1,5 +1,5 @@
 import { DeliveryServer } from "../../delivery-server/src/index.js";
-import { DeliveryClient, RemoteDelivery, ShardObservationOverflowError } from "../src/index.js";
+import { DeliveryClient, RemoteDelivery } from "../src/index.js";
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -157,10 +157,10 @@ it("recovers work written immediately after a same-endpoint Admin restart throug
   expect(beta.exitCode).toBeNull();
 }, 15_000);
 
-it("bounds a paused RemoteDelivery Admin source then lets an environment drain its retained work", async () => {
+it("recovers an overflowed tiny-buffer RemoteDelivery source through its environment supervisor", async () => {
   const server = trackedServer();
   await server.start();
-  const alpha = application(server.baseUrl, "alpha");
+  const alpha = application(server.baseUrl, "alpha", { DELIVERY_OBSERVATION_BUFFER: "1" });
   const beta = application(server.baseUrl, "beta");
   const dispatched: { readonly node: string; readonly signalId: string }[] = [];
   for (const child of [alpha, beta])
@@ -173,36 +173,29 @@ it("bounds a paused RemoteDelivery Admin source then lets an environment drain i
     command(beta, { command: "block-first" }),
   ]);
 
-  const delivery = RemoteDelivery.connectTo({
-    endpoint: server.baseUrl,
-    removalQuarantine: memoryQuarantine(),
-    clientOptions: { observationBufferSize: 1, observationReconnects: 0 },
-  });
-  deliveries.push(delivery);
-  await delivery.open();
-  const iterator = delivery.source.observeShardUpdates()[Symbol.asyncIterator]();
-  const first = iterator.next();
   await command(alpha, { command: "write", signalId: "first" });
-  await expect(first).resolves.toMatchObject({ done: false });
   await eventually(() => {
     expect(dispatched.filter((event) => event.signalId === "first-started")).toHaveLength(1);
   });
 
-  await command(alpha, { command: "write", signalId: "overflow-a" });
-  await command(beta, { command: "write", signalId: "overflow-b" });
-  await eventuallyAsync(async () => {
-    await expect(iterator.next()).rejects.toBeInstanceOf(ShardObservationOverflowError);
-  });
-  const snapshot = await delivery.source.shardSnapshot();
-  expect(snapshot.some((shard) => shard.messages >= 0)).toBe(true);
+  await Promise.all(
+    Array.from({ length: 12 }, (_, index) =>
+      command(index % 2 === 0 ? alpha : beta, {
+        command: "write",
+        signalId: `overflow-${String(index)}`,
+      }),
+    ),
+  );
 
   await Promise.all([
     command(alpha, { command: "release-first" }),
     command(beta, { command: "release-first" }),
   ]);
   await eventually(() => {
-    expect(dispatched.filter((event) => event.signalId === "overflow-a")).toHaveLength(1);
-    expect(dispatched.filter((event) => event.signalId === "overflow-b")).toHaveLength(1);
+    for (let index = 0; index < 12; index += 1)
+      expect(
+        dispatched.filter((event) => event.signalId === `overflow-${String(index)}`),
+      ).toHaveLength(1);
   });
 }, 15_000);
 
@@ -212,25 +205,13 @@ function trackedServer(port = 0): DeliveryServer {
   return server;
 }
 
-function memoryQuarantine() {
-  const values = new Map();
-  return {
-    get: (id: string) => Promise.resolve(values.get(id)),
-    put: (record: { readonly id: string }) => {
-      values.set(record.id, record);
-      return Promise.resolve();
-    },
-    delete: (id: string) => {
-      values.delete(id);
-      return Promise.resolve();
-    },
-    close: () => Promise.resolve(),
-  };
-}
-
-function application(baseUrl: string, node: string): ChildProcess {
+function application(
+  baseUrl: string,
+  node: string,
+  extraEnvironment: Record<string, string> = {},
+): ChildProcess {
   const child = spawn(process.execPath, [applicationFixture], {
-    env: { ...process.env, DELIVERY_SERVER_URL: baseUrl, DELIVERY_NODE: node },
+    env: { ...process.env, DELIVERY_SERVER_URL: baseUrl, DELIVERY_NODE: node, ...extraEnvironment },
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
   applications.add(child);
@@ -281,10 +262,14 @@ async function stop(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGTERM");
   await Promise.race([
-    new Promise<void>((resolve) => child.once("exit", resolve)),
-    new Promise<void>((_, reject) =>
-      setTimeout(() => reject(new Error("Fixture shutdown timed out.")), 5_000),
-    ),
+    new Promise<void>((resolve) => {
+      child.once("exit", resolve);
+    }),
+    new Promise<void>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("Fixture shutdown timed out."));
+      }, 5_000);
+    }),
   ]);
 }
 

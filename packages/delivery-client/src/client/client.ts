@@ -406,30 +406,28 @@ export class DeliveryClient {
           worker: requestedWorker,
         });
         DeliveryRequestCodec.requestBytes(PickUpShardSchema, request);
-        try {
-          return {
-            kind: "PICKED" as const,
-            value: await this.#shards.pickShard(
-              request,
-              DeliveryRequestCodec.callOptions(signal, timeoutMs),
-            ),
-          };
-        } catch (error) {
-          throw error;
-        }
+        return {
+          kind: "PICKED" as const,
+          value: await this.#shards.pickShard(
+            request,
+            DeliveryRequestCodec.callOptions(signal, timeoutMs),
+          ),
+        };
       },
     );
     DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response.value);
     if (response.value.value.case === "alreadyPickedUp") {
       const held = response.value.value.value;
       DeliveryShardCodec.validatePicked(held, shardIndex);
+      if (held.worker === undefined || held.whenPicked === undefined)
+        throw DeliveryRequestCodec.protocol();
       return Object.freeze({
         kind: "ALREADY_PICKED" as const,
         session: Object.freeze({
           kind: "EXCLUSIVE" as const,
           shard: DeliveryShardCodec.snapshot(shardIndex),
-          worker: DeliveryShardCodec.decodeWorker(held.worker!),
-          whenPicked: DeliveryShardCodec.date(held.whenPicked!),
+          worker: DeliveryShardCodec.decodeWorker(held.worker),
+          whenPicked: DeliveryShardCodec.date(held.whenPicked),
         }),
       });
     }
@@ -592,14 +590,6 @@ export class DeliveryClient {
   static #isRetryableReadError(error: unknown): boolean {
     if (!(error instanceof ConnectError)) return true;
     return error.code === Code.Unavailable || error.code === Code.DeadlineExceeded;
-  }
-
-  static #isNoPendingWork(error: unknown): boolean {
-    return (
-      error instanceof ConnectError &&
-      error.code === Code.FailedPrecondition &&
-      error.metadata.get("x-spine-delivery-outcome") === "no-pending-work"
-    );
   }
 }
 

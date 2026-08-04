@@ -9,6 +9,7 @@ import process from "node:process";
 
 const endpoint = process.env.DELIVERY_SERVER_URL;
 const node = process.env.DELIVERY_NODE;
+const observationBufferSize = Number(process.env.DELIVERY_OBSERVATION_BUFFER ?? "100");
 if (endpoint === undefined || node === undefined || process.send === undefined) process.exit(1);
 
 const quarantine = new Map();
@@ -26,7 +27,7 @@ const delivery = RemoteDelivery.connectTo({
     },
     close: () => Promise.resolve(),
   },
-  clientOptions: { observationReconnects: 0 },
+  clientOptions: { observationBufferSize, observationReconnects: 0 },
 });
 ServerEnvironment.when(EnvironmentType.Local).use({ delivery });
 const environment = ServerEnvironment.instance();
