@@ -102,3 +102,21 @@ session state, and release. Corrections will:
 No Protobuf, generated-code, or new public method is required. The complete
 review findings plus this blueprint return as one correction batch to the
 existing Terra/medium implementation owner.
+
+## Correction Re-review Endpoint
+
+- Baseline: `origin/main@ce1ef99e`.
+- Corrected endpoint: `897deab8`, clean and pushed.
+- The focused real-gRPC recovery scenarios passed three consecutive runs; the
+  focused recovery suite passed 108/108. Delivery-client/server typechecks,
+  focused ESLint, Prettier, and diff checks passed.
+- The final task preflight passed Proto integrity, the workspace build, and
+  strict TypeScript checking after the deterministic test-transport typing
+  correction in `897deab8`.
+- Re-review assignments retain the existing concern-specific roles:
+  style/maintainability, TypeScript/API, and performance/reliability use
+  explicit `gpt-5.6-terra` / `high`; documentation uses the immutable
+  `documentation_reviewer` at `gpt-5.6-luna` / `medium`.
+- Runtime self-introspection remains unavailable. The explicit dispatch fields
+  and immutable configured profiles are the actual-metadata evidence unless a
+  visible mismatch occurs.
