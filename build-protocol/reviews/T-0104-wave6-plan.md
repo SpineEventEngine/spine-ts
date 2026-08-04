@@ -33,6 +33,29 @@ All findings were accepted as one correction batch. The plan now:
 - fences reconciliation and cancellation races, and removes unsupported
   ordering and deduplication promises.
 
+The documentation re-review accepted the corrected outcome but found one
+residual gap-matrix sentence that still generalized durable-registry behavior
+to the in-memory implementation. That row now distinguishes shared durable
+definitions from process-local in-memory definitions.
+
+The reliability re-review accepted the original capacity, snapshot-race,
+fan-in, and ordering corrections but found that partial activation closed only
+runtime streams. The plan now requires idempotent cancellation of the shared
+Stand definition, durable Gateway binding cleanup, both capacity releases,
+restart recovery when bounded cleanup is interrupted, and one joined cleanup
+operation for a concurrent client Cancel.
+
+The TypeScript/API re-review accepted the record, JVM event, Gateway migration,
+and registry/builder corrections but found that generated wildcard paths made
+the planned internal Protobuf files technically importable. The plan now
+preserves the frozen options exactly, marks the new Stand record with
+`internal_all`, distinguishes technically importable package-internal generated
+contracts from curated end-user APIs, and assigns the corresponding Proto
+reference correction to T-0105.
+
+The style/maintainability re-review is clean. Dynamic discovery remains in Wave
+7, and registry persistence versus listener reconciliation ownership is clear.
+
 ## Review Assignments
 
 - Style/maintainability: existing `style_maintainability_reviewer`, explicit

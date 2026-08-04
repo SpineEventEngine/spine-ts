@@ -28,7 +28,7 @@ a new Q&A about application redeployment and update behavior.
 | Drain behavior      | Bounded delivery runs exist.                                                                                                                  | A shard owner continues finite runs until no deliverable Inbox message remains, then releases the shard.                 |
 | Stand updates       | `Stand.update()` writes current state and invokes process-local callbacks.                                                                    | Entity commits publish `EntityStateChanged`; Stand observes the EventBus and creates matching Entity updates.            |
 | Event subscriptions | SubscriptionService registers callbacks directly.                                                                                             | Stand observes subscribed events from the EventBus and emits event updates.                                              |
-| Stand registry      | Local callback sets plus service-owned inactive/claim/cancel rows.                                                                            | One configurable registry stores subscription definitions for every node; no per-node claim owns a definition.           |
+| Stand registry      | Local callback sets plus service-owned inactive/claim/cancel rows.                                                                            | Durable mode shares definitions across nodes; explicitly selected in-memory mode remains process-local.                  |
 | Cancellation        | Service and Gateway records may retain cancel/retired states.                                                                                 | Stand registry cancellation physically deletes the definition; Gateway stops its streams without waiting for every node. |
 | Gateway backend     | One configured backend URL.                                                                                                                   | One logical Gateway fans out native subscription activation to a fixed configured application-node set.                  |
 | Example topology    | Simple Message Board and deployment templates.                                                                                                | Add Distributed Message Board with two application nodes, one Gateway, and one simple delivery server.                   |
@@ -76,16 +76,23 @@ without building JVM. The source is
 
 Copy the frozen source and its required `entity_type.proto` dependency through
 the existing frozen-Proto manifest rather than recreating a similar TS-only
-message. The package root does not re-export this internal system event.
+message. Preserve both files exactly: `entity_log_events.proto` declares
+`option (internal_all) = true`, while `entity_type.proto` does not. Their
+generated schemas are package-internal contracts: the curated package root and
+named public subpaths do not export them. The generated wildcard remains
+technically importable because framework packages need it, but it is not an
+end-user API or a compatibility promise.
 
 ## Subscription Storage
 
 Define an internal Protobuf wire record at
 `packages/proto/proto/spine/system/server/stand_subscription.proto`. Runtime
 storage/codec ownership remains in the server package. The file uses package
-`spine.system.server`, prefix `type.spine.io`, and internal generation only; it
-is not re-exported from the public Proto package root. One logical subscription
-occupies one row:
+`spine.system.server`, prefix `type.spine.io`, and
+`option (internal_all) = true`. It follows the same package-internal generated
+contract policy: framework code may use its generated wildcard path, but the
+curated root and named public subpaths do not expose it to end users. One
+logical subscription occupies one row:
 
 ```proto
 message StandSubscriptionRecord {
@@ -190,7 +197,14 @@ configuration. Per-backend operations retain the existing request, lease,
 queue, cancellation, and shutdown bounds. Fence late activation/retry results;
 after Cancel or close, no backend reconnect may start. Partial activation
 failure closes already-started streams and reports the existing gap/lifecycle
-notification without retrying a command.
+notification without retrying a command. It then performs the same idempotent
+durable cancellation used by an explicit client Cancel: one reachable backend
+deletes the shared Stand definition, the Gateway deletes its binding, and both
+capacity slots are released. The activation error is not completed as cleanly
+compensated until those deletions are confirmed. If bounded cancellation cannot
+confirm them, the existing durable Gateway cancellation state retains the
+canonical envelope and retries cleanup after restart; it never reactivates the
+subscription. A concurrent client Cancel joins the same cleanup operation.
 
 Backend discovery, backend additions/removals, and scaling reconciliation are
 Wave 7. Kubernetes/service discovery products are not framework policy.
@@ -206,6 +220,10 @@ Aggregate/Process Manager Inbox labels needed by later tasks.
 - RED: exact pinned file/checksum/type URL/field compatibility, invalid record
   rejection, canonical non-duplicated topic, target/shard preservation, no
   generated output tracked.
+- Documentation/API: revise the Proto package reference so wildcard generated
+  paths are described as framework/advanced compatibility access, and
+  `internal_all` schemas are explicitly outside the end-user compatibility
+  contract despite being technically importable.
 - Review: TypeScript/API and reliability required; style/docs as affected.
 - Verification: focused Proto/generation tests, generated typecheck, then
   `verify:release` because serialized contracts change.
@@ -280,7 +298,10 @@ remains solely at the Gateway. Dynamic discovery is Wave 7.
   command retry, all-node activation, partial activation cleanup, duplicate
   forwarding without retained dedupe state, stream loss notification,
   cancellation/close races, no reconnect after cancellation, binding restart
-  with the same fixed backend fingerprint, actor/tenant preservation.
+  with the same fixed backend fingerprint, actor/tenant preservation. Partial
+  activation tests assert stream closure, shared-definition deletion, binding
+  deletion, both capacity releases, cleanup recovery after an interrupted
+  cancellation, and a concurrent Cancel joining the same operation.
 - Review: all four concerns, plus the final security reviewer only if this task
   exposes a new authentication trust boundary.
 - Verification: native and browser interoperability plus `verify:release`.
