@@ -4,7 +4,7 @@ import {
   type DeliverySource,
 } from "@spine-event-engine/server";
 
-import { DeliveryClient } from "../client/client.js";
+import { DeliveryClient, deliveryClientAccess } from "../client/client.js";
 import type { DeliveryClientOptions, RemovalQuarantine } from "../client/types.js";
 import { RemoteInbox, RemoteWorkRegistry } from "./adapters.js";
 
@@ -103,11 +103,11 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   /**
    * Returns the ready Admin source used by environment delivery supervisors.
    *
-   * @returns The client that supplies bounded snapshots and shard updates.
+   * @returns The source that supplies bounded snapshots and one-attempt shard updates.
    */
   get source(): DeliverySource {
     if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
-    return this.#bundle.client;
+    return this.#bundle.source;
   }
 
   /**
@@ -132,7 +132,16 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
     try {
       await client.shardSnapshot();
       if (this.#closed) throw new Error("Remote delivery is closed.");
-      this.#bundle = { client, inbox, workRegistry };
+      this.#bundle = {
+        client,
+        inbox,
+        workRegistry,
+        source: {
+          shardSnapshot: (options) => client.shardSnapshot(options),
+          observeShardUpdates: (options) => deliveryClientAccess.observeOnce(client, options),
+          releaseExpired: (options) => client.releaseExpired(options),
+        },
+      };
     } catch (error) {
       if (!this.#closed) {
         client.close();
@@ -176,4 +185,5 @@ interface RemoteDeliveryBundle {
   readonly client: DeliveryClient;
   readonly inbox: RemoteInbox;
   readonly workRegistry: RemoteWorkRegistry;
+  readonly source: DeliverySource;
 }

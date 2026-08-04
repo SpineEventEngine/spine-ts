@@ -111,6 +111,7 @@ export class DeliveryClient {
     deliveryClientRevalidations.set(this, (session, options) =>
       this.#pickUp(session.shard, session.worker, options, false, true),
     );
+    deliveryClientObservations.set(this, (options) => this.#observeShardUpdates(options, 0));
   }
 
   /**
@@ -186,6 +187,13 @@ export class DeliveryClient {
    * @returns A cancellable stream of detached shard observations.
    */
   observeShardUpdates(options: DeliveryFindOneOptions = {}): DeliveryShardObservationStream {
+    return this.#observeShardUpdates(options, this.#observationReconnects);
+  }
+
+  #observeShardUpdates(
+    options: DeliveryFindOneOptions,
+    reconnects: number,
+  ): DeliveryShardObservationStream {
     if (this.#closed) throw new Error("Delivery client is closed.");
     if (options.signal?.aborted) throw options.signal.reason;
     const controller = new AbortController();
@@ -198,7 +206,7 @@ export class DeliveryClient {
       signal: controller.signal,
       timeoutMs: DeliveryRequestCodec.timeout(options.timeoutMs ?? 30_000),
       capacity: this.#observationBufferSize,
-      reconnects: this.#observationReconnects,
+      reconnects,
       reconnectBackoffMs: this.#observationReconnectBackoffMs,
       open: (signal, timeoutMs) =>
         this.#admin.subscribeToShardUpdates(
@@ -646,6 +654,11 @@ const deliveryClientRevalidations = new WeakMap<
   ) => Promise<RemoteShardSession | undefined>
 >();
 
+const deliveryClientObservations = new WeakMap<
+  DeliveryClient,
+  (options: DeliveryFindOneOptions) => DeliveryShardObservationStream
+>();
+
 /**
  * Provides package-internal conditional pickup without extending the public client API.
  */
@@ -661,6 +674,10 @@ export const deliveryClientAccess: Readonly<{
     session: RemoteShardSession,
     options: DeliveryMutationOptions,
   ) => Promise<RemoteShardSession | undefined>;
+  observeOnce: (
+    client: DeliveryClient,
+    options?: DeliveryFindOneOptions,
+  ) => DeliveryShardObservationStream;
 }> = Object.freeze({
   pickUpPending(
     client: DeliveryClient,
@@ -681,5 +698,14 @@ export const deliveryClientAccess: Readonly<{
     if (revalidate === undefined)
       throw new TypeError("Delivery client revalidation access is unavailable.");
     return revalidate(session, options);
+  },
+  observeOnce(
+    client: DeliveryClient,
+    options: DeliveryFindOneOptions = {},
+  ): DeliveryShardObservationStream {
+    const observe = deliveryClientObservations.get(client);
+    if (observe === undefined)
+      throw new TypeError("Delivery client observation access is unavailable.");
+    return observe(options);
   },
 });

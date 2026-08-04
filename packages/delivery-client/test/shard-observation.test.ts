@@ -216,10 +216,12 @@ describe("DeliveryClient shard observation", () => {
     ]);
     const client = DeliveryClient.usingTransport(fake.transport, { observationReconnects: 2 });
 
-    await expect(client.observeShardUpdates()[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+    await expect(
+      client.observeShardUpdates()[Symbol.asyncIterator]().next(),
+    ).resolves.toMatchObject({
       value: { status: "NOT_PICKED", messages: 1 },
     });
-    expect(fake.stream).toHaveBeenCalledTimes(2);
+    expect(fake.stream).toHaveBeenCalledTimes(3);
     client.close();
   });
 

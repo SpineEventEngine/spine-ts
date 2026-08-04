@@ -24,6 +24,9 @@ vi.mock("../src/client/client.js", () => ({
       return client;
     }),
   },
+  deliveryClientAccess: {
+    observeOnce: (client: FakeClient) => client.observeShardUpdatesOnce(),
+  },
 }));
 
 vi.mock("../src/remote/adapters.js", () => ({
