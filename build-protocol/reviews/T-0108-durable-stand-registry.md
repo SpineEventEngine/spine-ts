@@ -54,6 +54,41 @@ explicit dispatch fields/text are accepted unless the surface exposes a
 visible mismatch. Reviewers receive the pushed `origin/main@7c5457d1...bd2e4f2d`
 diff and must return findings only for their canonical concern.
 
+## Review Results
+
+- Style/maintainability: two P2 findings. Remove completed-migration result
+  aliases and centralize maximum-capacity and cleanup-page policy constants.
+  Mechanical diff and standalone-function ledger are clean.
+- Documentation: two P2 findings. Explain the atomic-CAS provider requirement
+  and unsupported-provider failure; add a beginner lifecycle example and exact
+  agent-facing create/activate/delete/get/snapshot/cleanup/error behavior.
+- TypeScript/API: two P1 and two P2 findings. Remove the durable class's public
+  `string` ID widening, validate negative revisions consistently, expose a
+  deep-readonly subscription view, and document builder ownership/exclusion in
+  public TSDoc.
+- Performance/reliability: two P1 findings. A second live handle can treat an
+  in-progress staged create/delete as abandoned, and the codec admits missing
+  or blank topic IDs. Live MySQL and Datastore conformance is still unexecuted.
+- Security: N/A disposition retained; no reviewer finding changes the stated
+  trust-boundary analysis.
+
+All reviewers used the recorded existing roles and configured profiles. Runtime
+self-introspection remained unavailable and no visible model/profile mismatch
+was exposed.
+
+## Correction Architecture Assignment
+
+The live-operation recovery P1 demonstrates a distributed correctness ambiguity
+in the frozen two-row protocol. Before implementation, one bounded existing
+`requirements_splitter` pass is assigned explicitly `gpt-5.6-sol` / `high` to
+choose the smallest provider-neutral repair that preserves exact capacity,
+physical deletion, restart recovery, one definition row per subscription plus
+the separate control record, and the existing public contract. It must address
+fencing/ownership under arbitrary pauses, not assume a staged operation is
+abandoned merely because its row is absent, and state honestly if the existing
+serialized record cannot express the required invariant. It also specifies the
+minimal MySQL/Datastore conformance execution plan without building Spine JVM.
+
 ## Architecture Evidence
 
 The existing `requirements_splitter`, explicit `gpt-5.6-sol` / `high`, completed
