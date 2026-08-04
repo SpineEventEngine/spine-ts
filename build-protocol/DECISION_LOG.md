@@ -4986,3 +4986,50 @@ Consequences:
 - Production container, Compose, Kubernetes, and Envoy documentation must state
   lifecycle, readiness, durability, and subscription limitations without
   promising high availability from the in-memory delivery server.
+
+## D-0108: Coordinate Delivery And Stand Across Application Nodes
+
+Status: Accepted
+
+Date: 2026-08-04
+
+Task: Wave 6 planning / `T-0104`
+
+Decision:
+
+- Route Aggregate and Process Manager work through sharded Inbox persistence.
+  Every application node observes delivery-server shard notifications, but only
+  the lease owner dispatches a shard and drains it until empty.
+- Make Stand observe domain and `EntityStateChanged` system events through the
+  EventBus instead of relying on process-local state callbacks.
+- Give Stand a configurable subscription registry. The built-in durable
+  implementation uses the Bounded Context StorageFactory; a custom complete
+  implementation may be supplied through the builder.
+- Reconcile complete durable subscription snapshots every 10 seconds. Expire
+  pending activation after 30 seconds through finite idempotent cleanup on each
+  node. Physically delete cancelled subscriptions; retain no tombstone.
+- Keep in-memory Stand subscriptions valid and emit a warning, not a startup
+  failure, in production.
+- Let one Gateway connect to all application nodes. Subscription notices remain
+  best effort and Entity queries remain authoritative.
+- Add a separate Distributed Message Board using two application nodes, one
+  standalone Gateway, and the in-memory simple delivery server.
+
+Reasoning:
+
+- Shared Inbox storage plus an exclusive shard lease serializes one Entity's
+  updates without tying clients or Gateways to the node that ultimately handles
+  the signal.
+- Shared subscription definitions allow the node that commits an event or
+  Entity change to notify its local Stand. A multi-backend Gateway can then
+  receive notices without promising completeness.
+- Physical deletion and full snapshots keep storage bounded and permit every
+  healthy node to converge without millions of cancellation tombstones.
+
+Consequences:
+
+- Wave 6 changes delivery, persistence, subscription, and Gateway lifecycle
+  contracts and therefore executes as high-risk tasks T-0105 through T-0112.
+- Wave 7 owns stronger horizontal semantics and redeployment/update behavior.
+- Redis, Hazelcast, durable delivery-server modes, JVM builds, and npm
+  publication remain excluded.

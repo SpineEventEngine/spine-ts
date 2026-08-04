@@ -7,11 +7,9 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Wave 5 packaging and deployment is complete under `T-0089`. Its approved scope
-and optimized execution sequence are recorded in
-`build-protocol/planning/WAVE_5_PACKAGING_DEPLOYMENT_PLAN.md`. The next feature
-frontier is Wave 6, which requires a separate human Q&A before planning or
-implementation begins.
+Wave 5 packaging and deployment is complete under `T-0089`. Wave 6 Q&A and
+T-0104 planning are complete; autonomous runtime implementation follows
+`build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 
 ## Purpose
 
@@ -118,14 +116,17 @@ durably closed.
   registry, containers, deterministic Compose, and minimal Kubernetes
   references. The approved plan is
   `build-protocol/planning/WAVE_5_PACKAGING_DEPLOYMENT_PLAN.md`.
-- **Wave 6:** horizontal best-effort subscription propagation so notifications
-  produced by any application node are reachable through subscriptions
-  attached to any node. The earlier cluster-complete-while-connected delivery
-  guarantee is superseded; queries remain authoritative.
+- **Wave 6:** JVM-familiar sharded Inbox delivery for Aggregates and Process
+  Managers, delivery-server shard fan-out and single-owner drain, EventBus-driven
+  Stand, a configurable durable Stand subscription registry, one Gateway
+  connected to all application nodes, and a Distributed Message Board.
+- **Wave 7:** horizontal best-effort subscription hardening. It retains no
+  cluster-complete guarantee; queries remain authoritative. Its Q&A must also
+  decide application redeployment and update behavior.
 
-Wave 5 Q&A is complete. Wave 6 still requires a separate human Q&A. Do not
-publish packages to npm until all waves are complete and publication is
-revisited with the human.
+Wave 6 Q&A is complete and autonomous execution is approved. Wave 7 still
+requires a separate human Q&A. Do not publish packages to npm until all waves
+are complete and publication is revisited with the human.
 
 ## Authored API And Example Quality Correction
 
