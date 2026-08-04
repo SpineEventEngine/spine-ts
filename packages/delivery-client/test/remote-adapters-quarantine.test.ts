@@ -25,7 +25,7 @@ import {
   RemoteInbox,
   RemoteWorkRegistry,
 } from "../src/index.js";
-import { domainMessage, message, quarantine, transport } from "./shared-fixtures.js";
+import { domainMessage, echoPickup, message, quarantine, transport } from "./shared-fixtures.js";
 
 describe("RemoteInbox and remote work adapters", () => {
   it("adapts an exact remote inbox snapshot and reconciles an unknown removal without replay", async () => {
@@ -60,19 +60,7 @@ describe("RemoteInbox and remote work adapters", () => {
     await expect(inbox.read(ShardIndex.single())).rejects.toBeInstanceOf(DeliveryPagingError);
 
     const registry = new RemoteWorkRegistry(client);
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n },
-          }),
-        },
-      }),
-    );
+    echoPickup(fake);
     const session = await registry.pickUp(ShardIndex.single(), "node");
     fake.fail(new Error("response lost"));
     if (session === undefined) throw new Error("Shard session was not acquired.");
@@ -87,19 +75,7 @@ describe("RemoteInbox and remote work adapters", () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n },
-          }),
-        },
-      }),
-    );
+    echoPickup(fake);
     const session = await registry.pickUp(ShardIndex.single(), "node");
     if (session === undefined) throw new Error("Remote session was not acquired.");
     let rejectRelease: ((error: Error) => void) | undefined;
@@ -107,18 +83,7 @@ describe("RemoteInbox and remote work adapters", () => {
       rejectRelease = reject;
     });
     fake.unary.mockReturnValueOnce(pendingRelease);
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 2n },
-          }),
-        },
-      }),
-    );
+    fake.replyPickup();
 
     const release = registry.release(session);
     registry.reconcile(
@@ -134,18 +99,7 @@ describe("RemoteInbox and remote work adapters", () => {
       Object.freeze({ shard: ShardIndex.single(), status: "NOT_PICKED" as const, messages: 0 }),
     );
 
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 2n },
-          }),
-        },
-      }),
-    );
+    fake.replyPickup();
     await expect(registry.pickUp(ShardIndex.single(), "node")).resolves.toMatchObject({
       kind: "EXCLUSIVE",
     });
@@ -155,19 +109,7 @@ describe("RemoteInbox and remote work adapters", () => {
     const fake = transport();
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n },
-          }),
-        },
-      }),
-    );
+    echoPickup(fake);
     const session = await registry.pickUp(ShardIndex.single(), "node");
     if (session === undefined) throw new Error("Remote session was not acquired.");
     let resolveRelease: (() => void) | undefined;
@@ -176,18 +118,7 @@ describe("RemoteInbox and remote work adapters", () => {
         resolveRelease = resolve;
       }),
     );
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 2n },
-          }),
-        },
-      }),
-    );
+    fake.replyPickup();
 
     const release = registry.release(session);
     registry.reconcile(
@@ -198,18 +129,7 @@ describe("RemoteInbox and remote work adapters", () => {
     resolveRelease?.();
     await expect(release).resolves.toBe(true);
 
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 2n },
-          }),
-        },
-      }),
-    );
+    fake.replyPickup();
     await expect(registry.pickUp(ShardIndex.single(), "node")).resolves.toMatchObject({
       kind: "EXCLUSIVE",
     });
@@ -452,20 +372,8 @@ describe("RemoteInbox and remote work adapters", () => {
         .withWorkRegistry(registry)
         .withPageSize(1)
         .build();
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
     const pickup = () => {
-      fake.reply(
-        create(LiquorPickUpOutcomeSchema, {
-          value: {
-            case: "pickedUp",
-            value: create(ShardPickedUpSchema, {
-              shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-              worker,
-              whenPicked: { seconds: 1n },
-            }),
-          },
-        }),
-      );
+      fake.replyPickup();
     };
 
     fake.reply(create(PageOfMessagesSchema, { message: [message("command", "builder")] }));

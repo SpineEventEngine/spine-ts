@@ -21,7 +21,7 @@ import {
   ShardObservationOverflowError,
   RemoteWorkRegistry,
 } from "../src/index.js";
-import { transport } from "./shared-fixtures.js";
+import { echoPickup, transport } from "./shared-fixtures.js";
 
 describe("DeliveryClient shard observation", () => {
   it("returns a frozen validated Admin shard snapshot through safe reads", async () => {
@@ -324,20 +324,8 @@ describe("DeliveryClient shard observation", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
     await expect(registry.release({ kind: "EXCLUSIVE", shard })).resolves.toBe(false);
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
-      }),
-    );
+    echoPickup(fake);
     const session = await registry.pickUp(shard, "node");
     if (session === undefined) throw new Error("Remote session was not acquired.");
     fake.fail(new Error("release response lost"));
@@ -357,18 +345,7 @@ describe("DeliveryClient shard observation", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker: create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" }),
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
-      }),
-    );
+    echoPickup(fake);
     const session = await registry.pickUp(shard, "node");
     if (session === undefined) throw new Error("Remote session was not acquired.");
     let release: (() => void) | undefined;

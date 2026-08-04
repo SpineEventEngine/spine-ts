@@ -242,6 +242,9 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     conditionalPickUp.register(this, (shard, node, options) =>
       this.#pickUp(shard, node, options, true),
     );
+    remoteWorkRegistryRevalidations.set(this, (session, options) =>
+      this.#revalidate(session, options),
+    );
     Object.freeze(this);
   }
 
@@ -325,6 +328,29 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
       return true;
     } finally {
       this.#releasesInFlight.delete(key);
+    }
+  }
+
+  async #revalidate(
+    session: ExclusiveDeliveryWorkSession,
+    options: DeliveryOperationOptions | undefined,
+  ): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    const remote = this.#sessions.get(session);
+    if (remote === undefined) return undefined;
+    const key = RemoteValues.shardKey(session.shard);
+    if (this.#quarantined.has(key)) return undefined;
+    try {
+      const refreshed = await deliveryClientAccess.revalidate(this.client, remote, options ?? {});
+      if (refreshed === undefined) {
+        this.#sessions.delete(session);
+        this.#removeSession(key, session);
+        return undefined;
+      }
+      this.#sessions.set(session, refreshed);
+      return session;
+    } catch (error) {
+      if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
+      throw error;
     }
   }
 
@@ -487,6 +513,30 @@ const RemoteValues = Object.freeze({
   workerFor(node: string): DeliveryWorkerId {
     if (typeof node !== "string" || node.trim().length === 0)
       throw new TypeError("Delivery worker node is invalid.");
-    return RemoteValues.freeze({ nodeId: node, value: `spine-ts:${node}` });
+    return RemoteValues.freeze({ nodeId: node, value: randomUUID() });
+  },
+});
+
+const remoteWorkRegistryRevalidations = new WeakMap<
+  RemoteWorkRegistry,
+  (
+    session: ExclusiveDeliveryWorkSession,
+    options: DeliveryOperationOptions | undefined,
+  ) => Promise<ExclusiveDeliveryWorkSession | undefined>
+>();
+
+/** Provides package-internal remote ownership revalidation. */
+export const remoteWorkRegistryAccess: Readonly<{
+  revalidate: (
+    registry: RemoteWorkRegistry,
+    session: ExclusiveDeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ) => Promise<ExclusiveDeliveryWorkSession | undefined>;
+}> = Object.freeze({
+  revalidate(registry, session, options): Promise<ExclusiveDeliveryWorkSession | undefined> {
+    const revalidate = remoteWorkRegistryRevalidations.get(registry);
+    if (revalidate === undefined)
+      throw new TypeError("Remote work registry revalidation is unavailable.");
+    return revalidate(session, options);
   },
 });

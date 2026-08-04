@@ -57,13 +57,19 @@ export const ShardHandlers: Readonly<{
           current !== undefined &&
           processingTimeoutMs > 0 &&
           pickedAt - ShardInputs.requireWhenPicked(current) > processingTimeoutMs;
-        if (
-          current === undefined ||
-          stale ||
-          (ShardInputs.revalidating(context.requestHeader) && ShardInputs.sameWorker(current.worker, worker))
-        ) {
+        const refreshed =
+          current !== undefined &&
+          !stale &&
+          ShardInputs.revalidating(context.requestHeader) &&
+          ShardInputs.sameWorker(current.worker, worker);
+        if (current === undefined || stale || refreshed) {
           if (pendingOnly && !state.hasPending(shard)) throw ShardErrors.noPendingWork();
           state.setSession(shard, worker, pickedAt);
+          if (ShardInputs.revalidating(context.requestHeader))
+            context.responseHeader.set(
+              "x-spine-delivery-revalidation",
+              refreshed ? "refreshed" : "picked",
+            );
           if (pendingOnly)
             context.responseHeader.set("x-spine-delivery-outcome", "pending-acknowledged");
           onTransition?.(shard);
@@ -80,6 +86,8 @@ export const ShardHandlers: Readonly<{
         }
         if (pendingOnly)
           context.responseHeader.set("x-spine-delivery-outcome", "pending-acknowledged");
+        if (ShardInputs.revalidating(context.requestHeader))
+          context.responseHeader.set("x-spine-delivery-revalidation", "lost");
         return create(PickUpOutcomeSchema, {
           value: {
             case: "alreadyPickedUp",

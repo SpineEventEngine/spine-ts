@@ -108,6 +108,9 @@ export class DeliveryClient {
     deliveryClientPickups.set(this, (shardIndex, workerId, options) =>
       this.#pickUp(shardIndex, workerId, options, true),
     );
+    deliveryClientRevalidations.set(this, (session, options) =>
+      this.#pickUp(session.shard, session.worker, options, false, true),
+    );
   }
 
   /**
@@ -385,6 +388,7 @@ export class DeliveryClient {
     workerId: DeliveryWorkerId,
     options: DeliveryMutationOptions,
     requirePending: boolean,
+    revalidating = false,
   ): Promise<RemoteShardSession | undefined> {
     const requestedShard = DeliveryShardCodec.encode(shardIndex);
     const requestedWorker = DeliveryShardCodec.encodeWorker(workerId);
@@ -413,7 +417,14 @@ export class DeliveryClient {
                       responseHeader = headers;
                     },
                   }
-                : {}),
+                : revalidating
+                  ? {
+                      headers: new Headers([["x-spine-delivery-revalidate", "true"]]),
+                      onHeader: (headers: Headers) => {
+                        responseHeader = headers;
+                      },
+                    }
+                  : {}),
             }),
           };
         } catch (error) {
@@ -434,10 +445,27 @@ export class DeliveryClient {
     DeliveryRequestCodec.responseBytes(PickUpOutcomeSchema, response.value);
     if (response.value.value.case === "alreadyPickedUp") {
       DeliveryShardCodec.validatePicked(response.value.value.value, shardIndex);
+      if (revalidating && responseHeader?.get("x-spine-delivery-revalidation") !== "lost")
+        throw new DeliveryOutcomeUnknownError("PICK_UP_SHARD", [
+          DeliveryShardCodec.snapshot(shardIndex),
+        ]);
       return undefined;
     }
     if (response.value.value.case !== "pickedUp") throw DeliveryRequestCodec.protocol();
-    return DeliveryShardCodec.decodePicked(response.value.value.value, shardIndex, workerId);
+    const picked = DeliveryShardCodec.decodePicked(
+      response.value.value.value,
+      shardIndex,
+      workerId,
+    );
+    if (!revalidating) return picked;
+    const outcome = responseHeader?.get("x-spine-delivery-revalidation");
+    if (outcome === "refreshed") return picked;
+    if (outcome !== "picked")
+      throw new DeliveryOutcomeUnknownError("PICK_UP_SHARD", [
+        DeliveryShardCodec.snapshot(shardIndex),
+      ]);
+    await this.release(picked, options);
+    return undefined;
   }
 
   /**
@@ -610,6 +638,14 @@ const deliveryClientPickups = new WeakMap<
   ) => Promise<RemoteShardSession | undefined>
 >();
 
+const deliveryClientRevalidations = new WeakMap<
+  DeliveryClient,
+  (
+    session: RemoteShardSession,
+    options: DeliveryMutationOptions,
+  ) => Promise<RemoteShardSession | undefined>
+>();
+
 /**
  * Provides package-internal conditional pickup without extending the public client API.
  */
@@ -618,6 +654,11 @@ export const deliveryClientAccess: Readonly<{
     client: DeliveryClient,
     shardIndex: ShardIndex,
     workerId: DeliveryWorkerId,
+    options: DeliveryMutationOptions,
+  ) => Promise<RemoteShardSession | undefined>;
+  revalidate: (
+    client: DeliveryClient,
+    session: RemoteShardSession,
     options: DeliveryMutationOptions,
   ) => Promise<RemoteShardSession | undefined>;
 }> = Object.freeze({
@@ -630,5 +671,15 @@ export const deliveryClientAccess: Readonly<{
     const pickUp = deliveryClientPickups.get(client);
     if (pickUp === undefined) throw new TypeError("Delivery client pickup access is unavailable.");
     return pickUp(shardIndex, workerId, options);
+  },
+  revalidate(
+    client: DeliveryClient,
+    session: RemoteShardSession,
+    options: DeliveryMutationOptions,
+  ): Promise<RemoteShardSession | undefined> {
+    const revalidate = deliveryClientRevalidations.get(client);
+    if (revalidate === undefined)
+      throw new TypeError("Delivery client revalidation access is unavailable.");
+    return revalidate(session, options);
   },
 });

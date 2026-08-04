@@ -3,7 +3,11 @@ import { AnySchema } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
 import { type InboxMessage, ShardIndex } from "@spine-event-engine/server";
 import { CommandSchema, EventSchema } from "@spine-event-engine/proto";
-import { OptionalInboxMessageSchema } from "@spine-event-engine/proto/delivery-server";
+import {
+  LiquorPickUpOutcomeSchema,
+  OptionalInboxMessageSchema,
+  ShardPickedUpSchema,
+} from "@spine-event-engine/proto/delivery-server";
 import {
   InboxIdSchema,
   InboxLabel,
@@ -24,18 +28,32 @@ export function transport(): {
   readonly streamAborts: number;
   readonly streamFinished: number;
   reply(value: Message): void;
+  replyPickup(): void;
   replyAndHold(value: Message): { release(): void };
   fail(error: Error): void;
   streamReply(values: readonly Message[]): void;
   streamReplyAndHold(values: readonly Message[]): void;
   closed: boolean;
 } {
-  const replies: (Message | Error | { readonly value: Message; readonly held: Promise<void> })[] =
-    [];
-  const unary = vi.fn(async (..._ignored: unknown[]) => {
-    void _ignored;
+  const replies: (
+    Message | Error | { readonly value: Message; readonly held: Promise<void> } | "PICKUP"
+  )[] = [];
+  const unary = vi.fn(async (...args: unknown[]) => {
     await Promise.resolve();
     const reply = replies.shift() ?? create(OptionalInboxMessageSchema);
+    if (reply === "PICKUP") {
+      const request = args[4] as { shard: unknown; worker: unknown };
+      return create(LiquorPickUpOutcomeSchema, {
+        value: {
+          case: "pickedUp",
+          value: create(ShardPickedUpSchema, {
+            shard: request.shard as never,
+            worker: request.worker as never,
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
+        },
+      });
+    }
     if (typeof reply === "object" && "held" in reply) {
       await reply.held;
       return reply.value;
@@ -120,6 +138,7 @@ export function transport(): {
   };
   const result = Object.assign(fake, {
     reply: (value: Message) => replies.push(value),
+    replyPickup: () => replies.push("PICKUP"),
     replyAndHold: (value: Message) => {
       let release: (() => void) | undefined;
       const held = new Promise<void>((resolve) => {
@@ -138,6 +157,24 @@ export function transport(): {
     streamFinished: { get: () => streamFinished },
   });
   return result as unknown as ReturnType<typeof transport>;
+}
+
+export function echoPickup(fake: ReturnType<typeof transport>): void {
+  fake.unary.mockImplementationOnce(
+    (_method: unknown, _signal: unknown, _timeoutMs: unknown, _header: unknown, input: unknown) => {
+      const request = input as { shard: unknown; worker: unknown };
+      return create(LiquorPickUpOutcomeSchema, {
+        value: {
+          case: "pickedUp",
+          value: create(ShardPickedUpSchema, {
+            shard: request.shard as never,
+            worker: request.worker as never,
+            whenPicked: { seconds: 1n, nanos: 0 },
+          }),
+        },
+      });
+    },
+  );
 }
 
 export function message(kind: "command" | "event", id = "message-1", payloadBytes = 0) {

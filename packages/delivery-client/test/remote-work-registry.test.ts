@@ -28,7 +28,7 @@ import {
 import { deliveryClientAccess } from "../src/client/client.js";
 import { remoteWorkRegistryAccess } from "../src/remote/adapters.js";
 import { conditionalPickUp } from "@spine-event-engine/server/internal/conditional-pickup";
-import { transport } from "./shared-fixtures.js";
+import { echoPickup, transport } from "./shared-fixtures.js";
 
 describe("RemoteWorkRegistry", () => {
   it("uses a distinct opaque worker value for each remote pickup while retaining the node", async () => {
@@ -187,7 +187,6 @@ describe("RemoteWorkRegistry", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
 
     fake.fail(
       new ConnectError(
@@ -201,18 +200,7 @@ describe("RemoteWorkRegistry", () => {
     await expect(pickUpPending(shard, "node")).resolves.toBeUndefined();
     expect(pickupMode(fake)).toBe("pending");
 
-    fake.reply(
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
-      }),
-    );
+    echoPickup(fake);
     await expect(registry.pickUp(shard, "node")).resolves.toMatchObject({ kind: "EXCLUSIVE" });
   });
 
@@ -221,21 +209,9 @@ describe("RemoteWorkRegistry", () => {
     const client = DeliveryClient.usingTransport(fake.transport);
     const registry = new RemoteWorkRegistry(client);
     const shard = ShardIndex.single();
-    const worker = create(WorkerIdSchema, { nodeId: { value: "node" }, value: "spine-ts:node" });
-    const pickedUp = () =>
-      create(LiquorPickUpOutcomeSchema, {
-        value: {
-          case: "pickedUp",
-          value: create(ShardPickedUpSchema, {
-            shard: create(ShardIndexSchema, { index: 0, ofTotal: 1 }),
-            worker,
-            whenPicked: { seconds: 1n, nanos: 0 },
-          }),
-        },
-      });
     const notPicked = () => Object.freeze({ shard, status: "NOT_PICKED" as const, messages: 0 });
 
-    fake.reply(pickedUp());
+    echoPickup(fake);
     const firstSession = await registry.pickUp(shard, "node");
     if (firstSession === undefined) throw new Error("Remote shard was not acquired.");
 
@@ -250,7 +226,7 @@ describe("RemoteWorkRegistry", () => {
 
     heldRelease.release();
     await expect(firstRelease).resolves.toBe(true);
-    fake.reply(pickedUp());
+    echoPickup(fake);
     const secondSession = await registry.pickUp(shard, "node");
     if (secondSession === undefined) throw new Error("Remote shard was not reacquired.");
     expect(fake.unary).toHaveBeenCalledTimes(3);
@@ -263,7 +239,7 @@ describe("RemoteWorkRegistry", () => {
     expect(fake.unary).toHaveBeenCalledTimes(4);
 
     registry.reconcile(notPicked());
-    fake.reply(pickedUp());
+    echoPickup(fake);
     await expect(registry.pickUp(shard, "node")).resolves.toMatchObject({
       kind: "EXCLUSIVE",
       shard,
@@ -495,7 +471,10 @@ function workerTransport(
   return {
     unary: async (method, _signal, _timeoutMs, header, input) => {
       if (method.name === "PickShard") {
-        const request = input as { shard: unknown; worker: { nodeId?: { value: string }; value: string } };
+        const request = input as {
+          shard: unknown;
+          worker: { nodeId?: { value: string }; value: string };
+        };
         const worker = {
           nodeId: request.worker.nodeId?.value ?? "",
           value: request.worker.value,
