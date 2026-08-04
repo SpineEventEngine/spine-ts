@@ -35,6 +35,7 @@ export class LocalEntityInbox implements EntityInbox {
    * @param contextName Names the bounded context that owns this inbox.
    * @param readiness Coordinates delivery readiness after persistence.
    * @param keepTenant Records a tenant before its message is persisted.
+   * @param strategy Derives shard ownership for Entity Inbox targets.
    */
   constructor(
     contextName: string,

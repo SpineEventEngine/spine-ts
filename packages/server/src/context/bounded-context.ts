@@ -582,6 +582,7 @@ export class BoundedContext {
    * @param stand Stores read-side state for this context.
    * @param storageFactory Creates context storage.
    * @param repositories Lists repositories to register.
+   * @param deliveryStrategy Selects immutable Entity Inbox shards.
    * @param token Proves framework-controlled construction.
    */
   protected constructor(

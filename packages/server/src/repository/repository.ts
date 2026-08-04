@@ -709,13 +709,24 @@ type EntityInboxInput = Omit<InboxMessageInput, "whenReceived" | "version" | "sh
  * @internal
  */
 export interface EntityInboxTarget {
-  /** Target state type URL routed by this replay target. */
+
+  /**
+   * Target state type URL routed by this replay target.
+   */
   readonly targetTypeUrl: string;
 
-  /** Delivery labels configured for this target. */
+  /**
+   * Delivery labels configured for this target.
+   */
   readonly labels: readonly EntityInboxLabel[];
 
-  /** Replays one durable Entity Inbox message. */
+  /**
+   * Returns after replaying a stored Entity Inbox message.
+   *
+   * @param message Supplies the durable Entity Inbox message.
+   * @param deliveryTenantId Identifies the active delivery tenant.
+   * @returns Resolves after replay, optionally with an async follow-up callback.
+   */
   replay(
     message: EntityInboxMessage,
     deliveryTenantId?: string,
