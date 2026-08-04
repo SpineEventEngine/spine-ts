@@ -6,13 +6,14 @@ import { describe, expect, it } from "vitest";
 import { type_url_prefix } from "../src/index.js";
 import * as curatedSchemas from "../src/index.js";
 import { InboxLabel } from "../generated/spine/server/delivery/inbox_pb.js";
-import { required, validate } from "../generated/spine/options_pb.js";
+import { internal_all, required, validate } from "../generated/spine/options_pb.js";
 import {
   EntityStateChangedSchema,
   file_spine_system_server_entity_log_events,
 } from "../generated/spine/system/server/entity_log_events_pb.js";
 import { EntityTypeNameSchema } from "../generated/spine/system/server/entity_type_pb.js";
 import {
+  file_spine_system_server_stand_subscription,
   StandSubscriptionRecordSchema,
   SubscriptionPhase,
 } from "../generated/spine/system/server/stand_subscription_pb.js";
@@ -115,6 +116,10 @@ describe("distributed delivery system contracts", () => {
     expect(getOption(file_spine_system_server_entity_log_events, type_url_prefix)).toBe(
       "type.spine.io",
     );
+    expect(getOption(file_spine_system_server_stand_subscription, type_url_prefix)).toBe(
+      "type.spine.io",
+    );
+    expect(getOption(file_spine_system_server_stand_subscription, internal_all)).toBe(true);
     expect(EntityStateChangedSchema.fields.map((field) => [field.name, field.number])).toEqual([
       ["entity", 1],
       ["old_state", 6],

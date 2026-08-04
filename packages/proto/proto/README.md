@@ -1,23 +1,35 @@
 # Spine Protobuf sources
 
-This directory contains exact copies of the Spine `.proto` files used by Spine
-TS. Keeping the originals intact lets TypeScript and JVM applications exchange
-the same commands, events, queries, subscriptions, and context messages.
+This directory contains the `.proto` files used by Spine TS. Most are exact
+copies of Spine JVM contracts, so TypeScript and JVM applications can exchange
+the same commands, events, queries, subscriptions, and context messages. A
+small number are Spine TS-owned internal contracts.
 
-> **📌 These files are imported source.** Do not edit them as if they were
-> application models. Update them only through the verified source-copy process.
+## 📌 Two kinds of source
 
-## 💡 Why keep a verified copy?
+[`spine-sources.json`](spine-sources.json) records both kinds of source:
+
+- `sources` are frozen copies from upstream Spine repositories. Each entry has
+  the repository, commit, source URL, raw URL, and SHA-256 checksum. Do not
+  edit one by hand. Copy it from its pinned raw URL, preserve it byte-for-byte,
+  then update its manifest checksum and descriptor lock through the verification
+  workflow.
+- `ownedSources` are small Spine TS-maintained internal schemas. Edit these as
+  normal framework source, update their checksum in the manifest, and regenerate
+  the descriptor lock. They are still checked so changes stay deliberate and
+  reproducible.
+
+## 💡 Why verify sources?
 
 - ✅ Builds and tests do not need the network.
-- ✅ Every file records its upstream repository, commit, URL, and SHA-256.
+- ✅ Frozen copies retain their upstream repository, commit, URLs, and SHA-256.
+- ✅ Local internal schemas have an explicit checksum and descriptor history.
 - ✅ Descriptor checks catch changes to fields, options, type URLs, and imports.
 - ✅ Generated TypeScript always comes from a known contract set.
 
-The complete inventory is [`spine-sources.json`](spine-sources.json). It pins
-41 frozen source files and two Spine TS-owned internal schemas. Buf adds
-standard imported descriptors while compiling them, producing the 52-file
-descriptor set checked by this repository.
+The current inventory has 41 frozen source files and two Spine TS-owned
+internal schemas. Buf adds standard imported descriptors while compiling them,
+producing the 52-file descriptor set checked by this repository.
 
 ## 🚀 Verify and generate
 
@@ -30,9 +42,9 @@ pnpm proto:generate
 pnpm proto:check-generated
 ```
 
-`proto:verify` checks that the manifest and copied files match exactly and that
-every checksum is correct. `proto:lint` checks the copied contracts with the
-narrow compatibility exceptions required by the original Spine files.
+`proto:verify` checks that every frozen copy and every owned schema matches its
+manifest checksum. `proto:lint` checks the contracts with the narrow
+compatibility exceptions required by frozen original Spine files.
 `proto:generate` rebuilds `packages/proto/generated`; the generated directory
 must not be a symlink. `proto:check-generated` rejects missing, stale, orphaned,
 tracked, or symlinked generated output.
@@ -47,7 +59,7 @@ checksum, so compatibility-relevant changes fail closed.
 
 ## ⚠️ Original naming is preserved
 
-Some copied Spine files use legacy enum, field, package, or version names. They
+Some frozen Spine files use legacy enum, field, package, or version names. They
 remain unchanged because they are wire contracts shared with Spine JVM. New
 application Proto packages should follow the current naming guidance in the
 [end-user guide](../../../docs/USER_GUIDE.md).
