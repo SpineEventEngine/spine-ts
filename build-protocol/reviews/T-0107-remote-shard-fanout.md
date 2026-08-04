@@ -1,6 +1,6 @@
 # T-0107 Review Record
 
-Status: Review In Progress
+Status: Corrections Required
 
 ## Review Endpoint
 
@@ -33,4 +33,43 @@ explicit dispatch fields are the actual-metadata evidence.
 
 ## Results
 
-Pending one complete specialist wave.
+The complete first specialist wave returned the following consolidated
+findings:
+
+1. P1 style/reliability: supervisor watch restart proceeds after a failed
+   recovery snapshot because recovery swallows the error. Reopening must be
+   gated by successful snapshot recovery and covered by regression evidence.
+2. P1 reliability: client-internal observation reconnect can resume live
+   updates without exposing failure to the supervisor, bypassing its snapshot
+   barrier.
+3. P1 reliability: an expired/released remote shard owner is not fenced from
+   committing an already running Entity callback after another node acquires
+   the shard. The release service also needs to match the current worker/session
+   rather than releasing an unrelated current owner.
+4. P1 style/reliability: the real-gRPC scenario builds raw clients and
+   supervisors instead of exercising `RemoteDelivery` through two application
+   environment assembly paths, and it lacks required fault/recovery coverage.
+5. P2 style: real-gRPC teardown does not close supervisors on every failure
+   path.
+6. P2 process: the task brief lacks its mandatory Human-Imposed Requirements
+   Ledger.
+7. P2 documentation: README/reference omit the concrete multi-node workflow,
+   one-owner-per-shard semantics, and lack of cross-shard ordering.
+8. P2 API: validate an optional dynamically supplied delivery `source` before
+   passing it to the typed supervisor boundary.
+9. P2 API/documentation: server reference omits the additive optional
+   `ServerEnvironmentDelivery.source` contract and its fallback/lifecycle
+   behavior.
+
+The first documentation dispatch supplied an incompatible Terra override and
+was rejected before acceptance. The replacement used the immutable
+`documentation_reviewer` Luna/medium profile; runtime self-introspection was
+unavailable and no visible mismatch occurred. The other reviewers confirmed
+their explicit Terra/high assignments with the same self-introspection
+limitation.
+
+The remote ownership-fence finding is a demonstrated high-risk architectural
+ambiguity. Before correction dispatch, one existing `requirements_splitter`
+pass will determine the smallest compatible fence using explicit
+`gpt-5.6-sol` / `high`. No implementation writer is active during this
+read-only reassessment.
