@@ -4,6 +4,7 @@ import { RemoteDelivery } from "@spine-event-engine/delivery-client";
 import { CommandSchema } from "@spine-event-engine/proto";
 import { EnvironmentType, ServerEnvironment, ShardIndex } from "@spine-event-engine/server";
 import { serverEnvironmentAccess } from "../../server/dist/server/server-environment.js";
+import { commitFenced } from "../../server/dist/repository/commit-fence.js";
 import process from "node:process";
 
 const endpoint = process.env.DELIVERY_SERVER_URL;
@@ -34,7 +35,7 @@ const ready = {
   targetTypeUrl: "type.spine.io/test.Target",
   shard: ShardIndex.single(),
 };
-const attachment = await serverEnvironmentAccess.attach(environment, {
+const attachOptions = {
   ownership: "caller",
   descriptors: [
     {
@@ -46,14 +47,25 @@ const attachment = await serverEnvironmentAccess.attach(environment, {
         if (message.signalId === "first" && holdFirst) {
           process.send({ type: "dispatched", node, signalId: "first-started" });
           await releaseFirst.promise;
+          process.send({ type: "dispatched", node, signalId: "resumed-first" });
         }
-        process.send({ type: "dispatched", node, signalId: message.signalId });
+        try {
+          await commitFenced({}, () => {
+            process.send({ type: "dispatched", node, signalId: `committed-${message.signalId}` });
+            return { status: "committed" };
+          });
+          process.send({ type: "dispatched", node, signalId: message.signalId });
+        } catch {
+          process.send({ type: "dispatched", node, signalId: "fenced" });
+          throw new Error("Delivery commit fence rejected.");
+        }
       },
       onReady: () => () => undefined,
       transition: (_scopes, onReady) => Promise.resolve(onReady(ready)).then(() => undefined),
     },
   ],
-});
+};
+const attachment = await serverEnvironmentAccess.attach(environment, attachOptions);
 
 let holdFirst = false;
 let releaseFirst = Promise.withResolvers();
@@ -96,7 +108,11 @@ async function close() {
   await environment.close();
 }
 
-process.once("SIGTERM", () => void close().finally(() => process.exit(0)));
+process.once("SIGTERM", () => {
+  holdFirst = false;
+  releaseFirst.resolve();
+  void close().finally(() => process.exit(0));
+});
 process.send({ type: "ready" });
 
 function isWrite(frame) {

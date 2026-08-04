@@ -190,15 +190,21 @@ class RemoteInboxWork implements DeliveryInboxWork {
     if (!this.#active) throw new DeliveryProtocolError();
     return DeliveryMessageCodec.snapshot(this.snapshot);
   }
-  synchronize(session: DeliveryWorkSession, _options?: DeliveryOperationOptions): Promise<void> {
-    void _options;
+  async synchronize(
+    session: DeliveryWorkSession,
+    options?: DeliveryOperationOptions,
+  ): Promise<void> {
     if (
       !this.#active ||
       session.kind !== "EXCLUSIVE" ||
       !RemoteValues.sameShard(session.shard, this.snapshot.shard)
     )
-      return Promise.reject(new DeliveryProtocolError());
-    return Promise.resolve();
+      throw new DeliveryProtocolError();
+    const remote = RemoteSessionValues.get(this.client, session);
+    if (remote === undefined) throw new DeliveryProtocolError();
+    const refreshed = await deliveryClientAccess.revalidate(this.client, remote, options ?? {});
+    if (refreshed === undefined) throw new DeliveryProtocolError();
+    RemoteSessionValues.set(this.client, session, refreshed);
   }
   async complete(options?: DeliveryOperationOptions): Promise<boolean> {
     if (!this.#active) return false;
@@ -296,6 +302,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
       shard: DeliveryShardCodec.snapshot(shardIndex),
     });
     this.#sessions.set(session, remote);
+    RemoteSessionValues.set(this.client, session, remote);
     const sessions = this.#sessionsByShard.get(key) ?? new Set<ExclusiveDeliveryWorkSession>();
     sessions.add(session);
     this.#sessionsByShard.set(key, sessions);
@@ -319,6 +326,7 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     const key = RemoteValues.shardKey(session.shard);
     if (this.#quarantined.has(key)) return false;
     this.#sessions.delete(session);
+    RemoteSessionValues.delete(this.client, session);
     this.#removeSession(key, session);
     this.#releasesInFlight.add(key);
     this.#quarantined.add(key);
@@ -343,10 +351,12 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
       const refreshed = await deliveryClientAccess.revalidate(this.client, remote, options ?? {});
       if (refreshed === undefined) {
         this.#sessions.delete(session);
+        RemoteSessionValues.delete(this.client, session);
         this.#removeSession(key, session);
         return undefined;
       }
       this.#sessions.set(session, refreshed);
+      RemoteSessionValues.set(this.client, session, refreshed);
       return session;
     } catch (error) {
       if (error instanceof DeliveryOutcomeUnknownError) this.#quarantined.add(key);
@@ -377,7 +387,10 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
     const key = RemoteValues.shardKey(observation.shard);
     const sessions = this.#sessionsByShard.get(key);
     if (sessions !== undefined) {
-      for (const session of sessions) this.#sessions.delete(session);
+      for (const session of sessions) {
+        this.#sessions.delete(session);
+        RemoteSessionValues.delete(this.client, session);
+      }
       this.#sessionsByShard.delete(key);
     }
     if (!this.#releasesInFlight.has(key)) this.#quarantined.delete(key);
@@ -394,6 +407,33 @@ export class RemoteWorkRegistry implements DeliveryWorkRegistry {
 /**
  * Groups immutable remote-adapter value operations.
  */
+const remoteSessions = new WeakMap<
+  DeliveryClient,
+  WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>
+>();
+
+const RemoteSessionValues = Object.freeze({
+  get(
+    client: DeliveryClient,
+    session: ExclusiveDeliveryWorkSession,
+  ): RemoteShardSession | undefined {
+    return remoteSessions.get(client)?.get(session);
+  },
+  set(
+    client: DeliveryClient,
+    session: ExclusiveDeliveryWorkSession,
+    remote: RemoteShardSession,
+  ): void {
+    const sessions =
+      remoteSessions.get(client) ?? new WeakMap<ExclusiveDeliveryWorkSession, RemoteShardSession>();
+    sessions.set(session, remote);
+    remoteSessions.set(client, sessions);
+  },
+  delete(client: DeliveryClient, session: ExclusiveDeliveryWorkSession): void {
+    remoteSessions.get(client)?.delete(session);
+  },
+});
+
 const RemoteValues = Object.freeze({
   receiveMessage(input: InboxMessageInput): InboxMessage {
     const message = DeliveryMessageCodec.snapshot({

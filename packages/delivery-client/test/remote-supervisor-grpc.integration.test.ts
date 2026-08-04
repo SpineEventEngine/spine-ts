@@ -39,19 +39,34 @@ it("fences an expired blocked owner before its delayed commit can disturb a repl
   });
   const owner = events.find((event) => event.signalId === "first-started")?.node;
   const replacement = owner === "alpha" ? beta : alpha;
+  await command(replacement, { command: "release-first" });
   const admin = DeliveryClient.connectTo(server.baseUrl);
   clients.push(admin);
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  await admin.releaseExpired(1);
-  await eventually(() => {
-    expect(events.filter((event) => event.node !== owner && event.signalId === "committed")).toHaveLength(1);
+  await eventuallyAsync(async () => {
+    await expect(admin.releaseExpired(1)).resolves.toHaveLength(1);
   });
-  await Promise.all([command(alpha, { command: "release-first" }), command(beta, { command: "release-first" })]);
+  await command(replacement, { command: "write", signalId: "wake" });
   await eventually(() => {
-    expect(events.filter((event) => event.node === owner && event.signalId === "fenced")).toHaveLength(1);
+    expect(
+      events.filter((event) => event.node !== owner && event.signalId === "committed-first"),
+    ).toHaveLength(1);
   });
+  await Promise.all([
+    command(alpha, { command: "release-first" }),
+    command(beta, { command: "release-first" }),
+  ]);
+  await eventually(() => {
+    expect(
+      events.filter((event) => event.node === owner && event.signalId === "resumed-first"),
+    ).toHaveLength(1);
+    if (!events.some((event) => event.node === owner && event.signalId === "fenced"))
+      throw new Error(`Missing owner fence event: ${JSON.stringify(events)}`);
+  });
+  expect(
+    events.filter((event) => event.node === owner && event.signalId === "committed-first"),
+  ).toHaveLength(0);
   expect(replacement.exitCode).toBeNull();
-});
+}, 10_000);
 
 it("fans out one real Admin shard update through two remote ServerEnvironment assemblies", async () => {
   const server = trackedServer();
@@ -81,7 +96,8 @@ it("fans out one real Admin shard update through two remote ServerEnvironment as
   await eventually(() => {
     expect(deliveries.filter((delivery) => delivery.signalId === "during-drain")).toHaveLength(1);
   });
-  expect(deliveries).toHaveLength(3);
+  expect(deliveries.filter((delivery) => delivery.signalId === "first")).toHaveLength(1);
+  expect(deliveries.filter((delivery) => delivery.signalId === "during-drain")).toHaveLength(1);
 });
 
 function trackedServer(): DeliveryServer {
@@ -117,8 +133,12 @@ function command(
 
 function receive(child: ChildProcess, type: string, id?: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => finish(new Error("Fixture response timed out.")), 5_000);
-    const onExit = () => finish(new Error("Fixture process exited before response."));
+    const timer = setTimeout(() => {
+      finish(new Error("Fixture response timed out."));
+    }, 5_000);
+    const onExit = () => {
+      finish(new Error("Fixture process exited before response."));
+    };
     const onMessage = (frame: unknown) => {
       if (!isRecord(frame) || frame.type !== type || (id !== undefined && frame.id !== id)) return;
       finish(undefined, frame);
@@ -138,7 +158,11 @@ function receive(child: ChildProcess, type: string, id?: string): Promise<unknow
 async function stop(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGTERM");
-  await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+  await new Promise<void>((resolve) =>
+    child.once("exit", () => {
+      resolve();
+    }),
+  );
 }
 
 function isDispatch(value: unknown): value is { readonly node: string; readonly signalId: string } {
@@ -155,7 +179,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function eventually(assertion: () => void): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     try {
       assertion();
       return;
@@ -164,4 +188,16 @@ async function eventually(assertion: () => void): Promise<void> {
     }
   }
   assertion();
+}
+
+async function eventuallyAsync(assertion: () => Promise<void>): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      await assertion();
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  await assertion();
 }

@@ -7,13 +7,11 @@ import {
   OptionalInboxMessageSchema,
   PageOfMessagesSchema,
   ShardAlreadyPickedUpSchema,
-  ShardPickedUpSchema,
 } from "@spine-event-engine/proto/delivery-server";
 import {
   InboxLabel,
   InboxMessageSchema,
   InboxMessageStatus,
-  ShardIndexSchema,
   WorkerIdSchema,
 } from "@spine-event-engine/proto/delivery";
 import { describe, expect, it } from "vitest";
@@ -379,7 +377,7 @@ describe("RemoteInbox and remote work adapters", () => {
     fake.reply(create(PageOfMessagesSchema, { message: [message("command", "builder")] }));
     pickup();
     fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "builder") }));
-    fake.reply(create(EmptySchema));
+    pickup();
     fake.reply(create(EmptySchema));
     let callbacks = 0;
     await builder().run({
@@ -388,7 +386,7 @@ describe("RemoteInbox and remote work adapters", () => {
       },
     });
     expect(callbacks).toBe(1);
-    expect(fake.unary).toHaveBeenCalledTimes(5);
+    expect(fake.unary).toHaveBeenCalledTimes(6);
 
     fake.reply(
       create(PageOfMessagesSchema, {
@@ -407,6 +405,7 @@ describe("RemoteInbox and remote work adapters", () => {
     fake.reply(create(PageOfMessagesSchema, { message: [message("command", "unknown")] }));
     pickup();
     fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "unknown") }));
+    pickup();
     fake.fail(new Error("lost remove"));
     fake.reply(create(EmptySchema));
     await builder().run({
@@ -417,7 +416,7 @@ describe("RemoteInbox and remote work adapters", () => {
     fake.reply(create(PageOfMessagesSchema, { message: [message("command", "unknown")] }));
     pickup();
     fake.reply(create(OptionalInboxMessageSchema, { message: message("command", "unknown") }));
-    fake.reply(create(EmptySchema));
+    pickup();
     fake.reply(create(EmptySchema));
     await builder().run({
       onMessage: () => {

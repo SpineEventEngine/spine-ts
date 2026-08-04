@@ -121,10 +121,12 @@ export function transport(): {
     stream,
     transport: {
       async unary(method, signal, timeoutMs, header, input) {
+        const revalidating =
+          header instanceof Headers && header.get("x-spine-delivery-revalidate") === "true";
         return {
           stream: false,
           method,
-          header: new Headers(),
+          header: new Headers(revalidating ? [["x-spine-delivery-revalidation", "refreshed"]] : []),
           trailer: new Headers(),
           service: method.parent,
           message: await unary(method, signal, timeoutMs, header, input),
