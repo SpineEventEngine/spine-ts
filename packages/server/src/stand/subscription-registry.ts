@@ -631,22 +631,12 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           createdAt: entry.createdAt,
           revision: entry.revision + 1n,
         });
-        const control = await this.#controlState();
-        const staged = controlWithOperation(control, control.count, {
-          kind: "activate",
-          id,
-          digest: recordDigest(record),
-        });
-        if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
-          continue;
         if (await this.#storage.compareAndSet(id, record, StandSubscriptionRecords.write(active))) {
-          await this.#recover();
           return Object.freeze({
             kind: "activated" as const,
             entry: StorageSubscriptionRegistry.#clone(active),
           });
         }
-        await this.#recover();
       }
     });
   }
@@ -823,19 +813,18 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       }
       const current = await this.#storage.read(control.operation.id);
       const matches = current !== undefined && recordDigest(current) === control.operation.digest;
-      if (current !== undefined && !matches && control.operation.kind !== "activate")
+      if (current !== undefined && !matches) {
+        if (control.operation.kind === "delete") {
+          const unchanged = controlWithOperation(control, control.count);
+          if (await this.#control.compareAndSet(controlSlot, record, writeControl(unchanged)))
+            return;
+          continue;
+        }
         throw new Error("Malformed Stand subscription control record.");
+      }
       let next: Control;
       if (control.operation.kind === "create") {
         next = controlWithOperation(control, matches ? control.count : control.count - 1);
-      } else if (control.operation.kind === "activate") {
-        if (current === undefined) throw new Error("Malformed Stand subscription control record.");
-        if (!matches) {
-          const entry = StandSubscriptionRecords.read(current, control.operation.id);
-          if (entry.phase !== "active")
-            throw new Error("Malformed Stand subscription control record.");
-        }
-        next = controlWithOperation(control, control.count);
       } else {
         if (
           matches &&
@@ -870,7 +859,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
 const controlSlot = "control";
 const controlTypeUrl = "type.spine.io/stand.subscription.control.v1";
 interface ControlOperation {
-  readonly kind: "create" | "activate" | "delete";
+  readonly kind: "create" | "delete";
   readonly id: string;
   readonly digest: string;
 }
@@ -923,9 +912,7 @@ function readControl(record: Any, limit: number): Control {
       });
     const operation = control.operation as { kind?: unknown; id?: unknown; digest?: unknown };
     if (
-      (operation.kind !== "create" &&
-        operation.kind !== "activate" &&
-        operation.kind !== "delete") ||
+      (operation.kind !== "create" && operation.kind !== "delete") ||
       typeof operation.id !== "string" ||
       operation.id.trim() === "" ||
       typeof operation.digest !== "string" ||
