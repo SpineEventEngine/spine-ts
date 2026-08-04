@@ -64,13 +64,13 @@ delivery correctness.
 
 ## Human-Imposed Requirements Ledger
 
-| Requirement | Evidence | Status |
-| --- | --- | --- |
-| Keep the implementation small and use existing delivery/environment boundaries. | This task and Wave 6 architecture disposition. | Active |
-| Treat Admin updates as bounded best-effort wake-up hints; durable Inbox work and remote ownership remain authoritative. | Acceptance criteria 3, 5, and 6. | Active |
-| Never add cross-shard ordering or a new serialized/public contract for this correction. | High-risk assumptions and review architecture disposition. | Active |
-| Fence stale ownership before framework-owned Entity transaction commit. | Review finding P1 and architecture disposition. | Active |
-| Push every RED, GREEN, and correction checkpoint with durable work-log evidence. | BUILD_PROTOCOL and implementation assignment. | Active |
+| Requirement                                                                                                             | Evidence                                                   | Status |
+| ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------ |
+| Keep the implementation small and use existing delivery/environment boundaries.                                         | This task and Wave 6 architecture disposition.             | Active |
+| Treat Admin updates as bounded best-effort wake-up hints; durable Inbox work and remote ownership remain authoritative. | Acceptance criteria 3, 5, and 6.                           | Active |
+| Never add cross-shard ordering or a new serialized/public contract for this correction.                                 | High-risk assumptions and review architecture disposition. | Active |
+| Fence stale ownership before framework-owned Entity transaction commit.                                                 | Review finding P1 and architecture disposition.            | Active |
+| Push every RED, GREEN, and correction checkpoint with durable work-log evidence.                                        | BUILD_PROTOCOL and implementation assignment.              | Active |
 
 ## Implementation Assignment
 
