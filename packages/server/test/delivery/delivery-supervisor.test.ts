@@ -37,11 +37,13 @@ describe("DeliverySupervisor", () => {
         releaseExpired: () => Promise.resolve([]),
         shardSnapshot: () => {
           snapshots += 1;
-          return snapshots === 1 ? Promise.reject(new Error("snapshot failed")) : Promise.resolve([]);
+          return snapshots === 1
+            ? Promise.reject(new Error("snapshot failed"))
+            : Promise.resolve([]);
         },
-        observeShardUpdates: () => {
+        observeShardUpdates: (options) => {
           watches += 1;
-          return emptyUpdates();
+          return updatesUntilAborted(options?.signal);
         },
       },
       delivery: new DeliveryBuilder()
@@ -55,7 +57,7 @@ describe("DeliverySupervisor", () => {
     });
     await supervisor.start();
     expect(watches).toBe(0);
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => setTimeout(resolve, 30));
     expect(watches).toBe(1);
     await supervisor.close();
   });

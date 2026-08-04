@@ -326,7 +326,10 @@ export class DeliverySupervisor {
     if (this.#closing || this.#closed || this.#recoveryTimer !== undefined) return;
     this.#recoveryTimer = setTimeout(() => {
       this.#recoveryTimer = undefined;
-      void this.#recover().then(() => this.#scheduleRecovery());
+      void this.#recover().then((recovered) => {
+        if (recovered) this.#startWatch();
+        this.#scheduleRecovery();
+      });
     }, this.#recoveryMs);
     this.#recoveryTimer.unref();
   }
