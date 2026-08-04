@@ -767,7 +767,8 @@ describe("BoundedContext assembly", () => {
         .withGeneratedRegistryRoot(registry.root)
         .add(ReplayTaskProcessManager)
         .buildAsync();
-      const descriptor = internalDeliveryDescriptor(recovered);
+      const recoveryContext = requireRecoveryContext(recovered);
+      const descriptor = internalDeliveryDescriptor(recoveryContext);
       expect(descriptor.endpoints()).toEqual(
         ["HANDLE_COMMAND", "REACT_UPON_EVENT"].flatMap((label) =>
           [0, 1, 2].map((index) => ({
@@ -779,7 +780,7 @@ describe("BoundedContext assembly", () => {
       );
       const attachment = await serverEnvironmentAccess.attach(ServerEnvironment.instance(), {
         ownership: "caller",
-        descriptors: [boundedContextAccess.delivery(recovered)],
+        descriptors: [boundedContextAccess.delivery(recoveryContext)],
       });
       try {
         await waitForCondition(
@@ -787,7 +788,7 @@ describe("BoundedContext assembly", () => {
             (
               await Promise.all(
                 rows.map((row) =>
-                  recovered.stand().read(ProcessManagerStateSchema, row.inboxId.targetId),
+                  recoveryContext.stand().read(ProcessManagerStateSchema, row.inboxId.targetId),
                 ),
               )
             ).every((state) => state !== undefined),
@@ -2209,6 +2210,13 @@ async function persistDescriptorRow(input: {
 
 function removeGeneratedRegistry(fixture: { readonly registryPath: string }): void {
   rmSync(join(fixture.registryPath, "../../.."), { recursive: true, force: true });
+}
+
+function requireRecoveryContext(context: BoundedContext | undefined): BoundedContext {
+  if (context === undefined) {
+    throw new Error("Expected a fresh bounded context before descriptor recovery.");
+  }
+  return context;
 }
 
 async function waitForCondition(
