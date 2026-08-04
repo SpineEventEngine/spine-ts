@@ -718,14 +718,7 @@ export interface EntityInboxTarget {
 }
 
 /**
- * Describes a framework-only process-manager inbox replay target.
- *
- * @internal
- */
-export type ProcessManagerInboxTarget = EntityInboxTarget;
-
-/**
- * Defines context-owned process-manager inbox handoff operations.
+ * Defines context-owned Entity Inbox handoff operations.
  *
  * @internal
  */
@@ -740,7 +733,7 @@ export interface EntityInbox {
   strategy(): import("../delivery/delivery-builder.js").DeliveryStrategy;
 
   /**
-   * Delivers one durable inbox row through registered process-manager targets.
+   * Delivers one durable inbox row through registered Entity Inbox targets.
    *
    * @param message The durable inbox row to replay.
    * @param deliveryTenantId The tenant resolved by the delivery runtime.
@@ -776,14 +769,6 @@ export interface EntityInbox {
     deliveryTenantId?: string,
   ): Promise<readonly InboxMessage[]>;
 }
-
-/**
- * Defines context-owned Aggregate and Process Manager inbox operations.
- *
- * @internal
- */
-/** @internal Compatibility alias for the formerly Process-Manager-only inbox. */
-export type ProcessManagerInbox = EntityInbox;
 
 /**
  *
@@ -903,15 +888,12 @@ export interface RepositoryAccess {
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
 
   /**
-   * Returns the process-manager inbox target configured for a repository.
+   * Returns the Entity Inbox target configured for a repository.
    *
    * @param repository The repository to inspect.
    * @returns The inbox target, if present.
    */
   entityInboxTarget(repository: RepositoryView): EntityInboxTarget | undefined;
-
-  /** @internal Compatibility accessor for existing Process Manager tests. */
-  processManagerInboxTarget(repository: RepositoryView): EntityInboxTarget | undefined;
 
   /**
    * Returns the projection inbox target configured for a repository.
@@ -985,10 +967,6 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
   },
 
   entityInboxTarget(repository: RepositoryView): EntityInboxTarget | undefined {
-    return repositoryPmInboxTargets.get(repository);
-  },
-
-  processManagerInboxTarget(repository: RepositoryView): EntityInboxTarget | undefined {
     return repositoryPmInboxTargets.get(repository);
   },
 
@@ -2908,7 +2886,7 @@ const RepositoryTenants = {
     const tid = tenantId;
     if (tid === undefined) {
       throw new Error(
-        `Multitenant process-manager inbox handoff for "${context.name}" requires tenantId.`,
+        `Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`,
       );
     }
 
@@ -2963,7 +2941,7 @@ const RepositoryTenants = {
 
     if (tenantId === undefined || tenantId.trim() === "") {
       throw new Error(
-        `Multitenant process-manager inbox handoff for "${context.name}" requires tenantId.`,
+        `Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`,
       );
     }
 
@@ -2979,7 +2957,7 @@ const RepositoryTenants = {
 
     if (tenantId === undefined || tenantId.trim() === "") {
       throw new Error(
-        `Multitenant process-manager inbox handoff for "${context.name}" requires tenantId.`,
+        `Multitenant Entity Inbox handoff for "${context.name}" requires tenantId.`,
       );
     }
 
@@ -3828,7 +3806,7 @@ const InboxMessages = {
     const primitive = PrimitiveIds.readFinite(entityId) ?? MessageIds.readValue(entityId);
 
     if (primitive === undefined) {
-      throw new Error("Repository process-manager inbox handoff requires a readable target ID.");
+      throw new Error("Repository Entity Inbox handoff requires a readable target ID.");
     }
 
     return String(primitive);
@@ -3836,7 +3814,7 @@ const InboxMessages = {
 
   readInboxCommand(message: InboxMessage): Command {
     if (message.label !== "HANDLE_COMMAND") {
-      throw new Error(`Process-manager inbox replay does not handle "${message.label}" messages.`);
+      throw new Error(`Entity Inbox replay does not handle "${message.label}" messages.`);
     }
 
     const command =
@@ -3853,8 +3831,8 @@ const InboxMessages = {
     return InboxMessages.readStoredEvent(
       message,
       "REACT_UPON_EVENT",
-      "Process-manager inbox replay",
-      "Process-manager inbox replay requires a readable stored event.",
+      "Entity Inbox replay",
+      "Entity Inbox replay requires a readable stored event.",
     );
   },
 
@@ -3942,7 +3920,7 @@ const InboxReplay = {
       return;
     }
 
-    throw new Error(`Process-manager inbox replay does not handle "${message.label}" messages.`);
+    throw new Error(`Entity Inbox replay does not handle "${message.label}" messages.`);
   },
 
   async replayProcessManagerCommand(
@@ -3956,7 +3934,7 @@ const InboxReplay = {
     const runtime = repositoryRuntimes.get(repository);
 
     if (runtime === undefined) {
-      throw new Error("Process-manager inbox replay requires a bound repository runtime.");
+      throw new Error("Entity Inbox replay requires a bound repository runtime.");
     }
 
     const command = InboxMessages.readInboxCommand(message);
@@ -3979,7 +3957,7 @@ const InboxReplay = {
     const runtime = repositoryRuntimes.get(repository);
 
     if (runtime === undefined) {
-      throw new Error("Process-manager inbox replay requires a bound repository runtime.");
+      throw new Error("Entity Inbox replay requires a bound repository runtime.");
     }
 
     const event = InboxMessages.readPmInboxEvent(message);
@@ -3988,7 +3966,7 @@ const InboxReplay = {
     InboxReplay.validateReplayedEventPayload(
       routing,
       event,
-      "Process-manager inbox replay requires a readable event payload.",
+      "Entity Inbox replay requires a readable event payload.",
     );
 
     const entityId = InboxReplay.replayProcessManagerId(repository, message, event);
@@ -4074,17 +4052,17 @@ const InboxReplay = {
 
     if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
       throw new Error(
-        `Multitenant process-manager inbox replay for "${context.name}" requires tenantId.`,
+        `Multitenant Entity Inbox replay for "${context.name}" requires tenantId.`,
       );
     }
 
     const envelopeTenantId = RepositoryTenants.readCommandTenant(command);
 
     if (envelopeTenantId === undefined || envelopeTenantId.trim() === "") {
-      throw new Error("Process-manager inbox replay requires stored command tenant metadata.");
+      throw new Error("Entity Inbox replay requires stored command tenant metadata.");
     }
     if (envelopeTenantId !== deliveryTenantId) {
-      throw new Error("Process-manager inbox replay stored command tenant does not match.");
+      throw new Error("Entity Inbox replay stored command tenant does not match.");
     }
   },
 
@@ -4124,17 +4102,17 @@ const InboxReplay = {
 
     if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
       throw new Error(
-        `Multitenant process-manager inbox replay for "${context.name}" requires tenantId.`,
+        `Multitenant Entity Inbox replay for "${context.name}" requires tenantId.`,
       );
     }
 
     const envelopeTenantId = RepositoryTenants.readEventTenant(event) ?? context.tenantId;
 
     if (envelopeTenantId === undefined || envelopeTenantId.trim() === "") {
-      throw new Error("Process-manager inbox replay requires stored event tenant metadata.");
+      throw new Error("Entity Inbox replay requires stored event tenant metadata.");
     }
     if (envelopeTenantId !== deliveryTenantId) {
-      throw new Error("Process-manager inbox replay stored event tenant does not match.");
+      throw new Error("Entity Inbox replay stored event tenant does not match.");
     }
   },
 
@@ -4149,7 +4127,7 @@ const InboxReplay = {
 
     if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
       throw new Error(
-        "Process-manager inbox replay stored target type does not match the routed repository.",
+        "Entity Inbox replay stored target type does not match the routed repository.",
       );
     }
 
@@ -4158,7 +4136,7 @@ const InboxReplay = {
 
     if (message.inboxId.targetId !== expectedTargetId) {
       throw new Error(
-        "Process-manager inbox replay stored target ID does not match the routed command.",
+        "Entity Inbox replay stored target ID does not match the routed command.",
       );
     }
   },
@@ -4174,7 +4152,7 @@ const InboxReplay = {
 
     if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
       throw new Error(
-        "Process-manager inbox replay stored target type does not match the routed repository.",
+        "Entity Inbox replay stored target type does not match the routed repository.",
       );
     }
 
@@ -4185,7 +4163,7 @@ const InboxReplay = {
 
     if (entityId === undefined) {
       throw new Error(
-        "Process-manager inbox replay stored target ID does not match the routed event.",
+        "Entity Inbox replay stored target ID does not match the routed event.",
       );
     }
 

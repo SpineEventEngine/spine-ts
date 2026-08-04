@@ -8,13 +8,12 @@ import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { DeliveryReadiness } from "../../src/context/local-inbox-handoff.js";
-import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
 import { LocalEntityInbox } from "../../src/context/entity-inbox.js";
 
-type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
+type ReceiveInput = Parameters<LocalEntityInbox["receive"]>[1];
 const processManagerLabels = ["HANDLE_COMMAND", "REACT_UPON_EVENT"] as const;
 
-describe("LocalProcessManagerInbox", () => {
+describe("LocalEntityInbox", () => {
   it("exposes the shared entity inbox for Aggregate command labels", () => {
     const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.Aggregate";
@@ -37,7 +36,7 @@ describe("LocalProcessManagerInbox", () => {
     const kept = Promise.withResolvers<undefined>();
     const keep = vi.fn(() => kept.promise);
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
-    const inbox = new LocalProcessManagerInbox("Tasks", undefined, keep);
+    const inbox = new LocalEntityInbox("Tasks", undefined, keep);
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
@@ -89,7 +88,7 @@ describe("LocalProcessManagerInbox", () => {
       },
       drainMessage,
     } as unknown as Delivery;
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
@@ -111,7 +110,7 @@ describe("LocalProcessManagerInbox", () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const drainFailure = new Error("first drain failed");
     const replayed: string[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     inbox.register({
       targetTypeUrl,
       labels: ["HANDLE_COMMAND"],
@@ -139,7 +138,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const readiness = new DeliveryReadiness();
-    const inbox = new LocalProcessManagerInbox("Tasks", readiness);
+    const inbox = new LocalEntityInbox("Tasks", readiness);
     const replayStarted = Promise.withResolvers<undefined>();
     const releaseReplay = Promise.withResolvers<undefined>();
     const replayed: string[] = [];
@@ -197,7 +196,7 @@ describe("LocalProcessManagerInbox", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     let startReplay!: () => void;
     let releaseReplay!: () => void;
@@ -262,7 +261,7 @@ describe("LocalProcessManagerInbox", () => {
       .mockRejectedValueOnce(new Error("second write rejected"));
     const delivery = { inbox: { receive } } as unknown as Delivery;
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     inbox.register({
       targetTypeUrl,
       labels: ["REACT_UPON_EVENT"],
@@ -291,7 +290,7 @@ describe("LocalProcessManagerInbox", () => {
     });
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
@@ -336,7 +335,7 @@ describe("LocalProcessManagerInbox", () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const seen: string[] = [];
     let notifications = 0;
-    const inbox = new LocalProcessManagerInbox("Tasks", () => {
+    const inbox = new LocalEntityInbox("Tasks", () => {
       notifications += 1;
       throw new Error("observer failed");
     });
@@ -385,7 +384,7 @@ describe("LocalProcessManagerInbox", () => {
     const observed = new Promise<void>((resolve) => {
       markObserved = resolve;
     });
-    const inbox = new LocalProcessManagerInbox("Tasks", () => {
+    const inbox = new LocalEntityInbox("Tasks", () => {
       markObserved();
       return foreign.promise;
     });
@@ -413,7 +412,7 @@ describe("LocalProcessManagerInbox", () => {
   it("emits no readiness for a rejected write or a duplicate without new persistence", async () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const rejectedDelivery = {
       inbox: { receive: () => Promise.reject(new Error("write rejected")) },
     } as unknown as Delivery;
@@ -458,7 +457,7 @@ describe("LocalProcessManagerInbox", () => {
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const drainFailure = new Error("batch replay failed");
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     inbox.register({
       targetTypeUrl,
       labels: processManagerLabels,
@@ -489,7 +488,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const seen: InboxMessage[] = [];
 
@@ -551,7 +550,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const seen: InboxMessage[] = [];
 
@@ -598,12 +597,12 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 
-  it("delivers an event reactor row to the registered process-manager target", async () => {
+  it("delivers an event reactor row to the registered Entity Inbox target", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const seen: InboxMessage[] = [];
 
@@ -646,7 +645,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
@@ -701,7 +700,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const firstTypeUrl = "type.example.dev/Tasks.FirstProcessManager";
     const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
     const shard = ShardIndex.single();
@@ -783,7 +782,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const firstTypeUrl = "type.example.dev/Tasks.FirstProcessManager";
     const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
     const shard = ShardIndex.single();
@@ -871,7 +870,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const firstTypeUrl = "type.example.dev/Tasks.FirstProcessManager";
     const secondTypeUrl = "type.example.dev/Tasks.SecondProcessManager";
     const shard = ShardIndex.single();
@@ -959,7 +958,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const shard = ShardIndex.single();
     const seen: InboxMessage[] = [];
@@ -1040,7 +1039,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const unrelatedProcessManagerTypeUrl = "type.example.dev/Tasks.OtherProcessManager";
     const shard = ShardIndex.single();
@@ -1130,7 +1129,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
 
     inbox.register({
@@ -1166,7 +1165,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
 
     inbox.register({
@@ -1204,7 +1203,7 @@ describe("LocalProcessManagerInbox", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const inbox = new LocalProcessManagerInbox("Tasks");
+    const inbox = new LocalEntityInbox("Tasks");
     const shard = ShardIndex.single();
     const session = await delivery.shards.pickUp(shard, "other-node");
     if (session === undefined) {
@@ -1236,7 +1235,7 @@ describe("LocalProcessManagerInbox", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
 
     inbox.register({
@@ -1279,7 +1278,7 @@ describe("LocalProcessManagerInbox", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
 
     inbox.register({
@@ -1322,7 +1321,7 @@ describe("LocalProcessManagerInbox", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.CommandOnlyProcessManager";
     const replayFailure = new Error("unconfigured event label should not replay");
     inbox.register({
@@ -1358,7 +1357,7 @@ describe("LocalProcessManagerInbox", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
     const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
     const replayFailure = new Error("non-configured shard should preserve drain failure");
     inbox.register({
@@ -1393,7 +1392,7 @@ describe("LocalProcessManagerInbox", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
     const ready: unknown[] = [];
-    const inbox = new LocalProcessManagerInbox("Tasks", (scope) => ready.push(scope));
+    const inbox = new LocalEntityInbox("Tasks", (scope) => ready.push(scope));
 
     await expect(
       inbox.receive(delivery, {
