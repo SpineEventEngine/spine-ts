@@ -7090,7 +7090,7 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
 }
 
 function requireEntityInboxTarget(repository: RepositoryView): {
-  replay(message: InboxMessage, tenantId?: string): Promise<void>;
+  replay(message: InboxMessage, tenantId?: string): Promise<void | (() => Promise<void>)>;
 } {
   const target = repositoryAccess.entityInboxTarget(repository);
   if (target === undefined) {

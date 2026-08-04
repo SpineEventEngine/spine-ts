@@ -223,7 +223,6 @@ describe("LocalEntityInbox", () => {
         signalId: "signal-ready",
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
       },
       "tenant-a",
     );
@@ -249,7 +248,6 @@ describe("LocalEntityInbox", () => {
       signalId: "event-partial",
       label: "REACT_UPON_EVENT" as const,
       status: "TO_DELIVER" as const,
-      shard: ShardIndex.single(),
     }));
     const firstInput = inputs[0];
     if (firstInput === undefined) {
@@ -399,7 +397,6 @@ describe("LocalEntityInbox", () => {
       signalId: "foreign-observer-failure",
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
-      shard: ShardIndex.single(),
     });
     await observed;
     await Promise.resolve();
@@ -421,7 +418,6 @@ describe("LocalEntityInbox", () => {
       signalId: "signal-dedup",
       label: "HANDLE_COMMAND" as const,
       status: "TO_DELIVER" as const,
-      shard: ShardIndex.single(),
     };
 
     await expect(inbox.receive(rejectedDelivery, input)).rejects.toThrow("write rejected");
@@ -522,8 +518,8 @@ describe("LocalEntityInbox", () => {
 
     const run = await new DeliveryLoop({
       delivery,
-      shard: ShardIndex.single(),
       node: "worker-a",
+      shard: ShardIndex.single(),
       onMessage: (message) => inbox.replay(message),
     }).run();
 
@@ -568,7 +564,6 @@ describe("LocalEntityInbox", () => {
       signalId: "signal-1",
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
-      shard: ShardIndex.single(),
     });
 
     expect(seen).toHaveLength(1);
@@ -620,7 +615,6 @@ describe("LocalEntityInbox", () => {
       signalId: "event-1",
       label: "REACT_UPON_EVENT",
       status: "TO_DELIVER",
-      shard: ShardIndex.single(),
     });
 
     expect(seen).toHaveLength(1);
@@ -662,7 +656,6 @@ describe("LocalEntityInbox", () => {
       signalId: "signal-duplicate",
       label: "HANDLE_COMMAND" as const,
       status: "TO_DELIVER" as const,
-      shard,
     };
 
     inbox.register({
@@ -800,14 +793,12 @@ describe("LocalEntityInbox", () => {
       signalId: "event-mixed-batch-to-single",
       label: "REACT_UPON_EVENT" as const,
       status: "TO_DELIVER" as const,
-      shard,
     };
     const secondInput = {
       inboxId: { targetId: "pm-second", targetTypeUrl: secondTypeUrl },
       signalId: "event-mixed-batch-to-single",
       label: "REACT_UPON_EVENT" as const,
       status: "TO_DELIVER" as const,
-      shard,
     };
     const inputs = [firstInput, secondInput];
 
@@ -1093,7 +1084,6 @@ describe("LocalEntityInbox", () => {
       signalId: "signal-1",
       label: "HANDLE_COMMAND",
       status: "TO_DELIVER",
-      shard,
     });
 
     expect(seen).toHaveLength(1);
@@ -1146,7 +1136,6 @@ describe("LocalEntityInbox", () => {
         signalId: "signal-2",
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
       }),
     ).rejects.toThrow("target failed");
     await expect(
@@ -1184,7 +1173,6 @@ describe("LocalEntityInbox", () => {
         signalId: "signal-3",
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
       }),
     ).rejects.toThrow("Entity Inbox replay failed.");
     await expect(
@@ -1217,7 +1205,6 @@ describe("LocalEntityInbox", () => {
           signalId: "signal-4",
           label: "HANDLE_COMMAND",
           status: "TO_DELIVER",
-          shard,
         }),
       ).rejects.toThrow(
         "Entity Inbox delivery was skipped before the target row was delivered.",
@@ -1336,7 +1323,6 @@ describe("LocalEntityInbox", () => {
         signalId: "event-label-mismatch",
         label: "REACT_UPON_EVENT",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
       }),
     ).rejects.toBe(replayFailure);
     await expect(
@@ -1403,7 +1389,6 @@ describe("LocalEntityInbox", () => {
         signalId: "signal-7",
         label: "HANDLE_COMMAND",
         status: "TO_DELIVER",
-        shard: ShardIndex.single(),
       }),
     ).rejects.toThrow(
       'BoundedContext delivery has no Entity Inbox target for "type.example.dev/Tasks.ProcessManager".',
@@ -1427,7 +1412,6 @@ function processInput(targetTypeUrl: string, targetId: string): ReceiveInput {
     signalId: `signal-${targetId}`,
     label: "HANDLE_COMMAND",
     status: "TO_DELIVER",
-    shard: ShardIndex.single(),
   };
 }
 
@@ -1451,7 +1435,8 @@ function writtenResult(input: ReceiveInput, version: bigint): { readonly outcome
     outcome: "WRITTEN" as const,
     message: {
       ...input,
-      id: { value: `row-${String(version)}`, shard: input.shard },
+      shard: ShardIndex.single(),
+      id: { value: `row-${String(version)}`, shard: ShardIndex.single() },
       whenReceived: new Date("2026-07-12T09:00:00.000Z"),
       version,
     },
