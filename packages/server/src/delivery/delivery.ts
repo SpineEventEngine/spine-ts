@@ -22,6 +22,7 @@ import { conditionalPickUp } from "./conditional-pickup.js";
 import { DeliveryRetryDecisions, type DeliveryRetryDecision } from "./delivery-retry-decision.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
+import { withDeliveryCommitFence } from "../repository/commit-fence.js";
 import type {
   DeliveryInbox,
   DeliveryInboxWork,
@@ -793,7 +794,10 @@ export class Delivery {
     lease.requireActive();
     DeliveryValues.requireEndpointLabel(message.label);
     active.markCallbackAccepted();
-    await onMessage(DeliveryValues.endpointSnapshot(message));
+    await withDeliveryCommitFence(
+      () => this.#synchronizeActiveWork(lease, active, fence),
+      async () => onMessage(DeliveryValues.endpointSnapshot(message)),
+    );
     fence.requireActive();
     active.markCallbackSucceeded();
   }
