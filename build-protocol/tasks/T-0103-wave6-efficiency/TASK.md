@@ -101,5 +101,5 @@ scripts/package-metadata.test.mjs` passed 13 tests. The tests prove that
 
 ## Current Status
 
-Implementation changes are awaiting focused preflight and review. No Wave 6
-implementation has started.
+Implementation and specialist review are complete. Release verification and
+integration remain. No Wave 6 implementation has started.
