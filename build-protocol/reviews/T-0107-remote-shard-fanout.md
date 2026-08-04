@@ -309,3 +309,13 @@ The orchestrator applied this deterministic, review-neutral correction directly.
 Affected ESLint/format checks and the delivery-fencing suite pass 9/9. The
 release gate must be rerun after this correction; specialist concerns are not
 reopened because behavior and public contracts did not change.
+
+## Release Verification
+
+The final `pnpm --config.verify-deps-before-run=false verify:release` run passes
+at `95cf6a72`: 180 test files and 3,545 tests pass; 3 files and 25 tests are
+intentionally skipped. Coverage passes all global thresholds: statements
+94.02% (`19,555/20,797`), branches 90.01% (`11,091/12,321`), functions 94.53%
+(`4,622/4,889`), and lines 94.90% (`18,414/19,403`). All deterministic build,
+TypeScript, ESLint, cleanup, TSDoc, formatting, documentation, Proto, generated
+output, and release-readiness gates pass in the same run.

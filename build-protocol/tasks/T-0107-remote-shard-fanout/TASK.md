@@ -1,6 +1,6 @@
 # T-0107: Remote Shard Fan-Out And Drain
 
-Status: In Progress
+Status: Complete
 
 ## Objective
 
