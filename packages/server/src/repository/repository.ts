@@ -2896,7 +2896,7 @@ Object.freeze(RepositoryStand);
  * Internal repository tenants operations.
  */
 const RepositoryTenants = {
-  processManagerDeliveryContext(
+  entityInboxDeliveryContext(
     context: StorageContext,
     tenantId: string | undefined,
   ): StorageContext {
@@ -2965,7 +2965,7 @@ const RepositoryTenants = {
     return tenantId;
   },
 
-  requireProcessManagerTenant(context: StorageContext, command: Command): string | undefined {
+  requireCommandTenant(context: StorageContext, command: Command): string | undefined {
     if (!context.multitenant) {
       return undefined;
     }
@@ -4221,12 +4221,9 @@ const InboxHandoff = {
     const commandId = RepositorySignals.requireCommandId(command);
     const whenReceived = new Date();
     const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
-    const deliveryTenantId = RepositoryTenants.requireProcessManagerTenant(
-      runtime.context,
-      command,
-    );
+    const deliveryTenantId = RepositoryTenants.requireCommandTenant(runtime.context, command);
     const delivery = new Delivery({
-      context: RepositoryTenants.processManagerDeliveryContext(runtime.context, deliveryTenantId),
+      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
       storageFactory: runtime.storageFactory,
       strategy: runtime.entityInbox.strategy(),
     });
@@ -4292,7 +4289,7 @@ const InboxHandoff = {
     const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
     const delivery = new Delivery({
-      context: RepositoryTenants.processManagerDeliveryContext(runtime.context, deliveryTenantId),
+      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
       storageFactory: runtime.storageFactory,
       strategy: runtime.entityInbox.strategy(),
     });
@@ -4315,7 +4312,7 @@ const InboxHandoff = {
     const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
     const deliveryTenantId = RepositoryTenants.requirePmEventTenant(runtime.context, event);
     const delivery = new Delivery({
-      context: RepositoryTenants.processManagerDeliveryContext(runtime.context, deliveryTenantId),
+      context: RepositoryTenants.entityInboxDeliveryContext(runtime.context, deliveryTenantId),
       storageFactory: runtime.storageFactory,
       strategy: runtime.entityInbox.strategy(),
     });

@@ -167,7 +167,16 @@ run. The package exposes no general raw worker callback API.
 
 `BoundedContextBuilder.withDeliveryStrategy(strategy)` snapshots a validated
 immutable strategy for its Entity Inbox; the default is one shard. For example,
-use `new BoundedContextBuilder(spec).withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))`.
+use the public builder chain:
+
+```ts
+import { BoundedContext, UniformAcrossAllShards } from "@spine-event-engine/server";
+
+const context = BoundedContext.singleTenant("Tasks")
+  .withDeliveryStrategy(UniformAcrossAllShards.forNumber(3))
+  .build();
+```
+
 Aggregate commands and Process Manager commands/events derive their target shard
 internally and persist their envelope before replay. Direct local delivery drains
 in the post request; attached `ServerEnvironment` ports acknowledge persisted

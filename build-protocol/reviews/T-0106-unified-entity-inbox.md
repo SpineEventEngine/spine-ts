@@ -51,13 +51,12 @@ actual-metadata evidence. No visible mismatch or fallback occurred.
 
 ## Current Dispositions
 
-- Style/maintainability: re-review accepted findings 1 and 3; one P2 naming
-  remainder persists because generic command handoff still calls
-  `processManagerDeliveryContext()` and `requireProcessManagerTenant()`.
-- Documentation: wording/default/ports claims are accepted; one P2 example
-  remainder constructs protected `BoundedContextBuilder` directly.
-- TypeScript/API docs: replay type is accepted; the same unusable builder
-  example remains.
+- Style/maintainability: corrections ready for final re-review; generic command
+  handoff now uses Entity Inbox terminology while PM event helpers remain PM-named.
+- Documentation: corrections ready for final re-review; README/REFERENCE use a
+  complete public `BoundedContext.singleTenant(...).withDeliveryStrategy(...)` example.
+- TypeScript/API docs: corrections ready for final re-review; the builder example
+  now matches the public API.
 - Performance/reliability: clean after correction re-review.
 - Security: N/A unless implementation changes a trust boundary.
 
