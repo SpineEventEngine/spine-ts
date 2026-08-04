@@ -1,6 +1,7 @@
 import {
   type ServerEnvironmentCloseable,
   type ServerEnvironmentDelivery,
+  type DeliverySource,
 } from "@spine-event-engine/server";
 
 import { DeliveryClient } from "../client/client.js";
@@ -97,6 +98,16 @@ export class RemoteDelivery implements ServerEnvironmentDelivery {
   get workRegistry(): RemoteWorkRegistry {
     if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
     return this.#bundle.workRegistry;
+  }
+
+  /**
+   * Returns the ready Admin source used by environment delivery supervisors.
+   *
+   * @returns The client that supplies bounded snapshots and shard updates.
+   */
+  get source(): DeliverySource {
+    if (this.#bundle === undefined) throw new Error("Remote delivery is not open.");
+    return this.#bundle.client;
   }
 
   /**

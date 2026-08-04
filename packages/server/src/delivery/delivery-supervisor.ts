@@ -362,7 +362,9 @@ export class DeliverySupervisor {
     this.#watchBackoffMs = Math.min(this.#watchMaxBackoffMs, delay * 2);
     this.#watchTimer = setTimeout(() => {
       this.#watchTimer = undefined;
-      this.#startWatch();
+      void this.#recover().finally(() => {
+        this.#startWatch();
+      });
     }, delay);
     this.#watchTimer.unref();
   }

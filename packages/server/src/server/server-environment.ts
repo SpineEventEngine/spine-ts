@@ -13,6 +13,7 @@ import type {
 import { RetryableCloseGroup } from "./retryable-close.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
+import type { DeliverySource } from "../delivery/delivery-supervisor.js";
 import { EnvironmentDeliveryWorker } from "./environment-delivery-worker.js";
 import {
   EnvironmentAttachments,
@@ -58,6 +59,11 @@ export interface ServerEnvironmentDelivery extends ServerEnvironmentCloseable {
    * Supplies the shard work-registry port used by environment delivery generations.
    */
   readonly workRegistry: DeliveryWorkRegistry;
+
+  /**
+   * Supplies the remote Admin source used to recover and observe shard work.
+   */
+  readonly source?: DeliverySource;
 }
 
 /**
@@ -455,7 +461,11 @@ const ServerEnvironmentValues = Object.freeze({
   ports(delivery: ServerEnvironmentCloseable | undefined): EnvironmentDeliveryPorts | undefined {
     const remote = ServerEnvironmentValues.openableDelivery(delivery);
     if (remote === undefined) return undefined;
-    return { inbox: remote.inbox, workRegistry: remote.workRegistry };
+    return {
+      inbox: remote.inbox,
+      workRegistry: remote.workRegistry,
+      ...(remote.source === undefined ? {} : { source: remote.source }),
+    };
   },
   facilitiesToClose(options: RequiredFacilities): readonly unknown[] {
     return Object.freeze([

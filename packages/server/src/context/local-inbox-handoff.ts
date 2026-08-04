@@ -1,5 +1,6 @@
 import { Delivery, type DeliveryEndpointMessage } from "../delivery/delivery.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
+import type { DeliverySource } from "../delivery/delivery-supervisor.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 
@@ -67,6 +68,11 @@ export interface EnvironmentDeliveryPorts {
    * Coordinates environment-owned shard work.
    */
   readonly workRegistry: DeliveryWorkRegistry;
+
+  /**
+   * Supplies remote Admin recovery and notification observations when delivery is remote.
+   */
+  readonly source?: DeliverySource;
 }
 
 /**

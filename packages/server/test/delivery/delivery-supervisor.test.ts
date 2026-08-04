@@ -534,9 +534,13 @@ describe("DeliverySupervisor", () => {
     vi.useFakeTimers();
     try {
       let watches = 0;
+      let snapshots = 0;
       const supervisor = new DeliverySupervisor({
         source: {
-          shardSnapshot: () => Promise.resolve([]),
+          shardSnapshot: () => {
+            snapshots += 1;
+            return Promise.resolve([]);
+          },
           observeShardUpdates: () => {
             watches += 1;
             return failingUpdates();
@@ -554,8 +558,10 @@ describe("DeliverySupervisor", () => {
       await supervisor.start();
       vi.runAllTicks();
       expect(watches).toBe(1);
+      expect(snapshots).toBe(1);
       await vi.advanceTimersByTimeAsync(10);
       expect(watches).toBe(2);
+      expect(snapshots).toBe(2);
       await supervisor.close({ graceMs: 10 });
     } finally {
       vi.useRealTimers();
