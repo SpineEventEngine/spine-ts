@@ -5613,7 +5613,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("uses command tenant over imported tenant metadata when stored aggregate events update projections", async () => {
+  it("delivers an Aggregate-produced Projection update after the shared inbox shard is released", async () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createProjectionProducingRepository())
       .add(createExecutingProjectionRepository())
