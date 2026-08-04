@@ -65,6 +65,8 @@ import {
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
+import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
+import { ShardIndex } from "../delivery/shard-index.js";
 
 /**
  * Tenant isolation mode declared by a bounded context specification.
@@ -515,6 +517,7 @@ let constructBoundedContext:
       stand: Stand,
       storageFactory: StorageFactory,
       repositories: readonly RepositoryView[],
+      deliveryStrategy: DeliveryStrategy,
       token: FrameworkConstructionToken,
     ) => BoundedContext)
   | undefined;
@@ -535,6 +538,7 @@ export class BoundedContext {
   readonly #eventEndpoint: EventEndpoint;
   readonly #processManagerInbox: PmInbox;
   readonly #projectionInbox: PrjInbox;
+  readonly #deliveryStrategy: DeliveryStrategy;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
   readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
   readonly #repositoryViews = new Set<RepositoryView>();
@@ -554,6 +558,7 @@ export class BoundedContext {
       stand,
       storageFactory,
       repositories,
+      deliveryStrategy,
       token,
     ): BoundedContext =>
       new BoundedContext(
@@ -563,6 +568,7 @@ export class BoundedContext {
         stand,
         storageFactory,
         repositories,
+        deliveryStrategy,
         token,
       );
   }
@@ -585,6 +591,7 @@ export class BoundedContext {
     stand: Stand,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
+    deliveryStrategy: DeliveryStrategy,
     token: FrameworkConstructionToken,
   ) {
     ContextParts.requireFrameworkConstructionToken(
@@ -596,6 +603,7 @@ export class BoundedContext {
     this.#eventBus = eventBus;
     this.#stand = stand;
     this.#storageFactory = storageFactory;
+    this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
       acceptedCommandTypes: () => this.#commandBus.acceptedCommandTypes(),
       post: (command: Command) => this.#commandBus.post(command),
@@ -615,6 +623,7 @@ export class BoundedContext {
       this.#snapshot.name.value,
       deliveryReadiness,
       keepTenant,
+      this.#deliveryStrategy,
     );
     this.#projectionInbox = new LocalProjectionInbox(
       this.#snapshot.name.value,
@@ -1040,6 +1049,7 @@ export class BoundedContextBuilder {
   readonly #eventDispatchers = new Set<EventDispatcher>();
   readonly #repositories = new Set<RepositoryView>();
   readonly #entityTypes = new Set<RepositoryEntityType>();
+  #deliveryStrategy: DeliveryStrategy = UniformAcrossAllShards.singleShard();
   #storageFactory: StorageFactory | undefined;
   #generatedRegistryRoot: string | URL | undefined;
 
@@ -1192,6 +1202,17 @@ export class BoundedContextBuilder {
   }
 
   /**
+   * Sets the target-to-shard strategy for the context-owned Entity Inbox.
+   *
+   * @param strategy Selects the durable shard for Aggregate and Process Manager targets.
+   * @returns Returns this builder for further configuration.
+   */
+  withDeliveryStrategy(strategy: DeliveryStrategy): this {
+    this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(strategy);
+    return this;
+  }
+
+  /**
    * Sets a trusted compiled application root for generated handler metadata.
    *
    * @param root Names the compiled package or application root.
@@ -1268,6 +1289,7 @@ export class BoundedContextBuilder {
         stand,
         storageFactory,
         registeredRepositories,
+        this.#deliveryStrategy,
       );
     } catch (error) {
       ContextParts.closeEventStore(eventStore, error);
@@ -1452,6 +1474,7 @@ const ContextParts = Object.freeze({
     stand: Stand,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
+    deliveryStrategy: DeliveryStrategy,
   ): BoundedContext {
     return constructBoundedContext(
       {
@@ -1464,6 +1487,7 @@ const ContextParts = Object.freeze({
       stand,
       storageFactory,
       repositories,
+      deliveryStrategy,
       frameworkConstructionToken,
     );
   },
@@ -1472,6 +1496,23 @@ const ContextParts = Object.freeze({
     return Object.freeze({
       name: specSnapshot.name.value,
       multitenant: specSnapshot.multitenant,
+    });
+  },
+
+  snapshotDeliveryStrategy(strategy: DeliveryStrategy): DeliveryStrategy {
+    if (!Number.isSafeInteger(strategy.shardCount) || strategy.shardCount <= 0) {
+      throw new Error("Delivery strategy shard count must be a positive safe integer.");
+    }
+    const shardCount = strategy.shardCount;
+    return Object.freeze({
+      shardCount,
+      shardFor(targetId: string, targetType: string): ShardIndex {
+        const shard = strategy.shardFor(targetId, targetType);
+        if (shard.ofTotal !== shardCount) {
+          throw new Error("Delivery strategy shard total must equal its resolved shard count.");
+        }
+        return new ShardIndex(shard.index, shard.ofTotal);
+      },
     });
   },
 

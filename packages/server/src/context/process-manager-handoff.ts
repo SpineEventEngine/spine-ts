@@ -1,4 +1,5 @@
 import { Delivery } from "../delivery/delivery.js";
+import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import { ShardIndex } from "../delivery/shard-index.js";
 import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
@@ -19,6 +20,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #endpoints = new Map<string, readonly DeliveryEndpoint[]>();
   readonly #readiness: DeliveryReadiness;
   readonly #keepTenant: (tenantId: string) => Promise<void>;
+  readonly #strategy: DeliveryStrategy;
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   readonly #inFlightBatchHandoffs = new Map<string, Promise<readonly InboxMessage[]>>();
   #nextVersion = 0n;
@@ -33,11 +35,13 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     contextName: string,
     readiness: DeliveryReadiness | OnDeliveryReady = new DeliveryReadiness(),
     keepTenant: (tenantId: string) => Promise<void> = () => Promise.resolve(),
+    strategy: DeliveryStrategy = UniformAcrossAllShards.singleShard(),
   ) {
     this.#contextName = contextName;
     this.#readiness =
       readiness instanceof DeliveryReadiness ? readiness : new DeliveryReadiness(readiness);
     this.#keepTenant = keepTenant;
+    this.#strategy = strategy;
   }
 
   /**
@@ -49,12 +53,14 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     this.#endpoints.set(
       target.targetTypeUrl,
       Object.freeze(
-        target.labels.map((label) =>
-          InboxHandoff.endpoint({
-            label,
-            inboxId: { targetTypeUrl: target.targetTypeUrl },
-            shard: ShardIndex.single(),
-          }),
+        target.labels.flatMap((label) =>
+          Array.from({ length: this.#strategy.shardCount }, (_, index) =>
+            InboxHandoff.endpoint({
+              label,
+              inboxId: { targetTypeUrl: target.targetTypeUrl },
+              shard: new ShardIndex(index, this.#strategy.shardCount),
+            }),
+          ),
         ),
       ),
     );
