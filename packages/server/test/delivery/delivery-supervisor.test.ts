@@ -29,6 +29,36 @@ import type {
 } from "../../src/delivery/inbox.js";
 
 describe("DeliverySupervisor", () => {
+  it("does not open a replacement watch until failed recovery later succeeds", async () => {
+    let snapshots = 0;
+    let watches = 0;
+    const supervisor = new DeliverySupervisor({
+      source: {
+        releaseExpired: () => Promise.resolve([]),
+        shardSnapshot: () => {
+          snapshots += 1;
+          return snapshots === 1 ? Promise.reject(new Error("snapshot failed")) : Promise.resolve([]);
+        },
+        observeShardUpdates: () => {
+          watches += 1;
+          return emptyUpdates();
+        },
+      },
+      delivery: new DeliveryBuilder()
+        .withStorageFactory(new InMemoryStorageFactory())
+        .withNode("node")
+        .build(),
+      onMessage: () => Promise.resolve(),
+      recoveryMs: 1,
+      watchInitialBackoffMs: 1,
+      watchMaxBackoffMs: 1,
+    });
+    await supervisor.start();
+    expect(watches).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(watches).toBe(1);
+    await supervisor.close();
+  });
   it.each([
     [{ concurrency: 0 }, "Delivery supervisor concurrency"],
     [{ pendingLimit: 0 }, "Delivery supervisor pending limit"],
