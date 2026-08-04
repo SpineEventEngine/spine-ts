@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseTaskVerificationArgs, vitestArgs } from "./verify-task.mjs";
+import {
+  classifyTaskChanges,
+  parseTaskVerificationArgs,
+  taskGateCommands,
+  vitestArgs,
+} from "./verify-task.mjs";
 
 describe("verify-task", () => {
   it("requires an explicit focused coverage choice and test paths", () => {
@@ -38,5 +43,23 @@ describe("verify-task", () => {
       parseTaskVerificationArgs(["--no-coverage", "test.mjs", "--source", "source.mjs"]),
     ).toThrow("only with --coverage");
     expect(() => parseTaskVerificationArgs(["--no-tests", "test.mjs"])).toThrow("only argument");
+  });
+
+  it("skips Proto and TypeDoc gates only for known record or Markdown changes", () => {
+    const recordOnly = classifyTaskChanges([
+      "build-protocol/tasks/T-0103-wave6-efficiency/TASK.md",
+      "README.md",
+    ]);
+
+    expect(recordOnly).toEqual({ proto: false, typeDoc: false });
+    expect(taskGateCommands(recordOnly)).not.toContain("proto:generate");
+    expect(taskGateCommands(recordOnly)).not.toContain("docs:check:generated");
+    expect(taskGateCommands(recordOnly)).toContain("docs:audience:check");
+  });
+
+  it("fails closed for package source and shared tooling changes", () => {
+    for (const path of ["packages/core/src/index.ts", "scripts/verify-task.mjs", "package.json"]) {
+      expect(classifyTaskChanges([path])).toEqual({ proto: true, typeDoc: true });
+    }
   });
 });

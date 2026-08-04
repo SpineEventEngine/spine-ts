@@ -82,6 +82,20 @@ immutable role and metadata limitation will be recorded honestly.
 - Performance/reliability: relevant for fail-closed path classification and
   avoiding skipped required gates.
 
+## Implementation Evidence
+
+- 2026-08-04 RED: after restoring the worktree's locked dependencies,
+  `pnpm exec vitest run scripts/verify-task.test.mjs` failed 2 assertions
+  because the deterministic classifier exports did not exist.
+- 2026-08-04 GREEN: `pnpm exec vitest run scripts/verify-task.test.mjs
+scripts/package-metadata.test.mjs` passed 13 tests. The tests prove that
+  known task-record/Markdown-only changes skip Proto and TypeDoc gates while
+  package source, package metadata, and shared tooling retain both gates.
+- The classifier combines the branch diff from the `origin/main` merge base
+  with unstaged, staged, and untracked paths; Git failure or an empty
+  classification fails closed. Release verification remains unconditional.
+
 ## Current Status
 
-The task is framed. No Wave 6 implementation has started.
+Implementation changes are awaiting focused preflight and review. No Wave 6
+implementation has started.
