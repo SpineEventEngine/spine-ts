@@ -39,8 +39,8 @@ warn.
 
 The generic storage seam has no native two-row transaction. A crash can leave a
 staged control operation that the registry settles during its next
-startup/operation. T-0109 is required for cross-node polling and listener
-reconciliation: this registry alone provides no cross-node polling or listener
+startup/operation. Cross-node polling and listener reconciliation are not yet
+provided, so this registry alone provides no cross-node polling or listener
 completeness guarantee.
 
 `Entity` is the state base class. `Aggregate`, `Projection`, and
