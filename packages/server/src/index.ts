@@ -29,6 +29,7 @@ export {
 } from "./stand/stand.js";
 export {
   InMemorySubscriptionRegistry,
+  StorageSubscriptionRegistry,
   StandCapacityError,
   StandConflictError,
   type StandSubscriptionActivateResult,

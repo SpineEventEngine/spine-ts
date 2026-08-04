@@ -64,7 +64,7 @@ import {
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
-import { InMemorySubscriptionRegistry, type StandSubscriptionRegistry } from "../stand/subscription-registry.js";
+import { StorageSubscriptionRegistry, type StandSubscriptionRegistry } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -1333,7 +1333,11 @@ export class BoundedContextBuilder {
         context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
-      const registry = this.#subscriptionRegistry ?? new InMemorySubscriptionRegistry(this.#subscriptionLimit);
+      const registry = this.#subscriptionRegistry ?? new StorageSubscriptionRegistry(
+        ContextParts.createStorageContext(this.#specSnapshot),
+        storageFactory,
+        this.#subscriptionLimit,
+      );
       this.#subscriptionRegistry = undefined;
       return ContextParts.createBoundedContext(
         this.#specSnapshot,
