@@ -163,3 +163,39 @@ returning this one batch to implementation, an existing
 `requirements_splitter` is assigned with explicit `gpt-5.6-sol` / `high` to
 select the smallest compatible design. The other corrections require no human
 decision or new review lane.
+
+## Frozen-Wire Correction Disposition
+
+The existing `requirements_splitter`, explicit `gpt-5.6-sol` / `high`, found
+no Proto/public-contract change and no human decision necessary. Runtime
+self-introspection was unavailable; the immutable role/profile and explicit
+dispatch are accepted with no visible mismatch.
+
+The implementation owner must:
+
+- remove required private pickup/revalidation metadata from the client path;
+- preserve the exact unique acquisition worker and original `whenPicked`, but
+  probe ownership with an ordinary frozen `PickShard` using a fresh challenger
+  worker;
+- authorize the immediate synchronous commit only when the result is
+  `already_picked_up` naming the original worker and generation; treat a new
+  challenger pickup, another owner/generation, malformed reply, or unknown
+  outcome as ownership loss and fail closed;
+- release an accidentally acquired challenger through bounded cleanup that is
+  independent of the aborted delivery-operation signal;
+- consolidate remote session, shard index, quarantine, release, invalidate,
+  reconcile, and synchronize state in one package-private per-client owner used
+  by both `RemoteWorkRegistry` and `RemoteInboxWork`; delete the test-only
+  alternate revalidation seam;
+- stop requiring the private conditional-pickup acknowledgement; ordinary
+  `PickShard`, finite scan, and release are the compatible bounded fallback;
+- retain exact-worker release and non-authoritative Admin `PICKED` semantics;
+  and
+- test scripted header-ignorant/JVM-compatible outcomes plus the live
+  environment-to-repository commit fence.
+
+The frozen wire cannot make ownership validation and an Entity-storage commit
+one distributed transaction. This task retains the accepted immediate
+pre-commit probe with no intervening asynchronous boundary and must not claim a
+stronger linearizable revocation guarantee. A storage-transaction fencing token
+would be a separate serialized/storage design requiring a future human choice.
