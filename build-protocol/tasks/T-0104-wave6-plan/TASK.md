@@ -1,6 +1,6 @@
 # T-0104: Wave 6 Distributed Delivery And Stand Plan
 
-Status: Active
+Status: Complete
 
 ## Objective
 

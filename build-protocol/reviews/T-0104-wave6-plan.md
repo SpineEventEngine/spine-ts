@@ -1,6 +1,6 @@
 # T-0104 Review Record
 
-Status: Corrections pending re-review
+Status: Accepted
 
 ## First Review Wave
 
@@ -55,6 +55,22 @@ reference correction to T-0105.
 
 The style/maintainability re-review is clean. Dynamic discovery remains in Wave
 7, and registry persistence versus listener reconciliation ownership is clear.
+
+## Final Dispositions
+
+- Style/maintainability: clean after the first correction batch.
+- Documentation: clean after the durable/in-memory gap-matrix correction.
+- TypeScript/API docs: clean after the exact frozen-option and generated-access
+  policy correction.
+- Performance/reliability: clean after durable partial-activation compensation
+  and recovery were added.
+
+No security review is required for this planning-only task. It changes no
+runtime trust boundary, dependency, executable code, credential handling, or
+deployment surface.
+
+Verification: `pnpm --config.verify-deps-before-run=false verify:task --
+--no-tests` passed after the documented fresh-worktree generation precondition.
 
 ## Review Assignments
 

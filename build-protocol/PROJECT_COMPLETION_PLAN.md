@@ -7,8 +7,8 @@ Plan date: 2026-07-12
 
 Starting `main`: `40329cad`
 
-Wave 5 packaging and deployment is complete under `T-0089`. Wave 6 Q&A is
-complete, and T-0104 records its approved execution plan in
+Wave 5 packaging and deployment is complete under `T-0089`. Wave 6 Q&A and
+T-0104 planning are complete; autonomous runtime implementation follows
 `build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 
 ## Purpose
