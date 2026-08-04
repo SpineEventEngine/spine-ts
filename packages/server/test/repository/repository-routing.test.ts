@@ -2394,7 +2394,9 @@ describe("repository signal routing", () => {
       .commandBus()
       .post(createAggregateCommand("command-async", "task-async", "Async"));
 
-    await vi.waitFor(() => expect(AsyncAssigneeAggregate.resolveCommand).toBeTypeOf("function"));
+    await vi.waitFor(() => {
+      expect(AsyncAssigneeAggregate.resolveCommand).toBeTypeOf("function");
+    });
     await expect(storage.readCurrent("task-async")).resolves.toBeUndefined();
 
     AsyncAssigneeAggregate.resolveCommand?.("Async");

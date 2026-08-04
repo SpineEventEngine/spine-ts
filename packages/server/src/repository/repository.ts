@@ -717,7 +717,7 @@ export interface EntityInboxTarget {
   replay(
     message: EntityInboxMessage,
     deliveryTenantId?: string,
-  ): Promise<void | (() => Promise<void>)>;
+  ): Promise<undefined | (() => Promise<void>)>;
 }
 
 /**
@@ -1286,7 +1286,7 @@ class AggregateCommandExecution {
     );
   }
 
-  async run(): Promise<void | (() => Promise<void>)> {
+  async run(): Promise<undefined | (() => Promise<void>)> {
     void RepositorySignals.requireCommandId(this.#command);
 
     const commandMessage = EntityInvocation.requireSignalMessage(this.#command.message, "command");
@@ -3894,7 +3894,7 @@ const InboxReplay = {
     routing: RepositoryRouting,
     message: InboxMessage,
     deliveryTenantId?: string,
-  ): Promise<void | (() => Promise<void>)> {
+  ): Promise<undefined | (() => Promise<void>)> {
     const runtime = repositoryRuntimes.get(repository);
 
     if (runtime === undefined) {
@@ -4409,10 +4409,12 @@ const RepositoryDispatch = {
       replay: (
         message: InboxMessage,
         deliveryTenantId?: string,
-      ): Promise<void | (() => Promise<void>)> =>
+      ): Promise<undefined | (() => Promise<void>)> =>
         repository.entityFamily === "aggregate"
           ? InboxReplay.replayAggregateCommand(repository, routing, message, deliveryTenantId)
-          : InboxReplay.replayPmInbox(repository, routing, message, deliveryTenantId),
+          : InboxReplay
+              .replayPmInbox(repository, routing, message, deliveryTenantId)
+              .then(() => undefined),
     });
   },
 

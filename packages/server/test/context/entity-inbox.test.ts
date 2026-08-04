@@ -1446,7 +1446,7 @@ function corruptedInput(input: unknown): ReceiveInput {
   return input as ReceiveInput;
 }
 
-function writtenResult(input: ReceiveInput, version: bigint) {
+function writtenResult(input: ReceiveInput, version: bigint): { readonly outcome: "WRITTEN"; readonly message: InboxMessage } {
   return {
     outcome: "WRITTEN" as const,
     message: {

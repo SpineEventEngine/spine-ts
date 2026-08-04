@@ -1,6 +1,6 @@
 # T-0106 Review Record
 
-Status: Pending Implementation
+Status: Implementation Complete; Mechanical Preflight Pending Review
 
 ## Planned Review Assignments
 
@@ -21,8 +21,8 @@ fallback occurs.
 
 ## Current Dispositions
 
-- Style/maintainability: pending.
-- Documentation: pending.
-- TypeScript/API docs: pending.
-- Performance/reliability: pending.
+- Style/maintainability: pending focused review of the Entity Inbox boundary.
+- Documentation: pending focused review of delivery and builder claims.
+- TypeScript/API docs: pending focused review of internal replay contracts.
+- Performance/reliability: pending focused review of shard, follow-up, and replay behavior.
 - Security: N/A unless implementation changes a trust boundary.
