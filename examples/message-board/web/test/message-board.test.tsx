@@ -574,7 +574,11 @@ describe("MessageBoardApp", () => {
   });
 
   it("refreshes when live updates disconnect before a successful post completes", async () => {
-    const request = requestFixture({ queuedQueries: true, deferredPost: true });
+    const request = requestFixture({
+      queuedQueries: true,
+      deferredPost: true,
+      retainCancelledSubscription: true,
+    });
     render(
       createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
     );
@@ -935,6 +939,10 @@ describe("MessageBoardApp", () => {
     request.query.resolveAt(2, responseBoardRows("board-b initial", "board-b"));
     await screen.findByText("board-b initial");
     expect(screen.queryByText("board-a initial")).toBeNull();
+    oldSubscription.emitRecovery(responseBoardRows("retired board-a", "board-a"));
+    await Promise.resolve();
+    expect(screen.queryByText("retired board-a")).toBeNull();
+    expect(screen.getByText("board-b initial")).toBeTruthy();
     fillPost("new message");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
     await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
@@ -977,6 +985,7 @@ function requestFixture(
     validationFailure?: boolean;
     initialRows?: ReturnType<typeof responseRows>;
     deferredPost?: boolean;
+    retainCancelledSubscription?: boolean;
   } = {},
 ) {
   const queries = [Promise.withResolvers<ReturnType<typeof responseRows>>()];
@@ -996,7 +1005,9 @@ function requestFixture(
     }),
     post: fixturePost(options, postDeferred),
     createSubscription: vi.fn(async (_topic, options) => {
-      const subscription = subscriptionFixture();
+      const subscription = subscriptionFixture({
+        cancelEnds: !options.retainCancelledSubscription,
+      });
       subscriptions.push(subscription);
       subscription.authoritativeQuery = vi.fn<() => unknown>(options.authoritativeQuery);
       return subscription;
@@ -1084,14 +1095,16 @@ function removeUpdate(id: string) {
   });
 }
 
-function subscriptionFixture() {
+function subscriptionFixture(options: { readonly cancelEnds?: boolean } = {}) {
   const lifecycle = queue<never>();
   const updates = queue<never>();
   return {
     activate: vi.fn(async () => undefined),
     cancel: vi.fn(async () => {
-      lifecycle.close();
-      updates.close();
+      if (options.cancelEnds !== false) {
+        lifecycle.close();
+        updates.close();
+      }
     }),
     lifecycle: lifecycle.values,
     updates: updates.values,

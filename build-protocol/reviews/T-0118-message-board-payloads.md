@@ -125,3 +125,25 @@ No targeted finding is rejected. Style, TypeScript/API documentation,
 documentation completeness, and performance/reliability must confirm the
 substantive corrections; deterministic record-only updates do not independently
 reopen a lane.
+
+## Final Correction Implementation Evidence
+
+All four final findings are implemented.
+
+1. `useEffectEvent` supplies committed callback ownership, and each reader also
+   checks its live generation and exact subscription handle. The retained-old-
+   subscription Message Board regression and suspended replacement direct test
+   cover retired and uncommitted callback isolation.
+2. The deterministic API inventory includes `OnSubscriptionDelivery` and
+   `OnSubscriptionLifecycle`. `packages/client-react/REFERENCE.md` records the
+   exact optional trailing callback signature and required execution semantics.
+3. Direct client-react tests cover every notice, ordering within each stream,
+   cleanup, callback replacement without recreation, and throwing delivery or
+   lifecycle callbacks publishing an observation error and cancelling once.
+4. The TypeScript/API disposition is relevant and complete for the public
+   callback types, hook parameters, inventory, and reference.
+
+Focused evidence: client-react and web TypeScript checks pass; focused
+client-react plus Message Board Vitest passes 78/78; the TypeDoc/API inventory
+passes with 13 client-react exports; changed-source ESLint, Prettier, and
+`git diff --check` pass. Confirmation review remains pending.

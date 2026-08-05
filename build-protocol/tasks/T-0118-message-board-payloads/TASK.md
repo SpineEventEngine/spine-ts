@@ -1,6 +1,6 @@
 # T-0118: Message Board Payload-First Synchronization
 
-Status: Review corrections implemented; targeted re-review pending
+Status: Final review corrections implemented; confirmation review pending
 
 ## Objective
 
@@ -110,3 +110,23 @@ converged `verify:release` gate.
   client-react plus Message Board Vitest (72/72), changed production ESLint,
   Prettier, and `git diff --check`. Re-review and the selected convergence
   profile remain pending.
+
+## Final Correction Evidence
+
+- React 19 Effect Events replace render-mutated callback refs. Delivery and
+  lifecycle callbacks are committed-render values, are bound to the active
+  generation and subscription handle, and cannot be invoked by retired handles
+  or an abandoned replacement render.
+- The client-react API inventory freezes both callback exports. Its package
+  reference specifies the exact optional trailing arguments, synchronous
+  every-notice/pre-coalescing behavior, callback identity exclusion from
+  subscription identity, and callback failure behavior.
+- Direct client-react tests cover every notice, committed callback replacement
+  without recreation, suspended replacement isolation, cleanup suppression,
+  and throwing delivery/lifecycle callbacks. The Message Board board-switch
+  regression retains the old stream and proves its late resynchronization does
+  not affect the new board.
+- Focused final validation passed: client-react and web TypeScript checks,
+  focused client-react plus Message Board Vitest (78/78), the deterministic
+  TypeDoc/API inventory (13 client-react exports), changed-source ESLint,
+  Prettier, and `git diff --check`.

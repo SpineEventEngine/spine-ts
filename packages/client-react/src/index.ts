@@ -9,6 +9,7 @@ import {
   createElement,
   useContext,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type ReactElement,
@@ -82,12 +83,12 @@ export interface SubscriptionObservation {
 }
 
 /**
- * Receives each subscription delivery before React coalesces observation state.
+ * Receives each active Entity subscription delivery synchronously before React coalesces it.
  */
 export type OnSubscriptionDelivery = (delivery: SubscriptionDelivery) => void;
 
 /**
- * Receives each subscription lifecycle notice before React coalesces observation state.
+ * Receives each active Entity subscription lifecycle notice synchronously before React coalesces it.
  */
 export type OnSubscriptionLifecycle = (lifecycle: SubscriptionLifecycle) => void;
 
@@ -193,8 +194,8 @@ export function useEntityQuery(
  * @param topic Supplies the subscription topic.
  * @param authoritativeQuery Creates the recovery query after reconnect.
  * @param dependencies Identifies when React must recreate the subscription.
- * @param onDelivery Receives every delivery before React coalesces observation state.
- * @param onLifecycle Receives every lifecycle notice before React coalesces observation state.
+ * @param onDelivery Optionally receives every delivery before React coalesces observation state.
+ * @param onLifecycle Optionally receives every lifecycle notice before React coalesces observation state.
  * @returns Returns the latest subscription observation.
  */
 export function useEntitySubscription(
@@ -261,10 +262,12 @@ const SubscriptionObservers = Object.freeze({
   ): SubscriptionObservation {
     const [state, setState] = useState<SubscriptionObservation>(subscriptionIdle);
     const generation = useRef(0);
-    const onDeliveryRef = useRef(onDelivery);
-    onDeliveryRef.current = onDelivery;
-    const onLifecycleRef = useRef(onLifecycle);
-    onLifecycleRef.current = onLifecycle;
+    const notifyDelivery = useEffectEvent((delivery: SubscriptionDelivery) => {
+      onDelivery?.(delivery);
+    });
+    const notifyLifecycle = useEffectEvent((lifecycle: SubscriptionLifecycle) => {
+      onLifecycle?.(lifecycle);
+    });
     useEffect(() => {
       const current = ++generation.current;
       let live = true;
@@ -310,17 +313,17 @@ const SubscriptionObservers = Object.freeze({
           });
           void SubscriptionObservers.observeDeliveries(
             handle,
-            () => live,
+            () => live && generation.current === current && handle === created,
             setState,
             cancel,
-            () => onDeliveryRef.current,
+            notifyDelivery,
           );
           void SubscriptionObservers.observeLifecycle(
             handle,
-            () => live,
+            () => live && generation.current === current && handle === created,
             setState,
             cancel,
-            () => onLifecycleRef.current,
+            notifyLifecycle,
           );
         })
         .catch((error: unknown) => {
@@ -342,12 +345,12 @@ const SubscriptionObservers = Object.freeze({
     live: () => boolean,
     onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
     cancel: () => Promise<void>,
-    onDelivery: () => OnSubscriptionDelivery | undefined,
+    onDelivery: OnSubscriptionDelivery,
   ): Promise<void> {
     try {
       for await (const delivery of subscription.updates) {
         if (live()) {
-          onDelivery()?.(delivery);
+          onDelivery(delivery);
           onSetState((previous) => ({ ...previous, delivery }));
         }
       }
@@ -368,12 +371,12 @@ const SubscriptionObservers = Object.freeze({
     live: () => boolean,
     onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
     cancel: () => Promise<void>,
-    onLifecycle: () => OnSubscriptionLifecycle | undefined,
+    onLifecycle: OnSubscriptionLifecycle,
   ): Promise<void> {
     try {
       for await (const lifecycle of subscription.lifecycle) {
         if (live()) {
-          onLifecycle()?.(lifecycle);
+          onLifecycle(lifecycle);
           onSetState((previous) => ({ ...previous, lifecycle }));
         }
       }
