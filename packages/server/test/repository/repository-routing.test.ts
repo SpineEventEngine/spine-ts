@@ -2122,6 +2122,38 @@ describe("repository signal routing", () => {
     ]);
   });
 
+  it("keeps lifecycle System event context tenant-scoped", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("tenant-lifecycle-a", "same", "A", "tenant-a"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("tenant-lifecycle-b", "same", "B", "tenant-b"));
+      await waitForCondition(() => changes.length === 4);
+      expect(
+        changes.map((event) =>
+          event.context?.origin.case === "pastMessage"
+            ? event.context.origin.value.actorContext?.tenantId?.kind.value
+            : undefined,
+        ),
+      ).toEqual(["tenant-a", "tenant-a", "tenant-b", "tenant-b"]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("dispatches events committed by accepted command work before close resolves", async () => {
     GeneratedTwoArgAggregate.reset({ pauseAssignee: true });
     const observed: string[] = [];
