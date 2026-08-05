@@ -216,7 +216,7 @@ interface RepositoryRegistration {
   /**
    * Posts a committed system event without affecting domain event storage.
    */
-  readonly postSystemEventFollowUp: (event: Event) => Promise<void>;
+  readonly postSystemFollowUp: (event: Event) => Promise<void>;
 
   /**
    * Command posting callback into the owning context command bus.
@@ -764,7 +764,7 @@ export class BoundedContext {
       registerSystemEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
       },
-      postSystemEventFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
+      postSystemFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
       onPostCommand: (command) => commandBusAccess.postInternal(this.#commandBus, command),
       recordDispatchFailure: (event, error) => {
         this.#recordDispatchFailure(event, error);
@@ -1676,9 +1676,9 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
-  attemptCleanup(work: () => void, errors: unknown[]): void {
+  attemptCleanup(onCleanup: () => void, errors: unknown[]): void {
     try {
-      work();
+      onCleanup();
     } catch (error) {
       errors.push(error);
     }
@@ -2347,7 +2347,7 @@ const ContextParts = Object.freeze({
       postEventFollowUp: registration.postEventFollowUp,
       registerEventSchema: registration.registerEventSchema,
       registerSystemEventSchema: registration.registerSystemEventSchema,
-      postSystemEventFollowUp: registration.postSystemEventFollowUp,
+      postSystemFollowUp: registration.postSystemFollowUp,
       onPostCommand: registration.onPostCommand,
       recordDispatchFailure: registration.recordDispatchFailure,
     });
