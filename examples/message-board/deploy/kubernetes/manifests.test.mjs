@@ -51,6 +51,7 @@ test("standalone reference binds replica count and delivery waits to each Deploy
   assert.match(document, /lb_policy: RING_HASH/u);
   assert.match(document, /clusterIP: None/u);
   assert.match(document, /message-board-gateway-headless, port_value: 8080/u);
+  assert.match(document, /name: BACKEND_URLS/u);
 });
 
 test("Envoy policy rejects non-path and duplicate route items", () => {

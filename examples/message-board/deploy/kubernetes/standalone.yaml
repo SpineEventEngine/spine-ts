@@ -84,7 +84,7 @@ spec:
               { name: HOST, value: 0.0.0.0 },
               { name: PORT, value: "8080" },
               { name: NODE_ENV, value: production },
-              { name: BACKEND_URL, value: http://message-board-application:8080 },
+              { name: BACKEND_URLS, value: http://message-board-application:8080,http://message-board-application:8080 },
             ]
           startupProbe: { tcpSocket: { port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
           readinessProbe: { tcpSocket: { port: 8080 }, periodSeconds: 2 }
