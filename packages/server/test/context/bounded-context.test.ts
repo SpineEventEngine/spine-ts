@@ -1757,7 +1757,9 @@ describe("BoundedContext assembly", () => {
       .withSubscriptionRegistry(registry)
       .build();
 
-    await vi.waitFor(() => expect(registry.snapshotCalls).toBe(1));
+    await vi.waitFor(() => {
+      expect(registry.snapshotCalls).toBe(1);
+    });
     await context.close();
   });
 
