@@ -13,8 +13,8 @@ reviewed, verified, integrated, and pushed. T-0106 unified Entity Inbox handoff
 is reviewed, release-verified, integrated, post-merge verified, and pushed.
 T-0107 remote shard fan-out is reviewed, release-verified, integrated, and
 post-merge verified. T-0108 configurable durable Stand registry is reviewed,
-release-verified, and accepted for integration. T-0109 Stand listener
-reconciliation follows its post-merge verification. Autonomous implementation follows
+release-verified, integrated, post-merge verified, and pushed. T-0109 Stand
+listener reconciliation is the current action. Autonomous implementation follows
 `build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 
 ## Purpose
