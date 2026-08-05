@@ -13,11 +13,13 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguffSvDX1/JxpSa58
 umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
 WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
 -----END PRIVATE KEY-----`;
+let deadlineAt = 0;
 
 test(
   "runs two application nodes behind one Gateway and shuts them down",
   { timeout: 90_000 },
   () => {
+    deadlineAt = Date.now() + 80_000;
     const project = `t0111-${Date.now()}`;
     try {
       composeRun(project, ["up", "--detach"]);
@@ -41,7 +43,7 @@ function composeRun(project, arguments_, ignoreFailure = false) {
       {
         encoding: "utf8",
         env: { ...process.env, GATEWAY_PORT: "0", MESSAGE_BOARD_SESSION_PRIVATE_KEY: key },
-        timeout: 90_000,
+        timeout: remaining(),
       },
     );
   } catch (error) {
@@ -59,7 +61,7 @@ function waitFor(project, services) {
       )
     )
       return;
-    execFileSync("sleep", ["1"]);
+    execFileSync("sleep", ["1"], { timeout: remaining() });
   }
   assert.fail(
     `distributed topology did not become ready: ${composeRun(project, ["ps", "--all"])} `,
@@ -73,7 +75,7 @@ function waitStopped(project, service) {
       assert.equal(Number(record.ExitCode), 0);
       return;
     }
-    execFileSync("sleep", ["1"]);
+    execFileSync("sleep", ["1"], { timeout: remaining() });
   }
   assert.fail(`${service} did not exit after SIGTERM`);
 }
@@ -95,7 +97,10 @@ function ready(project, service) {
   if (service?.Service === "datastore" || service?.Service === "delivery")
     return service.Health === "healthy";
   if (service?.ID === undefined) return false;
-  const logs = execFileSync("docker", ["logs", service.ID], { encoding: "utf8", timeout: 10_000 });
+  const logs = execFileSync("docker", ["logs", service.ID], {
+    encoding: "utf8",
+    timeout: remaining(),
+  });
   return /MessageBoard (application|gateway) ready/u.test(logs);
 }
 
@@ -108,7 +113,7 @@ function assertNoLeaks(project) {
     assert.equal(
       execFileSync("docker", [command, ...arguments_], {
         encoding: "utf8",
-        timeout: 10_000,
+        timeout: remaining(),
       }).trim(),
       "",
     );
@@ -139,6 +144,10 @@ function clientRun(project, runId) {
       "spine-ts/message-board:local",
       "/app/node_modules/@spine-event-engine/example-message-board-app/compose-rpc-client.mjs",
     ],
-    { encoding: "utf8", timeout: 45_000 },
+    { encoding: "utf8", timeout: remaining() },
   );
+}
+
+function remaining() {
+  return Math.max(1, deadlineAt - Date.now());
 }

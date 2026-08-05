@@ -139,12 +139,16 @@ async function distributedFlow() {
     .activate(subscription, { signal: controller.signal })
     [Symbol.asyncIterator]();
   try {
-    const next = updates.next();
+    let next = updates.next();
+    const posted = new Set();
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const id = `${runId}-update-${attempt}`;
       await post(`update-${attempt}`, "Distributed subscription notice");
+      posted.add(id);
       const update = await Promise.race([next, pause(1_000)]);
-      if (update !== undefined && noticeFor(update, id)) return process.stdout.write("full-ok\n");
+      if (update === undefined) continue;
+      if (noticeFor(update, posted)) return process.stdout.write("full-ok\n");
+      next = updates.next();
     }
     throw new Error("Timed out waiting for a matching distributed subscription update.");
   } finally {
@@ -154,14 +158,14 @@ async function distributedFlow() {
   }
 }
 
-function noticeFor(result, id) {
+function noticeFor(result, ids) {
   if (result.done || result.value.response?.status?.status.case !== "ok") return false;
   return (
     result.value.update.case === "entityUpdates" &&
     result.value.update.value.update.some(
       (update) =>
         update.kind.case === "state" &&
-        AnyMessages.unpack(update.kind.value, BoardMessageViewSchema)?.id?.value === id,
+        ids.has(AnyMessages.unpack(update.kind.value, BoardMessageViewSchema)?.id?.value),
     )
   );
 }
