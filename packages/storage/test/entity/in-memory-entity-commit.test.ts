@@ -202,7 +202,7 @@ describe("MemoryEntityCommitStorage", () => {
           entity: input,
           id: `${id}:task`,
           entityId: "task",
-          expected,
+          ...(expected === undefined ? {} : { expected }),
           next: current("unexpected", 2n),
         }),
       ).resolves.toBe("conflict");
