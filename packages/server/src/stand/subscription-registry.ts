@@ -631,16 +631,20 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         });
         const next = StandSubscriptionRecords.write(proposed);
         const digest = recordDigest(next);
-        const staged = controlWithOperation(control, {
-          kind: "create",
-          id,
-          expectedDigest: digest,
-          resultDigest: digest,
-          generation: generationToken(next),
-          token: randomUUID(),
-          expectedRevision: 1,
-          resultRevision: 1,
-        }, control.count + 1);
+        const staged = controlWithOperation(
+          control,
+          {
+            kind: "create",
+            id,
+            expectedDigest: digest,
+            resultDigest: digest,
+            generation: generationToken(next),
+            token: randomUUID(),
+            expectedRevision: 1,
+            resultRevision: 1,
+          },
+          control.count + 1,
+        );
         if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
           continue;
         if (!(await this.#stage.compareAndSet(stageSlot, undefined, next))) {
@@ -649,7 +653,10 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         }
         await this.#settle(staged, writeControl(staged));
         const settled = await this.#storage.read(id);
-        if (settled !== undefined && matchesOperation(settled, staged.operation!, "result"))
+        const operation = staged.operation;
+        if (operation === undefined)
+          throw new Error("Malformed Stand subscription control record.");
+        if (settled !== undefined && matchesOperation(settled, operation, "result"))
           return Object.freeze({
             kind: "created" as const,
             entry: StorageSubscriptionRegistry.#clone(proposed),
@@ -1082,27 +1089,6 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       },
       current.generation,
     );
-  }
-
-  async #discardReservation(id: string, record: StandSubscriptionRecord): Promise<boolean> {
-    const entry = StandSubscriptionRecords.read(record, id);
-    if (entry.revision !== 0n) throw new Error("Malformed Stand subscription control record.");
-    for (;;) {
-      await this.#recover();
-      const control = await this.#controlState();
-      const staged = controlWithOperation(control, {
-        kind: "discard",
-        id,
-        expectedDigest: recordDigest(record),
-        generation: generationToken(record),
-        token: randomUUID(),
-        expectedRevision: 0,
-      });
-      if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
-        continue;
-      await this.#settle(staged, writeControl(staged));
-      return true;
-    }
   }
 
   async #deleteCurrent(id: string, record: StandSubscriptionRecord): Promise<boolean> {

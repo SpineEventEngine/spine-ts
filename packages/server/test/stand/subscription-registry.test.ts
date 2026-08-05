@@ -51,6 +51,14 @@ function subscription(value: string, topic = "topic"): Subscription {
   return create(SubscriptionSchema, { id: id(value), topic: { id: { value: topic } } });
 }
 
+function subscriptionAnyBytes(value: Subscription): Uint8Array {
+  const criterion = value.topic?.target?.criterion;
+  if (criterion?.case !== "filters") throw new Error("Expected target filters.");
+  const bytes = criterion.value.idFilter?.id[0]?.value;
+  if (bytes === undefined) throw new Error("Expected Any bytes.");
+  return bytes;
+}
+
 describe("InMemorySubscriptionRegistry", () => {
   it("creates a pending definition with the exact 30-second deadline", async () => {
     vi.useFakeTimers();
@@ -435,7 +443,9 @@ describe("StorageSubscriptionRegistry", () => {
             case: "filters",
             value: {
               idFilter: {
-                id: [create(AnySchema, { typeUrl: "type.example/value", value: new Uint8Array([1]) })],
+                id: [
+                  create(AnySchema, { typeUrl: "type.example/value", value: new Uint8Array([1]) }),
+                ],
               },
             },
           },
@@ -444,17 +454,15 @@ describe("StorageSubscriptionRegistry", () => {
     });
     const created = await registry.create(input);
     if (created.kind !== "created") throw new Error("Expected a new definition.");
-    const callerBytes = input.topic?.target?.criterion.value?.idFilter?.id[0]?.value;
-    const returnedBytes = created.entry.subscription.topic?.target?.criterion.value?.idFilter?.id[0]?.value;
-    if (callerBytes === undefined || returnedBytes === undefined) throw new Error("Expected Any bytes.");
+    const callerBytes = subscriptionAnyBytes(input);
+    const returnedBytes = subscriptionAnyBytes(created.entry.subscription as Subscription);
 
     callerBytes[0] = 9;
     expect(returnedBytes).toEqual(new Uint8Array([1]));
     returnedBytes[0] = 7;
     const stored = await registry.get(id("bytes"));
-    expect(stored?.subscription.topic?.target?.criterion.value?.idFilter?.id[0]?.value).toEqual(
-      new Uint8Array([1]),
-    );
+    if (stored === undefined) throw new Error("Expected a stored definition.");
+    expect(subscriptionAnyBytes(stored.subscription as Subscription)).toEqual(new Uint8Array([1]));
   });
 
   it("does not reject an activate-delete race as malformed durable control", async () => {
@@ -926,9 +934,13 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
       case "discard-stage":
         return operation === "discard";
       case "create-definition":
-        return id !== "control" && id !== "stage" && expected === undefined && revisionOf(next) === 1n;
+        return (
+          id !== "control" && id !== "stage" && expected === undefined && revisionOf(next) === 1n
+        );
       case "create-promote":
-        return id !== "control" && id !== "stage" && expected === undefined && revisionOf(next) === 1n;
+        return (
+          id !== "control" && id !== "stage" && expected === undefined && revisionOf(next) === 1n
+        );
       case "create-commit":
         return (
           control &&

@@ -1113,7 +1113,7 @@
     "identity": "registryId()#1",
     "name": "registryId",
     "disposition": "necessity",
-    "reason": "TypeScript public boundary: registryId normalizes generated and string identifiers before durable registry operations."
+    "reason": "TypeScript public boundary: registryId validates a generated SubscriptionId before durable registry operations."
   },
   {
     "rule": "standalone-function",
