@@ -1,6 +1,6 @@
 # T-0115 Review Log
 
-Status: Specialist review wave dispatched
+Status: One accepted correction batch in implementation
 
 ## Scope
 
@@ -52,3 +52,51 @@ dispatch. The documentation role has an immutable Luna/medium configuration;
 the dispatch surface does not accept a separate Luna model override, so that
 role configuration and this limitation are the recorded metadata until the
 result returns. Reviewers are read-only and must assess the frozen endpoint.
+
+## Review Results
+
+- Style/maintainability: changes requested. Immutable configured role/profile
+  `style_maintainability_reviewer`, `gpt-5.6-terra` / high; runtime
+  self-introspection was unavailable and no mismatch was visible.
+- Documentation: changes requested. Immutable configured role/profile
+  `documentation_reviewer`, `gpt-5.6-luna` / medium; runtime
+  self-introspection was unavailable and the role configuration is the
+  authoritative metadata.
+- TypeScript/API docs: changes requested. Immutable configured role/profile
+  `typescript_api_docs_reviewer`, `gpt-5.6-terra` / high; runtime
+  self-introspection was unavailable and no mismatch was visible.
+- Performance/reliability: changes requested. Immutable configured
+  role/profile `performance_reliability_reviewer`, `gpt-5.6-terra` / high;
+  runtime self-introspection was unavailable and no mismatch was visible.
+
+## Accepted Correction Batch
+
+1. Removes the combined observer compatibility entry point that can default the
+   System bus to the domain bus, and migrates tests/callers to explicit event or
+   state observation.
+2. Routes entity-state observation through the paired System Stand access
+   boundary instead of retaining and void-reading an unenforced dependency.
+3. Retains acquired EventBus handles during construction and closes their owned
+   stores through those buses; the registry has exactly one cleanup owner after
+   `SubscriptionRuntime` construction.
+4. Coalesces ten-second background reconciliation ticks while one cycle is
+   pending so a hung registry call cannot accumulate unbounded queued work.
+5. Makes direct runtime close attempt registry closure exactly once even when
+   observer detachment fails, aggregating independent failures and preserving
+   the coalesced terminal outcome.
+6. Documents that a directly constructed public `EventBus` is domain-only and
+   rejects System schemas/dispatchers/events.
+
+All findings are accepted because they enforce the frozen T-0115 contract and
+were independently confirmed against the implementation. Documentation's
+finding duplicates item 1 and does not create a seventh correction.
+
+## Correction Assignment
+
+- Existing role: implementer `/root/t0115_terminal_impl`.
+- Ownership: the six accepted findings, focused RED/GREEN tests, task/review
+  records, one correction commit, and immediate feature-branch push.
+- Expected and explicitly dispatched model: `gpt-5.6-terra`.
+- Expected and explicitly dispatched reasoning: `medium`.
+- Runtime self-introspection is unavailable; the immutable configured role and
+  explicitly dispatched profile are the available metadata.
