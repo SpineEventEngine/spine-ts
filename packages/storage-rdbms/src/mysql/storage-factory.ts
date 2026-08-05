@@ -530,7 +530,7 @@ class MysqlRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   ) {
     super(context, recordSpec);
     this.#scope = CanonicalMysqlValues.encode(
-      [context.name, context.multitenant, recordSpec.schema.typeName],
+      [context.name, context.multitenant, recordSpec.storageKey],
       scopeKeyBytes,
     );
   }

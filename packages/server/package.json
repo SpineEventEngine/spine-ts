@@ -43,6 +43,11 @@
     "typescript": "6.0.3"
   },
   "devDependencies": {
+    "@spine-event-engine/storage-datastore": "2.0.0-snapshot.1",
+    "@spine-event-engine/storage-rdbms": "2.0.0-snapshot.1",
     "@connectrpc/connect-web": "2.1.2"
+  },
+  "scripts": {
+    "test:stand-registry:providers": "node scripts/test-stand-registry-providers.mjs"
   }
 }

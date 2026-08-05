@@ -147,6 +147,7 @@ describe("distributed delivery system contracts", () => {
         ["created_at", 3],
         ["pending_until", 4],
         ["revision", 5],
+        ["generation", 6],
       ],
     );
     expect(SubscriptionPhase.PENDING).toBe(1);

@@ -235,6 +235,9 @@ export class Server {
       this.#contexts,
       this.#environment.storageFactory,
     );
+    for (const context of contexts) {
+      serverEnvironmentAccess.warnVolatileRegistry(this.#environment, context);
+    }
     let attachment: EnvironmentAttachmentHandle;
     try {
       attachment = await serverEnvironmentAccess.attach(this.#environment, {

@@ -64,6 +64,11 @@ import {
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
+import {
+  StorageSubscriptionRegistry,
+  standSubscriptionLimits,
+  type StandSubscriptionRegistry,
+} from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
 import { type DeliveryStrategy, UniformAcrossAllShards } from "../delivery/delivery-builder.js";
 import { ShardIndex } from "../delivery/shard-index.js";
@@ -488,6 +493,7 @@ const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>
 const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
+const contextSubscriptionRegistries = new WeakMap<BoundedContext, StandSubscriptionRegistry>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
   (defaultStorageFactory: StorageFactory) => Promise<BoundedContext>
@@ -507,6 +513,7 @@ interface BoundedContextAccess {
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
   tenantIndex(context: BoundedContext): TenantIndex;
   storageFactory(context: BoundedContext): StorageFactory;
+  subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -515,6 +522,7 @@ let constructBoundedContext:
       commandBus: CommandBus,
       eventBus: EventBus,
       stand: Stand,
+      registry: StandSubscriptionRegistry,
       storageFactory: StorageFactory,
       repositories: readonly RepositoryView[],
       deliveryStrategy: DeliveryStrategy,
@@ -545,6 +553,7 @@ export class BoundedContext {
   readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
+  readonly #subscriptionRegistry: StandSubscriptionRegistry;
   #closed: Promise<void> | undefined;
 
   /**
@@ -556,6 +565,7 @@ export class BoundedContext {
       commandBus,
       eventBus,
       stand,
+      registry,
       storageFactory,
       repositories,
       deliveryStrategy,
@@ -566,6 +576,7 @@ export class BoundedContext {
         commandBus,
         eventBus,
         stand,
+        registry,
         storageFactory,
         repositories,
         deliveryStrategy,
@@ -580,6 +591,7 @@ export class BoundedContext {
    * @param commandBus Dispatches commands accepted by this context.
    * @param eventBus Dispatches events accepted by this context.
    * @param stand Stores read-side state for this context.
+   * @param subscriptionRegistry Stores this context's Stand subscription definitions.
    * @param storageFactory Creates context storage.
    * @param repositories Lists repositories to register.
    * @param deliveryStrategy Selects immutable Entity Inbox shards.
@@ -590,6 +602,7 @@ export class BoundedContext {
     commandBus: CommandBus,
     eventBus: EventBus,
     stand: Stand,
+    subscriptionRegistry: StandSubscriptionRegistry,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
@@ -603,6 +616,7 @@ export class BoundedContext {
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
     this.#stand = stand;
+    this.#subscriptionRegistry = subscriptionRegistry;
     this.#storageFactory = storageFactory;
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
@@ -637,6 +651,7 @@ export class BoundedContext {
     contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
+    contextSubscriptionRegistries.set(this, subscriptionRegistry);
     contextDeliveryDescriptors.set(
       this,
       ContextParts.createDeliveryDescriptor(
@@ -936,6 +951,7 @@ export class BoundedContext {
     );
     await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await ContextParts.closeContextPart(() => this.#stand.close(), errors);
+    await ContextParts.closeContextPart(() => this.#subscriptionRegistry.close(), errors);
     await ContextParts.closeContextPart(() => {
       ContextParts.requireTenantIndex(this).close();
     }, errors);
@@ -1030,6 +1046,14 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return storageFactory;
   },
 
+  subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry {
+    const registry = contextSubscriptionRegistries.get(context);
+    if (registry === undefined) {
+      throw new TypeError("Subscription registry access requires a built BoundedContext instance.");
+    }
+    return registry;
+  },
+
   delivery(context: BoundedContext): ContextDeliveryDescriptor {
     const descriptor = contextDeliveryDescriptors.get(context);
 
@@ -1052,6 +1076,8 @@ export class BoundedContextBuilder {
   readonly #entityTypes = new Set<RepositoryEntityType>();
   #deliveryStrategy: DeliveryStrategy = UniformAcrossAllShards.singleShard();
   #storageFactory: StorageFactory | undefined;
+  #subscriptionRegistry: StandSubscriptionRegistry | undefined;
+  #subscriptionLimit: number | undefined;
   #generatedRegistryRoot: string | URL | undefined;
 
   /**
@@ -1203,6 +1229,47 @@ export class BoundedContextBuilder {
   }
 
   /**
+   * Sets a complete custom registry and transfers it to the first build attempt.
+   *
+   * The built context closes the registry. A failed first build also begins its
+   * closure, so callers must not reuse it. This option cannot be combined with
+   * {@link withSubscriptionLimit}; either call order throws `Error`.
+   *
+   * @param registry Stores this context's Stand subscription definitions.
+   * @returns Returns this builder for further configuration.
+   * @throws Error when a built-in subscription limit is already configured.
+   */
+  withSubscriptionRegistry(registry: StandSubscriptionRegistry): this {
+    if (this.#subscriptionLimit !== undefined) {
+      throw new Error("A custom subscription registry cannot use a subscription limit.");
+    }
+    this.#subscriptionRegistry = registry;
+    return this;
+  }
+
+  /**
+   * Sets the built-in registry capacity from one through 100.
+   *
+   * This option cannot be combined with {@link withSubscriptionRegistry};
+   * either call order throws `Error`.
+   *
+   * @param limit Maximum admitted subscription definitions.
+   * @returns Returns this builder for further configuration.
+   * @throws Error when a custom subscription registry is already configured.
+   * @throws RangeError when the limit is not a safe integer from one through 100.
+   */
+  withSubscriptionLimit(limit: number): this {
+    if (this.#subscriptionRegistry !== undefined) {
+      throw new Error("A custom subscription registry cannot use a subscription limit.");
+    }
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > standSubscriptionLimits.maximum) {
+      throw new RangeError("Stand subscription limit must be from 1 through 100.");
+    }
+    this.#subscriptionLimit = limit;
+    return this;
+  }
+
+  /**
    * Sets the target-to-shard strategy for the context-owned Entity Inbox.
    *
    * @param strategy Selects the durable shard for Aggregate and Process Manager targets.
@@ -1262,15 +1329,19 @@ export class BoundedContextBuilder {
     repositories: readonly RepositoryView[],
     storageFactory: StorageFactory,
   ): BoundedContext {
-    const registeredRepositories = [...repositories];
-    ContextParts.preflightRepositories(registeredRepositories);
-    const commandBus = new CommandBus([
-      ...this.#commandDispatchers,
-      ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
-    ]);
-    const eventStore = this.createEventStore(storageFactory);
+    let registry = this.#subscriptionRegistry;
+    this.#subscriptionRegistry = undefined;
 
+    const registeredRepositories = [...repositories];
+    let eventStore: EventStore | undefined;
+    let stand: Stand | undefined;
     try {
+      ContextParts.preflightRepositories(registeredRepositories);
+      const commandBus = new CommandBus([
+        ...this.#commandDispatchers,
+        ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
+      ]);
+      eventStore = this.createEventStore(storageFactory);
       const eventBus = new EventBus(eventStore, [
         ...ContextParts.repositoryEventDispatchers(registeredRepositories),
         ...this.#eventDispatchers,
@@ -1279,21 +1350,31 @@ export class BoundedContextBuilder {
         eventBus,
         ContextParts.repositoryProducedEventSchemas(registeredRepositories),
       );
-      const stand = new Stand({
+      stand = new Stand({
         context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
+      registry ??= new StorageSubscriptionRegistry(
+        ContextParts.createStorageContext(this.#specSnapshot),
+        storageFactory,
+        this.#subscriptionLimit,
+      );
       return ContextParts.createBoundedContext(
         this.#specSnapshot,
         commandBus,
         eventBus,
         stand,
+        registry,
         storageFactory,
         registeredRepositories,
         this.#deliveryStrategy,
       );
     } catch (error) {
-      ContextParts.closeEventStore(eventStore, error);
+      void registry?.close().catch(() => undefined);
+      void stand?.close().catch(() => undefined);
+      if (eventStore !== undefined) {
+        ContextParts.closeEventStore(eventStore, error);
+      }
       throw error;
     }
   }
@@ -1473,6 +1554,7 @@ const ContextParts = Object.freeze({
     commandBus: CommandBus,
     eventBus: EventBus,
     stand: Stand,
+    registry: StandSubscriptionRegistry,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
@@ -1486,6 +1568,7 @@ const ContextParts = Object.freeze({
       commandBus,
       eventBus,
       stand,
+      registry,
       storageFactory,
       repositories,
       deliveryStrategy,

@@ -13,6 +13,60 @@ handler registry for classes registered with `add(EntityClass)`;
 explicit `Repository` registration. A built context owns `CommandBus`,
 `EventBus`, `Stand`, repositories, and its storage lifecycle.
 
+### Stand subscription registry
+
+Each built context also owns one `StandSubscriptionRegistry`. By default the
+builder creates a storage-backed registry from the resolved context
+`StorageFactory` (including the `ServerEnvironment` factory used for a builder
+added to a server). Its capacity is 100 definitions, or a configured positive
+safe-integer lower limit through `withSubscriptionLimit(limit)`. A complete
+custom implementation can instead be supplied with
+`withSubscriptionRegistry(registry)`; the two options are mutually exclusive,
+and builder ownership transfers on the first build attempt.
+
+Create records begin `pending` and expire after 30 seconds unless activated.
+Active records have no framework TTL. Cancellation physically deletes the
+definition and releases capacity; no tombstone remains. A stored definition is
+at most 1 MiB (1,048,576 bytes). `cleanup()` visits a finite page of at most 25
+expired pending definitions, and can run idempotently on every node.
+
+Context close drains and closes Stand before its registry, then closes tenant,
+repository, and storage resources; it attempts every close and reports
+aggregate failures. An in-memory registry reports `persistent === false`.
+Attaching such a context to a production `ServerEnvironment` emits one
+context-name-only warning without failing startup; Local environments do not
+warn.
+
+The generic storage seam has no native two-row transaction. Creation reserves
+capacity in the control row before writing its full record to one fixed staging
+slot, then promotes that exact staged record. A crash or missing stage is
+recovered on the next operation: the matching fenced stage is finished, while
+a missing stage rolls its reserved count back. A stale writer cannot promote
+after its control token changes. Cross-node polling and listener reconciliation
+are not yet provided, so this registry alone provides no cross-node polling or
+listener completeness guarantee.
+
+The registry accepts only a generated `SubscriptionId` for activate, get, and
+delete. `create(subscription)` returns `{ kind: "created", entry }` or
+`{ kind: "existing", entry }`; the latter requires byte-equivalent canonical
+content and a different definition with the same ID throws `StandConflictError`.
+`activate(id)` returns `activated`, `active`, `missing`, or `expired`.
+`delete(id, expectedRevision?)` returns `deleted`, `missing`, or `changed`;
+negative expected revisions throw `RangeError`. Capacity admission throws
+`StandCapacityError`. Blank IDs or topics, malformed durable records, unknown
+phases, invalid revisions, and inconsistent control data fail closed.
+
+Entries and nested subscriptions returned by create, activate, get, and
+snapshot are clone-safe views with a deeply readonly TypeScript surface.
+Objects are frozen at runtime; Protobuf byte arrays remain mutable runtime
+views but are cloned so they never alias caller storage. Snapshots contain at
+most the configured capacity and are ordered by identifier. The internal staging
+slot is never exposed and is empty after recovery settles. A durable provider
+must implement atomic compare-and-set for definition, control, and staging
+records; construction rejects a provider that cannot. The registry owns only
+its three opened record-storage handles, while the context owns and closes the
+registry.
+
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
 `@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. In a transactional

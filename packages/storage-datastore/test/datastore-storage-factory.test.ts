@@ -637,6 +637,25 @@ describe("DatastoreStorageFactory", () => {
     expect(client.lastQuery?.orders).toContainEqual(["__key__", { descending: false }]);
   });
 
+  it("does not duplicate an explicit identifier order", async () => {
+    const client = new MemoryDatastoreClient();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const storage = factory.createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:id-order",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+    );
+    await storage.write(create(StringValueSchema, { value: "task" }));
+
+    await expect(storage.queryEntries({ sort: [{ field: "id" }] })).resolves.toHaveLength(1);
+
+    expect(client.lastQuery?.orders).toEqual([["__key__", { descending: false }]]);
+  });
+
   it("pushes a limit-only record query directly to Datastore", async () => {
     const client = new MemoryDatastoreClient();
     const factory = new DatastoreStorageFactory({ client: client as never, maxClientSideScan: 10 });

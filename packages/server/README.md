@@ -45,6 +45,69 @@ Use `withStorageFactory()` to choose storage. Use
 register explicitly assembled repositories with `add()`. `buildAsync()` is the
 normal choice for an application that uses generated handlers.
 
+### Keep Stand subscription definitions
+
+Stand subscription definitions use your context storage by default. The default
+registry keeps up to 100 definitions; choose a smaller limit when that better
+fits the application.
+
+```ts
+import { BoundedContext } from "@spine-event-engine/server";
+
+const context = BoundedContext.singleTenant("Tasks").withSubscriptionLimit(25).build();
+```
+
+For an application-specific registry, provide one complete implementation.
+The built context owns and closes it. Do not combine a custom registry with
+`withSubscriptionLimit()`.
+
+```ts
+import { BoundedContext, type StandSubscriptionRegistry } from "@spine-event-engine/server";
+
+declare const registry: StandSubscriptionRegistry;
+
+const context = BoundedContext.singleTenant("Tasks").withSubscriptionRegistry(registry).build();
+```
+
+An in-memory registry is useful in local development and tests. When a
+production server attaches a context with one, it emits one warning naming the
+context because definitions disappear on restart; startup still continues.
+
+### Follow one definition from creation to cleanup
+
+The registry stores a definition first, then makes it active. Applications use
+the generated `SubscriptionId` throughout the lifecycle. `get()` and
+`snapshot()` return cloned, frozen message/object graphs, so treat them as
+observations rather than mutable working objects. Their cloned Protobuf byte
+arrays remain mutable, but do not alias stored or caller bytes.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { InMemorySubscriptionRegistry } from "@spine-event-engine/server";
+import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
+
+const registry = new InMemorySubscriptionRegistry();
+const id = create(SubscriptionIdSchema, { value: "daily-report" });
+const definition = create(SubscriptionSchema, {
+  id,
+  topic: { id: { value: "reports.daily" } },
+});
+
+await registry.create(definition); // pending for up to 30 seconds
+await registry.activate(id); // active definitions do not expire
+const current = await registry.get(id); // one isolated snapshot
+const all = await registry.snapshot(); // bounded, identifier-sorted copies
+if (current !== undefined) await registry.delete(id, current.revision);
+await registry.cleanup(); // removes one finite page of expired pending entries
+await registry.close();
+
+void all;
+```
+
+The built-in durable registry requires record storage with atomic
+compare-and-set. Context construction fails fast when the selected storage
+provider cannot supply that capability; it never silently falls back to memory.
+
 An aggregate receives a generated command type in an `@Assign` method. The
 generator discovers this method and writes the registry used by `buildAsync()`;
 run `spine-proto handlers` after changing it.

@@ -797,6 +797,55 @@ describe("MysqlStorageFactory", () => {
     expect(endCalls).toBe(1);
   });
 
+  it("physically isolates same-schema records with distinct storage keys while same keys share scope", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_storage_scope",
+    });
+    const context = { name: "Tasks", multitenant: false };
+    const first = factory.createRecordStorage(
+      context,
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:first",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+    );
+    const same = factory.createRecordStorage(
+      context,
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:first",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+    );
+    const distinct = factory.createRecordStorage(
+      context,
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:distinct",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+    );
+    try {
+      await first.write(create(StringValueSchema, { value: "one" }));
+      await same.write(create(StringValueSchema, { value: "two" }));
+      await distinct.write(create(StringValueSchema, { value: "three" }));
+
+      const scopes = calls
+        .filter(({ sql }) => sql.includes("INSERT INTO `spine_ts_records`"))
+        .map(({ values }) => values?.[0]);
+      expect(scopes).toHaveLength(3);
+      expect(scopes[0]).toEqual(scopes[1]);
+      expect(scopes[2]).not.toEqual(scopes[0]);
+    } finally {
+      await factory.close();
+    }
+  });
+
   it("shares an observable pool-close failure without unhandled replacement promises", async () => {
     const { MysqlStorageConnectionError, MysqlStorageFactory } = await import("../src/index.js");
     const factory = await MysqlStorageFactory.create({
@@ -1937,7 +1986,7 @@ describe("MysqlStorageFactory", () => {
     expect(query?.values).toHaveLength(6);
     expect(query?.values?.[0]).toEqual(CanonicalMysqlValues.encode("state", 255));
     expect(query?.values?.[3]).toEqual(
-      CanonicalMysqlValues.encode(["Tasks", false, StringValueSchema.typeName], 512),
+      CanonicalMysqlValues.encode(["Tasks", false, "StringValueSchema:legacy"], 512),
     );
     expect(query?.values?.[5]).toEqual(CanonicalMysqlValues.encode("slot-1", 768));
     await factory.close();
@@ -2505,7 +2554,7 @@ describe("MysqlStorageFactory", () => {
       two.kind,
       two.data,
       CanonicalMysqlValues.encode("state", 255),
-      CanonicalMysqlValues.encode(["Tasks", false, StringValueSchema.typeName], 512),
+      CanonicalMysqlValues.encode(["Tasks", false, "StringValueSchema:legacy"], 512),
       CanonicalMysqlValues.encode(null, 255),
       open.kind,
       open.kind,

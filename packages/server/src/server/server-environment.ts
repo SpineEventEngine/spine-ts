@@ -11,6 +11,7 @@ import type {
 } from "@spine-event-engine/transport";
 
 import { RetryableCloseGroup } from "./retryable-close.js";
+import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import type { EnvironmentDeliveryPorts } from "../context/local-inbox-handoff.js";
 import type { DeliveryInbox, DeliveryWorkRegistry } from "../delivery/delivery-ports.js";
 import type { DeliverySource } from "../delivery/delivery-supervisor.js";
@@ -91,6 +92,13 @@ export interface ServerEnvironmentSettings {
    * Optional tracing factory placeholder for later tracing adapters.
    */
   readonly tracerFactory?: ServerEnvironmentCloseable;
+
+  /**
+   * Notifies an application logger about one non-sensitive environment warning.
+   *
+   * @param message Describes the warning.
+   */
+  readonly warn?: (message: string) => void;
 }
 
 /**
@@ -154,6 +162,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
     this.delivery = settings.delivery;
     this.tracerFactory = settings.tracerFactory;
     this.#ownedCloseables = ServerEnvironmentValues.facilitiesToClose(settings);
+    environmentWarnings.set(this, settings.warn);
+    warnedVolatileRegistries.set(this, new WeakSet());
     this.#closeGroup = new RetryableCloseGroup(
       this.#ownedCloseables,
       "ServerEnvironment close failed.",
@@ -271,6 +281,7 @@ interface RequiredFacilities {
   readonly transport: SignalTransport;
   readonly delivery: ServerEnvironmentCloseable | undefined;
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
+  readonly warn: (message: string) => void;
 }
 
 /**
@@ -330,11 +341,14 @@ interface ServerEnvironmentAccess {
     environment: ServerEnvironment,
     createWorker: () => EnvironmentGenerationWorker,
   ): void;
+  warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext): void;
 }
 
 const environmentAttachments = new WeakMap<ServerEnvironment, EnvironmentAttachments>();
 const deliveryOpeners = new WeakMap<ServerEnvironment, () => Promise<void>>();
 const testAttachmentsInstallable = new WeakSet<ServerEnvironment>();
+const environmentWarnings = new WeakMap<ServerEnvironment, (message: string) => void>();
+const warnedVolatileRegistries = new WeakMap<ServerEnvironment, WeakSet<BoundedContext>>();
 
 /**
  * Provides package-only environment delivery attachment access for server lifecycle owners.
@@ -436,6 +450,18 @@ export const serverEnvironmentAccess: ServerEnvironmentAccess = Object.freeze({
     }
     environmentAttachments.set(environment, new EnvironmentAttachments({ createWorker }));
   },
+  warnVolatileRegistry(environment: ServerEnvironment, context: BoundedContext) {
+    if (environment.environment.type !== EnvironmentType.Production) return;
+    if (boundedContextAccess.subscriptionRegistry(context).persistent) return;
+    const warned = warnedVolatileRegistries.get(environment);
+    const warn = environmentWarnings.get(environment);
+    if (warned === undefined || warn === undefined) {
+      throw new TypeError("Registry warning requires a ServerEnvironment instance.");
+    }
+    if (warned.has(context)) return;
+    warned.add(context);
+    warn(`Stand subscription registry for context "${context.name.value}" is not persistent.`);
+  },
 });
 
 /**
@@ -491,6 +517,7 @@ const ServerEnvironmentValues = Object.freeze({
         transport: settings.transport,
         delivery: settings.delivery,
         tracerFactory: settings.tracerFactory,
+        warn: settings.warn ?? console.warn,
       };
     }
     return {
@@ -498,6 +525,7 @@ const ServerEnvironmentValues = Object.freeze({
       transport: settings.transport ?? new LocalSignalTransport(),
       delivery: settings.delivery,
       tracerFactory: settings.tracerFactory,
+      warn: settings.warn ?? console.warn,
     };
   },
 });
