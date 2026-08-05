@@ -98,6 +98,7 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
+import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { TaskAlreadyDone } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections.js";
 import { TaskAlreadyDoneSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_rejections_pb.js";
 import { TaskIdSchema as TodoIdSchema } from "../../../../examples/todo/generated/spine/examples/todo/task_id_pb.js";
@@ -4635,7 +4636,12 @@ async function postEntityStateChanged(
     idSchema !== undefined && id !== undefined
       ? AnyMessages.pack(idSchema, id as never, { validate: false })
       : AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: String(id) }));
-  await context.eventBus().post(
+  await (
+    boundedContextAccess as unknown as {
+      postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
+    }
+  ).postSystemEvent(
+    context,
     create(EventSchema, {
       id: { value: `state-change-${String(++stateChangeSequence)}` },
       message: AnyMessages.pack(

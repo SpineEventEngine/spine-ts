@@ -501,6 +501,7 @@ const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
 const contextSubscriptionRegistries = new WeakMap<BoundedContext, StandSubscriptionRegistry>();
+const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
   (defaultStorageFactory: StorageFactory) => Promise<BoundedContext>
@@ -517,6 +518,7 @@ interface BoundedContextAccess {
     typeUrl: string,
     subscriber: EventSubscriber,
   ): EventSubscription;
+  postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
   tenantIndex(context: BoundedContext): TenantIndex;
   storageFactory(context: BoundedContext): StorageFactory;
@@ -671,6 +673,7 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
+    systemEventPosters.set(this, (event) => this.#systemEventBus.post(event));
     contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot, systemSpec));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
@@ -1073,6 +1076,14 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return subscribe(typeUrl, subscriber);
   },
 
+  postSystemEvent(context: BoundedContext, event: Event): Promise<void> {
+    const post = systemEventPosters.get(context);
+    if (post === undefined) {
+      throw new TypeError("System event posting requires a built BoundedContext instance.");
+    }
+    return post(event);
+  },
+
   systemPairing(context: BoundedContext): SystemPairingSnapshot {
     return ContextParts.cloneSystemPairing(ContextParts.requireSystemPairing(context));
   },
@@ -1398,14 +1409,17 @@ export class BoundedContextBuilder {
     let systemStand: Stand | undefined;
     try {
       ContextParts.preflightRepositories(registeredRepositories);
+      const eventDispatchers = [
+        ...ContextParts.repositoryEventDispatchers(registeredRepositories),
+        ...this.#eventDispatchers,
+      ];
       const commandBus = new CommandBus([
         ...this.#commandDispatchers,
         ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
       ]);
       eventStore = this.createEventStore(storageFactory);
       const eventBus = new EventBus(eventStore, [
-        ...ContextParts.repositoryEventDispatchers(registeredRepositories),
-        ...this.#eventDispatchers,
+        ...ContextParts.domainEventDispatchers(eventDispatchers),
       ]);
       eventBusAccess.registerSchemas(
         eventBus,
@@ -1422,7 +1436,10 @@ export class BoundedContextBuilder {
       systemEventStore = systemSpec.storesEvents
         ? new EventStore(ContextParts.createStorageContext(systemSpec), storageFactory)
         : undefined;
-      const systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
+      const systemEventBus = eventBusAccess.createSystemBus(
+        systemEventStore,
+        ContextParts.systemEventDispatchers(eventDispatchers),
+      );
       systemStand = new Stand({
         context: ContextParts.createStorageContext(systemSpec),
         storageFactory,
@@ -2092,6 +2109,27 @@ const ContextParts = Object.freeze({
     });
   },
 
+  domainEventDispatchers(dispatchers: readonly EventDispatcher[]): readonly EventDispatcher[] {
+    return Object.freeze(
+      dispatchers.filter((dispatcher) => !ContextParts.isSystemEventDispatcher(dispatcher)),
+    );
+  },
+
+  systemEventDispatchers(dispatchers: readonly EventDispatcher[]): readonly EventDispatcher[] {
+    return Object.freeze(
+      dispatchers.filter((dispatcher) => ContextParts.isSystemEventDispatcher(dispatcher)),
+    );
+  },
+
+  isSystemEventDispatcher(dispatcher: EventDispatcher): boolean {
+    const schemas = [...dispatcher.messageSchemas()];
+    const systemSchemas = schemas.filter((schema) => schema.typeName.startsWith("spine.system."));
+    if (systemSchemas.length > 0 && systemSchemas.length !== schemas.length) {
+      throw new Error("An EventDispatcher cannot mix domain and system event schemas.");
+    }
+    return systemSchemas.length > 0;
+  },
+
   repositoryProducedEventSchemas(
     repositories: readonly RepositoryView[],
   ): readonly MessageSchema[] {
@@ -2123,6 +2161,7 @@ const ContextParts = Object.freeze({
     contextStorageFactories.delete(context);
     contextDeliveryDescriptors.delete(context);
     eventSubscribers.delete(context);
+    systemEventPosters.delete(context);
     tenantIndex.close();
   },
 

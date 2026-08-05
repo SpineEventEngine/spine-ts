@@ -112,7 +112,7 @@ describe("Stand", () => {
       context: { name: "Gated", multitenant: false },
       storageFactory: factory,
     });
-    const bus = new EventBus(new EventStore({ name: "Gated", multitenant: false }, factory));
+    const bus = eventBusAccess.createSystemBus(undefined);
     const registry = new GatedSnapshotRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "gated-delete" }),
@@ -149,7 +149,7 @@ describe("Stand", () => {
       context: { name: "Closing", multitenant: false },
       storageFactory: factory,
     });
-    const bus = new EventBus(new EventStore({ name: "Closing", multitenant: false }, factory));
+    const bus = eventBusAccess.createSystemBus(undefined);
     const registry = new GatedSnapshotRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "gated-close" }),
@@ -194,9 +194,7 @@ describe("Stand", () => {
       context: { name: "Subscriptions", multitenant: false },
       storageFactory,
     });
-    const eventBus = new EventBus(
-      new EventStore({ name: "Subscriptions", multitenant: false }, storageFactory),
-    );
+    const eventBus = eventBusAccess.createSystemBus(undefined);
     const registry = new FailingSnapshotRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "failed-consumer" }),
@@ -240,9 +238,7 @@ describe("Stand", () => {
       context: { name: "Subscriptions", multitenant: false },
       storageFactory,
     });
-    const eventBus = new EventBus(
-      new EventStore({ name: "Subscriptions", multitenant: false }, storageFactory),
-    );
+    const eventBus = eventBusAccess.createSystemBus(undefined);
     stand.register(ProjectionStateSchema);
     const registry = new RevisionFencedRegistry();
     const subscription = create(SubscriptionSchema, {
@@ -289,12 +285,8 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    const firstBus = new EventBus(
-      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
-    );
-    const secondBus = new EventBus(
-      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
-    );
+    const firstBus = eventBusAccess.createSystemBus(undefined);
+    const secondBus = eventBusAccess.createSystemBus(undefined);
     first.register(ProjectionStateSchema);
     second.register(ProjectionStateSchema);
     const subscription = create(SubscriptionSchema, {
