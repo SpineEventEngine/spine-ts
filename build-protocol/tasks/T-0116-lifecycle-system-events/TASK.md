@@ -53,6 +53,16 @@ subscription removal/restoration across every Entity family.
 - Runtime metadata: pending; immutable role/profile and any introspection
   limitation will be recorded before acceptance.
 
+## Implementation Assignment
+
+- Existing role: implementer `/root/t0116_impl`.
+- Ownership: repository lifecycle System-event production, System Stand
+  subscription rendering, focused RED/GREEN tests, and task records.
+- Expected and explicitly dispatched model: `gpt-5.6-terra`.
+- Expected and explicitly dispatched reasoning: `medium`.
+- Runtime metadata: pending; immutable role/profile and any introspection
+  limitation will be recorded before acceptance.
+
 ## Review Dispositions
 
 - Style/maintainability: relevant to shared repository transition code.
