@@ -150,3 +150,21 @@ opened.
   self-introspection may be unavailable, and the immutable configured profile is
   then the acceptance metadata. The replacement may not spawn children or
   change production behavior unless the proof exposes a concrete defect.
+
+## Finding-Specific Confirmation Dispatch
+
+The converged endpoint `4570fff0` receives confirmation only for findings left
+open by the second complete review wave. This is not a third broad review wave.
+Every reviewer is instructed not to spawn children.
+
+| Concern                     | Existing role                      | Expected profile                    | Confirmation scope                                                                                                                                               |
+| --------------------------- | ---------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Performance and reliability | `performance_reliability_reviewer` | `gpt-5.6-terra` / `high`            | Post-commit callback isolation, simultaneous activation, provider exact-one ownership, native entity-family subscriptions, and reconciliation/shutdown barriers. |
+| Style and maintainability   | `style_maintainability_reviewer`   | `gpt-5.6-terra` / `high`            | Deterministic lifecycle proof, obsolete server-path removal, and the requirements ledger.                                                                        |
+| TypeScript and API          | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / `high`            | Correct internal atomic-commit subpath and no public provider-factory leak.                                                                                      |
+| Documentation               | `documentation_reviewer`           | immutable `gpt-5.6-luna` / `medium` | Correct storage reference subpaths and separation of history from atomic commit operations.                                                                      |
+
+All dispatches explicitly name their configured model and reasoning. The
+Desktop surface may not expose runtime self-introspection; when absent, the
+immutable configured role/profile is the accepted actual metadata unless a
+visible mismatch occurs.
