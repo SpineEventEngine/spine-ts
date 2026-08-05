@@ -71,3 +71,8 @@ immutable configured profile. No finding is rejected or deferred.
 - Evidence: repository-routing plus EventBus regression (220 passing), root
   tooling typecheck, generated build/typecheck, affected ESLint, cleanup and
   TSDoc checks, formatter check, and `git diff --check`.
+- The same style and reliability reviewers are redispatched only over
+  `6a581f2b..2b613d92`. Their expected and explicitly dispatched profiles
+  remain `gpt-5.6-terra` / `high`; runtime self-introspection remains
+  unavailable and the immutable configured role/profile is the available
+  metadata.
