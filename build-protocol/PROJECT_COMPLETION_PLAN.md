@@ -24,6 +24,15 @@ durably closed; Wave 7 requires its separate human Q&A before work starts.
 Autonomous implementation follows
 `build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 
+The pre-Wave-7 architecture review found that `EntityStateChanged` currently
+uses a domain EventBus persistence-bypass path instead of a paired System
+Context EventBus, and that Message Board discards complete normal subscription
+payloads. T-0113 Q&A and planning are complete. The approved correction is
+dependency-ordered as T-0114 through T-0119 in
+`build-protocol/planning/T-0113_SYSTEM_CONTEXT_PLAN.md`. Implementation has not
+started and requires explicit human authorization. Complete this correction
+before Wave 7 Q&A continues.
+
 ## Purpose
 
 This is the executable plan from the current repository state to a completed
@@ -137,10 +146,11 @@ durably closed.
   cluster-complete guarantee; queries remain authoritative. Its Q&A must also
   decide application redeployment and update behavior.
 
-Wave 6 Q&A, planning, implementation, review, release verification, integration,
-and documentation closure are complete. Wave 7 still requires a separate human
-Q&A. Do not publish packages to npm until all waves are complete and publication
-is revisited with the human.
+Wave 6 Q&A, its original implementation, review, release verification,
+integration, and documentation closure are complete. T-0113 records the
+subsequent System Context and payload-first correction that must precede Wave 7.
+Wave 7 still requires a separate human Q&A. Do not publish packages to npm until
+all waves are complete and publication is revisited with the human.
 
 ## Authored API And Example Quality Correction
 

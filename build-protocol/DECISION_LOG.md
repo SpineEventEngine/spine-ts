@@ -5046,3 +5046,50 @@ it must complete a fresh snapshot before reopening live observation.
 
 Consequences: no Proto or public method is added; one shard has one owner at a
 time, while different shards retain no ordering guarantee.
+
+## D-0109: Separate System Events From The Domain EventBus
+
+Status: Accepted
+
+Date: 2026-08-05
+
+Task: System Context correction planning / `T-0113`
+
+Decision:
+
+- Build one internal System Context for every domain Bounded Context. Give the
+  pair separate EventBuses, Stands, and event-storage namespaces while sharing
+  one durable Stand subscription registry.
+- Route every system event only through the System Context EventBus. A system
+  event must never register with, traverse, or be stored by the domain
+  EventBus/EventStore.
+- Forget system events by default. Provide a narrow builder-level opt-in that
+  persists them only in the System Context's storage namespace.
+- Emit all copied system events corresponding to current TS operations:
+  creation, state and lifecycle transitions, and accepted command/event
+  dispatch. Keep `EventImported` compatibility-only and `MigrationApplied`
+  dormant until their operations exist.
+- Keep System Contexts internal. Domain Stand remains authoritative for
+  queries; System Stand observes entity lifecycle events. Both subscription
+  sources feed the same active stream through the shared definition registry.
+- Make Message Board apply valid entity subscription payloads locally. Query
+  only for initial state, recovery/gaps, inconsistent payloads, and after its
+  own successful post while live updates are disconnected.
+
+Reasoning:
+
+- System events describe framework lifecycle and diagnostics rather than the
+  domain event history. Mixing them into the domain EventBus violates that
+  boundary even when a special path skips EventStore append.
+- Payload-bearing subscription updates normally contain the exact changed
+  state. Querying after each update discards useful protocol data and creates
+  unnecessary load.
+
+Consequences:
+
+- The correction changes EventBus persistence, context assembly, Stand
+  observation, subscription activation, shutdown, and current documentation.
+- Implementation follows dependency tasks T-0114 through T-0119 in
+  `build-protocol/planning/T-0113_SYSTEM_CONTEXT_PLAN.md`.
+- Subscription delivery remains best effort; this decision adds no
+  cluster-complete, replay-complete, or exactly-once guarantee.
