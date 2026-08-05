@@ -983,6 +983,31 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
     const entity = EntityValues.key(input.entity, input.entityId);
     const commitKey = CanonicalMysqlValues.encode(input.id, idBytes);
     const digest = MysqlCommitValues.digest(input);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.attempt(input, scope, entity, commitKey, digest);
+      } catch (error) {
+        if (!MysqlCommitValues.retryable(error) || attempt === 2) {
+          if (
+            error instanceof Error &&
+            error.message === "Entity commit ID was reused with different content."
+          ) {
+            throw error;
+          }
+          throw new MysqlStorageOperationError();
+        }
+      }
+    }
+    throw new MysqlStorageOperationError();
+  }
+
+  private async attempt<I, S extends Message>(
+    input: EntityCommitInput<I, S>,
+    scope: Uint8Array,
+    entity: Uint8Array,
+    commitKey: Uint8Array,
+    digest: Uint8Array,
+  ): Promise<EntityCommitResult> {
     let connection: PoolConnection | undefined;
     let transactionStarted = false;
     try {
@@ -1018,16 +1043,16 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
       return "committed";
     } catch (error) {
       if (transactionStarted) await connection?.rollback().catch(() => undefined);
-      if (connection !== undefined && (await this.receiptMatches(input, digest))) {
-        return "committed";
+      if (connection !== undefined) {
+        if (MysqlCommitValues.brokenConnection(error)) {
+          this.connections.destroy(connection);
+        } else {
+          this.connections.release(connection);
+        }
+        connection = undefined;
       }
-      if (
-        error instanceof Error &&
-        error.message === "Entity commit ID was reused with different content."
-      ) {
-        throw error;
-      }
-      throw new MysqlStorageOperationError();
+      if (await this.receiptMatches(input, digest)) return "committed";
+      throw error;
     } finally {
       if (connection !== undefined) this.connections.release(connection);
     }
@@ -1213,6 +1238,26 @@ const EntityValues = Object.freeze({
   },
 });
 const MysqlCommitValues = Object.freeze({
+  brokenConnection(error: unknown): boolean {
+    if (typeof error !== "object" || error === null) return false;
+    const code: unknown = Reflect.get(error, "code");
+    return (
+      code === "PROTOCOL_CONNECTION_LOST" ||
+      code === "ECONNRESET" ||
+      code === "EPIPE" ||
+      Reflect.get(error, "fatal") === true
+    );
+  },
+
+  retryable(error: unknown): boolean {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      (Reflect.get(error, "code") === "ER_LOCK_DEADLOCK" ||
+        Reflect.get(error, "code") === "ER_LOCK_WAIT_TIMEOUT")
+    );
+  },
+
   digest<I, S extends Message>(input: EntityCommitInput<I, S>): Uint8Array {
     const record = (value: EntityRecord<I, S> | undefined) =>
       value === undefined

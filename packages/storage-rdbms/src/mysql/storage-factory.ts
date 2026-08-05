@@ -418,7 +418,7 @@ export class MysqlStorageFactory extends StorageFactory {
   ): EntityCommitStorage {
     this.#lifecycle.assertOpen();
     const handle = new MysqlEntityCommitStorage(
-      input as EntityStorageInput<unknown, Message>,
+      input as unknown as EntityStorageInput<unknown, Message>,
       this.entityConnections(),
       (connection) => EntitySchemaVerification.verify(connection),
       () => this.#handles.delete(handle),
