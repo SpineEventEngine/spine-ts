@@ -244,3 +244,9 @@ after the review wave. `c0bb470b` corrects only Projection and Process Manager
 entity initialization while preserving tombstones as atomic expected records.
 The existing reliability concern receives one exact confirmation under its
 retained explicit Terra/high profile; no broad review lane is reopened.
+
+The exact confirmation is clean with 184 focused tests. It verifies default
+initialization for deleted Projection and Process Manager records, unchanged
+tombstone CAS input, and unchanged Aggregate lifecycle loading. Runtime
+self-introspection was unavailable and no visible mismatch occurred. T-0109 is
+review-converged for release verification.
