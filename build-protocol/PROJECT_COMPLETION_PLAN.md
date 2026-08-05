@@ -14,7 +14,9 @@ is reviewed, release-verified, integrated, post-merge verified, and pushed.
 T-0107 remote shard fan-out is reviewed, release-verified, integrated, and
 post-merge verified. T-0108 configurable durable Stand registry is reviewed,
 release-verified, integrated, post-merge verified, and pushed. T-0109 Stand
-listener reconciliation is the current action. Autonomous implementation follows
+listener reconciliation is reviewed, release-verified, integrated, post-merge
+verified, and pushed. T-0110 multi-node Gateway fan-in is the current action.
+Autonomous implementation follows
 `build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 
 ## Purpose
