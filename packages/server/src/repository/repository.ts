@@ -10,10 +10,12 @@ import {
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
+  CommandIdSchema,
   CommandSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  MessageIdSchema,
   RejectionEventContextSchema,
   type Command,
   type Event,
@@ -21,6 +23,7 @@ import {
   type Version,
   VersionSchema,
 } from "@spine-event-engine/proto";
+import { EntityStateChangedSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import {
   EventStore,
   RecordColumn,
@@ -1061,6 +1064,7 @@ const inboxDedupMs = 30_000;
 
 interface LoadedAggregate {
   readonly entity: object;
+  readonly oldState: Message | undefined;
   readonly states: EntityStateHistoryPort<unknown, Message>;
   readonly events: EntityEventHistoryPort<unknown>;
   readonly version: bigint;
@@ -1100,6 +1104,7 @@ class AggregateExecutionSupport {
 
     return Object.freeze({
       entity,
+      oldState: current === undefined ? undefined : clone(this.#repository.stateSchema, current.state as never),
       states: storage.states,
       events: storage.events,
       version: current?.version ?? 0n,
@@ -1203,8 +1208,10 @@ class AggregateExecutionSupport {
     version: bigint,
     events: readonly Event[],
     dispatch: (event: Event) => Promise<void>,
+    onPersisted: () => Promise<void>,
   ): Promise<() => Promise<void>> {
     await this.persistAggregateUpdate(loaded, entityId, version, events);
+    await onPersisted();
     return async () => {
       await Promise.all(
         events.map(async (event) => {
@@ -1352,6 +1359,18 @@ class AggregateCommandExecution {
       committedVersion,
       events,
       (event) => this.#runtime.dispatchStored(event),
+      async () => {
+        if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
+        await EntityStateChangePublisher.command(
+          this.#runtime,
+          this.#repository,
+          this.#command,
+          route.entityId,
+          loaded.oldState,
+          RepositoryEntities.repositoryState(loaded.entity) as Message,
+          RepositorySignals.eventVersionNumber(committedVersion),
+        );
+      },
     );
   }
 
@@ -1554,6 +1573,18 @@ class AggregateEventExecution {
         loaded.version + BigInt(produced.events.length),
         produced.events,
         (event) => this.#runtime.dispatchStoredFollowUp(event),
+        async () => {
+          if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
+          await EntityStateChangePublisher.event(
+            this.#runtime,
+            this.#repository,
+            this.#event,
+            entityId,
+            loaded.oldState,
+            RepositoryEntities.repositoryState(loaded.entity) as Message,
+            RepositorySignals.eventVersionNumber(loaded.version + BigInt(produced.events.length)),
+          );
+        },
       );
       void dispatch();
     }
@@ -1782,10 +1813,15 @@ class ProjectionEventExecution {
   async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
     const packedMessage = EntityInvocation.requireSignalMessage(this.#event.message, "event");
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
+    const previous = await this.#runtime.stand.readVersioned(
+      this.#repository.stateSchema,
+      entityId,
+      tenantOptions,
+    );
     const entity = await this.#loadProjection(entityId, tenantOptions);
 
     await this.#invokeSubscribers(entity, subscribers, packedMessage);
-    await this.#storeIfChanged(entity, tenantOptions);
+    await this.#storeIfChanged(entity, tenantOptions, previous?.state as Message | undefined);
   }
 
   #readIntake(): {
@@ -1806,6 +1842,7 @@ class ProjectionEventExecution {
   async #storeIfChanged(
     entity: object,
     tenantOptions: { readonly tenantId?: string },
+    oldState: Message | undefined,
   ): Promise<void> {
     if (!RepositoryEntities.repositoryChanged(entity)) {
       return;
@@ -1836,6 +1873,15 @@ class ProjectionEventExecution {
         createdAt: this.#event.context?.timestamp ?? create(TimestampSchema),
       });
     }
+    await EntityStateChangePublisher.event(
+      this.#runtime,
+      this.#repository,
+      this.#event,
+      (entity as { readonly id: unknown }).id,
+      oldState,
+      RepositoryEntities.repositoryState(entity) as Message,
+      this.#event.context?.version?.number ?? 0,
+    );
   }
 
   async #invokeSubscribers(
@@ -2083,6 +2129,11 @@ class ProcessManagerCommandExecution {
       this.#runtime.context,
       this.#command,
     );
+    const previous = await this.#runtime.stand.readVersioned(
+      this.#repository.stateSchema,
+      route.entityId,
+      tenantOptions,
+    );
     const entity = await this.#support.load(route.entityId, tenantOptions);
     let eventSignals: readonly unknown[];
     try {
@@ -2102,6 +2153,17 @@ class ProcessManagerCommandExecution {
     );
     const events = this.#bindProducedEvents(eventSignals, route.entityId);
     await this.#support.appendDiagnosticEvents(entity, tenantOptions, events);
+    if (RepositoryEntities.repositoryChanged(entity)) {
+      await EntityStateChangePublisher.command(
+        this.#runtime,
+        this.#repository,
+        this.#command,
+        route.entityId,
+        previous?.state as Message | undefined,
+        RepositoryEntities.repositoryState(entity) as Message,
+        RepositoryStand.processManagerVersion(entity),
+      );
+    }
     this.#postEvents(events);
   }
 
@@ -2281,6 +2343,11 @@ class ProcessManagerEventExecution {
     },
   ): Promise<void> {
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
+    const previous = await this.#runtime.stand.readVersioned(
+      this.#repository.stateSchema,
+      entityId,
+      tenantOptions,
+    );
     const entity = await this.#support.load(entityId, tenantOptions);
     const produced = await this.#invokeHandlers(entity, intake);
 
@@ -2294,6 +2361,17 @@ class ProcessManagerEventExecution {
       DispatchGuards.guardedJournalEvent(this.#event, entityId),
     ]);
     await this.#support.appendDiagnosticEvents(entity, tenantOptions, events);
+    if (RepositoryEntities.repositoryChanged(entity)) {
+      await EntityStateChangePublisher.event(
+        this.#runtime,
+        this.#repository,
+        this.#event,
+        entityId,
+        previous?.state as Message | undefined,
+        RepositoryEntities.repositoryState(entity) as Message,
+        RepositoryStand.processManagerVersion(entity),
+      );
+    }
     this.#postEvents(events);
     await this.#postCommands(this.#bindProducedCommands(produced.commands));
   }
@@ -2865,6 +2943,113 @@ const RepositorySignals = {
     });
   },
 };
+
+/**
+ * Builds and best-effort dispatches committed entity state notifications.
+ */
+class EntityStateChangePublisher {
+  static async command(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    command: Command,
+    entityId: unknown,
+    oldState: Message | undefined,
+    newState: Message,
+    version: number,
+  ): Promise<void> {
+    const producerId = RepositorySignals.runtimeProducerId(entityId);
+    const metadata = runtime.signalMetadata.eventFromCommand(command, 0, {
+      ...(producerId === undefined ? {} : { producerId }),
+      version,
+    });
+    await this.#publish(
+      runtime,
+      repository,
+      metadata,
+      AnyMessages.pack(CommandIdSchema, command.id as never),
+      command.message?.typeUrl ?? "",
+      entityId,
+      oldState,
+      newState,
+      version,
+    );
+  }
+
+  static async event(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    source: Event,
+    entityId: unknown,
+    oldState: Message | undefined,
+    newState: Message,
+    version: number,
+  ): Promise<void> {
+    const producerId = RepositorySignals.runtimeProducerId(entityId);
+    const metadata = runtime.signalMetadata.eventFromEvent(source, 0, {
+      ...(producerId === undefined ? {} : { producerId }),
+      version,
+    });
+    await this.#publish(
+      runtime,
+      repository,
+      metadata,
+      AnyMessages.pack(EventIdSchema, source.id as never),
+      source.message?.typeUrl ?? "",
+      entityId,
+      oldState,
+      newState,
+      version,
+    );
+  }
+
+  static async #publish(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    metadata: ReturnType<SignalMetadata["eventFromCommand"]>,
+    signalId: NonNullable<ReturnType<typeof AnyMessages.pack>>,
+    signalTypeUrl: string,
+    entityId: unknown,
+    oldState: Message | undefined,
+    newState: Message,
+    version: number,
+  ): Promise<void> {
+    runtime.registerEventSchema(EntityStateChangedSchema);
+    const event = create(EventSchema, {
+      id: metadata.id,
+      message: AnyMessages.pack(
+        EntityStateChangedSchema,
+        create(EntityStateChangedSchema, {
+          entity: create(MessageIdSchema, {
+            id: this.#packEntityId(repository, entityId),
+            typeUrl: TypeUrls.derive(repository.stateSchema),
+          }),
+          ...(oldState === undefined
+            ? {}
+            : { oldState: AnyMessages.pack(repository.stateSchema, oldState as never) }),
+          newState: AnyMessages.pack(repository.stateSchema, newState as never),
+          signalId: [create(MessageIdSchema, { id: signalId, typeUrl: signalTypeUrl })],
+          when: metadata.context.timestamp,
+          newVersion: create(VersionSchema, { number: version }),
+        }),
+      ),
+      context: metadata.context,
+    });
+    try {
+      void runtime.postEventFollowUp(event).catch((error: unknown) => {
+        runtime.recordDispatchFailure(event, error);
+      });
+    } catch (error) {
+      runtime.recordDispatchFailure(event, error);
+    }
+  }
+
+  static #packEntityId(repository: RepositoryView, entityId: unknown) {
+    const field = repository.idField.descriptor;
+    return field.fieldKind === "message"
+      ? AnyMessages.pack(field.message as MessageSchema, entityId as never)
+      : PrimitiveIds.pack(entityId as never);
+  }
+}
 Object.freeze(RepositorySignals);
 
 /**

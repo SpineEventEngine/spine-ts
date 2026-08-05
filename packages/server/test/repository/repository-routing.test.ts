@@ -52,6 +52,7 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import { EntityStateChangedSchema } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -4508,6 +4509,46 @@ describe("repository signal routing", () => {
       },
       version: { number: 1 },
     });
+  });
+
+  it("publishes a committed aggregate state change after durable persistence", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: async (event) => {
+          changes.push(event);
+        },
+      })
+      .build();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("command-state-change", "changed"));
+
+      await waitForCondition(() => changes.length === 1);
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toMatchObject({
+        message: { typeUrl: TypeUrls.derive(EntityStateChangedSchema) },
+        context: { origin: { case: "pastMessage" } },
+      });
+      const change = AnyMessages.unpack(changes[0]?.message, EntityStateChangedSchema);
+      expect(change).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+        newState: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        newVersion: { number: 1 },
+      });
+      expect(AnyMessages.unpack(change?.newState, AggregateStateSchema)).toMatchObject({
+        id: "changed",
+        name: "Task (applied)",
+      });
+      expect(context.eventBus().acceptedEventTypes()).not.toContain(
+        TypeUrls.derive(EntityStateChangedSchema),
+      );
+    } finally {
+      await context.close();
+    }
   });
 
   it("rebuilds projection state from stored events without re-appending them", async () => {
