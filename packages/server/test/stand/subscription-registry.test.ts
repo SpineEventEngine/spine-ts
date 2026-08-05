@@ -1,5 +1,5 @@
 import { create, toBinary, type Message } from "@bufbuild/protobuf";
-import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema, type Any } from "@bufbuild/protobuf/wkt";
 import {
   SubscriptionIdSchema,
   SubscriptionSchema,
@@ -59,6 +59,122 @@ function subscriptionAnyBytes(value: Subscription): Uint8Array {
   if (bytes === undefined) throw new Error("Expected Any bytes.");
   return bytes;
 }
+
+describe("StandSubscriptionRecords", () => {
+  const validRecord = (): StandSubscriptionRecord =>
+    create(StandSubscriptionRecordSchema, {
+      subscription: subscription("record"),
+      phase: SubscriptionPhase.PENDING,
+      createdAt: create(TimestampSchema, { seconds: 1_000n }),
+      pendingUntil: create(TimestampSchema, { seconds: 1_030n }),
+      revision: 1n,
+      generation: new Uint8Array(16),
+    });
+
+  it("rejects malformed lifecycle fields", () => {
+    const reject = (
+      corrupt: (record: StandSubscriptionRecord) => void,
+      expectedId = "record",
+    ): void => {
+      const record = validRecord();
+      corrupt(record);
+      expect(() => StandSubscriptionRecords.read(record, expectedId)).toThrow(
+        "Stand subscription record is invalid.",
+      );
+    };
+
+    reject((record) => {
+      record.subscription = undefined;
+    });
+    reject((record) => {
+      record.subscription = subscription("record");
+    }, "different");
+    reject((record) => {
+      record.subscription = subscription("  ");
+    });
+    reject((record) => {
+      record.subscription = subscription("record", "  ");
+    });
+    reject((record) => {
+      record.generation = new Uint8Array();
+    });
+    reject((record) => {
+      record.createdAt = undefined;
+    });
+    reject((record) => {
+      record.createdAt = create(TimestampSchema, { seconds: -1n });
+    });
+    reject((record) => {
+      record.revision = -1n;
+    });
+    reject((record) => {
+      record.revision = BigInt(Number.MAX_SAFE_INTEGER) + 1n;
+    });
+    reject((record) => {
+      record.createdAt = create(TimestampSchema, {
+        seconds: BigInt(Number.MAX_SAFE_INTEGER),
+      });
+    });
+    reject((record) => {
+      record.pendingUntil = undefined;
+    });
+    reject((record) => {
+      record.pendingUntil = create(TimestampSchema, {
+        seconds: BigInt(Number.MAX_SAFE_INTEGER),
+      });
+    });
+    reject((record) => {
+      record.pendingUntil = create(TimestampSchema, { seconds: 999n });
+    });
+    reject((record) => {
+      record.phase = SubscriptionPhase.SUBSCRIPTION_PHASE_UNSPECIFIED;
+      record.pendingUntil = undefined;
+    });
+    reject((record) => {
+      record.phase = SubscriptionPhase.ACTIVE;
+    });
+  });
+
+  it("rejects invalid generation and time values before encoding", () => {
+    const entry: StandSubscriptionEntry = {
+      subscription: subscription("record"),
+      phase: "pending",
+      createdAt: start,
+      pendingUntil: start + 30_000,
+      revision: 1n,
+    };
+
+    expect(() => StandSubscriptionRecords.write(entry, new Uint8Array())).toThrow(RangeError);
+    expect(() => StandSubscriptionRecords.write({ ...entry, createdAt: -1 })).toThrow(RangeError);
+    expect(() => StandSubscriptionRecords.write({ ...entry, createdAt: 1.5 })).toThrow(RangeError);
+  });
+
+  it("reads an active record without a pending deadline", () => {
+    const record = validRecord();
+    record.phase = SubscriptionPhase.ACTIVE;
+    record.pendingUntil = undefined;
+
+    expect(StandSubscriptionRecords.read(record)).toMatchObject({
+      phase: "active",
+      revision: 1n,
+    });
+  });
+
+  it("decodes a valid record and rejects malformed or oversized bytes", () => {
+    const bytes = toBinary(StandSubscriptionRecordSchema, validRecord());
+
+    expect(StandSubscriptionRecords.decode(bytes, "record")).toMatchObject({
+      phase: "pending",
+      revision: 1n,
+    });
+    expect(() => StandSubscriptionRecords.decode(Uint8Array.of(255))).toThrow(
+      "Malformed Stand subscription record.",
+    );
+    expect(() => StandSubscriptionRecords.decode(new Uint8Array(1_048_577))).toThrow(
+      "Malformed Stand subscription record.",
+    );
+  });
+});
 
 describe("InMemorySubscriptionRegistry", () => {
   it("creates a pending definition with the exact 30-second deadline", async () => {
