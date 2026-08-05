@@ -210,3 +210,10 @@ dispatch explicitly uses `gpt-5.6-terra` / `medium`; runtime self-introspection
 may be unavailable, and the immutable configured role/profile is then the
 accepted metadata absent a visible mismatch. It may not spawn children or
 change production behavior unless a test exposes a concrete remaining defect.
+
+The replacement implementer completed and pushed `6ada7260` under the explicit
+Terra/medium assignment. Runtime self-introspection was unavailable and no
+visible mismatch occurred. The two assigned files add Process Manager command
+and event failure-isolation regressions plus an active-observer close proof.
+Focused evidence passes 187 tests, server TypeScript, ESLint, formatting, and
+diff checks; no further production correction was required.
