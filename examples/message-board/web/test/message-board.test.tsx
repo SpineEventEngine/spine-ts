@@ -262,6 +262,90 @@ describe("MessageBoardApp", () => {
     expect(request.send).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps a newer live payload when an older recovery query completes", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitUpdate(stateUpdate(view("live", "general", 2n)));
+    await screen.findByText("live");
+
+    request.query.resolveAt(1, responseRows("stale recovery"));
+
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText("stale recovery")).toBeNull();
+    request.query.resolveAt(2, responseRows("current recovery"));
+    await screen.findByText("current recovery");
+  });
+
+  it("coalesces multiple live payloads during one recovery into one follow-up query", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitUpdate(stateUpdate(view("live one", "general", 2n)));
+    await screen.findByText("live one");
+    request.subscription.emitUpdate(stateUpdate(view("live two", "general", 3n)));
+    await screen.findByText("live two");
+
+    request.query.resolveAt(1, responseRows("stale recovery"));
+
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    expect(request.send).toHaveBeenCalledTimes(3);
+  });
+
+  it("ignores a board A recovery completion after switching boards", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-a" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
+    await screen.findByText("board-a initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+
+    rendered.rerender(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-b" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    request.query.resolveAt(1, responseBoardRows("board-a stale", "board-a"));
+    request.query.resolveAt(2, responseBoardRows("board-b current", "board-b"));
+
+    await screen.findByText("board-b current");
+    expect(screen.queryByText("board-a stale")).toBeNull();
+  });
+
+  it("ignores a recovery completion after unmount", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    const options = calledOptions(request.send, 1);
+
+    rendered.unmount();
+    request.query.resolveAt(1, responseRows("late recovery"));
+
+    expect(options.signal.aborted).toBe(true);
+    await Promise.resolve();
+    expect(screen.queryByText("late recovery")).toBeNull();
+  });
+
   it("keeps a post-success refresh queued when an earlier hint refresh rejects", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(

@@ -50,6 +50,9 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
   const refreshRequest = useRef(0);
   const refreshController = useRef<AbortController | undefined>(undefined);
   const refreshGeneration = useRef(0);
+  const updateGeneration = useRef(0);
+  const activeBoard = useRef(board);
+  activeBoard.current = board;
   const query = useEntityQuery(() => view.query(), [view]);
   const subscription = useEntitySubscription(view.topic(), () => view.query(), [view]);
   const lifecycle = useSubscriptionLifecycle(subscription);
@@ -76,20 +79,23 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
     refreshInFlight.current = true;
     const controller = new AbortController();
     const generation = refreshGeneration.current;
+    const capturedBoard = board;
     refreshController.current = controller;
     void (async () => {
       try {
         let completedRequest: number;
         do {
           completedRequest = refreshRequest.current;
+          const capturedUpdate = updateGeneration.current;
           let response: QueryResponse | undefined;
           try {
             response = await request.send(view.query(), { signal: controller.signal });
           } catch {
             if (controller.signal.aborted) return;
           }
-          if (generation !== refreshGeneration.current) return;
-          if (response !== undefined) {
+          if (generation !== refreshGeneration.current || capturedBoard !== activeBoard.current)
+            return;
+          if (response !== undefined && capturedUpdate === updateGeneration.current) {
             setRefreshed(response);
             setRecovered(undefined);
             setApplied(undefined);
@@ -107,6 +113,7 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
   useEffect(
     () => () => {
       refreshGeneration.current += 1;
+      updateGeneration.current += 1;
       refreshController.current?.abort();
     },
     [view],
@@ -151,6 +158,8 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
       const current = applied ?? (response === undefined ? [] : view.rows(response));
       const result = BoardPayloads.apply(board, current, delivery.update);
       if (result.kind === "applied") {
+        updateGeneration.current += 1;
+        if (refreshInFlight.current) refreshRequest.current += 1;
         console.info("MessageBoard applied a live update.", {
           board,
           target: view.topic().target,
