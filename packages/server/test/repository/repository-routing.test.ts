@@ -86,6 +86,7 @@ import { Delivery } from "../../src/delivery/delivery.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import { entityStorageDescriptor } from "../../src/entity/entity-storage-descriptor.js";
 import { standAccess } from "../../src/stand/stand.js";
+import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -4964,6 +4965,47 @@ describe("repository signal routing", () => {
         kind: 1,
       });
     } finally {
+      await context.close();
+    }
+  });
+
+  it("uses each lifecycle envelope timestamp for its payload under an advancing clock", async () => {
+    const changes: SpineEvent[] = [];
+    let clockTick = 0;
+    const clock = vi
+      .spyOn(SystemClock.prototype, "now")
+      .mockImplementation(() => new Date(1_000 + clockTick++ * 1_000));
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema, EntityArchivedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.commandBus().post(createAggregateCommand("clock-created", "clock-id"));
+      await waitForCondition(() => changes.length === 2);
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityCreatedSchema),
+        TypeUrls.derive(EntityStateChangedSchema),
+      ]);
+      const stateChanged = AnyMessages.unpack(
+        changes[1]?.message as never,
+        EntityStateChangedSchema,
+      );
+      expect(stateChanged?.when).toEqual(changes[1]?.context?.timestamp);
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("clock-archive", "clock-id", "archive-lifecycle"));
+      await waitForCondition(() => changes.length === 1);
+      const archived = AnyMessages.unpack(changes[0]?.message as never, EntityArchivedSchema);
+      expect(archived?.when).toEqual(changes[0]?.context?.timestamp);
+    } finally {
+      clock.mockRestore();
       await context.close();
     }
   });
