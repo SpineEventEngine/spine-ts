@@ -278,6 +278,17 @@ its focused tests/docs/ledger, and the provider fixture. The Desktop surface
 supports the explicit dispatch. Runtime self-introspection may be unavailable;
 the immutable role/profile and explicit dispatch remain the acceptance evidence.
 
+## Final Finding Re-Review Assignments
+
+Endpoint `03375535` is assigned a final, finding-specific re-review. The same
+existing roles and explicit profiles are reused: style/maintainability
+`gpt-5.6-terra` / `high`, documentation `gpt-5.6-luna` / `medium`,
+TypeScript/API `gpt-5.6-terra` / `high`, and performance/reliability
+`gpt-5.6-terra` / `high`. Review is limited to the previously accepted
+findings and their substantively changed staging/MySQL/fixture boundaries.
+Security remains N/A. Runtime self-introspection may be unavailable; immutable
+role/profile plus explicit dispatch remain the metadata evidence.
+
 ## Final Correction Evidence
 
 The existing `implementer` correction used explicit `gpt-5.6-terra` / `medium`.
