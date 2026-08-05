@@ -1,6 +1,6 @@
 # T-0115 Review Log
 
-Status: Third targeted correction batch in implementation
+Status: Closing deterministic proof batch in implementation
 
 ## Scope
 
@@ -253,3 +253,33 @@ build and terminal-order requirements without changing public scope.
   their previously recorded explicit roles and `gpt-5.6-terra` / high
   profiles. Review is limited to resolution of the three accepted findings and
   regressions introduced by this correction.
+
+## Third Targeted Re-review Results
+
+- Style/maintainability: clean. Shutdown order, retained bus ownership, and
+  cleanup aggregation are sound.
+- Performance/reliability: production behavior is sound; changes requested for
+  two missing deterministic failure proofs.
+- Immutable configured profiles remain the accepted runtime metadata; runtime
+  self-introspection was unavailable and no mismatch was visible.
+
+## Closing Proof Batch
+
+1. Proves a throwing observer detaches alongside its peers before registry
+   close begins, both independent failures aggregate, and repeated close shares
+   the same terminal outcome.
+2. Proves stateful domain and System dispatchers pass classification then throw
+   during registration, with retained bus/store cleanup exactly once and
+   nonduplicated cleanup error order.
+
+This batch is tests-only unless a RED proof exposes a production defect.
+
+## Closing Proof Assignment
+
+- Existing role: implementer `/root/t0115_terminal_impl`.
+- Ownership: the two focused proofs, records, one test commit, and immediate
+  feature-branch push.
+- Expected and explicitly dispatched model: `gpt-5.6-terra`.
+- Expected and explicitly dispatched reasoning: `medium`.
+- Runtime self-introspection is unavailable; immutable role/profile metadata
+  applies.
