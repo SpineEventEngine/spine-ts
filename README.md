@@ -79,6 +79,8 @@ in-memory storage and a local development identity, so it is safe to explore
 without cloud credentials.
 
 See the [Message Board guide](examples/message-board/README.md) for a beginner walkthrough.
+For the two-node, one-Gateway development topology, see the
+[Distributed Message Board](examples/distributed-message-board/README.md).
 
 ## 📦 Workspace map
 

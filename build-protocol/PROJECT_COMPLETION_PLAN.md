@@ -16,8 +16,9 @@ post-merge verified. T-0108 configurable durable Stand registry is reviewed,
 release-verified, integrated, post-merge verified, and pushed. T-0109 Stand
 listener reconciliation is reviewed, release-verified, integrated, post-merge
 verified, and pushed. T-0110 multi-node Gateway fan-in is reviewed,
-release-gated, merged, post-merge verified, and pushed. T-0111
-Distributed Message Board and example migration is the current action.
+release-gated, merged, post-merge verified, and pushed. T-0111 Distributed
+Message Board and example migration is reviewed and release-gated; integration
+is the current action, followed by T-0112 documentation and Wave closure.
 Autonomous implementation follows
 `build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 

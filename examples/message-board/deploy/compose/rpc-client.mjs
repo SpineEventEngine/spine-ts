@@ -99,6 +99,7 @@ const topic = create(TopicSchema, {
 
 try {
   if (mode === "full") await fullFlow();
+  else if (mode === "distributed-full") await distributedFlow();
   else if (mode === "subscribe") await createSubscription();
   else if (mode === "cancel") await cancelSubscription();
   else if (mode === "assert-cancelled") await assertCancelled();
@@ -127,6 +128,47 @@ async function fullFlow() {
     await subscriptions.cancel(subscription);
   }
   process.stdout.write("full-ok\n");
+}
+
+async function distributedFlow() {
+  await post("initial", "Distributed authoritative query");
+  await authoritativeQueryFor(`${runId}-initial`);
+  const subscription = await subscriptions.subscribe(topic);
+  const controller = new globalThis.AbortController();
+  const updates = subscriptions
+    .activate(subscription, { signal: controller.signal })
+    [Symbol.asyncIterator]();
+  try {
+    let next = updates.next();
+    const posted = new Set();
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const id = `${runId}-update-${attempt}`;
+      await post(`update-${attempt}`, "Distributed subscription notice");
+      posted.add(id);
+      const update = await Promise.race([next, pause(1_000)]);
+      if (update === undefined) continue;
+      if (update.done) throw new Error("Distributed subscription ended before an update.");
+      if (noticeFor(update, posted)) return process.stdout.write("full-ok\n");
+      next = updates.next();
+    }
+    throw new Error("Timed out waiting for a matching distributed subscription update.");
+  } finally {
+    controller.abort();
+    await updates.return?.();
+    await subscriptions.cancel(subscription);
+  }
+}
+
+function noticeFor(result, ids) {
+  if (result.done || result.value.response?.status?.status.case !== "ok") return false;
+  return (
+    result.value.update.case === "entityUpdates" &&
+    result.value.update.value.update.some(
+      (update) =>
+        update.kind.case === "state" &&
+        ids.has(AnyMessages.unpack(update.kind.value, BoardMessageViewSchema)?.id?.value),
+    )
+  );
 }
 
 async function createSubscription() {
@@ -171,9 +213,17 @@ function isCancelledSubscriptionClosure(error) {
 }
 
 async function authoritativeQuery() {
+  await authoritativeQueryFor(undefined);
+}
+
+async function authoritativeQueryFor(id) {
   await eventually(async () => {
     const response = await queries.read(query);
-    return response.message.length > 0 ? true : undefined;
+    if (id === undefined) return response.message.length > 0 ? true : undefined;
+    const matches = response.message.filter(
+      (entry) => AnyMessages.unpack(entry.state, BoardMessageViewSchema)?.id?.value === id,
+    );
+    return matches.length === 1 ? true : undefined;
   });
   process.stdout.write("query-ok\n");
 }
@@ -224,6 +274,10 @@ async function deadline(operation, milliseconds, name) {
   } finally {
     globalThis.clearTimeout(timer);
   }
+}
+
+function pause(milliseconds) {
+  return new Promise((resolve) => globalThis.setTimeout(() => resolve(undefined), milliseconds));
 }
 
 function required(name) {

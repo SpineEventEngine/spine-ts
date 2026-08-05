@@ -72,6 +72,8 @@ importers:
         specifier: 2.9.0
         version: 2.9.0
 
+  examples/distributed-message-board: {}
+
   examples/message-board/app:
     dependencies:
       '@bufbuild/protobuf':
