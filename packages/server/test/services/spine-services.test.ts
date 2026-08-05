@@ -99,6 +99,7 @@ import {
   Server,
   SpineServices,
   EntityHandlers,
+  InMemorySubscriptionRegistry,
   type CommandDispatcher,
   type EventDispatcher,
   type RunningServer,
@@ -2163,6 +2164,35 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("stores the canonical subscription lifecycle in the context Stand registry", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("RegistrySubscriptions")
+      .withSubscriptionRegistry(registry)
+      .add(repository)
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+
+    const subscription = await handlers.subscribe(createTopic());
+    const created = await registry.snapshot();
+
+    expect(created).toHaveLength(1);
+    expect(created[0]?.subscription).toEqual(subscription);
+    expect(created[0]?.phase).toBe("pending");
+
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const pending = iterator.next();
+    await delay(25);
+
+    expect((await registry.get(subscription.id!))?.phase).toBe("active");
+    await handlers.cancel(subscription);
+    await pending;
+    await context.close();
   });
 
   it("delivers event_updates for activated event subscriptions", async () => {

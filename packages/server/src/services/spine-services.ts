@@ -90,6 +90,7 @@ import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import type { StandReadResult, StandUpdate } from "../stand/stand.js";
+import type { StandSubscriptionRegistry } from "../stand/subscription-registry.js";
 import {
   DurableSubscriptionRecords,
   durableSubscriptionRecordSpec,
@@ -378,12 +379,15 @@ export class SpineServices {
     record: SubscriptionRecord,
     subscription: Subscription,
   ): Promise<Subscription> {
+    const registry = this.#subscriptionRegistry(record.route.context);
     try {
+      await registry?.create(subscription);
       await this.#persistSubscription(record);
       this.#rememberSubscription(record);
       return clone(SubscriptionSchema, subscription);
     } catch (error) {
       try {
+        await registry?.delete(subscription.id!);
         await this.#cancelPersistence(record.id, record.route.context, undefined);
       } catch {
         this.#retainFailedSetup(record);
@@ -445,6 +449,11 @@ export class SpineServices {
     }
 
     if (record.delivery.active) {
+      return;
+    }
+
+    const activation = await this.#activateRegistry(record);
+    if (!activation) {
       return;
     }
 
@@ -596,6 +605,9 @@ export class SpineServices {
     unknown: boolean,
   ): Promise<void> {
     try {
+      await this.#subscriptionRegistry(record?.route.context)?.delete(
+        create(SubscriptionIdSchema, { value: id }),
+      );
       await this.#cancelPersistence(id, record?.route.context, claim?.owner);
       this.#releaseLocal(id, record, claim);
       removal.resolve();
@@ -1000,6 +1012,28 @@ export class SpineServices {
     }
 
     return ServiceValues.createSubscriptionStorage(store);
+  }
+
+  #subscriptionRegistry(
+    context: BoundedContext | undefined,
+  ): StandSubscriptionRegistry | undefined {
+    if (context === undefined) {
+      return undefined;
+    }
+    try {
+      return boundedContextAccess.subscriptionRegistry(context);
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #activateRegistry(record: SubscriptionRecord): Promise<boolean> {
+    const registry = this.#subscriptionRegistry(record.route.context);
+    if (registry === undefined) {
+      return true;
+    }
+    const result = await registry.activate(create(SubscriptionIdSchema, { value: record.id }));
+    return result.kind === "activated" || result.kind === "active";
   }
 
   #reserveSubscription(id: string): SubscriptionReservation | undefined {

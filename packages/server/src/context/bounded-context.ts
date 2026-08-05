@@ -1355,7 +1355,7 @@ export class BoundedContextBuilder {
         storageFactory,
       });
       registry ??= new StorageSubscriptionRegistry(
-        ContextParts.createStorageContext(this.#specSnapshot),
+        ContextParts.createSubscriptionStorageContext(this.#specSnapshot),
         storageFactory,
         this.#subscriptionLimit,
       );
@@ -1580,6 +1580,13 @@ const ContextParts = Object.freeze({
     return Object.freeze({
       name: specSnapshot.name.value,
       multitenant: specSnapshot.multitenant,
+    });
+  },
+
+  createSubscriptionStorageContext(specSnapshot: ContextSpecSnapshot): StorageContext {
+    return Object.freeze({
+      name: `${specSnapshot.name.value}:subscriptions`,
+      multitenant: false,
     });
   },
 
