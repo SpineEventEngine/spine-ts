@@ -120,6 +120,64 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("matches EITHER criteria after an ID filter and leaves an explicit empty mask unprojected", async () => {
+    const bus = createBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = SubscriptionObservers.observeSubscription(
+      create(SubscriptionSchema, {
+        topic: {
+          target: {
+            type: TypeUrls.derive(ProjectionStateSchema),
+            criterion: {
+              case: "filters",
+              value: {
+                idFilter: { id: [packString("task-either")] },
+                filter: [
+                  create(CompositeFilterSchema, {
+                    operator: CompositeFilter_CompositeOperator.EITHER,
+                    filter: [
+                      create(FilterSchema, {
+                        fieldPath: { fieldName: ["name"] },
+                        operator: Filter_Operator.EQUAL,
+                        value: packString("Named match"),
+                      }),
+                      create(FilterSchema, {
+                        fieldPath: { fieldName: ["priority"] },
+                        operator: Filter_Operator.EQUAL,
+                        value: AnyMessages.pack(
+                          Int32ValueSchema,
+                          create(Int32ValueSchema, { value: 5 }),
+                        ),
+                      }),
+                    ],
+                  }),
+                ],
+              },
+            },
+          },
+          fieldMask: { paths: [] },
+        },
+      }),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+
+    await postStateChange(bus, createState("task-either", "Priority match", 5));
+    await postStateChange(bus, createState("task-either", "No match", 1));
+    await postStateChange(bus, createState("other", "Named match", 1));
+
+    expect(received).toHaveLength(1);
+    const update =
+      received[0]?.update.case === "entityUpdates" ? received[0].update.value.update[0] : undefined;
+    if (update?.kind.case !== "state") throw new Error("Expected an entity state update.");
+    expect(AnyMessages.unpack(update.kind.value, ProjectionStateSchema)).toEqual(
+      createState("task-either", "Priority match", 5),
+    );
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
   it("ignores state-change envelopes with a wrong tenant, state type, or malformed payload", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
@@ -181,6 +239,7 @@ describe("SubscriptionObservers", () => {
     const observer = SubscriptionObservers.observeSubscription(
       create(SubscriptionSchema, {
         topic: {
+          context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
           target: {
             type: TypeUrls.derive(ProjectionStateSchema),
             criterion: { case: "includeAll", value: true },
@@ -197,6 +256,7 @@ describe("SubscriptionObservers", () => {
         validate: false,
       }),
       context: create(EventContextSchema, {
+        ...tenantContext("tenant-a"),
         rejection: create(RejectionEventContextSchema, {
           command: {},
           commandMessage: packString("secret command"),
@@ -205,8 +265,19 @@ describe("SubscriptionObservers", () => {
       }),
     });
 
+    await bus.post(
+      create(EventSchema, {
+        id: { value: "wrong-tenant-event" },
+        message: AnyMessages.pack(ProjectionStateSchema, createState("task-1", "Wrong tenant", 1), {
+          validate: false,
+        }),
+        context: tenantContext("tenant-b"),
+      }),
+    );
+    await postStateChange(bus, createState("task-1", "State event", 1), undefined, "tenant-a");
     await bus.post(source);
 
+    expect(received).toHaveLength(1);
     const event =
       received[0]?.update.case === "eventUpdates" ? received[0].update.value.event[0] : undefined;
     expect(event?.message).toEqual(source.message);
