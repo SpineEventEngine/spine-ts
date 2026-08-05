@@ -294,3 +294,14 @@ This batch is tests-only unless a RED proof exposes a production defect.
   registration failure without storage leaks.
 - Evidence: focused tests passed 108 tests; server/tooling typechecks,
   changed-file ESLint, TSDoc, Prettier, and diff checks passed.
+
+## Closing Reliability Re-review
+
+- Proof base: `94e64416`.
+- Proof endpoint: `c3b9112b`.
+- Immutable proof diff:
+  `.superpowers/sdd/review-94e64416..c3b9112b.diff`.
+- Performance/reliability is the only reopened concern because this batch adds
+  exactly the deterministic proofs it requested. The existing
+  `performance_reliability_reviewer` role is explicitly re-dispatched with
+  `gpt-5.6-terra` / high.
