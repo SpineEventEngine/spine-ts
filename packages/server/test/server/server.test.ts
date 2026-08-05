@@ -151,6 +151,28 @@ describe("Server", () => {
     await bindings.close();
   });
 
+  it("starts one array-configured backend and handles empty browser request facts", async () => {
+    const requests = BrowserServer.requests(browserGateway());
+    const requestHeader = new Headers();
+
+    expect(requests.credential({ requestHeader })).toEqual({ kind: "bearer", value: "" });
+    expect(requests.transport({ requestHeader })).toBeDefined();
+
+    const unopened = http.createServer();
+    await expect(BrowserServer.closeListener(unopened)).resolves.toBeUndefined();
+
+    const running = await BrowserServer.open(["http://127.0.0.1:65534"], {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    await running.close();
+  });
+
   it("rejects production browser bindings before context assembly or listener startup", async () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
