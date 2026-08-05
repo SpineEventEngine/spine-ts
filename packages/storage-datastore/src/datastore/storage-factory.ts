@@ -7,6 +7,7 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type {
+  EntityCommitStorage,
   EntityEventHistoryPort,
   EntityRecordStorage,
   EntityStateHistoryPort,
@@ -14,7 +15,7 @@ import type {
 } from "@spine-event-engine/storage/internal/entity-history";
 
 import { DatastoreRecordStorage } from "./record-storage.js";
-import { DatastoreEntityStorage } from "./entity-history.js";
+import { DatastoreEntityCommitStorage, DatastoreEntityStorage } from "./entity-history.js";
 
 /**
  * Explicit Google Cloud client settings used to construct a Datastore adapter.
@@ -114,8 +115,9 @@ export class DatastoreStorageFactory extends StorageFactory {
    *
    * This consumes the frozen internal storage input; it is not a remote history
    * API. Each result is independently closeable, never closes the injected
-   * client, binds its layout before access, and does not make current and
-   * history calls atomic with one another.
+   * client, and binds its layout before access. Repository commits use the
+   * separate atomic commit handle below when current state and histories must
+   * change together.
    *
    * @param input The frozen framework storage input for one durable entity scope.
    * @returns An independently closeable entity-history provider handle.
@@ -125,6 +127,19 @@ export class DatastoreStorageFactory extends StorageFactory {
   ): DatastoreEntityStorageHandle<I, S> {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     return new DatastoreEntityStorage(input, this.#client);
+  }
+
+  /**
+   * Creates an atomic Datastore commit handle for one Entity storage layout.
+   *
+   * @param input Defines the frozen framework Entity storage layout.
+   * @returns An independently closeable atomic Entity commit handle.
+   */
+  createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    return new DatastoreEntityCommitStorage(input, this.#client);
   }
 
   /**

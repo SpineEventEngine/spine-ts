@@ -3,6 +3,9 @@ import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import type {
+  EntityCommitInput,
+  EntityCommitResult,
+  EntityCommitStorage,
   EntityEventHistoryPort,
   EntityEventHistoryRecord,
   EntityRecord,
@@ -16,6 +19,8 @@ import {
   StorageQueryPolicy,
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
+
+import { CanonicalValue } from "./value-codec.js";
 
 const payload = "$spine.payload";
 const entity = "$spine.entity";
@@ -738,6 +743,336 @@ class EventHistory<I, S extends Message> implements EntityEventHistoryPort<I> {
     await this.codec.run(() => HistoryRetention.truncate(this.codec, "event", olderThan));
   }
 }
+
+/**
+ * Commits one Entity mutation through a single Datastore transaction.
+ *
+ * This provider-internal handle deliberately shares the entity-history codec,
+ * so the current row and retained history remain visible to normal handles.
+ */
+export class DatastoreEntityCommitStorage<I, S extends Message> implements EntityCommitStorage {
+  readonly #codec: EntityCodec<I, S>;
+
+  /**
+   * Creates a commit handle for one Entity storage layout.
+   *
+   * @param input Defines the Entity storage layout.
+   * @param client Provides the caller-owned Datastore client.
+   */
+  constructor(input: EntityStorageInput<I, S>, client: Datastore) {
+    this.#codec = new EntityCodec(input, client, new OperationGate());
+  }
+
+  /**
+   * Applies a complete Entity mutation, or returns its prior durable result.
+   *
+   * @param input Defines the Entity, history, and framework-event mutation.
+   * @returns The committed, replayed, or conflict outcome.
+   */
+  async commit<T, U extends Message>(input: EntityCommitInput<T, U>): Promise<EntityCommitResult> {
+    this.#codec.requireOpen();
+    this.#requireCompatible(input);
+    const compatible = input as unknown as EntityCommitInput<I, S>;
+    this.#preflight(compatible);
+    return this.#codec.run(() => this.#attempt(compatible));
+  }
+
+  /** Closes this handle without closing sibling handles or the injected client. */
+  close(): void {
+    this.#codec.close();
+  }
+
+  #requireCompatible<T, U extends Message>(input: EntityCommitInput<T, U>): void {
+    const expected = this.#codec.input;
+    if (
+      input.context.name !== expected.context.name ||
+      input.context.multitenant !== expected.context.multitenant ||
+      input.context.tenantId !== expected.context.tenantId ||
+      input.entity.storageKey !== expected.storageKey
+    ) {
+      throw new Error("Entity commit handle cannot commit another Entity storage scope.");
+    }
+  }
+
+  #preflight(input: EntityCommitInput<I, S>): void {
+    const eventIds = (input.events ?? []).map((event) => event.id?.value);
+    if (eventIds.some((id) => id === undefined || id.trim().length === 0))
+      throw new Error("Entity commit requires delivery events with non-empty IDs.");
+    if (new Set(eventIds).size !== eventIds.length)
+      throw new Error("Entity commit requires unique delivery-event IDs.");
+    if (1 + eventIds.length > 25)
+      throw new Error("Datastore entity commit exceeds the 25 entity-group limit.");
+    const bytes = [
+      this.#codec.state(input.next.state),
+      ...(input.states ?? []).map((row) => this.#codec.state(row.state)),
+      ...(input.diagnostics ?? []).map((row) => toBinary(EventSchema, row.event)),
+      ...(input.events ?? []).map((event) => toBinary(EventSchema, event)),
+    ].reduce((total, value) => total + value.byteLength, 0);
+    // The provider limit includes keys and indexes. Reserve headroom for those
+    // deterministic rows rather than starting a transaction that cannot commit.
+    if (bytes > 9 * 1024 * 1024)
+      throw new Error("Datastore entity commit exceeds the 10 MiB mutation limit.");
+  }
+
+  async #attempt(input: EntityCommitInput<I, S>): Promise<EntityCommitResult> {
+    const digest = DatastoreCommitValues.digest(input, this.#codec);
+    const id = this.#codec.id(input.entityId);
+    const receiptKey = this.#codec.childKey(id, "$SpineEntityCommit", input.id);
+    const currentKey = this.#codec.key("current", id);
+    const canonical = (input.events ?? []).map((event) =>
+      DatastoreCommitValues.delivery(this.#codec, event),
+    );
+    const reads = [receiptKey, currentKey, ...canonical.map((item) => item.key)];
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const transaction = this.#codec.client.transaction();
+      try {
+        await transaction.run();
+        const rows = await Promise.all(
+          reads.map((key) => transaction.get(key, { wrapNumbers: true })),
+        );
+        const receipt = DatastoreResults.first(rows[0]);
+        if (receipt !== undefined) {
+          if (receipt.digest !== digest)
+            throw new Error("Entity commit ID was reused with different content.");
+          await transaction.rollback();
+          return "replayed";
+        }
+        const current = DatastoreCommitValues.current(
+          this.#codec,
+          input.entityId,
+          DatastoreResults.first(rows[1]),
+        );
+        if (!DatastoreCommitValues.sameCurrent(current, input.expected, this.#codec)) {
+          await transaction.rollback();
+          return "conflict";
+        }
+        if (rows.slice(2).some((row) => DatastoreResults.first(row) !== undefined))
+          throw new Error("Entity commit requires unique delivery-event IDs.");
+
+        const rootKey = this.#codec.entityKey(id);
+        const root = DatastoreResults.first(await transaction.get(rootKey, { wrapNumbers: true }));
+        let nextRoot = HistoryRows.entityRoot(root, this.#codec.scope, id);
+        const currentData = DatastoreCommitValues.currentRow(this.#codec, input.next);
+        transaction.save({ key: currentKey, data: currentData, excludeFromIndexes: [payload] });
+
+        for (const state of input.states ?? []) {
+          const stateId = this.#codec.id(state.entityId);
+          if (stateId !== id)
+            throw new Error("Entity commit state history belongs to another Entity.");
+          const key = this.#codec.stateKey(id, state.version);
+          const stateRow = HistoryRows.row(
+            "state",
+            state.entityId,
+            this.#codec,
+            state.version,
+            state.createdAt,
+            this.#codec.state(state.state),
+          );
+          const existing = DatastoreResults.first(
+            await transaction.get(key, { wrapNumbers: true }),
+          );
+          if (existing !== undefined && !DatastoreValues.same(existing, stateRow))
+            throw new Error("State-history retry has divergent content.");
+          if (existing === undefined) {
+            nextRoot = HistoryRows.nextEntityRoot(nextRoot, 1);
+            transaction.insert({ key, data: stateRow, excludeFromIndexes: [payload] });
+            transaction.insert({
+              key: this.#codec.stateOrderKey(id, state.version, state.createdAt),
+              data: {
+                [stateBackward]: HistoryKeys.stateOrderToken(state.version, state.createdAt, true),
+                [stateAt]: HistoryKeys.stateOrderToken(state.version, state.createdAt, false),
+                [stateReference]: HistoryKeys.signedAscending(state.version),
+                [stateRevision]: DatastoreValues.providerInteger(
+                  DatastoreValues.integer(nextRoot.revision),
+                ),
+              },
+            });
+            transaction.insert({
+              key: this.#codec.stateCutKey(id, state.version, state.createdAt),
+              data: {
+                [createdSeconds]: DatastoreValues.providerInteger(state.createdAt.seconds),
+                [createdNanos]: state.createdAt.nanos,
+              },
+            });
+          }
+        }
+        for (const diagnostic of input.diagnostics ?? []) {
+          const diagnosticId = this.#codec.id(diagnostic.entityId);
+          if (diagnosticId !== id)
+            throw new Error("Entity commit event history belongs to another Entity.");
+          const eventIdentity = diagnostic.event.id?.value;
+          if (eventIdentity === undefined || eventIdentity.trim().length === 0)
+            throw new Error("Event history requires an event ID.");
+          const key = this.#codec.key("event", eventIdentity);
+          const row = {
+            ...HistoryRows.row(
+              "event",
+              diagnostic.entityId,
+              this.#codec,
+              diagnostic.producerVersion,
+              diagnostic.createdAt,
+              toBinary(EventSchema, diagnostic.event),
+            ),
+            [eventId]: eventIdentity,
+          };
+          const existing = DatastoreResults.first(
+            await transaction.get(key, { wrapNumbers: true }),
+          );
+          if (existing !== undefined && !DatastoreValues.same(existing, row))
+            throw new Error("Event-history retry has divergent content.");
+          if (existing === undefined) {
+            nextRoot = HistoryRows.nextEntityRoot(nextRoot, 0);
+            transaction.insert({ key, data: row, excludeFromIndexes: [payload] });
+            transaction.insert({
+              key: this.#codec.eventOrderKey(
+                id,
+                diagnostic.producerVersion,
+                diagnostic.createdAt,
+                eventIdentity,
+              ),
+              data: { [eventId]: eventIdentity },
+            });
+            transaction.insert({
+              key: this.#codec.eventCutKey(
+                id,
+                diagnostic.producerVersion,
+                diagnostic.createdAt,
+                eventIdentity,
+              ),
+              data: {
+                [createdSeconds]: DatastoreValues.providerInteger(diagnostic.createdAt.seconds),
+                [createdNanos]: diagnostic.createdAt.nanos,
+              },
+            });
+          }
+        }
+        if (root === undefined) transaction.insert({ key: rootKey, data: nextRoot });
+        else if (nextRoot !== root) transaction.save({ key: rootKey, data: nextRoot });
+        for (const event of canonical) transaction.insert(event);
+        transaction.insert({ key: receiptKey, data: { digest }, excludeFromIndexes: ["digest"] });
+        await transaction.commit();
+        return "committed";
+      } catch (error) {
+        await transaction.rollback().catch(() => undefined);
+        const receipt = DatastoreResults.first(
+          await this.#codec.client.get(receiptKey, { wrapNumbers: true }),
+        );
+        if (receipt?.digest === digest) return "replayed";
+        if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+        throw error;
+      }
+    }
+    throw new Error("Datastore entity commit retry limit was reached.");
+  }
+}
+
+const DatastoreCommitValues = Object.freeze({
+  delivery<I, S extends Message>(codec: EntityCodec<I, S>, event: Event) {
+    const id = event.id?.value as string;
+    const key = codec.client.key({
+      path: [
+        `${codec.input.context.name}:${EventSchema.typeName}`,
+        CanonicalValue.encode(event.id),
+      ],
+      ...(codec.input.context.multitenant
+        ? {
+            namespace: HistoryInputs.requiredTenant(
+              codec.input.context.name,
+              codec.input.context.tenantId,
+            ),
+          }
+        : {}),
+    });
+    const data: Record<string, unknown> = {
+      "$spine.id": CanonicalValue.encode(event.id),
+      [payload]: Buffer.from(toBinary(EventSchema, event, { writeUnknownFields: false })),
+      "$spine.column.timestamp": DatastoreValues.providerInteger(
+        event.context?.timestamp?.seconds ?? 0n,
+      ),
+      "$spine.columnType.timestamp": "bigint",
+      "$spine.column.typeUrl": event.message?.typeUrl,
+    };
+    return { key, data, excludeFromIndexes: [payload, "$spine.columnType.timestamp"] };
+  },
+  current<I, S extends Message>(
+    codec: EntityCodec<I, S>,
+    id: I,
+    row: Record<string, unknown> | undefined,
+  ): EntityRecord<I, S> | undefined {
+    if (row === undefined) return undefined;
+    return Object.freeze({
+      id: codec.cloneId(id),
+      state: codec.decodeState(row[payload]),
+      version: DatastoreValues.integer(row[version]),
+      archived: row[archived] === true,
+      deleted: row[deleted] === true,
+    });
+  },
+  currentRow<I, S extends Message>(
+    codec: EntityCodec<I, S>,
+    record: EntityRecord<I, S>,
+  ): Record<string, unknown> {
+    const id = codec.id(record.id);
+    if (id !== codec.id(codec.input.extractId(record.state)))
+      throw new Error("Entity current record ID does not match its state ID.");
+    return {
+      [scopeProperty]: codec.scope,
+      [entity]: id,
+      [historyKind]: "current",
+      [payload]: Buffer.from(codec.state(record.state)),
+      [version]: DatastoreValues.providerInteger(record.version),
+      [archived]: record.archived,
+      [deleted]: record.deleted,
+    };
+  },
+  sameCurrent<I, S extends Message>(
+    actual: EntityRecord<I, S> | undefined,
+    expected: EntityRecord<I, S> | undefined,
+    codec: EntityCodec<I, S>,
+  ): boolean {
+    if (actual === undefined || expected === undefined) return actual === expected;
+    return (
+      actual.version === expected.version &&
+      actual.archived === expected.archived &&
+      actual.deleted === expected.deleted &&
+      Buffer.from(codec.state(actual.state)).equals(Buffer.from(codec.state(expected.state)))
+    );
+  },
+  digest<I, S extends Message>(input: EntityCommitInput<I, S>, codec: EntityCodec<I, S>): string {
+    const bytes = (value: Uint8Array) => Buffer.from(value).toString("hex");
+    const record = (value: EntityRecord<I, S> | undefined) =>
+      value === undefined
+        ? undefined
+        : {
+            state: bytes(codec.state(value.state)),
+            version: value.version.toString(),
+            archived: value.archived,
+            deleted: value.deleted,
+          };
+    return JSON.stringify({
+      id: input.id,
+      entity: codec.id(input.entityId),
+      expected: record(input.expected),
+      next: record(input.next),
+      states: (input.states ?? []).map((state) => [
+        codec.id(state.entityId),
+        bytes(codec.state(state.state)),
+        state.version.toString(),
+        state.createdAt.seconds.toString(),
+        state.createdAt.nanos,
+      ]),
+      diagnostics: (input.diagnostics ?? []).map((event) => [
+        codec.id(event.entityId),
+        bytes(toBinary(EventSchema, event.event)),
+        event.producerVersion.toString(),
+        event.createdAt.seconds.toString(),
+        event.createdAt.nanos,
+      ]),
+      events: (input.events ?? []).map((event) => bytes(toBinary(EventSchema, event))),
+    });
+  },
+});
 
 const HistoryWrites = Object.freeze({
   async append<I, S extends Message>(

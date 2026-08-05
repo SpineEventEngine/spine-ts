@@ -419,6 +419,42 @@ describe("Datastore entity history", () => {
     await expect(storage.events.append(historyEvent("once", "other"))).rejects.toThrow("divergent");
   });
 
+  it("commits current state and history atomically with an immutable receipt", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const factory = new DatastoreStorageFactory({ client: backend.client() as never });
+    const commit = factory.createEntityCommitStorage(input());
+    const mutation = {
+      context: input().context,
+      entity: input(),
+      id: "command-1",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "one" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+      states: [
+        {
+          entityId: "task",
+          state: create(StringValueSchema, { value: "one" }),
+          version: 1n,
+          createdAt: time(1),
+        },
+      ],
+    };
+
+    await expect(commit.commit(mutation)).resolves.toBe("committed");
+    await expect(commit.commit(mutation)).resolves.toBe("replayed");
+    await expect(
+      commit.commit({ ...mutation, next: { ...mutation.next, version: 2n } }),
+    ).rejects.toThrow("reused with different content");
+    const normal = factory.createEntityStorage(input());
+    await expect(normal.current.read("task")).resolves.toMatchObject({ version: 1n });
+    await expect(normal.states.backward("task", 1)).resolves.toMatchObject([{ version: 1n }]);
+  });
+
   it("rejects an independent-client divergent event-ID race with one global marker set", async () => {
     const backend = new HistoryDatastoreBackend();
     const first = new DatastoreStorageFactory({
