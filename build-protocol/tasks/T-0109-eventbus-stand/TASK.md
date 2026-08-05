@@ -70,11 +70,14 @@ matching, and listener fencing.
 
 ## Human-Imposed Requirements Ledger
 
-| Requirement                                                                                | T-0109 disposition                                                                                                                                |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Preserve established Spine/JVM-shaped architecture and avoid invented public abstractions. | Stand remains the internal owner of durable-definition reconciliation and local EventBus observation.                                             |
-| Use behavior-focused tests for runtime changes and retain durable evidence.                | Regression tests cover observer delivery, activation fencing, reconciliation cleanup, and close sequencing; evidence is recorded in the work log. |
-| Do not promise distributed guarantees not supplied by the implementation.                  | Documentation limits reconciliation to immediate plus ten-second best-effort per-node convergence, without cluster completeness.                  |
+| Requirement                                                                                | T-0109 disposition                                                                                                                                                             |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Preserve established Spine/JVM-shaped architecture and avoid invented public abstractions. | Stand remains the internal owner of durable-definition reconciliation and local EventBus observation.                                                                          |
+| Use behavior-focused tests for runtime changes and retain durable evidence.                | Regression tests cover observer delivery, activation fencing, reconciliation cleanup, direct-subscriber isolation, and close sequencing; evidence is recorded in the work log. |
+| Do not promise distributed guarantees not supplied by the implementation.                  | Documentation limits reconciliation to immediate plus ten-second best-effort per-node convergence, without cluster completeness.                                               |
+| Do not add Entity-state polling or a second subscription definition store.                 | Stand observes committed local EventBus state-change events; the registry remains the sole canonical definition store.                                                         |
+| Keep the task bounded: no Gateway fan-in, distributed example, or JVM source/build change. | T-0110 and T-0111 retain those exclusions; this task changes only TS server-local lifecycle and tests.                                                                         |
+| Preserve best-effort rather than inventing exactly-once or cluster-complete delivery.      | Subscriber failure is diagnosed after commit while publication and follow-ups continue; no stronger delivery claim is made.                                                    |
 
 ## Initial Read-Only Assignments
 

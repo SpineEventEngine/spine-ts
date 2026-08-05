@@ -536,7 +536,6 @@ export class SpineServices {
       this.#unknownRemovals.add(id);
     } else {
       record.delivery.close();
-      this.#removeLocalAttachment();
       this.#subscriptions.delete(id);
     }
 
@@ -605,11 +604,6 @@ export class SpineServices {
       });
     }
     return undefined;
-  }
-
-  #removeLocalAttachment(): void {
-    // The stream-owned consumer is closed above. The canonical definition is
-    // deleted below; every Stand then detaches its own observer on reconciliation.
   }
 
   #subscriptionRegistry(

@@ -25,7 +25,6 @@ import {
 } from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import {
-  EventStore,
   RecordColumn,
   type StorageContext,
   type StorageFactory,
@@ -1168,18 +1167,6 @@ class AggregateExecutionSupport {
   }
 
   /**
-   * Persists the framework delivery journal separately from the aggregate diagnostic journal.
-   */
-  async appendDeliveryEvents(events: readonly Event[]): Promise<void> {
-    const store = new EventStore(this.#storageContext, this.#runtime.storageFactory);
-    try {
-      await store.appendAll(events);
-    } finally {
-      store.close();
-    }
-  }
-
-  /**
    * Store the current aggregate record before its diagnostic and delivery journals.
    */
   async persistAggregateUpdate(
@@ -1985,7 +1972,11 @@ class ProjectionEventExecution {
       deferred.cancel();
       throw error;
     }
-    deferred.notify();
+    try {
+      deferred.notify();
+    } catch (error) {
+      this.#runtime.recordDispatchFailure(this.#event, error);
+    }
     EntityStateChangePublisher.event(
       this.#runtime,
       this.#repository,
