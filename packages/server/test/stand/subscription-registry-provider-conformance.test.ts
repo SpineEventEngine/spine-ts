@@ -33,7 +33,7 @@ interface RegistryFixture {
   readonly factory: StorageFactory;
   readonly context: StorageContext;
   registry(limit?: number): StorageSubscriptionRegistry;
-  dispose(registry: StandSubscriptionRegistry): Promise<void>;
+  dispose(): Promise<void>;
 }
 
 function id(value: string): SubscriptionId {
@@ -49,24 +49,29 @@ async function createFixture(): Promise<RegistryFixture> {
   const name = `T0108Provider${provider}${String(process.pid)}${String(sequence)}`;
   const context = { name, multitenant: false };
   const factory = await providerFactory();
+  const registries = new Set<StorageSubscriptionRegistry>();
+  const registry = (limit?: number): StorageSubscriptionRegistry => {
+    const created = new StorageSubscriptionRegistry(context, factory, limit);
+    registries.add(created);
+    return created;
+  };
   return {
     name,
     factory,
     context,
-    registry: (limit?: number) => new StorageSubscriptionRegistry(context, factory, limit),
-    async dispose(registry: StandSubscriptionRegistry): Promise<void> {
+    registry,
+    async dispose(): Promise<void> {
       try {
-        const cleaner = registry;
+        const cleaner = registry();
         for (const entry of await cleaner.snapshot())
           await cleaner.delete(requiredId(entry.subscription), entry.revision);
-        await cleaner.close();
       } catch (error) {
         if (!(error instanceof Error) || !error.message.includes("closed")) throw error;
-        const cleaner = new StorageSubscriptionRegistry(context, factory);
+        const cleaner = registry();
         for (const entry of await cleaner.snapshot())
           await cleaner.delete(requiredId(entry.subscription), entry.revision);
-        await cleaner.close();
       } finally {
+        await Promise.all([...registries].map(async (value) => await value.close()));
         await closeFactory(factory);
       }
     },
@@ -111,7 +116,7 @@ describe(`StorageSubscriptionRegistry ${provider} conformance`, () => {
 
   afterEach(async () => {
     vi.useRealTimers();
-    await fixture.dispose(registry);
+    await fixture.dispose();
   });
 
   it("is persistent and creates, reads, snapshots, and activates a pending definition", async () => {

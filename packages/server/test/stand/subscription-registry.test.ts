@@ -541,6 +541,117 @@ describe("StorageSubscriptionRegistry", () => {
     ]);
   }, 5_000);
 
+  it("fences a missing held stage at the liveness boundary and reuses its exact slot", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(start);
+    try {
+      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+      const context = { name: "DurableRegistryMissingHeldStage", multitenant: false };
+      const owner = new StorageSubscriptionRegistry(context, factory, 1);
+      const held = factory.hold("create-reservation");
+      const creating = owner.create(subscription("stale"));
+      await held.reached.promise;
+
+      const helper = new StorageSubscriptionRegistry(context, factory, 1);
+      const recovered = helper.create(subscription("fresh"));
+      await vi.advanceTimersByTimeAsync(25);
+      await expect(recovered).resolves.toMatchObject({ kind: "created", entry: { revision: 1n } });
+
+      held.release.resolve(undefined);
+      await expect(creating).rejects.toBeInstanceOf(StandCapacityError);
+      await expect(
+        new StorageSubscriptionRegistry(context, factory, 1).snapshot(),
+      ).resolves.toMatchObject([{ subscription: { id: { value: "fresh" } }, revision: 1n }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 5_000);
+
+  it("admits only the limit while multiple creators wait behind one held control slot", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(start);
+    try {
+      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+      const context = { name: "DurableRegistryManyHeldCreators", multitenant: false };
+      const owner = new StorageSubscriptionRegistry(context, factory, 1);
+      const held = factory.hold("create-reservation");
+      const ownerCreate = owner.create(subscription("owner"));
+      await held.reached.promise;
+
+      const helpers = ["one", "two", "three"].map((value) =>
+        new StorageSubscriptionRegistry(context, factory, 1).create(subscription(value)).then(
+          () => "created" as const,
+          () => "rejected" as const,
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(25);
+      const results = await Promise.all(helpers);
+      expect(results.filter((result) => result === "created")).toHaveLength(1);
+      expect(results.filter((result) => result === "rejected")).toHaveLength(2);
+
+      held.release.resolve(undefined);
+      await expect(ownerCreate).rejects.toBeInstanceOf(StandCapacityError);
+      await expect(
+        new StorageSubscriptionRegistry(context, factory, 1).snapshot(),
+      ).resolves.toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 5_000);
+
+  it("retries a fenced same-ID admission with a fresh full pending lifetime", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(start);
+    try {
+      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+      const context = { name: "DurableRegistryFreshRetry", multitenant: false };
+      const owner = new StorageSubscriptionRegistry(context, factory, 1);
+      const held = factory.hold("create-reservation");
+      const stale = owner.create(subscription("one"));
+      await held.reached.promise;
+
+      const helper = new StorageSubscriptionRegistry(context, factory, 1);
+      const retry = helper.create(subscription("one"));
+      await vi.advanceTimersByTimeAsync(25);
+      const created = await retry;
+      expect(created).toMatchObject({
+        kind: "created",
+        entry: { createdAt: start + 25, pendingUntil: start + 30_025, revision: 1n },
+      });
+      await vi.advanceTimersByTimeAsync(29_999);
+      await expect(helper.activate(id("one"))).resolves.toMatchObject({ kind: "activated" });
+
+      held.release.resolve(undefined);
+      await expect(stale).resolves.toMatchObject({ kind: "existing", entry: { revision: 2n } });
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 5_000);
+
+  it("hides and safely removes a legacy revision-zero definition from every public operation", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "DurableRegistryLegacyReservation", multitenant: false };
+    await writeDefinition(
+      factory,
+      context,
+      StandSubscriptionRecords.write({
+        subscription: subscription("legacy"),
+        phase: "pending",
+        createdAt: start,
+        pendingUntil: start + 30_000,
+        revision: 0n,
+      }),
+      "legacy",
+    );
+
+    const registry = new StorageSubscriptionRegistry(context, factory);
+    await expect(registry.get(id("legacy"))).resolves.toBeUndefined();
+    await expect(registry.activate(id("legacy"))).resolves.toEqual({ kind: "missing" });
+    await expect(registry.delete(id("legacy"))).resolves.toBe("missing");
+    await expect(registry.snapshot()).resolves.toEqual([]);
+    await expect(registry.cleanup()).resolves.toEqual({ scanned: 0, deleted: 0, more: false });
+  });
+
   it.each(["create-reservation", "create-stage", "create-promote", "create-commit"] as const)(
     "settles an applied-then-thrown %s create without leaking a revision-zero reservation",
     async (phase) => {
@@ -757,6 +868,7 @@ async function writeDefinition(
   factory: StorageFactory,
   context: StorageContext,
   record: StandSubscriptionRecord,
+  entryId = "malformed",
 ): Promise<void> {
   const storage = factory.createRecordStorage(
     context,
@@ -764,7 +876,7 @@ async function writeDefinition(
       schema: StandSubscriptionRecords.schema,
       storageKey: "spine.server.StandSubscriptionRecord:definition",
       idKind: "string",
-      extractId: () => "malformed",
+      extractId: () => entryId,
       columns: [
         new RecordColumn("admitted", (entry) => entry.revision > 0n, "boolean"),
         new RecordColumn(
@@ -785,7 +897,7 @@ async function writeDefinition(
     }),
   );
   try {
-    await storage.compareAndSet("malformed", undefined, record);
+    await storage.compareAndSet(entryId, undefined, record);
   } finally {
     storage.close();
   }

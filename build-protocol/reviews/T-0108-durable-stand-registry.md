@@ -277,3 +277,25 @@ explicitly `gpt-5.6-terra` / `medium`, with exclusive ownership of the registry,
 its focused tests/docs/ledger, and the provider fixture. The Desktop surface
 supports the explicit dispatch. Runtime self-introspection may be unavailable;
 the immutable role/profile and explicit dispatch remain the acceptance evidence.
+
+## Final Correction Evidence
+
+The existing `implementer` correction used explicit `gpt-5.6-terra` / `medium`.
+Runtime self-introspection is unavailable; immutable configured role/profile
+and explicit dispatch are the recorded metadata evidence with no visible
+mismatch. The provider fixture now owns every registry it constructs. Public
+TSDoc and REFERENCE specify observable closed/error behavior and exact get,
+cleanup, close, and built-in three-handle ownership semantics. The shared
+entry wording is provider-neutral and byte-array clone isolation remains
+covered without claiming Uint8Array instances are frozen.
+
+Deterministic fake-Date/timer/deferred-CAS regressions prove liveness-boundary
+rollback/reuse, bounded held admission, fresh same-ID retry lifetime, and safe
+legacy revision-zero invisibility/removal. The closest MySQL adapter regression
+proves distinct storage keys physically separate same-schema records while a
+matching key shares scope. Evidence is registry 49/49 (5-second timeout),
+MySQL adapter 103/103, real-MySQL concurrency 20 consecutive runs of 7/7, and
+the memory/MySQL/Datastore provider script 7/7 each. Server/RDBMS typechecks
+and focused TSDoc, cleanup, API/audience docs, ESLint, Prettier, and diff checks
+pass. The Datastore run emits only its existing Filter-object recommendation.
+Security remains N/A: this correction adds no trust boundary or unbounded input.

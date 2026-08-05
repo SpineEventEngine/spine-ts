@@ -226,6 +226,9 @@ export interface StandSubscriptionRegistry {
    *
    * @param subscription Defines the subscription to retain.
    * @returns Resolves to the creation result.
+   * @throws StandCapacityError When the configured admitted-definition limit is exhausted.
+   * @throws StandConflictError When the ID already has different canonical content.
+   * @throws Error When the registry is closed or durable data is malformed.
    */
   create(subscription: Subscription): Promise<StandCreateResult>;
 
@@ -234,6 +237,8 @@ export interface StandSubscriptionRegistry {
    *
    * @param id Identifies the definition to activate.
    * @returns Resolves to the activation result.
+   * @throws TypeError When the generated ID is blank.
+   * @throws Error When the registry is closed or durable data is malformed.
    */
   activate(id: SubscriptionId): Promise<StandActivateResult>;
 
@@ -243,6 +248,9 @@ export interface StandSubscriptionRegistry {
    * @param id Identifies the definition to delete.
    * @param expectedRevision Limits deletion to the observed revision.
    * @returns Resolves to the deletion result.
+   * @throws TypeError When the generated ID is blank.
+   * @throws RangeError When an expected revision is negative.
+   * @throws Error When the registry is closed or durable data is malformed.
    */
   delete(id: SubscriptionId, expectedRevision?: bigint): Promise<StandDeleteResult>;
 
@@ -251,6 +259,8 @@ export interface StandSubscriptionRegistry {
    *
    * @param id Identifies the definition to find.
    * @returns Resolves to a clone or undefined.
+   * @throws TypeError When the generated ID is blank.
+   * @throws Error When the registry is closed or durable data is malformed.
    */
   get(id: SubscriptionId): Promise<StandSubscriptionEntry | undefined>;
 
@@ -258,6 +268,7 @@ export interface StandSubscriptionRegistry {
    * Lists bounded definitions in deterministic identifier order.
    *
    * @returns Resolves to cloned definitions.
+   * @throws Error When the registry is closed or durable data is malformed.
    */
   snapshot(): Promise<readonly StandSubscriptionEntry[]>;
 
@@ -265,6 +276,7 @@ export interface StandSubscriptionRegistry {
    * Deletes one bounded page of expired pending definitions.
    *
    * @returns Resolves to cleanup work counts.
+   * @throws Error When the registry is closed or durable data is malformed.
    */
   cleanup(): Promise<StandCleanupResult>;
 
@@ -272,6 +284,7 @@ export interface StandSubscriptionRegistry {
    * Closes the registry after admitted operations settle.
    *
    * @returns Resolves after closure completes.
+   * @throws Error When durable storage cannot close.
    */
   close(): Promise<void>;
 }
