@@ -1,4 +1,5 @@
 import { clone, create, toBinary } from "@bufbuild/protobuf";
+import { randomUUID } from "node:crypto";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import {
   SubscriptionSchema,
@@ -583,6 +584,8 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           kind: "create",
           id,
           digest,
+          generation: generationToken(next),
+          token: randomUUID(),
         });
         if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
           continue;
@@ -673,6 +676,8 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           kind: "delete",
           id,
           digest: recordDigest(record),
+          generation: generationToken(record),
+          token: randomUUID(),
         });
         if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
           continue;
@@ -844,7 +849,10 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         return;
       }
       const current = await this.#storage.read(control.operation.id);
-      const matches = current !== undefined && recordDigest(current) === control.operation.digest;
+      const matches =
+        current !== undefined &&
+        recordDigest(current) === control.operation.digest &&
+        generationToken(current) === control.operation.generation;
       if (current !== undefined && !matches) {
         if (control.operation.kind === "delete") {
           const unchanged = controlWithOperation(control, control.count);
@@ -878,6 +886,8 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         kind: "delete",
         id,
         digest: recordDigest(record),
+        generation: generationToken(record),
+        token: randomUUID(),
       });
       if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
         continue;
@@ -894,6 +904,8 @@ interface ControlOperation {
   readonly kind: "create" | "delete";
   readonly id: string;
   readonly digest: string;
+  readonly generation: string;
+  readonly token: string;
 }
 interface Control {
   readonly version: 2;
@@ -957,13 +969,23 @@ function readControl(record: Any, limit: number): Control {
         count: control.count as number,
       });
     if (control.state === "clean" || control.operation === undefined) throw Error();
-    const operation = control.operation as { kind?: unknown; id?: unknown; digest?: unknown };
+    const operation = control.operation as {
+      kind?: unknown;
+      id?: unknown;
+      digest?: unknown;
+      generation?: unknown;
+      token?: unknown;
+    };
     if (
       (operation.kind !== "create" && operation.kind !== "delete") ||
       typeof operation.id !== "string" ||
       operation.id.trim() === "" ||
       typeof operation.digest !== "string" ||
-      !/^[0-9a-f]{16}$/.test(operation.digest)
+      !/^[0-9a-f]{16}$/.test(operation.digest) ||
+      typeof operation.generation !== "string" ||
+      !/^[0-9a-f]{32}$/.test(operation.generation) ||
+      typeof operation.token !== "string" ||
+      !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(operation.token)
     )
       throw Error();
     return Object.freeze({
@@ -975,6 +997,8 @@ function readControl(record: Any, limit: number): Control {
         kind: operation.kind,
         id: operation.id,
         digest: operation.digest,
+        generation: operation.generation,
+        token: operation.token,
       }),
     });
   } catch {
@@ -988,6 +1012,10 @@ function recordDigest(record: StandSubscriptionRecord): string {
     hash = ((hash ^ BigInt(byte)) * 0x100000001b3n) & 0xffffffffffffffffn;
   }
   return hash.toString(16).padStart(16, "0");
+}
+
+function generationToken(record: StandSubscriptionRecord): string {
+  return Buffer.from(record.generation).toString("hex");
 }
 
 function sameSubscription(left: Subscription, right: Subscription): boolean {
