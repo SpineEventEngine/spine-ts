@@ -158,16 +158,14 @@ const InMemoryCommitLocks = Object.freeze({
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    queues.set(
-      scope,
-      prior.then(() => gate),
-    );
+    const tail = prior.then(() => gate);
+    queues.set(scope, tail);
     await prior;
     try {
       return await work();
     } finally {
       release();
-      if (queues.get(scope) === gate) queues.delete(scope);
+      if (queues.get(scope) === tail) queues.delete(scope);
     }
   },
 });
@@ -182,18 +180,18 @@ const InMemoryCommitValues = Object.freeze({
       next: InMemoryCommitValues.record(input.next, input.entity.stateSchema),
       states: (input.states ?? []).map((state) => ({
         entityId: input.entity.id.key(state.entityId),
-        state: InMemoryCommitValues.base64(toBinary(input.entity.stateSchema, state.state)),
+        state: InMemoryCommitValues.hex(toBinary(input.entity.stateSchema, state.state)),
         version: state.version.toString(),
         createdAt: InMemoryCommitValues.time(state.createdAt),
       })),
       diagnostics: (input.diagnostics ?? []).map((event) => ({
         entityId: input.entity.id.key(event.entityId),
-        event: InMemoryCommitValues.base64(toBinary(EventSchema, event.event)),
+        event: InMemoryCommitValues.hex(toBinary(EventSchema, event.event)),
         producerVersion: event.producerVersion.toString(),
         createdAt: InMemoryCommitValues.time(event.createdAt),
       })),
       events: (input.events ?? []).map((event) =>
-        InMemoryCommitValues.base64(toBinary(EventSchema, event)),
+        InMemoryCommitValues.hex(toBinary(EventSchema, event)),
       ),
     });
   },
@@ -205,7 +203,7 @@ const InMemoryCommitValues = Object.freeze({
     return record === undefined
       ? undefined
       : {
-          state: InMemoryCommitValues.base64(toBinary(schema, record.state)),
+          state: InMemoryCommitValues.hex(toBinary(schema, record.state)),
           version: record.version.toString(),
           archived: record.archived,
           deleted: record.deleted,
@@ -230,7 +228,7 @@ const InMemoryCommitValues = Object.freeze({
     );
   },
 
-  base64(bytes: Uint8Array): string {
+  hex(bytes: Uint8Array): string {
     return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
   },
 
