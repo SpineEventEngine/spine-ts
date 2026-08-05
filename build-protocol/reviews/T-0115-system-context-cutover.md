@@ -295,6 +295,17 @@ This batch is tests-only unless a RED proof exposes a production defect.
 - Evidence: focused tests passed 108 tests; server/tooling typechecks,
   changed-file ESLint, TSDoc, Prettier, and diff checks passed.
 
+## Final System Store Cleanup Proof — 2026-08-05
+
+- Persisted-System dispatcher registration fails after classification and an
+  instrumented System EventStore close fails during retained-bus abort. The
+  exact aggregate is `[primary registration failure, System store cleanup
+failure]`, with each error present once and no nested primary error.
+- Implementer `/root/t0115_terminal_impl`: immutable configured profile
+  `gpt-5.6-terra` / medium; runtime self-introspection is unavailable.
+- Evidence: 65 context tests, server/tooling typechecks, changed-file ESLint,
+  TSDoc, Prettier, and diff checks passed.
+
 ## Closing Reliability Re-review
 
 - Proof base: `94e64416`.

@@ -1668,6 +1668,36 @@ describe("BoundedContext assembly", () => {
     }
   });
 
+  it("keeps one primary registration failure and one System-store cleanup failure", () => {
+    const storageFactory = new ObservingStorageFactory([], [1]);
+    const primary = new Error("System dispatcher registration failed.");
+    let schemaReads = 0;
+    const dispatcher: EventDispatcher = {
+      messageSchemas: () => {
+        schemaReads++;
+        if (schemaReads > 2) throw primary;
+        return [EntityLog.EntityStateChangedSchema];
+      },
+      dispatch: () => Promise.resolve(),
+    };
+
+    let failure: unknown;
+    try {
+      BoundedContext.singleTenant("Tasks")
+        .persistSystemEvents()
+        .withStorageFactory(storageFactory)
+        .addEventDispatcher(dispatcher)
+        .build();
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([
+      primary,
+      expect.objectContaining({ message: "Cannot close record storage." }),
+    ]);
+  });
+
   it("closes every prepared repository storage when cleanup also fails", () => {
     const storageFactory = new FailingStorageFactory(7, ProcessManagerStateSchema.typeName, [5]);
     const aggregateRepository = new Repository({
