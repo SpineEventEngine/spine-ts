@@ -1,6 +1,6 @@
 # T-0115 Review Log
 
-Status: Closing deterministic proof batch in implementation
+Status: Persisted System cleanup proof in implementation
 
 ## Scope
 
@@ -305,3 +305,16 @@ This batch is tests-only unless a RED proof exposes a production defect.
   exactly the deterministic proofs it requested. The existing
   `performance_reliability_reviewer` role is explicitly re-dispatched with
   `gpt-5.6-terra` / high.
+
+## Closing Reliability Result
+
+- Detach-before-registry and domain-bus registration proofs are accepted.
+- One P2 proof gap remains: the System registration case used default
+  forgetting mode and therefore did not exercise persisted System-store close
+  failure ordering.
+- Existing implementer `/root/t0115_terminal_impl` owns one tests-only
+  `persistSystemEvents()` case proving exact-once store/bus cleanup and exact
+  `[registration failure, cleanup failure]` aggregation without duplication.
+- Expected and explicitly dispatched profile remains `gpt-5.6-terra` /
+  medium. Runtime self-introspection is unavailable; immutable role/profile
+  metadata applies.
