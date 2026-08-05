@@ -1,5 +1,6 @@
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
+import { createHash } from "node:crypto";
 
 import {
   createNativeGatewayServices,
@@ -55,6 +56,7 @@ export const BrowserServer: Readonly<{
   origins(origins: readonly string[]): ReadonlySet<string>;
   backendUrl(value: string): string;
   backendUrls(values: readonly string[]): readonly string[];
+  topologyFingerprint(values: readonly string[]): string;
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   authRoutes(
     routes: readonly BrowserAuthRoute[] | undefined,
@@ -69,7 +71,10 @@ export const BrowserServer: Readonly<{
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
 }> = Object.freeze({
-  async open(native: RunningServer | string, options: BrowserHostOptions): Promise<RunningServer> {
+  async open(
+    native: RunningServer | string | readonly string[],
+    options: BrowserHostOptions,
+  ): Promise<RunningServer> {
     BrowserServer.requireDurableBindings(options, options.production);
     const origins = BrowserServer.origins(options.origins);
     const authRoutes = BrowserServer.authRoutes(options.authRoutes);
@@ -78,9 +83,10 @@ export const BrowserServer: Readonly<{
     if (!Number.isSafeInteger(maxActiveAuthRequests) || maxActiveAuthRequests < 1)
       throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
     let draining = false;
+    const running = BrowserServerValues.running(native);
     const backendBaseUrls = Array.isArray(native)
       ? BrowserServer.backendUrls(native)
-      : [typeof native === "string" ? native : native.baseUrl];
+      : [typeof native === "string" ? native : running!.baseUrl];
     const creators = backendBaseUrls.map(
       (baseUrl) => new NativeSubscriptionCreator(createGrpcTransport({ baseUrl })),
     );
@@ -109,6 +115,7 @@ export const BrowserServer: Readonly<{
       contexts: options.contexts,
       clock: options.clock,
       fingerprint: options.fingerprint,
+      topology: BrowserServer.topologyFingerprint(backendBaseUrls),
       creator,
     });
     const services = createNativeGatewayServices({ unary, subscriptions, requests });
@@ -183,16 +190,9 @@ export const BrowserServer: Readonly<{
       }
       throw error;
     }
-    return new RunningBrowserServer(
-      server,
-      typeof native === "string" || Array.isArray(native) ? undefined : native,
-      subscriptions,
-      address,
-      activeAuth,
-      () => {
-        draining = true;
-      },
-    );
+    return new RunningBrowserServer(server, running, subscriptions, address, activeAuth, () => {
+      draining = true;
+    });
   },
   requests(options: BrowserServerOptions) {
     return {
@@ -268,6 +268,17 @@ export const BrowserServer: Readonly<{
     if (new Set(urls).size !== urls.length)
       throw new Error("Server browser backends must be unique canonical HTTP(S) origins.");
     return urls;
+  },
+  topologyFingerprint(values: readonly string[]): string {
+    const hash = createHash("sha256");
+    for (const url of BrowserServer.backendUrls(values)) {
+      const bytes = new TextEncoder().encode(url);
+      const length = new Uint8Array(4);
+      new DataView(length.buffer).setUint32(0, bytes.byteLength);
+      hash.update(length);
+      hash.update(bytes);
+    }
+    return hash.digest("hex");
   },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
     const supplied = options as Partial<BrowserServerOptions>;
@@ -488,6 +499,11 @@ export const BrowserServer: Readonly<{
 });
 
 const BrowserServerValues = Object.freeze({
+  running(native: RunningServer | string | readonly string[]): RunningServer | undefined {
+    return typeof native === "string" || Array.isArray(native)
+      ? undefined
+      : (native as RunningServer);
+  },
   backendUrlsFor(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
     return "baseUrl" in backend ? [backend.baseUrl] : backend.baseUrls;
   },

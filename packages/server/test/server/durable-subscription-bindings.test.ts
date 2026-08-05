@@ -1243,6 +1243,7 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "inactive",
         fence: 0,
         principalFingerprint: "principal",
+        topology: "legacy",
         tenant: "tenant",
         expiresAtMs: 10,
         backend: "AQ==",
@@ -1255,6 +1256,7 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "active",
         fence: 1,
         principalFingerprint: "principal",
+        topology: "legacy",
         expiresAtMs: 10,
         backend: "AQ==",
         backendBytes: 1,
@@ -1268,6 +1270,7 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "cancelling",
         fence: 2,
         principalFingerprint: "principal",
+        topology: "legacy",
         expiresAtMs: 10,
         backend: "AQ==",
         backendBytes: 1,
@@ -2545,7 +2548,7 @@ function repairStore(factory: StorageFactory, namespace: string): RecordStorage<
     { name: `spine.gateway.${namespace}`, multitenant: false },
     new RecordSpec({
       schema: AnySchema,
-      storageKey: "spine.gateway.SubscriptionBinding:v2",
+      storageKey: "spine.gateway.SubscriptionBinding:v3",
       idKind: "string",
       extractId: (record) => repairId(record),
     }),
@@ -2607,7 +2610,7 @@ function repairRecord(id: string, lifecycle: "reserved" | "retired"): Any {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
       JSON.stringify({
-        version: 2,
+        version: 3,
         family: "binding",
         id,
         revision: 1,
@@ -2624,7 +2627,7 @@ function malformedRepairRecord(id: string): Any {
   return create(AnySchema, {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
-      JSON.stringify({ version: 2, family: "binding", id, revision: 1 }),
+      JSON.stringify({ version: 3, family: "binding", id, revision: 1 }),
     ),
   });
 }
@@ -2642,7 +2645,7 @@ function durableRecord(
   return create(AnySchema, {
     typeUrl,
     value: new TextEncoder().encode(
-      JSON.stringify({ version: family === "binding" ? 2 : 1, family, ...value }),
+      JSON.stringify({ version: family === "binding" ? 3 : 1, family, ...value }),
     ),
   });
 }
