@@ -1895,15 +1895,10 @@ class ProjectionEventExecution {
   async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
     const packedMessage = EntityInvocation.requireSignalMessage(this.#event.message, "event");
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
-    const previous = await this.#runtime.stand.readVersioned(
-      this.#repository.stateSchema,
-      entityId,
-      tenantOptions,
-    );
     const loaded = await this.#loadProjection(entityId, tenantOptions);
 
     await this.#invokeSubscribers(loaded.entity, subscribers, packedMessage);
-    await this.#storeIfChanged(loaded, tenantOptions, previous?.state);
+    await this.#storeIfChanged(loaded, tenantOptions, loaded.current?.state);
   }
 
   #readIntake(): {
@@ -2058,7 +2053,7 @@ class ProjectionEventExecution {
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
+      state: stored === undefined ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
       lifecycle: { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
     });
@@ -2138,7 +2133,7 @@ class ProcessManagerExecutionSupport {
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
+      state: stored === undefined ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
       lifecycle: { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
     });
@@ -2296,11 +2291,6 @@ class ProcessManagerCommandExecution {
       this.#runtime.context,
       this.#command,
     );
-    const previous = await this.#runtime.stand.readVersioned(
-      this.#repository.stateSchema,
-      route.entityId,
-      tenantOptions,
-    );
     const loaded = await this.#support.load(route.entityId, tenantOptions);
     let eventSignals: readonly unknown[];
     try {
@@ -2328,7 +2318,7 @@ class ProcessManagerCommandExecution {
         this.#repository,
         this.#command,
         route.entityId,
-        previous?.state,
+        loaded.current?.state,
         loaded.current === undefined
           ? undefined
           : { archived: loaded.current.archived, deleted: loaded.current.deleted },
@@ -2516,11 +2506,6 @@ class ProcessManagerEventExecution {
     },
   ): Promise<void> {
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
-    const previous = await this.#runtime.stand.readVersioned(
-      this.#repository.stateSchema,
-      entityId,
-      tenantOptions,
-    );
     const loaded = await this.#support.load(entityId, tenantOptions);
     const produced = await this.#invokeHandlers(loaded.entity, intake);
 
@@ -2540,7 +2525,7 @@ class ProcessManagerEventExecution {
         this.#repository,
         this.#event,
         entityId,
-        previous?.state,
+        loaded.current?.state,
         loaded.current === undefined
           ? undefined
           : { archived: loaded.current.archived, deleted: loaded.current.deleted },

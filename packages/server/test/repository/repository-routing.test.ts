@@ -85,6 +85,7 @@ import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import { entityStorageDescriptor } from "../../src/entity/entity-storage-descriptor.js";
+import { standAccess } from "../../src/stand/stand.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -1162,8 +1163,11 @@ class RoutingProcessManager extends ProcessManager<
 
   assignTask(command: AggregateState): ProjectionState {
     RoutingProcessManager.commandCalls++;
-    if (command.name === "archive-lifecycle") {
-      this.archiveDraft();
+    if (command.name.endsWith("-lifecycle")) {
+      if (command.name === "archive-lifecycle") this.archiveDraft();
+      if (command.name === "unarchive-lifecycle") this.unarchiveDraft();
+      if (command.name === "delete-lifecycle") this.markDraftDeleted();
+      if (command.name === "restore-lifecycle") this.restoreDraft();
       return create(ProjectionStateSchema, { id: command.id, name: command.name, priority: 1 });
     }
     this.update((draft) =>
@@ -5047,6 +5051,69 @@ describe("repository signal routing", () => {
     await waitForCondition(() => changes.length === 1);
     expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
     await context.close();
+  });
+
+  it("rehydrates archived process managers for a lifecycle-only unarchive", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.commandBus().post(createAggregateCommand("pm-seed-all", "pm-all"));
+      await waitForCondition(() => changes.length === 2);
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-archive-all", "pm-all", "archive-lifecycle"));
+      await waitForCondition(() => changes.length === 1);
+      await expect(
+        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+      ).resolves.toMatchObject({ archived: true });
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-unarchive-all", "pm-all", "unarchive-lifecycle"));
+      expect(RoutingProcessManager.commandCalls).toBe(3);
+      await expect(
+        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+      ).resolves.toMatchObject({ archived: false });
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityUnarchivedSchema));
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-delete-all", "pm-all", "delete-lifecycle"));
+      await expect(
+        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+      ).resolves.toMatchObject({ deleted: true });
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityDeletedSchema));
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-restore-all", "pm-all", "restore-lifecycle"));
+      await expect(
+        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+      ).resolves.toMatchObject({ deleted: false, state: { queue: "Task assigned" } });
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityRestoredSchema));
+    } finally {
+      await context.close();
+    }
   });
 
   it("records failed state-change follow-ups with absent and present prior state", async () => {
