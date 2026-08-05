@@ -1,6 +1,6 @@
 # T-0116: Entity Lifecycle System Events
 
-Status: Release verified; integration pending
+Status: Complete; merged, post-merge verified, and pushed
 
 ## Objective
 

@@ -33,8 +33,10 @@ dependency-ordered as T-0114 through T-0119 in
 storing/forgetting policy is reviewed, release-verified, integrated,
 post-merge verified, and pushed. T-0115 atomic System Context and Stand cutover
 is reviewed, release-verified, merged as `4275a6d7`, post-merge verified, and
-pushed. T-0116 lifecycle system events is the active next task. Complete T-0116
-through T-0119 before Wave 7 Q&A continues.
+pushed. T-0116 lifecycle System events is reviewed, release-verified, merged as
+`5ffe02b7`, post-merge verified, and pushed. T-0117 dispatch-failure diagnostics
+is the active next task. Complete T-0117 through T-0119 before Wave 7 Q&A
+continues.
 
 ## Purpose
 
