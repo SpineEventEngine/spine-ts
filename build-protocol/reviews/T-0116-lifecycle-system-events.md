@@ -1,6 +1,6 @@
 # T-0116 Review Log
 
-Status: One accepted correction batch pending
+Status: Focused re-review pending
 
 ## Scope
 
@@ -61,3 +61,20 @@ before accepting a result.
 All three reviewers reported that runtime self-introspection is unavailable;
 their immutable configured roles and explicitly dispatched model/reasoning
 match the assignments above. No finding is rejected or deferred.
+
+## Correction Endpoint And Re-Review — 2026-08-05
+
+- Corrected endpoint: `c61fc897`.
+- P1: per-ordinal metadata is reused by each payload and envelope; an advancing
+  `SystemClock` regression test proves created-before-state-changed ordering and
+  exact payload/context timestamp equality for state-change and archive events.
+- P2: message construction and best-effort posting are separated; lifecycle
+  shapes use `EntityLifecycleFlags`; new context-owning tests close in
+  `finally`; System Stand and runtime TSDoc describe lifecycle rendering.
+- Full repository-routing and subscription-observer suites pass: 177 tests.
+  Server typecheck, affected ESLint, cleanup/TSDoc, formatting, and diff checks
+  pass.
+- The same style, TypeScript/API, and reliability reviewers are redispatched
+  only over `365f59c9..c61fc897`. Their expected and explicitly dispatched
+  profiles remain `gpt-5.6-terra` / `high`; runtime self-introspection remains
+  unavailable and the immutable configured profile is the available metadata.
