@@ -98,3 +98,7 @@ immutable configured profile. No finding is rejected or deferred.
 - Evidence: focused PM failure cases pass, followed by repository-routing plus
   EventBus regression, root typechecks, generated lint/cleanup/TSDoc, format,
   and diff checks.
+- The same performance/reliability reviewer is redispatched only over
+  `55b242f4..f3d17e63`. Expected and explicitly dispatched profile remains
+  `gpt-5.6-terra` / `high`; immutable configured metadata applies because
+  runtime self-introspection is unavailable.
