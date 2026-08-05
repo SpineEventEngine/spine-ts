@@ -160,10 +160,10 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
       if (result.kind === "applied") {
         updateGeneration.current += 1;
         if (refreshInFlight.current) refreshRequest.current += 1;
-        console.info("MessageBoard applied a live update.", {
+        console.info("MessageBoard applied a server payload.", {
           board,
           target: view.topic().target,
-          update: delivery.update,
+          rows: result.rows.length,
         });
         setApplied(result.rows);
       } else {

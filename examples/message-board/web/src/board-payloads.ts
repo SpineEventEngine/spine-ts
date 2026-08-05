@@ -24,9 +24,41 @@ export type BoardRecovery =
 /**
  * Describes either an atomically applied subscription batch or required recovery.
  */
-export type BoardPayloadResult =
-  | Readonly<{ readonly kind: "applied"; readonly rows: readonly BoardMessageView[] }>
-  | Readonly<{ readonly kind: "recovery"; readonly reason: BoardRecovery }>;
+export type BoardPayloadResult = BoardPayloadApplied | BoardPayloadRecovery;
+
+/**
+ * Describes rows produced by one valid subscription batch.
+ */
+export interface BoardPayloadApplied {
+  // prettier-ignore
+
+  /**
+   * Identifies a successfully applied batch.
+   */
+  readonly kind: "applied";
+
+  /**
+   * Contains the replacement rows in display order.
+   */
+  readonly rows: readonly BoardMessageView[];
+}
+
+/**
+ * Describes the recovery required for one unusable subscription batch.
+ */
+export interface BoardPayloadRecovery {
+  // prettier-ignore
+
+  /**
+   * Identifies a batch that needs authoritative recovery.
+   */
+  readonly kind: "recovery";
+
+  /**
+   * Explains why the payload was not applied.
+   */
+  readonly reason: BoardRecovery;
+}
 
 /**
  * Validates and applies Message Board entity-state update batches without client access.
@@ -38,6 +70,8 @@ export const BoardPayloads: Readonly<{
     value: SubscriptionUpdate,
   ) => BoardPayloadResult;
 }> = Object.freeze({
+  // prettier-ignore
+
   /**
    * Applies a fully valid batch or reports the first reason authoritative recovery is required.
    *
@@ -51,87 +85,94 @@ export const BoardPayloads: Readonly<{
     rows: readonly BoardMessageView[],
     value: SubscriptionUpdate,
   ): BoardPayloadResult {
-    const parsed = read(board, value);
+    const parsed = BoardPayloadReaders.read(board, value);
     if (typeof parsed === "string") return { kind: "recovery", reason: parsed };
     const next = new Map(rows.map((row) => [row.id?.value ?? "", row]));
     for (const change of parsed)
       if (change.row === undefined) next.delete(change.id);
       else next.set(change.id, change.row);
-    return { kind: "applied", rows: [...next.values()].sort(order) };
+    return { kind: "applied", rows: [...next.values()].sort(BoardPayloadReaders.order) };
   },
 });
 
 /**
- * Parses an entire entity batch before any caller-visible row change.
- *
- * @param board Identifies the selected board.
- * @param value Supplies one raw subscription update.
- * @returns The validated changes or a recovery reason.
+ * Keeps payload parsing steps beside the reducer without expanding its public API.
  */
-function read(board: string, value: SubscriptionUpdate): readonly BoardChange[] | BoardRecovery {
-  if (value.update.case !== "entityUpdates") return "wrong-update";
-  if (value.update.value.update.length === 0) return "empty-batch";
-  const changes: BoardChange[] = [];
-  for (const update of value.update.value.update) {
-    const change = readChange(board, update);
-    if (typeof change === "string") return change;
-    changes.push(change);
-  }
-  return changes;
-}
+const BoardPayloadReaders = Object.freeze({
+  // prettier-ignore
 
-/**
- * Decodes one subscription item after its batch is known to be an entity update.
- *
- * @param board Identifies the selected board.
- * @param update Supplies one entity state update.
- * @returns The row, removed identifier, or recovery reason.
- */
-function readChange(board: string, update: EntityStateUpdate): BoardChange | BoardRecovery {
-  const id = readId(update);
-  if (typeof id === "string") return id;
-  if (update.kind.case === "noLongerMatching") return { id: id.value };
-  if (update.kind.case !== "state") return "wrong-kind";
-  const state = update.kind.value as Any | undefined;
-  if (state === undefined) return "missing-state";
-  const row = AnyMessages.unpack(state, BoardMessageViewSchema);
-  if (row === undefined) return "invalid-state";
-  const rowId = row.id?.value;
-  if (rowId === undefined || rowId.length === 0) return "invalid-state";
-  if (rowId !== id.value) return "identity-mismatch";
-  if (row.board?.value !== board) return "foreign-board";
-  return { id: id.value, row };
-}
+  /**
+   * Parses an entire entity batch before any caller-visible row change.
+   *
+   * @param board Identifies the selected board.
+   * @param value Supplies one raw subscription update.
+   * @returns The validated changes or a recovery reason.
+   */
+  read(board: string, value: SubscriptionUpdate): readonly BoardChange[] | BoardRecovery {
+    if (value.update.case !== "entityUpdates") return "wrong-update";
+    if (value.update.value.update.length === 0) return "empty-batch";
+    const changes: BoardChange[] = [];
+    for (const update of value.update.value.update) {
+      const change = BoardPayloadReaders.readChange(board, update);
+      if (typeof change === "string") return change;
+      changes.push(change);
+    }
+    return changes;
+  },
 
-/**
- * Decodes a non-empty Message Board identity.
- *
- * @param update Supplies the entity state update containing an identity.
- * @returns The decoded identifier or its recovery reason.
- */
-function readId(update: EntityStateUpdate): BoardId | BoardRecovery {
-  if (update.id === undefined) return "missing-id";
-  const id = AnyMessages.unpack(update.id, MessageIdSchema)?.value;
-  return id === undefined || id.length === 0 ? "invalid-id" : { value: id };
-}
+  /**
+   * Decodes one subscription item after its batch is known to be an entity update.
+   *
+   * @param board Identifies the selected board.
+   * @param update Supplies one entity state update.
+   * @returns The row, removed identifier, or recovery reason.
+   */
+  readChange(board: string, update: EntityStateUpdate): BoardChange | BoardRecovery {
+    const id = BoardPayloadReaders.readId(update);
+    if (typeof id === "string") return id;
+    if (update.kind.case === "noLongerMatching") return { id: id.value };
+    if (update.kind.case !== "state") return "wrong-kind";
+    const state = update.kind.value as Any | undefined;
+    if (state === undefined) return "missing-state";
+    const row = AnyMessages.unpack(state, BoardMessageViewSchema);
+    if (row === undefined) return "invalid-state";
+    const rowId = row.id?.value;
+    if (rowId === undefined || rowId.length === 0) return "invalid-state";
+    if (rowId !== id.value) return "identity-mismatch";
+    if (row.board?.value !== board) return "foreign-board";
+    return { id: id.value, row };
+  },
 
-/**
- * Orders rows by posting time and then identity for deterministic oldest-first display.
- *
- * @param left Supplies the first row.
- * @param right Supplies the second row.
- * @returns The relative display order.
- */
-function order(left: BoardMessageView, right: BoardMessageView): number {
-  const leftSeconds = left.postedAt?.seconds ?? 0n;
-  const rightSeconds = right.postedAt?.seconds ?? 0n;
-  const seconds = leftSeconds < rightSeconds ? -1 : leftSeconds > rightSeconds ? 1 : 0;
-  return (
-    seconds ||
-    (left.postedAt?.nanos ?? 0) - (right.postedAt?.nanos ?? 0) ||
-    (left.id?.value ?? "").localeCompare(right.id?.value ?? "")
-  );
-}
+  /**
+   * Decodes a non-empty Message Board identity.
+   *
+   * @param update Supplies the entity state update containing an identity.
+   * @returns The decoded identifier or its recovery reason.
+   */
+  readId(update: EntityStateUpdate): BoardId | BoardRecovery {
+    if (update.id === undefined) return "missing-id";
+    const id = AnyMessages.unpack(update.id, MessageIdSchema)?.value;
+    return id === undefined || id.length === 0 ? "invalid-id" : { value: id };
+  },
+
+  /**
+   * Orders rows by posting time and then identity for deterministic oldest-first display.
+   *
+   * @param left Supplies the first row.
+   * @param right Supplies the second row.
+   * @returns The relative display order.
+   */
+  order(left: BoardMessageView, right: BoardMessageView): number {
+    const leftSeconds = left.postedAt?.seconds ?? 0n;
+    const rightSeconds = right.postedAt?.seconds ?? 0n;
+    const seconds = leftSeconds < rightSeconds ? -1 : leftSeconds > rightSeconds ? 1 : 0;
+    return (
+      seconds ||
+      (left.postedAt?.nanos ?? 0) - (right.postedAt?.nanos ?? 0) ||
+      (left.id?.value ?? "").localeCompare(right.id?.value ?? "")
+    );
+  },
+});
 
 type BoardChange = Readonly<{ readonly id: string; readonly row?: BoardMessageView }>;
 type BoardId = Readonly<{ readonly value: string }>;

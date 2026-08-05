@@ -1,6 +1,6 @@
 # T-0118: Message Board Payload-First Synchronization
 
-Status: Baseline and implementation pending
+Status: Implementation complete; managed Chromium smoke and review pending
 
 ## Objective
 
@@ -75,3 +75,19 @@ and user-visible logging across the browser/server boundary.
 Focused React coverage, app/web typechecks, managed local Chromium smoke, and
 changed-line coverage precede review. Example/runtime integration requires one
 converged `verify:release` gate.
+
+## Implementation Evidence
+
+- The example-local reducer validates complete `EntityStateUpdate` batches,
+  applies valid state/removal payloads atomically, and returns explicit
+  recovery reasons without entering `client-react`.
+- `useBoardSync` preserves the initial authoritative Query, applies valid
+  payloads without querying, coalesces malformed/gap recovery, and guards
+  recovery completion with update generation and board identity.
+- A successful post performs no Query while the subscription is connected and
+  relies on its live payload. Without a connected subscription it performs one
+  coalesced authoritative Query. Failed posts keep their current feedback and
+  do not refresh.
+- Focused web tests, app/web typechecks, changed-production lint, cleanup,
+  TSDoc, formatting, and diff checks are complete. Chromium smoke and
+  specialist review remain deliberately pending.

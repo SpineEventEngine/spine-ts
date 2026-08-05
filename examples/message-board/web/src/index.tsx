@@ -158,6 +158,10 @@ const Board = function Board({
   readonly session: Extract<BoardSession, { readonly status: "signedIn" }>;
 }): ReactElement {
   const synchronized = useBoardSync(board, request);
+  const onPosted = () => {
+    if (synchronized.lifecycle?.state === "connected") return;
+    synchronized.refresh();
+  };
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:py-12">
@@ -174,7 +178,7 @@ const Board = function Board({
         actor={session.actor}
         request={request}
         {...(createMessageId === undefined ? {} : { createMessageId })}
-        onPosted={synchronized.refresh}
+        onPosted={onPosted}
       />
     </main>
   );

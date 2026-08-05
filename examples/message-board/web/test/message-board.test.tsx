@@ -494,7 +494,7 @@ describe("MessageBoardApp", () => {
     });
   });
 
-  it("refreshes authoritative messages after a successful post without an update hint", async () => {
+  it("refreshes authoritative messages after a successful post while disconnected", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
       createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
@@ -510,6 +510,46 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     request.query.resolveAt(1, responseRows("posted without update"));
     await screen.findByText("posted without update");
+  });
+
+  it("relies on a live payload after a successful post while connected", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitLifecycle({ state: "connected", generation: 1 });
+    await screen.findByText("Updating live");
+    fillPost("posted live");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    expect(request.send).toHaveBeenCalledTimes(1);
+    request.subscription.emitUpdate(stateUpdate(view("posted live", "general", 2n)));
+    await screen.findByText("posted live");
+    expect(request.send).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(
+      "MessageBoard applied a server payload.",
+      expect.objectContaining({ board: "general", rows: 2 }),
+    );
+  });
+
+  it("does not refresh after a failed post", async () => {
+    const request = requestFixture({ postFailure: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("general message");
+    fillPost("failed post");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+
+    await screen.findByRole("alert");
+    expect(request.send).toHaveBeenCalledTimes(1);
   });
 
   it("shows the username and message errors returned by the server", async () => {
@@ -632,17 +672,12 @@ describe("MessageBoardApp", () => {
       "MessageBoard live updates failed.",
       expect.objectContaining({ generation: 2 }),
     );
-    expect(info).toHaveBeenCalledWith(
-      "MessageBoard is sending a post command.",
-      expect.objectContaining({
-        board: "general",
-        command: request.post.mock.calls[0]?.[1],
-      }),
-    );
-    expect(info).toHaveBeenCalledWith(
-      "MessageBoard post command was accepted.",
-      expect.objectContaining({ board: "general", outcome: { kind: "ok" } }),
-    );
+    expect(info).toHaveBeenCalledWith("MessageBoard is sending a post command.", {
+      board: "general",
+    });
+    expect(info).toHaveBeenCalledWith("MessageBoard post command was accepted.", {
+      board: "general",
+    });
     expect(info).toHaveBeenCalledWith(
       "MessageBoard is cancelling live updates.",
       expect.objectContaining({ board: "general" }),
@@ -661,13 +696,9 @@ describe("MessageBoardApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
     await screen.findByRole("alert");
 
-    expect(warn).toHaveBeenCalledWith(
-      "MessageBoard post command was rejected.",
-      expect.objectContaining({
-        board: "general",
-        outcome: { kind: "rejection", rejection: {} },
-      }),
-    );
+    expect(warn).toHaveBeenCalledWith("MessageBoard post command was rejected.", {
+      board: "general",
+    });
   });
 
   it("reports a post transport failure in the browser console", async () => {
