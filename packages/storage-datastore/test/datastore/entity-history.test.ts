@@ -1,7 +1,13 @@
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
+import { EventStore } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 import {
   EntityHistoryConformance,
@@ -444,6 +450,20 @@ describe("Datastore entity history", () => {
           createdAt: time(1),
         },
       ],
+      diagnostics: [
+        {
+          entityId: "task",
+          event: create(EventSchema, { id: create(EventIdSchema, { value: "diagnostic-1" }) }),
+          producerVersion: 1n,
+          createdAt: time(1),
+        },
+      ],
+      events: [
+        create(EventSchema, {
+          id: create(EventIdSchema, { value: "delivery-1" }),
+          message: create(AnySchema, { typeUrl: "type.spine.test/Delivery" }),
+        }),
+      ],
     };
 
     await expect(commit.commit(mutation)).resolves.toBe("committed");
@@ -454,6 +474,90 @@ describe("Datastore entity history", () => {
     const normal = factory.createEntityStorage(input());
     await expect(normal.current.read("task")).resolves.toMatchObject({ version: 1n });
     await expect(normal.states.backward("task", 1)).resolves.toMatchObject([{ version: 1n }]);
+    await expect(normal.events.backward("task", 1)).resolves.toMatchObject([
+      { id: { value: "diagnostic-1" } },
+    ]);
+    const delivery = new EventStore(input().context, factory);
+    await expect(delivery.read()).resolves.toMatchObject([{ id: { value: "delivery-1" } }]);
+    delivery.close();
+  });
+
+  it("rejects duplicate delivery preflight before starting a Datastore transaction", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+    const delivery = create(EventSchema, { id: create(EventIdSchema, { value: "duplicate" }) });
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        context: inputValue.context,
+        entity: inputValue,
+        id: "duplicate-delivery",
+        entityId: "task",
+        next: {
+          id: "task",
+          state: create(StringValueSchema, { value: "next" }),
+          version: 1n,
+          archived: false,
+          deleted: false,
+        },
+        events: [delivery, delivery],
+      }),
+    ).rejects.toThrow("unique delivery-event IDs");
+
+    expect(client.transactionCalls).toBe(0);
+  });
+
+  it("retries a transaction abort and returns conflict without durable mutation", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+    const commit = EntityCommitStorageFactories.create(factory, inputValue);
+    const transaction = client.transaction.bind(client);
+    let aborts = 1;
+    client.transaction = () => {
+      const value = transaction();
+      const run = value.run.bind(value);
+      value.run = async () => {
+        if (aborts > 0) {
+          aborts -= 1;
+          throw Object.assign(new Error("transaction aborted"), { code: 10 });
+        }
+        return run();
+      };
+      return value;
+    };
+    const mutation = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "retry",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "next" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+
+    await expect(commit.commit(mutation)).resolves.toBe("committed");
+    await expect(
+      commit.commit({
+        ...mutation,
+        id: "conflict",
+        expected: { ...mutation.next, state: create(StringValueSchema, { value: "wrong" }) },
+      }),
+    ).resolves.toBe("conflict");
+    expect(client.transactionCalls).toBeGreaterThanOrEqual(3);
+    await expect(
+      factory.createEntityStorage(inputValue).current.read("task"),
+    ).resolves.toMatchObject({
+      state: { value: "next" },
+      version: 1n,
+    });
   });
 
   it("returns committed to the invocation whose ambiguous acknowledgement persisted", async () => {

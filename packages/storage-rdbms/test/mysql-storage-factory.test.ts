@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { create, toBinary } from "@bufbuild/protobuf";
-import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import { EntityHistoryConformance } from "../../storage/src/entity/history-conformance.js";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
@@ -65,6 +71,10 @@ const entityCurrent = new Map<
     readonly archived: boolean;
     readonly deleted: boolean;
   }
+>();
+const entityCommitReceipts = new Map<
+  string,
+  { readonly digest: Uint8Array; readonly owner: string }
 >();
 
 vi.mock("mysql2/promise", () => ({
@@ -180,6 +190,27 @@ vi.mock("mysql2/promise", () => ({
               const fingerprint = values?.[1];
               if (fingerprint instanceof Uint8Array && !entitySpecifications.has(scope))
                 entitySpecifications.set(scope, fingerprint);
+              return [{ affectedRows: 1 }, []];
+            }
+            if (sql.includes("FROM spine_ts_entity_commits")) {
+              const receipt = entityCommitReceipts.get(
+                `${fakeKey(values?.[0])}:${fakeKey(values?.[1])}:${fakeKey(values?.[2])}`,
+              );
+              return [receipt === undefined ? [] : [receipt], []];
+            }
+            if (sql.startsWith("INSERT INTO spine_ts_entity_commits")) {
+              const scope = values?.[0];
+              const entity = values?.[1];
+              const commit = values?.[2];
+              const digest = values?.[3];
+              const owner = values?.[4];
+              if (!(digest instanceof Uint8Array) || typeof owner !== "string") {
+                throw new Error("invalid entity commit receipt fixture row");
+              }
+              entityCommitReceipts.set(`${fakeKey(scope)}:${fakeKey(entity)}:${fakeKey(commit)}`, {
+                digest,
+                owner,
+              });
               return [{ affectedRows: 1 }, []];
             }
             if (sql.startsWith("SELECT fingerprint FROM spine_ts_entity_specs")) {
@@ -673,6 +704,133 @@ describe("MysqlStorageFactory", () => {
     });
     await factory.close();
   });
+
+  it("commits current, state, diagnostic, delivery, and receipt once before replaying", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_commit",
+    });
+    const input = entityHistoryInput();
+    const commitStorage = EntityCommitStorageFactories.create(factory, input);
+    const delivery = create(EventSchema, {
+      id: create(EventIdSchema, { value: "delivery-1" }),
+      message: create(AnySchema, { typeUrl: "type.spine.test/Delivery" }),
+    });
+    const mutation = {
+      context: input.context,
+      entity: input,
+      id: "command-1",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "next" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+      states: [stateRecord("task", 1n)],
+      diagnostics: [
+        {
+          entityId: "task",
+          event: create(EventSchema, { id: create(EventIdSchema, { value: "diagnostic-1" }) }),
+          producerVersion: 1n,
+          createdAt: create(TimestampSchema, { seconds: 1n }),
+        },
+      ],
+      events: [delivery],
+    };
+
+    await expect(commitStorage.commit(mutation)).resolves.toBe("committed");
+    await expect(commitStorage.commit(mutation)).resolves.toBe("replayed");
+
+    expect(calls.map((call) => call.sql).join("\n")).toMatch(
+      /INSERT INTO spine_ts_entity_current[\s\S]*INSERT INTO spine_ts_entity_states[\s\S]*INSERT INTO spine_ts_entity_events[\s\S]*INSERT INTO spine_ts_records[\s\S]*INSERT INTO spine_ts_entity_commits/u,
+    );
+    expect(commits).toBe(1);
+    await factory.close();
+  });
+
+  it("rejects duplicate delivery IDs before acquiring a commit connection", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_preflight",
+    });
+    const input = entityHistoryInput();
+    const mutation = atomicMutation(input, "duplicate-delivery");
+    const delivery = mutation.events[0];
+    if (delivery === undefined) throw new Error("Expected atomic mutation delivery event.");
+    connectionAcquires = 0;
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit({
+        ...mutation,
+        events: [delivery, delivery],
+      }),
+    ).rejects.toThrow("unique delivery-event IDs");
+
+    expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
+
+  it("returns conflict without write statements when the expected current record differs", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_conflict",
+    });
+    const input = entityHistoryInput();
+    const commitStorage = EntityCommitStorageFactories.create(factory, input);
+    await commitStorage.commit(atomicMutation(input, "seed"));
+    calls.length = 0;
+
+    await expect(
+      commitStorage.commit({
+        ...atomicMutation(input, "conflict"),
+        expected: {
+          id: "task",
+          state: create(StringValueSchema, { value: "wrong" }),
+          version: 1n,
+          archived: false,
+          deleted: false,
+        },
+      }),
+    ).resolves.toBe("conflict");
+
+    expect(calls.some(({ sql }) => sql.startsWith("INSERT INTO spine_ts_entity_current"))).toBe(
+      false,
+    );
+    expect(rollbacks).toBeGreaterThan(0);
+    await factory.close();
+  });
+
+  it("retries a deadlock and reconciles a persisted receipt after a lost commit acknowledgement", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_retry",
+    });
+    const input = entityHistoryInput();
+    let deadlocks = 1;
+    executeFailure = (sql) => {
+      if (sql.startsWith("INSERT INTO spine_ts_entity_current") && deadlocks > 0) {
+        deadlocks -= 1;
+        return Object.assign(new Error("deadlock"), { code: "ER_LOCK_DEADLOCK" });
+      }
+      return undefined;
+    };
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit(atomicMutation(input, "retry")),
+    ).resolves.toBe("committed");
+    expect(transactionStarts).toBeGreaterThanOrEqual(2);
+
+    commitResponses.push(Object.assign(new Error("connection lost"), { code: "ECONNRESET" }));
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit(
+        atomicMutation(input, "ambiguous"),
+      ),
+    ).resolves.toBe("committed");
+    expect(destroys).toBe(1);
+    await factory.close();
+  });
   beforeEach(() => {
     calls.length = 0;
     endCalls = 0;
@@ -711,6 +869,7 @@ describe("MysqlStorageFactory", () => {
     afterTruncateCutoff = undefined;
     entitySpecifications.clear();
     entityCurrent.clear();
+    entityCommitReceipts.clear();
     poolOptions = undefined;
   });
 
@@ -2886,6 +3045,36 @@ function stateRecord(entityId: string, version: bigint) {
     state: create(StringValueSchema, { value: `state-${version.toString()}` }),
     version,
     createdAt: create(TimestampSchema, { seconds: version }),
+  };
+}
+
+function atomicMutation(input: EntityStorageInput<string, StringValue>, id: string) {
+  const delivery = create(EventSchema, {
+    id: create(EventIdSchema, { value: `${id}-delivery` }),
+    message: create(AnySchema, { typeUrl: "type.spine.test/Delivery" }),
+  });
+  return {
+    context: input.context,
+    entity: input,
+    id,
+    entityId: "task",
+    next: {
+      id: "task",
+      state: create(StringValueSchema, { value: "next" }),
+      version: 1n,
+      archived: false,
+      deleted: false,
+    },
+    states: [stateRecord("task", 1n)],
+    diagnostics: [
+      {
+        entityId: "task",
+        event: create(EventSchema, { id: create(EventIdSchema, { value: `${id}-diagnostic` }) }),
+        producerVersion: 1n,
+        createdAt: create(TimestampSchema, { seconds: 1n }),
+      },
+    ],
+    events: [delivery],
   };
 }
 
