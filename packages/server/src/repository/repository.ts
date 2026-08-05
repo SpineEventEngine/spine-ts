@@ -1828,6 +1828,8 @@ class AggregateEventExecution {
   }
 }
 
+type EntityLoadMode = "stored" | "rebuild";
+
 class ProjectionEventExecution {
   readonly #repository: RepositoryView & {
     routeEvent(event: Event): RepositoryEventRoute;
@@ -1895,10 +1897,11 @@ class ProjectionEventExecution {
   async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
     const packedMessage = EntityInvocation.requireSignalMessage(this.#event.message, "event");
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
-    const loaded = await this.#loadProjection(entityId, tenantOptions);
+    const mode: EntityLoadMode = this.#commitScope === undefined ? "stored" : "rebuild";
+    const loaded = await this.#loadProjection(entityId, tenantOptions, mode);
 
     await this.#invokeSubscribers(loaded.entity, subscribers, packedMessage);
-    await this.#storeIfChanged(loaded, tenantOptions, loaded.current?.state);
+    await this.#storeIfChanged(loaded, tenantOptions, loaded.current?.state, mode);
   }
 
   #readIntake(): {
@@ -1920,6 +1923,7 @@ class ProjectionEventExecution {
     loaded: LoadedRepositoryEntity,
     tenantOptions: { readonly tenantId?: string },
     oldState: Message | undefined,
+    mode: EntityLoadMode,
   ): Promise<void> {
     if (!RepositoryEntities.repositoryChanged(loaded.entity)) {
       return;
@@ -1989,9 +1993,11 @@ class ProjectionEventExecution {
       this.#event,
       entityId,
       oldState,
-      loaded.current === undefined
-        ? undefined
-        : { archived: loaded.current.archived, deleted: loaded.current.deleted },
+      mode === "rebuild"
+        ? lifecycle
+        : loaded.current === undefined
+          ? undefined
+          : { archived: loaded.current.archived, deleted: loaded.current.deleted },
       state,
       lifecycle,
       this.#event.context?.version?.number ?? 0,
@@ -2035,6 +2041,7 @@ class ProjectionEventExecution {
   async #loadProjection(
     entityId: unknown,
     options: { readonly tenantId?: string },
+    mode: EntityLoadMode,
   ): Promise<LoadedRepositoryEntity> {
     const stored = await standAccess.readCurrent(
       this.#runtime.stand,
@@ -2053,9 +2060,18 @@ class ProjectionEventExecution {
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored === undefined ? this.#defaultState(entityId) : stored.state,
-      version: RepositoryStand.projectionVersion(stored?.version),
-      lifecycle: { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
+      state:
+        stored === undefined || (mode === "rebuild" && stored.deleted)
+          ? this.#defaultState(entityId)
+          : stored.state,
+      version:
+        mode === "rebuild" && stored?.deleted
+          ? 0
+          : RepositoryStand.projectionVersion(stored?.version),
+      lifecycle:
+        mode === "rebuild" && stored?.deleted
+          ? { archived: false, deleted: false }
+          : { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
     });
     const storageInput = RepositoryStorage.entityStorageInput(
       this.#repository,
