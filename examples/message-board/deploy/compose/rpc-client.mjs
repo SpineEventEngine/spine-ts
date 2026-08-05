@@ -118,8 +118,15 @@ async function fullFlow() {
     [Symbol.asyncIterator]();
   try {
     const next = updates.next();
-    await post("update", "Compose public subscription");
-    const update = await deadline(next, 5_000, "subscription update");
+    let update;
+    for (let attempt = 0; attempt < 5 && update === undefined; attempt += 1) {
+      await post(`update-${attempt}`, "Compose public subscription");
+      update = await Promise.race([
+        next,
+        new Promise((resolve) => globalThis.setTimeout(() => resolve(undefined), 1_000)),
+      ]);
+    }
+    if (update === undefined) update = await deadline(next, 1_000, "subscription update");
     if (update.done) throw new Error("Compose subscription ended before an update.");
   } finally {
     controller.abort();

@@ -22,7 +22,7 @@ test("runs two application nodes behind one Gateway and shuts them down", { time
     assert.match(clientRun(project, "first"), /full-ok/u);
     assert.match(clientRun(project, "second"), /full-ok/u);
     composeRun(project, ["kill", "--signal", "SIGTERM", "gateway"]);
-    assert.match(composeRun(project, ["ps", "--all", "--format", "json"]), /gateway/u);
+    waitStopped(project, "gateway");
   } finally {
     composeRun(project, ["down", "--volumes", "--remove-orphans"], true);
   }
@@ -43,11 +43,38 @@ function composeRun(project, arguments_, ignoreFailure = false) {
 
 function waitFor(project, services) {
   for (let attempt = 0; attempt < 45; attempt += 1) {
-    const state = composeRun(project, ["ps", "--format", "json"]);
-    if (services.every((service) => state.includes(service) && state.includes("running"))) return;
+    const state = states(composeRun(project, ["ps", "--format", "json"]));
+    if (services.every((service) => state.get(service)?.State === "running" && ready(project, state.get(service)))) return;
     execFileSync("sleep", ["1"]);
   }
   assert.fail(`distributed topology did not become ready: ${composeRun(project, ["ps", "--all"])} `);
+}
+
+function waitStopped(project, service) {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const record = states(composeRun(project, ["ps", "--all", "--format", "json"])).get(service);
+    if (record?.State === "exited") {
+      assert.equal(Number(record.ExitCode), 0);
+      return;
+    }
+    execFileSync("sleep", ["1"]);
+  }
+  assert.fail(`${service} did not exit after SIGTERM`);
+}
+
+function states(output) {
+  return new Map(
+    output.trim().split("\n").filter(Boolean).map((line) => {
+      const record = JSON.parse(line);
+      return [record.Service, record];
+    }),
+  );
+}
+
+function ready(project, service) {
+  if (service?.ID === undefined) return false;
+  const logs = execFileSync("docker", ["logs", service.ID], { encoding: "utf8" });
+  return /MessageBoard (application|gateway) ready/u.test(logs);
 }
 
 function clientRun(project, runId) {
