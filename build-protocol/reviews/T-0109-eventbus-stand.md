@@ -134,3 +134,19 @@ opened.
 - Runtime self-introspection remains unavailable for both immutable implementer
   profiles. Each owner works in a separate worktree from this endpoint and may
   not spawn children or modify the other lane.
+
+## Native Family Proof Redispatch
+
+- The original server implementer completed post-commit isolation,
+  delete-during-snapshot, gated close, and simultaneous activation checkpoints,
+  but stopped before the required full native family subscription proof because
+  Process Manager fixtures were private to another test module. This is a
+  demonstrated context/implementation limit, not a protocol blocker.
+- A fresh bounded implementer receives sole ownership of extracting or
+  duplicating the minimum test fixtures and proving actual Aggregate,
+  Projection, Process Manager command, and Process Manager event commits through
+  native SubscriptionService activation and EventBus `EntityStateChanged`.
+  Expected dispatch is explicitly `gpt-5.6-terra` / `medium`; runtime
+  self-introspection may be unavailable, and the immutable configured profile is
+  then the acceptance metadata. The replacement may not spawn children or
+  change production behavior unless the proof exposes a concrete defect.
