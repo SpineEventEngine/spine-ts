@@ -1,6 +1,6 @@
 # T-0115 Review Log
 
-Status: Second targeted correction batch in implementation
+Status: Third targeted correction batch in implementation
 
 ## Scope
 
@@ -196,3 +196,36 @@ activation guarantees. Style and reliability independently confirmed item 2.
   and re-dispatched with their previously recorded explicit roles and
   `gpt-5.6-terra` / high profiles. Documentation and API lanes remain clean and
   are not reopened because this correction changes no public claim or API.
+
+## Second Targeted Re-review Results
+
+- Style/maintainability: changes requested. Synchronous abort findings are
+  resolved, but registry close now starts before observer detachment settles.
+- Performance/reliability: changes requested. Explicit reconciliation and
+  synchronous cleanup isolation are resolved; dispatcher-registration failure
+  can still strand an unretained bus runtime, and raw-store cleanup can report
+  the primary construction failure twice.
+- Immutable configured reviewer profiles remain the accepted runtime metadata;
+  self-introspection was unavailable and no mismatch was visible.
+
+## Third Accepted Correction Batch
+
+1. Settles observer detachment before starting registry close, while still
+   attempting registry close after a detach failure and aggregating both.
+2. Constructs and retains each domain/System EventBus before registering its
+   dispatchers so a synchronous registration failure leaves an abortable bus.
+3. Reports a raw-store cleanup failure after the primary construction failure
+   exactly once, without nesting or duplicating the primary error.
+
+These findings are accepted because they close the remaining frozen partial
+build and terminal-order requirements without changing public scope.
+
+## Third Correction Assignment
+
+- Existing role: implementer `/root/t0115_terminal_impl`.
+- Ownership: the three findings, focused injected-failure tests, records, one
+  correction commit, and immediate feature-branch push.
+- Expected and explicitly dispatched model: `gpt-5.6-terra`.
+- Expected and explicitly dispatched reasoning: `medium`.
+- Runtime self-introspection is unavailable; immutable role/profile metadata
+  applies.
