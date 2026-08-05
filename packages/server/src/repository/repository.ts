@@ -3455,10 +3455,7 @@ class HandlerDispatchPublishing {
         ),
         context,
       });
-      runtime.registerSystemEventSchema(EntityLog.CommandDispatchedToHandlerSchema);
-      void runtime.postSystemFollowUp(event).catch((error: unknown) => {
-        runtime.recordDispatchFailure(event, error);
-      });
+      this.#post(runtime, EntityLog.CommandDispatchedToHandlerSchema, event);
     } catch (error) {
       runtime.recordDispatchFailure(create(EventSchema), error);
     }
@@ -3515,10 +3512,7 @@ class HandlerDispatchPublishing {
         ),
         context,
       });
-      runtime.registerSystemEventSchema(schema);
-      void runtime.postSystemFollowUp(diagnostic).catch((error: unknown) => {
-        runtime.recordDispatchFailure(diagnostic, error);
-      });
+      this.#post(runtime, schema, diagnostic);
     } catch (error) {
       runtime.recordDispatchFailure(create(EventSchema), error);
     }
@@ -3541,6 +3535,24 @@ class HandlerDispatchPublishing {
         impl: { case: "javaClassName", value: repository.entityType.name },
       }),
     });
+  }
+
+  #post(
+    runtime: RepositoryRuntime,
+    schema:
+      | typeof EntityLog.CommandDispatchedToHandlerSchema
+      | typeof EntityLog.EventDispatchedToSubscriberSchema
+      | typeof EntityLog.EventDispatchedToReactorSchema,
+    event: Event,
+  ): void {
+    try {
+      runtime.registerSystemEventSchema(schema);
+      void runtime.postSystemFollowUp(event).catch((error: unknown) => {
+        runtime.recordDispatchFailure(event, error);
+      });
+    } catch (error) {
+      runtime.recordDispatchFailure(event, error);
+    }
   }
 
   #packEntityId(repository: RepositoryView, entityId: unknown): Any {

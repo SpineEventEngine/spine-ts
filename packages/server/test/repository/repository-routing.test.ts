@@ -451,15 +451,20 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
 class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
+  static failure: Error | undefined;
 
-  static reset(): void {
+  static reset(failure?: Error): void {
     this.argumentCounts = [];
     this.contexts = [];
+    this.failure = failure;
   }
 
   reactProjection(event: ProjectionState, context: EventContext): AggregateState {
     GeneratedReactorAggregate.argumentCounts.push(arguments.length);
     GeneratedReactorAggregate.contexts.push(context);
+    if (GeneratedReactorAggregate.failure !== undefined) {
+      throw GeneratedReactorAggregate.failure;
+    }
     this.update((draft) =>
       Object.assign(
         draft,
@@ -2296,6 +2301,37 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("retains one reactor diagnostic when an admitted reactor fails", async () => {
+    const failure = new Error("admitted reactor failed");
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent("aggregate-reactor-failure", "aggregate-reactor-failure");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      GeneratedReactorAggregate.reset(failure);
+      await expect(context.eventBus().post(event)).rejects.toThrow(failure);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      expect(GeneratedReactorAggregate.argumentCounts).toEqual([2]);
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToReactorSchema),
+      ).toMatchObject({ payload: event });
+    } finally {
+      GeneratedReactorAggregate.reset();
+      await context.close();
+    }
+  });
+
   it("does not emit reactor diagnostics for an event without a matching route", async () => {
     GeneratedReactorAggregate.reset();
     const diagnostics: SpineEvent[] = [];
@@ -2321,7 +2357,7 @@ describe("repository signal routing", () => {
           }),
         ),
       ).rejects.toThrow(/event schema/i);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await context.close();
 
       expect(diagnostics).toEqual([]);
       expect(GeneratedReactorAggregate.argumentCounts).toEqual([]);
@@ -3164,6 +3200,37 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("retains one command diagnostic when an admitted handler fails", async () => {
+    const failure = new Error("admitted command handler failed");
+    const diagnostics: SpineEvent[] = [];
+    const command = createAggregateCommand("command-diagnostic-failure", "diagnostic-failure");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      ExecutingTaskAggregate.reset(failure);
+      await expect(context.commandBus().post(command)).rejects.toThrow(failure);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, CommandDispatchedToHandlerSchema),
+      ).toMatchObject({ payload: command });
+    } finally {
+      ExecutingTaskAggregate.reset();
+      await context.close();
+    }
+  });
+
   it("does not emit command diagnostics for refused or unroutable commands", async () => {
     const diagnostics: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
@@ -3184,7 +3251,7 @@ describe("repository signal routing", () => {
       await expect(
         context.commandBus().post(createAggregateCommand("unroutable-diagnostic", "unroutable")),
       ).rejects.toThrow(/dispatcher/i);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await context.close();
 
       expect(diagnostics).toEqual([]);
     } finally {
@@ -4662,7 +4729,7 @@ describe("repository signal routing", () => {
 
     try {
       await context.eventBus().post(createProjectionEvent("pm-no-reactor", "pm-no-reactor"));
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await context.close();
 
       expect(diagnostics).toEqual([]);
     } finally {
@@ -5072,6 +5139,39 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("retains one subscriber diagnostic when an admitted subscriber fails", async () => {
+    const failure = new Error("admitted projection subscriber failed");
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent(
+      "subscriber-diagnostic-failure",
+      "subscriber-diagnostic-failure",
+    );
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createThrowingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      ThrowingTaskProjection.reset(failure);
+      await expect(context.eventBus().post(event)).rejects.toThrow(failure);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToSubscriberSchema),
+      ).toMatchObject({ payload: event });
+    } finally {
+      ThrowingTaskProjection.reset();
+      await context.close();
+    }
+  });
+
   it("keeps subscriber diagnostics tenant-scoped and emits them for catch-up replay", async () => {
     const diagnostics: SpineEvent[] = [];
     const context = BoundedContext.multitenant("Tasks")
@@ -5129,7 +5229,7 @@ describe("repository signal routing", () => {
           message: create(NumberRouteEventSchema, { id: 7 }),
         }),
       );
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await context.close();
 
       expect(diagnostics).toEqual([]);
     } finally {
@@ -5160,7 +5260,7 @@ describe("repository signal routing", () => {
           }),
         ),
       ).rejects.toThrow(/same entity/i);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await context.close();
 
       expect(diagnostics).toEqual([]);
       expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
