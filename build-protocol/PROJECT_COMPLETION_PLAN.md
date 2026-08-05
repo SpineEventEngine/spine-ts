@@ -32,8 +32,9 @@ dependency-ordered as T-0114 through T-0119 in
 `build-protocol/planning/T-0113_SYSTEM_CONTEXT_PLAN.md`. T-0114 EventBus
 storing/forgetting policy is reviewed, release-verified, integrated,
 post-merge verified, and pushed. T-0115 atomic System Context and Stand cutover
-is the active next task. Complete T-0115 through T-0119 before Wave 7 Q&A
-continues.
+is reviewed, release-verified, merged as `4275a6d7`, post-merge verified, and
+pushed. T-0116 lifecycle system events is the active next task. Complete T-0116
+through T-0119 before Wave 7 Q&A continues.
 
 ## Purpose
 
