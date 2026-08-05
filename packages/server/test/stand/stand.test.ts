@@ -18,7 +18,7 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   InMemorySubscriptionRegistry,
@@ -30,9 +30,33 @@ import {
 } from "../../src/index.js";
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import { standAccess } from "../../src/stand/stand.js";
-import { eventBusAccess } from "../../src/bus/event-bus.js";
+import {
+  eventBusAccess,
+  type EventBus as EventBusType,
+  type EventSubscriber,
+} from "../../src/bus/event-bus.js";
 import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+const observedEventBusSubscriptions = vi.hoisted(
+  () => [] as { readonly closed: boolean; unsubscribe(): void }[],
+);
+
+vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/bus/event-bus.js")>();
+
+  return {
+    ...actual,
+    eventBusAccess: Object.freeze({
+      ...actual.eventBusAccess,
+      subscribe(eventBus: EventBusType, typeUrl: string, subscriber: EventSubscriber) {
+        const subscription = actual.eventBusAccess.subscribe(eventBus, typeUrl, subscriber);
+        observedEventBusSubscriptions.push(subscription);
+        return subscription;
+      },
+    }),
+  };
+});
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -119,6 +143,7 @@ describe("Stand", () => {
   });
 
   it("detaches EventBus observers while a reconciliation snapshot is gated during close", async () => {
+    observedEventBusSubscriptions.length = 0;
     const factory = new InMemoryStorageFactory();
     const stand = new Stand({
       context: { name: "Closing", multitenant: false },
@@ -144,6 +169,9 @@ describe("Stand", () => {
     standAccess.startSubscriptions(stand, registry, bus);
     let deliveries = 0;
     await standAccess.consumeSubscription(stand, registry, "gated-close", () => deliveries++);
+    expect(observedEventBusSubscriptions).toHaveLength(1);
+    const [observer] = observedEventBusSubscriptions;
+    expect(observer?.closed).toBe(false);
     await postStateChange(bus, ProjectionStateSchema, createState("before-close", "Before close"));
     expect(deliveries).toBe(1);
 
@@ -154,6 +182,7 @@ describe("Stand", () => {
     registry.releaseSnapshot();
     await reconciliation;
     await closing;
+    expect(observer?.closed).toBe(true);
     await postStateChange(bus, ProjectionStateSchema, createState("after-close", "After close"));
     expect(deliveries).toBe(1);
     await expect(bus.close()).resolves.toBeUndefined();
