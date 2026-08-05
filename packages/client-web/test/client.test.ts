@@ -3010,6 +3010,69 @@ describe("Client", () => {
     await client.close();
   });
 
+  it("suppresses only backend-unavailable loss notices before delivering healthy updates", async () => {
+    let topic: Topic | undefined;
+    const client = Client.usingTransport({
+      transport: unaryTransport(
+        (method, input) =>
+          method.name === "Subscribe"
+            ? ((topic = input as Topic),
+              create(SubscriptionSchema, {
+                id: create(SubscriptionIdSchema, { value: "fan-in" }),
+                topic,
+              }))
+            : create(ResponseSchema),
+        undefined,
+        () =>
+          (async function* () {
+            await Promise.resolve();
+            const subscription = create(SubscriptionSchema, {
+              id: create(SubscriptionIdSchema, { value: "fan-in" }),
+              topic: requireValue(topic, "subscription topic"),
+            });
+            yield create(SubscriptionUpdateSchema, {
+              subscription,
+              response: create(ResponseSchema, {
+                status: create(StatusSchema, {
+                  status: {
+                    case: "error",
+                    value: create(ErrorSchema, { type: "backend-unavailable" }),
+                  },
+                }),
+              }),
+            });
+            yield create(SubscriptionUpdateSchema, { subscription });
+            yield create(SubscriptionUpdateSchema, {
+              subscription,
+              response: create(ResponseSchema, {
+                status: create(StatusSchema, {
+                  status: {
+                    case: "error",
+                    value: create(ErrorSchema, { type: "application-error" }),
+                  },
+                }),
+              }),
+            });
+          })(),
+      ),
+      createRequestId: () => "fan-in-loss",
+    });
+    const subscription = await client
+      .asGuest()
+      .createSubscription(create(TopicSchema), eventSubscription);
+    const lifecycle = subscription.lifecycle[Symbol.asyncIterator]();
+    await subscription.activate();
+    await lifecycle.next();
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "connected" } });
+    await expect(lifecycle.next()).resolves.toMatchObject({ value: { state: "gapPossible" } });
+    const updates = subscription.updates[Symbol.asyncIterator]();
+    await expect(updates.next()).resolves.toMatchObject({ done: false });
+    await expect(updates.next()).resolves.toMatchObject({
+      value: { update: { response: { status: { status: { case: "error" } } } } },
+    });
+    await client.close();
+  });
+
   it("honors an activation signal that was already aborted", async () => {
     let subscribes = 0;
     const client = Client.usingTransport({
