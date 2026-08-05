@@ -42,6 +42,7 @@ import type {
 import { SubscriptionPhase } from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
 
 const start = 1_000_000;
+const stagingStorageKey = "spine.server.StandSubscriptionRecord:staging";
 
 function id(value: string): SubscriptionId {
   return create(SubscriptionIdSchema, { value });
@@ -938,7 +939,7 @@ async function readStage(
     context,
     new RecordSpec<string, StandSubscriptionRecord>({
       schema: StandSubscriptionRecords.schema,
-      storageKey: "spine.server.StandSubscriptionRecord:stage",
+      storageKey: stagingStorageKey,
       idKind: "string",
       extractId: () => "stage",
     }),

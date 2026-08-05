@@ -77,8 +77,9 @@ context because definitions disappear on restart; startup still continues.
 
 The registry stores a definition first, then makes it active. Applications use
 the generated `SubscriptionId` throughout the lifecycle. `get()` and
-`snapshot()` return frozen copies, so treat them as observations rather than
-mutable working objects.
+`snapshot()` return cloned, frozen message/object graphs, so treat them as
+observations rather than mutable working objects. Their cloned Protobuf byte
+arrays remain mutable, but do not alias stored or caller bytes.
 
 ```ts
 import { create } from "@bufbuild/protobuf";

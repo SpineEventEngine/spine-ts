@@ -420,3 +420,25 @@ mismatch was exposed.
 - Server and RDBMS TypeScript builds, focused ESLint, cleanup, TSDoc, API
   documentation (235 server exports), documentation-audience, Prettier, and
   `git diff --check` all exited successfully.
+
+## Deterministic Closure Corrections
+
+- The final stale-stage helper now opens the exact production fixed-stage
+  storage key, `spine.server.StandSubscriptionRecord:staging`, through one
+  test-local constant. Its empty-stage assertion therefore observes the real
+  stage namespace after the two-owner interleaving rather than a different,
+  always-empty namespace.
+- The beginner server README now distinguishes the frozen cloned
+  message/object graph from intentionally mutable cloned Protobuf byte arrays;
+  returned bytes remain isolated from both stored and caller input bytes.
+- The existing `implementer` assignment remains explicitly
+  `gpt-5.6-terra` / `medium`. Runtime self-introspection is unavailable on this
+  surface, so the immutable configured role/profile and explicit dispatch are
+  the available metadata evidence; no visible mismatch was exposed.
+- Fresh deterministic evidence: the corrected stale-stage regression passed
+  1/1 and the complete registry suite passed 50/50 with the five-second test
+  timeout. Server TypeScript, focused ESLint, cleanup, TSDoc, API docs (235
+  server exports), audience checks, README/test Prettier, and diff hygiene all
+  exited cleanly. The reusable provider fixture passed 8/8 independently for
+  memory, MySQL, and Datastore; Datastore emitted only its existing
+  Filter-object recommendation warning.
