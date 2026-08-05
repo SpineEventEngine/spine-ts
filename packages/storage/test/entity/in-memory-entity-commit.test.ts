@@ -133,6 +133,122 @@ describe("MemoryEntityCommitStorage", () => {
     ).toThrow(/closed/);
     second.close();
   });
+
+  it("commits a current record when optional histories and delivery events are omitted", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const entity = factory.createEntityStorage(input) as EntityHandle;
+    const commits = commitStorage(factory, input);
+
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        id: "current-only:task",
+        entityId: "task",
+        next: current("current-only", 1n),
+      }),
+    ).resolves.toBe("committed");
+
+    await expect(entity.current.read("task")).resolves.toMatchObject({
+      state: { value: "current-only" },
+      version: 1n,
+    });
+    await expect(entity.states.backward("task", 10)).resolves.toEqual([]);
+    await expect(entity.events.backward("task", 10)).resolves.toEqual([]);
+    const events = new EventStore(input.context, factory);
+    await expect(events.read()).resolves.toEqual([]);
+    events.close();
+    commits.close();
+    entity.close();
+  });
+
+  it("returns conflict for absent or meaningfully different expected current records", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const commits = commitStorage(factory, input);
+    const persisted = current("persisted", 1n);
+
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        id: "missing:task",
+        entityId: "task",
+        expected: current("missing", 0n),
+        next: current("unexpected", 1n),
+      }),
+    ).resolves.toBe("conflict");
+    await expect(
+      commits.commit({
+        context: input.context,
+        entity: input,
+        id: "seed:task",
+        entityId: "task",
+        next: persisted,
+      }),
+    ).resolves.toBe("committed");
+
+    for (const [id, expected] of [
+      ["undefined", undefined],
+      ["state", current("different", 1n)],
+      ["version", current("persisted", 2n)],
+      ["archived", { ...persisted, archived: true }],
+      ["deleted", { ...persisted, deleted: true }],
+    ] as const) {
+      await expect(
+        commits.commit({
+          context: input.context,
+          entity: input,
+          id: `${id}:task`,
+          entityId: "task",
+          expected,
+          next: current("unexpected", 2n),
+        }),
+      ).resolves.toBe("conflict");
+    }
+    commits.close();
+  });
+
+  it("keeps sibling handles usable after a handle is closed repeatedly", async () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const first = commitStorage(factory, input);
+    const second = commitStorage(factory, input);
+
+    first.close();
+    expect(() => {
+      first.close();
+    }).not.toThrow();
+    await expect(
+      second.commit({
+        context: input.context,
+        entity: input,
+        id: "sibling:task",
+        entityId: "task",
+        next: current("sibling", 1n),
+      }),
+    ).resolves.toBe("committed");
+    second.close();
+  });
+
+  it("rejects a commit input from another entity storage scope", () => {
+    const factory = new InMemoryStorageFactory();
+    const input = entityInput();
+    const commits = commitStorage(factory, input);
+    const incompatible = { ...input, storageKey: "tasks.Other:current" };
+
+    expect(() =>
+      commits.commit({
+        context: incompatible.context,
+        entity: incompatible,
+        id: "wrong-scope:task",
+        entityId: "task",
+        next: current("wrong-scope", 1n),
+      }),
+    ).toThrow(/another Entity storage scope/);
+    commits.close();
+  });
 });
 
 const context = Object.freeze({ name: "Tasks", multitenant: false });
