@@ -1,0 +1,282 @@
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  Int32ValueSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import {
+  EventContextSchema,
+  EventSchema,
+  RejectionEventContextSchema,
+  file_spine_options,
+} from "@spine-event-engine/proto";
+import {
+  CompositeFilterSchema,
+  CompositeFilter_CompositeOperator,
+  FilterSchema,
+  Filter_Operator,
+  SubscriptionSchema,
+  type SubscriptionUpdate,
+} from "@spine-event-engine/proto/client";
+import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
+import { describe, expect, it } from "vitest";
+
+import { eventBusAccess, EventBus } from "../../src/bus/event-bus.js";
+import { SubscriptionObservers } from "../../src/stand/subscription-observer.js";
+import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+type ProjectionState = Message<"ProjectionState"> & {
+  id: string;
+  name: string;
+  priority: number;
+};
+
+function fixtureFile(descriptorSetBase64: string) {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(descriptorSetBase64, "base64"),
+  );
+  const descriptor = descriptorSet.file[0];
+  if (descriptor === undefined) throw new Error("Expected fixture descriptor.");
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+}
+
+const fixture = fixtureFile(serverEntityMetadataTestFixtures.main.descriptorSetBase64);
+const ProjectionStateSchema = messageDesc(fixture, 0) as GenMessage<ProjectionState>;
+let eventSequence = 0;
+
+describe("SubscriptionObservers", () => {
+  it("renders a masked matching state then a no-longer-matching state from the local EventBus", async () => {
+    const bus = createBus();
+    const received: SubscriptionUpdate[] = [];
+    const subscription = create(SubscriptionSchema, {
+      topic: {
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: {
+            case: "filters",
+            value: {
+              idFilter: { id: [packString("task-1")] },
+              filter: [
+                create(CompositeFilterSchema, {
+                  operator: CompositeFilter_CompositeOperator.ALL,
+                  filter: [
+                    create(FilterSchema, {
+                      fieldPath: { fieldName: ["priority"] },
+                      operator: Filter_Operator.EQUAL,
+                      value: AnyMessages.pack(
+                        Int32ValueSchema,
+                        create(Int32ValueSchema, { value: 1 }),
+                      ),
+                    }),
+                  ],
+                }),
+              ],
+            },
+          },
+        },
+        fieldMask: { paths: ["name"] },
+      },
+    });
+
+    const observer = SubscriptionObservers.observeSubscription(
+      subscription,
+      bus,
+      (typeUrl) =>
+        typeUrl === TypeUrls.derive(ProjectionStateSchema)
+          ? { schema: ProjectionStateSchema, idField: "id" }
+          : undefined,
+      (update) => received.push(update),
+    );
+
+    await postStateChange(bus, createState("task-1", "Open", 1));
+    await postStateChange(
+      bus,
+      createState("task-1", "Closed", 2),
+      createState("task-1", "Open", 1),
+    );
+    await postStateChange(bus, createState("other", "Ignored", 1));
+
+    expect(received).toHaveLength(2);
+    const first =
+      received[0]?.update.case === "entityUpdates" ? received[0].update.value.update[0] : undefined;
+    expect(first?.kind.case).toBe("state");
+    if (first?.kind.case === "state") {
+      expect(AnyMessages.unpack(first.kind.value, ProjectionStateSchema)).toEqual(
+        create(ProjectionStateSchema, { name: "Open" }),
+      );
+    }
+    const second =
+      received[1]?.update.case === "entityUpdates" ? received[1].update.value.update[0] : undefined;
+    expect(second?.kind.case).toBe("noLongerMatching");
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
+  it("ignores state-change envelopes with a wrong tenant, state type, or malformed payload", async () => {
+    const bus = createBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = SubscriptionObservers.observeSubscription(
+      create(SubscriptionSchema, {
+        topic: {
+          context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
+          target: {
+            type: TypeUrls.derive(ProjectionStateSchema),
+            criterion: { case: "includeAll", value: true },
+          },
+        },
+      }),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+
+    await postStateChange(bus, createState("task-1", "Wrong tenant", 1), undefined, "tenant-b");
+    await bus.post(
+      create(EventSchema, {
+        id: { value: "wrong-type" },
+        message: AnyMessages.pack(
+          EntityLog.EntityStateChangedSchema,
+          create(EntityLog.EntityStateChangedSchema, {
+            entity: { id: packString("task-1"), typeUrl: TypeUrls.derive(StringValueSchema) },
+            newState: packString("not projection state"),
+            signalId: [
+              { id: packString("wrong-type"), typeUrl: TypeUrls.derive(StringValueSchema) },
+            ],
+          }),
+          { validate: false },
+        ),
+        context: tenantContext("tenant-a"),
+      }),
+    );
+    await expect(
+      bus.post(
+        create(EventSchema, {
+          id: { value: "malformed" },
+          message: AnyMessages.pack(
+            EntityLog.EntityStateChangedSchema,
+            create(EntityLog.EntityStateChangedSchema),
+            { validate: false },
+          ),
+          context: tenantContext("tenant-a"),
+        }),
+      ),
+    ).rejects.toBeInstanceOf(Error);
+
+    expect(received).toEqual([]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
+  it("forwards accepted event targets while redacting client rejection details", async () => {
+    const bus = createBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = SubscriptionObservers.observeSubscription(
+      create(SubscriptionSchema, {
+        topic: {
+          target: {
+            type: TypeUrls.derive(ProjectionStateSchema),
+            criterion: { case: "includeAll", value: true },
+          },
+        },
+      }),
+      bus,
+      () => undefined,
+      (update) => received.push(update),
+    );
+    const source = create(EventSchema, {
+      id: { value: "rejected-event" },
+      message: AnyMessages.pack(ProjectionStateSchema, createState("task-1", "Event", 1), {
+        validate: false,
+      }),
+      context: create(EventContextSchema, {
+        rejection: create(RejectionEventContextSchema, {
+          command: {},
+          commandMessage: packString("secret command"),
+          stacktrace: "secret stack",
+        }),
+      }),
+    });
+
+    await bus.post(source);
+
+    const event =
+      received[0]?.update.case === "eventUpdates" ? received[0].update.value.event[0] : undefined;
+    expect(event?.message).toEqual(source.message);
+    expect(event?.context?.rejection?.command).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- client redaction includes the legacy wire field.
+    expect(event?.context?.rejection?.commandMessage).toBeUndefined();
+    expect(event?.context?.rejection?.stacktrace).toBe("");
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- verifies redaction leaves the source intact.
+    expect(source.context?.rejection?.commandMessage).toEqual(packString("secret command"));
+    expect(source.context?.rejection?.stacktrace).toBe("secret stack");
+    observer?.unsubscribe();
+    await bus.close();
+  });
+});
+
+function createBus(): EventBus {
+  const storage = new InMemoryStorageFactory();
+  const bus = new EventBus(new EventStore({ name: "Observer", multitenant: false }, storage));
+  eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema, ProjectionStateSchema]);
+  return bus;
+}
+
+function createState(id: string, name: string, priority: number): ProjectionState {
+  return create(ProjectionStateSchema, { id, name, priority });
+}
+
+function packString(value: string) {
+  return AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value }));
+}
+
+function tenantContext(tenantId: string) {
+  return create(EventContextSchema, {
+    origin: {
+      case: "importContext",
+      value: { tenantId: { kind: { case: "value", value: tenantId } } },
+    },
+  });
+}
+
+async function postStateChange(
+  bus: EventBus,
+  state: ProjectionState,
+  previousState?: ProjectionState,
+  tenantId?: string,
+): Promise<void> {
+  await bus.post(
+    create(EventSchema, {
+      id: { value: `state-change-${String(++eventSequence)}` },
+      message: AnyMessages.pack(
+        EntityLog.EntityStateChangedSchema,
+        create(EntityLog.EntityStateChangedSchema, {
+          entity: { id: packString(state.id), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+          newState: AnyMessages.pack(ProjectionStateSchema, state, { validate: false }),
+          signalId: [
+            {
+              id: packString(`signal-${String(eventSequence)}`),
+              typeUrl: TypeUrls.derive(StringValueSchema),
+            },
+          ],
+          ...(previousState === undefined
+            ? {}
+            : {
+                oldState: AnyMessages.pack(ProjectionStateSchema, previousState, {
+                  validate: false,
+                }),
+              }),
+        }),
+        { validate: false },
+      ),
+      ...(tenantId === undefined ? {} : { context: tenantContext(tenantId) }),
+    }),
+  );
+}
