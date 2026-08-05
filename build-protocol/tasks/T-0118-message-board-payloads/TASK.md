@@ -1,6 +1,6 @@
 # T-0118: Message Board Payload-First Synchronization
 
-Status: Implementation complete; managed Chromium smoke and review pending
+Status: Preflight complete; specialist review pending
 
 ## Objective
 
@@ -89,5 +89,6 @@ converged `verify:release` gate.
   coalesced authoritative Query. Failed posts keep their current feedback and
   do not refresh.
 - Focused web tests, app/web typechecks, changed-production lint, cleanup,
-  TSDoc, formatting, and diff checks are complete. Chromium smoke and
-  specialist review remain deliberately pending.
+  TSDoc, formatting, and diff checks are complete. The managed Chromium suite
+  proves posting and 61-second live-update continuity. Specialist review and
+  the final release gate remain pending.
