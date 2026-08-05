@@ -439,14 +439,8 @@ export class SpineServices {
         record.route.context.stand(),
         registry,
         record.id,
-        (signal) => {
-          if (signal.kind === "event") {
-            if (!ServiceValues.eventTenantMatches(record, signal.event)) return;
-            record.delivery.push(ServiceValues.createEventUpdate(record, signal.event));
-          } else if (record.kind === "state") {
-            const update = ServiceValues.createEntityUpdate(record, signal.update);
-            if (update !== undefined) record.delivery.push(update);
-          }
+        (update) => {
+          record.delivery.push(update);
           if (record.delivery.closed) {
             void this.#removeSubscription(record.id).catch(() => undefined);
           }
@@ -699,7 +693,8 @@ interface EventSubscriptionRecord extends SubscriptionRecordBase {
 interface StateSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "state";
   readonly route: StateRoute;
-  readonly matcher: SubscriptionMatcher;
+  /** Test-double fallback only; built contexts render in Stand. */
+  readonly matcher?: SubscriptionMatcher;
 }
 
 type SubscriptionShape =
@@ -710,7 +705,7 @@ type SubscriptionShape =
   | {
       readonly kind: "state";
       readonly route: StateRoute;
-      readonly matcher: SubscriptionMatcher;
+      readonly matcher?: SubscriptionMatcher;
     };
 
 interface SubscriptionMatcher {
@@ -1423,14 +1418,7 @@ const ServiceValues = (() => {
             Code.InvalidArgument,
           );
         }
-        return {
-          kind: "state",
-          route,
-          matcher: {
-            fieldMask,
-            match: () => "state",
-          },
-        };
+        return { kind: "state", route, matcher: { fieldMask, match: () => "state" } };
       case "filters":
         return {
           kind: "state",
@@ -2028,7 +2016,9 @@ const ServiceValues = (() => {
     record: StateSubscriptionRecord,
     update: StandUpdate,
   ): SubscriptionUpdate | undefined {
-    const match = record.matcher.match(update);
+    const matcher = record.matcher;
+    if (matcher === undefined) return undefined;
+    const match = matcher.match(update);
     if (match === undefined) {
       return undefined;
     }
@@ -2096,7 +2086,7 @@ const ServiceValues = (() => {
     record: StateSubscriptionRecord,
     state: MessageShape<MessageSchema>,
   ): Message {
-    return RecordMask.apply(clone(record.route.schema, state), record.matcher.fieldMask);
+    return RecordMask.apply(clone(record.route.schema, state), record.matcher?.fieldMask);
   }
 
   function packString(value: string): Any {
