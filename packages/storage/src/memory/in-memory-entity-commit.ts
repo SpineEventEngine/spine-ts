@@ -78,7 +78,8 @@ export class InMemoryEntityCommitStorage implements EntityCommitStorage {
       () => new Map<string, string>(),
     );
     const digest = InMemoryCommitValues.digest(input);
-    const prior = receipts.get(input.id);
+    const receiptKey = `${input.id}\u0000${input.entity.id.key(input.entityId)}`;
+    const prior = receipts.get(receiptKey);
     if (prior !== undefined) {
       if (prior !== digest) throw new Error("Entity commit ID was reused with different content.");
       return "replayed";
@@ -119,7 +120,7 @@ export class InMemoryEntityCommitStorage implements EntityCommitStorage {
       InMemoryCommitValues.replace(live.states, stagedBackend.states);
       InMemoryCommitValues.replace(live.events, stagedBackend.events);
       this.#events.replace(stagedEvents.snapshot());
-      receipts.set(input.id, digest);
+      receipts.set(receiptKey, digest);
       return "committed";
     } finally {
       entity.close();

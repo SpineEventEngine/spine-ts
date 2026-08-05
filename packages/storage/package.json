@@ -12,6 +12,10 @@
     "./internal/entity-history": {
       "types": "./dist/internal/entity-history.d.ts",
       "default": "./dist/internal/entity-history.js"
+    },
+    "./internal/entity-commit": {
+      "types": "./dist/internal/entity-commit.d.ts",
+      "default": "./dist/internal/entity-commit.js"
     }
   },
   "files": [
