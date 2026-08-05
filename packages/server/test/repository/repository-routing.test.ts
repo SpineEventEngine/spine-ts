@@ -1227,6 +1227,23 @@ class TombstoneResetProcessManager extends ProcessManager<
   }
 }
 
+class DiagnosticOnlyProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static calls = 0;
+
+  assignTask(command: AggregateState): ProjectionState {
+    DiagnosticOnlyProcessManager.calls += 1;
+    return create(ProjectionStateSchema, {
+      id: command.id,
+      name: `${command.name} diagnostic`,
+      priority: 1,
+    });
+  }
+}
+
 class InboxCheckingProcessManager extends ProcessManager<
   string,
   typeof ProcessManagerStateSchema,
@@ -6103,6 +6120,47 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("atomically retains process-manager diagnostics without creating unchanged state", async () => {
+    DiagnosticOnlyProcessManager.calls = 0;
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createDiagnosticOnlyProcessManagerRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+
+    try {
+      const existing = create(ProcessManagerStateSchema, {
+        id: "pm-diagnostic",
+        queue: "already persisted",
+      });
+      await storage.writeCurrent({
+        entityId: "pm-diagnostic",
+        lifecycle: { archived: false, deleted: false },
+        state: existing,
+        version: 1n,
+      });
+      await context.stand().update(ProcessManagerStateSchema, existing, {
+        version: create(VersionSchema, { number: 1 }),
+      });
+      await context.commandBus().post(createAggregateCommand("pm-diagnostic", "pm-diagnostic"));
+
+      expect(DiagnosticOnlyProcessManager.calls).toBe(1);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-diagnostic"),
+      ).resolves.toEqual(existing);
+      await expect(storage.readEvents("pm-diagnostic")).resolves.toMatchObject([
+        { message: { typeUrl: TypeUrls.derive(ProjectionStateSchema) } },
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("loads existing projection state before applying later delivered events", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createAccumulatingProjectionRepository())
@@ -7200,6 +7258,32 @@ function createTombstoneResetProcessManagerRepository(): Repository<
     entityType: TombstoneResetProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
+  });
+}
+
+function createDiagnosticOnlyProcessManagerRepository(): Repository<
+  typeof DiagnosticOnlyProcessManager
+> {
+  const handlers = HandlerMetadataValues.defineArity(
+    DiagnosticOnlyProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        emittedSchemas: [ProjectionStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: DiagnosticOnlyProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    events: [ProjectionStateSchema],
+    processManagerEventHistory: true,
   });
 }
 
