@@ -1,4 +1,8 @@
 import type { UnaryForwarder } from "./index.js";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { ErrorSchema } from "@spine-event-engine/proto";
+import { ResponseSchema } from "@spine-event-engine/proto";
+import { SubscriptionSchema, SubscriptionUpdateSchema } from "@spine-event-engine/proto/client";
 import type {
   BackendSubscriptionEnvelope,
   SubscriptionCreator,
@@ -88,7 +92,7 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
    * @param signal Cancels activation.
    * @returns Completes when all child streams end.
    */
-  activate(
+  async activate(
     request: {
       readonly wire: PublicSubscriptionWire;
       readonly backend: BackendSubscriptionEnvelope;
@@ -96,9 +100,26 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
     },
     signal: AbortSignal,
   ): Promise<void> {
-    return this.#all(request.backend, (child, backend) =>
-      child.activate({ wire: request.wire, backend, updates: request.updates }, signal),
-    );
+    const children = FanInValues.decode(request.backend.bytes);
+    let active = children.length;
+    try {
+      await Promise.all(
+        children.map(async (backend, index) => {
+          try {
+            await this.#children[index]!.activate(
+              { wire: request.wire, backend, updates: request.updates },
+              signal,
+            );
+          } finally {
+            active--;
+            if (active > 0 && !signal.aborted)
+              await FanInValues.lossNotice(request.wire, request.updates);
+          }
+        }),
+      );
+    } finally {
+      for (const backend of children) backend.bytes.fill(0);
+    }
   }
 
   /**
@@ -194,5 +215,25 @@ const FanInValues = Object.freeze({
     }
     if (offset !== bytes.byteLength) throw new Error("Invalid subscription fan-in envelope.");
     return result;
+  },
+  async lossNotice(wire: PublicSubscriptionWire, updates: SubscriptionUpdateSink): Promise<void> {
+    const subscription = fromBinary(SubscriptionSchema, wire.bytes);
+    await updates({
+      kind: "subscription-update",
+      bytes: toBinary(
+        SubscriptionUpdateSchema,
+        create(SubscriptionUpdateSchema, {
+          subscription,
+          response: create(ResponseSchema, {
+            status: {
+              status: {
+                case: "error",
+                value: create(ErrorSchema, { type: "backend-unavailable" }),
+              },
+            },
+          }),
+        }),
+      ),
+    });
   },
 });

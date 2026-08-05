@@ -33,14 +33,14 @@ describe("gateway fan-in collaborators", () => {
 
     await fanIn.activate(
       {
-        wire: { kind: "public-subscription", bytes: bytes("subscription") },
+        wire: { kind: "public-subscription", bytes: new Uint8Array() },
         backend,
         updates: async () => undefined,
       },
       signal,
     );
     await fanIn.cancel(
-      { wire: { kind: "public-subscription", bytes: bytes("subscription") }, backend },
+      { wire: { kind: "public-subscription", bytes: new Uint8Array() }, backend },
       signal,
     );
     await fanIn.dispose(backend, signal);
