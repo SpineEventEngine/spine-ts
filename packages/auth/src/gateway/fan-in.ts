@@ -110,6 +110,8 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
               { wire: request.wire, backend, updates: request.updates },
               signal,
             );
+          } catch {
+            // A child loss is represented by the generic notice below while healthy children continue.
           } finally {
             active--;
             if (active > 0 && !signal.aborted)
