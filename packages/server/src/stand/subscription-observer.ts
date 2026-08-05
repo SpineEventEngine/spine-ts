@@ -78,6 +78,56 @@ interface ResolvedPath {
  * @internal
  */
 export class SubscriptionObservers {
+  /**
+   * Observes one domain event target through the domain EventBus.
+   *
+   * Entity-state targets are intentionally not inferred here: callers must use
+   * {@link observeState} after classifying the target against domain Stand
+   * metadata, so one definition cannot attach to both buses.
+   *
+   * @internal
+   */
+  static observeEvent(
+    subscription: Subscription,
+    domainEventBus: EventBus | undefined,
+    onUpdate: (update: SubscriptionUpdate) => void,
+  ): EventSubscription | undefined {
+    const typeUrl = subscription.topic?.target?.type;
+    if (typeUrl === undefined || typeUrl.length === 0 || domainEventBus === undefined) return undefined;
+    const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
+    return eventBusAccess.subscribe(domainEventBus, typeUrl, {
+      onEvent(event) {
+        if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId) return;
+        onUpdate(SubscriptionObservers.#createEventUpdate(subscription, event));
+      },
+    });
+  }
+
+  /**
+   * Observes one known entity-state target through the paired System EventBus.
+   *
+   * @internal
+   */
+  static observeState(
+    subscription: Subscription,
+    state: StandObservedState,
+    systemEventBus: EventBus | undefined,
+    onUpdate: (update: SubscriptionUpdate) => void,
+  ): EventSubscription | undefined {
+    if (systemEventBus === undefined) return undefined;
+    const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
+    const render = SubscriptionObservers.#createStateRenderer(subscription, state);
+    return eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityStateChangedSchema), {
+      onEvent(event) {
+        const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
+        if (update !== undefined) {
+          const rendered = render(update);
+          if (rendered !== undefined) onUpdate(rendered);
+        }
+      },
+    });
+  }
+
   // prettier-ignore
 
   /**
@@ -100,29 +150,11 @@ export class SubscriptionObservers {
     const target = subscription.topic?.target;
     const typeUrl = target?.type;
     if (typeUrl === undefined || typeUrl.length === 0) return undefined;
-    const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     const state = findState(typeUrl);
     if (state !== undefined) {
-      if (systemEventBus === undefined) return undefined;
-      const render = SubscriptionObservers.#createStateRenderer(subscription, state);
-      return eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityStateChangedSchema), {
-        onEvent(event) {
-          const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
-          if (update !== undefined) {
-          const rendered = render(update);
-          if (rendered !== undefined) onUpdate(rendered);
-          }
-        },
-      });
+      return SubscriptionObservers.observeState(subscription, state, systemEventBus, onUpdate);
     }
-    if (domainEventBus === undefined) return undefined;
-    return eventBusAccess.subscribe(domainEventBus, typeUrl, {
-      onEvent(event) {
-        if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId)
-          return;
-        onUpdate(SubscriptionObservers.#createEventUpdate(subscription, event));
-      },
-    });
+    return SubscriptionObservers.observeEvent(subscription, domainEventBus, onUpdate);
   }
 
   static #createStateRenderer(

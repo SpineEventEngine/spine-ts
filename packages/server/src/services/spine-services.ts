@@ -86,7 +86,7 @@ import { boundedContextAccess, type BoundedContext } from "../context/bounded-co
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
-import { standAccess, type StandReadResult, type StandUpdate } from "../stand/stand.js";
+import { type StandReadResult, type StandUpdate } from "../stand/stand.js";
 import {
   InMemorySubscriptionRegistry,
   type StandSubscriptionRegistry,
@@ -457,9 +457,8 @@ export class SpineServices {
       return;
     }
     try {
-      const consumer = await standAccess.consumeSubscription(
-        record.route.context.stand(),
-        registry,
+      const consumer = await boundedContextAccess.consumeSubscription(
+        record.route.context,
         record.id,
         (update) => {
           record.delivery.push(update);
@@ -470,7 +469,11 @@ export class SpineServices {
       );
       record.delivery.attach(consumer);
     } catch (error) {
-      if (!(error instanceof TypeError) || !error.message.includes("requires a Stand instance")) {
+      if (
+        !(error instanceof TypeError) ||
+        (!error.message.includes("requires a Stand instance") &&
+          !error.message.includes("requires a built BoundedContext instance"))
+      ) {
         throw error;
       }
       this.#createSubscriptionAttachment(record);

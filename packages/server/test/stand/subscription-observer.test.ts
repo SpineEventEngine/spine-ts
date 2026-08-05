@@ -59,6 +59,11 @@ const ProjectionStateSchema = messageDesc(fixture, 0) as GenMessage<ProjectionSt
 let eventSequence = 0;
 
 describe("SubscriptionObservers", () => {
+  it("keeps event and entity-state observers on their explicitly selected buses", () => {
+    expect(SubscriptionObservers.observeEvent).toBeTypeOf("function");
+    expect(SubscriptionObservers.observeState).toBeTypeOf("function");
+  });
+
   it("does not attach incomplete, state, or event targets without a local EventBus", () => {
     const state = { schema: ProjectionStateSchema, idField: "id" };
     const missingTarget = SubscriptionObservers.observeSubscription(

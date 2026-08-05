@@ -63,7 +63,8 @@ import {
   type EntityHandlersMetadata,
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
-import { standAccess, Stand } from "../stand/stand.js";
+import { Stand } from "../stand/stand.js";
+import { SubscriptionRuntime } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
   standSubscriptionLimits,
@@ -500,7 +501,7 @@ const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>
 const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
-const contextSubscriptionRegistries = new WeakMap<BoundedContext, StandSubscriptionRegistry>();
+const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
 const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
@@ -523,6 +524,11 @@ interface BoundedContextAccess {
   tenantIndex(context: BoundedContext): TenantIndex;
   storageFactory(context: BoundedContext): StorageFactory;
   subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry;
+  consumeSubscription(
+    context: BoundedContext,
+    id: string,
+    onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
+  ): Promise<import("../stand/stand.js").StandSubscription>;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -533,7 +539,7 @@ let constructBoundedContext:
       systemEventBus: EventBus,
       stand: Stand,
       systemStand: Stand,
-      registry: StandSubscriptionRegistry,
+      runtime: SubscriptionRuntime,
       systemSpec: ContextSpecSnapshot,
       storageFactory: StorageFactory,
       repositories: readonly RepositoryView[],
@@ -567,7 +573,7 @@ export class BoundedContext {
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
   readonly #systemStand: Stand;
-  readonly #subscriptionRegistry: StandSubscriptionRegistry;
+  readonly #subscriptionRuntime: SubscriptionRuntime;
   #closed: Promise<void> | undefined;
 
   /**
@@ -581,7 +587,7 @@ export class BoundedContext {
       systemEventBus,
       stand,
       systemStand,
-      registry,
+      runtime,
       systemSpec,
       storageFactory,
       repositories,
@@ -595,7 +601,7 @@ export class BoundedContext {
         systemEventBus,
         stand,
         systemStand,
-        registry,
+        runtime,
         systemSpec,
         storageFactory,
         repositories,
@@ -624,7 +630,7 @@ export class BoundedContext {
     systemEventBus: EventBus,
     stand: Stand,
     systemStand: Stand,
-    subscriptionRegistry: StandSubscriptionRegistry,
+    subscriptionRuntime: SubscriptionRuntime,
     systemSpec: ContextSpecSnapshot,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
@@ -641,7 +647,7 @@ export class BoundedContext {
     this.#systemEventBus = systemEventBus;
     this.#stand = stand;
     this.#systemStand = systemStand;
-    this.#subscriptionRegistry = subscriptionRegistry;
+    this.#subscriptionRuntime = subscriptionRuntime;
     this.#storageFactory = storageFactory;
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
@@ -677,7 +683,7 @@ export class BoundedContext {
     contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot, systemSpec));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
-    contextSubscriptionRegistries.set(this, subscriptionRegistry);
+    contextSubscriptionRuntimes.set(this, subscriptionRuntime);
     contextDeliveryDescriptors.set(
       this,
       ContextParts.createDeliveryDescriptor(
@@ -691,12 +697,7 @@ export class BoundedContext {
     );
     try {
       this.#registerRepositories(repositories);
-      standAccess.startSubscriptions(
-        this.#stand,
-        this.#subscriptionRegistry,
-        this.#eventBus,
-        this.#systemEventBus,
-      );
+      this.#subscriptionRuntime.start();
     } catch (error) {
       try {
         ContextParts.cleanupFailedContext(this, tenantIndex);
@@ -999,7 +1000,8 @@ export class BoundedContext {
       () => eventBusAccess.finishClose(this.#systemEventBus),
       errors,
     );
-    await ContextParts.closeContextPart(() => this.#subscriptionRegistry.close(), errors);
+    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.close(), errors);
+    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.registry().close(), errors);
     await ContextParts.closeContextPart(() => {
       ContextParts.requireTenantIndex(this).close();
     }, errors);
@@ -1103,11 +1105,19 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 
   subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry {
-    const registry = contextSubscriptionRegistries.get(context);
-    if (registry === undefined) {
+    const runtime = contextSubscriptionRuntimes.get(context);
+    if (runtime === undefined) {
       throw new TypeError("Subscription registry access requires a built BoundedContext instance.");
     }
-    return registry;
+    return runtime.registry();
+  },
+
+  consumeSubscription(context: BoundedContext, id: string, onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void) {
+    const runtime = contextSubscriptionRuntimes.get(context);
+    if (runtime === undefined) {
+      throw new TypeError("Subscription consumption requires a built BoundedContext instance.");
+    }
+    return runtime.consume(id, onUpdate);
   },
 
   delivery(context: BoundedContext): ContextDeliveryDescriptor {
@@ -1407,6 +1417,7 @@ export class BoundedContextBuilder {
     let systemEventStore: EventStore | undefined;
     let stand: Stand | undefined;
     let systemStand: Stand | undefined;
+    let runtime: SubscriptionRuntime | undefined;
     try {
       ContextParts.preflightRepositories(registeredRepositories);
       const eventDispatchers = [
@@ -1449,6 +1460,7 @@ export class BoundedContextBuilder {
         storageFactory,
         this.#subscriptionLimit,
       );
+      runtime = new SubscriptionRuntime(stand, systemStand, eventBus, systemEventBus, registry);
       return ContextParts.createBoundedContext(
         this.#specSnapshot,
         commandBus,
@@ -1456,13 +1468,14 @@ export class BoundedContextBuilder {
         systemEventBus,
         stand,
         systemStand,
-        registry,
+        runtime,
         systemSpec,
         storageFactory,
         registeredRepositories,
         this.#deliveryStrategy,
       );
     } catch (error) {
+      void runtime?.close().catch(() => undefined);
       void registry?.close().catch(() => undefined);
       void stand?.close().catch(() => undefined);
       void systemStand?.close().catch(() => undefined);
@@ -1653,7 +1666,7 @@ const ContextParts = Object.freeze({
     systemEventBus: EventBus,
     stand: Stand,
     systemStand: Stand,
-    registry: StandSubscriptionRegistry,
+    runtime: SubscriptionRuntime,
     systemSpec: ContextSpecSnapshot,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
@@ -1670,7 +1683,7 @@ const ContextParts = Object.freeze({
       systemEventBus,
       stand,
       systemStand,
-      registry,
+      runtime,
       systemSpec,
       storageFactory,
       repositories,
