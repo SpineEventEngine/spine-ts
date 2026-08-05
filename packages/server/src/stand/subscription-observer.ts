@@ -157,6 +157,7 @@ export class SubscriptionObservers {
             state,
             tenantId,
             EntityLog.EntityArchivedSchema,
+            subscription,
             onUpdate,
           );
         },
@@ -168,6 +169,7 @@ export class SubscriptionObservers {
             state,
             tenantId,
             EntityLog.EntityDeletedSchema,
+            subscription,
             onUpdate,
           );
         },
@@ -214,6 +216,7 @@ export class SubscriptionObservers {
     state: StandObservedState,
     tenantId: string | undefined,
     schema: MessageSchema,
+    subscription: Subscription,
     onUpdate: (update: SubscriptionUpdate) => void,
   ): void {
     if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId) return;
@@ -229,7 +232,7 @@ export class SubscriptionObservers {
     const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
     const id = SubscriptionObservers.#unpackValue(lifecycle.entity.id, idSchema);
     if (id === undefined) return;
-    onUpdate(SubscriptionObservers.#removalUpdate(id, state));
+    onUpdate(SubscriptionObservers.#removalUpdate(id, state, subscription));
   }
 
   static #lifecycleState(
@@ -269,8 +272,13 @@ export class SubscriptionObservers {
     if (rendered !== undefined) onUpdate(rendered);
   }
 
-  static #removalUpdate(id: unknown, state: StandObservedState): SubscriptionUpdate {
+  static #removalUpdate(
+    id: unknown,
+    state: StandObservedState,
+    subscription: Subscription,
+  ): SubscriptionUpdate {
     return create(SubscriptionUpdateSchema, {
+      subscription: clone(SubscriptionSchema, subscription),
       response: SubscriptionObservers.#okResponse(),
       update: {
         case: "entityUpdates",

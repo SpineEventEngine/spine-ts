@@ -481,6 +481,9 @@ describe("SubscriptionObservers", () => {
     );
 
     expect(received).toHaveLength(2);
+    expect(received[0]?.subscription?.topic?.target?.type).toBe(
+      TypeUrls.derive(ProjectionStateSchema),
+    );
     expect(
       received.map(
         (update) =>
