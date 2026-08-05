@@ -66,6 +66,7 @@ import {
   EntityStateChangedSchema,
   EntityUnarchivedSchema,
   EventDispatchedToSubscriberSchema,
+  EventDispatchedToReactorSchema,
 } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
@@ -2252,6 +2253,81 @@ describe("repository signal routing", () => {
     });
     await waitForCondition(() => observed.length === 1);
     expect(observed).toEqual(["event-reactor-source-1"]);
+  });
+
+  it("emits a System reactor-dispatch diagnostic after aggregate reactor admission", async () => {
+    GeneratedReactorAggregate.reset();
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent("aggregate-reactor-diagnostic", "aggregate-reactor-id");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(event);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      const diagnostic = AnyMessages.unpack(
+        diagnostics[0]?.message as never,
+        EventDispatchedToReactorSchema,
+      );
+      expect(diagnostic).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        payload: event,
+        entityType: { impl: { case: "javaClassName", value: "GeneratedReactorAggregate" } },
+        whenDispatched: diagnostics[0]?.context?.timestamp,
+      });
+      expect(diagnostics[0]?.context?.origin).toMatchObject({
+        case: "pastMessage",
+        value: { message: { typeUrl: TypeUrls.derive(ProjectionStateSchema) } },
+      });
+      expect(context.eventBus().acceptedEventTypes()).not.toContain(
+        TypeUrls.derive(EventDispatchedToReactorSchema),
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not emit reactor diagnostics for an event without a matching route", async () => {
+    GeneratedReactorAggregate.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(
+          SignalEnvelopes.event({
+            id: create(EventIdSchema, { value: "aggregate-reactor-unmatched" }),
+            context: create(EventContextSchema),
+            schema: NumberRouteEventSchema,
+            message: create(NumberRouteEventSchema, { id: 7 }),
+          }),
+        ),
+      ).rejects.toThrow(/event schema/i);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(diagnostics).toEqual([]);
+      expect(GeneratedReactorAggregate.argumentCounts).toEqual([]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("dispatches produced reactor events before later external posts and drains them on close", async () => {
@@ -4516,6 +4592,117 @@ describe("repository signal routing", () => {
         queue: "Task reacted",
       }),
     );
+  });
+
+  it("emits distinct command and reactor diagnostics for a routed Process Manager", async () => {
+    RoutingProcessManager.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProcessManagerCommandAndReactRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema, EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const command = createAggregateCommand(
+      "pm-diagnostic-command",
+      "pm-diagnostic",
+      "Command",
+      "a",
+    );
+    const event = createProjectionEvent("pm-diagnostic-event", "pm-diagnostic", {
+      pastMessageTenantId: "a",
+    });
+
+    try {
+      await context.commandBus().post(command);
+      await context.eventBus().post(event);
+      await waitForCondition(() => diagnostics.length >= 2);
+
+      expect(diagnosticTenants(diagnostics).every((tenantId) => tenantId === "a")).toBe(true);
+      const reactor = diagnostics.find(
+        (diagnostic) =>
+          diagnostic.message?.typeUrl === TypeUrls.derive(EventDispatchedToReactorSchema) &&
+          AnyMessages.unpack(diagnostic.message, EventDispatchedToReactorSchema)?.payload?.id
+            ?.value === event.id?.value,
+      );
+      expect(
+        AnyMessages.unpack(reactor?.message as never, EventDispatchedToReactorSchema),
+      ).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        payload: event,
+        entityType: { impl: { case: "javaClassName", value: "RoutingProcessManager" } },
+        whenDispatched: reactor?.context?.timestamp,
+      });
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-diagnostic", { tenantId: "a" }),
+      ).resolves.toMatchObject({
+        queue: "Task reacted",
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not emit reactor diagnostics without a matched reactor", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(createProjectionEvent("pm-no-reactor", "pm-no-reactor"));
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("isolates reactor diagnostic publication failure from Process Manager work", async () => {
+    RoutingProcessManager.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.reject(new Error("reactor diagnostic dispatch failed"));
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(createProjectionEvent("pm-reactor-failure", "pm-reactor-failure")),
+      ).resolves.toBeUndefined();
+      await waitForFailures(context, 1);
+
+      expect(RoutingProcessManager.eventCalls).toBe(1);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-reactor-failure"),
+      ).resolves.toMatchObject({
+        queue: "Task reacted",
+      });
+      expect(diagnostics).toHaveLength(1);
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { error: { message: "reactor diagnostic dispatch failed" } },
+      ]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("keeps committed process-manager event transitions usable when a Stand subscriber throws", async () => {
@@ -7926,6 +8113,36 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
     RoutingProcessManager,
     ProcessManagerStateSchema,
     (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createProcessManagerCommandAndReactRepository(): Repository<typeof RoutingProcessManager> {
+  const handlers = HandlerMetadataValues.defineArity(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.react(ProjectionStateSchema, "reactTask"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        emittedSchemas: [ProjectionStateSchema],
+      },
+      {
+        kind: "event-reaction",
+        methodName: "reactTask",
+        parameterCount: 1,
+      },
+    ],
   );
 
   return new Repository({

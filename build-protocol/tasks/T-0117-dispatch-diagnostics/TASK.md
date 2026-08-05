@@ -1,6 +1,6 @@
 # T-0117: Dispatch Diagnostic System Events
 
-Status: Baseline and focused implementation pending
+Status: Implementation and mechanical preflight complete; review pending
 
 ## Objective
 
@@ -70,3 +70,15 @@ multitenancy and post-dispatch failure isolation.
 Focused handler-family/routing/System-bus tests and changed-line coverage
 precede review. Shared runtime and serialized behavior require one converged
 `verify:release` gate.
+
+## Implementation Acceptance — 2026-08-05
+
+- Commands, Projection subscribers, Aggregate reactors, and Process Manager
+  reactors now emit their supported frozen System diagnostics only after their
+  respective admission seams.
+- Focused behavior coverage proves serialized fields, System-only routing,
+  causal tenant propagation, pre-admission silence, handler-work isolation,
+  Process Manager target routing, and Projection catch-up behavior.
+- No public API changed. T-0118 and T-0119 remain out of scope.
+- Specialist review and the converged release verification profile remain
+  orchestrator-owned closure work.

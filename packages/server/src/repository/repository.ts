@@ -1715,6 +1715,9 @@ class AggregateEventExecution {
         );
       }
 
+      if (intake.reactors.length > 0) {
+        HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
+      }
       for (const reactor of intake.reactors) {
         const produced = await EntityInvocation.invokeEntityMethod(
           loaded.entity,
@@ -2539,7 +2542,7 @@ class ProcessManagerEventExecution {
   ): Promise<void> {
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
     const loaded = await this.#support.load(entityId, tenantOptions);
-    const produced = await this.#invokeHandlers(loaded.entity, intake);
+    const produced = await this.#invokeHandlers(entityId, loaded.entity, intake);
 
     const events = this.#bindProducedEvents(produced.events, entityId);
     const diagnostics = [DispatchGuards.guardedJournalEvent(this.#event, entityId), ...events];
@@ -2586,6 +2589,7 @@ class ProcessManagerEventExecution {
   }
 
   async #invokeHandlers(
+    entityId: unknown,
     entity: object,
     intake: {
       readonly message: unknown;
@@ -2599,6 +2603,9 @@ class ProcessManagerEventExecution {
 
     transactionalEntityAccess.start(entity);
     try {
+      if (intake.reactors.length > 0) {
+        HandlerDispatchPublisher.reactor(this.#runtime, this.#repository, this.#event, entityId);
+      }
       for (const reactor of intake.reactors) {
         const produced = await EntityInvocation.invokeEntityMethod(
           entity,
@@ -3463,6 +3470,39 @@ class HandlerDispatchPublishing {
     event: Event,
     entityId: unknown,
   ): void {
+    this.#publishEvent(
+      runtime,
+      repository,
+      event,
+      entityId,
+      EntityLog.EventDispatchedToSubscriberSchema,
+    );
+  }
+
+  reactor(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    event: Event,
+    entityId: unknown,
+  ): void {
+    this.#publishEvent(
+      runtime,
+      repository,
+      event,
+      entityId,
+      EntityLog.EventDispatchedToReactorSchema,
+    );
+  }
+
+  #publishEvent(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    event: Event,
+    entityId: unknown,
+    schema:
+      | typeof EntityLog.EventDispatchedToSubscriberSchema
+      | typeof EntityLog.EventDispatchedToReactorSchema,
+  ): void {
     try {
       const context = runtime.signalMetadata.eventContext({
         origin: runtime.signalMetadata.originFromEvent(event),
@@ -3470,12 +3510,12 @@ class HandlerDispatchPublishing {
       const diagnostic = create(EventSchema, {
         id: runtime.signalMetadata.eventId(),
         message: AnyMessages.pack(
-          EntityLog.EventDispatchedToSubscriberSchema,
-          this.#eventMessage(repository, event, entityId, context.timestamp),
+          schema,
+          this.#eventMessage(schema, repository, event, entityId, context.timestamp) as never,
         ),
         context,
       });
-      runtime.registerSystemEventSchema(EntityLog.EventDispatchedToSubscriberSchema);
+      runtime.registerSystemEventSchema(schema);
       void runtime.postSystemFollowUp(diagnostic).catch((error: unknown) => {
         runtime.recordDispatchFailure(diagnostic, error);
       });
@@ -3511,12 +3551,15 @@ class HandlerDispatchPublishing {
   }
 
   #eventMessage(
+    schema:
+      | typeof EntityLog.EventDispatchedToSubscriberSchema
+      | typeof EntityLog.EventDispatchedToReactorSchema,
     repository: RepositoryView,
     event: Event,
     entityId: unknown,
     whenDispatched: Timestamp | undefined,
-  ): EntityLog.EventDispatchedToSubscriber {
-    return create(EntityLog.EventDispatchedToSubscriberSchema, {
+  ): EntityLog.EventDispatchedToSubscriber | EntityLog.EventDispatchedToReactor {
+    const fields = {
       receiver: create(MessageIdSchema, {
         id: this.#packEntityId(repository, entityId),
         typeUrl: TypeUrls.derive(repository.stateSchema),
@@ -3526,7 +3569,10 @@ class HandlerDispatchPublishing {
       entityType: create(EntityTypeNameSchema, {
         impl: { case: "javaClassName", value: repository.entityType.name },
       }),
-    });
+    };
+    return schema === EntityLog.EventDispatchedToSubscriberSchema
+      ? create(EntityLog.EventDispatchedToSubscriberSchema, fields)
+      : create(EntityLog.EventDispatchedToReactorSchema, fields);
   }
 }
 
