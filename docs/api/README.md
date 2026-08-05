@@ -378,40 +378,17 @@ support `include_all = true` in this runtime implementation and stream wire-leve
 continue to receive generated domain event messages; framework envelopes remain
 service/runtime data. Client rejection updates redact rejected-command payload
 forms and throwable stack; internal generated handlers retain full defensive
-context. Activation is by opaque ID. Inactive records are stored
-through the owning bounded context storage factory, so a new `SpineServices`
-instance over the same storage factory can activate a previously returned ID.
-Activation compare-and-sets the exact inactive row to a unique-owner claim and
-retains that claim while the local stream is active. Single-tenant subscriptions reject tenant
-options; multitenant subscriptions require `tenantId`; state and event
-delivery are scoped to that tenant scope. Unknown, canceled, expired,
-malformed, inconsistent, and already active IDs complete without updates.
-Cancellation of a missing, unknown, already-canceled, or already-cleaned
-subscription returns OK only after admission to the bounded unknown-removal
-pool. Overflow returns `RESOURCE_EXHAUSTED` before storage access. An exact
-inactive row or same-instance claim moves
-through a cancel marker to absence; a foreign active claim returns `ABORTED`.
-Cleanup is idempotent across cancellation, activation-stream finalization,
-inactive expiry, and slow-consumer queue closure. Malformed durable rows remain
-inert. `SpineServicesOptions.subscriptionLimit` defaults to 100 and must be a
-positive safe integer; it bounds pending, inactive, active, and recovered
-subscriptions owned by one `SpineServices` instance. Each instance has its own
-bound, not a process-wide or distributed quota. Unknown-ID cancellation uses a
-separate internal pool of the same size. Known-local cancellation retains its
-normal subscription capacity until durable cancellation settles. If that
-persistence fails, `Cancel` returns Connect `INTERNAL` with `Subscription
-cancellation failed.`; retry `Cancel` with the same returned `Subscription`
-message containing its ID. That retry contract does not apply to internal cleanup after an
-initial failed `Subscribe`. If a normal inactive-expiry timer fires and durable
-cleanup fails, its timer stays cleared, the local record and its capacity remain,
-and no automatic retry or new timer is scheduled; `Cancel` with that same
-returned `Subscription` message containing its ID can retry the durable cleanup and release the capacity. Defaults are 30 seconds for inactive expiry and 100
-queued updates per active subscription. Active streams and queued updates remain
-process-local and are not replayed after activation or restart. This is not a
-client DSL, broad server lifecycle, projection catch-up loop, cross-process
-stream ownership, or durable retained update queue. A crashed owner can leave a
-stale claim because this contract has no lease, heartbeat, routing, supervision,
-or automatic reclamation.
+context. Activation is by opaque ID. Definitions live in the configured Stand
+registry: the default registry uses the application storage factory, a builder
+may supply another implementation, and each definition occupies one record.
+Pending definitions expire after 30 seconds; active definitions have no
+framework TTL; and cancellation physically deletes the definition. Every node
+reconciles a bounded complete snapshot every 10 seconds before attaching or
+removing its local listener. Single-tenant subscriptions reject tenant options;
+multitenant subscriptions require `tenantId`. Durable definitions do not make
+live streams durable: active streams and their bounded queues remain
+process-local and are not replayed after restart. In-memory registry use is
+valid for development and tests and warns in production.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `Environment`, `EnvironmentType`,
 `ServerEnvironment`, and `ServerEnvironmentSettings` select one process-wide

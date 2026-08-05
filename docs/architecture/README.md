@@ -390,36 +390,13 @@ Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and
 multitenant contexts require `tenantId`.
 Service subscription delivery starts only when a client activates the opaque
-subscription ID. Never-activated durable records become ineligible for
-activation after the configurable `inactiveTtlMs` (default 30 seconds;
-non-positive or non-finite values coerce to 1, positive finite values are
-floored, and an effective value above 2,147,483,647 milliseconds throws
-synchronously before storage or timer work), and slow consumers are bounded
-by the configurable `queueLimit`. Each `SpineServices` instance also has an
-independent `subscriptionLimit` (default 100; positive safe integer) covering
-pending, inactive, active, and recovered records. Stream/cancel cleanup releases
-the direct Stand or event-bus listener handle. `Subscribe` accepts registered state targets and event targets
-exposed by built-context event dispatchers. It rejects unknown/private targets,
-invalid criteria, unsupported comparison operators, event filters, event field
-masks, and unknown subscription field paths before creating a service-owned
-inactive record or attaching a listener. The inactive record is stored through
-the owning bounded context storage factory, so a fresh `SpineServices` adapter
-over the same storage factory can recover it by opaque subscription ID.
-Activation atomically replaces the exact inactive row with a unique-owner claim
-before live attachment and retains that claim while active. Cancellation moves
-an exact inactive row or same-instance claim through a marker to absence; a
-foreign active claim returns `ABORTED`. Same-ID cancellation coalescing applies
-only within one `SpineServices` instance. Unknown-ID cancellation work uses a
-separate per-instance pool bounded by `subscriptionLimit`; exhaustion returns
-`RESOURCE_EXHAUSTED` before storage access. Known local cleanup retains its
-subscription capacity until persistence settles; marker-cleanup failure returns
-`INTERNAL` and a same-ID retry can settle the retained marker. Confirmed absence
-returns `OK`, while concurrent same-ID cancellation within one instance shares
-one exact outcome. If inactive-expiry cleanup fails after its timer is cleared,
-the instance retains the local record and its capacity with no automatic retry;
-an explicit same-ID `Cancel` can retry persistence cleanup. A crashed owner can
-leave a stale claim because this release adds no lease, heartbeat, routing,
-supervision, or reclamation. State
+subscription ID. `Subscribe` creates one definition in the configured Stand
+registry; the default uses the application storage factory, while a builder can
+supply another implementation. Pending definitions expire after 30 seconds,
+active definitions have no framework TTL, and `Cancel` physically deletes the
+definition. Every node reconciles a bounded complete snapshot every 10 seconds
+and attaches only its local listener. Active streams and slow-consumer queues
+remain process-local. State
 include-all topics deliver each activated Stand update. Filtered state topics
 support optional ID filters plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
