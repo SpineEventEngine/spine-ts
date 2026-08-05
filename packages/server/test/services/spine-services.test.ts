@@ -3006,6 +3006,28 @@ describe("SpineServices", () => {
     );
   });
 
+  it("keeps registry-missing and expired subscriptions inert during activation", async () => {
+    for (const outcome of ["missing", "expired"] as const) {
+      const context = BoundedContext.singleTenant(`Subscription-${outcome}`)
+        .withSubscriptionRegistry(new InertActivationRegistry(outcome))
+        .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+        .build();
+      const handlers = registeredSubscriptionHandlers(context);
+
+      try {
+        const subscription = await handlers.subscribe(createTopic());
+        await expect(
+          withTimeout(
+            handlers.activate(subscription)[Symbol.asyncIterator]().next(),
+            `${outcome} subscription activation`,
+          ),
+        ).resolves.toEqual({ done: true, value: undefined });
+      } finally {
+        await context.close();
+      }
+    }
+  });
+
   it("rejects empty subscription ID filters before activation attaches Stand delivery", () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
@@ -4757,6 +4779,19 @@ class GatedActivateRegistry extends InMemorySubscriptionRegistry {
       this.#release = resolve;
     });
     return await super.activate(id);
+  }
+}
+
+class InertActivationRegistry extends InMemorySubscriptionRegistry {
+  constructor(private readonly outcome: "missing" | "expired") {
+    super();
+  }
+
+  override activate(
+    id: Parameters<InMemorySubscriptionRegistry["activate"]>[0],
+  ): ReturnType<InMemorySubscriptionRegistry["activate"]> {
+    void id;
+    return Promise.resolve(Object.freeze({ kind: this.outcome }));
   }
 }
 

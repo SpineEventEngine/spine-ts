@@ -4647,6 +4647,95 @@ describe("repository signal routing", () => {
     expect(changes).toEqual([]);
   });
 
+  it("cancels aggregate, projection, and process-manager delivery when atomic storage replays", async () => {
+    const aggregateChanges: SpineEvent[] = [];
+    const aggregate = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          aggregateChanges.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .build();
+    const projection = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .build();
+    const processManager = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .build();
+
+    try {
+      await aggregate
+        .commandBus()
+        .post(createAggregateCommand("aggregate-replay", "aggregate-replay"));
+      await projection
+        .eventBus()
+        .post(createProjectionEvent("projection-replay", "projection-replay"));
+      await processManager.commandBus().post(createAggregateCommand("pm-replay", "pm-replay"));
+
+      await expect(
+        aggregate.stand().read(AggregateStateSchema, "aggregate-replay"),
+      ).resolves.toBeUndefined();
+      await expect(
+        projection.stand().read(ProjectionStateSchema, "projection-replay"),
+      ).resolves.toBeUndefined();
+      await expect(
+        processManager.stand().read(ProcessManagerStateSchema, "pm-replay"),
+      ).resolves.toBeUndefined();
+      expect(aggregateChanges).toEqual([]);
+    } finally {
+      await Promise.all([aggregate.close(), projection.close(), processManager.close()]);
+    }
+  });
+
+  it("rejects aggregate, projection, and process-manager delivery on atomic commit conflicts", async () => {
+    const aggregate = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
+      .build();
+    const projection = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
+      .build();
+    const processManager = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
+      .build();
+
+    try {
+      await expect(
+        aggregate
+          .commandBus()
+          .post(createAggregateCommand("aggregate-conflict", "aggregate-conflict")),
+      ).rejects.toThrow("Concurrent Aggregate state commit conflict.");
+      await expect(
+        projection
+          .eventBus()
+          .post(createProjectionEvent("projection-conflict", "projection-conflict")),
+      ).rejects.toThrow("Concurrent Projection state commit conflict.");
+      await expect(
+        processManager.commandBus().post(createAggregateCommand("pm-conflict", "pm-conflict")),
+      ).rejects.toThrow("Concurrent Process Manager state commit conflict.");
+
+      await expect(
+        aggregate.stand().read(AggregateStateSchema, "aggregate-conflict"),
+      ).resolves.toBeUndefined();
+      await expect(
+        projection.stand().read(ProjectionStateSchema, "projection-conflict"),
+      ).resolves.toBeUndefined();
+      await expect(
+        processManager.stand().read(ProcessManagerStateSchema, "pm-conflict"),
+      ).resolves.toBeUndefined();
+    } finally {
+      await Promise.all([aggregate.close(), projection.close(), processManager.close()]);
+    }
+  });
+
   it("does not expose process-manager state or follow-ups when its atomic commit fails", async () => {
     RoutingProcessManager.reset();
     const factory = new FailingEntityCommitStorageFactory();
@@ -8149,6 +8238,29 @@ class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
         }
         return await storage.commit(unit);
       },
+      close: () => {
+        storage.close();
+      },
+    } satisfies EntityCommitStorage;
+  }
+}
+
+class OutcomeEntityCommitStorageFactory extends InMemoryStorageFactory {
+  #outcomes: EntityCommitResult[];
+
+  constructor(outcomes: readonly EntityCommitResult[]) {
+    super();
+    this.#outcomes = [...outcomes];
+  }
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      commit: async <I, S extends Message>(
+        unit: EntityCommitInput<I, S>,
+      ): Promise<EntityCommitResult> => this.#outcomes.shift() ?? (await storage.commit(unit)),
       close: () => {
         storage.close();
       },
