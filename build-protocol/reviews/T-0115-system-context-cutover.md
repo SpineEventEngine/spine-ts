@@ -183,5 +183,16 @@ activation guarantees. Style and reliability independently confirmed item 2.
   retains the original construction failure first, and attempts every remaining
   owner. Runtime terminal close starts drain and registry-close thunks without
   allowing a synchronous registry throw to suppress drain.
-- Focused evidence: six affected test files passed 266 tests; server and tooling
+- Focused evidence: affected server tests passed 107 tests; server and tooling
   typechecks, changed-file ESLint, TSDoc, Prettier, and diff checks passed.
+
+## Second Targeted Re-review
+
+- Correction base: `0a187aed`.
+- Correction endpoint: `6f949c6f`.
+- Immutable correction diff:
+  `.superpowers/sdd/review-0a187aed..6f949c6f.diff`.
+- Style/maintainability and performance/reliability are substantively affected
+  and re-dispatched with their previously recorded explicit roles and
+  `gpt-5.6-terra` / high profiles. Documentation and API lanes remain clean and
+  are not reopened because this correction changes no public claim or API.
