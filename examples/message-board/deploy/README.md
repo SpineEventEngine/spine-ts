@@ -17,6 +17,12 @@ The registry is durable and cancellation-fenced, but update delivery is best
 effort: reconnecting clients re-query authoritative state. The supplied simple
 delivery server is in-memory and not highly available.
 
+For the smaller runnable development topology of exactly two identical
+applications and one Gateway, use
+[Distributed Message Board](../../distributed-message-board/README.md). The
+standalone reference below is intentionally replica-oriented: it demonstrates
+separately scalable application and Gateway processes.
+
 ## 🚀 Run the references
 
 Build the local-only images first:

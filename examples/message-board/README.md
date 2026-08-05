@@ -142,6 +142,12 @@ bindings plus a fixed, non-secret identity for `ada`. It is not a sign-in flow.
 After a reconnect, the UI must re-query; no subscription stream supplies a
 complete historical record.
 
+For the deliberately small distributed development topology—two identical
+application nodes, one Gateway, shared storage, and the in-memory simple
+delivery server—run [Distributed Message Board](../distributed-message-board/README.md).
+The deployment references in this example instead show combined and
+replica-oriented standalone application modes.
+
 ## 🔗 Learn more
 
 - [Message Board server](app/README.md)

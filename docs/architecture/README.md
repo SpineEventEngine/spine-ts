@@ -13,6 +13,32 @@ The notes describe current code rather than a learning sequence. Use the package
 READMEs for beginner examples and the adjacent `REFERENCE.md` files for
 package-specific details.
 
+## Distributed command, delivery, and refresh path
+
+```mermaid
+flowchart LR
+  Browser --> Gateway[Gateway: fixed 1–32 backend list]
+  Gateway -->|command or query: one bounded round-robin attempt| AppA[Application node A]
+  Gateway -->|command or query: one bounded round-robin attempt| AppB[Application node B]
+  AppA --> Inbox[(Entity Inbox)]
+  AppB --> Inbox
+  Inbox --> Delivery[Shared remote delivery shard]
+  Delivery -->|one lease owner drains until empty| Entity[Entity handler]
+  Entity --> Events[Domain events and EntityStateChanged]
+  Events --> Stand[Stand EventBus]
+  Stand -->|best-effort notice fan-in| Gateway
+  Gateway -->|refresh hint| Browser
+```
+
+An `@Assign` command to an Aggregate or Process Manager is persisted in its
+Entity Inbox before delivery. Every server node can attempt a shared delivery
+shard, while one lease owner drains it until it is empty; Process Manager
+delivery uses the same mechanism. Stand observes domain events and
+`EntityStateChanged`, then routes notices through the Gateway. Subscription
+notices can duplicate, gap, or be lost, so browser clients re-query the
+authoritative state. Gateway backend membership is a configured startup list,
+not a discovery or redeployment protocol.
+
 ## Proto Contract Boundary
 
 The `proto/` tree contains verbatim copied Spine contract closures.
