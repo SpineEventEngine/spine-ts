@@ -776,7 +776,8 @@ export interface SubscriptionGatewayOptions {
 
   /**
    *
-   * Identifies the ordered backend topology used to fence durable bindings.
+   * Identifies the ordered backend topology used to fence durable bindings;
+   * omission defaults to `legacy`.
    */
   readonly topology?: string;
 

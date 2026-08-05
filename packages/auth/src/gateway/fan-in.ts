@@ -110,7 +110,9 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
     const controller = new AbortController();
     const settled = Promise.allSettled(
       created.map((backend, index) =>
-        FanInValues.child(this.#children, index).dispose(backend, controller.signal),
+        Promise.resolve().then(() =>
+          FanInValues.child(this.#children, index).dispose(backend, controller.signal),
+        ),
       ),
     );
     let timeout: ReturnType<typeof setTimeout> | undefined;

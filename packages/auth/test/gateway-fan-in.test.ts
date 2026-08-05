@@ -117,6 +117,36 @@ describe("gateway fan-in collaborators", () => {
     expect(aborted).toBe(true);
   });
 
+  it("attempts every rollback dispose when one dispose throws synchronously", async () => {
+    const calls: string[] = [];
+    const child = (name: string, throws = false): SubscriptionCreator => ({
+      subscribe: () =>
+        Promise.resolve({ kind: "backend-subscription-envelope", bytes: bytes(name) }),
+      activate: () => Promise.resolve(),
+      cancel: () => Promise.resolve(),
+      dispose: () => {
+        calls.push(name);
+        if (throws) throw new Error("dispose failed");
+        return Promise.resolve();
+      },
+    });
+    const third: SubscriptionCreator = {
+      ...child("third"),
+      subscribe: () => Promise.reject(new Error("create failed")),
+    };
+    await expect(
+      new FanInSubscriptionCreator(
+        [child("first", true), child("second"), third],
+        1_048_576,
+        1,
+      ).subscribe(
+        { kind: "subscription-topic", bytes: bytes("topic") },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("create failed");
+    expect(calls).toEqual(["first", "second"]);
+  });
+
   it("caps aggregate envelopes before allocation and compensates created children", async () => {
     const first = creator("first");
     const second = creator("second");
