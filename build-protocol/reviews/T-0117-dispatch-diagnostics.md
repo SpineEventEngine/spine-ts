@@ -76,3 +76,13 @@ immutable configured profile. No finding is rejected or deferred.
   remain `gpt-5.6-terra` / `high`; runtime self-introspection remains
   unavailable and the immutable configured role/profile is the available
   metadata.
+
+## Focused Re-Review Result — 2026-08-05
+
+- Style/maintainability: clean; both P2 findings are resolved.
+- Performance/reliability: Aggregate command/subscriber/reactor invocation
+  failure proofs are clean, but a residual P2 remains because Process Manager
+  `@Assign` command and reactor use separate post-admission seams and lack the
+  same failing-invocation/exactly-one-diagnostic proof.
+- Both reviewers again report unavailable runtime self-introspection and the
+  matching immutable configured `gpt-5.6-terra` / `high` profile.
