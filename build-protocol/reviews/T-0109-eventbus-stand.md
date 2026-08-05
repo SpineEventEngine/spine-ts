@@ -224,3 +224,17 @@ post-close non-delivery can also result from the cleared consumer map, so the
 test must assert the EventBus observer's unsubscribe or detachment directly.
 The same implementer retains test-only ownership under its explicit
 Terra/medium profile; no production change or broad re-review is authorized.
+
+`973e0ba2` captures the actual EventBus subscription handle and proves that
+`Stand.close()` closes it while reconciliation is gated. The final narrow
+reliability confirmation is clean with 37 focused tests. Its explicit profile
+was Terra/high; runtime self-introspection was unavailable and no visible
+mismatch occurred. All style, documentation, API, and reliability findings are
+closed.
+
+The documentation role's immutable Luna/medium profile was used after the
+Desktop surface rejected Luna as a generic model override; that tooling
+limitation is recorded honestly, and the role reported no visible mismatch.
+Security is N/A for final review: T-0109 introduces no credential,
+authorization, external-input, or deployment trust boundary, and its internal
+provider SPI remains non-public.
