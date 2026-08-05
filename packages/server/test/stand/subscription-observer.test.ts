@@ -536,6 +536,49 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("isolates lifecycle removals by subscription tenant", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      create(SubscriptionSchema, {
+        topic: {
+          context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
+          target: {
+            type: TypeUrls.derive(ProjectionStateSchema),
+            criterion: { case: "includeAll", value: true },
+          },
+        },
+      }),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+    for (const tenant of ["tenant-b", "tenant-a"]) {
+      await bus.post(
+        create(EventSchema, {
+          id: { value: tenant },
+          context: tenantContext(tenant),
+          message: AnyMessages.pack(
+            EntityLog.EntityArchivedSchema,
+            create(EntityLog.EntityArchivedSchema, {
+              entity: { id: packString(tenant), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              signalId: [{ id: packString(tenant), typeUrl: TypeUrls.derive(StringValueSchema) }],
+              version: { number: 1 },
+              lastState: AnyMessages.pack(ProjectionStateSchema, createState(tenant, tenant, 1)),
+            }),
+            { validate: false },
+          ),
+        }),
+      );
+    }
+    expect(received).toHaveLength(1);
+    expect(AnyMessages.unpack(entityUpdateId(received[0]), StringValueSchema)?.value).toBe(
+      "tenant-a",
+    );
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
   it("forwards accepted event targets while redacting client rejection details", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
