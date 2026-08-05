@@ -4682,7 +4682,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
       .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
         dispatch: (event) => {
           changes.push(event);
           return Promise.resolve();
@@ -4705,7 +4712,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
         dispatch: (event) => {
           changes.push(event);
           return Promise.resolve();
@@ -5304,7 +5318,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createTransitionViolatingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
         dispatch: (event) => {
           changes.push(event);
           return Promise.resolve();
