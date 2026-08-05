@@ -176,6 +176,34 @@ describe("EventBus", () => {
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
   });
 
+  it("forgets accepted events without using the EventStore", async () => {
+    const acceptThenAppend = vi.fn();
+    const read = vi.fn();
+    const eventStore = {
+      acceptThenAppend,
+      close: vi.fn(),
+      read,
+    } as unknown as EventStore;
+    const observed: string[] = [];
+    const bus = eventBusAccess.createForgettingBus(eventStore, [
+      createEventDispatcher([ProjectionStateSchema], (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+      }),
+    ]);
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+      onEvent: (event) => {
+        observed.push(`subscriber:${event.id?.value ?? "missing"}`);
+      },
+    });
+
+    await bus.post(createProjectionEvent("event-forgotten"));
+
+    expect(observed).toEqual(["dispatch:event-forgotten", "subscriber:event-forgotten"]);
+    expect(validationChecks).toHaveBeenCalledTimes(1);
+    expect(acceptThenAppend).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("rejects events without a message", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
@@ -718,6 +746,22 @@ describe("EventBus", () => {
     expect(() => eventBusAccess.eventSchemas(notBus)).toThrow(
       "Event schema listing requires an EventBus instance.",
     );
+    expect(() => {
+      eventBusAccess.registerSchemas(notBus, [ProjectionStateSchema]);
+    }).toThrow("Event schema registration requires an EventBus instance.");
+  });
+
+  it("coordinates close through internal event-bus access", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+
+    eventBusAccess.beginClose(bus);
+    expect(eventBusAccess.acceptedWorkCount(bus)).toBe(0);
+    await eventBusAccess.drain(bus);
+    await eventBusAccess.finishClose(bus);
   });
 
   it("runs accept hooks before dispatching already stored events", async () => {
