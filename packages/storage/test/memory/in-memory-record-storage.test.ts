@@ -243,6 +243,25 @@ describe("InMemoryRecordStorage", () => {
     expect(page[0]?.message).toBeUndefined();
   });
 
+  it("continues descending pages after the ordered row key", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n),
+      createEvent("event-3", "type.spine.io/tasks.TaskClosed", 3n),
+      createEvent("event-2", "type.spine.io/tasks.TaskClosed", 2n),
+    ]);
+
+    await expect(
+      storage.index({
+        sort: [{ field: "timestamp", direction: "desc" }],
+        after: {
+          values: [{ field: "timestamp", value: 3n }],
+          id: create(EventIdSchema, { value: "event-3" }),
+        },
+      }),
+    ).resolves.toMatchObject([{ value: "event-2" }, { value: "event-1" }]);
+  });
+
   it("rejects continuations with the wrong number of ordered values", async () => {
     const storage = createStorage();
     await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
@@ -337,6 +356,27 @@ describe("InMemoryRecordStorage", () => {
 
     expect(bigintOrder.map((id) => id.value)).toEqual(["event-2", "event-10"]);
     expect(numberOrder.map((id) => id.value)).toEqual(["event-2", "event-10"]);
+  });
+
+  it("matches any value in an array-valued column filter", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-created", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-updated", "type.spine.io/tasks.TaskUpdated", 2n),
+      createEvent("event-closed", "type.spine.io/tasks.TaskClosed", 3n),
+    ]);
+
+    await expect(
+      storage.index({
+        filters: [
+          {
+            column: "typeUrl",
+            value: ["type.spine.io/tasks.TaskCreated", "type.spine.io/tasks.TaskClosed"],
+          },
+        ],
+        sort: [{ field: "id", direction: "asc" }],
+      }),
+    ).resolves.toMatchObject([{ value: "event-closed" }, { value: "event-created" }]);
   });
 
   it("sorts mixed value kinds deterministically", async () => {
@@ -477,6 +517,31 @@ describe("InMemoryRecordStorage", () => {
       { value: "event-false-a" },
       { value: "event-false-b" },
       { value: "event-true" },
+    ]);
+  });
+
+  it("orders list lengths and object key boundaries deterministically", async () => {
+    const lists = createLookupStorage({
+      "event-short": [1],
+      "event-long": [1, 0],
+    });
+    await lists.writeAll(createLookupEvents(["event-long", "event-short"]));
+    await expect(
+      lists.index({ sort: [{ field: "value", direction: "asc" }] }),
+    ).resolves.toMatchObject([{ value: "event-short" }, { value: "event-long" }]);
+
+    const objects = createLookupStorage({
+      "event-a-copy": { a: 1 },
+      "event-b": { b: 1 },
+      "event-a": { a: 1 },
+    });
+    await objects.writeAll(createLookupEvents(["event-a-copy", "event-b", "event-a"]));
+    await expect(
+      objects.index({ sort: [{ field: "value", direction: "asc" }] }),
+    ).resolves.toMatchObject([
+      { value: "event-a" },
+      { value: "event-a-copy" },
+      { value: "event-b" },
     ]);
   });
 
