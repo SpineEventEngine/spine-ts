@@ -74,6 +74,7 @@ interface ResolvedPath {
 interface LifecycleMessage extends Message {
   readonly entity?: { readonly id?: Any; readonly typeUrl: string };
   readonly state?: Any;
+  readonly lastState?: Any;
   readonly version?: import("@spine-event-engine/proto").Version;
 }
 
@@ -232,6 +233,19 @@ export class SubscriptionObservers {
     const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
     const id = SubscriptionObservers.#unpackValue(lifecycle.entity.id, idSchema);
     if (id === undefined) return;
+    const lastState =
+      lifecycle.lastState === undefined
+        ? undefined
+        : AnyMessages.unpack(lifecycle.lastState, state.schema);
+    if (
+      lastState === undefined ||
+      SubscriptionObservers.#createMatcher(subscription, state).match({
+        typeUrl: TypeUrls.derive(state.schema),
+        id,
+        state: lastState,
+      }) === undefined
+    )
+      return;
     onUpdate(SubscriptionObservers.#removalUpdate(id, state, subscription));
   }
 

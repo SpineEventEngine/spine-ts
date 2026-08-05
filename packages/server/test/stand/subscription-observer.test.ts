@@ -579,6 +579,41 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("does not leak archive removals to a nonmatching filtered subscription", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      filteredSubscription(ProjectionStateSchema, packString("other-id")),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+    await bus.post(
+      create(EventSchema, {
+        id: { value: "archive-filter" },
+        message: AnyMessages.pack(
+          EntityLog.EntityArchivedSchema,
+          create(EntityLog.EntityArchivedSchema, {
+            entity: {
+              id: packString("archived-id"),
+              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+            },
+            signalId: [{ id: packString("signal"), typeUrl: TypeUrls.derive(StringValueSchema) }],
+            version: { number: 1 },
+            lastState: AnyMessages.pack(
+              ProjectionStateSchema,
+              createState("archived-id", "Archived", 1),
+            ),
+          }),
+          { validate: false },
+        ),
+      }),
+    );
+    expect(received).toEqual([]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
   it("forwards accepted event targets while redacting client rejection details", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
