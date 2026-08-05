@@ -289,6 +289,38 @@ findings and their substantively changed staging/MySQL/fixture boundaries.
 Security remains N/A. Runtime self-introspection may be unavailable; immutable
 role/profile plus explicit dispatch remain the metadata evidence.
 
+## Final Finding Re-Review Results
+
+- Style/maintainability: two P2 findings. Split the 53-line create settlement
+  state machine into named transitions; guarantee factory close even if a
+  tracked registry close fails.
+- Documentation: one P2 and one P3 finding. Remove the unsupported claim that a
+  custom registry owns one handle and document create's blank-ID/topic
+  `TypeError`.
+- TypeScript/API: one P1 finding. The deep-readonly mapped type incorrectly
+  promises readonly `Uint8Array` values while the clone-safe runtime deliberately
+  returns mutable byte arrays.
+- Performance/reliability: one runtime P1, one persistence-format P1, and one
+  P2. A stale owner can publish into the fixed stage after rollback and wedge a
+  fresh staged control; fixture cleanup can skip factory close. The MySQL scope
+  correction changes the pre-release physical namespace from schema name to the
+  declared storage key.
+
+The MySQL persistence-format finding is dispositioned by the human's explicit
+project decision that this pre-release codebase requires no migration
+compatibility and may change without a migration cycle. The storage-key scope is
+the correct provider contract and receives no legacy fallback or migration
+machinery. The runtime P1, API P1, style/documentation findings, and cleanup P2
+are accepted for correction.
+
+One fresh existing `implementer` owns the complete final correction, explicitly
+`gpt-5.6-terra` / `medium`. It must add the exact two-owner stale-stage RED test,
+exact-CAS evict only a mismatched stage under the current control, split named
+settlement steps, model bytes as mutable but clone-isolated in the public type,
+guarantee/aggregate teardown, and correct the two documentation statements.
+Runtime self-introspection may be unavailable; immutable role/profile plus
+explicit dispatch are the acceptance evidence.
+
 ## Final Correction Evidence
 
 The existing `implementer` correction used explicit `gpt-5.6-terra` / `medium`.
