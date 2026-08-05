@@ -22,7 +22,7 @@ import {
   type NormalizedQueryPlan,
 } from "@spine-event-engine/storage";
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { CanonicalMysqlValues, SortableMysqlColumnValue } from "./value-codec.js";
 import {
@@ -121,6 +121,7 @@ export const entityHistorySchema: EntityHistorySchema = {
         { name: "entity_key", mysqlType: "varbinary(768)", ddlType: "VARBINARY(768)" },
         { name: "commit_key", mysqlType: "varbinary(768)", ddlType: "VARBINARY(768)" },
         { name: "digest", mysqlType: "binary(32)", ddlType: "BINARY(32)" },
+        { name: "owner", mysqlType: "varbinary(36)", ddlType: "VARBINARY(36)" },
       ],
       indexes: [
         {
@@ -983,9 +984,10 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
     const entity = EntityValues.key(input.entity, input.entityId);
     const commitKey = CanonicalMysqlValues.encode(input.id, idBytes);
     const digest = MysqlCommitValues.digest(input);
+    const owner = randomUUID();
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.attempt(input, scope, entity, commitKey, digest);
+        return await this.attempt(input, scope, entity, commitKey, digest, owner);
       } catch (error) {
         if (!MysqlCommitValues.retryable(error) || attempt === 2) {
           if (
@@ -1007,6 +1009,7 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
     entity: Uint8Array,
     commitKey: Uint8Array,
     digest: Uint8Array,
+    owner: string,
   ): Promise<EntityCommitResult> {
     let connection: PoolConnection | undefined;
     let transactionStarted = false;
@@ -1017,12 +1020,12 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
       const current = await MysqlCommitValues.readCurrent(connection, input, scope, entity);
       const receipt = await MysqlCommitValues.readReceipt(connection, scope, entity, commitKey);
       if (receipt !== undefined) {
-        if (!EntityValues.same(receipt, digest)) {
+        if (!EntityValues.same(receipt.digest, digest)) {
           throw new Error("Entity commit ID was reused with different content.");
         }
         await connection.rollback();
         transactionStarted = false;
-        return "replayed";
+        return receipt.owner === owner ? "committed" : "replayed";
       }
       if (!MysqlCommitValues.sameCurrent(current, input.expected, input.entity.stateSchema)) {
         await connection.rollback();
@@ -1035,8 +1038,8 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
       await MysqlCommitValues.writeDelivery(connection, input);
       await connection.execute(
         `INSERT INTO spine_ts_entity_commits
-           (scope_key,entity_key,commit_key,digest) VALUES (?,?,?,?)`,
-        [scope, entity, commitKey, digest],
+           (scope_key,entity_key,commit_key,digest,owner) VALUES (?,?,?,?,?)`,
+        [scope, entity, commitKey, digest, owner],
       );
       await connection.commit();
       transactionStarted = false;
@@ -1051,7 +1054,7 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
         }
         connection = undefined;
       }
-      if (await this.receiptMatches(input, digest)) return "committed";
+      if (await this.receiptMatches(input, digest, owner)) return "committed";
       throw error;
     } finally {
       if (connection !== undefined) this.connections.release(connection);
@@ -1085,6 +1088,7 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
   private async receiptMatches<I, S extends Message>(
     input: EntityCommitInput<I, S>,
     digest: Uint8Array,
+    owner: string,
   ): Promise<boolean> {
     let connection: PoolConnection | undefined;
     try {
@@ -1096,7 +1100,9 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
         CanonicalMysqlValues.encode(input.id, idBytes),
         false,
       );
-      return receipt !== undefined && EntityValues.same(receipt, digest);
+      return (
+        receipt !== undefined && EntityValues.same(receipt.digest, digest) && receipt.owner === owner
+      );
     } catch {
       return false;
     } finally {
@@ -1189,6 +1195,7 @@ interface SpecRow extends RowDataPacket {
 }
 interface CommitRow extends RowDataPacket {
   digest: Uint8Array;
+  owner: string;
 }
 interface KeyRow extends RowDataPacket {
   entity_key: Uint8Array;
@@ -1325,13 +1332,13 @@ const MysqlCommitValues = Object.freeze({
     entity: Uint8Array,
     commitKey: Uint8Array,
     lock = true,
-  ): Promise<Uint8Array | undefined> {
+  ): Promise<CommitRow | undefined> {
     const [rows] = await connection.execute<CommitRow[]>(
-      `SELECT digest FROM spine_ts_entity_commits
+      `SELECT digest, owner FROM spine_ts_entity_commits
        WHERE scope_key=? AND entity_key=? AND commit_key=?${lock ? " FOR UPDATE" : ""}`,
       [scope, entity, commitKey],
     );
-    return rows[0]?.digest;
+    return rows[0];
   },
 
   sameCurrent<I, S extends Message>(

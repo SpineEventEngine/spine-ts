@@ -20,6 +20,7 @@ import {
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/entity-commit";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-history";
 
 import { CanonicalMysqlValues, SortableMysqlColumnValue } from "./value-codec.js";
 import {
@@ -317,6 +318,9 @@ export class MysqlStorageFactory extends StorageFactory {
   ) {
     super();
     this.#pool = pool;
+    EntityCommitStorageFactories.register(this, {
+      createEntityCommitStorage: (input) => this.#createEntityCommitStorage(input),
+    });
   }
 
   /**
@@ -413,7 +417,7 @@ export class MysqlStorageFactory extends StorageFactory {
    * @param input The Entity storage contract committed by the handle.
    * @returns An independently closeable MySQL commit handle.
    */
-  createEntityCommitStorage<I, S extends Message>(
+  #createEntityCommitStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): EntityCommitStorage {
     this.#lifecycle.assertOpen();

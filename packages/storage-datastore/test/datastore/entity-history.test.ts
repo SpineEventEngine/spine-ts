@@ -1,6 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-history";
 import { describe, expect, it } from "vitest";
 import {
   EntityHistoryConformance,
@@ -422,7 +423,7 @@ describe("Datastore entity history", () => {
   it("commits current state and history atomically with an immutable receipt", async () => {
     const backend = new HistoryDatastoreBackend();
     const factory = new DatastoreStorageFactory({ client: backend.client() as never });
-    const commit = factory.createEntityCommitStorage(input());
+    const commit = EntityCommitStorageFactories.create(factory, input());
     const mutation = {
       context: input().context,
       entity: input(),
@@ -453,6 +454,32 @@ describe("Datastore entity history", () => {
     const normal = factory.createEntityStorage(input());
     await expect(normal.current.read("task")).resolves.toMatchObject({ version: 1n });
     await expect(normal.states.backward("task", 1)).resolves.toMatchObject([{ version: 1n }]);
+  });
+
+  it("returns committed to the invocation whose ambiguous acknowledgement persisted", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const firstFactory = new DatastoreStorageFactory({ client: backend.client() as never });
+    const mutation = {
+      context: input().context,
+      entity: input(),
+      id: "ambiguous-command",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "one" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+    // Bind the layout before injecting the lost acknowledgement, so the fault
+    // applies to the commit receipt rather than the first-use layout binding.
+    await firstFactory.createEntityStorage(input()).current.read("task");
+    backend.failCommitAppliedOnce = true;
+
+    await expect(EntityCommitStorageFactories.create(firstFactory, input()).commit(mutation)).resolves.toBe(
+      "committed",
+    );
   });
 
   it("rejects an independent-client divergent event-ID race with one global marker set", async () => {

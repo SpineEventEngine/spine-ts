@@ -1,6 +1,7 @@
 import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
+import { randomUUID } from "node:crypto";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
 import type {
   EntityCommitInput,
@@ -787,7 +788,7 @@ export class DatastoreEntityCommitStorage<I, S extends Message> implements Entit
     this.#requireCompatible(input);
     const compatible = input as unknown as EntityCommitInput<I, S>;
     this.#preflight(compatible);
-    return this.#codec.run(() => this.#attempt(compatible));
+    return this.#codec.run(() => this.#attempt(compatible, randomUUID()));
   }
 
   /**
@@ -829,7 +830,7 @@ export class DatastoreEntityCommitStorage<I, S extends Message> implements Entit
       throw new Error("Datastore entity commit exceeds the 10 MiB mutation limit.");
   }
 
-  async #attempt(input: EntityCommitInput<I, S>): Promise<EntityCommitResult> {
+  async #attempt(input: EntityCommitInput<I, S>, owner: string): Promise<EntityCommitResult> {
     const digest = DatastoreCommitValues.digest(input, this.#codec);
     const id = this.#codec.id(input.entityId);
     const receiptKey = this.#codec.childKey(id, "$SpineEntityCommit", input.id);
@@ -851,7 +852,7 @@ export class DatastoreEntityCommitStorage<I, S extends Message> implements Entit
           if (receipt.digest !== digest)
             throw new Error("Entity commit ID was reused with different content.");
           await transaction.rollback();
-          return "replayed";
+          return receipt.owner === owner ? "committed" : "replayed";
         }
         const current = DatastoreCommitValues.current(
           this.#codec,
@@ -965,7 +966,11 @@ export class DatastoreEntityCommitStorage<I, S extends Message> implements Entit
         if (root === undefined) transaction.insert({ key: rootKey, data: nextRoot });
         else if (nextRoot !== root) transaction.save({ key: rootKey, data: nextRoot });
         for (const event of canonical) transaction.insert(event);
-        transaction.insert({ key: receiptKey, data: { digest }, excludeFromIndexes: ["digest"] });
+        transaction.insert({
+          key: receiptKey,
+          data: { digest, owner },
+          excludeFromIndexes: ["digest", "owner"],
+        });
         await transaction.commit();
         return "committed";
       } catch (error) {
@@ -973,7 +978,7 @@ export class DatastoreEntityCommitStorage<I, S extends Message> implements Entit
         const receipt = DatastoreResults.first(
           await this.#codec.client.get(receiptKey, { wrapNumbers: true }),
         );
-        if (receipt?.digest === digest) return "replayed";
+        if (receipt?.digest === digest) return receipt.owner === owner ? "committed" : "replayed";
         if ((error as { code?: unknown }).code === 10 && attempt < 2) {
           await DatastoreRetries.afterAbort(attempt);
           continue;

@@ -51,6 +51,12 @@ safe to retry; divergent content fails. State trim and truncate work in bounded
 chunks. Completed chunks can remain durable after a later failure, so callers
 retry maintenance as needed.
 
+The internal atomic Entity commit port combines current state, configured
+histories, framework delivery events, and a receipt in one Datastore
+transaction. Its receipt records the committing invocation owner so an
+ambiguous acknowledgement still returns `committed` to exactly that invocation;
+later callers receive `replayed`. Standalone history operations remain separate.
+
 ## Operations and errors
 
 Malformed stored payloads cause a redacted decoding error. Datastore provider

@@ -9,6 +9,7 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { EventStore, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-history";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -128,7 +129,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     };
     const factory = await MysqlStorageFactory.create({ url });
     factories.push(factory);
-    const commits = factory.createEntityCommitStorage(input);
+    const commits = EntityCommitStorageFactories.create(factory, input);
     const storage = factory.createEntityStorage(input);
     const eventStore = new EventStore(context, factory);
     const event = create(EventSchema, {

@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 import { EventStore } from "../../src/event/event-store.js";
 import type {
   EntityCommitStorage,
-  EntityCommitStorageFactory,
 } from "../../src/internal/entity-commit.js";
+import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 
@@ -143,7 +143,7 @@ function commitStorage(
   factory: InMemoryStorageFactory,
   input: EntityStorageInput<string, ReturnType<typeof createString>>,
 ): EntityCommitStorage {
-  return (factory as unknown as EntityCommitStorageFactory).createEntityCommitStorage(input);
+  return EntityCommitStorageFactories.create(factory, input);
 }
 
 function entityInput(): EntityStorageInput<string, ReturnType<typeof createString>> {

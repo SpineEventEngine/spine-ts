@@ -8,6 +8,7 @@ import type {
 import type { EntityRecord } from "../entity/entity-record.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { EntityStorageInput } from "./entity-history.js";
+import type { StorageFactory } from "../storage/storage-factory.js";
 
 /**
  * Describes one provider-owned atomic mutation for an Entity commit.
@@ -106,3 +107,27 @@ export interface EntityCommitStorageFactory {
     input: EntityStorageInput<I, S>,
   ): EntityCommitStorage;
 }
+
+/**
+ * Provides the typed internal lookup for provider-owned atomic commit handles.
+ *
+ * Provider adapters register their creator while constructing their factory;
+ * the end-user storage root deliberately exposes no commit-construction method.
+ */
+export const EntityCommitStorageFactories = Object.freeze({
+  register(factory: StorageFactory, creator: EntityCommitStorageFactory): void {
+    creators.set(factory, creator);
+  },
+
+  create<I, S extends Message>(
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const creator = creators.get(factory);
+    if (creator === undefined)
+      throw new Error("StorageFactory does not provide the required atomic Entity commit storage.");
+    return creator.createEntityCommitStorage(input);
+  },
+});
+
+const creators = new WeakMap<StorageFactory, EntityCommitStorageFactory>();

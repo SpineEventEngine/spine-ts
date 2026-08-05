@@ -13,6 +13,7 @@ import type {
   EntityStateHistoryPort,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-history";
 
 import { DatastoreRecordStorage } from "./record-storage.js";
 import { DatastoreEntityCommitStorage, DatastoreEntityStorage } from "./entity-history.js";
@@ -98,6 +99,9 @@ export class DatastoreStorageFactory extends StorageFactory {
     if (!Number.isInteger(this.#maxClientSideScan) || this.#maxClientSideScan <= 0) {
       throw new Error("Datastore maxClientSideScan must be a positive finite integer.");
     }
+    EntityCommitStorageFactories.register(this, {
+      createEntityCommitStorage: (entity) => this.#createEntityCommitStorage(entity),
+    });
   }
 
   /**
@@ -135,7 +139,7 @@ export class DatastoreStorageFactory extends StorageFactory {
    * @param input Defines the frozen framework Entity storage layout.
    * @returns An independently closeable atomic Entity commit handle.
    */
-  createEntityCommitStorage<I, S extends Message>(
+  #createEntityCommitStorage<I, S extends Message>(
     input: EntityStorageInput<I, S>,
   ): EntityCommitStorage {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
