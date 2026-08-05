@@ -16,10 +16,6 @@ import type {
 } from "@spine-event-engine/storage/internal/entity-history";
 import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
 import type { StandObservedState } from "./subscription-observer.js";
-import { SubscriptionRuntime } from "./subscription-runtime.js";
-import type { EventBus } from "../bus/event-bus.js";
-import type { SubscriptionUpdate } from "@spine-event-engine/proto/client";
-import type { StandSubscriptionRegistry } from "./subscription-registry.js";
 
 /**
  * Options for constructing a direct read-side Stand.
@@ -630,7 +626,6 @@ export class Stand {
   async #closeOnce(): Promise<void> {
     this.#closing = true;
     await Promise.all([...this.#inFlight]);
-    await standaloneSubscriptionRuntimes.get(this)?.close();
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
@@ -936,9 +931,6 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
 }
 
 interface StandAccess {
-  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry, domainEventBus: EventBus, systemEventBus?: EventBus): void;
-  consumeSubscription(stand: Stand, registry: StandSubscriptionRegistry, id: string, onUpdate: (update: SubscriptionUpdate) => void): Promise<StandSubscription>;
-  reconcileSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): Promise<void>;
   observedState(stand: Stand, typeUrl: string | undefined): StandObservedState | undefined;
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,
@@ -960,26 +952,6 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
-  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry, domainEventBus: EventBus, systemEventBus?: EventBus) {
-    let runtime = standaloneSubscriptionRuntimes.get(stand);
-    if (runtime === undefined) {
-      runtime = new SubscriptionRuntime(stand, stand, domainEventBus, systemEventBus ?? domainEventBus, registry);
-      standaloneSubscriptionRuntimes.set(stand, runtime);
-      standaloneSubscriptionBuses.set(stand, domainEventBus);
-      runtime.start();
-    }
-  },
-  consumeSubscription(stand: Stand, registry: StandSubscriptionRegistry, id: string, onUpdate: (update: SubscriptionUpdate) => void) {
-    standAccess.startSubscriptions(stand, registry, eventBusFor(stand), eventBusFor(stand));
-    const runtime = standaloneSubscriptionRuntimes.get(stand);
-    if (runtime === undefined) throw new TypeError("Stand subscription consumption requires a Stand instance.");
-    return runtime.consume(id, onUpdate);
-  },
-  reconcileSubscriptions(stand: Stand, registry: StandSubscriptionRegistry) {
-    const runtime = standaloneSubscriptionRuntimes.get(stand);
-    if (runtime === undefined) throw new TypeError("Stand subscription reconciliation requires a Stand instance.");
-    return runtime.reconcile();
-  },
   observedState(stand: Stand, typeUrl: string | undefined): StandObservedState | undefined {
     if (!(stand instanceof Stand)) throw new TypeError("State observation requires a Stand instance.");
     if (typeUrl === undefined) return undefined;
@@ -1025,10 +997,3 @@ const currentReads = new WeakMap<
     options: StandReadOptions,
   ) => Promise<StandCurrentRecord<Schema> | undefined>
 >();
-const standaloneSubscriptionRuntimes = new WeakMap<Stand, SubscriptionRuntime>();
-const standaloneSubscriptionBuses = new WeakMap<Stand, EventBus>();
-function eventBusFor(stand: Stand): EventBus {
-  const bus = standaloneSubscriptionBuses.get(stand);
-  if (bus === undefined) throw new TypeError("Stand subscription consumption requires a Stand instance.");
-  return bus;
-}

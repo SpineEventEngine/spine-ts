@@ -30,6 +30,7 @@ import {
 } from "../../src/index.js";
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import { standAccess } from "../../src/stand/stand.js";
+import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
 import {
   eventBusAccess,
   type EventBus as EventBusType,
@@ -106,6 +107,12 @@ const fileEntityEmptyFixture = createFixtureFileDescriptor(
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
+  it("keeps subscription lifecycle operations out of the Stand access seam", () => {
+    expect("startSubscriptions" in standAccess).toBe(false);
+    expect("consumeSubscription" in standAccess).toBe(false);
+    expect("reconcileSubscriptions" in standAccess).toBe(false);
+  });
+
   it("does not attach a deleted definition after its snapshot is released", async () => {
     const factory = new InMemoryStorageFactory();
     const stand = new Stand({
@@ -130,16 +137,17 @@ describe("Stand", () => {
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     registry.gateNextSnapshot();
-    standAccess.startSubscriptions(stand, registry, bus);
+    const runtime = pairedRuntime(stand, factory, registry, bus, bus);
+    runtime.start();
     await registry.snapshotStarted;
     await registry.delete(subscription.id);
     registry.releaseSnapshot();
-    await standAccess.reconcileSubscriptions(stand, registry);
+    await runtime.reconcile();
     let delivered = 0;
-    await standAccess.consumeSubscription(stand, registry, "gated-delete", () => delivered++);
+    await runtime.consume("gated-delete", () => delivered++);
     await postStateChange(bus, ProjectionStateSchema, createState("deleted", "Deleted"));
     expect(delivered).toBe(0);
-    await Promise.all([stand.close(), bus.close()]);
+    await Promise.all([runtime.close(), stand.close(), bus.close()]);
   });
 
   it("detaches EventBus observers while a reconciliation snapshot is gated during close", async () => {
@@ -166,9 +174,10 @@ describe("Stand", () => {
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
-    standAccess.startSubscriptions(stand, registry, bus);
+    const runtime = pairedRuntime(stand, factory, registry, bus, bus);
+    runtime.start();
     let deliveries = 0;
-    await standAccess.consumeSubscription(stand, registry, "gated-close", () => deliveries++);
+    await runtime.consume("gated-close", () => deliveries++);
     expect(observedEventBusSubscriptions).toHaveLength(1);
     const [observer] = observedEventBusSubscriptions;
     expect(observer?.closed).toBe(false);
@@ -176,9 +185,9 @@ describe("Stand", () => {
     expect(deliveries).toBe(1);
 
     registry.gateNextSnapshot();
-    const reconciliation = standAccess.reconcileSubscriptions(stand, registry);
+    const reconciliation = runtime.reconcile();
     await registry.snapshotStarted;
-    const closing = stand.close();
+    const closing = runtime.close();
     registry.releaseSnapshot();
     await reconciliation;
     await closing;
@@ -211,17 +220,18 @@ describe("Stand", () => {
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
-    standAccess.startSubscriptions(stand, registry, eventBus);
-    await standAccess.reconcileSubscriptions(stand, registry);
+    const runtime = pairedRuntime(stand, storageFactory, registry, eventBus, eventBus);
+    runtime.start();
+    await runtime.reconcile();
     registry.failNextSnapshot();
     let failedConsumerDeliveries = 0;
     await expect(
-      standAccess.consumeSubscription(stand, registry, "failed-consumer", () => {
+      runtime.consume("failed-consumer", () => {
         failedConsumerDeliveries++;
       }),
     ).rejects.toThrow("snapshot failed");
     let delivered = 0;
-    await standAccess.consumeSubscription(stand, registry, "failed-consumer", () => {
+    await runtime.consume("failed-consumer", () => {
       delivered++;
     });
 
@@ -229,7 +239,7 @@ describe("Stand", () => {
 
     expect(failedConsumerDeliveries).toBe(0);
     expect(delivered).toBe(1);
-    await Promise.all([stand.close(), eventBus.close()]);
+    await Promise.all([runtime.close(), stand.close(), eventBus.close()]);
   });
 
   it("fences Stand-owned observers by the exact active revision and sweeps absent snapshots", async () => {
@@ -256,22 +266,23 @@ describe("Stand", () => {
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
-    standAccess.startSubscriptions(stand, registry, eventBus);
-    await standAccess.consumeSubscription(stand, registry, "s-1", () => observed.push(1));
+    const runtime = pairedRuntime(stand, storageFactory, registry, eventBus, eventBus);
+    runtime.start();
+    await runtime.consume("s-1", () => observed.push(1));
 
     await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Before fence"));
     expect(observed).toEqual([]);
 
     registry.allowExactRevision = true;
-    await standAccess.reconcileSubscriptions(stand, registry);
+    await runtime.reconcile();
     await postStateChange(eventBus, ProjectionStateSchema, createState("two", "After fence"));
     expect(observed).toEqual([1]);
 
     await registry.delete(subscription.id);
-    await standAccess.reconcileSubscriptions(stand, registry);
+    await runtime.reconcile();
     await postStateChange(eventBus, ProjectionStateSchema, createState("three", "After sweep"));
     expect(observed).toEqual([1]);
-    await Promise.all([stand.close(), eventBus.close()]);
+    await Promise.all([runtime.close(), stand.close(), eventBus.close()]);
   });
 
   it("observes one shared definition from both nodes without crossing local buses", async () => {
@@ -305,16 +316,25 @@ describe("Stand", () => {
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(firstBus, [EntityLog.EntityStateChangedSchema]);
     eventBusAccess.registerSchemas(secondBus, [EntityLog.EntityStateChangedSchema]);
-    standAccess.startSubscriptions(first, registry, firstBus);
-    standAccess.startSubscriptions(second, registry, secondBus);
-    await standAccess.consumeSubscription(first, registry, "shared", () => observed.first++);
-    await standAccess.consumeSubscription(second, registry, "shared", () => observed.second++);
+    const firstRuntime = pairedRuntime(first, storageFactory, registry, firstBus, firstBus);
+    const secondRuntime = pairedRuntime(second, storageFactory, registry, secondBus, secondBus);
+    firstRuntime.start();
+    secondRuntime.start();
+    await firstRuntime.consume("shared", () => observed.first++);
+    await secondRuntime.consume("shared", () => observed.second++);
 
     await postStateChange(firstBus, ProjectionStateSchema, createState("first", "First node"));
     await postStateChange(secondBus, ProjectionStateSchema, createState("second", "Second node"));
 
     expect(observed).toEqual({ first: 1, second: 1 });
-    await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
+    await Promise.all([
+      firstRuntime.close(),
+      secondRuntime.close(),
+      first.close(),
+      second.close(),
+      firstBus.close(),
+      secondBus.close(),
+    ]);
   });
 
   it("delivers an event target only from the local EventBus on each reconciled node", async () => {
@@ -350,22 +370,26 @@ describe("Stand", () => {
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
     await registry.create(subscription);
     await registry.activate(subscription.id);
-    standAccess.startSubscriptions(first, registry, firstBus);
-    standAccess.startSubscriptions(second, registry, secondBus);
-    await standAccess.consumeSubscription(first, registry, "shared-events", () => observed.first++);
-    await standAccess.consumeSubscription(
-      second,
-      registry,
-      "shared-events",
-      () => observed.second++,
-    );
+    const firstRuntime = pairedRuntime(first, storageFactory, registry, firstBus, firstBus);
+    const secondRuntime = pairedRuntime(second, storageFactory, registry, secondBus, secondBus);
+    firstRuntime.start();
+    secondRuntime.start();
+    await firstRuntime.consume("shared-events", () => observed.first++);
+    await secondRuntime.consume("shared-events", () => observed.second++);
 
     await firstBus.post(createSubscriptionEvent("first-event"));
     expect(observed).toEqual({ first: 1, second: 0 });
     await secondBus.post(createSubscriptionEvent("second-event"));
     expect(observed).toEqual({ first: 1, second: 1 });
 
-    await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
+    await Promise.all([
+      firstRuntime.close(),
+      secondRuntime.close(),
+      first.close(),
+      second.close(),
+      firstBus.close(),
+      secondBus.close(),
+    ]);
   });
 
   it("registers known entity state types and rejects unknown reads and subscriptions", async () => {
@@ -1089,6 +1113,20 @@ describe("Stand", () => {
     expect(observed?.version).toEqual(expectedVersion);
   });
 });
+
+function pairedRuntime(
+  domainStand: Stand,
+  storageFactory: InMemoryStorageFactory,
+  registry: InMemorySubscriptionRegistry,
+  domainEventBus: EventBusType,
+  systemEventBus: EventBusType,
+): SubscriptionRuntime {
+  const systemStand = new Stand({
+    context: { name: "__spine/System", multitenant: false },
+    storageFactory,
+  });
+  return new SubscriptionRuntime(domainStand, systemStand, domainEventBus, systemEventBus, registry);
+}
 
 function createState(id: string, name: string): ProjectionState {
   return create(ProjectionStateSchema, {
