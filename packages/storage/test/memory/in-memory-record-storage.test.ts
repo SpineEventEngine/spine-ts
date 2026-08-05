@@ -277,6 +277,22 @@ describe("InMemoryRecordStorage", () => {
     ).rejects.toThrow(/continuation must match the sort order/i);
   });
 
+  it("rejects sparse continuation sort entries", async () => {
+    const storage = createStorage();
+    await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
+    const malformed = {
+      sort: [undefined],
+      after: {
+        values: [{ field: undefined, value: 1n }],
+        id: create(EventIdSchema, { value: "event-1" }),
+      },
+    };
+
+    await expect(storage.index(malformed as Parameters<typeof storage.index>[0])).rejects.toThrow(
+      /continuation sort order is invalid/i,
+    );
+  });
+
   it("rejects continuations without a matching sort order", async () => {
     const storage = createStorage();
     await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
@@ -358,6 +374,18 @@ describe("InMemoryRecordStorage", () => {
     expect(numberOrder.map((id) => id.value)).toEqual(["event-2", "event-10"]);
   });
 
+  it("breaks equal numeric sort keys with stable record IDs", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-b", "type.spine.io/tasks.TaskClosed", 1n, 7),
+      createEvent("event-a", "type.spine.io/tasks.TaskClosed", 2n, 7),
+    ]);
+
+    await expect(
+      storage.index({ sort: [{ field: "nanos", direction: "asc" }] }),
+    ).resolves.toMatchObject([{ value: "event-a" }, { value: "event-b" }]);
+  });
+
   it("matches any value in an array-valued column filter", async () => {
     const storage = createStorage();
     await storage.writeAll([
@@ -421,6 +449,16 @@ describe("InMemoryRecordStorage", () => {
       "event-string",
       "event-undefined",
     ]);
+  });
+
+  it("rejects uncloneable runtime column values", async () => {
+    const storage = createLookupStorage({
+      "event-function": () => "uncloneable",
+    });
+
+    await expect(storage.writeAll(createLookupEvents(["event-function"]))).rejects.toThrow(
+      /value could not be cloned/i,
+    );
   });
 
   it("sorts booleans, strings, bytes, arrays, objects, nulls, undefined, and NaN deterministically", async () => {
