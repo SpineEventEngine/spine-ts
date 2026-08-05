@@ -19,10 +19,12 @@ import {
   type StorageQueryCapabilities,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/entity-commit";
 
 import { CanonicalMysqlValues, SortableMysqlColumnValue } from "./value-codec.js";
 import {
   MysqlEntityStorage,
+  MysqlEntityCommitStorage,
   type MysqlEntityConnectionProvider,
   type MysqlEntityStorageHandle,
   entityHistorySchema,
@@ -398,6 +400,26 @@ export class MysqlStorageFactory extends StorageFactory {
       input,
       this.entityConnections(),
       this.database,
+      (connection) => EntitySchemaVerification.verify(connection),
+      () => this.#handles.delete(handle),
+    );
+    this.#handles.add(handle);
+    return handle;
+  }
+
+  /**
+   * Creates a provider-owned atomic Entity commit handle.
+   *
+   * @param input The Entity storage contract committed by the handle.
+   * @returns An independently closeable MySQL commit handle.
+   */
+  createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    this.#lifecycle.assertOpen();
+    const handle = new MysqlEntityCommitStorage(
+      input as EntityStorageInput<unknown, Message>,
+      this.entityConnections(),
       (connection) => EntitySchemaVerification.verify(connection),
       () => this.#handles.delete(handle),
     );

@@ -1,7 +1,7 @@
 import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
-import { EventSchema, type Event } from "@spine-event-engine/proto";
+import { EventIdSchema, EventSchema, type Event } from "@spine-event-engine/proto";
 import type {
   EntityEventHistoryPort,
   EntityEventHistoryRecord,
@@ -11,6 +11,11 @@ import type {
   EntityStateHistoryRecord,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
+import type {
+  EntityCommitInput,
+  EntityCommitResult,
+  EntityCommitStorage,
+} from "@spine-event-engine/storage/internal/entity-commit";
 import {
   StorageQueryEvaluator,
   StorageQueryPolicy,
@@ -19,7 +24,7 @@ import {
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import { createHash } from "node:crypto";
 
-import { CanonicalMysqlValues } from "./value-codec.js";
+import { CanonicalMysqlValues, SortableMysqlColumnValue } from "./value-codec.js";
 import {
   MysqlStorageDataError,
   MysqlStorageOperationError,
@@ -29,6 +34,10 @@ import {
 const scopeBytes = 512;
 const idBytes = 768;
 const batchSize = 128;
+const recordScopeBytes = 512;
+const tenantBytes = 255;
+const recordSlotBytes = 768;
+const columnBytes = 255;
 interface EntityColumnSchema {
   readonly name: string;
 
@@ -104,6 +113,22 @@ export const entityHistorySchema: EntityHistorySchema = {
         { name: "fingerprint", mysqlType: "varbinary(1024)", ddlType: "VARBINARY(1024)" },
       ],
       indexes: [{ name: "PRIMARY", columns: [{ name: "scope_key" }], primary: true }],
+    },
+    {
+      name: "spine_ts_entity_commits",
+      columns: [
+        { name: "scope_key", mysqlType: "varbinary(512)", ddlType: "VARBINARY(512)" },
+        { name: "entity_key", mysqlType: "varbinary(768)", ddlType: "VARBINARY(768)" },
+        { name: "commit_key", mysqlType: "varbinary(768)", ddlType: "VARBINARY(768)" },
+        { name: "digest", mysqlType: "binary(32)", ddlType: "BINARY(32)" },
+      ],
+      indexes: [
+        {
+          name: "PRIMARY",
+          columns: [{ name: "scope_key" }, { name: "entity_key" }, { name: "commit_key" }],
+          primary: true,
+        },
+      ],
     },
     {
       name: "spine_ts_entity_current",
@@ -921,6 +946,167 @@ export class MysqlEntityStorage<I, S extends Message> implements MysqlEntityStor
     return `spine_ts_${hash.slice(0, 55)}`;
   }
 }
+
+/**
+ * Applies complete Entity commits in one InnoDB transaction.
+ */
+export class MysqlEntityCommitStorage implements EntityCommitStorage {
+  #open = true;
+  #schemaReady: Promise<void> | undefined;
+
+  /**
+   * Creates an independently closeable atomic commit handle.
+   *
+   * @param input The Entity storage contract owned by this handle.
+   * @param connections The factory-owned connection lease provider.
+   * @param verifySchema Verifies the fixed MySQL Entity schema.
+   * @param onClose Removes this handle from its owning factory.
+   */
+  constructor(
+    private readonly input: EntityStorageInput<unknown, Message>,
+    private readonly connections: MysqlEntityConnectionProvider,
+    private readonly verifySchema: (connection: PoolConnection) => Promise<void>,
+    private readonly onClose: () => void,
+  ) {}
+
+  /**
+   * Applies current state, configured histories, and delivery events atomically.
+   *
+   * @param input The complete framework-owned Entity commit.
+   * @returns The durable commit, replay, or optimistic-conflict outcome.
+   */
+  async commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult> {
+    this.requireCompatible(input);
+    this.preflight(input);
+    await this.ready();
+    const scope = EntityValues.scope(input.entity);
+    const entity = EntityValues.key(input.entity, input.entityId);
+    const commitKey = CanonicalMysqlValues.encode(input.id, idBytes);
+    const digest = MysqlCommitValues.digest(input);
+    let connection: PoolConnection | undefined;
+    let transactionStarted = false;
+    try {
+      connection = await this.connections.acquire();
+      await connection.beginTransaction();
+      transactionStarted = true;
+      const current = await MysqlCommitValues.readCurrent(connection, input, scope, entity);
+      const receipt = await MysqlCommitValues.readReceipt(connection, scope, entity, commitKey);
+      if (receipt !== undefined) {
+        if (!EntityValues.same(receipt, digest)) {
+          throw new Error("Entity commit ID was reused with different content.");
+        }
+        await connection.rollback();
+        transactionStarted = false;
+        return "replayed";
+      }
+      if (!MysqlCommitValues.sameCurrent(current, input.expected, input.entity.stateSchema)) {
+        await connection.rollback();
+        transactionStarted = false;
+        return "conflict";
+      }
+      await MysqlCommitValues.writeCurrent(connection, input, scope, entity);
+      await MysqlCommitValues.writeStates(connection, input, scope);
+      await MysqlCommitValues.writeDiagnostics(connection, input, scope);
+      await MysqlCommitValues.writeDelivery(connection, input);
+      await connection.execute(
+        `INSERT INTO spine_ts_entity_commits
+           (scope_key,entity_key,commit_key,digest) VALUES (?,?,?,?)`,
+        [scope, entity, commitKey, digest],
+      );
+      await connection.commit();
+      transactionStarted = false;
+      return "committed";
+    } catch (error) {
+      if (transactionStarted) await connection?.rollback().catch(() => undefined);
+      if (connection !== undefined && (await this.receiptMatches(input, digest))) {
+        return "committed";
+      }
+      if (
+        error instanceof Error &&
+        error.message === "Entity commit ID was reused with different content."
+      ) {
+        throw error;
+      }
+      throw new MysqlStorageOperationError();
+    } finally {
+      if (connection !== undefined) this.connections.release(connection);
+    }
+  }
+
+  /**
+   * Closes this commit handle without closing sibling handles.
+   */
+  close(): void {
+    if (!this.#open) return;
+    this.#open = false;
+    this.onClose();
+  }
+
+  private async ready(): Promise<void> {
+    this.requireOpen();
+    this.#schemaReady ??= (async () => {
+      let connection: PoolConnection | undefined;
+      try {
+        connection = await this.connections.acquire();
+        for (const sql of tables) await connection.query(sql);
+        await this.verifySchema(connection);
+      } finally {
+        if (connection !== undefined) this.connections.release(connection);
+      }
+    })();
+    await this.#schemaReady;
+  }
+
+  private async receiptMatches<I, S extends Message>(
+    input: EntityCommitInput<I, S>,
+    digest: Uint8Array,
+  ): Promise<boolean> {
+    let connection: PoolConnection | undefined;
+    try {
+      connection = await this.connections.acquire();
+      const receipt = await MysqlCommitValues.readReceipt(
+        connection,
+        EntityValues.scope(input.entity),
+        EntityValues.key(input.entity, input.entityId),
+        CanonicalMysqlValues.encode(input.id, idBytes),
+        false,
+      );
+      return receipt !== undefined && EntityValues.same(receipt, digest);
+    } catch {
+      return false;
+    } finally {
+      if (connection !== undefined) this.connections.release(connection);
+    }
+  }
+
+  private requireCompatible<I, S extends Message>(input: EntityCommitInput<I, S>): void {
+    this.requireOpen();
+    if (
+      input.context.name !== this.input.context.name ||
+      input.context.multitenant !== this.input.context.multitenant ||
+      input.context.tenantId !== this.input.context.tenantId ||
+      input.entity.storageKey !== this.input.storageKey
+    ) {
+      throw new Error("Entity commit handle cannot commit another Entity storage scope.");
+    }
+  }
+
+  private preflight<I, S extends Message>(input: EntityCommitInput<I, S>): void {
+    if (input.id.trim() === "") throw new Error("Entity commit requires a non-blank ID.");
+    EntityInputs.signed64(input.next.version, "Current record version");
+    const eventIds = (input.events ?? []).map((event) => event.id?.value);
+    if (eventIds.some((id) => id === undefined || id.trim() === "")) {
+      throw new Error("Entity commit requires delivery events with non-empty IDs.");
+    }
+    if (new Set(eventIds).size !== eventIds.length) {
+      throw new Error("Entity commit requires unique delivery-event IDs.");
+    }
+  }
+
+  private requireOpen(): void {
+    if (!this.#open) throw new Error("Entity commit storage is closed.");
+  }
+}
 interface EntityTruncateDescriptor {
   readonly highWaterSql: string;
   readonly chunkSql: string;
@@ -976,6 +1162,9 @@ interface EventRetryRow extends EventRow {
 interface SpecRow extends RowDataPacket {
   fingerprint: Uint8Array;
 }
+interface CommitRow extends RowDataPacket {
+  digest: Uint8Array;
+}
 interface KeyRow extends RowDataPacket {
   entity_key: Uint8Array;
   event_key: Uint8Array;
@@ -1023,6 +1212,217 @@ const EntityValues = Object.freeze({
     }
   },
 });
+const MysqlCommitValues = Object.freeze({
+  digest<I, S extends Message>(input: EntityCommitInput<I, S>): Uint8Array {
+    const record = (value: EntityRecord<I, S> | undefined) =>
+      value === undefined
+        ? undefined
+        : {
+            state: [...toBinary(input.entity.stateSchema, value.state)],
+            version: value.version.toString(),
+            archived: value.archived,
+            deleted: value.deleted,
+          };
+    return new Uint8Array(
+      createHash("sha256")
+        .update(
+          JSON.stringify({
+            context: input.context,
+            id: input.id,
+            entityId: input.entity.id.key(input.entityId),
+            expected: record(input.expected),
+            next: record(input.next),
+            states: (input.states ?? []).map((row) => ({
+              entityId: input.entity.id.key(row.entityId),
+              state: [...toBinary(input.entity.stateSchema, row.state)],
+              version: row.version.toString(),
+              createdAt: [row.createdAt.seconds.toString(), row.createdAt.nanos],
+            })),
+            diagnostics: (input.diagnostics ?? []).map((row) => ({
+              entityId: input.entity.id.key(row.entityId),
+              event: [...toBinary(EventSchema, row.event)],
+              producerVersion: row.producerVersion.toString(),
+              createdAt: [row.createdAt.seconds.toString(), row.createdAt.nanos],
+            })),
+            events: (input.events ?? []).map((event) => [...toBinary(EventSchema, event)]),
+          }),
+        )
+        .digest(),
+    );
+  },
+
+  async readCurrent<I, S extends Message>(
+    connection: PoolConnection,
+    input: EntityCommitInput<I, S>,
+    scope: Uint8Array,
+    entity: Uint8Array,
+  ): Promise<EntityRecord<I, S> | undefined> {
+    const [rows] = await connection.execute<CurrentRow[]>(
+      `SELECT payload,version,archived,deleted FROM spine_ts_entity_current
+       WHERE scope_key=? AND entity_key=? FOR UPDATE`,
+      [scope, entity],
+    );
+    const row = rows[0];
+    return row === undefined
+      ? undefined
+      : {
+          id: input.entity.id.clone(input.entityId),
+          state: EntityValues.decode(input.entity.stateSchema, row.payload),
+          version: BigInt(row.version),
+          archived: Boolean(row.archived),
+          deleted: Boolean(row.deleted),
+        };
+  },
+
+  async readReceipt(
+    connection: PoolConnection,
+    scope: Uint8Array,
+    entity: Uint8Array,
+    commitKey: Uint8Array,
+    lock = true,
+  ): Promise<Uint8Array | undefined> {
+    const [rows] = await connection.execute<CommitRow[]>(
+      `SELECT digest FROM spine_ts_entity_commits
+       WHERE scope_key=? AND entity_key=? AND commit_key=?${lock ? " FOR UPDATE" : ""}`,
+      [scope, entity, commitKey],
+    );
+    return rows[0]?.digest;
+  },
+
+  sameCurrent<I, S extends Message>(
+    actual: EntityRecord<I, S> | undefined,
+    expected: EntityRecord<I, S> | undefined,
+    schema: GenMessage<S>,
+  ): boolean {
+    if (actual === undefined || expected === undefined) return actual === expected;
+    return (
+      actual.version === expected.version &&
+      actual.archived === expected.archived &&
+      actual.deleted === expected.deleted &&
+      EntityValues.same(toBinary(schema, actual.state), toBinary(schema, expected.state))
+    );
+  },
+
+  async writeCurrent<I, S extends Message>(
+    connection: PoolConnection,
+    input: EntityCommitInput<I, S>,
+    scope: Uint8Array,
+    entity: Uint8Array,
+  ): Promise<void> {
+    await connection.execute(
+      `INSERT INTO spine_ts_entity_current
+         (scope_key,entity_key,payload,version,archived,deleted) VALUES (?,?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE payload=VALUES(payload),version=VALUES(version),
+         archived=VALUES(archived),deleted=VALUES(deleted)`,
+      [
+        scope,
+        entity,
+        toBinary(input.entity.stateSchema, input.next.state),
+        input.next.version,
+        input.next.archived,
+        input.next.deleted,
+      ],
+    );
+  },
+
+  async writeStates<I, S extends Message>(
+    connection: PoolConnection,
+    input: EntityCommitInput<I, S>,
+    scope: Uint8Array,
+  ): Promise<void> {
+    for (const row of input.states ?? []) {
+      EntityInputs.signed64(row.version, "State-history version");
+      EntityInputs.timestamp(row.createdAt);
+      await connection.execute(
+        `INSERT INTO spine_ts_entity_states
+           (scope_key,entity_key,version,seconds,nanos,payload) VALUES (?,?,?,?,?,?)`,
+        [
+          scope,
+          EntityValues.key(input.entity, row.entityId),
+          row.version,
+          row.createdAt.seconds,
+          row.createdAt.nanos,
+          toBinary(input.entity.stateSchema, row.state),
+        ],
+      );
+    }
+  },
+
+  async writeDiagnostics<I, S extends Message>(
+    connection: PoolConnection,
+    input: EntityCommitInput<I, S>,
+    scope: Uint8Array,
+  ): Promise<void> {
+    for (const row of input.diagnostics ?? []) {
+      const id = row.event.id?.value;
+      if (id === undefined || id.trim() === "")
+        throw new Error("Event history requires an event ID.");
+      EntityInputs.signed64(row.producerVersion, "Event-history producer version");
+      EntityInputs.timestamp(row.createdAt);
+      await connection.execute(
+        `INSERT INTO spine_ts_entity_events
+           (scope_key,event_key,entity_key,producer_version,seconds,nanos,payload)
+         VALUES (?,?,?,?,?,?,?)`,
+        [
+          scope,
+          new TextEncoder().encode(id),
+          EntityValues.key(input.entity, row.entityId),
+          row.producerVersion,
+          row.createdAt.seconds,
+          row.createdAt.nanos,
+          toBinary(EventSchema, row.event),
+        ],
+      );
+    }
+  },
+
+  async writeDelivery<I, S extends Message>(
+    connection: PoolConnection,
+    input: EntityCommitInput<I, S>,
+  ): Promise<void> {
+    const scope = CanonicalMysqlValues.encode(
+      [input.context.name, input.context.multitenant, "spine.core.Event:event-store"],
+      recordScopeBytes,
+    );
+    const tenant = CanonicalMysqlValues.encode(
+      input.context.multitenant ? input.context.tenantId : null,
+      tenantBytes,
+    );
+    for (const event of input.events ?? []) {
+      const id = event.id?.value;
+      if (id === undefined) throw new Error("Entity commit requires delivery event IDs.");
+      const slot = CanonicalMysqlValues.encode(
+        create(EventIdSchema, { value: id }),
+        recordSlotBytes,
+      );
+      await connection.execute(
+        `INSERT INTO spine_ts_records (scope_key,tenant_key,slot_key,payload) VALUES (?,?,?,?)`,
+        [scope, tenant, slot, toBinary(EventSchema, event)],
+      );
+      const values = [
+        ["timestamp", event.context?.timestamp?.seconds ?? 0n],
+        ["typeUrl", event.message?.typeUrl],
+      ] as const;
+      for (const [name, value] of values) {
+        const encoded = SortableMysqlColumnValue.encode(value);
+        await connection.execute(
+          `INSERT INTO spine_ts_columns
+             (scope_key,tenant_key,slot_key,column_name,value_kind,value_data)
+           VALUES (?,?,?,?,?,?)`,
+          [
+            scope,
+            tenant,
+            slot,
+            CanonicalMysqlValues.encode(name, columnBytes),
+            encoded.kind,
+            encoded.data,
+          ],
+        );
+      }
+    }
+  },
+});
+
 const EntityInputs = Object.freeze({
   depth(depth: number): void {
     if (!Number.isSafeInteger(depth) || depth <= 0)
