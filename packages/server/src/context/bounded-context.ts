@@ -1025,6 +1025,7 @@ export class BoundedContext {
         storage.close();
       }, errors);
     }
+    ContextParts.clearContextMetadata(this);
 
     if (errors.length > 0) {
       throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
@@ -2186,13 +2187,18 @@ const ContextParts = Object.freeze({
   },
 
   cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {
+    ContextParts.clearContextMetadata(context);
+    tenantIndex.close();
+  },
+
+  clearContextMetadata(context: BoundedContext): void {
     contextSystemPairings.delete(context);
     contextTenantIndexes.delete(context);
     contextStorageFactories.delete(context);
     contextDeliveryDescriptors.delete(context);
+    contextSubscriptionRuntimes.delete(context);
     eventSubscribers.delete(context);
     systemEventPosters.delete(context);
-    tenantIndex.close();
   },
 
   createDeliveryDescriptor(

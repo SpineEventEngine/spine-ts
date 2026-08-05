@@ -8,7 +8,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import type { Any } from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -61,6 +61,7 @@ import { serverEnvironmentAccess } from "../../src/server/server-environment.js"
 import { ServerEnvironment } from "../../src/server/server-environment.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Stand } from "../../src/stand/stand.js";
+import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 interface InternalSystemPairing {
@@ -1928,6 +1929,134 @@ describe("BoundedContext assembly", () => {
     }
   });
 
+  it("drains accepted domain work through the System bus before terminal cleanup", async () => {
+    const order: string[] = [];
+    const domainHandleFailure = new Error("domain Stand close failed");
+    const systemHandleFailure = new Error("System Stand close failed");
+    const registryFailure = new Error("registry close failed");
+    const storageFactory = new OrderedStorageFactory(order);
+    const registry = new OrderedFailingRegistry(order, registryFailure);
+    let releaseCommand: (() => void) | undefined;
+    const commandReleased = new Promise<void>((resolve) => {
+      releaseCommand = resolve;
+    });
+    let context: BoundedContext | undefined;
+    const systemDispatcher = createEventDispatcher([EntityLog.EntityStateChangedSchema], () => {
+      order.push("system event dispatched");
+    });
+    const commandDispatcher = createCommandDispatcher([ProjectionStateSchema], async () => {
+      order.push("domain command accepted");
+      await commandReleased;
+      await (
+        boundedContextAccess as unknown as {
+          postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
+        }
+      ).postSystemEvent(
+        context as BoundedContext,
+        create(EventSchema, {
+          id: { value: "terminal-system-event" },
+          message: AnyMessages.pack(
+            EntityLog.EntityStateChangedSchema,
+            create(EntityLog.EntityStateChangedSchema, {
+              entity: {
+                id: AnyMessages.pack(
+                  StringValueSchema,
+                  create(StringValueSchema, { value: "task-1" }),
+                ),
+                typeUrl: TypeUrls.derive(ProjectionStateSchema),
+              },
+              newState: AnyMessages.pack(
+                ProjectionStateSchema,
+                create(ProjectionStateSchema, { id: "task-1", name: "Closed", priority: 1 }),
+              ),
+              signalId: [
+                {
+                  id: AnyMessages.pack(
+                    StringValueSchema,
+                    create(StringValueSchema, { value: "terminal-command" }),
+                  ),
+                  typeUrl: TypeUrls.derive(StringValueSchema),
+                },
+              ],
+            }),
+          ),
+        }),
+      );
+      order.push("domain command finished");
+    });
+    const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(async function () {
+      const role = order.includes("domain Stand close") ? "System" : "domain";
+      order.push(`${role} Stand close`);
+      throw role === "domain" ? domainHandleFailure : systemHandleFailure;
+    });
+    context = BoundedContext.multitenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .withSubscriptionRegistry(registry)
+      .addCommandDispatcher(commandDispatcher)
+      .addEventDispatcher(systemDispatcher)
+      .build();
+
+    try {
+      const command = context.commandBus().post(createProjectionCommand("terminal-command"));
+      await vi.waitFor(() => expect(order).toEqual(["domain command accepted"]));
+      const firstClose = context.close();
+      const secondClose = context.close();
+      expect(secondClose).toBe(firstClose);
+      releaseCommand?.();
+      await expect(command).resolves.toBeUndefined();
+      const failure = await firstClose.then(
+        () => {
+          throw new Error("Expected terminal close to fail.");
+        },
+        (error: unknown) => error,
+      );
+
+      expect(order).toEqual([
+        "domain command accepted",
+        "system event dispatched",
+        "domain command finished",
+        "storage:Tasks",
+        "domain Stand close",
+        "System Stand close",
+        "registry",
+        "storage:__spine/Tasks/tenants",
+      ]);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        domainHandleFailure,
+        systemHandleFailure,
+        registryFailure,
+      ]);
+      await expect(secondClose).rejects.toBe(failure);
+      expect(registry.closeCalls).toBe(1);
+      await expect(
+        context.commandBus().post(createProjectionCommand("late-command")),
+      ).rejects.toThrow("server runtime is closed");
+      await expect(context.eventBus().post(createProjectionEvent("late-event"))).rejects.toThrow(
+        "server runtime is closed",
+      );
+      expect(() =>
+        (
+          boundedContextAccess as unknown as { systemPairing(context: BoundedContext): unknown }
+        ).systemPairing(context as BoundedContext),
+      ).toThrow("System pairing requires a built BoundedContext instance.");
+      expect(() => boundedContextAccess.tenantIndex(context as BoundedContext)).toThrow(
+        "Tenant index requires a built BoundedContext instance.",
+      );
+      expect(() => boundedContextAccess.storageFactory(context as BoundedContext)).toThrow(
+        "Storage access requires a built BoundedContext instance.",
+      );
+      expect(() => boundedContextAccess.delivery(context as BoundedContext)).toThrow(
+        "Delivery access requires a built BoundedContext instance.",
+      );
+      expect(() => boundedContextAccess.subscriptionRegistry(context as BoundedContext)).toThrow(
+        "Subscription registry access requires a built BoundedContext instance.",
+      );
+    } finally {
+      closeStand.mockRestore();
+    }
+  });
+
   it("does not expose repository, delivery, gRPC, or transport APIs on BoundedContext", () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const forbiddenMembers = [
@@ -2053,13 +2182,19 @@ class ObservingSubscriptionRegistry extends InMemorySubscriptionRegistry {
 }
 
 class OrderedFailingRegistry extends InMemorySubscriptionRegistry {
-  constructor(private readonly order: string[]) {
+  closeCalls = 0;
+
+  constructor(
+    private readonly order: string[],
+    private readonly failure = new Error("Registry close failed."),
+  ) {
     super();
   }
 
   override close(): Promise<void> {
+    this.closeCalls += 1;
     this.order.push("registry");
-    return Promise.reject(new Error("Registry close failed."));
+    return Promise.reject(this.failure);
   }
 }
 
