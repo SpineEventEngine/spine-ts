@@ -32,10 +32,10 @@ export class RoundRobinUnaryForwarder implements UnaryForwarder {
   }
 
   /**
-   * Forwards the request exactly once to its selected backend.
+   * Returns the selected backend response for one authorized request.
    *
    * @param request Supplies the authorized request.
-   * @returns Returns the selected backend response.
+   * @returns Resolves to the selected backend response.
    */
   forward(request: Parameters<UnaryForwarder["forward"]>[0]): Promise<Uint8Array> {
     const child = this.#children[this.#next];
@@ -147,11 +147,11 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
   }
 
   /**
-   * Disposes every child subscription.
+   * Returns after disposing every child subscription represented by the aggregate envelope.
    *
    * @param backend Supplies the aggregate envelope.
    * @param signal Cancels disposal.
-   * @returns Completes after all disposal attempts settle.
+   * @returns Resolves after all disposal attempts settle.
    */
   dispose(backend: BackendSubscriptionEnvelope, signal: AbortSignal): Promise<void> {
     return this.#all(backend, (child, childBackend) => child.dispose(childBackend, signal));

@@ -757,7 +757,10 @@ export interface SubscriptionGatewayOptions {
    */
   readonly fingerprint: (principal: AuthenticatedPrincipal) => string;
 
-  /** Ordered backend topology identity used to fence durable bindings. */
+  /**
+   *
+   * Identifies the ordered backend topology used to fence durable bindings.
+   */
   readonly topology?: string;
 
   /**
