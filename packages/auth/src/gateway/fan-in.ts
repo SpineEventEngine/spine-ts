@@ -50,7 +50,8 @@ export class RoundRobinUnaryForwarder implements UnaryForwarder {
 /**
  * Fans subscription lifecycle operations across 1–32 fixed backend creators.
  * Child loss produces a generic best-effort notice; consumers re-query
- * authoritative state and tolerate duplicate updates.
+ * authoritative state and tolerate duplicate updates. Unary failures are
+ * returned and never retried automatically.
  */
 export class FanInSubscriptionCreator implements SubscriptionCreator {
   readonly #children: readonly SubscriptionCreator[];
@@ -112,13 +113,18 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
         FanInValues.child(this.#children, index).dispose(backend, controller.signal),
       ),
     );
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<void>((resolve) => {
-      setTimeout(() => {
+      timeout = setTimeout(() => {
         controller.abort();
         resolve();
       }, this.#cleanupTimeoutMs);
     });
-    await Promise.race([settled.then(() => undefined), deadline]);
+    try {
+      await Promise.race([settled.then(() => undefined), deadline]);
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+    }
   }
 
   /**

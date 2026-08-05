@@ -93,6 +93,30 @@ describe("gateway fan-in collaborators", () => {
     expect(cleanupAborted).toBe(false);
   });
 
+  it("bounds non-cooperative rollback cleanup and aborts its fresh signal", async () => {
+    let aborted = false;
+    const first: SubscriptionCreator = {
+      subscribe: () =>
+        Promise.resolve({ kind: "backend-subscription-envelope", bytes: bytes("one") }),
+      activate: () => Promise.resolve(),
+      cancel: () => Promise.resolve(),
+      dispose: (_backend, signal) => {
+        signal.addEventListener("abort", () => {
+          aborted = true;
+        });
+        return new Promise<void>(() => undefined);
+      },
+    };
+    const second = creator("two", "subscribe");
+    await expect(
+      new FanInSubscriptionCreator([first, second.creator], 1_048_576, 1).subscribe(
+        { kind: "subscription-topic", bytes: bytes("topic") },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("two subscribe failed");
+    expect(aborted).toBe(true);
+  });
+
   it("caps aggregate envelopes before allocation and compensates created children", async () => {
     const first = creator("first");
     const second = creator("second");

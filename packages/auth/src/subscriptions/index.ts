@@ -221,7 +221,7 @@ export interface SubscriptionBindings {
   // prettier-ignore
 
   /**
-   * Declares exact topology persistence and equality fencing for durable fan-in bindings.
+   * Declares that a custom durable fan-in store persists and equality-fences topology identities.
    */
   readonly topologyFencing?: true;
 
@@ -233,6 +233,10 @@ export interface SubscriptionBindings {
   create(input: {
     readonly backend: BackendSubscriptionEnvelope;
     readonly principalFingerprint: string;
+
+    /**
+     * Exact ordered topology identity persisted with the binding; omitted values use `legacy`.
+     */
     readonly topology?: string;
     readonly tenant: string | undefined;
     readonly expiresAtMs: number;
@@ -247,6 +251,10 @@ export interface SubscriptionBindings {
   activate(input: {
     readonly id: string;
     readonly principalFingerprint: string;
+
+    /**
+     * Exact ordered topology identity equality-fenced before invoking the callback.
+     */
     readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
@@ -266,6 +274,10 @@ export interface SubscriptionBindings {
   cancel(input: {
     readonly id: string;
     readonly principalFingerprint: string;
+
+    /**
+     * Exact ordered topology identity equality-fenced before invoking the callback.
+     */
     readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;

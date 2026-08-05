@@ -100,7 +100,8 @@ Subscriptions are hints, never authoritative or complete. Duplicate, missing,
 and differently ordered updates are possible. A healthy-looking transport does
 not prove every update arrived. Entity resynchronization restores current
 authoritative state, **not** intermediate history. Event gaps can occur and are
-not replayed. Cross-node subscription propagation is not provided.
+not replayed. Fixed gateway fan-in is best effort and does not provide
+cluster-complete propagation.
 
 For an entity subscription, provide an `authoritativeQuery`; client-web
 evaluates it only during reconnect, verifies a byte-equivalent Topic target,
