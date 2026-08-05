@@ -1,6 +1,6 @@
 # T-0116 Review Log
 
-Status: Specialist review wave dispatched
+Status: One accepted correction batch pending
 
 ## Scope
 
@@ -12,10 +12,10 @@ for T-0116.
 
 | Concern                 | Existing role/profile   | Status                                                  |
 | ----------------------- | ----------------------- | ------------------------------------------------------- |
-| Style/maintainability   | `gpt-5.6-terra` / high  | Dispatched against `2e6af785`.                          |
+| Style/maintainability   | `gpt-5.6-terra` / high  | Three P2 findings accepted.                             |
 | Documentation           | `gpt-5.6-luna` / medium | N/A: no public prose, TSDoc, or end-user claim changed. |
-| TypeScript/API docs     | `gpt-5.6-terra` / high  | Dispatched against `2e6af785`.                          |
-| Performance/reliability | `gpt-5.6-terra` / high  | Dispatched against `2e6af785`.                          |
+| TypeScript/API docs     | `gpt-5.6-terra` / high  | One P1 and one P2 finding accepted.                     |
+| Performance/reliability | `gpt-5.6-terra` / high  | One P1 finding accepted; duplicates API P1.             |
 
 Every dispatch must state its role, expected model, and expected reasoning.
 Actual metadata or the immutable configured-profile limitation must be recorded
@@ -40,3 +40,24 @@ before accepting a result.
 - Final security review is N/A: the task changes no authentication,
   authorization, untrusted-input boundary, dependency, secret, transport, or
   deployment surface. Lifecycle correctness is owned by the reliability lane.
+
+## Accepted Finding Batch — 2026-08-05
+
+1. P1, API and reliability: lifecycle payload `when` fields and their enclosing
+   Event contexts use separate metadata instances and may carry different
+   timestamps. Construct each emitted payload and envelope from one per-event
+   metadata instance and prove equality with an advancing clock.
+2. P2, style: the lifecycle publisher mixes transition selection, five Proto
+   constructions, metadata allocation, schema registration, and best-effort
+   dispatch in one 113-line method. Separate message construction from posting.
+3. P2, style: replace repeated anonymous archived/deleted shapes with the
+   existing `EntityLifecycleFlags` type.
+4. P2, style: wrap the newly added context-owning repository test in
+   `try/finally` so failure cannot leak its runtime.
+5. P2, API docs: update stale System Stand and subscription-runtime TSDoc that
+   still claims only `EntityStateChanged` is delivered; describe lifecycle
+   removal and restoration behavior.
+
+All three reviewers reported that runtime self-introspection is unavailable;
+their immutable configured roles and explicitly dispatched model/reasoning
+match the assignments above. No finding is rejected or deferred.
