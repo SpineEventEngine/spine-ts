@@ -188,6 +188,21 @@ fields __key__`. The fixture makes no production change; repair requires the
 - The reported provider finding is resolved by the narrow `id`-order
   canonicalization: Datastore now appends `__key__` only when no explicit
   identifier order exists. The closest RED unit regression failed with two key
-  orders; it is green after the correction (32/32). Rebuilt live conformance is
+  orders; it is green after the correction (33/33). Rebuilt live conformance is
   accepted for memory, MySQL, and Datastore at 7/7 each. The real-emulator suite
   logs the Google client Filter-object recommendation warning only.
+
+## Correction Re-Review Assignments
+
+The converged correction endpoint is assigned one concern-specific re-review
+wave. Style/maintainability uses the existing `style_maintainability_reviewer`,
+explicit `gpt-5.6-terra` / `high`; documentation uses the existing immutable
+`documentation_reviewer`, `gpt-5.6-luna` / `medium`; TypeScript/API uses the
+existing `typescript_api_docs_reviewer`, explicit `gpt-5.6-terra` / `high`;
+performance/reliability uses the existing
+`performance_reliability_reviewer`, explicit `gpt-5.6-terra` / `high`.
+Security remains N/A because the correction exposes no new trust boundary,
+credential handling, or authorization behavior. The Desktop surface supports
+these explicit dispatches. Runtime self-introspection may remain unavailable;
+acceptance will record the immutable role/profile plus any visible metadata and
+will reject only an omitted/wrong dispatch or visible mismatch.
