@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const compose = join(root, "deploy", "compose.yaml");
+const reference = join(root, "REFERENCE.md");
+const readme = join(root, "README.md");
 
 test("declares one Gateway, two identical applications, shared storage, and simple delivery", () => {
   assert.equal(existsSync(compose), true, "the distributed Compose topology must exist");
@@ -17,4 +19,23 @@ test("declares one Gateway, two identical applications, shared storage, and simp
   assert.match(source, /spine-ts\/simple-delivery-server:local/u);
   assert.match(source, /DATASTORE_EMULATOR_HOST: datastore:8081/u);
   assert.match(source, /BACKEND_URLS: http:\/\/application-1:8080,http:\/\/application-2:8080/u);
+  assert.match(source, /condition: service_healthy/u);
+});
+
+test("creates a local development signing key instead of referring to an absent fixture", () => {
+  const source = readFileSync(readme, "utf8");
+
+  assert.match(source, /openssl ecparam -name prime256v1 -genkey/u);
+  assert.match(source, /fixture-private-key\.pem/u);
+  assert.doesNotMatch(source, /BEGIN PRIVATE KEY/u);
+});
+
+test("documents the reuse boundary and finite operator lifecycle", () => {
+  assert.equal(existsSync(reference), true, "the distributed example reference must exist");
+  const source = readFileSync(reference, "utf8");
+
+  assert.match(source, /examples\/message-board\/model/u);
+  assert.match(source, /examples\/message-board\/app/u);
+  assert.match(source, /examples\/message-board\/web/u);
+  assert.match(source, /docker compose --file deploy\/compose\.yaml down/u);
 });

@@ -13,6 +13,11 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8484
+    healthcheck:
+      test: [CMD-SHELL, "node -e \"const client=require('node:http2').connect('http://127.0.0.1:8484');client.on('connect',()=>{client.close();process.exit(0)});client.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),1000)\""]
+      interval: 2s
+      timeout: 2s
+      retries: 30
 
   application-1: &application
     image: spine-ts/message-board:local
@@ -29,7 +34,11 @@ services:
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
       MESSAGE_BOARD_SESSION_KEY_ID: distributed-fixture
       MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set a P-256 PKCS8 PEM.}
-    depends_on: [datastore, delivery]
+    depends_on:
+      datastore:
+        condition: service_healthy
+      delivery:
+        condition: service_healthy
 
   application-2:
     <<: *application
@@ -53,4 +62,12 @@ services:
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
       MESSAGE_BOARD_SESSION_KEY_ID: distributed-fixture
       MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set a P-256 PKCS8 PEM.}
-    depends_on: [datastore, delivery, application-1, application-2]
+    depends_on:
+      datastore:
+        condition: service_healthy
+      delivery:
+        condition: service_healthy
+      application-1:
+        condition: service_started
+      application-2:
+        condition: service_started

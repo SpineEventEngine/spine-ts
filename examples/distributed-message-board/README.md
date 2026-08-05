@@ -7,10 +7,12 @@ code: use the packages under `../message-board/` for both.
 ## Start
 
 Build the local images once from the repository root, then start all topology
-processes with one command:
+processes with one command. Generate a local development key first; do not
+commit it:
 
 ```bash
 pnpm images:build:local
+openssl ecparam -name prime256v1 -genkey -noout -out fixture-private-key.pem
 MESSAGE_BOARD_SESSION_PRIVATE_KEY="$(cat fixture-private-key.pem)" \\
   pnpm --dir examples/distributed-message-board start
 ```
@@ -37,4 +39,5 @@ and subscription notices are best effort, so the UI always re-queries through
 the single Gateway after a notice or reconnect.
 
 See the reused [Message Board model and app](../message-board/README.md) for
-the domain and UI implementation.
+the domain and UI implementation, or the [operator reference](REFERENCE.md)
+for this topology's exact lifecycle and limits.
