@@ -1209,6 +1209,24 @@ class RoutingProcessManager extends ProcessManager<
   }
 }
 
+class TombstoneResetProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  reactTask(event: ProjectionState): void {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: event.id,
+          queue: `${this.state.queue}|${event.name}`,
+        }),
+      ),
+    );
+  }
+}
+
 class InboxCheckingProcessManager extends ProcessManager<
   string,
   typeof ProcessManagerStateSchema,
@@ -4654,6 +4672,23 @@ describe("repository signal routing", () => {
     expect(dispatched).toEqual([]);
   });
 
+  it("starts a process manager from default state after its Stand row is cleared", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createTombstoneResetProcessManagerRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("pm-tombstone-original", "pm-tombstone"));
+    await context.stand().clear(ProcessManagerStateSchema);
+    await context.eventBus().post(createProjectionEvent("pm-tombstone-rebuilt", "pm-tombstone"));
+
+    await expect(context.stand().read(ProcessManagerStateSchema, "pm-tombstone")).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-tombstone",
+        queue: "|Task",
+      }),
+    );
+  });
+
   it("publishes a committed aggregate state change after durable persistence", async () => {
     const changes: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
@@ -6995,6 +7030,21 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
 
   return new Repository({
     entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createTombstoneResetProcessManagerRepository(): Repository<
+  typeof TombstoneResetProcessManager
+> {
+  const handlers = EntityHandlers.define(
+    TombstoneResetProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+  return new Repository({
+    entityType: TombstoneResetProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
   });

@@ -2042,7 +2042,7 @@ class ProjectionEventExecution {
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored?.state ?? this.#defaultState(entityId),
+      state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
     });
     const storageInput = RepositoryStorage.entityStorageInput(
@@ -2120,7 +2120,7 @@ class ProcessManagerExecutionSupport {
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored?.state ?? this.#defaultState(entityId),
+      state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
     });
     const storageInput = RepositoryStorage.entityStorageInput(
