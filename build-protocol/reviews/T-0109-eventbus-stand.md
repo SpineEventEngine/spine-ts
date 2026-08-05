@@ -1,6 +1,6 @@
 # T-0109 Review Record
 
-Status: Affected-lane re-review pending
+Status: Final correction batch in progress
 
 ## Classification And Scope
 
@@ -99,3 +99,38 @@ Accepted findings, deduplicated across lanes:
   batch and receive one focused re-review. Security remains provisionally N/A:
   no trust boundary, authorization, credential, or external-input contract was
   introduced.
+
+## Focused Re-review Results
+
+- API: the public factory leak is fixed; one P2 remains for the wrong internal
+  subpath named in `packages/storage/REFERENCE.md`.
+- Documentation: server and provider claims are fixed; it confirms the same P2
+  internal-subpath error.
+- Reliability: EventBus observation, stream-consumer isolation, owner-token
+  persistence, failed-cycle cleanup, shutdown ordering, and lock-tail cleanup
+  are fixed. Two P1 groups remain: direct Stand subscriber failure still blocks
+  Projection/Process Manager post-commit work, and deterministic full-path race
+  proof is incomplete for simultaneous activation, exact-one provider outcome,
+  and native Aggregate/Projection/Process Manager subscriptions.
+- Style: consumer/lock/name fixes are clean. One P1 remains for barrier-controlled
+  delete-during-snapshot and shutdown proof. Three P2 items remain: obsolete
+  EventStore/no-op attachment code and an incomplete requirements ledger.
+
+This is the second complete review wave. The final correction batch is returned
+to the existing implementation contexts and closes through deterministic proof
+plus finding-specific reviewer confirmation; no third complete review wave is
+opened.
+
+## Final Correction Ownership
+
+- Server implementer (`gpt-5.6-terra` / `medium`, explicit retained profile)
+  owns direct-subscriber isolation for Projection and both Process Manager
+  paths; barrier-controlled activation/reconciliation/delete/shutdown tests;
+  full native Aggregate/Projection/Process Manager subscription integration;
+  obsolete server code removal; and the complete requirements ledger.
+- Storage implementer (`gpt-5.6-terra` / `medium`, explicit retained profile)
+  owns strict exact-one MySQL and Datastore competing-caller tests and the exact
+  `internal/entity-commit` reference correction.
+- Runtime self-introspection remains unavailable for both immutable implementer
+  profiles. Each owner works in a separate worktree from this endpoint and may
+  not spawn children or modify the other lane.
