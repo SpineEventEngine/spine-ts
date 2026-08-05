@@ -13,6 +13,7 @@ import type {
 
 const maximumChildren = 32;
 const envelopeVersion = 1;
+const defaultEnvelopeBytes = 1_048_576;
 
 /**
  * Forwards each accepted unary request to one fixed backend in round-robin order.
@@ -50,15 +51,22 @@ export class RoundRobinUnaryForwarder implements UnaryForwarder {
  */
 export class FanInSubscriptionCreator implements SubscriptionCreator {
   readonly #children: readonly SubscriptionCreator[];
+  readonly #maxEnvelopeBytes: number;
 
   /**
    * Creates a bounded fixed subscription fan-in.
    *
    * @param children Supplies the ordered backend creators.
    */
-  constructor(children: readonly SubscriptionCreator[]) {
+  constructor(
+    children: readonly SubscriptionCreator[],
+    maxEnvelopeBytes: number = defaultEnvelopeBytes,
+  ) {
     FanInValues.children(children);
+    if (!Number.isSafeInteger(maxEnvelopeBytes) || maxEnvelopeBytes < 2)
+      throw new RangeError("Gateway backend envelope limit must be a safe integer of at least 2.");
     this.#children = [...children];
+    this.#maxEnvelopeBytes = maxEnvelopeBytes;
   }
 
   /**
@@ -75,11 +83,14 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
     const created: BackendSubscriptionEnvelope[] = [];
     try {
       for (const child of this.#children) created.push(await child.subscribe(request, signal));
-      return { kind: "backend-subscription-envelope", bytes: FanInValues.encode(created) };
+      return {
+        kind: "backend-subscription-envelope",
+        bytes: FanInValues.encode(created, this.#maxEnvelopeBytes),
+      };
     } catch (error) {
       await Promise.allSettled(
         created.map((backend, index) =>
-          FanInValues.child(this.#children, index).dispose(backend, signal),
+          FanInValues.child(this.#children, index).dispose(backend, new AbortController().signal),
         ),
       );
       throw error;
@@ -183,9 +194,14 @@ const FanInValues = Object.freeze({
     if (children.length < 1 || children.length > maximumChildren)
       throw new RangeError("Gateway backends must contain between 1 and 32 children.");
   },
-  encode(children: readonly BackendSubscriptionEnvelope[]): Uint8Array {
+  encode(children: readonly BackendSubscriptionEnvelope[], maxBytes: number): Uint8Array {
     FanInValues.children(children);
-    const size = 2 + children.reduce((total, child) => total + 4 + child.bytes.byteLength, 0);
+    let size = 2;
+    for (const child of children) {
+      if (child.bytes.byteLength > maxBytes - size - 4)
+        throw new Error("backend-envelope-too-large");
+      size += 4 + child.bytes.byteLength;
+    }
     const bytes = new Uint8Array(size);
     const view = new DataView(bytes.buffer);
     view.setUint8(0, envelopeVersion);

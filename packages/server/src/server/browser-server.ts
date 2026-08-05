@@ -519,7 +519,11 @@ const BrowserServerValues = Object.freeze({
       : (native as RunningServer);
   },
   backendUrlsFor(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
-    return "baseUrl" in backend ? [backend.baseUrl] : backend.baseUrls;
+    const source = backend as { readonly baseUrl?: unknown; readonly baseUrls?: unknown };
+    if (typeof source.baseUrl === "string" && source.baseUrls === undefined)
+      return [source.baseUrl];
+    if (source.baseUrl === undefined && Array.isArray(source.baseUrls)) return source.baseUrls;
+    throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
   },
 });
 

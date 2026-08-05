@@ -587,6 +587,10 @@ export interface ServerOptions {
 /**
  * Configures the authenticated browser-facing Connect and gRPC-Web listener.
  */
+type BrowserBackend =
+  | { readonly baseUrl: string; readonly baseUrls?: never }
+  | { readonly baseUrl?: never; readonly baseUrls: readonly string[] };
+
 export interface BrowserServerOptions {
   // prettier-ignore
 
@@ -606,7 +610,7 @@ export interface BrowserServerOptions {
    * The URL must be one canonical HTTP(S) origin without credentials, query,
    * fragment, or a path beyond `/`.
    */
-  readonly backend?: { readonly baseUrl: string } | { readonly baseUrls: readonly string[] };
+  readonly backend?: BrowserBackend;
 
   /**
    * Application-owned, exact authentication endpoints exposed beside the fixed
@@ -1069,7 +1073,11 @@ const ServerValues = Object.freeze({
   },
 
   browserBackendUrls(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
-    return "baseUrl" in backend ? [backend.baseUrl] : backend.baseUrls;
+    const source = backend as { readonly baseUrl?: unknown; readonly baseUrls?: unknown };
+    if (typeof source.baseUrl === "string" && source.baseUrls === undefined)
+      return [source.baseUrl];
+    if (source.baseUrl === undefined && Array.isArray(source.baseUrls)) return source.baseUrls;
+    throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
   },
 
   normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {
