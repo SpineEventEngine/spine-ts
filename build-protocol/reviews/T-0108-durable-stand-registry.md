@@ -463,3 +463,11 @@ and Bounded Context storage fault/count expectations include the built-in fixed
 staging handle. They do not alter reviewed production behavior or reopen a
 specialist concern. The corrected preflight passed six files / 273 tests and all
 mandatory deterministic repository gates recorded in the work log.
+
+The failed release profile exposed four additional deterministic contract
+locks outside the original focused paths: descriptor generation field, root
+runtime export snapshot, delegated CAS capability in a repository test wrapper,
+and a syntactically incomplete documentation excerpt. Their exact corrections
+do not alter reviewed production behavior or reopen specialist lanes. The
+expanded post-failure preflight passed ten files / 435 tests and all mandatory
+repository gates before the required release-profile rerun.

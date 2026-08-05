@@ -79,24 +79,37 @@ boundary.
 
 `BoardMessageAggregate` owns one message ID and refuses a duplicate before it
 changes state. This is the `postMessage()` handler excerpt from
-[`BoardMessageAggregate`](app/src/index.ts); imports and the class declaration
+[`BoardMessageAggregate`](app/src/index.ts); imports and unrelated class members
 are omitted to focus on the handler. Its return value feeds the read model:
 
 ```ts
-@Assign
-postMessage(command: PostMessage): MessagePosted {
-  if (this.state.board !== undefined) throw MessageAlreadyPosted.create({ id: this.id });
-  const id = clone(MessageIdSchema, this.id);
-  this.update((draft) =>
-    Object.assign(draft, create(BoardMessageSchema, {
-      id, board: command.board, author: command.author, username: command.username,
-      text: command.text, postedAt: command.postedAt,
-    })),
-  );
-  return create(MessagePostedSchema, {
-    id, board: command.board, author: command.author, username: command.username,
-    text: command.text, postedAt: command.postedAt,
-  });
+class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSchema> {
+  @Assign
+  postMessage(command: PostMessage): MessagePosted {
+    if (this.state.board !== undefined) throw MessageAlreadyPosted.create({ id: this.id });
+    const id = clone(MessageIdSchema, this.id);
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(BoardMessageSchema, {
+          id,
+          board: command.board,
+          author: command.author,
+          username: command.username,
+          text: command.text,
+          postedAt: command.postedAt,
+        }),
+      ),
+    );
+    return create(MessagePostedSchema, {
+      id,
+      board: command.board,
+      author: command.author,
+      username: command.username,
+      text: command.text,
+      postedAt: command.postedAt,
+    });
+  }
 }
 ```
 

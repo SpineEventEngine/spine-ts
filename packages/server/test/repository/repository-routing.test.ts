@@ -7744,6 +7744,8 @@ class ObservingStorageFactory extends InMemoryStorageFactory {
 }
 
 class ObservingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  override readonly atomicCompareAndSet = true;
+
   constructor(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
