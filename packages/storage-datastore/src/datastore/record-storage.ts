@@ -514,7 +514,7 @@ const DatastoreQueryPushdown = Object.freeze(
           descending: order.direction === "desc",
         });
       }
-      query.order("__key__");
+      if (!(recordQuery.sort ?? []).some((order) => order.field === "id")) query.order("__key__");
     }
 
     /**

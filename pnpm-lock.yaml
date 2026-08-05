@@ -482,6 +482,12 @@ importers:
       '@connectrpc/connect-web':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@spine-event-engine/storage-datastore':
+        specifier: 2.0.0-snapshot.1
+        version: link:../storage-datastore
+      '@spine-event-engine/storage-rdbms':
+        specifier: 2.0.0-snapshot.1
+        version: link:../storage-rdbms
 
   packages/storage:
     dependencies:

@@ -169,3 +169,25 @@ physical deletion, revision-aware finite cleanup, context ownership, custom
 builder injection, and environment-owned production warning recorded in the
 task. No human blocker, polling/listener responsibility, provider-specific
 transaction SPI, or Gateway-registry reuse remains.
+
+## Provider-Conformance Evidence
+
+- The assigned existing `implementer` used the explicit `gpt-5.6-terra` /
+  `medium` configuration. Runtime self-introspection was unavailable; no
+  visible profile mismatch was exposed, so the immutable configured role/profile
+  is the metadata evidence.
+- The reusable public lifecycle fixture is green against `InMemoryStorageFactory`
+  and local real MySQL (6/6 each). Both assigned service health checks passed.
+- Datastore emulator conformance is not accepted: a live first-create execution
+  fails with `3 INVALID_ARGUMENT: order by clause cannot contain duplicate
+fields __key__`. The fixture makes no production change; repair requires the
+  current provider/runtime owner to investigate the duplicated Datastore order.
+  The test's globally fake-clock expiry approach is also unsuitable for gRPC
+  transport because it blocks timer progress; any accepted final fixture must
+  fake only `Date` or use another no-sleep clock seam.
+- The reported provider finding is resolved by the narrow `id`-order
+  canonicalization: Datastore now appends `__key__` only when no explicit
+  identifier order exists. The closest RED unit regression failed with two key
+  orders; it is green after the correction (32/32). Rebuilt live conformance is
+  accepted for memory, MySQL, and Datastore at 7/7 each. The real-emulator suite
+  logs the Google client Filter-object recommendation warning only.
