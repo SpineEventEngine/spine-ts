@@ -4786,8 +4786,23 @@ describe("repository signal routing", () => {
   });
 
   it("rejects aggregate, projection, and process-manager delivery on atomic commit conflicts", async () => {
+    const lifecycleEvents: SpineEvent[] = [];
     const aggregate = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
+        dispatch: (event) => {
+          lifecycleEvents.push(event);
+          return Promise.resolve();
+        },
+      })
       .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
       .build();
     const projection = BoundedContext.singleTenant("Tasks")
@@ -4823,6 +4838,7 @@ describe("repository signal routing", () => {
       await expect(
         processManager.stand().read(ProcessManagerStateSchema, "pm-conflict"),
       ).resolves.toBeUndefined();
+      expect(lifecycleEvents).toEqual([]);
     } finally {
       await Promise.all([aggregate.close(), projection.close(), processManager.close()]);
     }
