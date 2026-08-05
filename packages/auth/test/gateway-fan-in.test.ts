@@ -166,6 +166,26 @@ describe("gateway fan-in collaborators", () => {
       () => new FanInSubscriptionCreator(Array.from({ length: 33 }, () => creator("x").creator)),
     ).toThrow("between 1 and 32");
   });
+
+  it.each([0, Number.NaN, 1.5])("rejects invalid aggregate limits %s", (limit) => {
+    expect(() => new FanInSubscriptionCreator([creator("one").creator], limit)).toThrow();
+  });
+
+  it.each([0, Number.NaN, 1.5])("rejects invalid cleanup timeouts %s", (timeout) => {
+    expect(() => new FanInSubscriptionCreator([creator("one").creator], 10, timeout)).toThrow();
+  });
+
+  it.each([new Uint8Array(), new Uint8Array([2, 1]), new Uint8Array([1, 0, 1])])(
+    "rejects malformed aggregate envelopes",
+    async (encoded) => {
+      await expect(
+        new FanInSubscriptionCreator([creator("one").creator]).dispose(
+          { kind: "backend-subscription-envelope", bytes: encoded },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow(/Invalid subscription fan-in envelope|Gateway backends/u);
+    },
+  );
 });
 
 function unary(

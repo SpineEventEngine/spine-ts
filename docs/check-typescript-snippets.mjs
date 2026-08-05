@@ -175,7 +175,7 @@ function checkBrowserGuide() {
     "A healthy-looking transport does not prove every update arrived.",
     "intermediate history.",
     "Event gaps can occur and are not replayed.",
-    "Cross-node subscription propagation is not provided.",
+    "Fixed gateway fan-in is best effort and does not provide cluster-complete propagation.",
     "protected by gateway authentication",
     "informational, not a credential",
     "Signed sessions trade local validation for delayed revocation.",
