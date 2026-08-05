@@ -68,3 +68,17 @@ recorded role with no visible fallback.
 No other style, naming, placement, frozen Proto, or trust-boundary finding was
 reported. One correction pass returns to the existing implementer; only
 substantively affected reliability/API/docs concerns require confirmation.
+
+## Correction Endpoint And Confirmation
+
+- Review corrections converge at `c538e649`. They add fresh bounded rollback,
+  pre-allocation caps, exact notice discrimination, exclusive configuration,
+  topology-fencing capability, stable Kubernetes endpoints, all requested
+  regressions, and user/agent/public documentation.
+- Fresh focused `verify:task --no-coverage` passes every deterministic gate and
+  374 tests. The style findings are deterministically closed by Gateway-validated
+  manifest/config tests and the exact-notice client regression.
+- Narrow confirmation returns only to the existing API and reliability roles
+  under explicit Terra/high and documentation under immutable Luna/medium.
+  Runtime metadata handling is unchanged; reviewers remain read-only and may not
+  spawn children.
