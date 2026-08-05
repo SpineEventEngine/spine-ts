@@ -47,7 +47,9 @@ export class RoundRobinUnaryForwarder implements UnaryForwarder {
 }
 
 /**
- * Fans subscription lifecycle operations across a fixed set of backend creators.
+ * Fans subscription lifecycle operations across 1–32 fixed backend creators.
+ * Child loss produces a generic best-effort notice; consumers re-query
+ * authoritative state and tolerate duplicate updates.
  */
 export class FanInSubscriptionCreator implements SubscriptionCreator {
   readonly #children: readonly SubscriptionCreator[];
@@ -57,6 +59,7 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
    * Creates a bounded fixed subscription fan-in.
    *
    * @param children Supplies the ordered backend creators.
+   * @param maxEnvelopeBytes Limits the aggregate private envelope bytes.
    */
   constructor(
     children: readonly SubscriptionCreator[],

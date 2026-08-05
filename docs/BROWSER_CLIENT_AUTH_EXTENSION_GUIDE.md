@@ -415,6 +415,12 @@ limits, gRPC-Web, and explicit binary Connect support. Its Activate route is a
 live stream. Copy and customize the template for hosts, certificates,
 observability, rate limits, and topology.
 
+A fixed gateway topology contains 1–32 ordered origins. Unary calls are
+round-robin without retry; subscriptions are best effort and can duplicate.
+Generic loss notices mean a possible gap and require an authoritative re-query.
+The legacy single-backend form remains supported; durable fan-in fencing rejects
+missing, reordered, or different backend topology before attachment.
+
 Use this test matrix before changing an extension:
 
 | Concern            | Exercise                                                                                                                     |

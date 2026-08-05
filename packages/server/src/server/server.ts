@@ -591,6 +591,9 @@ type BrowserBackend =
   | { readonly baseUrl: string; readonly baseUrls?: never }
   | { readonly baseUrl?: never; readonly baseUrls: readonly string[] };
 
+/**
+ * Configures the authenticated browser-facing Connect and gRPC-Web listener.
+ */
 export interface BrowserServerOptions {
   // prettier-ignore
 
@@ -605,10 +608,12 @@ export interface BrowserServerOptions {
   readonly port?: number;
 
   /**
-   * Selects a separately hosted Spine backend.
+   * Selects one separately hosted Spine backend or an ordered fixed set of 1–32 backends.
    *
    * The URL must be one canonical HTTP(S) origin without credentials, query,
-   * fragment, or a path beyond `/`.
+   * fragment, or a path beyond `/`. `baseUrl` and `baseUrls` are exclusive;
+   * fan-in is best effort, so clients re-query authoritative state after a
+   * duplicate update or generic loss notice.
    */
   readonly backend?: BrowserBackend;
 

@@ -91,6 +91,22 @@ describe("Server", () => {
     expect(() => BrowserServer.backendUrls(baseUrls)).toThrow(error);
   });
 
+  it.each([
+    [{ baseUrl: "https://backend.example.test", baseUrls: ["https://other.example.test"] }],
+    [{}],
+  ])("rejects standalone backend configuration with both or neither URL form", (backend) => {
+    expect(() =>
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend,
+          bindings: inMemoryBindings(),
+        } as unknown as BrowserServerOptions,
+        false,
+      ),
+    ).toThrow("exactly one of baseUrl or baseUrls");
+  });
+
   it("rejects production browser bindings before context assembly or listener startup", async () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({
