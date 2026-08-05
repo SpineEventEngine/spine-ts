@@ -199,6 +199,10 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       message: create(AnySchema, { typeUrl: "type.spine.test/AtomicEvent" }),
     });
     await eventStore.append(duplicate);
+    const firstState = unit.states[0];
+    if (firstState === undefined) {
+      throw new Error("Expected the atomic commit fixture to contain state history.");
+    }
     await expect(
       commits.commit({
         ...unit,
@@ -211,7 +215,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         },
         states: [
           {
-            ...unit.states[0],
+            ...firstState,
             entityId: "rollback",
             state: create(StringValueSchema, { value: "rolled-back" }),
           },

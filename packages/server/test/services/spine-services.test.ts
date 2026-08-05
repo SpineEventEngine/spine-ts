@@ -2205,10 +2205,9 @@ describe("SpineServices", () => {
       const iterator = second.activate(subscription)[Symbol.asyncIterator]();
       const pending = iterator.next();
       await delay(25);
-      await secondContext.stand().update(
-        ProjectionStateSchema,
-        createState("task-shared", "Shared"),
-      );
+      await secondContext
+        .stand()
+        .update(ProjectionStateSchema, createState("task-shared", "Shared"));
 
       const delivery = await withTimeout(pending, "cross-service subscription update");
       expect(delivery.done).toBe(false);
@@ -2960,15 +2959,14 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
-  it("coerces non-positive subscription service options", () => {
+  it("coerces a non-positive subscription queue limit", () => {
     const handlers = registeredSubscriptionHandlers(
       createFakeContext({ stateTypes: [TypeUrls.derive(ProjectionStateSchema)] }),
-      { inactiveTtlMs: 0, queueLimit: 0 },
+      { queueLimit: 0 },
     );
 
     expect(() => handlers.subscribe(createTopic())).not.toThrow();
   });
-
 
   it("keeps missing subscription IDs inert", async () => {
     const handlers = registeredSubscriptionHandlers(
@@ -3424,7 +3422,6 @@ describe("SpineServices", () => {
     }
   });
 
-
   it("releases subscription delivery when the activation iterator closes", async () => {
     const activeStandSubscriptions: string[] = [];
     let deliverUpdate:
@@ -3551,7 +3548,6 @@ describe("SpineServices", () => {
     expect(secondActivation.done).toBe(true);
     expect(subscribeCalls).toBe(1);
   });
-
 
   it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
     const unsubscribeCounts: number[] = [];
@@ -3730,7 +3726,6 @@ describe("SpineServices", () => {
     expect(seventhId).toBeUndefined();
     await iterator.return?.();
   });
-
 
   it("closes slow subscription consumers when the update queue limit is exceeded", async () => {
     let deliverUpdate:

@@ -4522,6 +4522,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           changes.push(event);
+          return Promise.resolve();
         },
       })
       .withStorageFactory(factory)
@@ -4546,6 +4547,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [AggregateStateSchema, EntityStateChangedSchema],
         dispatch: (event) => {
           dispatched.push(event);
+          return Promise.resolve();
         },
       })
       .withStorageFactory(factory)
@@ -4568,6 +4570,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           changes.push(event);
+          return Promise.resolve();
         },
       })
       .build();
@@ -4581,14 +4584,21 @@ describe("repository signal routing", () => {
         message: { typeUrl: TypeUrls.derive(EntityStateChangedSchema) },
         context: { origin: { case: "pastMessage" } },
       });
-      const change = AnyMessages.unpack(changes[0]?.message, EntityStateChangedSchema);
+      const event = changes[0];
+      if (event?.message === undefined) {
+        throw new Error("Expected the committed state change event.");
+      }
+      const change = AnyMessages.unpack(event.message, EntityStateChangedSchema);
       expect(change).toMatchObject({
         entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
         signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
         newState: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
         newVersion: { number: 1 },
       });
-      expect(AnyMessages.unpack(change?.newState, AggregateStateSchema)).toMatchObject({
+      if (change?.newState === undefined) {
+        throw new Error("Expected the committed state in the change event.");
+      }
+      expect(AnyMessages.unpack(change.newState, AggregateStateSchema)).toMatchObject({
         id: "changed",
         name: "Task (applied)",
       });
@@ -4608,6 +4618,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           aggregateChanges.push(event);
+          return Promise.resolve();
         },
       })
       .build();
@@ -4631,6 +4642,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           projectionChanges.push(event);
+          return Promise.resolve();
         },
       })
       .build();
@@ -4653,6 +4665,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           pmChanges.push(event);
+          return Promise.resolve();
         },
       })
       .build();
@@ -4674,6 +4687,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           pmEventChanges.push(event);
+          return Promise.resolve();
         },
       })
       .build();
@@ -4697,6 +4711,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           changes.push(event);
+          return Promise.resolve();
         },
       })
       .build();
@@ -4717,6 +4732,7 @@ describe("repository signal routing", () => {
         messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           changes.push(event);
+          return Promise.resolve();
         },
       })
       .build();
@@ -7221,7 +7237,10 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
 }
 
 function readStateChange(event: SpineEvent | undefined) {
-  return AnyMessages.unpack(event?.message, EntityStateChangedSchema);
+  if (event?.message === undefined) {
+    throw new Error("Expected an Entity state change event.");
+  }
+  return AnyMessages.unpack(event.message, EntityStateChangedSchema);
 }
 
 function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
