@@ -65,6 +65,7 @@ import {
   EntityRestoredSchema,
   EntityStateChangedSchema,
   EntityUnarchivedSchema,
+  EventDispatchedToSubscriberSchema,
 } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
@@ -4842,6 +4843,178 @@ describe("repository signal routing", () => {
       },
       version: { number: 1 },
     });
+  });
+
+  it("emits a System subscriber-dispatch diagnostic after projection admission", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent("subscriber-diagnostic", "subscriber-id");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(event);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      const diagnostic = AnyMessages.unpack(
+        diagnostics[0]?.message as never,
+        EventDispatchedToSubscriberSchema,
+      );
+      expect(diagnostic).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+        payload: event,
+        entityType: { impl: { case: "javaClassName", value: "ExecutingTaskProjection" } },
+        whenDispatched: diagnostics[0]?.context?.timestamp,
+      });
+      expect(diagnostics[0]?.context?.origin).toMatchObject({
+        case: "pastMessage",
+        value: { message: { typeUrl: TypeUrls.derive(ProjectionStateSchema) } },
+      });
+      expect(context.eventBus().acceptedEventTypes()).not.toContain(
+        TypeUrls.derive(EventDispatchedToSubscriberSchema),
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("keeps subscriber diagnostics tenant-scoped and emits them for catch-up replay", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(
+        createProjectionEvent("subscriber-tenant", "subscriber-id", {
+          pastMessageTenantId: "tenant-a",
+        }),
+      );
+      await waitForCondition(() => diagnostics.length === 1);
+      expect(diagnosticTenants(diagnostics)).toEqual(["tenant-a"]);
+
+      diagnostics.splice(0);
+      ExecutingTaskProjection.reset();
+      await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).resolves.toMatchObject({
+        replayedEventCount: 1,
+      });
+      await waitForCondition(() => diagnostics.length === 1);
+      expect(diagnosticTenants(diagnostics)).toEqual(["tenant-a"]);
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not emit subscriber diagnostics before projection subscriber admission", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "subscriber-unmatched" }),
+          context: create(EventContextSchema),
+          schema: NumberRouteEventSchema,
+          message: create(NumberRouteEventSchema, { id: 7 }),
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not emit subscriber diagnostics when event routing refuses before invocation", async () => {
+    ExecutingTaskProjection.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRoutingRepository())
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(
+          createProjectionEvent("subscriber-routing-refusal", "first-field-task", {
+            producerId: "producer-task",
+          }),
+        ),
+      ).rejects.toThrow(/same entity/i);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(diagnostics).toEqual([]);
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("isolates subscriber diagnostic publication failure from projection work", async () => {
+    ExecutingTaskProjection.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.reject(new Error("subscriber diagnostic dispatch failed"));
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(createProjectionEvent("subscriber-failure", "subscriber-failure")),
+      ).resolves.toBeUndefined();
+      await waitForFailures(context, 1);
+
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+      await expect(
+        context.stand().read(ProjectionStateSchema, "subscriber-failure"),
+      ).resolves.toMatchObject({
+        name: "Task (projected)",
+      });
+      expect(diagnostics).toHaveLength(1);
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { error: { message: "subscriber diagnostic dispatch failed" } },
+      ]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("does not expose projection state when its atomic commit fails", async () => {

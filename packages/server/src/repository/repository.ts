@@ -1396,7 +1396,7 @@ class AggregateCommandExecution {
     }
 
     const loaded = await this.#support.loadAggregate(route.entityId);
-    CommandDispatchPublisher.publish(
+    HandlerDispatchPublisher.command(
       this.#runtime,
       this.#repository,
       this.#command,
@@ -1909,6 +1909,7 @@ class ProjectionEventExecution {
     const mode: EntityLoadMode = this.#commitScope === undefined ? "stored" : "rebuild";
     const loaded = await this.#loadProjection(entityId, tenantOptions, mode);
 
+    HandlerDispatchPublisher.subscriber(this.#runtime, this.#repository, this.#event, entityId);
     await this.#invokeSubscribers(loaded.entity, subscribers, packedMessage);
     await this.#storeIfChanged(loaded, tenantOptions, loaded.current?.state, mode);
   }
@@ -2317,7 +2318,7 @@ class ProcessManagerCommandExecution {
       this.#command,
     );
     const loaded = await this.#support.load(route.entityId, tenantOptions);
-    CommandDispatchPublisher.publish(
+    HandlerDispatchPublisher.command(
       this.#runtime,
       this.#repository,
       this.#command,
@@ -3426,10 +3427,10 @@ class EntityStateChangePublishing {
 const EntityStateChangePublisher = Object.freeze(new EntityStateChangePublishing());
 
 /**
- * Builds and best-effort dispatches accepted command-handler diagnostics.
+ * Builds and best-effort dispatches accepted handler diagnostics.
  */
-class CommandDispatchPublishing {
-  publish(
+class HandlerDispatchPublishing {
+  command(
     runtime: RepositoryRuntime,
     repository: RepositoryView,
     command: Command,
@@ -3450,6 +3451,33 @@ class CommandDispatchPublishing {
       runtime.registerSystemEventSchema(EntityLog.CommandDispatchedToHandlerSchema);
       void runtime.postSystemFollowUp(event).catch((error: unknown) => {
         runtime.recordDispatchFailure(event, error);
+      });
+    } catch (error) {
+      runtime.recordDispatchFailure(create(EventSchema), error);
+    }
+  }
+
+  subscriber(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    event: Event,
+    entityId: unknown,
+  ): void {
+    try {
+      const context = runtime.signalMetadata.eventContext({
+        origin: runtime.signalMetadata.originFromEvent(event),
+      });
+      const diagnostic = create(EventSchema, {
+        id: runtime.signalMetadata.eventId(),
+        message: AnyMessages.pack(
+          EntityLog.EventDispatchedToSubscriberSchema,
+          this.#eventMessage(repository, event, entityId, context.timestamp),
+        ),
+        context,
+      });
+      runtime.registerSystemEventSchema(EntityLog.EventDispatchedToSubscriberSchema);
+      void runtime.postSystemFollowUp(diagnostic).catch((error: unknown) => {
+        runtime.recordDispatchFailure(diagnostic, error);
       });
     } catch (error) {
       runtime.recordDispatchFailure(create(EventSchema), error);
@@ -3481,9 +3509,28 @@ class CommandDispatchPublishing {
       ? AnyMessages.pack(field.message as MessageSchema, entityId as never)
       : PrimitiveIds.pack(entityId as never);
   }
+
+  #eventMessage(
+    repository: RepositoryView,
+    event: Event,
+    entityId: unknown,
+    whenDispatched: Timestamp | undefined,
+  ): EntityLog.EventDispatchedToSubscriber {
+    return create(EntityLog.EventDispatchedToSubscriberSchema, {
+      receiver: create(MessageIdSchema, {
+        id: this.#packEntityId(repository, entityId),
+        typeUrl: TypeUrls.derive(repository.stateSchema),
+      }),
+      payload: clone(EventSchema, event),
+      whenDispatched,
+      entityType: create(EntityTypeNameSchema, {
+        impl: { case: "javaClassName", value: repository.entityType.name },
+      }),
+    });
+  }
 }
 
-const CommandDispatchPublisher = Object.freeze(new CommandDispatchPublishing());
+const HandlerDispatchPublisher = Object.freeze(new HandlerDispatchPublishing());
 Object.freeze(RepositorySignals);
 
 /**
