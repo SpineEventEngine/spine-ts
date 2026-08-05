@@ -80,11 +80,12 @@ class GatedCleanupRegistry extends InMemorySubscriptionRegistry {
     this.#release?.();
   }
 
-  override async cleanup(): Promise<void> {
+  override async cleanup() {
     this.cleanupCalls++;
     this.#started?.();
     await new Promise<void>((resolve) => {
       this.#release = resolve;
     });
+    return await super.cleanup();
   }
 }
