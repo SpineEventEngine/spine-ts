@@ -12,7 +12,7 @@ commit it:
 
 ```bash
 pnpm images:build:local
-openssl ecparam -name prime256v1 -genkey -noout -out fixture-private-key.pem
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out fixture-private-key.pem
 MESSAGE_BOARD_SESSION_PRIVATE_KEY="$(cat fixture-private-key.pem)" \\
   pnpm --dir examples/distributed-message-board start
 ```

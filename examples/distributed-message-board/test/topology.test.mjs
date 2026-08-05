@@ -8,6 +8,7 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const compose = join(root, "deploy", "compose.yaml");
 const reference = join(root, "REFERENCE.md");
 const readme = join(root, "README.md");
+const gitignore = join(root, ".gitignore");
 
 test("declares one Gateway, two identical applications, shared storage, and simple delivery", () => {
   assert.equal(existsSync(compose), true, "the distributed Compose topology must exist");
@@ -25,9 +26,10 @@ test("declares one Gateway, two identical applications, shared storage, and simp
 test("creates a local development signing key instead of referring to an absent fixture", () => {
   const source = readFileSync(readme, "utf8");
 
-  assert.match(source, /openssl ecparam -name prime256v1 -genkey/u);
+  assert.match(source, /openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256/u);
   assert.match(source, /fixture-private-key\.pem/u);
   assert.doesNotMatch(source, /BEGIN PRIVATE KEY/u);
+  assert.match(readFileSync(gitignore, "utf8"), /^fixture-private-key\.pem$/mu);
 });
 
 test("documents the reuse boundary and finite operator lifecycle", () => {
