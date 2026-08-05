@@ -20,7 +20,12 @@ import type {
   ClientOutcome,
   ClientRequest,
 } from "@spine-event-engine/client-web";
-import type { Query } from "@spine-event-engine/proto/client";
+import {
+  EntityStateUpdateSchema,
+  EntityUpdatesSchema,
+  SubscriptionUpdateSchema,
+  type Query,
+} from "@spine-event-engine/proto/client";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -203,6 +208,58 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
     request.query.resolveAt(2, responseRows("refresh two"));
     await screen.findByText("refresh two");
+  });
+
+  it("applies valid subscription payloads locally without another board query", async () => {
+    const request = requestFixture({ initialRows: responseRows("initial") });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(stateUpdate(view("live", "general", 2n)));
+    await screen.findByText("live");
+    request.subscription.emitUpdate(removeUpdate("initial"));
+    await waitFor(() => expect(screen.queryByText("initial")).toBeNull());
+
+    expect(request.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("coalesces malformed subscription payload recovery into one board query", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+
+    expect(request.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("replaces local rows from reconnect recovery and coalesces a gap query", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(stateUpdate(view("live")));
+    await screen.findByText("live");
+
+    request.subscription.emitRecovery(responseRows("reconnected"));
+    await screen.findByText("reconnected");
+    expect(screen.queryByText("live")).toBeNull();
+    request.subscription.emitLifecycle({ state: "gapPossible", generation: 1 });
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitLifecycle({ state: "gapPossible", generation: 1 });
+
+    expect(request.send).toHaveBeenCalledTimes(2);
   });
 
   it("keeps a post-success refresh queued when an earlier hint refresh rejects", async () => {
@@ -444,10 +501,10 @@ describe("MessageBoardApp", () => {
     request.subscription.emitLifecycle({ state: "connected", generation: 2 });
     await waitFor(() => expect(info).toHaveBeenCalledTimes(3));
     request.subscription.emitUpdate();
-    await waitFor(() => expect(info).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
     const recovery = responseRows("recovered console message");
     request.subscription.emitRecovery(recovery);
-    await waitFor(() => expect(info).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(info).toHaveBeenCalledTimes(4));
     request.subscription.emitLifecycle({
       state: "failed",
       generation: 2,
@@ -475,9 +532,13 @@ describe("MessageBoardApp", () => {
       "MessageBoard live updates are connected.",
       expect.objectContaining({ generation: 2 }),
     );
-    expect(info).toHaveBeenCalledWith(
-      "MessageBoard received a server update and is refreshing the board.",
-      expect.objectContaining({ board: "general", target: expect.anything(), update: {} }),
+    expect(warn).toHaveBeenCalledWith(
+      "MessageBoard is refreshing after an unusable live update.",
+      expect.objectContaining({
+        board: "general",
+        target: expect.anything(),
+        reason: "wrong-update",
+      }),
     );
     expect(info).toHaveBeenCalledWith(
       "MessageBoard received authoritative board state after reconnecting.",
@@ -797,6 +858,38 @@ function view(
   });
 }
 
+function stateUpdate(value: ReturnType<typeof view>) {
+  return create(SubscriptionUpdateSchema, {
+    update: {
+      case: "entityUpdates",
+      value: create(EntityUpdatesSchema, {
+        update: [
+          create(EntityStateUpdateSchema, {
+            id: AnyMessages.pack(MessageIdSchema, value.id!),
+            kind: { case: "state", value: AnyMessages.pack(BoardMessageViewSchema, value) },
+          }),
+        ],
+      }),
+    },
+  });
+}
+
+function removeUpdate(id: string) {
+  return create(SubscriptionUpdateSchema, {
+    update: {
+      case: "entityUpdates",
+      value: create(EntityUpdatesSchema, {
+        update: [
+          create(EntityStateUpdateSchema, {
+            id: AnyMessages.pack(MessageIdSchema, create(MessageIdSchema, { value: id })),
+            kind: { case: "noLongerMatching", value: true },
+          }),
+        ],
+      }),
+    },
+  });
+}
+
 function subscriptionFixture() {
   const lifecycle = queue<never>();
   const updates = queue<never>();
@@ -815,8 +908,8 @@ function subscriptionFixture() {
     emitRecovery(response: ReturnType<typeof responseRows>) {
       updates.push({ kind: "resynchronization", response } as never);
     },
-    emitUpdate() {
-      updates.push({ kind: "update", update: {} } as never);
+    emitUpdate(update: unknown = create(SubscriptionUpdateSchema)) {
+      updates.push({ kind: "update", update } as never);
     },
   };
 }
