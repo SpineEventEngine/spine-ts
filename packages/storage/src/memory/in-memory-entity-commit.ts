@@ -1,4 +1,5 @@
 import { clone, toBinary, type Message } from "@bufbuild/protobuf";
+import { EventSchema } from "@spine-event-engine/proto";
 
 import { eventStoreRecordSpec } from "../event/event-store.js";
 import type { EntityRecord } from "../entity/entity-record.js";
@@ -143,13 +144,38 @@ const InMemoryCommitValues = Object.freeze({
   digest<I, S extends Message>(input: EntityCommitInput<I, S>): string {
     return JSON.stringify({
       context: input.context,
+      id: input.id,
       entityId: input.entity.id.key(input.entityId),
-      next: InMemoryCommitValues.base64(toBinary(input.entity.stateSchema, input.next.state)),
-      version: input.next.version.toString(),
-      states: (input.states ?? []).map((state) => state.version.toString()),
-      diagnostics: (input.diagnostics ?? []).map((event) => event.producerVersion.toString()),
-      events: (input.events ?? []).map((event) => event.id?.value),
+      expected: InMemoryCommitValues.record(input.expected, input.entity.stateSchema),
+      next: InMemoryCommitValues.record(input.next, input.entity.stateSchema),
+      states: (input.states ?? []).map((state) => ({
+        entityId: input.entity.id.key(state.entityId),
+        state: InMemoryCommitValues.base64(toBinary(input.entity.stateSchema, state.state)),
+        version: state.version.toString(),
+        createdAt: state.createdAt,
+      })),
+      diagnostics: (input.diagnostics ?? []).map((event) => ({
+        entityId: input.entity.id.key(event.entityId),
+        event: InMemoryCommitValues.base64(toBinary(EventSchema, event.event)),
+        producerVersion: event.producerVersion.toString(),
+        createdAt: event.createdAt,
+      })),
+      events: (input.events ?? []).map((event) => InMemoryCommitValues.base64(toBinary(EventSchema, event))),
     });
+  },
+
+  record<I, S extends Message>(
+    record: EntityRecord<I, S> | undefined,
+    schema: EntityCommitInput<I, S>["entity"]["stateSchema"],
+  ): unknown {
+    return record === undefined
+      ? undefined
+      : {
+          state: InMemoryCommitValues.base64(toBinary(schema, record.state)),
+          version: record.version.toString(),
+          archived: record.archived,
+          deleted: record.deleted,
+        };
   },
 
   sameCurrent<I, S extends Message>(
