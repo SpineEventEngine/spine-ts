@@ -874,7 +874,11 @@ retains the claim while active; updates from before activation are not replayed.
 Cancel removes an inactive row or same-instance claim through a marker. A claim
 owned by another service instance returns `ABORTED`; a crashed owner may leave a
 stale claim because this release has no claim lease or automatic reclamation.
-Active streams and queued updates are process-local, with a
+Subscription definitions are reconciled from the configured Stand registry;
+the default durable registry uses the application's storage factory, pending
+definitions expire after 30 seconds, active definitions have no framework TTL,
+and cancel physically deletes the definition. Reconciliation reads a bounded
+complete snapshot every 10 seconds. Active streams and queued updates are process-local, with a
 default queue cap of 100 updates. Exceeding that cap closes the stream and
 discards its queued updates. `SpineServicesOptions.subscriptionLimit` defaults
 to 100 and bounds pending, inactive, active, and recovered subscriptions owned

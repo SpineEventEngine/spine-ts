@@ -242,9 +242,11 @@ const context = BoundedContext.singleTenant("Tasks")
 ```
 
 Aggregate commands and Process Manager commands/events derive their target shard
-internally and persist their envelope before replay. Direct local delivery drains
-in the post request; attached `ServerEnvironment` ports acknowledge persisted
-work and replay it in a worker. Projection rows remain separate.
+internally and persist their envelope in the target Entity Inbox before any
+handler runs. Delivery is never a post-request callback: local and remote
+workers drain persisted work. Attached `ServerEnvironment` ports acknowledge
+admission and replay it through the same delivery path. Projection rows remain
+separate.
 
 `DeliveryBuilder` constructs a controlled `Delivery`; `DeliverySupervisor`
 receives `{ source, delivery, onMessage }`, owns bounded shard notifications
