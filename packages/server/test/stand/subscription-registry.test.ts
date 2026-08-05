@@ -481,6 +481,28 @@ describe("StorageSubscriptionRegistry", () => {
     ]);
   });
 
+  it.each(["discard-stage", "discard-definition", "discard-commit"] as const)(
+    "recovers an applied-then-thrown %s reservation discard",
+    async (phase) => {
+      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+      const context = { name: `DurableRegistry${phase}`, multitenant: false };
+      const interrupted = new StorageSubscriptionRegistry(context, factory, 1);
+      factory.arm();
+      await expect(interrupted.create(subscription("one"))).rejects.toThrow("applied-then-thrown");
+
+      factory.setPhase(phase);
+      factory.arm();
+      const helper = new StorageSubscriptionRegistry(context, factory, 1);
+      await expect(helper.create(subscription("one"))).rejects.toThrow("applied-then-thrown");
+
+      const recovered = new StorageSubscriptionRegistry(context, factory, 1);
+      await expect(recovered.create(subscription("one"))).resolves.toMatchObject({
+        kind: "created",
+      });
+      await expect(recovered.snapshot()).resolves.toHaveLength(1);
+    },
+  );
+
   it.each([
     "activate-stage",
     "activate-definition",
@@ -667,18 +689,25 @@ type StandRegistryScriptPhase =
   | "activate-definition"
   | "activate-commit"
   | "delete-stage"
-  | "delete-definition";
+  | "delete-definition"
+  | "discard-stage"
+  | "discard-definition"
+  | "discard-commit";
 
 class StandRegistryScriptedStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   #armed = false;
 
-  constructor(private readonly phase: StandRegistryScriptPhase) {
+  constructor(private phase: StandRegistryScriptPhase) {
     super();
   }
 
   arm(): void {
     this.#armed = true;
+  }
+
+  setPhase(phase: StandRegistryScriptPhase): void {
+    this.phase = phase;
   }
 
   protected override onCreateRecordStorage<I, R extends Message>(
@@ -758,6 +787,8 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
         return operation === "activate";
       case "delete-stage":
         return operation === "delete";
+      case "discard-stage":
+        return operation === "discard";
       case "create-definition":
         return id !== "control" && expected?.revision === 0n && next?.revision === 1n;
       case "create-promote":
@@ -774,10 +805,18 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
         );
       case "delete-definition":
         return id !== "control" && expected !== undefined && next === undefined;
+      case "discard-definition":
+        return id !== "control" && expected?.revision === 0n && next === undefined;
       case "delete-commit":
         return (
           control &&
           controlOperation(next as unknown as Any) === "delete" &&
+          controlState(next as unknown as Any) === "committed"
+        );
+      case "discard-commit":
+        return (
+          control &&
+          controlOperation(next as unknown as Any) === "discard" &&
           controlState(next as unknown as Any) === "committed"
         );
     }
