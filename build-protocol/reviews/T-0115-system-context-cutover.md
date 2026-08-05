@@ -1,6 +1,6 @@
 # T-0115 Review Log
 
-Status: Targeted correction re-review dispatched
+Status: Second targeted correction batch in implementation
 
 ## Scope
 
@@ -133,3 +133,42 @@ finding duplicates item 1 and does not create a seventh correction.
   with the same explicit roles and expected profiles recorded above. Review is
   read-only and limited to resolution of the accepted batch plus regressions
   introduced by its correction diff.
+
+## Targeted Re-review Results
+
+- TypeScript/API docs: clean. Both accepted API findings are resolved; no
+  public/internal contract regression was introduced.
+- Documentation: clean. The observer contradiction is removed and EventBus
+  claims match the corrected behavior.
+- Style/maintainability: changes requested for two synchronous-throw cleanup
+  holes in EventBus abort and SubscriptionRuntime terminal close.
+- Performance/reliability: changes requested for EventBus abort cleanup and
+  for incorrectly coalescing explicit consumer reconciliation with a possibly
+  stale in-flight periodic snapshot.
+- Immutable configured profiles remain the metadata recorded for the first
+  wave; runtime self-introspection was unavailable and no mismatch was visible.
+
+## Second Accepted Correction Batch
+
+1. Coalesces periodic timer ticks only. Explicit `consume()` and explicit
+   reconciliation requests queue one complete snapshot after any current
+   cycle, so activation cannot resolve against stale pre-activation data.
+2. Isolates synchronous EventStore/EventBus abort failures so every partial
+   build cleanup hook still starts, the original construction failure remains
+   primary, and cleanup failures are retained after all attempts.
+3. Starts observer drain and registry close through independent promise thunks
+   so a synchronous registry close throw cannot prevent drain, and both errors
+   aggregate into the one coalesced terminal outcome.
+
+All three findings are accepted because they preserve the frozen lifecycle and
+activation guarantees. Style and reliability independently confirmed item 2.
+
+## Second Correction Assignment
+
+- Existing role: implementer `/root/t0115_terminal_impl`.
+- Ownership: the three accepted findings, focused RED/GREEN tests, records,
+  one correction commit, and immediate feature-branch push.
+- Expected and explicitly dispatched model: `gpt-5.6-terra`.
+- Expected and explicitly dispatched reasoning: `medium`.
+- Runtime self-introspection is unavailable; the immutable configured role and
+  explicit profile are the available metadata.
