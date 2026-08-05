@@ -126,13 +126,36 @@ describe("Stand", () => {
     });
     const bus = new EventBus(new EventStore({ name: "Closing", multitenant: false }, factory));
     const registry = new GatedSnapshotRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "gated-close" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    stand.register(ProjectionStateSchema);
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
-    registry.gateNextSnapshot();
     standAccess.startSubscriptions(stand, registry, bus);
+    let deliveries = 0;
+    await standAccess.consumeSubscription(stand, registry, "gated-close", () => deliveries++);
+    await postStateChange(bus, ProjectionStateSchema, createState("before-close", "Before close"));
+    expect(deliveries).toBe(1);
+
+    registry.gateNextSnapshot();
+    const reconciliation = standAccess.reconcileSubscriptions(stand, registry);
     await registry.snapshotStarted;
     const closing = stand.close();
     registry.releaseSnapshot();
+    await reconciliation;
     await closing;
+    await postStateChange(bus, ProjectionStateSchema, createState("after-close", "After close"));
+    expect(deliveries).toBe(1);
     await expect(bus.close()).resolves.toBeUndefined();
   });
 

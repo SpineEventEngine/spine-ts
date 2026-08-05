@@ -1517,6 +1517,52 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("keeps committed process-manager command transitions usable when a Stand subscriber throws", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .build();
+    let notifications = 0;
+    context.stand().subscribe(ProcessManagerStateSchema, () => {
+      notifications++;
+      throw new Error("process-manager command subscriber failed");
+    });
+
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-pm-subscriber-1", "pm-subscriber")),
+      ).resolves.toBeUndefined();
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-pm-subscriber-2", "pm-subscriber", "Follow-up")),
+      ).resolves.toBeUndefined();
+
+      expect(RoutingProcessManager.commandCalls).toBe(2);
+      expect(notifications).toBe(2);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-subscriber"),
+      ).resolves.toEqual(
+        create(ProcessManagerStateSchema, {
+          id: "pm-subscriber",
+          queue: "Follow-up assigned",
+        }),
+      );
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        {
+          error: { message: "process-manager command subscriber failed" },
+        },
+        {
+          error: { message: "process-manager command subscriber failed" },
+        },
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("delivers deferred aggregate updates only to subscribers present at the current write", async () => {
     const factory = new GatedAggregateEventStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
@@ -4229,6 +4275,52 @@ describe("repository signal routing", () => {
         queue: "Task reacted",
       }),
     );
+  });
+
+  it("keeps committed process-manager event transitions usable when a Stand subscriber throws", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .build();
+    let notifications = 0;
+    context.stand().subscribe(ProcessManagerStateSchema, () => {
+      notifications++;
+      throw new Error("process-manager event subscriber failed");
+    });
+
+    try {
+      await expect(
+        context.eventBus().post(createProjectionEvent("event-pm-subscriber-1", "pm-subscriber")),
+      ).resolves.toBeUndefined();
+      await expect(
+        context
+          .eventBus()
+          .post(
+            createProjectionEvent("event-pm-subscriber-2", "pm-subscriber", { name: "Follow-up" }),
+          ),
+      ).resolves.toBeUndefined();
+
+      expect(RoutingProcessManager.eventCalls).toBe(2);
+      expect(notifications).toBe(2);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-subscriber"),
+      ).resolves.toEqual(
+        create(ProcessManagerStateSchema, {
+          id: "pm-subscriber",
+          queue: "Follow-up reacted",
+        }),
+      );
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        {
+          error: { message: "process-manager event subscriber failed" },
+        },
+        {
+          error: { message: "process-manager event subscriber failed" },
+        },
+      ]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("posts commands produced by process-manager event commanding after state commit", async () => {
@@ -7463,6 +7555,7 @@ function createProjectionEvent(
   entityId: string,
   options: {
     readonly producerId?: string;
+    readonly name?: string;
     readonly producerNumber?: number;
     readonly producerMessage?: AggregateState;
     readonly importTenantId?: string;
@@ -7486,7 +7579,7 @@ function createProjectionEvent(
     schema: ProjectionStateSchema,
     message: create(ProjectionStateSchema, {
       id: entityId,
-      name: "Task",
+      name: options.name ?? "Task",
       priority: 1,
     }),
   });
