@@ -8,8 +8,11 @@ Import public types from `@spine-event-engine/storage`. The entry point exports
 `StorageFactory`, `RecordStorage`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
 `RecordMask`, `InMemoryStorageFactory`, `InMemoryStorageBackend`, event-store
 types, normalized query policy/evaluator types, and entity history interfaces.
-The `./internal/entity-history` subpath, including the atomic Entity commit
-port, is a framework/provider seam, not an application-facing remote API.
+The `./internal/entity-history` subpath supplies Entity records, ID/layout
+inputs, and current/state/event-history ports. The separate
+`./internal/entity-commit` subpath supplies atomic commit input/result types,
+`EntityCommitStorage`, and `EntityCommitStorageFactories`; both are
+framework/provider seams, not application-facing remote APIs.
 
 ## Record storage
 

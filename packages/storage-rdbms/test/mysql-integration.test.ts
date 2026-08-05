@@ -167,9 +167,9 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       events: [event],
     };
 
-    await expect(Promise.all([commits.commit(unit), commits.commit(unit)])).resolves.toEqual(
-      expect.arrayContaining(["committed", "replayed"]),
-    );
+    const outcomes = await Promise.all([commits.commit(unit), commits.commit(unit)]);
+    expect(outcomes.filter((outcome) => outcome === "committed")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome === "replayed")).toHaveLength(1);
     await expect(storage.current.read("task")).resolves.toMatchObject({
       state: { value: "committed" },
       version: 1n,

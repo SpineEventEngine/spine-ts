@@ -482,6 +482,34 @@ describe("Datastore entity history", () => {
     ).resolves.toBe("committed");
   });
 
+  it("returns exactly one committed result to competing identical callers", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const inputValue = input();
+    const mutation = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "competing-command",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "one" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+    const first = new DatastoreStorageFactory({ client: backend.client() as never });
+    const second = new DatastoreStorageFactory({ client: backend.client() as never });
+
+    const outcomes = await Promise.all([
+      EntityCommitStorageFactories.create(first, inputValue).commit(mutation),
+      EntityCommitStorageFactories.create(second, inputValue).commit(mutation),
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome === "committed")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome === "replayed")).toHaveLength(1);
+  });
+
   it("rejects an independent-client divergent event-ID race with one global marker set", async () => {
     const backend = new HistoryDatastoreBackend();
     const first = new DatastoreStorageFactory({
