@@ -78,7 +78,6 @@ interface ResolvedPath {
  * @internal
  */
 export class SubscriptionObservers {
-
   /**
    * Observes one domain event target through the domain EventBus.
    *

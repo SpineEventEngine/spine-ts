@@ -17,12 +17,12 @@ acceptance section in `build-protocol/planning/T-0113_SYSTEM_CONTEXT_PLAN.md`.
 
 ## Planned Assignments
 
-| Concern | Existing role/profile | Status |
-| --- | --- | --- |
-| Style/maintainability | `gpt-5.6-terra` / high | Pending. |
-| Documentation | `gpt-5.6-luna` / medium | Pending if public claims change. |
-| TypeScript/API docs | `gpt-5.6-terra` / high | Pending. |
-| Performance/reliability | `gpt-5.6-terra` / high | Pending. |
+| Concern                 | Existing role/profile   | Status                           |
+| ----------------------- | ----------------------- | -------------------------------- |
+| Style/maintainability   | `gpt-5.6-terra` / high  | Pending.                         |
+| Documentation           | `gpt-5.6-luna` / medium | Pending if public claims change. |
+| TypeScript/API docs     | `gpt-5.6-terra` / high  | Pending.                         |
+| Performance/reliability | `gpt-5.6-terra` / high  | Pending.                         |
 
 Every dispatch must pass model and reasoning explicitly. Actual metadata or the
 immutable configured profile limitation must be recorded before acceptance.
