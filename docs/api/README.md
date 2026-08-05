@@ -29,8 +29,8 @@ set-once transition validation, explicit handler metadata APIs,
 command/event bus exports, the server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services with durable inactive subscription recovery
-over the same storage factory, a small local `Server` lifecycle owner for real
+command/query/subscription services with storage-backed Stand subscription
+definitions and local active streams, a small local `Server` lifecycle owner for real
 Connect/gRPC-compatible services, `@spine-event-engine/transport`
 contracts, `@spine-event-engine/storage` contracts, and the minimal
 `@spine-event-engine/testing` BlackBox test boundary, optional Datastore storage, and
@@ -355,18 +355,25 @@ ordering returns `INVALID_QUERY`. Use proto column names such as
 Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
 with a positive value but without ordering, missing criteria, and `include_all = false` return
 `INVALID_QUERY` before reading Stand storage.
-`Subscribe` allocates opaque IDs, validates subscription criteria,
-`Activate` attaches delivery, and `Cancel`/stream finalization release
-in-process handles. Never-activated subscriptions have a configurable inactive
-TTL: it defaults to 30 seconds; non-positive or non-finite values become 1;
-positive finite values are floored; and an effective value above 2,147,483,647
-milliseconds throws synchronously before storage or timer work. Active delivery
-uses a configurable queue limit for slow consumers.
+`Subscribe` allocates an opaque ID, validates criteria, and creates one pending
+definition in the context's Stand registry. `Activate` changes that definition
+to active before attaching this process's delivery; missing or expired
+definitions, and a definition already active for this process, produce no
+updates. `Cancel` and stream finalization release local delivery and physically
+delete the shared definition. Pending definitions expire after 30 seconds;
+active definitions have no framework TTL.
+
+The context builder's built-in registry capacity is from 1 through 100 admitted
+definitions, or the builder may provide a custom registry. Separately,
+`SpineServices.subscriptionLimit` defaults to 100 per service instance and
+bounds concurrent unknown-ID cancellation work; it is not a registry or
+distributed quota. `SpineServices.queueLimit` defaults to 100 queued updates
+per active local stream and closes slow delivery when exhausted.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
 criteria, unsupported comparison operators, event filters, event field masks,
 and unknown subscription field paths with `INVALID_ARGUMENT` before creating an
-inactive record or attaching a listener. State `Target.include_all = true`
+definition or attaching a listener. State `Target.include_all = true`
 delivers every activated update. State `Target.filters` supports an optional ID filter plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
 fields, including nested message fields; missing ID filters match all IDs.
@@ -378,40 +385,18 @@ support `include_all = true` in this runtime implementation and stream wire-leve
 continue to receive generated domain event messages; framework envelopes remain
 service/runtime data. Client rejection updates redact rejected-command payload
 forms and throwable stack; internal generated handlers retain full defensive
-context. Activation is by opaque ID. Inactive records are stored
-through the owning bounded context storage factory, so a new `SpineServices`
-instance over the same storage factory can activate a previously returned ID.
-Activation compare-and-sets the exact inactive row to a unique-owner claim and
-retains that claim while the local stream is active. Single-tenant subscriptions reject tenant
-options; multitenant subscriptions require `tenantId`; state and event
-delivery are scoped to that tenant scope. Unknown, canceled, expired,
-malformed, inconsistent, and already active IDs complete without updates.
-Cancellation of a missing, unknown, already-canceled, or already-cleaned
-subscription returns OK only after admission to the bounded unknown-removal
-pool. Overflow returns `RESOURCE_EXHAUSTED` before storage access. An exact
-inactive row or same-instance claim moves
-through a cancel marker to absence; a foreign active claim returns `ABORTED`.
-Cleanup is idempotent across cancellation, activation-stream finalization,
-inactive expiry, and slow-consumer queue closure. Malformed durable rows remain
-inert. `SpineServicesOptions.subscriptionLimit` defaults to 100 and must be a
-positive safe integer; it bounds pending, inactive, active, and recovered
-subscriptions owned by one `SpineServices` instance. Each instance has its own
-bound, not a process-wide or distributed quota. Unknown-ID cancellation uses a
-separate internal pool of the same size. Known-local cancellation retains its
-normal subscription capacity until durable cancellation settles. If that
-persistence fails, `Cancel` returns Connect `INTERNAL` with `Subscription
-cancellation failed.`; retry `Cancel` with the same returned `Subscription`
-message containing its ID. That retry contract does not apply to internal cleanup after an
-initial failed `Subscribe`. If a normal inactive-expiry timer fires and durable
-cleanup fails, its timer stays cleared, the local record and its capacity remain,
-and no automatic retry or new timer is scheduled; `Cancel` with that same
-returned `Subscription` message containing its ID can retry the durable cleanup and release the capacity. Defaults are 30 seconds for inactive expiry and 100
-queued updates per active subscription. Active streams and queued updates remain
-process-local and are not replayed after activation or restart. This is not a
-client DSL, broad server lifecycle, projection catch-up loop, cross-process
-stream ownership, or durable retained update queue. A crashed owner can leave a
-stale claim because this contract has no lease, heartbeat, routing, supervision,
-or automatic reclamation.
+context. Activation is by opaque ID. Definitions live in the configured Stand
+registry: the default registry uses the application storage factory, a builder
+may supply another implementation, and each definition occupies one record.
+Pending definitions expire after 30 seconds; active definitions have no
+framework TTL; and cancellation physically deletes the definition. Every node
+reconciles a bounded complete snapshot every 10 seconds before attaching or
+removing its local listener. Single-tenant subscriptions reject tenant options;
+multitenant subscriptions require `tenantId`. Durable definitions do not make
+live streams durable: active streams and their bounded queues remain
+process-local and are not replayed after restart. `InMemorySubscriptionRegistry`
+is valid for development and tests. A context using it emits a warning only
+when attached to a production `ServerEnvironment`.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `Environment`, `EnvironmentType`,
 `ServerEnvironment`, and `ServerEnvironmentSettings` select one process-wide

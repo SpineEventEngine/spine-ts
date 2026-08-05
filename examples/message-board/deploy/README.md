@@ -5,6 +5,19 @@ Agents should use the nearby [reference](REFERENCE.md) for exact guarantees.
 
 ## 🧭 Choose a topology
 
+```mermaid
+flowchart LR
+  Browser --> Gateway[Authenticated Gateway]
+  Gateway --> Select[Unary routing: select one backend]
+  Select -->|one bounded round-robin attempt| AppOne[Application replica 1]
+  Select -->|one bounded round-robin attempt| AppTwo[Application replica 2]
+  Gateway -->|subscription fan-in| AppOne
+  Gateway -->|subscription fan-in| AppTwo
+```
+
+The two application connections shown for unary routing are alternatives, not
+fan-out: one command or query is sent to one selected backend without retry.
+
 Combined mode runs one Message Board application and authenticated browser
 gateway in the same process. Use it to understand the smallest browser-facing
 deployment. Standalone mode runs application replicas separately from gateway
@@ -16,6 +29,12 @@ processes share the session signing values and subscription-registry namespace.
 The registry is durable and cancellation-fenced, but update delivery is best
 effort: reconnecting clients re-query authoritative state. The supplied simple
 delivery server is in-memory and not highly available.
+
+For the smaller runnable development topology of exactly two identical
+applications and one Gateway, use
+[Distributed Message Board](../../distributed-message-board/README.md). The
+standalone reference below is intentionally replica-oriented: it demonstrates
+separately scalable application and Gateway processes.
 
 ## 🚀 Run the references
 

@@ -69,9 +69,10 @@ declare const registry: StandSubscriptionRegistry;
 const context = BoundedContext.singleTenant("Tasks").withSubscriptionRegistry(registry).build();
 ```
 
-An in-memory registry is useful in local development and tests. When a
-production server attaches a context with one, it emits one warning naming the
-context because definitions disappear on restart; startup still continues.
+`InMemorySubscriptionRegistry` is useful in local development and tests. When a
+context using it is attached to a production `ServerEnvironment`, it emits one
+warning naming the context because definitions disappear on restart; startup
+still continues.
 
 ### Follow one definition from creation to cleanup
 
@@ -164,6 +165,25 @@ declare const context: BoundedContext;
 const running = await new Server({ contexts: [context], port: 8080 }).run();
 console.log(`Spine server ready at ${running.baseUrl}`);
 ```
+
+## Delivery and subscriptions
+
+An `@Assign` command for an Aggregate or Process Manager first persists in that
+Entity's Inbox. Local intake can then directly drain the persisted work in the
+current request path. With an attached `ServerEnvironment`, delivery workers
+replay admitted Inbox work through the same path. In shared remote delivery,
+every matching node may attempt a shard, while one active lease owner performs
+one bounded drain; later drains can have a different lease owner. Events and
+later Process Manager commands use the same path. See [REFERENCE.md](REFERENCE.md)
+for operational delivery details.
+
+`Stand` observes domain events and committed Entity state changes from the
+EventBus. Its default registry uses the application's `StorageFactory`; a
+builder may supply another implementation. A definition is pending for at most
+30 seconds, active definitions have no framework TTL, and cancellation
+physically deletes the definition. Nodes reconcile their local listeners from a
+bounded complete snapshot every 10 seconds. Active streams and queues are
+process-local.
 
 ### Serve browser clients
 

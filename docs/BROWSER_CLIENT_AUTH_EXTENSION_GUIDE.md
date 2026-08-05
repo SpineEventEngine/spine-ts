@@ -158,6 +158,13 @@ keep its own underlying work alive.
 
 ## Gateway contracts and request facts
 
+One logical browser Gateway may use a fixed 1–32 backend list. Commands and
+queries are sent to one backend with bounded round-robin selection and no
+automatic retry. Subscription creation and activation fan out across that fixed
+list; merged notices are best-effort and can duplicate, gap, or be lost. Query
+responses remain authoritative. This is configured at startup and does not
+discover backends or redeploy them dynamically.
+
 The gateway authenticates and authorizes every incoming request independently,
 then resolves and injects a trusted context. Browser-visible actor/tenant is
 informational, not a credential. An application may request hints, but it may

@@ -142,6 +142,12 @@ bindings plus a fixed, non-secret identity for `ada`. It is not a sign-in flow.
 After a reconnect, the UI must re-query; no subscription stream supplies a
 complete historical record.
 
+For the deliberately small distributed development topology—two identical
+application nodes, one Gateway, shared storage, and the in-memory simple
+delivery server—run [Distributed Message Board](../distributed-message-board/README.md).
+The deployment references in this example instead show combined and
+replica-oriented standalone application modes.
+
 ## 🔗 Learn more
 
 - [Message Board server](app/README.md)
@@ -170,14 +176,17 @@ flowchart LR
   end
   Envoy -->|combined alternative| C
   subgraph Standalone[Standalone topology]
-    Envoy --> G1[Gateway replica]
-    Envoy --> G2[Gateway replica]
+    Envoy -->|standalone alternative| GatewaySelect[Select one Gateway]
+    GatewaySelect -->|one unary request| G1[Gateway replica]
+    GatewaySelect -->|one unary request| G2[Gateway replica]
     G1 --> R[(Durable registry)]
     G2 --> R
-    G1 --> Apps[Private application service]
-    G2 --> Apps
-    Apps --> A1[Application replica]
-    Apps --> A2[Application replica]
+    G1 --> G1Select[Select one private application]
+    G2 --> G2Select[Select one private application]
+    G1Select -->|one unary request| A1[Application replica]
+    G1Select -->|one unary request| A2[Application replica]
+    G2Select -->|one unary request| A1
+    G2Select -->|one unary request| A2
     A1 --> S[(Application-selected storage)]
     A2 --> S
     A1 --> D
@@ -186,6 +195,11 @@ flowchart LR
     G2 --> D
   end
 ```
+
+The branches leaving each selection node are alternatives, not broadcast: a
+unary request selects one Gateway and then one private application node. The
+registry and delivery connections represent shared topology and subscription
+fan-in, not additional unary request routes.
 
 Application code selects and owns its storage, including logical session
 revocation records. Gateway code owns the separate durable subscription

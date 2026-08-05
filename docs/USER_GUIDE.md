@@ -862,37 +862,17 @@ selection is applied before this bound.
 Use `SubscriptionService.Subscribe`, then `Activate`. `Cancel` accepts the
 returned `Subscription` message, not its opaque ID alone; pass that message
 when the client is finished. State topics support ID and equality filters;
-event topics currently support `include_all`. Inactive subscription records
-are storage-backed and have a default TTL of 30 seconds. Non-positive or
-non-finite values become 1, positive finite values are floored, and an effective
-TTL above 2,147,483,647 milliseconds throws synchronously before storage or
-timer work. Client rejection updates redact rejected-command payload forms and
-throwable stack; internal generated subscribers retain full defensive context.
-Activation atomically
-replaces the inactive row with an owner claim before attaching delivery and
-retains the claim while active; updates from before activation are not replayed.
-Cancel removes an inactive row or same-instance claim through a marker. A claim
-owned by another service instance returns `ABORTED`; a crashed owner may leave a
-stale claim because this release has no claim lease or automatic reclamation.
-Active streams and queued updates are process-local, with a
-default queue cap of 100 updates. Exceeding that cap closes the stream and
-discards its queued updates. `SpineServicesOptions.subscriptionLimit` defaults
-to 100 and bounds pending, inactive, active, and recovered subscriptions owned
-by that `SpineServices` instance; configure a positive safe integer for
-instance-local capacity planning. Each instance has an independent limit, so
-this is neither a process-wide nor a distributed quota. Unknown-ID cancellation
-work uses a separate internal pool with the same bound. Pool exhaustion returns
-Connect `RESOURCE_EXHAUSTED` before storage access. If known-local durable
-cancellation persistence fails, `Cancel` returns Connect `INTERNAL` with
-`Subscription cancellation failed.`, retains that instance's capacity, and the
-client should retry `Cancel` with the same returned `Subscription` message
-containing its ID. This
-retry guidance applies only to an ID returned by `Subscribe`; cleanup after an
-initial failed `Subscribe` stays internal and uses the inactive TTL when its
-timer can be retained. If inactive-expiry cleanup fails after its timer is
-cleared, the instance retains its local record and capacity with no automatic
-retry; explicit `Cancel` with that same returned `Subscription` message
-containing its ID can retry persistence cleanup. Active streams and their queues are not recovered or replayed after
+event topics currently support `include_all`. Client rejection updates redact
+rejected-command payload forms and throwable stack; internal generated
+subscribers retain full defensive context. Subscription definitions are
+reconciled from the configured Stand registry;
+the default durable registry uses the application's storage factory, pending
+definitions expire after 30 seconds, active definitions have no framework TTL,
+and cancel physically deletes the definition. Reconciliation reads a bounded
+complete snapshot every 10 seconds. Active streams and queued updates are
+process-local, with a default queue cap of 100 updates. Exceeding that cap
+closes the stream and discards its queued updates. Active streams and queues
+are not recovered or replayed after
 disconnection or process restart, so clients must query current state when they
 need a fresh view.
 

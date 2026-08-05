@@ -647,11 +647,12 @@ export interface SpineServicesOptions {
   readonly queueLimit?: number;
 
   /**
-   * Maximum subscriptions owned by this `SpineServices` instance.
+   * Maximum concurrent unknown-ID cancellation operations for this
+   * `SpineServices` instance.
    *
-   * The limit includes active transport streams and unknown cancellation work.
    * It defaults to 100 and must be a positive safe integer. Each instance has an
-   * independent limit; this is neither a process-wide nor a distributed quota.
+   * independent limit; this is neither a registry, process-wide, nor distributed
+   * quota.
    */
   readonly subscriptionLimit?: number;
 }

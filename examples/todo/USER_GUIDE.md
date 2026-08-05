@@ -306,11 +306,10 @@ aborts the stream signal, returns the iterator, and aborts the HTTP/2 session.
 If the one-second creation deadline expires before that handle reaches the
 client, the client has no subscription ID it can cancel. Session abort still
 closes the client transport, while any server record created but never
-activated is removed by the configurable server inactive TTL
-(`SpineServicesOptions.inactiveTtlMs`), which defaults to 30 seconds.
-Non-positive or non-finite values become 1; positive finite values are floored;
-effective values above 2,147,483,647 milliseconds synchronously throw TypeError
-before storage or timer work.
+activated remains a pending Stand registry definition. Pending definitions are
+cleaned after 30 seconds; active definitions have no framework TTL. The default
+registry uses application storage, while its live stream and queue remain
+process-local. Cancel physically deletes the definition.
 
 ```js
 import { log } from "node:console";

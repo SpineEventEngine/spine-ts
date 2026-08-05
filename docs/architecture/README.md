@@ -3,15 +3,47 @@
 These notes are for framework maintainers and coding agents. Application
 developers should start with the [end-user guide](../USER_GUIDE.md).
 
-They explain how package boundaries fit together: delivery/inbox
-processing, command/query/subscription services, same-host ZeroMQ transport
-for multi-process use, and a `Server` lifecycle owner that starts and closes
-those pieces together. It does not claim production deployment supervision,
-durable transport, authentication, or cross-host topology behavior.
+They explain the server-owned scope: delivery/inbox processing,
+command/query/subscription services, same-host ZeroMQ transport for
+multi-process use, and a `Server` lifecycle owner that starts and closes those
+pieces together. Gateway hosting and remote delivery are supported integration
+paths, not claims of production deployment supervision or topology ownership.
+Read the [browser and Gateway guide](../BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+and the [delivery-client](../../packages/delivery-client/README.md) and
+[delivery-server](../../packages/delivery-server/README.md) guides for those
+boundaries.
 
 The notes describe current code rather than a learning sequence. Use the package
 READMEs for beginner examples and the adjacent `REFERENCE.md` files for
 package-specific details.
+
+## Distributed command, delivery, and refresh path
+
+```mermaid
+flowchart LR
+  Browser --> Gateway[Gateway: fixed 1–32 backend list]
+  Gateway --> Select[Unary router: selects one backend]
+  Select -->|one bounded round-robin attempt| AppA[Application node A]
+  Select -->|one bounded round-robin attempt| AppB[Application node B]
+  AppA --> Inbox[(Entity Inbox)]
+  AppB --> Inbox
+  Inbox --> Delivery[Shared remote delivery shard]
+  Delivery -->|one active lease owner performs one bounded drain| Entity[Entity handler]
+  Entity --> Events[Domain events and EntityStateChanged]
+  Events --> Stand[Stand EventBus]
+  Stand -->|best-effort notice fan-in| Gateway
+  Gateway -->|refresh hint| Browser
+```
+
+An `@Assign` command to an Aggregate or Process Manager is persisted in its
+Entity Inbox before delivery. Every server node can attempt a shared delivery
+shard, while one active lease owner performs one bounded drain; a later drain
+can have a different owner. Process Manager delivery uses the same mechanism.
+Stand observes domain events and
+`EntityStateChanged`, then routes notices through the Gateway. Subscription
+notices can duplicate, gap, or be lost, so browser clients re-query the
+authoritative state. Gateway backend membership is a configured startup list,
+not a discovery or redeployment protocol.
 
 ## Proto Contract Boundary
 
@@ -390,36 +422,13 @@ Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and
 multitenant contexts require `tenantId`.
 Service subscription delivery starts only when a client activates the opaque
-subscription ID. Never-activated durable records become ineligible for
-activation after the configurable `inactiveTtlMs` (default 30 seconds;
-non-positive or non-finite values coerce to 1, positive finite values are
-floored, and an effective value above 2,147,483,647 milliseconds throws
-synchronously before storage or timer work), and slow consumers are bounded
-by the configurable `queueLimit`. Each `SpineServices` instance also has an
-independent `subscriptionLimit` (default 100; positive safe integer) covering
-pending, inactive, active, and recovered records. Stream/cancel cleanup releases
-the direct Stand or event-bus listener handle. `Subscribe` accepts registered state targets and event targets
-exposed by built-context event dispatchers. It rejects unknown/private targets,
-invalid criteria, unsupported comparison operators, event filters, event field
-masks, and unknown subscription field paths before creating a service-owned
-inactive record or attaching a listener. The inactive record is stored through
-the owning bounded context storage factory, so a fresh `SpineServices` adapter
-over the same storage factory can recover it by opaque subscription ID.
-Activation atomically replaces the exact inactive row with a unique-owner claim
-before live attachment and retains that claim while active. Cancellation moves
-an exact inactive row or same-instance claim through a marker to absence; a
-foreign active claim returns `ABORTED`. Same-ID cancellation coalescing applies
-only within one `SpineServices` instance. Unknown-ID cancellation work uses a
-separate per-instance pool bounded by `subscriptionLimit`; exhaustion returns
-`RESOURCE_EXHAUSTED` before storage access. Known local cleanup retains its
-subscription capacity until persistence settles; marker-cleanup failure returns
-`INTERNAL` and a same-ID retry can settle the retained marker. Confirmed absence
-returns `OK`, while concurrent same-ID cancellation within one instance shares
-one exact outcome. If inactive-expiry cleanup fails after its timer is cleared,
-the instance retains the local record and its capacity with no automatic retry;
-an explicit same-ID `Cancel` can retry persistence cleanup. A crashed owner can
-leave a stale claim because this release adds no lease, heartbeat, routing,
-supervision, or reclamation. State
+subscription ID. `Subscribe` creates one definition in the configured Stand
+registry; the default uses the application storage factory, while a builder can
+supply another implementation. Pending definitions expire after 30 seconds,
+active definitions have no framework TTL, and `Cancel` physically deletes the
+definition. Every node reconciles a bounded complete snapshot every 10 seconds
+and attaches only its local listener. Active streams and slow-consumer queues
+remain process-local. State
 include-all topics deliver each activated Stand update. Filtered state topics
 support optional ID filters plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
@@ -435,16 +444,18 @@ rejection updates redact rejected-command payload forms and throwable stack;
 internal generated handlers retain full defensive context. Single-tenant
 subscriptions reject tenant options; multitenant subscriptions require
 `tenantId`; state and event delivery are scoped to that tenant scope. Activation
-and cancellation are keyed by subscription ID: unknown, canceled, expired, and
-already-active activations complete without updates; confirmed absence returns
-`OK`, concurrent same-ID cancellation within one `SpineServices` instance
-shares one exact outcome, and foreign active ownership returns `ABORTED`.
-Cleanup is idempotent across cancel, stream
-finalization, inactive expiry, and queue-limit closure. Direct Stand subscriber
-sets, active service delivery handles, queued updates, Stand version metadata,
-and in-memory storage adapter backing data are local process state; this implementation
-does not persist subscription positions, replay missed updates, coordinate
-cross-process stream ownership, or recover active subscriptions after restart.
+and cancellation are keyed by subscription ID. Activating a missing or expired
+definition completes without updates; an active definition is retained without
+creating a second local delivery. Cancellation physically deletes the shared
+definition, and concurrent same-ID cancellation within one `SpineServices`
+instance shares one outcome. Each Stand node reconciles a bounded complete
+registry snapshot every 10 seconds, attaches only its own listeners for active
+definitions, and detaches listeners removed from that snapshot. Cleanup is
+idempotent across cancellation, stream finalization, expired-pending cleanup,
+and queue-limit closure. Active service delivery handles and their queued
+updates are local process state: this implementation does not persist stream
+positions, replay missed updates, coordinate cross-process stream ownership, or
+recover active streams after restart.
 
 The command service error contract remains intentionally small.
 `CommandBus` validates each accepted command payload with the existing core
