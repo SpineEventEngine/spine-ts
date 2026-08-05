@@ -1,4 +1,4 @@
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
@@ -8,6 +8,8 @@ import type { EntityCommitStorage } from "../../src/internal/entity-commit.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
+import type { RecordStorage } from "../../src/record/record-storage.js";
+import { StorageFactory } from "../../src/storage/storage-factory.js";
 
 describe("MemoryEntityCommitStorage", () => {
   it("makes current, histories, events, and receipt visible as one commit", async () => {
@@ -249,6 +251,12 @@ describe("MemoryEntityCommitStorage", () => {
     ).toThrow(/another Entity storage scope/);
     commits.close();
   });
+
+  it("reports when a storage factory has not registered atomic commits", () => {
+    expect(() =>
+      EntityCommitStorageFactories.create(new UnregisteredStorageFactory(), entityInput()),
+    ).toThrow(/does not provide the required atomic Entity commit storage/);
+  });
 });
 
 const context = Object.freeze({ name: "Tasks", multitenant: false });
@@ -313,4 +321,10 @@ interface EntityHandle {
   readonly states: { backward(id: string, depth: number): Promise<readonly unknown[]> };
   readonly events: { backward(id: string, depth: number): Promise<readonly unknown[]> };
   close(): void;
+}
+
+class UnregisteredStorageFactory extends StorageFactory {
+  protected onCreateRecordStorage<I, R extends Message>(): RecordStorage<I, R> {
+    throw new Error("This test factory cannot create record storage.");
+  }
 }

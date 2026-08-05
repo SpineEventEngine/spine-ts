@@ -42,6 +42,34 @@ describe("InMemoryRecordStorage", () => {
     ).toMatchObject([{ id: { value: "event-2" } }]);
   });
 
+  it("stops public tenant-record path traversal at primitive and null values", () => {
+    const spec = createSpec();
+    const records = new TenantRecords<EventId, Event>();
+    const primitive = spec.materialize(
+      createEvent("event-primitive", "type.spine.io/tasks.TaskCreated", 1n),
+    );
+    const nullable = spec.materialize(
+      createEvent("event-null", "type.spine.io/tasks.TaskCreated", 2n),
+    );
+
+    records.write(primitive);
+    records.write({ ...nullable, record: { ...nullable.record, message: null } as Event });
+
+    expect(
+      records.queryEntries(spec, {
+        filters: [
+          { column: "id", value: primitive.id },
+          { column: "context.timestamp.seconds.unreachable", value: undefined },
+        ],
+      }),
+    ).toMatchObject([{ id: { value: "event-primitive" } }]);
+    expect(
+      records.queryEntries(spec, {
+        filters: [{ column: "message.typeUrl", value: undefined }],
+      }),
+    ).toMatchObject([{ id: { value: "event-null" } }]);
+  });
+
   it("conforms to the shared normalized query provider fixture", async () => {
     const storage = new ObservedInMemoryStorage(
       { name: "QueryConformance", multitenant: false },
@@ -432,6 +460,42 @@ describe("InMemoryRecordStorage", () => {
       { value: "event-nan-1" },
       { value: "event-nan-2" },
     ]);
+  });
+
+  it("orders distinct booleans after tied boolean values", async () => {
+    const storage = createLookupStorage({
+      "event-false-b": false,
+      "event-true": true,
+      "event-false-a": false,
+    });
+
+    await storage.writeAll(createLookupEvents(["event-false-b", "event-true", "event-false-a"]));
+
+    await expect(
+      storage.index({ sort: [{ field: "value", direction: "asc" }] }),
+    ).resolves.toMatchObject([
+      { value: "event-false-a" },
+      { value: "event-false-b" },
+      { value: "event-true" },
+    ]);
+  });
+
+  it("treats nested paths beyond scalar and absent values as undefined", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-primitive", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-absent", "type.spine.io/tasks.TaskCreated", 2n),
+    ]);
+
+    await expect(
+      storage.index({
+        filters: [
+          { column: "context.timestamp.seconds.unreachable", value: undefined },
+          { column: "notAField.unreachable", value: undefined },
+        ],
+        sort: [{ field: "id", direction: "asc" }],
+      }),
+    ).resolves.toMatchObject([{ value: "event-absent" }, { value: "event-primitive" }]);
   });
 
   it("treats collision-prone object keys as ordinary record values", async () => {
