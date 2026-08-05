@@ -899,7 +899,18 @@ describe("MysqlStorageFactory", () => {
       commitStorage.commit({ ...first, next: { ...first.next, version: 2n } }),
     ).rejects.toThrow("reused with different content");
 
+    const absent = atomicMutation(input, "expected-for-absent");
+    await expect(
+      commitStorage.commit({
+        ...absent,
+        entityId: "absent",
+        next: { ...absent.next, id: "absent" },
+        expected: first.next,
+      }),
+    ).resolves.toBe("conflict");
+
     for (const expected of [
+      { ...first.next, version: 2n },
       { ...first.next, archived: true },
       { ...first.next, deleted: true },
       { ...first.next, state: create(StringValueSchema, { value: "other" }) },
