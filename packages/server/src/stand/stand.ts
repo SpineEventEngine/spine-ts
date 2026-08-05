@@ -14,6 +14,7 @@ import type {
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
 import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
+import type { StandSubscriptionRegistry } from "./subscription-registry.js";
 
 /**
  * Options for constructing a direct read-side Stand.
@@ -227,6 +228,7 @@ export class Stand {
     { readonly current: EntityRecordStorage<unknown, Message>; close(): void }
   >();
   readonly #inFlight = new Set<Promise<void>>();
+  readonly #subscriptionWork = new Set<Promise<void>>();
   #closing = false;
   #closed = false;
   #closedPromise: Promise<void> | undefined;
@@ -243,6 +245,7 @@ export class Stand {
       this.#deferUpdate(schema, state, updateOptions),
     );
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
+    subscriptionStarters.set(this, (registry) => this.#startSubscriptions(registry));
   }
 
   /**
@@ -601,6 +604,7 @@ export class Stand {
   async #closeOnce(): Promise<void> {
     this.#closing = true;
     await Promise.all([...this.#inFlight]);
+    await Promise.all([...this.#subscriptionWork]);
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
@@ -609,6 +613,17 @@ export class Stand {
     }
     this.#entityHandles.clear();
     this.#closed = true;
+  }
+
+  #startSubscriptions(registry: StandSubscriptionRegistry): void {
+    const work = registry
+      .cleanup()
+      .then(async () => {
+        await registry.snapshot();
+      })
+      .catch(() => undefined)
+      .finally(() => this.#subscriptionWork.delete(work));
+    this.#subscriptionWork.add(work);
   }
 
   #registration<Schema extends MessageSchema>(
@@ -902,6 +917,7 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
 }
 
 interface StandAccess {
+  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): void;
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -922,6 +938,12 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
+  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): void {
+    const start = subscriptionStarters.get(stand);
+    if (start === undefined)
+      throw new TypeError("Stand subscription start requires a Stand instance.");
+    start(registry);
+  },
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -962,3 +984,4 @@ const currentReads = new WeakMap<
     options: StandReadOptions,
   ) => Promise<StandCurrentRecord<Schema> | undefined>
 >();
+const subscriptionStarters = new WeakMap<Stand, (registry: StandSubscriptionRegistry) => void>();

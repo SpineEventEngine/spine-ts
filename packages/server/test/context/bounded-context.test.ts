@@ -1751,6 +1751,16 @@ describe("BoundedContext assembly", () => {
     }
   });
 
+  it("starts one Stand registry reconciliation after repository registration", async () => {
+    const registry = new ObservingSubscriptionRegistry();
+    const context = BoundedContext.singleTenant("StandReconciliation")
+      .withSubscriptionRegistry(registry)
+      .build();
+
+    await vi.waitFor(() => expect(registry.snapshotCalls).toBe(1));
+    await context.close();
+  });
+
   it("rejects combining a custom subscription registry and a built-in limit in either order", () => {
     expect(() =>
       BoundedContext.singleTenant("Tasks")
@@ -2014,6 +2024,12 @@ class DelayingStorageFactory extends InMemoryStorageFactory {
 
 class ObservingSubscriptionRegistry extends InMemorySubscriptionRegistry {
   closeCalls = 0;
+  snapshotCalls = 0;
+
+  override snapshot() {
+    this.snapshotCalls += 1;
+    return super.snapshot();
+  }
 
   override async close(): Promise<void> {
     this.closeCalls += 1;

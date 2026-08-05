@@ -63,7 +63,7 @@ import {
   type EntityHandlersMetadata,
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
-import { Stand } from "../stand/stand.js";
+import { standAccess, Stand } from "../stand/stand.js";
 import {
   StorageSubscriptionRegistry,
   standSubscriptionLimits,
@@ -665,6 +665,7 @@ export class BoundedContext {
     );
     try {
       this.#registerRepositories(repositories);
+      standAccess.startSubscriptions(this.#stand, this.#subscriptionRegistry);
     } catch (error) {
       try {
         ContextParts.cleanupFailedContext(this, tenantIndex);
