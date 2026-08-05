@@ -89,7 +89,7 @@ import { boundedContextAccess, type BoundedContext } from "../context/bounded-co
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
-import type { StandReadResult, StandUpdate } from "../stand/stand.js";
+import { standAccess, type StandReadResult, type StandUpdate } from "../stand/stand.js";
 import type { StandSubscriptionRegistry } from "../stand/subscription-registry.js";
 import {
   DurableSubscriptionRecords,
@@ -473,7 +473,7 @@ export class SpineServices {
     }
 
     try {
-      this.#activateRecord(record);
+      await this.#activateRecord(record);
     } catch (error) {
       try {
         await this.#removeSubscription(id);
@@ -523,8 +523,26 @@ export class SpineServices {
     return route;
   }
 
-  #activateRecord(record: SubscriptionRecord): void {
+  async #activateRecord(record: SubscriptionRecord): Promise<void> {
     ServiceValues.clearInactiveTimer(record);
+    const registry = this.#subscriptionRegistry(record.route.context);
+    if (registry === undefined) {
+      this.#createSubscriptionAttachment(record);
+      return;
+    }
+    try {
+      await standAccess.attachSubscription(record.route.context.stand(), registry, record.id, () =>
+        this.#createSubscriptionAttachment(record),
+      );
+    } catch (error) {
+      if (!(error instanceof TypeError) || !error.message.includes("requires a Stand instance")) {
+        throw error;
+      }
+      this.#createSubscriptionAttachment(record);
+    }
+  }
+
+  #createSubscriptionAttachment(record: SubscriptionRecord): SubscriptionAttachment {
     if (record.kind === "event") {
       const eventSubscription = boundedContextAccess.subscribeToEvent(
         record.route.context,
@@ -542,7 +560,7 @@ export class SpineServices {
         },
       );
       record.delivery.attach(eventSubscription);
-      return;
+      return eventSubscription;
     }
 
     const stateRecord = record;
@@ -560,6 +578,7 @@ export class SpineServices {
       ServiceValues.tenantOptions(stateRecord.tenantId),
     );
     stateRecord.delivery.attach(standSubscription);
+    return standSubscription;
   }
 
   #removeSubscription(id: string): Promise<void> {
@@ -588,6 +607,7 @@ export class SpineServices {
       }
       ServiceValues.clearInactiveTimer(local);
       local.delivery.close();
+      this.#removeLocalAttachment(local);
       this.#subscriptions.delete(id);
     }
 
@@ -978,8 +998,17 @@ export class SpineServices {
   #forgetSubscription(record: SubscriptionRecord): void {
     ServiceValues.clearInactiveTimer(record);
     record.delivery.close();
+    this.#removeLocalAttachment(record);
     this.#subscriptions.delete(record.id);
     this.#releaseRecord(record);
+  }
+
+  #removeLocalAttachment(record: SubscriptionRecord): void {
+    try {
+      standAccess.removeSubscription(record.route.context.stand(), record.id);
+    } catch {
+      // Test-only legacy contexts have no Stand attachment seam.
+    }
   }
 
   #releaseLocal(

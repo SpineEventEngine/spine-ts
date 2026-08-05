@@ -1,6 +1,7 @@
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
 import { VersionSchema, type Version } from "@spine-event-engine/proto";
+import { SubscriptionIdSchema } from "@spine-event-engine/proto/client";
 import {
   RecordColumn,
   RecordMask,
@@ -228,6 +229,8 @@ export class Stand {
     { readonly current: EntityRecordStorage<unknown, Message>; close(): void }
   >();
   readonly #inFlight = new Set<Promise<void>>();
+  readonly #subscriptionCallbacks = new Map<string, () => StandSubscription>();
+  readonly #subscriptionAttachments = new Map<string, LocalSubscriptionAttachment>();
   #subscriptionTail: Promise<void> = Promise.resolve();
   #subscriptionTimer: ReturnType<typeof setInterval> | undefined;
   #closing = false;
@@ -247,6 +250,11 @@ export class Stand {
     );
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
     subscriptionStarters.set(this, (registry) => this.#startSubscriptions(registry));
+    subscriptionAttachers.set(this, (registry, id, onAttach) =>
+      this.#attachSubscription(registry, id, onAttach),
+    );
+    subscriptionReconcilers.set(this, (registry) => this.#reconcileSubscriptions(registry));
+    subscriptionRemovers.set(this, (id) => this.#removeSubscription(id));
   }
 
   /**
@@ -607,6 +615,11 @@ export class Stand {
     await Promise.all([...this.#inFlight]);
     if (this.#subscriptionTimer !== undefined) clearInterval(this.#subscriptionTimer);
     await this.#subscriptionTail;
+    for (const attachment of this.#subscriptionAttachments.values()) {
+      attachment.subscription.unsubscribe();
+    }
+    this.#subscriptionAttachments.clear();
+    this.#subscriptionCallbacks.clear();
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
@@ -619,20 +632,77 @@ export class Stand {
 
   #startSubscriptions(registry: StandSubscriptionRegistry): void {
     if (this.#subscriptionTimer !== undefined || this.#closing) return;
-    this.#reconcileSubscriptions(registry);
-    this.#subscriptionTimer = setInterval(() => this.#reconcileSubscriptions(registry), 10_000);
+    void this.#reconcileSubscriptions(registry);
+    this.#subscriptionTimer = setInterval(
+      () => void this.#reconcileSubscriptions(registry),
+      10_000,
+    );
     this.#subscriptionTimer.unref();
   }
 
-  #reconcileSubscriptions(registry: StandSubscriptionRegistry): void {
-    this.#subscriptionTail = this.#subscriptionTail
-      .then(async () => {
-        if (!this.#closing) {
-          await registry.cleanup();
-          await registry.snapshot();
+  #attachSubscription(
+    registry: StandSubscriptionRegistry,
+    id: string,
+    onAttach: () => StandSubscription,
+  ): Promise<void> {
+    this.#subscriptionCallbacks.set(id, onAttach);
+    return this.#reconcileSubscriptions(registry);
+  }
+
+  #removeSubscription(id: string): void {
+    this.#subscriptionCallbacks.delete(id);
+    this.#detachSubscription(id);
+  }
+
+  #reconcileSubscriptions(registry: StandSubscriptionRegistry): Promise<void> {
+    const cycle = this.#subscriptionTail.then(async () => {
+      if (this.#closing) return;
+      await registry.cleanup();
+      const entries = await registry.snapshot();
+      const seen = new Set<string>();
+      for (const entry of entries) {
+        const id = entry.subscription.id?.value;
+        if (id === undefined) continue;
+        seen.add(id);
+        if (entry.phase === "active") {
+          await this.#attachActiveSubscription(registry, id, entry.revision);
+        } else {
+          this.#detachSubscription(id);
         }
-      })
-      .catch(() => undefined);
+      }
+      for (const id of this.#subscriptionAttachments.keys()) {
+        if (!seen.has(id)) this.#detachSubscription(id);
+      }
+    });
+    this.#subscriptionTail = cycle.catch(() => undefined);
+    return cycle;
+  }
+
+  async #attachActiveSubscription(
+    registry: StandSubscriptionRegistry,
+    id: string,
+    revision: bigint,
+  ): Promise<void> {
+    const current = await registry.get(create(SubscriptionIdSchema, { value: id }));
+    if (current?.phase !== "active" || current.revision !== revision || this.#closing) return;
+    const existing = this.#subscriptionAttachments.get(id);
+    if (existing?.revision === revision) return;
+    this.#detachSubscription(id);
+    const onAttach = this.#subscriptionCallbacks.get(id);
+    if (onAttach === undefined) return;
+    const subscription = onAttach();
+    if (this.#closing) {
+      subscription.unsubscribe();
+      return;
+    }
+    this.#subscriptionAttachments.set(id, { revision, subscription });
+  }
+
+  #detachSubscription(id: string): void {
+    const attachment = this.#subscriptionAttachments.get(id);
+    if (attachment === undefined) return;
+    this.#subscriptionAttachments.delete(id);
+    attachment.subscription.unsubscribe();
   }
 
   #registration<Schema extends MessageSchema>(
@@ -918,6 +988,11 @@ interface DeferredStandUpdate {
   cancel(): void;
 }
 
+interface LocalSubscriptionAttachment {
+  readonly revision: bigint;
+  readonly subscription: StandSubscription;
+}
+
 interface StandCurrentRecord<Schema extends MessageSchema> {
   readonly state: MessageShape<Schema>;
   readonly version: bigint;
@@ -927,6 +1002,14 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
 
 interface StandAccess {
   startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): void;
+  attachSubscription(
+    stand: Stand,
+    registry: StandSubscriptionRegistry,
+    id: string,
+    onAttach: () => StandSubscription,
+  ): Promise<void>;
+  reconcileSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): Promise<void>;
+  removeSubscription(stand: Stand, id: string): void;
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -952,6 +1035,29 @@ export const standAccess: StandAccess = Object.freeze({
     if (start === undefined)
       throw new TypeError("Stand subscription start requires a Stand instance.");
     start(registry);
+  },
+  attachSubscription(
+    stand: Stand,
+    registry: StandSubscriptionRegistry,
+    id: string,
+    onAttach: () => StandSubscription,
+  ): Promise<void> {
+    const attach = subscriptionAttachers.get(stand);
+    if (attach === undefined)
+      throw new TypeError("Stand subscription attachment requires a Stand instance.");
+    return attach(registry, id, onAttach);
+  },
+  reconcileSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): Promise<void> {
+    const reconcile = subscriptionReconcilers.get(stand);
+    if (reconcile === undefined)
+      throw new TypeError("Stand subscription reconciliation requires a Stand instance.");
+    return reconcile(registry);
+  },
+  removeSubscription(stand: Stand, id: string): void {
+    const remove = subscriptionRemovers.get(stand);
+    if (remove === undefined)
+      throw new TypeError("Stand subscription removal requires a Stand instance.");
+    remove(id);
   },
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,
@@ -994,3 +1100,16 @@ const currentReads = new WeakMap<
   ) => Promise<StandCurrentRecord<Schema> | undefined>
 >();
 const subscriptionStarters = new WeakMap<Stand, (registry: StandSubscriptionRegistry) => void>();
+const subscriptionAttachers = new WeakMap<
+  Stand,
+  (
+    registry: StandSubscriptionRegistry,
+    id: string,
+    onAttach: () => StandSubscription,
+  ) => Promise<void>
+>();
+const subscriptionReconcilers = new WeakMap<
+  Stand,
+  (registry: StandSubscriptionRegistry) => Promise<void>
+>();
+const subscriptionRemovers = new WeakMap<Stand, (id: string) => void>();

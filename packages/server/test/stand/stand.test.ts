@@ -16,11 +16,14 @@ import type { EntityStorageInput } from "@spine-event-engine/storage/internal/en
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
+  InMemorySubscriptionRegistry,
   Stand,
   StandStateTypeError,
   type StandSubscription,
   type StandUpdate,
 } from "../../src/index.js";
+import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
+import { standAccess } from "../../src/stand/stand.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -71,6 +74,37 @@ const fileEntityEmptyFixture = createFixtureFileDescriptor(
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
+  it("fences local attachments by the exact active revision and sweeps absent snapshots", async () => {
+    const stand = new Stand({
+      context: { name: "Subscriptions", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const registry = new RevisionFencedRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-1" }),
+      topic: { id: { value: "updates" } },
+    });
+    const attached: number[] = [];
+    const detached: number[] = [];
+    await registry.create(subscription);
+    await registry.activate(subscription.id!);
+    await standAccess.attachSubscription(stand, registry, "s-1", () => {
+      attached.push(1);
+      return { closed: false, unsubscribe: () => detached.push(1) };
+    });
+
+    expect(attached).toEqual([]);
+
+    registry.allowExactRevision = true;
+    await standAccess.reconcileSubscriptions(stand, registry);
+    expect(attached).toEqual([1]);
+
+    await registry.delete(subscription.id!);
+    await standAccess.reconcileSubscriptions(stand, registry);
+    expect(detached).toEqual([1]);
+    await stand.close();
+  });
+
   it("registers known entity state types and rejects unknown reads and subscriptions", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -893,6 +927,18 @@ class CountingReadStorageFactory extends InMemoryStorageFactory {
     };
 
     return storage;
+  }
+}
+
+class RevisionFencedRegistry extends InMemorySubscriptionRegistry {
+  allowExactRevision = false;
+
+  override async get(id: Parameters<InMemorySubscriptionRegistry["get"]>[0]) {
+    const entry = await super.get(id);
+    if (entry === undefined || this.allowExactRevision) {
+      return entry;
+    }
+    return Object.freeze({ ...entry, revision: entry.revision + 1n });
   }
 }
 
