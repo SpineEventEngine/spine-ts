@@ -435,9 +435,24 @@ export class SpineServices {
       return;
     }
     try {
-      await standAccess.attachSubscription(record.route.context.stand(), registry, record.id, () =>
-        this.#createSubscriptionAttachment(record),
+      const consumer = await standAccess.consumeSubscription(
+        record.route.context.stand(),
+        registry,
+        record.id,
+        (signal) => {
+          if (signal.kind === "event") {
+            if (!ServiceValues.eventTenantMatches(record, signal.event)) return;
+            record.delivery.push(ServiceValues.createEventUpdate(record, signal.event));
+          } else if (record.kind === "state") {
+            const update = ServiceValues.createEntityUpdate(record, signal.update);
+            if (update !== undefined) record.delivery.push(update);
+          }
+          if (record.delivery.closed) {
+            void this.#removeSubscription(record.id).catch(() => undefined);
+          }
+        },
       );
+      record.delivery.attach(consumer);
     } catch (error) {
       if (!(error instanceof TypeError) || !error.message.includes("requires a Stand instance")) {
         throw error;
@@ -505,7 +520,7 @@ export class SpineServices {
       this.#unknownRemovals.add(id);
     } else {
       record.delivery.close();
-      this.#removeLocalAttachment(record);
+      this.#removeLocalAttachment();
       this.#subscriptions.delete(id);
     }
 
@@ -574,12 +589,9 @@ export class SpineServices {
     return undefined;
   }
 
-  #removeLocalAttachment(record: SubscriptionRecord): void {
-    try {
-      standAccess.removeSubscription(record.route.context.stand(), record.id);
-    } catch {
-      // Test-only legacy contexts have no Stand attachment seam.
-    }
+  #removeLocalAttachment(): void {
+    // The stream-owned consumer is closed above. The canonical definition is
+    // deleted below; every Stand then detaches its own observer on reconciliation.
   }
 
 

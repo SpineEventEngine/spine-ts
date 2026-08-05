@@ -15,6 +15,8 @@ import type {
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
 import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
+import type { EventBus } from "../bus/event-bus.js";
+import { observeSubscription, type StandSubscriptionSignal } from "./subscription-observer.js";
 import type { StandSubscriptionRegistry } from "./subscription-registry.js";
 
 /**
@@ -229,8 +231,9 @@ export class Stand {
     { readonly current: EntityRecordStorage<unknown, Message>; close(): void }
   >();
   readonly #inFlight = new Set<Promise<void>>();
-  readonly #subscriptionCallbacks = new Map<string, () => StandSubscription>();
+  readonly #subscriptionConsumers = new Map<string, Set<(signal: StandSubscriptionSignal) => void>>();
   readonly #subscriptionAttachments = new Map<string, LocalSubscriptionAttachment>();
+  #subscriptionEventBus: EventBus | undefined;
   #subscriptionTail: Promise<void> = Promise.resolve();
   #subscriptionTimer: ReturnType<typeof setInterval> | undefined;
   #closing = false;
@@ -249,12 +252,16 @@ export class Stand {
       this.#deferUpdate(schema, state, updateOptions),
     );
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
-    subscriptionStarters.set(this, (registry) => this.#startSubscriptions(registry));
-    subscriptionAttachers.set(this, (registry, id, onAttach) =>
-      this.#attachSubscription(registry, id, onAttach),
+    subscriptionStarters.set(this, (registry, eventBus) => {
+      this.#startSubscriptions(registry, eventBus);
+    });
+    subscriptionConsumers.set(this, (registry, id, onSignal) =>
+      this.#consumeSubscription(registry, id, onSignal),
     );
     subscriptionReconcilers.set(this, (registry) => this.#reconcileSubscriptions(registry));
-    subscriptionRemovers.set(this, (id) => this.#removeSubscription(id));
+    subscriptionRemovers.set(this, (id) => {
+      this.#removeSubscription(id);
+    });
   }
 
   /**
@@ -634,7 +641,7 @@ export class Stand {
       attachment.subscription.unsubscribe();
     }
     this.#subscriptionAttachments.clear();
-    this.#subscriptionCallbacks.clear();
+    this.#subscriptionConsumers.clear();
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
@@ -645,8 +652,9 @@ export class Stand {
     this.#closed = true;
   }
 
-  #startSubscriptions(registry: StandSubscriptionRegistry): void {
+  #startSubscriptions(registry: StandSubscriptionRegistry, eventBus: EventBus): void {
     if (this.#subscriptionTimer !== undefined || this.#closing) return;
+    this.#subscriptionEventBus = eventBus;
     void this.#reconcileSubscriptions(registry);
     this.#subscriptionTimer = setInterval(
       () => void this.#reconcileSubscriptions(registry),
@@ -655,17 +663,36 @@ export class Stand {
     this.#subscriptionTimer.unref();
   }
 
-  #attachSubscription(
+  #consumeSubscription(
     registry: StandSubscriptionRegistry,
     id: string,
-    onAttach: () => StandSubscription,
-  ): Promise<void> {
-    this.#subscriptionCallbacks.set(id, onAttach);
-    return this.#reconcileSubscriptions(registry);
+    onSignal: (signal: StandSubscriptionSignal) => void,
+  ): Promise<StandSubscription> {
+    let closed = false;
+    let consumers = this.#subscriptionConsumers.get(id);
+    if (consumers === undefined) {
+      consumers = new Set();
+      this.#subscriptionConsumers.set(id, consumers);
+    }
+    consumers.add(onSignal);
+    return this.#reconcileSubscriptions(registry).then(() =>
+      Object.freeze({
+        get closed() {
+          return closed;
+        },
+        unsubscribe: () => {
+          if (closed) return;
+          closed = true;
+          const current = this.#subscriptionConsumers.get(id);
+          current?.delete(onSignal);
+          if (current?.size === 0) this.#subscriptionConsumers.delete(id);
+        },
+      }),
+    );
   }
 
   #removeSubscription(id: string): void {
-    this.#subscriptionCallbacks.delete(id);
+    this.#subscriptionConsumers.delete(id);
     this.#detachSubscription(id);
   }
 
@@ -703,13 +730,18 @@ export class Stand {
     const existing = this.#subscriptionAttachments.get(id);
     if (existing?.revision === revision) return;
     this.#detachSubscription(id);
-    const onAttach = this.#subscriptionCallbacks.get(id);
-    if (onAttach === undefined) return;
-    const subscription = onAttach();
-    if (this.#closing) {
-      subscription.unsubscribe();
-      return;
-    }
+    const subscription = observeSubscription(
+      current.subscription as never,
+      this.#subscriptionEventBus,
+      (typeUrl) => this.#registrations.get(typeUrl)?.schema,
+      (schema, onUpdate, tenantId) => {
+        return this.subscribe(schema, onUpdate, tenantId === undefined ? {} : { tenantId });
+      },
+      (signal) => {
+        this.#notifySubscription(id, signal);
+      },
+    );
+    if (subscription === undefined) return;
     this.#subscriptionAttachments.set(id, { revision, subscription });
   }
 
@@ -718,6 +750,12 @@ export class Stand {
     if (attachment === undefined) return;
     this.#subscriptionAttachments.delete(id);
     attachment.subscription.unsubscribe();
+  }
+
+  #notifySubscription(id: string, signal: StandSubscriptionSignal): void {
+    for (const consumer of [...(this.#subscriptionConsumers.get(id) ?? [])]) {
+      consumer(signal);
+    }
   }
 
   #registration<Schema extends MessageSchema>(
@@ -1020,13 +1058,13 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
 }
 
 interface StandAccess {
-  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): void;
-  attachSubscription(
+  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry, eventBus: EventBus): void;
+  consumeSubscription(
     stand: Stand,
     registry: StandSubscriptionRegistry,
     id: string,
-    onAttach: () => StandSubscription,
-  ): Promise<void>;
+    onSignal: (signal: StandSubscriptionSignal) => void,
+  ): Promise<StandSubscription>;
   reconcileSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): Promise<void>;
   removeSubscription(stand: Stand, id: string): void;
   readCurrent<Schema extends MessageSchema>(
@@ -1049,22 +1087,22 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
-  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): void {
+  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry, eventBus: EventBus): void {
     const start = subscriptionStarters.get(stand);
     if (start === undefined)
       throw new TypeError("Stand subscription start requires a Stand instance.");
-    start(registry);
+    start(registry, eventBus);
   },
-  attachSubscription(
+  consumeSubscription(
     stand: Stand,
     registry: StandSubscriptionRegistry,
     id: string,
-    onAttach: () => StandSubscription,
-  ): Promise<void> {
-    const attach = subscriptionAttachers.get(stand);
-    if (attach === undefined)
-      throw new TypeError("Stand subscription attachment requires a Stand instance.");
-    return attach(registry, id, onAttach);
+    onSignal: (signal: StandSubscriptionSignal) => void,
+  ): Promise<StandSubscription> {
+    const consume = subscriptionConsumers.get(stand);
+    if (consume === undefined)
+      throw new TypeError("Stand subscription consumption requires a Stand instance.");
+    return consume(registry, id, onSignal);
   },
   reconcileSubscriptions(stand: Stand, registry: StandSubscriptionRegistry): Promise<void> {
     const reconcile = subscriptionReconcilers.get(stand);
@@ -1118,14 +1156,17 @@ const currentReads = new WeakMap<
     options: StandReadOptions,
   ) => Promise<StandCurrentRecord<Schema> | undefined>
 >();
-const subscriptionStarters = new WeakMap<Stand, (registry: StandSubscriptionRegistry) => void>();
-const subscriptionAttachers = new WeakMap<
+const subscriptionStarters = new WeakMap<
+  Stand,
+  (registry: StandSubscriptionRegistry, eventBus: EventBus) => void
+>();
+const subscriptionConsumers = new WeakMap<
   Stand,
   (
     registry: StandSubscriptionRegistry,
     id: string,
-    onAttach: () => StandSubscription,
-  ) => Promise<void>
+    onSignal: (signal: StandSubscriptionSignal) => void,
+  ) => Promise<StandSubscription>
 >();
 const subscriptionReconcilers = new WeakMap<
   Stand,

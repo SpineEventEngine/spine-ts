@@ -6,6 +6,7 @@ import { TypeUrls } from "@spine-event-engine/core";
 import { VersionSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
+  EventStore,
   RecordColumn,
   RecordStorage,
   type RecordSpec,
@@ -17,6 +18,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   InMemorySubscriptionRegistry,
+  EventBus,
   Stand,
   StandStateTypeError,
   type StandSubscription,
@@ -74,35 +76,84 @@ const fileEntityEmptyFixture = createFixtureFileDescriptor(
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
-  it("fences local attachments by the exact active revision and sweeps absent snapshots", async () => {
+  it("fences Stand-owned observers by the exact active revision and sweeps absent snapshots", async () => {
     const stand = new Stand({
       context: { name: "Subscriptions", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
+    stand.register(ProjectionStateSchema);
     const registry = new RevisionFencedRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "s-1" }),
-      topic: { id: { value: "updates" } },
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
     });
-    const attached: number[] = [];
-    const detached: number[] = [];
+    const observed: number[] = [];
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
     await registry.create(subscription);
-    await registry.activate(subscription.id!);
-    await standAccess.attachSubscription(stand, registry, "s-1", () => {
-      attached.push(1);
-      return { closed: false, unsubscribe: () => detached.push(1) };
-    });
+    await registry.activate(subscription.id);
+    standAccess.startSubscriptions(stand, registry, undefined as never);
+    await standAccess.consumeSubscription(stand, registry, "s-1", () => observed.push(1));
 
-    expect(attached).toEqual([]);
+    await stand.update(ProjectionStateSchema, createState("one", "Before fence"));
+    expect(observed).toEqual([]);
 
     registry.allowExactRevision = true;
     await standAccess.reconcileSubscriptions(stand, registry);
-    expect(attached).toEqual([1]);
+    await stand.update(ProjectionStateSchema, createState("two", "After fence"));
+    expect(observed).toEqual([1]);
 
-    await registry.delete(subscription.id!);
+    await registry.delete(subscription.id);
     await standAccess.reconcileSubscriptions(stand, registry);
-    expect(detached).toEqual([1]);
+    await stand.update(ProjectionStateSchema, createState("three", "After sweep"));
+    expect(observed).toEqual([1]);
     await stand.close();
+  });
+
+  it("observes one shared definition from both nodes without crossing local buses", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const registry = new InMemorySubscriptionRegistry();
+    const first = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const second = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const firstBus = new EventBus(new EventStore({ name: "Tasks", multitenant: false }, storageFactory));
+    const secondBus = new EventBus(new EventStore({ name: "Tasks", multitenant: false }, storageFactory));
+    first.register(ProjectionStateSchema);
+    second.register(ProjectionStateSchema);
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "shared" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    const observed = { first: 0, second: 0 };
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    standAccess.startSubscriptions(first, registry, firstBus);
+    standAccess.startSubscriptions(second, registry, secondBus);
+    await standAccess.consumeSubscription(first, registry, "shared", () => observed.first++);
+    await standAccess.consumeSubscription(second, registry, "shared", () => observed.second++);
+
+    await first.update(ProjectionStateSchema, createState("first", "First node"));
+    await second.update(ProjectionStateSchema, createState("second", "Second node"));
+
+    expect(observed).toEqual({ first: 1, second: 1 });
+    await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
   });
 
   it("registers known entity state types and rejects unknown reads and subscriptions", async () => {

@@ -666,7 +666,7 @@ export class BoundedContext {
     );
     try {
       this.#registerRepositories(repositories);
-      standAccess.startSubscriptions(this.#stand, this.#subscriptionRegistry);
+      standAccess.startSubscriptions(this.#stand, this.#subscriptionRegistry, this.#eventBus);
     } catch (error) {
       try {
         ContextParts.cleanupFailedContext(this, tenantIndex);
