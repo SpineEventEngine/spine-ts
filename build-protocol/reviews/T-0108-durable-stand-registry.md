@@ -442,3 +442,10 @@ mismatch was exposed.
   exited cleanly. The reusable provider fixture passed 8/8 independently for
   memory, MySQL, and Datastore; Datastore emitted only its existing
   Filter-object recommendation warning.
+
+The corrected staging-key assertion is assigned one final narrow pass to the
+existing performance/reliability reviewer, explicit `gpt-5.6-terra` / `high`.
+The corrected README wording is assigned one final narrow pass to the immutable
+existing documentation reviewer, `gpt-5.6-luna` / `medium`. Runtime
+self-introspection may be unavailable; immutable role/profile and explicit
+dispatch remain the metadata evidence.
