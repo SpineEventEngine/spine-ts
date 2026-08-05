@@ -29,9 +29,11 @@ uses a domain EventBus persistence-bypass path instead of a paired System
 Context EventBus, and that Message Board discards complete normal subscription
 payloads. T-0113 Q&A and planning are complete. The approved correction is
 dependency-ordered as T-0114 through T-0119 in
-`build-protocol/planning/T-0113_SYSTEM_CONTEXT_PLAN.md`. Implementation has not
-started and requires explicit human authorization. Complete this correction
-before Wave 7 Q&A continues.
+`build-protocol/planning/T-0113_SYSTEM_CONTEXT_PLAN.md`. T-0114 EventBus
+storing/forgetting policy is reviewed, release-verified, integrated,
+post-merge verified, and pushed. T-0115 atomic System Context and Stand cutover
+is the active next task. Complete T-0115 through T-0119 before Wave 7 Q&A
+continues.
 
 ## Purpose
 

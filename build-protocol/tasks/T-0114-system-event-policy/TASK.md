@@ -1,6 +1,6 @@
 # T-0114: EventBus Persistence Policy
 
-Status: Reviews and release verification clean; integration pending
+Status: Complete; integrated, post-merge verified, and pushed
 
 ## Objective
 

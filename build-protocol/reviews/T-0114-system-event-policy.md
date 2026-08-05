@@ -1,6 +1,6 @@
 # T-0114 Review Log
 
-Status: Clean; release verification passed
+Status: Clean; release and post-merge verification passed
 
 ## Scope
 
