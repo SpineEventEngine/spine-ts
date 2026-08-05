@@ -640,6 +640,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
             resultDigest: digest,
             generation: generationToken(next),
             token: randomUUID(),
+            stagedAt: Date.now(),
             expectedRevision: 1,
             resultRevision: 1,
           },
@@ -706,6 +707,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           resultDigest: recordDigest(active),
           generation: generationToken(record),
           token: randomUUID(),
+          stagedAt: Date.now(),
           expectedRevision: Number(entry.revision),
           resultRevision: Number(entry.revision + 1n),
         });
@@ -750,6 +752,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           expectedDigest: recordDigest(record),
           generation: generationToken(record),
           token: randomUUID(),
+          stagedAt: Date.now(),
           expectedRevision: Number(entry.revision),
         });
         if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
@@ -1011,6 +1014,12 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     const staged = await this.#stage.read(stageSlot);
     if (control.state === "staged") {
       if (staged === undefined) {
+        const remaining = operation.stagedAt + stageRecoveryMilliseconds - Date.now();
+        if (remaining > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+          await this.#settleCreate(control, controlRecord, operation);
+          return;
+        }
         const rolledBack = controlWithOperation(control, undefined, control.count - 1);
         await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(rolledBack));
         return;
@@ -1104,6 +1113,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         expectedDigest: recordDigest(record),
         generation: generationToken(record),
         token: randomUUID(),
+        stagedAt: Date.now(),
         expectedRevision: Number(StandSubscriptionRecords.read(record, id).revision),
       });
       if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
@@ -1117,6 +1127,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
 const controlSlot = "control";
 const stageSlot = "stage";
 const controlTypeUrl = "type.spine.io/stand.subscription.control.v1";
+const stageRecoveryMilliseconds = 25;
 interface ControlOperation {
   readonly kind: "create" | "activate" | "delete" | "discard";
   readonly id: string;
@@ -1124,6 +1135,7 @@ interface ControlOperation {
   readonly resultDigest?: string;
   readonly generation: string;
   readonly token: string;
+  readonly stagedAt: number;
   readonly expectedRevision: number;
   readonly resultRevision?: number;
 }
@@ -1218,6 +1230,7 @@ function readControl(record: Any, limit: number): Control {
       resultDigest?: unknown;
       generation?: unknown;
       token?: unknown;
+      stagedAt?: unknown;
       expectedRevision?: unknown;
       resultRevision?: unknown;
     };
@@ -1234,6 +1247,8 @@ function readControl(record: Any, limit: number): Control {
       !/^[0-9a-f]{32}$/.test(operation.generation) ||
       typeof operation.token !== "string" ||
       !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(operation.token) ||
+      !Number.isSafeInteger(operation.stagedAt) ||
+      (operation.stagedAt as number) < 0 ||
       !Number.isSafeInteger(operation.expectedRevision) ||
       (operation.expectedRevision as number) < 0 ||
       (operation.resultDigest !== undefined &&
@@ -1263,6 +1278,7 @@ function readControl(record: Any, limit: number): Control {
           : { resultDigest: validOperation.resultDigest }),
         generation: validOperation.generation,
         token: validOperation.token,
+        stagedAt: validOperation.stagedAt,
         expectedRevision: validOperation.expectedRevision,
         ...(validOperation.resultRevision === undefined
           ? {}
