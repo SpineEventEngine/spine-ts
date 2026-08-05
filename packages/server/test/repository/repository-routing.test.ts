@@ -5140,16 +5140,19 @@ describe("repository signal routing", () => {
         },
       })
       .build();
-    await context.commandBus().post(createAggregateCommand("pm-seed", "pm-archive"));
-    await waitForCondition(() => changes.length === 2);
-    changes.splice(0);
-    await context
-      .commandBus()
-      .post(createAggregateCommand("pm-archive", "pm-archive", "archive-lifecycle"));
-    expect(RoutingProcessManager.commandCalls).toBe(2);
-    await waitForCondition(() => changes.length === 1);
-    expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
-    await context.close();
+    try {
+      await context.commandBus().post(createAggregateCommand("pm-seed", "pm-archive"));
+      await waitForCondition(() => changes.length === 2);
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-archive", "pm-archive", "archive-lifecycle"));
+      expect(RoutingProcessManager.commandCalls).toBe(2);
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
+    } finally {
+      await context.close();
+    }
   });
 
   it("rehydrates archived process managers for a lifecycle-only unarchive", async () => {

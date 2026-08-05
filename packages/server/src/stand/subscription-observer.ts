@@ -123,7 +123,7 @@ export class SubscriptionObservers {
    *
    * @param subscription Defines the state target and tenant filter.
    * @param state Supplies registered entity-state metadata.
-   * @param systemEventBus Delivers `EntityStateChanged` events.
+   * @param systemEventBus Delivers Entity state and lifecycle System events.
    * @param onUpdate Receives the rendered client update.
    * @returns Returns an attachment when the System bus is available.
    * @internal
