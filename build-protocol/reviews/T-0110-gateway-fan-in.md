@@ -99,3 +99,13 @@ substantively affected reliability/API/docs concerns require confirmation.
   BrowserBackend's URL wording plural-aware.
 - One final bounded correction returns to the existing Terra/medium owner. Only
   reliability, API, and documentation receive finding-specific confirmation.
+
+## Final Confirmation Endpoint
+
+- `db597327` adds finite non-cooperative rollback proof, clears completed cleanup
+  timers, documents the public topology capability/lifecycle/default contract,
+  and corrects the three exact guide/TSDoc sentences. `ca22ecd2` records the
+  evidence.
+- Fresh focused preflight passes every deterministic gate and 375 tests.
+- Reliability, API, and documentation receive final confirmation of only their
+  previously remaining findings.
