@@ -73,7 +73,8 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
   },
 
   write(entry: StandSubscriptionEntry, generation = randomBytes(16)): StandSubscriptionRecord {
-    if (generation.byteLength !== 16) throw new RangeError("Stand subscription generation is invalid.");
+    if (generation.byteLength !== 16)
+      throw new RangeError("Stand subscription generation is invalid.");
     const record = create(StandSubscriptionRecordSchema, {
       subscription: entry.subscription,
       phase: entry.phase === "pending" ? SubscriptionPhase.PENDING : SubscriptionPhase.ACTIVE,
