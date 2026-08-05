@@ -16,7 +16,7 @@ test("declares one Gateway, two identical applications, shared storage, and simp
 
   for (const service of ["application-1", "application-2", "datastore", "delivery", "gateway"])
     assert.match(source, new RegExp(`^ {2}${service}:`, "mu"));
-  assert.doesNotMatch(source, /^  gateway-[0-9]+:/mu);
+  assert.doesNotMatch(source, /^ {2}gateway-[0-9]+:/mu);
   assert.match(source, /spine-ts\/simple-delivery-server:local/u);
   assert.match(source, /DATASTORE_EMULATOR_HOST: datastore:8081/u);
   assert.match(source, /BACKEND_URLS: http:\/\/application-1:8080,http:\/\/application-2:8080/u);
