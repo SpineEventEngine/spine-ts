@@ -1,7 +1,16 @@
 services:
   datastore:
     image: gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4
-    command: [gcloud, emulators, firestore, start, --database-mode=datastore-mode, --host-port=0.0.0.0:8081, --quiet]
+    command:
+      [
+        gcloud,
+        emulators,
+        firestore,
+        start,
+        --database-mode=datastore-mode,
+        --host-port=0.0.0.0:8081,
+        --quiet,
+      ]
     healthcheck:
       test: [CMD-SHELL, "bash -c 'echo > /dev/tcp/127.0.0.1/8081'"]
       interval: 2s
@@ -14,14 +23,19 @@ services:
       HOST: 0.0.0.0
       PORT: 8484
     healthcheck:
-      test: [CMD-SHELL, "node -e \"const client=require('node:http2').connect('http://127.0.0.1:8484');client.on('connect',()=>{client.close();process.exit(0)});client.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),1000)\""]
+      test:
+        [
+          CMD-SHELL,
+          'node -e "const client=require(''node:http2'').connect(''http://127.0.0.1:8484'');client.on(''connect'',()=>{client.close();process.exit(0)});client.on(''error'',()=>process.exit(1));setTimeout(()=>process.exit(1),1000)"',
+        ]
       interval: 2s
       timeout: 2s
       retries: 30
 
   application-1: &application
     image: spine-ts/message-board:local
-    command: [node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js]
+    command:
+      [node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js]
     environment: &application-environment
       HOST: 0.0.0.0
       PORT: 8080

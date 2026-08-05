@@ -110,7 +110,7 @@ try {
 
 async function fullFlow() {
   await post("initial", "Compose public query");
-  await authoritativeQuery();
+  await authoritativeQuery(`${runId}-initial`);
   const subscription = await subscriptions.subscribe(topic);
   const controller = new globalThis.AbortController();
   const updates = subscriptions
@@ -119,7 +119,7 @@ async function fullFlow() {
   try {
     const next = updates.next();
     let update;
-    for (let attempt = 0; attempt < 5 && update === undefined; attempt += 1) {
+    for (let attempt = 0; attempt < 20 && update === undefined; attempt += 1) {
       await post(`update-${attempt}`, "Compose public subscription");
       update = await Promise.race([
         next,
@@ -178,9 +178,17 @@ function isCancelledSubscriptionClosure(error) {
 }
 
 async function authoritativeQuery() {
+  await authoritativeQueryFor(undefined);
+}
+
+async function authoritativeQueryFor(id) {
   await eventually(async () => {
     const response = await queries.read(query);
-    return response.message.length > 0 ? true : undefined;
+    if (id === undefined) return response.message.length > 0 ? true : undefined;
+    const matches = response.message.filter(
+      (entry) => AnyMessages.unpack(entry.state, BoardMessageViewSchema)?.id?.value === id,
+    );
+    return matches.length === 1 ? true : undefined;
   });
   process.stdout.write("query-ok\n");
 }

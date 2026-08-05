@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "docker compose --file deploy/compose.yaml up",
+    "test": "node --test test/topology.test.mjs test/lifecycle.test.mjs",
     "test:topology": "node --test test/topology.test.mjs"
   }
 }

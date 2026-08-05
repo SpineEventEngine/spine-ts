@@ -4,6 +4,11 @@ This example runs the existing Message Board model, application package, and
 React UI in a distributed development topology. It adds no copied domain or UI
 code: use the packages under `../message-board/` for both.
 
+```text
+Browser -> Gateway -> application-1 or application-2 -> shared Datastore
+                      \-> in-memory simple delivery server
+```
+
 ## Start
 
 Build the local images once from the repository root, then start all topology
@@ -12,8 +17,9 @@ commit it:
 
 ```bash
 pnpm images:build:local
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out fixture-private-key.pem
-MESSAGE_BOARD_SESSION_PRIVATE_KEY="$(cat fixture-private-key.pem)" \\
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \\
+  -out examples/distributed-message-board/fixture-private-key.pem
+MESSAGE_BOARD_SESSION_PRIVATE_KEY="$(cat examples/distributed-message-board/fixture-private-key.pem)" \\
   pnpm --dir examples/distributed-message-board start
 ```
 
