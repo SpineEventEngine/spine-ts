@@ -30,6 +30,9 @@ test("creates a local development signing key instead of referring to an absent 
   assert.match(source, /fixture-private-key\.pem/u);
   assert.doesNotMatch(source, /BEGIN PRIVATE KEY/u);
   assert.match(readFileSync(gitignore, "utf8"), /^fixture-private-key\.pem$/mu);
+  const lines = source.split("\n");
+  for (const line of [lines[19], lines[21], lines[28]])
+    assert.equal(line.match(/\\+$/u)?.[0].length, 1);
 });
 
 test("documents the reuse boundary and finite operator lifecycle", () => {

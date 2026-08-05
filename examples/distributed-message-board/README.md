@@ -17,16 +17,16 @@ commit it:
 
 ```bash
 pnpm images:build:local
-openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \\
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 \
   -out examples/distributed-message-board/fixture-private-key.pem
-MESSAGE_BOARD_SESSION_PRIVATE_KEY="$(cat examples/distributed-message-board/fixture-private-key.pem)" \\
+MESSAGE_BOARD_SESSION_PRIVATE_KEY="$(cat examples/distributed-message-board/fixture-private-key.pem)" \
   pnpm --dir examples/distributed-message-board start
 ```
 
 Start the existing UI separately with its Gateway URL:
 
 ```bash
-VITE_MESSAGE_BOARD_GATEWAY_URL=http://127.0.0.1:18080 \\
+VITE_MESSAGE_BOARD_GATEWAY_URL=http://127.0.0.1:18080 \
   pnpm --dir examples/message-board/web start
 ```
 

@@ -13,13 +13,15 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguffSvDX1/JxpSa58
 umttcOhLktfYmydcd8IV4+hm9zGhRANCAASbBkf9sjyAX3qpSQ0s3nh3pIK2IbeY
 WOYLX8/ohZI0479Vp6ZOV1NXnKt1c0e9ovpoGmfUuccITMasHL/rbs+3
 -----END PRIVATE KEY-----`;
-let deadlineAt = 0;
+let cleanupDeadlineAt = 0;
+let operationDeadlineAt = 0;
 
 test(
   "runs two application nodes behind one Gateway and shuts them down",
   { timeout: 90_000 },
   () => {
-    deadlineAt = Date.now() + 80_000;
+    cleanupDeadlineAt = Date.now() + 88_000;
+    operationDeadlineAt = cleanupDeadlineAt - 15_000;
     const project = `t0111-${Date.now()}`;
     try {
       composeRun(project, ["up", "--detach"]);
@@ -29,13 +31,13 @@ test(
       composeRun(project, ["kill", "--signal", "SIGTERM", "gateway"]);
       waitStopped(project, "gateway");
     } finally {
-      composeRun(project, ["down", "--volumes", "--remove-orphans"], true);
+      composeRun(project, ["down", "--volumes", "--remove-orphans"], true, true);
       assertNoLeaks(project);
     }
   },
 );
 
-function composeRun(project, arguments_, ignoreFailure = false) {
+function composeRun(project, arguments_, ignoreFailure = false, cleanup = false) {
   try {
     return execFileSync(
       "docker",
@@ -43,7 +45,7 @@ function composeRun(project, arguments_, ignoreFailure = false) {
       {
         encoding: "utf8",
         env: { ...process.env, GATEWAY_PORT: "0", MESSAGE_BOARD_SESSION_PRIVATE_KEY: key },
-        timeout: remaining(),
+        timeout: remaining(cleanup),
       },
     );
   } catch (error) {
@@ -113,7 +115,7 @@ function assertNoLeaks(project) {
     assert.equal(
       execFileSync("docker", [command, ...arguments_], {
         encoding: "utf8",
-        timeout: remaining(),
+        timeout: remaining(true),
       }).trim(),
       "",
     );
@@ -148,6 +150,6 @@ function clientRun(project, runId) {
   );
 }
 
-function remaining() {
-  return Math.max(1, deadlineAt - Date.now());
+function remaining(cleanup = false) {
+  return Math.max(1, (cleanup ? cleanupDeadlineAt : operationDeadlineAt) - Date.now());
 }

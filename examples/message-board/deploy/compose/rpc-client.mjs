@@ -147,6 +147,7 @@ async function distributedFlow() {
       posted.add(id);
       const update = await Promise.race([next, pause(1_000)]);
       if (update === undefined) continue;
+      if (update.done) throw new Error("Distributed subscription ended before an update.");
       if (noticeFor(update, posted)) return process.stdout.write("full-ok\n");
       next = updates.next();
     }
