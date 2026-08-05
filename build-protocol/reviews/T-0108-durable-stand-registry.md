@@ -331,6 +331,24 @@ immutable existing `gpt-5.6-luna` / `medium` reviewer. Security remains N/A.
 Runtime self-introspection may be unavailable; immutable role/profile and
 explicit dispatch remain the metadata evidence.
 
+## Closure Re-Review Results
+
+- TypeScript/API: CLEAN.
+- Style/maintainability: CLEAN.
+- Performance/reliability: runtime fencing, liveness, and teardown are clean;
+  one P1 test defect remains because the stale-stage assertion opens storage key
+  `...:stage` instead of production's `...:staging` and therefore inspects a
+  different empty namespace.
+- Documentation: one P2 wording defect remains because the beginner README
+  calls returned copies fully frozen while cloned Protobuf byte arrays remain
+  intentionally mutable.
+
+The two deterministic corrections are assigned to one fresh existing
+`implementer`, explicitly `gpt-5.6-terra` / `medium`: use the exact production
+staging key in the regression and qualify the beginner clone/freeze wording.
+Runtime self-introspection may be unavailable; immutable role/profile plus
+explicit dispatch remain the acceptance evidence.
+
 ## Final Correction Evidence
 
 The existing `implementer` correction used explicit `gpt-5.6-terra` / `medium`.
