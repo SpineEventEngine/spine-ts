@@ -481,6 +481,7 @@ const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
 const dispatchFailureLimit = 10;
 const dispatchErrorMessageLimit = 500;
 const dispatchErrorStackLimit = 2_000;
+let readCatchUpCommitSequence = 0;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
@@ -898,6 +899,7 @@ export class BoundedContext {
     const clearedStateTypes: string[] = [];
     let clearedEntityCount = 0;
     let replayedEventCount = 0;
+    const commitScope = ContextParts.nextCatchUpCommitScope();
 
     for (const target of clearTargets) {
       clearedEntityCount += await this.#stand.clear(target.schema, tenantOptions);
@@ -909,7 +911,11 @@ export class BoundedContext {
     for (const event of events) {
       try {
         ContextParts.validateReplayTenant(storageContext, event);
-        replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(projections, event);
+        replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(
+          projections,
+          event,
+          commitScope,
+        );
       } catch (error) {
         throw ContextParts.catchUpReplayError(event, error);
       }
@@ -2406,6 +2412,7 @@ const ContextParts = Object.freeze({
   async dispatchStoredProjectionEvent(
     projections: readonly ProjectionDispatch[],
     event: Event,
+    commitScope: string,
   ): Promise<number> {
     const typeUrl = event.message?.typeUrl;
 
@@ -2422,10 +2429,16 @@ const ContextParts = Object.freeze({
       await repositoryAccess.dispatchProjectionDirect(
         projection.repository,
         clone(EventSchema, event),
+        commitScope,
       );
     }
 
     return matching.length > 0 ? 1 : 0;
+  },
+
+  nextCatchUpCommitScope(): string {
+    readCatchUpCommitSequence += 1;
+    return `catch-up-${String(Date.now())}-${String(readCatchUpCommitSequence)}`;
   },
 
   catchUpReplayError(event: Event, cause: unknown): Error {

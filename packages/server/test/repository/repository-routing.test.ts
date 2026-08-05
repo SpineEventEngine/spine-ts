@@ -4512,6 +4512,54 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("does not expose projection state when its atomic commit fails", async () => {
+    ExecutingTaskProjection.reset();
+    const factory = new FailingEntityCommitStorageFactory();
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+
+    await expect(
+      context.eventBus().post(createProjectionEvent("projection-commit-fails", "projection-fails")),
+    ).rejects.toThrow("forced Entity commit failure");
+    await expect(
+      context.stand().read(ProjectionStateSchema, "projection-fails"),
+    ).resolves.toBeUndefined();
+    expect(changes).toEqual([]);
+  });
+
+  it("does not expose process-manager state or follow-ups when its atomic commit fails", async () => {
+    RoutingProcessManager.reset();
+    const factory = new FailingEntityCommitStorageFactory();
+    const dispatched: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema, EntityStateChangedSchema],
+        dispatch: (event) => {
+          dispatched.push(event);
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("pm-commit-fails", "pm-fails")),
+    ).rejects.toThrow("forced Entity commit failure");
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-fails"),
+    ).resolves.toBeUndefined();
+    expect(dispatched).toEqual([]);
+  });
+
   it("publishes a committed aggregate state change after durable persistence", async () => {
     const changes: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
@@ -7911,6 +7959,28 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
       ): Promise<EntityCommitResult> => {
         this.#reached();
         await this.#gate;
+        return await storage.commit(unit);
+      },
+      close: () => {
+        storage.close();
+      },
+    } satisfies EntityCommitStorage;
+  }
+}
+
+class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
+  #remainingFailures = 1;
+
+  override createEntityCommitStorage(input: unknown): unknown {
+    const storage = super.createEntityCommitStorage(input) as EntityCommitStorage;
+    return {
+      commit: async <I, S extends Message>(
+        unit: EntityCommitInput<I, S>,
+      ): Promise<EntityCommitResult> => {
+        if (this.#remainingFailures > 0) {
+          this.#remainingFailures -= 1;
+          throw new Error("forced Entity commit failure");
+        }
         return await storage.commit(unit);
       },
       close: () => {
