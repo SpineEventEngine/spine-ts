@@ -4526,7 +4526,7 @@ describe("repository signal routing", () => {
     try {
       await context.commandBus().post(createAggregateCommand("command-state-change", "changed"));
 
-      await waitForCondition(() => changes.length === 1);
+      await new Promise((resolve) => setTimeout(resolve, 10));
       expect(changes).toHaveLength(1);
       expect(changes[0]).toMatchObject({
         message: { typeUrl: TypeUrls.derive(EntityStateChangedSchema) },
@@ -4643,6 +4643,26 @@ describe("repository signal routing", () => {
       .build();
     try {
       await context.eventBus().post(createProjectionEvent("unchanged", "unchanged-id"));
+      await context.close();
+      expect(changes).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not publish when aggregate transition validation rejects the handler mutation", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createTransitionViolatingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: async (event) => void changes.push(event),
+      })
+      .build();
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("rejected-change", "rejected-id")),
+      ).rejects.toMatchObject({ type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED" });
       await context.close();
       expect(changes).toEqual([]);
     } finally {
