@@ -4551,6 +4551,105 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("publishes one causally linked change for aggregate reactors, projections, and process managers", async () => {
+    const aggregateChanges: SpineEvent[] = [];
+    const aggregate = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: async (event) => void aggregateChanges.push(event),
+      })
+      .build();
+    try {
+      await aggregate.eventBus().post(createProjectionEvent("reactor-source", "reactor-id"));
+      await waitForCondition(() => aggregateChanges.length === 1);
+      expect(readStateChange(aggregateChanges[0])).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectionStateSchema) }],
+        newVersion: { number: 1 },
+      });
+      expect(aggregateChanges[0]?.context?.origin.case).toBe("pastMessage");
+    } finally {
+      await aggregate.close();
+    }
+
+    const projectionChanges: SpineEvent[] = [];
+    const projection = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: async (event) => void projectionChanges.push(event),
+      })
+      .build();
+    try {
+      await projection.eventBus().post(createProjectionEvent("projection-source", "projection-id"));
+      await waitForCondition(() => projectionChanges.length === 1);
+      expect(readStateChange(projectionChanges[0])).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectionStateSchema) }],
+        newVersion: { number: 1 },
+      });
+    } finally {
+      await projection.close();
+    }
+
+    const pmChanges: SpineEvent[] = [];
+    const processManager = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: async (event) => void pmChanges.push(event),
+      })
+      .build();
+    try {
+      await processManager.commandBus().post(createAggregateCommand("pm-command", "pm-command-id"));
+      await waitForCondition(() => pmChanges.length === 1);
+      expect(readStateChange(pmChanges[0])).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+      });
+    } finally {
+      await processManager.close();
+    }
+
+    const pmEventChanges: SpineEvent[] = [];
+    const eventProcessManager = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: async (event) => void pmEventChanges.push(event),
+      })
+      .build();
+    try {
+      await eventProcessManager.eventBus().post(createProjectionEvent("pm-event", "pm-event-id"));
+      await waitForCondition(() => pmEventChanges.length === 1);
+      expect(readStateChange(pmEventChanges[0])).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectionStateSchema) }],
+      });
+    } finally {
+      await eventProcessManager.close();
+    }
+  });
+
+  it("does not publish a state change when a projection leaves state unchanged", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createPassiveProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: async (event) => void changes.push(event),
+      })
+      .build();
+    try {
+      await context.eventBus().post(createProjectionEvent("unchanged", "unchanged-id"));
+      await context.close();
+      expect(changes).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("rebuilds projection state from stored events without re-appending them", async () => {
     ExecutingTaskProjection.reset();
     const storageFactory = new InMemoryStorageFactory();
@@ -7038,6 +7137,10 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
       archived: false,
     }),
   });
+}
+
+function readStateChange(event: SpineEvent | undefined) {
+  return AnyMessages.unpack(event?.message, EntityStateChangedSchema);
 }
 
 function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
