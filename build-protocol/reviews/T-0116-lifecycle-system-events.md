@@ -1,6 +1,6 @@
 # T-0116 Review Log
 
-Status: Focused re-review pending
+Status: Two maintainability corrections remain
 
 ## Scope
 
@@ -78,3 +78,15 @@ match the assignments above. No finding is rejected or deferred.
   only over `365f59c9..c61fc897`. Their expected and explicitly dispatched
   profiles remain `gpt-5.6-terra` / `high`; runtime self-introspection remains
   unavailable and the immutable configured profile is the available metadata.
+
+## Focused Re-Review Result — 2026-08-05
+
+- TypeScript/API: clean; timestamp and TSDoc findings are resolved.
+- Performance/reliability: clean; the P1 and correction-caused behavior are
+  resolved.
+- Style: context cleanup is resolved. Two P2 residuals remain: `#publish` is
+  still a 117-line assembler despite isolating posting, and the Projection and
+  Process Manager loader constructor contracts still repeat anonymous
+  archived/deleted shapes instead of `EntityLifecycleFlags`.
+- All re-reviewers again report unavailable runtime self-introspection and the
+  matching immutable configured `gpt-5.6-terra` / `high` profile.
