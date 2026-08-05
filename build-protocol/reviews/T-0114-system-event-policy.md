@@ -1,6 +1,6 @@
 # T-0114 Review Log
 
-Status: Final targeted correction verified; re-review and integration pending
+Status: Clean; release verification passed
 
 ## Scope
 
@@ -21,8 +21,8 @@ events, unchanged public storing construction, and no accidental public API.
 | ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | Style/maintainability   | `/root/t0114_style`; `gpt-5.6-terra` / high              | Clean after targeted re-review.                                                                              |
 | Documentation           | Existing documentation reviewer; `gpt-5.6-luna` / medium | N/A: no public prose or user workflow changed; deterministic TSDoc checks cover the narrow internal wording. |
-| TypeScript/API docs     | `/root/t0114_api`; `gpt-5.6-terra` / high                | Final P2 correction in progress.                                                                             |
-| Performance/reliability | `/root/t0114_reliability`; `gpt-5.6-terra` / high        | Final P1 correction in progress.                                                                             |
+| TypeScript/API docs     | `/root/t0114_api`; `gpt-5.6-terra` / high                | Clean after final targeted confirmation.                                                                     |
+| Performance/reliability | `/root/t0114_reliability`; `gpt-5.6-terra` / high        | Clean after final targeted confirmation.                                                                     |
 
 Every relevant dispatch must pass model and reasoning explicitly. Actual
 runtime metadata or the immutable configured role/profile limitation must be
@@ -114,5 +114,18 @@ concerns reopen. Documentation remains N/A.
   tests passing. Changed-source coverage is 96.81% statements, 91.66%
   branches, 98.41% functions, and 97.05% lines.
 - Build/tooling typechecks, focused lint, TSDoc, TypeDoc/export,
-  generated-clean, format, and diff checks were run. Reliability and API
-  re-review remain pending.
+  generated-clean, format, and diff checks were run.
+
+## Final Review Outcome
+
+- Reliability confirms untyped `new EventBus(undefined)` throws, only the
+  module-private sentinel and factory set the forgetting marker, and forgotten
+  buses own or touch no EventStore during construction, post, or close. Clean.
+- TypeScript/API confirms declaration-level factory TSDoc, unchanged public
+  constructor and export surface, and no declaration leakage. The focused
+  EventBus/root-export suites pass 49/49 and API checks retain 235 server
+  exports. Clean.
+- Style remains clean; documentation remains a justified N/A.
+- No P0-P2 finding remains. Every reviewer used its explicitly dispatched
+  immutable profile; independent runtime self-introspection was unavailable
+  and no mismatch was visible.
