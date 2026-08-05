@@ -42,7 +42,7 @@ for (const mode of ["combined", "standalone"]) {
 
 test("standalone reference binds replica count and delivery waits to each Deployment", () => {
   const document = readFileSync(join(root, "standalone.yaml"), "utf8");
-  const application = deployment(document, "message-board-application");
+  const application = statefulSet(document, "message-board-application");
   const gateway = deployment(document, "message-board-gateway");
   assert.match(application, /replicas: 2/u);
   assert.match(gateway, /replicas: 2/u);
@@ -52,6 +52,7 @@ test("standalone reference binds replica count and delivery waits to each Deploy
   assert.match(document, /clusterIP: None/u);
   assert.match(document, /message-board-gateway-headless, port_value: 8080/u);
   assert.match(document, /name: BACKEND_URLS/u);
+  assert.match(document, /message-board-application-0\.message-board-application-headless/u);
 });
 
 test("Envoy policy rejects non-path and duplicate route items", () => {
@@ -148,5 +149,14 @@ function deployment(document, name) {
     "u",
   ).exec(document);
   assert.notEqual(match, null, `missing ${name} deployment`);
+  return match[1];
+}
+
+function statefulSet(document, name) {
+  const match = new RegExp(
+    `kind: StatefulSet[\\s\\S]*?name: ${name}([\\s\\S]*?)(?=---|$)`,
+    "u",
+  ).exec(document);
+  assert.notEqual(match, null, `missing ${name} stateful set`);
   return match[1];
 }

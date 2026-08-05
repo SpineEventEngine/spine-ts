@@ -126,6 +126,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   readonly durable = true;
 
   /**
+   * Declares that durable records fence backend topology identity.
+   */
+  readonly topologyFencing = true;
+
+  /**
    * Names the validated durable registry shared by standalone gateway replicas.
    */
   readonly namespace: string;

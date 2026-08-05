@@ -11,10 +11,11 @@ data:
   MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
   MESSAGE_BOARD_SESSION_KEY_ID: replace-on-rotation
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: message-board-application
 spec:
+  serviceName: message-board-application-headless
   replicas: 2
   selector: { matchLabels: { app: message-board-application } }
   template:
@@ -55,6 +56,14 @@ spec:
   selector: { app: message-board-application }
   ports: [{ port: 8080, targetPort: 8080 }]
 ---
+apiVersion: v1
+kind: Service
+metadata: { name: message-board-application-headless }
+spec:
+  clusterIP: None
+  selector: { app: message-board-application }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -84,7 +93,7 @@ spec:
               { name: HOST, value: 0.0.0.0 },
               { name: PORT, value: "8080" },
               { name: NODE_ENV, value: production },
-              { name: BACKEND_URLS, value: http://message-board-application:8080,http://message-board-application:8080 },
+              { name: BACKEND_URLS, value: http://message-board-application-0.message-board-application-headless:8080,http://message-board-application-1.message-board-application-headless:8080 },
             ]
           startupProbe: { tcpSocket: { port: 8080 }, failureThreshold: 30, periodSeconds: 2 }
           readinessProbe: { tcpSocket: { port: 8080 }, periodSeconds: 2 }

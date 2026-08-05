@@ -305,6 +305,13 @@ export const BrowserServer: Readonly<{
         throw new Error("Standalone browser server requires a fingerprint function.");
       if (options.bindings === undefined)
         throw new Error("Standalone browser server requires explicit subscription bindings.");
+      if (
+        BrowserServerValues.backendUrlsFor(options.backend).length > 1 &&
+        (options.bindings as { readonly topologyFencing?: unknown }).topologyFencing !== true
+      )
+        throw new Error(
+          "Standalone browser fan-in requires topology-fencing subscription bindings.",
+        );
     }
     if (options.backend !== undefined && production && options.registry === undefined)
       throw new Error("Production standalone browser server requires a type registry.");

@@ -180,6 +180,10 @@ subscription bindings: local development and tests may explicitly supply an
 in-memory binding, while production also needs a type registry and named
 `DurableSubscriptionBindings`. The external backend remains caller-owned.
 
+Use `browser.backend.baseUrls` for 1–32 ordered unique origins. Unary calls use
+round-robin without retry; subscriptions fan out best-effort, so clients
+re-query authoritative state after duplicate updates or a generic loss notice.
+
 Applications may add only explicit OAuth-style callbacks with `authRoutes`.
 Each route uses an exact `GET`/`POST` path, per-route origins, a safe body limit,
 and a finite timeout. This is not a general HTTP router; use it for bounded

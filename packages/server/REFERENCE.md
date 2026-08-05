@@ -159,6 +159,12 @@ application type registry and named durable bindings. `ResolveContext` stays in 
 Post, Read, Subscribe, Activate, and Cancel use the same authenticated policy,
 context-replacement, and native descriptors before reaching the backend.
 
+`browser.backend.baseUrls` is exclusive with `baseUrl` and configures 1–32
+ordered unique origins. Unary calls use bounded round-robin without retry;
+subscriptions fan out best-effort. Durable bindings fence the ordered topology;
+custom durable fan-in stores must declare topology-fencing support. Clients
+re-query authoritative state after duplicate updates or generic loss notices.
+
 `browser.authRoutes` is deliberately a bounded callback seam, not a router.
 Each registration has one exact `GET` or `POST` canonical path, one method per
 path, exact canonical origins, finite request bytes, and a finite timeout. A
