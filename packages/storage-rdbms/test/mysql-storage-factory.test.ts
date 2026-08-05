@@ -886,6 +886,76 @@ describe("MysqlStorageFactory", () => {
     await factory.close();
   });
 
+  it("rejects divergent receipt reuse and conflicts for each changed expected-current field", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_receipt_current",
+    });
+    const input = entityHistoryInput();
+    const commitStorage = EntityCommitStorageFactories.create(factory, input);
+    const first = atomicMutation(input, "first");
+    await expect(commitStorage.commit(first)).resolves.toBe("committed");
+    await expect(
+      commitStorage.commit({ ...first, next: { ...first.next, version: 2n } }),
+    ).rejects.toThrow("reused with different content");
+
+    for (const expected of [
+      { ...first.next, archived: true },
+      { ...first.next, deleted: true },
+      { ...first.next, state: create(StringValueSchema, { value: "other" }) },
+    ]) {
+      await expect(
+        commitStorage.commit({
+          ...atomicMutation(input, `current-${String(expected.version)}`),
+          expected,
+        }),
+      ).resolves.toBe("conflict");
+    }
+    await factory.close();
+  });
+
+  it.each([
+    [
+      "context name",
+      (input: EntityStorageInput<string, StringValue>) => ({
+        ...input,
+        context: { ...input.context, name: "Other" },
+      }),
+    ],
+    [
+      "multitenancy",
+      (input: EntityStorageInput<string, StringValue>) => ({
+        ...input,
+        context: { ...input.context, multitenant: true, tenantId: "tenant" },
+      }),
+    ],
+    [
+      "storage key",
+      (input: EntityStorageInput<string, StringValue>) => ({
+        ...input,
+        storageKey: "other.Task:current",
+      }),
+    ],
+  ])("rejects another %s before acquiring a commit connection", async (_name, other) => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_scope",
+    });
+    const input = entityHistoryInput();
+    connectionAcquires = 0;
+    const mutation = atomicMutation(input, "scope");
+    const entity = other(input);
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit({
+        ...mutation,
+        context: entity.context,
+        entity,
+      }),
+    ).rejects.toThrow("another Entity storage scope");
+    expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
+
   it("retries a deadlock and reconciles a persisted receipt after a lost commit acknowledgement", async () => {
     const { MysqlStorageFactory } = await import("../src/index.js");
     const factory = await MysqlStorageFactory.create({
