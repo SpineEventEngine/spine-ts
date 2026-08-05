@@ -5197,6 +5197,9 @@ describe("repository signal routing", () => {
       await waitForFailures(context, 2);
 
       expect(changes).toHaveLength(2);
+      await expect(
+        context.stand().readVersioned(AggregateStateSchema, "state-change"),
+      ).resolves.toMatchObject({ state: { name: "Second (applied)" }, version: { number: 2 } });
       expect(readStateChange(changes[0])?.oldState).toBeUndefined();
       const oldState = readStateChange(changes[1])?.oldState;
       if (oldState === undefined) {
@@ -5210,6 +5213,7 @@ describe("repository signal routing", () => {
         { error: { message: "state-change follow-up failed" } },
         { error: { message: "state-change follow-up failed" } },
       ]);
+      expect(changes).toHaveLength(2);
     } finally {
       await context.close();
     }
