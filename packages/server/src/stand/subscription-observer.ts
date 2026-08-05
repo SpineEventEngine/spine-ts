@@ -205,9 +205,17 @@ export class SubscriptionObservers {
         return subscriptions.every((subscription) => subscription.closed);
       },
       unsubscribe() {
-        subscriptions.forEach((subscription) => {
-          subscription.unsubscribe();
-        });
+        const errors: unknown[] = [];
+        for (const subscription of subscriptions) {
+          try {
+            subscription.unsubscribe();
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+        if (errors.length === 1) throw errors[0];
+        if (errors.length > 1)
+          throw new AggregateError(errors, "Entity subscription observer detach failed.");
       },
     };
   }

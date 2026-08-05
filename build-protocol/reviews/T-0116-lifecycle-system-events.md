@@ -120,3 +120,16 @@ match the assignments above. No finding is rejected or deferred.
 - Security: N/A for the concrete reasons recorded above.
 - Reviewer runtime self-introspection remained unavailable; every immutable
   configured role/profile matched its explicit dispatch.
+
+## Release-Gate Reliability Correction — 2026-08-05
+
+- The full gate exposed composite observer cleanup that was not exercised by
+  the original focused surface. `SubscriptionObservers.observeState()` now
+  attempts all five lifecycle observer detachments when one throws.
+- Stand shutdown tests now assert the actual five-observer composition and
+  prove every child closes before registry shutdown, including injected
+  failure.
+- The performance/reliability reviewer is redispatched only over this
+  production correction and test. Expected and explicitly dispatched profile:
+  `gpt-5.6-terra` / `high`; immutable configured metadata applies because
+  runtime self-introspection is unavailable.
