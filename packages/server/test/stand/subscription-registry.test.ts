@@ -557,7 +557,7 @@ describe("StorageSubscriptionRegistry", () => {
         first.snapshot(),
         second.delete(id("one"), created.entry.revision),
       ]);
-      expect(snapshot).toHaveLength(1);
+      expect(snapshot).toHaveLength(0);
       expect(deletion).toBe("deleted");
 
       for (let index = 0; index < 27; index += 1)

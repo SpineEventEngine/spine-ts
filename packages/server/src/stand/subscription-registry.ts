@@ -735,12 +735,18 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    */
   async snapshot(): Promise<readonly StandSubscriptionEntry[]> {
     return await this.#operation(async () => {
-      await this.#recover();
-      return Object.freeze(
-        (await this.#definitions()).map((row) =>
-          StorageSubscriptionRegistry.#clone(StandSubscriptionRecords.read(row.record, row.id)),
-        ),
-      );
+      for (;;) {
+        await this.#recover();
+        const control = await this.#controlState();
+        const rows = await this.#definitions();
+        const current = await this.#control.read(controlSlot);
+        if (current === undefined || !sameAny(current, control.record)) continue;
+        return Object.freeze(
+          rows.map((row) =>
+            StorageSubscriptionRegistry.#clone(StandSubscriptionRecords.read(row.record, row.id)),
+          ),
+        );
+      }
     });
   }
 
@@ -1155,6 +1161,15 @@ function recordDigest(record: StandSubscriptionRecord): string {
 
 function generationToken(record: StandSubscriptionRecord): string {
   return Buffer.from(record.generation).toString("hex");
+}
+
+function sameAny(left: Any, right: Any): boolean {
+  const leftBytes = toBinary(AnySchema, left);
+  const rightBytes = toBinary(AnySchema, right);
+  return (
+    leftBytes.length === rightBytes.length &&
+    leftBytes.every((byte, index) => byte === rightBytes[index])
+  );
 }
 
 function matchesOperation(
