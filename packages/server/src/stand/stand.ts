@@ -228,7 +228,8 @@ export class Stand {
     { readonly current: EntityRecordStorage<unknown, Message>; close(): void }
   >();
   readonly #inFlight = new Set<Promise<void>>();
-  readonly #subscriptionWork = new Set<Promise<void>>();
+  #subscriptionTail: Promise<void> = Promise.resolve();
+  #subscriptionTimer: ReturnType<typeof setInterval> | undefined;
   #closing = false;
   #closed = false;
   #closedPromise: Promise<void> | undefined;
@@ -604,7 +605,8 @@ export class Stand {
   async #closeOnce(): Promise<void> {
     this.#closing = true;
     await Promise.all([...this.#inFlight]);
-    await Promise.all([...this.#subscriptionWork]);
+    if (this.#subscriptionTimer !== undefined) clearInterval(this.#subscriptionTimer);
+    await this.#subscriptionTail;
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
@@ -616,14 +618,21 @@ export class Stand {
   }
 
   #startSubscriptions(registry: StandSubscriptionRegistry): void {
-    const work = registry
-      .cleanup()
+    if (this.#subscriptionTimer !== undefined || this.#closing) return;
+    this.#reconcileSubscriptions(registry);
+    this.#subscriptionTimer = setInterval(() => this.#reconcileSubscriptions(registry), 10_000);
+    this.#subscriptionTimer.unref();
+  }
+
+  #reconcileSubscriptions(registry: StandSubscriptionRegistry): void {
+    this.#subscriptionTail = this.#subscriptionTail
       .then(async () => {
-        await registry.snapshot();
+        if (!this.#closing) {
+          await registry.cleanup();
+          await registry.snapshot();
+        }
       })
-      .catch(() => undefined)
-      .finally(() => this.#subscriptionWork.delete(work));
-    this.#subscriptionWork.add(work);
+      .catch(() => undefined);
   }
 
   #registration<Schema extends MessageSchema>(
