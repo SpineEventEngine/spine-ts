@@ -39,6 +39,7 @@ import {
 import type {
   StandSubscriptionRecord,
 } from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
+import { SubscriptionPhase } from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
 
 const start = 1_000_000;
 
@@ -372,7 +373,23 @@ describe("StorageSubscriptionRegistry", () => {
         storageKey: "spine.server.StandSubscriptionRecord:definition",
         idKind: "string",
         extractId: (record) => StandSubscriptionRecords.read(record).subscription.id?.value ?? "",
-        columns: [new RecordColumn("admitted", (record) => record.revision > 0n, "boolean")],
+        columns: [
+          new RecordColumn("admitted", (record) => record.revision > 0n, "boolean"),
+          new RecordColumn(
+            "pending",
+            (record) => record.phase === SubscriptionPhase.PENDING,
+            "boolean",
+          ),
+          new RecordColumn(
+            "pendingUntil",
+            (record) =>
+              record.pendingUntil === undefined
+                ? Number.MAX_SAFE_INTEGER
+                : Number(record.pendingUntil.seconds) * 1000 +
+                  Math.floor(record.pendingUntil.nanos / 1_000_000),
+            "number",
+          ),
+        ],
       }),
     );
     const control = factory.createRecordStorage(
@@ -614,7 +631,23 @@ async function writeDefinition(
       storageKey: "spine.server.StandSubscriptionRecord:definition",
       idKind: "string",
       extractId: () => "malformed",
-      columns: [new RecordColumn("admitted", (entry) => entry.revision > 0n, "boolean")],
+      columns: [
+        new RecordColumn("admitted", (entry) => entry.revision > 0n, "boolean"),
+        new RecordColumn(
+          "pending",
+          (entry) => entry.phase === SubscriptionPhase.PENDING,
+          "boolean",
+        ),
+        new RecordColumn(
+          "pendingUntil",
+          (entry) =>
+            entry.pendingUntil === undefined
+              ? Number.MAX_SAFE_INTEGER
+              : Number(entry.pendingUntil.seconds) * 1000 +
+                Math.floor(entry.pendingUntil.nanos / 1_000_000),
+          "number",
+        ),
+      ],
     }),
   );
   try {

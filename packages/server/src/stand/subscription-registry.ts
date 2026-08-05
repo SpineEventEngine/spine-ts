@@ -17,6 +17,7 @@ import {
 import type {
   StandSubscriptionRecord,
 } from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
+import { SubscriptionPhase } from "@spine-event-engine/proto/generated/spine/system/server/stand_subscription_pb.js";
 
 import { StandSubscriptionRecords } from "./subscription-records.js";
 
@@ -137,11 +138,6 @@ export type StandActivateResult =
  * Result returned after a delete attempt.
  */
 export type StandDeleteResult = "deleted" | "missing" | "changed";
-
-// Compatibility aliases retained only while the durable implementation is converted.
-type StandSubscriptionCreateResult = StandCreateResult;
-type StandSubscriptionActivateResult = StandActivateResult;
-type StandSubscriptionDeleteResult = StandDeleteResult;
 
 /**
  * Reports the work performed by one bounded expired-pending cleanup page.
@@ -537,6 +533,20 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
             (record: StandSubscriptionRecord) => record.revision > 0n,
             "boolean",
           ),
+          new RecordColumn(
+            "pending",
+            (record: StandSubscriptionRecord) => record.phase === SubscriptionPhase.PENDING,
+            "boolean",
+          ),
+          new RecordColumn(
+            "pendingUntil",
+            (record: StandSubscriptionRecord) =>
+              record.pendingUntil === undefined
+                ? Number.MAX_SAFE_INTEGER
+                : Number(record.pendingUntil.seconds) * 1000 +
+                  Math.floor(record.pendingUntil.nanos / 1_000_000),
+            "number",
+          ),
         ],
       }),
     );
@@ -760,15 +770,48 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       await this.#recover();
       let deleted = 0;
       const now = Date.now();
-      const expired = (await this.#definitions()).filter((row) => {
+      const reservations = await this.#storage.queryEntries({
+        filters: [
+          { column: "admitted", value: false },
+          { column: "pending", value: true },
+        ],
+        sort: [{ field: "pendingUntil" }, { field: "id" }],
+        limit: 26,
+      });
+      const pending = await this.#storage.queryEntries({
+        filters: [
+          { column: "admitted", value: true },
+          { column: "pending", value: true },
+        ],
+        sort: [{ field: "pendingUntil" }, { field: "id" }],
+        limit: 26,
+      });
+      const expired = [...reservations, ...pending].filter((row) => {
         const entry = StandSubscriptionRecords.read(row.record, row.id);
         return (
           entry.phase === "pending" && entry.pendingUntil !== undefined && entry.pendingUntil <= now
         );
       });
+      expired.sort((left, right) => {
+        const leftEntry = StandSubscriptionRecords.read(left.record, left.id);
+        const rightEntry = StandSubscriptionRecords.read(right.record, right.id);
+        return (
+          (leftEntry.pendingUntil ?? 0) - (rightEntry.pendingUntil ?? 0) ||
+          left.id.localeCompare(right.id)
+        );
+      });
       const page = expired.slice(0, 25);
-      for (const row of page) if (await this.#deleteCurrent(row.id, row.record)) deleted += 1;
-      return Object.freeze({ scanned: page.length, deleted, more: expired.length > page.length });
+      for (const row of page) {
+        const entry = StandSubscriptionRecords.read(row.record, row.id);
+        if (entry.revision === 0n)
+          deleted += (await this.#discardReservation(row.id, row.record)) ? 1 : 0;
+        else if (await this.#deleteCurrent(row.id, row.record)) deleted += 1;
+      }
+      return Object.freeze({
+        scanned: page.length,
+        deleted,
+        more: expired.length > page.length,
+      });
     });
   }
 
@@ -910,13 +953,15 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       if (expected) {
         const next = this.#operationResult(current, operation);
         if (!(await this.#storage.compareAndSet(operation.id, current, next))) return;
-        return await this.#settle(control, controlRecord);
+        await this.#settle(control, controlRecord);
+        return;
       }
       if (!result && !(current === undefined && operation.resultDigest === undefined))
         throw new Error("Malformed Stand subscription control record.");
       const committed = controlCommitted(control);
       if (await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(committed)))
-        return await this.#settle(committed, writeControl(committed));
+        await this.#settle(committed, writeControl(committed));
+      return;
       return;
     }
     if (!result && !(current === undefined && operation.resultDigest === undefined))
@@ -948,7 +993,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     );
   }
 
-  async #discardReservation(id: string, record: StandSubscriptionRecord): Promise<void> {
+  async #discardReservation(id: string, record: StandSubscriptionRecord): Promise<boolean> {
     const entry = StandSubscriptionRecords.read(record, id);
     if (entry.revision !== 0n) throw new Error("Malformed Stand subscription control record.");
     for (;;) {
@@ -965,7 +1010,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
         continue;
       await this.#settle(staged, writeControl(staged));
-      return;
+      return true;
     }
   }
 
