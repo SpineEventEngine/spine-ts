@@ -58,8 +58,12 @@ import type {
   EntityCommitStorage,
 } from "@spine-event-engine/storage/internal/entity-commit";
 import {
+  EntityArchivedSchema,
   EntityCreatedSchema,
+  EntityDeletedSchema,
+  EntityRestoredSchema,
   EntityStateChangedSchema,
+  EntityUnarchivedSchema,
 } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
@@ -282,6 +286,20 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
 
     if (ExecutingTaskAggregate.failure !== undefined) {
       throw ExecutingTaskAggregate.failure;
+    }
+
+    if (command.name.startsWith("archive-lifecycle")) this.archiveDraft();
+    if (command.name.startsWith("unarchive-lifecycle")) this.unarchiveDraft();
+    if (command.name.startsWith("delete-lifecycle")) this.markDraftDeleted();
+    if (command.name.startsWith("restore-lifecycle")) this.restoreDraft();
+
+    if (command.name.includes("-lifecycle")) {
+      return SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: `event-${command.name}` }),
+        context: create(EventContextSchema),
+        schema: AggregateStateSchema,
+        message: command,
+      });
     }
 
     const name = command.name === "Multi" ? "Multi two" : command.name;
@@ -4903,6 +4921,66 @@ describe("repository signal routing", () => {
         entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
         kind: 1,
       });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("emits lifecycle-only aggregate transitions without EntityStateChanged", async () => {
+    const changes: SpineEvent[] = [];
+    const schemas = [
+      EntityCreatedSchema,
+      EntityStateChangedSchema,
+      EntityArchivedSchema,
+      EntityUnarchivedSchema,
+      EntityDeletedSchema,
+      EntityRestoredSchema,
+    ];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => schemas,
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.commandBus().post(createAggregateCommand("seed-lifecycle", "lifecycle-id"));
+      await waitForCondition(() => changes.length === 2);
+      changes.splice(0);
+      for (const name of [
+        "archive-lifecycle",
+        "archive-lifecycle",
+        "unarchive-lifecycle",
+        "delete-lifecycle",
+        "restore-lifecycle",
+      ]) {
+        await context
+          .commandBus()
+          .post(createAggregateCommand(name, "lifecycle-id", `${name}-${String(changes.length)}`));
+      }
+      await waitForCondition(() => changes.length === 4);
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityArchivedSchema),
+        TypeUrls.derive(EntityUnarchivedSchema),
+        TypeUrls.derive(EntityDeletedSchema),
+        TypeUrls.derive(EntityRestoredSchema),
+      ]);
+      for (const [index, schema] of [
+        EntityArchivedSchema,
+        EntityUnarchivedSchema,
+        EntityDeletedSchema,
+        EntityRestoredSchema,
+      ].entries()) {
+        const lifecycle = AnyMessages.unpack(changes[index]?.message as never, schema);
+        expect(lifecycle).toMatchObject({
+          entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+          signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+          version: { number: index + 2 },
+        });
+      }
     } finally {
       await context.close();
     }
