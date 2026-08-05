@@ -1081,7 +1081,12 @@ const ServerValues = Object.freeze({
     const source = backend as { readonly baseUrl?: unknown; readonly baseUrls?: unknown };
     if (typeof source.baseUrl === "string" && source.baseUrls === undefined)
       return [source.baseUrl];
-    if (source.baseUrl === undefined && Array.isArray(source.baseUrls)) return source.baseUrls;
+    if (source.baseUrl === undefined && Array.isArray(source.baseUrls)) {
+      const values: readonly unknown[] = source.baseUrls;
+      if (values.some((value) => typeof value !== "string"))
+        throw new Error("Server browser backend URLs must be strings.");
+      return values as readonly string[];
+    }
     throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
   },
 

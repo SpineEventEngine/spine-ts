@@ -95,7 +95,7 @@ describe("Server", () => {
     [{ baseUrl: "https://backend.example.test", baseUrls: ["https://other.example.test"] }],
     [{}],
   ])("rejects standalone backend configuration with both or neither URL form", (backend) => {
-    expect(() =>
+    expect(() => {
       BrowserServer.requireDurableBindings(
         {
           ...browserGateway(),
@@ -103,8 +103,8 @@ describe("Server", () => {
           bindings: inMemoryBindings(),
         } as unknown as BrowserServerOptions,
         false,
-      ),
-    ).toThrow("exactly one of baseUrl or baseUrls");
+      );
+    }).toThrow("exactly one of baseUrl or baseUrls");
   });
 
   it("rejects production browser bindings before context assembly or listener startup", async () => {
