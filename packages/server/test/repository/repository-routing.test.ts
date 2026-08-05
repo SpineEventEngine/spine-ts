@@ -1162,6 +1162,10 @@ class RoutingProcessManager extends ProcessManager<
 
   assignTask(command: AggregateState): ProjectionState {
     RoutingProcessManager.commandCalls++;
+    if (command.name === "archive-lifecycle") {
+      this.archiveDraft();
+      return create(ProjectionStateSchema, { id: command.id, name: command.name, priority: 1 });
+    }
     this.update((draft) =>
       Object.assign(
         draft,
@@ -5008,18 +5012,41 @@ describe("repository signal routing", () => {
         .post(createProjectionEvent("projection-seed", "projection-lifecycle"));
       await waitForCondition(() => changes.length === 2);
       changes.splice(0);
-      await context
-        .eventBus()
-        .post(
-          createProjectionEvent("projection-archive", "projection-lifecycle", {
-            name: "archive-lifecycle",
-          }),
-        );
+      await context.eventBus().post(
+        createProjectionEvent("projection-archive", "projection-lifecycle", {
+          name: "archive-lifecycle",
+        }),
+      );
       await waitForCondition(() => changes.length === 1);
       expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
     } finally {
       await context.close();
     }
+  });
+
+  it("emits EntityArchived after a seeded process-manager archive", async () => {
+    RoutingProcessManager.reset();
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema, EntityArchivedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    await context.commandBus().post(createAggregateCommand("pm-seed", "pm-archive"));
+    await waitForCondition(() => changes.length === 2);
+    changes.splice(0);
+    await context
+      .commandBus()
+      .post(createAggregateCommand("pm-archive", "pm-archive", "archive-lifecycle"));
+    expect(RoutingProcessManager.commandCalls).toBe(2);
+    await waitForCondition(() => changes.length === 1);
+    expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
+    await context.close();
   });
 
   it("records failed state-change follow-ups with absent and present prior state", async () => {
