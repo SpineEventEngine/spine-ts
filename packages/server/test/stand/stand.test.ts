@@ -82,6 +82,60 @@ const fileEntityEmptyFixture = createFixtureFileDescriptor(
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
+  it("does not attach a deleted definition after its snapshot is released", async () => {
+    const factory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Gated", multitenant: false },
+      storageFactory: factory,
+    });
+    const bus = new EventBus(new EventStore({ name: "Gated", multitenant: false }, factory));
+    const registry = new GatedSnapshotRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "gated-delete" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    stand.register(ProjectionStateSchema);
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    registry.gateNextSnapshot();
+    standAccess.startSubscriptions(stand, registry, bus);
+    await registry.snapshotStarted;
+    await registry.delete(subscription.id);
+    registry.releaseSnapshot();
+    await standAccess.reconcileSubscriptions(stand, registry);
+    let delivered = 0;
+    await standAccess.consumeSubscription(stand, registry, "gated-delete", () => delivered++);
+    await postStateChange(bus, ProjectionStateSchema, createState("deleted", "Deleted"));
+    expect(delivered).toBe(0);
+    await Promise.all([stand.close(), bus.close()]);
+  });
+
+  it("detaches EventBus observers while a reconciliation snapshot is gated during close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Closing", multitenant: false },
+      storageFactory: factory,
+    });
+    const bus = new EventBus(new EventStore({ name: "Closing", multitenant: false }, factory));
+    const registry = new GatedSnapshotRegistry();
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    registry.gateNextSnapshot();
+    standAccess.startSubscriptions(stand, registry, bus);
+    await registry.snapshotStarted;
+    const closing = stand.close();
+    registry.releaseSnapshot();
+    await closing;
+    await expect(bus.close()).resolves.toBeUndefined();
+  });
+
   it("removes a consumer when its reconciliation cycle fails", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const stand = new Stand({
@@ -1163,6 +1217,35 @@ class FailingSnapshotRegistry extends InMemorySubscriptionRegistry {
       throw new Error("snapshot failed");
     }
     return await super.snapshot();
+  }
+}
+
+class GatedSnapshotRegistry extends InMemorySubscriptionRegistry {
+  #gate = false;
+  #release: (() => void) | undefined;
+  #started: (() => void) | undefined;
+  readonly snapshotStarted = new Promise<void>((resolve) => {
+    this.#started = resolve;
+  });
+
+  gateNextSnapshot(): void {
+    this.#gate = true;
+  }
+
+  releaseSnapshot(): void {
+    this.#release?.();
+  }
+
+  override async snapshot() {
+    const result = await super.snapshot();
+    if (this.#gate) {
+      this.#gate = false;
+      this.#started?.();
+      await new Promise<void>((resolve) => {
+        this.#release = resolve;
+      });
+    }
+    return result;
   }
 }
 
