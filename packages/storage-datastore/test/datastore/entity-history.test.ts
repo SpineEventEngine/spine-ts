@@ -649,6 +649,94 @@ describe("Datastore entity history", () => {
     expect(client.transactionCalls).toBe(3);
   });
 
+  it("rejects invalid current and retained-history identities without committing", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const factory = new DatastoreStorageFactory({ client: backend.client() as never });
+    const inputValue = input();
+    const base = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "invalid",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "next" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        ...base,
+        states: [{ ...state(1), entityId: "other" }],
+      }),
+    ).rejects.toThrow("state history belongs to another Entity");
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        ...base,
+        diagnostics: [
+          {
+            entityId: "task",
+            event: create(EventSchema),
+            producerVersion: 1n,
+            createdAt: time(1),
+          },
+        ],
+      }),
+    ).rejects.toThrow("Event history requires an event ID");
+    const mismatched = { ...inputValue, extractId: (value: StringValue) => value.value };
+    await expect(
+      EntityCommitStorageFactories.create(factory, mismatched).commit({
+        ...base,
+        entity: mismatched,
+      }),
+    ).rejects.toThrow("current record ID does not match");
+  });
+
+  it("rejects divergent retained state and diagnostic retries after preserving the first commit", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const factory = new DatastoreStorageFactory({ client: backend.client() as never });
+    const inputValue = input();
+    const commit = EntityCommitStorageFactories.create(factory, inputValue);
+    const first = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "first",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "one" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+      states: [state(1)],
+      diagnostics: [historyEvent("diagnostic", "task")],
+    };
+    await expect(commit.commit(first)).resolves.toBe("committed");
+    const expected = first.next;
+    await expect(
+      commit.commit({
+        ...first,
+        id: "state-retry",
+        expected,
+        states: [{ ...state(1), state: create(StringValueSchema, { value: "other" }) }],
+        diagnostics: [],
+      }),
+    ).rejects.toThrow("State-history retry has divergent content");
+    await expect(
+      commit.commit({
+        ...first,
+        id: "event-retry",
+        expected,
+        states: [],
+        diagnostics: [{ ...historyEvent("diagnostic", "task"), producerVersion: 2n }],
+      }),
+    ).rejects.toThrow("Event-history retry has divergent content");
+  });
+
   it("returns committed to the invocation whose ambiguous acknowledgement persisted", async () => {
     const backend = new HistoryDatastoreBackend();
     const firstFactory = new DatastoreStorageFactory({ client: backend.client() as never });
