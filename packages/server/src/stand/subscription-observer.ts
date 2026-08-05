@@ -78,6 +78,8 @@ interface ResolvedPath {
  * @internal
  */
 export class SubscriptionObservers {
+  // prettier-ignore
+
   /**
    * Observes one domain event target through the domain EventBus.
    *
