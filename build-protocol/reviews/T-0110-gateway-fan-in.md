@@ -132,3 +132,15 @@ substantively affected reliability/API/docs concerns require confirmation.
   8/8 fan-in tests. Documentation and style were already closed.
 - All four canonical concerns are closed; security remains N/A for the recorded
   no-new-trust-boundary reason. T-0110 may enter final release verification.
+
+## Release-Correction Confirmation
+
+- LCOV-guided testing exposed and `1f37073a` corrects the equivalent
+  synchronous-throw edge in normal fan-in `cancel` and `dispose` operations.
+- Narrow reliability confirmation is clean: every lifecycle child begins
+  behind a promise boundary, later children still run, rejections aggregate,
+  and decoded envelope bytes are cleared in `finally`. Malformed-input tests
+  remain bounded and introduce no concurrency or resource regression.
+- Runtime self-introspection remains unavailable. The immutable explicitly
+  dispatched performance/reliability reviewer profile was
+  `gpt-5.6-terra` / `high`, with no visible mismatch.
