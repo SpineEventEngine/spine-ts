@@ -477,8 +477,14 @@ export class Stand {
     state: MessageShape<Schema>,
     options: StandUpdateOptions = {},
   ): Promise<void> {
-    const deferred = await standAccess.deferUpdate(this, schema, state, options);
-    deferred.notify();
+    const prepared = await this.#prepareUpdate(schema, state, options);
+    try {
+      await prepared.write();
+      prepared.notify();
+    } catch (error) {
+      prepared.cancel();
+      throw error;
+    }
   }
 
   async #deferUpdate<Schema extends MessageSchema>(
@@ -486,6 +492,14 @@ export class Stand {
     state: MessageShape<Schema>,
     options: StandUpdateOptions,
   ): Promise<DeferredStandUpdate> {
+    return await this.#prepareUpdate(schema, state, options);
+  }
+
+  async #prepareUpdate<Schema extends MessageSchema>(
+    schema: Schema,
+    state: MessageShape<Schema>,
+    options: StandUpdateOptions,
+  ): Promise<PreparedStandUpdate> {
     const finish = this.#beginOperation();
     try {
       const registration = this.#registration(schema, "update");
@@ -497,13 +511,13 @@ export class Stand {
             MessageShape<Schema> | undefined)
         : undefined;
       const subscribers = [...this.#tenantSubscribers(registration, this.#tenantKey(tenantId))];
-      await this.#openCurrent(registration, tenantId).write({
+      const record = {
         id,
         state: stateCopy,
         version: BigInt(options.version?.number ?? 0),
         archived: options.lifecycle?.archived ?? false,
         deleted: options.lifecycle?.deleted ?? false,
-      });
+      };
       let settled = false;
       const settle = () => {
         if (!settled) {
@@ -513,6 +527,7 @@ export class Stand {
       };
       return Object.freeze({
         cancel: settle,
+        write: () => this.#openCurrent(registration, tenantId).write(record),
         notify: () => {
           try {
             this.#notify(
@@ -986,6 +1001,10 @@ interface EntityStorageFactory {
 interface DeferredStandUpdate {
   notify(): void;
   cancel(): void;
+}
+
+interface PreparedStandUpdate extends DeferredStandUpdate {
+  write(): Promise<void>;
 }
 
 interface LocalSubscriptionAttachment {
