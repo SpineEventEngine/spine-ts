@@ -57,6 +57,52 @@ describe("DurableSubscriptionBindings", () => {
     await reopened.close();
   });
 
+  it("fences durable callbacks by exact ordered topology identity", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "topology");
+    const createBinding = () =>
+      bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal",
+        topology: "a,b",
+        tenant: undefined,
+        expiresAtMs: 1_000,
+      });
+    const matching = await createBinding();
+    let callbacks = 0;
+    await expect(
+      bindings.activate({
+        id: matching.id,
+        principalFingerprint: "principal",
+        topology: "a,b",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: () => {
+          callbacks++;
+          return Promise.resolve();
+        },
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    const rejected = await createBinding();
+    for (const topology of ["b,a", "a,c", undefined]) {
+      await expect(
+        bindings.cancel({
+          id: rejected.id,
+          principalFingerprint: "principal",
+          ...(topology === undefined ? {} : { topology }),
+          tenant: undefined,
+          nowMs: 1,
+          onBackend: () => {
+            callbacks++;
+            return Promise.resolve();
+          },
+        }),
+      ).resolves.toEqual({ kind: "denied" });
+    }
+    expect(callbacks).toBe(1);
+    await bindings.close();
+  });
+
   it("keeps namespaces and ownership facts isolated", async () => {
     const factory = new InMemoryStorageFactory();
     const first = registry(factory, "first");
