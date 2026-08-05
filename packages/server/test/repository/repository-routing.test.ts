@@ -4647,6 +4647,31 @@ describe("repository signal routing", () => {
     expect(changes).toEqual([]);
   });
 
+  it("does not expose aggregate state or state notifications when its atomic commit throws", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(new FailingEntityCommitStorageFactory())
+      .build();
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("aggregate-commit-fails", "aggregate-fails")),
+    ).rejects.toThrow("forced Entity commit failure");
+    await expect(
+      context.stand().read(AggregateStateSchema, "aggregate-fails"),
+    ).resolves.toBeUndefined();
+    expect(changes).toEqual([]);
+  });
+
   it("cancels aggregate, projection, and process-manager delivery when atomic storage replays", async () => {
     const aggregateChanges: SpineEvent[] = [];
     const aggregate = BoundedContext.singleTenant("Tasks")
@@ -4821,6 +4846,45 @@ describe("repository signal routing", () => {
       expect(context.eventBus().acceptedEventTypes()).not.toContain(
         TypeUrls.derive(EntityStateChangedSchema),
       );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("records failed state-change follow-ups with absent and present prior state", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.reject(new Error("state-change follow-up failed"));
+        },
+      })
+      .build();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("state-change-first", "state-change"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("state-change-second", "state-change", "Second"));
+      await waitForFailures(context, 2);
+
+      expect(changes).toHaveLength(2);
+      expect(readStateChange(changes[0])?.oldState).toBeUndefined();
+      const oldState = readStateChange(changes[1])?.oldState;
+      if (oldState === undefined) {
+        throw new Error("Expected a prior state on the second state-change notification.");
+      }
+      expect(AnyMessages.unpack(oldState, AggregateStateSchema)).toMatchObject({
+        id: "state-change",
+        name: "Task (applied)",
+      });
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { error: { message: "state-change follow-up failed" } },
+        { error: { message: "state-change follow-up failed" } },
+      ]);
     } finally {
       await context.close();
     }

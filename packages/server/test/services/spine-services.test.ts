@@ -3632,6 +3632,31 @@ describe("SpineServices", () => {
     expect(subscribeCalls).toBe(1);
   });
 
+  it("surfaces attachment setup and registry cleanup failures together during activation", async () => {
+    const registry = new FailingDeleteRegistry();
+    const context = BoundedContext.singleTenant("SubscriptionCleanup")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+
+    try {
+      await expect(
+        handlers.activate(subscription)[Symbol.asyncIterator]().next(),
+      ).rejects.toMatchObject({
+        message: "Subscription activation and cleanup failed.",
+        errors: [
+          { message: "subscription attachment setup failed" },
+          { message: "subscription registry cleanup failed" },
+        ],
+      });
+      expect(registry.deletions).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
     const unsubscribeCounts: number[] = [];
     const callbacks: ((update: {
@@ -4792,6 +4817,22 @@ class InertActivationRegistry extends InMemorySubscriptionRegistry {
   ): ReturnType<InMemorySubscriptionRegistry["activate"]> {
     void id;
     return Promise.resolve(Object.freeze({ kind: this.outcome }));
+  }
+}
+
+class FailingDeleteRegistry extends InMemorySubscriptionRegistry {
+  deletions = 0;
+
+  override delete(
+    id: Parameters<InMemorySubscriptionRegistry["delete"]>[0],
+  ): ReturnType<InMemorySubscriptionRegistry["delete"]> {
+    void id;
+    this.deletions += 1;
+    return Promise.reject(new Error("subscription registry cleanup failed"));
+  }
+
+  override cleanup(): ReturnType<InMemorySubscriptionRegistry["cleanup"]> {
+    return Promise.reject(new Error("subscription attachment setup failed"));
   }
 }
 
