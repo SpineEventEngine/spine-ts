@@ -148,7 +148,19 @@ describe("Server", () => {
       },
       false,
     );
-    await bindings.close();
+    const running = await BrowserServer.open(
+      ["https://first.example.test", "https://second.example.test"],
+      {
+        ...browserGateway(),
+        bindings,
+        host: "127.0.0.1",
+        port: 0,
+        readMaxBytes: 1_048_576,
+        writeMaxBytes: 1_048_576,
+        production: false,
+      },
+    );
+    await running.close();
   });
 
   it("starts one array-configured backend and handles empty browser request facts", async () => {
@@ -574,6 +586,12 @@ describe("Server", () => {
       await expect(
         fetch(`${server.baseUrl}/auth/exchange`, { headers: { origin: "http://127.0.0.1:5173" } }),
       ).resolves.toMatchObject({ status: 405 });
+      await expect(
+        fetch(`${server.baseUrl}/auth/exchange`, {
+          method: "OPTIONS",
+          headers: { origin: "https://other.example" },
+        }),
+      ).resolves.toMatchObject({ status: 403 });
       await expect(
         fetch(`${server.baseUrl}/auth/exchange`, {
           method: "POST",
