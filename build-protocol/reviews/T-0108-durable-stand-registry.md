@@ -206,3 +206,35 @@ credential handling, or authorization behavior. The Desktop surface supports
 these explicit dispatches. Runtime self-introspection may remain unavailable;
 acceptance will record the immutable role/profile plus any visible metadata and
 will reject only an omitted/wrong dispatch or visible mismatch.
+
+## Correction Re-Review Results
+
+- Style/maintainability: one P2 and two P3 findings. The standalone-function
+  ledger still claims string IDs, one duplicate return is unreachable, and the
+  provider fixture replaces registries without closing every handle.
+- Documentation: two P2 and two P3 findings. Public registry TSDoc omits
+  observable throws/closed behavior; the agent reference omits exact get,
+  cleanup, and close outcomes and overgeneralizes built-in ownership; the shared
+  entry summary incorrectly calls in-memory entries durable.
+- TypeScript/API: two P1 findings. A clean-control revision-zero reservation can
+  be returned publicly, and recursive runtime freezing throws for valid
+  nonempty Protobuf byte arrays.
+- Performance/reliability: three P1 and one P2 findings. Public get/activate can
+  observe or promote revision zero and corrupt the capacity count; a discarded
+  paused create reuses an expired deadline and generation; arbitrarily many
+  paused creators can persist uncounted revision-zero rows beyond capacity; the
+  conformance fixture leaks replaced registry handles.
+- Security: the prior N/A disposition remains unchanged.
+
+All reviewers used their recorded existing roles and configured profiles.
+Runtime self-introspection was unavailable and no visible mismatch occurred.
+
+The unbounded-reservation P1 is a demonstrated distributed-admission design
+block, so one bounded existing `requirements_splitter` correction pass is
+assigned explicitly `gpt-5.6-sol` / `high`. It must preserve physical deletion,
+exact capacity, one definition row per subscription plus the separate control
+record at quiescence, arbitrary-pause fencing, bounded provider-neutral CAS,
+the 1 MiB definition bound, and current public APIs. It must choose the smallest
+recoverable pre-admission representation and specify direct RED tests. The
+Desktop surface supports explicit dispatch; runtime self-introspection may be
+unavailable and will be recorded honestly.
