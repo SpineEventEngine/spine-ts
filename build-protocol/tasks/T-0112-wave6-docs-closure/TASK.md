@@ -1,6 +1,6 @@
 # T-0112: Wave 6 Documentation And Closure
 
-Status: In Progress
+Status: Ready for Integration
 
 ## Objective
 
