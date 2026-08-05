@@ -4,9 +4,7 @@ import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
 
 import { EventStore } from "../../src/event/event-store.js";
-import type {
-  EntityCommitStorage,
-} from "../../src/internal/entity-commit.js";
+import type { EntityCommitStorage } from "../../src/internal/entity-commit.js";
 import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";

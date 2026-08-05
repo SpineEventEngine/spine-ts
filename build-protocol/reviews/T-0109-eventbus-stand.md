@@ -168,3 +168,31 @@ All dispatches explicitly name their configured model and reasoning. The
 Desktop surface may not expose runtime self-introspection; when absent, the
 immutable configured role/profile is the accepted actual metadata unless a
 visible mismatch occurs.
+
+## Finding-Specific Confirmation Results
+
+Runtime self-introspection was unavailable in all three completed confirmation
+lanes; no visible mismatch occurred with their explicit Terra/high profiles.
+
+- API confirms that provider commit construction remains absent from the public
+  factory surface. One P2 sentence still attributed the atomic commit port to
+  `internal/entity-history`; it is corrected to the separate
+  `internal/entity-commit` subpath.
+- Style confirms delete-during-snapshot fencing and obsolete-code removal. It
+  keeps shutdown proof open because the gated-close test did not attach an
+  active EventBus observer, and keeps the requirements ledger open for four
+  omitted approved requirements.
+- Reliability confirms simultaneous activation, exact-one provider ownership,
+  all four native entity-family paths, and snapshot/close barriers. It keeps one
+  P1 open: the Process Manager command and event paths notify direct Stand
+  subscribers without the post-commit failure boundary already used by
+  Projection.
+
+One bounded correction returns to the existing implementer role with explicit
+`gpt-5.6-terra` / `medium`. It owns the shared Process Manager post-commit
+failure boundary, command/event regression tests, and a close test that first
+attaches a real EventBus observer. It may not spawn children or change unrelated
+paths. Runtime self-introspection may be unavailable; the immutable configured
+role/profile is then the accepted metadata absent a visible mismatch. The
+orchestrator owns the deterministic reference, formatting, and requirements-
+ledger corrections.

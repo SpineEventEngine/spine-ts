@@ -61,8 +61,9 @@ its scoped rows.
 
 ## Entity storage
 
-The internal entity-history seam supplies current state plus immutable state and
-event history for framework repositories. Its atomic commit port is the only
-way repositories combine current state, retained histories, framework delivery
-events, and a commit receipt. Standalone EventStore and history operations stay
-separate operations; they are not a substitute transaction boundary.
+The `internal/entity-history` seam supplies current state plus immutable state
+and event history for framework repositories. The separate
+`internal/entity-commit` port is the only way repositories combine current
+state, retained histories, framework delivery events, and a commit receipt.
+Standalone EventStore and history operations stay separate operations; they
+are not a substitute transaction boundary.
