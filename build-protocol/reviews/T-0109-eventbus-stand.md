@@ -196,3 +196,17 @@ paths. Runtime self-introspection may be unavailable; the immutable configured
 role/profile is then the accepted metadata absent a visible mismatch. The
 orchestrator owns the deterministic reference, formatting, and requirements-
 ledger corrections.
+
+## Final Server Correction Redispatch
+
+The existing implementer pushed `5abacea5`, which adds the Process Manager
+post-commit failure boundary and passes 148 focused routing tests plus server
+typecheck, ESLint, formatting, and diff checks. It did not complete the required
+Process Manager command/event regressions or the close test with a real attached
+EventBus observer, so the correction is not yet accepted as closed.
+
+A fresh bounded implementer receives only those three deterministic tests. The
+dispatch explicitly uses `gpt-5.6-terra` / `medium`; runtime self-introspection
+may be unavailable, and the immutable configured role/profile is then the
+accepted metadata absent a visible mismatch. It may not spawn children or
+change production behavior unless a test exposes a concrete remaining defect.
