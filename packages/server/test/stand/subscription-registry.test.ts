@@ -447,6 +447,54 @@ describe("StorageSubscriptionRegistry", () => {
     },
   );
 
+  it("lets a helper complete a held applied create stage before its owner resumes", async () => {
+    const factory = new StandRegistryScriptedStorageFactory("create-stage");
+    const context = { name: "DurableRegistryHeldCreateStage", multitenant: false };
+    const owner = new StorageSubscriptionRegistry(context, factory, 1);
+    const held = factory.hold("create-stage");
+    const creating = owner.create(subscription("one"));
+
+    await held.reached.promise;
+
+    const helper = new StorageSubscriptionRegistry(context, factory, 1);
+    await expect(helper.create(subscription("one"))).resolves.toMatchObject({ kind: "existing" });
+    await expect(helper.snapshot()).resolves.toMatchObject([{ revision: 1n }]);
+    await expect(helper.create(subscription("two"))).rejects.toBeInstanceOf(StandCapacityError);
+
+    held.release.resolve();
+    await expect(creating).resolves.toMatchObject({ kind: "created", entry: { revision: 1n } });
+    await expect(owner.snapshot()).resolves.toMatchObject([
+      { subscription: { id: { value: "one" } }, revision: 1n },
+    ]);
+  }, 5_000);
+
+  it("discards a held expired reservation before its owner retries safely", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+      const context = { name: "DurableRegistryHeldReservation", multitenant: false };
+      const owner = new StorageSubscriptionRegistry(context, factory, 1);
+      const held = factory.hold("create-reservation");
+      const creating = owner.create(subscription("one"));
+
+      await held.reached.promise;
+      vi.setSystemTime(start + 30_000);
+
+      const helper = new StorageSubscriptionRegistry(context, factory, 1);
+      await expect(helper.cleanup()).resolves.toEqual({ scanned: 1, deleted: 1, more: false });
+
+      held.release.resolve();
+      await expect(creating).resolves.toMatchObject({ kind: "created", entry: { revision: 1n } });
+      await expect(helper.snapshot()).resolves.toMatchObject([
+        { subscription: { id: { value: "one" } }, revision: 1n },
+      ]);
+      await expect(helper.create(subscription("two"))).rejects.toBeInstanceOf(StandCapacityError);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 5_000);
+
   it.each(["create-reservation", "create-stage", "create-promote", "create-commit"] as const)(
     "settles an applied-then-thrown %s create without leaking a revision-zero reservation",
     async (phase) => {
@@ -720,9 +768,12 @@ type StandRegistryScriptPhase =
 class StandRegistryScriptedStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   #armed = false;
+  #held: StandRegistryCasHold | undefined;
+  #phase: StandRegistryScriptPhase;
 
-  constructor(private phase: StandRegistryScriptPhase) {
+  constructor(phase: StandRegistryScriptPhase) {
     super();
+    this.#phase = phase;
   }
 
   arm(): void {
@@ -730,7 +781,14 @@ class StandRegistryScriptedStorageFactory extends StorageFactory {
   }
 
   setPhase(phase: StandRegistryScriptPhase): void {
-    this.phase = phase;
+    this.#phase = phase;
+  }
+
+  hold(phase: StandRegistryScriptPhase): StandRegistryCasHold {
+    this.setPhase(phase);
+    const held = new StandRegistryCasHold();
+    this.#held = held;
+    return held;
   }
 
   protected override onCreateRecordStorage<I, R extends Message>(
@@ -745,8 +803,21 @@ class StandRegistryScriptedStorageFactory extends StorageFactory {
       () => {
         this.#armed = false;
       },
-      this.phase,
+      () => this.#phase,
+      () => this.#held,
     );
+  }
+}
+
+class StandRegistryCasHold {
+  readonly reached = Promise.withResolvers<undefined>();
+  readonly release = Promise.withResolvers<undefined>();
+  #claimed = false;
+
+  claim(): boolean {
+    if (this.#claimed) return false;
+    this.#claimed = true;
+    return true;
   }
 }
 
@@ -758,7 +829,8 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
     private readonly delegate: RecordStorage<I, R>,
     private readonly armed: () => boolean,
     private readonly disarm: () => void,
-    private readonly phase: StandRegistryScriptPhase,
+    private readonly phase: () => StandRegistryScriptPhase,
+    private readonly hold: () => StandRegistryCasHold | undefined,
   ) {
     super(context, spec);
   }
@@ -791,9 +863,16 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
     const applied = await this.delegate.compareAndSet(id, expected?.record, next?.record);
-    if (applied && this.armed() && this.matches(String(id), expected?.record, next?.record)) {
-      this.disarm();
-      throw new Error("applied-then-thrown");
+    if (applied && this.matches(String(id), expected?.record, next?.record)) {
+      const held = this.hold();
+      if (held?.claim()) {
+        held.reached.resolve();
+        await held.release.promise;
+      }
+      if (this.armed()) {
+        this.disarm();
+        throw new Error("applied-then-thrown");
+      }
     }
     return applied;
   }
@@ -801,7 +880,7 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
   private matches(id: string, expected: R | undefined, next: R | undefined): boolean {
     const control = id === "control" && next instanceof Object && "value" in next;
     const operation = control ? controlOperation(next as unknown as Any) : undefined;
-    switch (this.phase) {
+    switch (this.phase()) {
       case "create-reservation":
         return id !== "control" && expected === undefined && next?.revision === 0n;
       case "create-stage":
