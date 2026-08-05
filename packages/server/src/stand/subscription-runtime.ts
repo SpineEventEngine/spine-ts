@@ -34,6 +34,7 @@ export class SubscriptionRuntime {
   readonly #attachments = new Map<string, LocalSubscriptionAttachment>();
   #tail: Promise<void> = Promise.resolve();
   #timer: ReturnType<typeof setInterval> | undefined;
+  #reconciliation: Promise<void> | undefined;
   #closing = false;
   #closed: Promise<void> | undefined;
 
@@ -99,6 +100,7 @@ export class SubscriptionRuntime {
    * @returns Resolves after the accepted snapshot is reconciled.
    */
   reconcile(): Promise<void> {
+    if (this.#reconciliation !== undefined) return this.#reconciliation;
     const cycle = this.#tail.then(async () => {
       if (this.#closing) return;
       await this.#registry.cleanup();
@@ -114,7 +116,10 @@ export class SubscriptionRuntime {
       for (const id of this.#attachments.keys()) if (!seen.has(id)) this.remove(id);
     });
     this.#tail = cycle.catch(() => undefined);
-    return cycle;
+    this.#reconciliation = cycle.finally(() => {
+      this.#reconciliation = undefined;
+    });
+    return this.#reconciliation;
   }
 
   /**
@@ -182,8 +187,12 @@ export class SubscriptionRuntime {
   }
 
   async #finishClose(): Promise<void> {
-    await this.drainClose();
-    await this.#registry.close();
+    const errors: unknown[] = [];
+    await SubscriptionRuntime.#closePart(() => this.drainClose(), errors);
+    await SubscriptionRuntime.#closePart(() => this.#registry.close(), errors);
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "Subscription runtime close failed.");
+    }
   }
 
   /**
@@ -193,6 +202,21 @@ export class SubscriptionRuntime {
    */
   close(): Promise<void> {
     return this.finishClose();
+  }
+
+  /**
+   * Starts failed-construction cleanup before the context has exposed the runtime.
+   *
+   * @internal
+   */
+  abortClose(): void {
+    this.#closed ??= this.#abortClose();
+  }
+
+  async #abortClose(): Promise<void> {
+    this.beginClose();
+    const registryClose = this.#registry.close();
+    await Promise.allSettled([this.drainClose(), registryClose]);
   }
 
   #consumerHandle(id: string, onUpdate: (update: SubscriptionUpdate) => void): StandSubscription {
@@ -233,7 +257,8 @@ export class SubscriptionRuntime {
               this.#notify(id, update);
             },
           )
-        : SubscriptionObservers.observeState(
+        : standAccess.observeState(
+            this.#systemStand,
             current.subscription as never,
             state,
             this.#systemEventBus,
@@ -241,10 +266,15 @@ export class SubscriptionRuntime {
               this.#notify(id, update);
             },
           );
-    // Keep the paired Stand an explicit construction dependency. It owns no
-    // copied domain metadata and is the System-side observer boundary.
-    void this.#systemStand;
     if (attachment !== undefined) this.#attachments.set(id, { revision, subscription: attachment });
+  }
+
+  static async #closePart(work: () => Promise<void>, errors: unknown[]): Promise<void> {
+    try {
+      await work();
+    } catch (error) {
+      errors.push(error);
+    }
   }
 
   #notify(id: string, update: SubscriptionUpdate): void {

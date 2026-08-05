@@ -1428,6 +1428,8 @@ export class BoundedContextBuilder {
     const registeredRepositories = [...repositories];
     let eventStore: EventStore | undefined;
     let systemEventStore: EventStore | undefined;
+    let eventBus: EventBus | undefined;
+    let systemEventBus: EventBus | undefined;
     let stand: Stand | undefined;
     let systemStand: Stand | undefined;
     let runtime: SubscriptionRuntime | undefined;
@@ -1450,16 +1452,13 @@ export class BoundedContextBuilder {
       systemEventStore = systemSpec.storesEvents
         ? new EventStore(ContextParts.createStorageContext(systemSpec), storageFactory)
         : undefined;
-      const systemEventBus = eventBusAccess.createSystemBus(
-        systemEventStore,
-        systemEventDispatchers,
-      );
+      systemEventBus = eventBusAccess.createSystemBus(systemEventStore, systemEventDispatchers);
       systemStand = new Stand({
         context: ContextParts.createStorageContext(systemSpec),
         storageFactory,
       });
       eventStore = this.createEventStore(storageFactory);
-      const eventBus = new EventBus(eventStore, [...domainEventDispatchers]);
+      eventBus = new EventBus(eventStore, [...domainEventDispatchers]);
       eventBusAccess.registerSchemas(
         eventBus,
         ContextParts.repositoryProducedEventSchemas(registeredRepositories),
@@ -1488,14 +1487,18 @@ export class BoundedContextBuilder {
         this.#deliveryStrategy,
       );
     } catch (error) {
-      void runtime?.close().catch(() => undefined);
-      void registry?.close().catch(() => undefined);
+      runtime?.abortClose();
+      if (runtime === undefined) void registry?.close().catch(() => undefined);
       void stand?.close().catch(() => undefined);
       void systemStand?.close().catch(() => undefined);
-      if (systemEventStore !== undefined) {
+      if (systemEventBus !== undefined) {
+        eventBusAccess.abortClose(systemEventBus);
+      } else if (systemEventStore !== undefined) {
         ContextParts.closeEventStore(systemEventStore, error);
       }
-      if (eventStore !== undefined) {
+      if (eventBus !== undefined) {
+        eventBusAccess.abortClose(eventBus);
+      } else if (eventStore !== undefined) {
         ContextParts.closeEventStore(eventStore, error);
       }
       throw error;

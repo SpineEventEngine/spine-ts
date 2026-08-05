@@ -14,7 +14,9 @@ import type {
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
 import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
-import type { StandObservedState } from "./subscription-observer.js";
+import { SubscriptionObservers, type StandObservedState } from "./subscription-observer.js";
+import type { EventBus, EventSubscription } from "../bus/event-bus.js";
+import type { Subscription, SubscriptionUpdate } from "@spine-event-engine/proto/client";
 
 /**
  * Options for constructing a direct read-side Stand.
@@ -943,6 +945,13 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
 
 interface StandAccess {
   observedState(stand: Stand, typeUrl: string | undefined): StandObservedState | undefined;
+  observeState(
+    stand: Stand,
+    subscription: Subscription,
+    state: StandObservedState,
+    systemEventBus: EventBus,
+    onUpdate: (update: SubscriptionUpdate) => void,
+  ): EventSubscription | undefined;
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,
     schema: Schema,
@@ -968,6 +977,17 @@ export const standAccess: StandAccess = Object.freeze({
       throw new TypeError("State observation requires a Stand instance.");
     if (typeUrl === undefined) return undefined;
     return stand.observedState(typeUrl);
+  },
+  observeState(
+    stand: Stand,
+    subscription: Subscription,
+    state: StandObservedState,
+    systemEventBus: EventBus,
+    onUpdate: (update: SubscriptionUpdate) => void,
+  ): EventSubscription | undefined {
+    if (!(stand instanceof Stand))
+      throw new TypeError("State observation requires a Stand instance.");
+    return SubscriptionObservers.observeState(subscription, state, systemEventBus, onUpdate);
   },
   readCurrent<Schema extends MessageSchema>(
     stand: Stand,

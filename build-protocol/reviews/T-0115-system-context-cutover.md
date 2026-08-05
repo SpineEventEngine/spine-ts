@@ -100,3 +100,21 @@ finding duplicates item 1 and does not create a seventh correction.
 - Expected and explicitly dispatched reasoning: `medium`.
 - Runtime self-introspection is unavailable; the immutable configured role and
   explicitly dispatched profile are the available metadata.
+
+## Accepted Correction Outcome — 2026-08-05
+
+- Implementer: `/root/t0115_terminal_impl`, explicitly dispatched
+  `gpt-5.6-terra` / medium. Runtime self-introspection is unavailable; the
+  immutable configured profile is the available metadata and no mismatch was visible.
+- Items 1–2: removed `observeSubscription`; runtime callers now choose explicit
+  event observation or route state observation through `standAccess` and the paired System Stand.
+- Item 3: construction retains EventBus handles and uses internal bus abort-close
+  once ownership transfers; raw stores close directly only before bus construction,
+  and a constructed runtime exclusively owns registry cleanup.
+- Items 4–5: reconciliation ticks coalesce while a cycle is pending. Runtime close
+  attempts registry closure after detach failure, aggregates failures, and keeps one
+  terminal promise. Focused detach and timer tests cover these outcomes.
+- Item 6: public EventBus TSDoc now declares direct construction domain-only and
+  directs System events to the package-internal System factory.
+- Focused evidence: six affected test files passed 266 tests; server typecheck,
+  changed-file ESLint, TSDoc, Prettier, and diff checks passed.

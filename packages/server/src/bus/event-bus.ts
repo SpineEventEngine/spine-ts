@@ -27,6 +27,7 @@ const eventSchemaRegistrars = new WeakMap<EventBus, (schemas: Iterable<MessageSc
 const eventBusCloseStarters = new WeakMap<EventBus, () => void>();
 const eventBusDrainers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
+const eventBusAborters = new WeakMap<EventBus, () => void>();
 const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
 const forgettingBus: unique symbol = Symbol("forgetting-bus");
 const forgettingBuses = new WeakSet<EventBus>();
@@ -58,6 +59,7 @@ interface EventBusAccess {
   beginClose(eventBus: EventBus): void;
   drain(eventBus: EventBus): Promise<void>;
   finishClose(eventBus: EventBus): Promise<void>;
+  abortClose(eventBus: EventBus): void;
   acceptedWorkCount(eventBus: EventBus): number;
 }
 
@@ -66,8 +68,9 @@ type EventBusIntakeState = "open" | "closing" | "closed";
 /**
  * Small single-process multicast event bus.
  *
- * Public construction stores events. Internally assembled forgetting buses own
- * no `EventStore` and validate, accept, and dispatch without event storage.
+ * Public construction creates a domain-only bus that stores domain events and
+ * rejects System schemas, dispatchers, and events. Internally assembled
+ * forgetting and System buses own no `EventStore` unless explicitly given one.
  * Events with no matching dispatcher resolve without dispatch. Events with no
  * registered schema reject deterministically before storage or dispatch.
  */
@@ -82,7 +85,9 @@ export class EventBus {
   #closed: Promise<void> | undefined;
 
   /**
-   * Creates a bus backed by an event store and initial dispatchers.
+   * Creates a domain-only bus backed by an event store and initial dispatchers.
+   * System schemas and dispatchers are rejected; framework System events use
+   * the package-internal System-bus factory instead.
    *
    * @param eventStore the store that persists accepted events.
    * @param dispatchers the dispatchers to register.
@@ -106,6 +111,9 @@ export class EventBus {
     });
     eventBusDrainers.set(this, () => this.#drain());
     eventBusCloseFinishers.set(this, () => this.#finishClose());
+    eventBusAborters.set(this, () => {
+      this.#abortClose();
+    });
     eventBusWorkCounters.set(this, () => this.#acceptedWorkCount);
 
     for (const dispatcher of dispatchers) {
@@ -172,6 +180,17 @@ export class EventBus {
 
     if (errors.length > 0) {
       throw new AggregateError(errors, "EventBus close failed.");
+    }
+  }
+
+  #abortClose(): void {
+    this.#beginClose();
+    try {
+      this.#eventStore?.close();
+    } finally {
+      void this.#started.then(() => this.#runtime.close()).catch(() => undefined);
+      this.#intakeState = "closed";
+      this.#clearSubscribers();
     }
   }
 
@@ -591,6 +610,12 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     }
 
     return finishClose();
+  },
+  abortClose(eventBus: EventBus): void {
+    const abortClose = eventBusAborters.get(eventBus);
+    if (abortClose === undefined)
+      throw new TypeError("Event-bus close coordination requires an EventBus instance.");
+    abortClose();
   },
 
   acceptedWorkCount(eventBus: EventBus): number {

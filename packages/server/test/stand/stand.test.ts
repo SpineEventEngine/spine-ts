@@ -218,7 +218,7 @@ describe("Stand", () => {
       storageFactory: factory,
     });
     const bus = eventBusAccess.createSystemBus(undefined);
-    const registry = new InMemorySubscriptionRegistry();
+    const registry = new ClosingRegistry();
     stand.register(ProjectionStateSchema);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     for (const id of ["detach-one", "detach-two"]) {
@@ -238,6 +238,8 @@ describe("Stand", () => {
 
     const closing = runtime.close();
     await expect(closing).rejects.toMatchObject({ message: "Subscription runtime close failed." });
+    await expect(runtime.close()).rejects.toBe(await closing.catch((error: unknown) => error));
+    expect(registry.closeCalls).toBe(1);
     await expect(runtime.consume("detach-one", () => undefined)).rejects.toThrow(
       "Subscription runtime is closing.",
     );
@@ -1397,6 +1399,15 @@ class GatedSnapshotRegistry extends InMemorySubscriptionRegistry {
       });
     }
     return result;
+  }
+}
+
+class ClosingRegistry extends InMemorySubscriptionRegistry {
+  closeCalls = 0;
+
+  override async close(): Promise<void> {
+    this.closeCalls++;
+    await super.close();
   }
 }
 

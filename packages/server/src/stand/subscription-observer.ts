@@ -38,7 +38,7 @@ import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/ser
 import { RecordMask } from "@spine-event-engine/storage";
 
 import { eventBusAccess, type EventBus, type EventSubscription } from "../bus/event-bus.js";
-import type { StandSubscription, StandUpdate } from "./stand.js";
+import type { StandUpdate } from "./stand.js";
 
 /* eslint-disable @typescript-eslint/no-extraneous-class */
 
@@ -141,34 +141,6 @@ export class SubscriptionObservers {
         },
       },
     );
-  }
-
-  /**
-   * Attaches one active canonical definition to this node's local state/EventBus
-   * sources and renders its client-safe update before delivery to consumers.
-   *
-   * @param subscription The active canonical subscription definition.
-   * @param domainEventBus The local domain event source.
-   * @param findState Finds the local state route for a target type.
-   * @param onUpdate Receives a fully rendered client update.
-   * @param systemEventBus The paired System event source.
-   * @returns Returns the local observer attachment when the target is known.
-   */
-  static observeSubscription(
-    subscription: Subscription,
-    domainEventBus: EventBus | undefined,
-    findState: (typeUrl: string) => StandObservedState | undefined,
-    onUpdate: (update: SubscriptionUpdate) => void,
-    systemEventBus: EventBus | undefined = domainEventBus,
-  ): StandSubscription | EventSubscription | undefined {
-    const target = subscription.topic?.target;
-    const typeUrl = target?.type;
-    if (typeUrl === undefined || typeUrl.length === 0) return undefined;
-    const state = findState(typeUrl);
-    if (state !== undefined) {
-      return SubscriptionObservers.observeState(subscription, state, systemEventBus, onUpdate);
-    }
-    return SubscriptionObservers.observeEvent(subscription, domainEventBus, onUpdate);
   }
 
   static #createStateRenderer(

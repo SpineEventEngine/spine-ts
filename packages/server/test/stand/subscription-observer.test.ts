@@ -26,6 +26,7 @@ import {
   FilterSchema,
   Filter_Operator,
   SubscriptionSchema,
+  type Subscription,
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -70,25 +71,25 @@ describe("SubscriptionObservers", () => {
 
   it("does not attach incomplete, state, or event targets without a local EventBus", () => {
     const state = { schema: ProjectionStateSchema, idField: "id" };
-    const missingTarget = SubscriptionObservers.observeSubscription(
+    const missingTarget = observeSubscription(
       create(SubscriptionSchema),
       undefined,
       () => state,
       () => undefined,
     );
-    const emptyTarget = SubscriptionObservers.observeSubscription(
+    const emptyTarget = observeSubscription(
       create(SubscriptionSchema, { topic: { target: { type: "" } } }),
       undefined,
       () => state,
       () => undefined,
     );
-    const stateTarget = SubscriptionObservers.observeSubscription(
+    const stateTarget = observeSubscription(
       subscriptionFor(ProjectionStateSchema),
       undefined,
       () => state,
       () => undefined,
     );
-    const eventTarget = SubscriptionObservers.observeSubscription(
+    const eventTarget = observeSubscription(
       subscriptionFor(ProjectionStateSchema),
       undefined,
       () => undefined,
@@ -136,7 +137,7 @@ describe("SubscriptionObservers", () => {
       },
     });
 
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       subscription,
       bus,
       (typeUrl) =>
@@ -173,7 +174,7 @@ describe("SubscriptionObservers", () => {
   it("matches EITHER criteria after an ID filter and leaves an explicit empty mask unprojected", async () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       create(SubscriptionSchema, {
         topic: {
           target: {
@@ -248,7 +249,7 @@ describe("SubscriptionObservers", () => {
       }),
     ];
     const observers = filters.map((filter) =>
-      SubscriptionObservers.observeSubscription(
+      observeSubscription(
         create(SubscriptionSchema, {
           topic: {
             target: {
@@ -291,7 +292,7 @@ describe("SubscriptionObservers", () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observers = cases.map(({ schema }) =>
-      SubscriptionObservers.observeSubscription(
+      observeSubscription(
         subscriptionFor(schema),
         bus,
         (typeUrl) =>
@@ -338,7 +339,7 @@ describe("SubscriptionObservers", () => {
       create(BytesValueSchema, { value: new Uint8Array([4, 6]) }),
     );
     const observers = [anyId, otherAnyId, bytesId, otherBytesId].map((id) =>
-      SubscriptionObservers.observeSubscription(
+      observeSubscription(
         filteredSubscription(StringValueSchema, id),
         bus,
         () => ({ schema: StringValueSchema, idField: "value" }),
@@ -369,7 +370,7 @@ describe("SubscriptionObservers", () => {
   it("ignores state-change envelopes with a wrong tenant, state type, or malformed payload", async () => {
     const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       create(SubscriptionSchema, {
         topic: {
           context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
@@ -424,7 +425,7 @@ describe("SubscriptionObservers", () => {
   it("forwards accepted event targets while redacting client rejection details", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       create(SubscriptionSchema, {
         topic: {
           context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
@@ -483,7 +484,7 @@ describe("SubscriptionObservers", () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
     const domain = { kind: { case: "domain" as const, value: { value: "example.test" } } };
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       create(SubscriptionSchema, {
         topic: {
           context: { tenantId: domain },
@@ -529,6 +530,22 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 });
+
+function observeSubscription(
+  subscription: Subscription,
+  bus: EventBus | undefined,
+  findState: (
+    typeUrl: string,
+  ) => { readonly schema: MessageSchema; readonly idField: string } | undefined,
+  onUpdate: (update: SubscriptionUpdate) => void,
+) {
+  const typeUrl = subscription.topic?.target?.type;
+  if (typeUrl === undefined || typeUrl.length === 0) return undefined;
+  const state = findState(typeUrl);
+  return state === undefined
+    ? SubscriptionObservers.observeEvent(subscription, bus, onUpdate)
+    : SubscriptionObservers.observeState(subscription, state, bus, onUpdate);
+}
 
 function createSystemBus(): EventBus {
   const bus = eventBusAccess.createSystemBus(undefined);
