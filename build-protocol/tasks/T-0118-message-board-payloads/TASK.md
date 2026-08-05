@@ -1,6 +1,6 @@
 # T-0118: Message Board Payload-First Synchronization
 
-Status: Preflight complete; specialist review pending
+Status: Review corrections implemented; targeted re-review pending
 
 ## Objective
 
@@ -45,8 +45,9 @@ and user-visible logging across the browser/server boundary.
     board-switch races.
 11. A real local backend/frontend Chromium smoke proves startup, query, post,
     payload-first live rendering, and useful console logging.
-12. The reducer remains example-local; `client-react` and framework APIs do not
-    gain a speculative abstraction. Broad docs remain T-0119.
+12. The reducer remains example-local. The only client-react change is the
+    narrowly required per-delivery/lifecycle observer seam that prevents React
+    from coalescing data needed by this example; broad docs remain T-0119.
 
 ## Implementation Assignment
 
@@ -92,3 +93,20 @@ converged `verify:release` gate.
   TSDoc, formatting, and diff checks are complete. The managed Chromium suite
   proves posting and 61-second live-update continuity. Specialist review and
   the final release gate remain pending.
+
+## Review Correction Evidence
+
+- The correction RED tests proved that the previous latest-delivery observation
+  loses a valid burst member and that a post may complete after lifecycle state
+  has changed. The example now consumes every delivery before React coalesces
+  observation state, and observes lifecycle notices at the same boundary.
+- A reconnect resynchronization advances the update generation, so a prior
+  ordinary recovery completion cannot replace its authoritative rows. Reconnect
+  logging now contains only board, target, and row count.
+- `BoardRows.compare` is the one example-local oldest-first policy for query
+  and live rows. PostForm's callback documentation now describes a
+  post-success notification.
+- Focused validation passed: client-react and web TypeScript checks, focused
+  client-react plus Message Board Vitest (72/72), changed production ESLint,
+  Prettier, and `git diff --check`. Re-review and the selected convergence
+  profile remain pending.

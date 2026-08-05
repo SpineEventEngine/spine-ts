@@ -66,7 +66,7 @@ export interface PostFormProps {
 /**
  * Renders and submits the server-validated message form.
  *
- * @param props The board, actor, request, identifier source, and refresh callback.
+ * @param props The board, actor, request, identifier source, and post-success callback.
  * @returns The MessageBoard post form.
  */
 export const PostForm = (props: PostFormProps): ReactElement => {

@@ -1,6 +1,6 @@
 # T-0118 Review Log
 
-Status: First review wave complete; correction batch accepted
+Status: Correction batch implemented; targeted re-review pending
 
 ## Scope
 
@@ -65,3 +65,32 @@ Accepted correction batch:
 
 No finding is rejected. Corrections affecting runtime behavior require focused
 tests and re-review of style, documentation, and performance/reliability.
+
+## Correction Implementation Evidence
+
+All six accepted findings are implemented.
+
+1. The optional `client-react` delivery callback consumes every stream value
+   before React keeps only the latest observation; the Message Board reducer
+   now uses it with a burst regression.
+2. Reconnect resynchronization advances `updateGeneration`, preventing an
+   older ordinary recovery response from replacing reconnect rows.
+3. An optional immediate lifecycle callback keeps the post-completion decision
+   current through connected-to-failed and failed-to-connected transitions.
+4. Reconnect logs only board, target, and row count; no `QueryResponse` is
+   logged.
+5. `BoardRows.compare` is shared by authoritative query rows and live rows.
+6. PostForm's parameter documentation calls `onPosted` a post-success
+   callback.
+
+The narrow client-react callback seam is a concrete, tested exception to the
+earlier no-framework-API expectation: latest-only observation made burst-safe
+example behavior impossible. It is optional, preserves subscription identity
+when callback identities change, and has no reducer or Message Board policy.
+
+Focused evidence: client-react and web TypeScript checks pass, focused
+client-react plus Message Board Vitest passes 72/72, and changed production
+ESLint, Prettier, and `git diff --check` pass. Re-review style/maintainability,
+documentation, and performance/reliability; TypeScript/API docs is now
+relevant because the client-react public hook adds documented callback
+parameters.

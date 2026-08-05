@@ -82,6 +82,16 @@ export interface SubscriptionObservation {
 }
 
 /**
+ * Receives each subscription delivery before React coalesces observation state.
+ */
+export type OnSubscriptionDelivery = (delivery: SubscriptionDelivery) => void;
+
+/**
+ * Receives each subscription lifecycle notice before React coalesces observation state.
+ */
+export type OnSubscriptionLifecycle = (lifecycle: SubscriptionLifecycle) => void;
+
+/**
  * Properties accepted by the client request provider.
  */
 export interface SpineClientProviderProps {
@@ -183,6 +193,8 @@ export function useEntityQuery(
  * @param topic Supplies the subscription topic.
  * @param authoritativeQuery Creates the recovery query after reconnect.
  * @param dependencies Identifies when React must recreate the subscription.
+ * @param onDelivery Receives every delivery before React coalesces observation state.
+ * @param onLifecycle Receives every lifecycle notice before React coalesces observation state.
  * @returns Returns the latest subscription observation.
  */
 export function useEntitySubscription(
@@ -192,11 +204,15 @@ export function useEntitySubscription(
     { readonly kind: "entity" }
   >["authoritativeQuery"],
   dependencies: readonly unknown[],
+  onDelivery?: OnSubscriptionDelivery,
+  onLifecycle?: OnSubscriptionLifecycle,
 ): SubscriptionObservation {
   const request = useSpineClient();
   return SubscriptionObservers.use(
     () => request.createSubscription(topic, { kind: "entity", authoritativeQuery }),
     [request, ...dependencies],
+    onDelivery,
+    onLifecycle,
   );
 }
 
@@ -240,9 +256,15 @@ const SubscriptionObservers = Object.freeze({
   use(
     createSubscription: () => Promise<Subscription>,
     dependencies: readonly unknown[],
+    onDelivery?: OnSubscriptionDelivery,
+    onLifecycle?: OnSubscriptionLifecycle,
   ): SubscriptionObservation {
     const [state, setState] = useState<SubscriptionObservation>(subscriptionIdle);
     const generation = useRef(0);
+    const onDeliveryRef = useRef(onDelivery);
+    onDeliveryRef.current = onDelivery;
+    const onLifecycleRef = useRef(onLifecycle);
+    onLifecycleRef.current = onLifecycle;
     useEffect(() => {
       const current = ++generation.current;
       let live = true;
@@ -286,8 +308,20 @@ const SubscriptionObservers = Object.freeze({
             lifecycle: undefined,
             error: undefined,
           });
-          void SubscriptionObservers.observeDeliveries(handle, () => live, setState, cancel);
-          void SubscriptionObservers.observeLifecycle(handle, () => live, setState, cancel);
+          void SubscriptionObservers.observeDeliveries(
+            handle,
+            () => live,
+            setState,
+            cancel,
+            () => onDeliveryRef.current,
+          );
+          void SubscriptionObservers.observeLifecycle(
+            handle,
+            () => live,
+            setState,
+            cancel,
+            () => onLifecycleRef.current,
+          );
         })
         .catch((error: unknown) => {
           if (live && generation.current === current) {
@@ -308,10 +342,14 @@ const SubscriptionObservers = Object.freeze({
     live: () => boolean,
     onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
     cancel: () => Promise<void>,
+    onDelivery: () => OnSubscriptionDelivery | undefined,
   ): Promise<void> {
     try {
       for await (const delivery of subscription.updates) {
-        if (live()) onSetState((previous) => ({ ...previous, delivery }));
+        if (live()) {
+          onDelivery()?.(delivery);
+          onSetState((previous) => ({ ...previous, delivery }));
+        }
       }
     } catch (error: unknown) {
       if (live())
@@ -330,10 +368,14 @@ const SubscriptionObservers = Object.freeze({
     live: () => boolean,
     onSetState: (state: (previous: SubscriptionObservation) => SubscriptionObservation) => void,
     cancel: () => Promise<void>,
+    onLifecycle: () => OnSubscriptionLifecycle | undefined,
   ): Promise<void> {
     try {
       for await (const lifecycle of subscription.lifecycle) {
-        if (live()) onSetState((previous) => ({ ...previous, lifecycle }));
+        if (live()) {
+          onLifecycle()?.(lifecycle);
+          onSetState((previous) => ({ ...previous, lifecycle }));
+        }
       }
     } catch (error: unknown) {
       if (live())

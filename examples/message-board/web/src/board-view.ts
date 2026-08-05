@@ -114,7 +114,9 @@ export class BoardView {
 /**
  * Orders message rows by creation time and identifier.
  */
-const BoardRows = Object.freeze({
+export const BoardRows: Readonly<{
+  readonly compare: (left: BoardMessageView, right: BoardMessageView) => number;
+}> = Object.freeze({
   // prettier-ignore
 
   /**

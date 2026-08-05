@@ -225,6 +225,21 @@ describe("MessageBoardApp", () => {
     expect(request.send).toHaveBeenCalledTimes(1);
   });
 
+  it("applies every payload from a burst before React renders", async () => {
+    const request = requestFixture({ initialRows: responseRows("initial") });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("initial");
+
+    request.subscription.emitUpdate(stateUpdate(view("burst one", "general", 2n)));
+    request.subscription.emitUpdate(stateUpdate(view("burst two", "general", 3n)));
+
+    await screen.findByText("burst one");
+    await screen.findByText("burst two");
+    expect(request.send).toHaveBeenCalledTimes(1);
+  });
+
   it("coalesces malformed subscription payload recovery into one board query", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
@@ -281,6 +296,26 @@ describe("MessageBoardApp", () => {
     expect(screen.queryByText("stale recovery")).toBeNull();
     request.query.resolveAt(2, responseRows("current recovery"));
     await screen.findByText("current recovery");
+  });
+
+  it("keeps reconnect recovery when an older ordinary recovery completes", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+
+    request.subscription.emitRecovery(responseRows("reconnected"));
+    await screen.findByText("reconnected");
+    request.query.resolveAt(1, responseRows("stale recovery"));
+    await Promise.resolve();
+
+    expect(screen.queryByText("stale recovery")).toBeNull();
+    expect(screen.getByText("reconnected")).toBeTruthy();
   });
 
   it("coalesces multiple live payloads during one recovery into one follow-up query", async () => {
@@ -538,6 +573,50 @@ describe("MessageBoardApp", () => {
     );
   });
 
+  it("refreshes when live updates disconnect before a successful post completes", async () => {
+    const request = requestFixture({ queuedQueries: true, deferredPost: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitLifecycle({ state: "connected", generation: 1 });
+    await screen.findByText("Updating live");
+    fillPost("disconnecting post");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    request.subscription.emitLifecycle({
+      state: "failed",
+      generation: 1,
+      error: new Error("lost"),
+    });
+
+    request.postDeferred.resolve({ kind: "ok" });
+
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+  });
+
+  it("avoids refresh when live updates connect before a successful post completes", async () => {
+    const request = requestFixture({ queuedQueries: true, deferredPost: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    fillPost("connecting post");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    request.subscription.emitLifecycle({ state: "connected", generation: 1 });
+    await screen.findByText("Updating live");
+
+    request.postDeferred.resolve({ kind: "ok" });
+
+    await Promise.resolve();
+    expect(request.send).toHaveBeenCalledTimes(1);
+  });
+
   it("does not refresh after a failed post", async () => {
     const request = requestFixture({ postFailure: true });
     render(
@@ -666,7 +745,7 @@ describe("MessageBoardApp", () => {
     );
     expect(info).toHaveBeenCalledWith(
       "MessageBoard received authoritative board state after reconnecting.",
-      expect.objectContaining({ board: "general", response: recovery }),
+      expect.objectContaining({ board: "general", rows: 1 }),
     );
     expect(error).toHaveBeenCalledWith(
       "MessageBoard live updates failed.",
@@ -1108,6 +1187,7 @@ function postPayload(message: unknown): {
 
 function queue<T>() {
   const pending: ((result: IteratorResult<T>) => void)[] = [];
+  const values: T[] = [];
   let closed = false;
   return {
     values: {
@@ -1116,13 +1196,16 @@ function queue<T>() {
           next: () =>
             new Promise<IteratorResult<T>>((resolve) => {
               if (closed) resolve({ done: true, value: undefined as never });
+              else if (values.length > 0) resolve({ done: false, value: values.shift()! });
               else pending.push(resolve);
             }),
         };
       },
     } as AsyncIterable<T>,
     push(value: T) {
-      pending.shift()?.({ done: false, value });
+      const resolve = pending.shift();
+      if (resolve === undefined) values.push(value);
+      else resolve({ done: false, value });
     },
     close() {
       closed = true;

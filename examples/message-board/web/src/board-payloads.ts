@@ -7,6 +7,8 @@ import { AnyMessages } from "@spine-event-engine/core";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import type { EntityStateUpdate, SubscriptionUpdate } from "@spine-event-engine/proto/client";
 
+import { BoardRows } from "./board-view.js";
+
 /**
  * Explains why the board must recover from an authoritative query.
  */
@@ -91,7 +93,7 @@ export const BoardPayloads: Readonly<{
     for (const change of parsed)
       if (change.row === undefined) next.delete(change.id);
       else next.set(change.id, change.row);
-    return { kind: "applied", rows: [...next.values()].sort(BoardPayloadReaders.order) };
+    return { kind: "applied", rows: [...next.values()].sort(BoardRows.compare) };
   },
 });
 
@@ -153,24 +155,6 @@ const BoardPayloadReaders = Object.freeze({
     if (update.id === undefined) return "missing-id";
     const id = AnyMessages.unpack(update.id, MessageIdSchema)?.value;
     return id === undefined || id.length === 0 ? "invalid-id" : { value: id };
-  },
-
-  /**
-   * Orders rows by posting time and then identity for deterministic oldest-first display.
-   *
-   * @param left Supplies the first row.
-   * @param right Supplies the second row.
-   * @returns The relative display order.
-   */
-  order(left: BoardMessageView, right: BoardMessageView): number {
-    const leftSeconds = left.postedAt?.seconds ?? 0n;
-    const rightSeconds = right.postedAt?.seconds ?? 0n;
-    const seconds = leftSeconds < rightSeconds ? -1 : leftSeconds > rightSeconds ? 1 : 0;
-    return (
-      seconds ||
-      (left.postedAt?.nanos ?? 0) - (right.postedAt?.nanos ?? 0) ||
-      (left.id?.value ?? "").localeCompare(right.id?.value ?? "")
-    );
   },
 });
 
