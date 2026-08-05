@@ -58,12 +58,15 @@ import type {
   EntityCommitStorage,
 } from "@spine-event-engine/storage/internal/entity-commit";
 import {
+  CommandDispatchedToHandlerSchema,
   EntityArchivedSchema,
   EntityCreatedSchema,
   EntityDeletedSchema,
   EntityRestoredSchema,
   EntityStateChangedSchema,
   EntityUnarchivedSchema,
+  EventDispatchedToSubscriberSchema,
+  EventDispatchedToReactorSchema,
 } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
@@ -448,15 +451,20 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
 class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
+  static failure: Error | undefined;
 
-  static reset(): void {
+  static reset(failure?: Error): void {
     this.argumentCounts = [];
     this.contexts = [];
+    this.failure = failure;
   }
 
   reactProjection(event: ProjectionState, context: EventContext): AggregateState {
     GeneratedReactorAggregate.argumentCounts.push(arguments.length);
     GeneratedReactorAggregate.contexts.push(context);
+    if (GeneratedReactorAggregate.failure !== undefined) {
+      throw GeneratedReactorAggregate.failure;
+    }
     this.update((draft) =>
       Object.assign(
         draft,
@@ -2252,6 +2260,112 @@ describe("repository signal routing", () => {
     expect(observed).toEqual(["event-reactor-source-1"]);
   });
 
+  it("emits a System reactor-dispatch diagnostic after aggregate reactor admission", async () => {
+    GeneratedReactorAggregate.reset();
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent("aggregate-reactor-diagnostic", "aggregate-reactor-id");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(event);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      const diagnostic = AnyMessages.unpack(
+        diagnostics[0]?.message as never,
+        EventDispatchedToReactorSchema,
+      );
+      expect(diagnostic).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        payload: event,
+        entityType: { impl: { case: "javaClassName", value: "GeneratedReactorAggregate" } },
+        whenDispatched: diagnostics[0]?.context?.timestamp,
+      });
+      expect(diagnostics[0]?.context?.origin).toMatchObject({
+        case: "pastMessage",
+        value: { message: { typeUrl: TypeUrls.derive(ProjectionStateSchema) } },
+      });
+      expect(context.eventBus().acceptedEventTypes()).not.toContain(
+        TypeUrls.derive(EventDispatchedToReactorSchema),
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("retains one reactor diagnostic when an admitted reactor fails", async () => {
+    const failure = new Error("admitted reactor failed");
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent("aggregate-reactor-failure", "aggregate-reactor-failure");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      GeneratedReactorAggregate.reset(failure);
+      await expect(context.eventBus().post(event)).rejects.toThrow(failure);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      expect(GeneratedReactorAggregate.argumentCounts).toEqual([2]);
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToReactorSchema),
+      ).toMatchObject({ payload: event });
+    } finally {
+      GeneratedReactorAggregate.reset();
+      await context.close();
+    }
+  });
+
+  it("does not emit reactor diagnostics for an event without a matching route", async () => {
+    GeneratedReactorAggregate.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(
+          SignalEnvelopes.event({
+            id: create(EventIdSchema, { value: "aggregate-reactor-unmatched" }),
+            context: create(EventContextSchema),
+            schema: NumberRouteEventSchema,
+            message: create(NumberRouteEventSchema, { id: 7 }),
+          }),
+        ),
+      ).rejects.toThrow(/event schema/i);
+      await context.close();
+
+      expect(diagnostics).toEqual([]);
+      expect(GeneratedReactorAggregate.argumentCounts).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("dispatches produced reactor events before later external posts and drains them on close", async () => {
     const factory = new InMemoryStorageFactory();
     const observed: string[] = [];
@@ -3044,6 +3158,224 @@ describe("repository signal routing", () => {
         priority: 1,
       }),
     );
+  });
+
+  it("retains one command diagnostic when an admitted Process Manager assignment fails", async () => {
+    const failure = new Error("admitted Process Manager assignment failed");
+    const diagnostics: SpineEvent[] = [];
+    const command = createAggregateCommand("pm-command-diagnostic-failure", "pm-command-failure");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      RoutingProcessManager.reset(failure);
+      await expect(context.commandBus().post(command)).rejects.toThrow(failure);
+      await context.close();
+
+      expect(RoutingProcessManager.commandCalls).toBe(1);
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, CommandDispatchedToHandlerSchema),
+      ).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        payload: command,
+      });
+    } finally {
+      RoutingProcessManager.reset();
+      await context.close();
+    }
+  });
+
+  it("emits a System command-dispatch diagnostic after aggregate handler admission", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const command = createAggregateCommand("command-diagnostic", "diagnostic-id", "Diagnostic");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          diagnostics.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.commandBus().post(command);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      const diagnostic = AnyMessages.unpack(
+        diagnostics[0]?.message as never,
+        CommandDispatchedToHandlerSchema,
+      );
+      expect(diagnostic).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        payload: command,
+        entityType: { impl: { case: "javaClassName", value: "ExecutingTaskAggregate" } },
+        whenDispatched: diagnostics[0]?.context?.timestamp,
+      });
+      expect(diagnostics[0]?.context?.origin).toMatchObject({
+        case: "pastMessage",
+        value: { message: { typeUrl: TypeUrls.derive(AggregateStateSchema) } },
+      });
+      expect(context.eventBus().acceptedEventTypes()).not.toContain(
+        TypeUrls.derive(CommandDispatchedToHandlerSchema),
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("retains one command diagnostic when an admitted handler fails", async () => {
+    const failure = new Error("admitted command handler failed");
+    const diagnostics: SpineEvent[] = [];
+    const command = createAggregateCommand("command-diagnostic-failure", "diagnostic-failure");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      ExecutingTaskAggregate.reset(failure);
+      await expect(context.commandBus().post(command)).rejects.toThrow(failure);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, CommandDispatchedToHandlerSchema),
+      ).toMatchObject({ payload: command });
+    } finally {
+      ExecutingTaskAggregate.reset();
+      await context.close();
+    }
+  });
+
+  it("does not emit command diagnostics for refused or unroutable commands", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createValidatingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          diagnostics.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.commandBus().post(createValidatedCommand("refused-diagnostic", "refused", "")),
+      ).rejects.toThrow(/validation/i);
+      await expect(
+        context.commandBus().post(createAggregateCommand("unroutable-diagnostic", "unroutable")),
+      ).rejects.toThrow(/dispatcher/i);
+      await context.close();
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("preserves tenant context for aggregate and process-manager command diagnostics", async () => {
+    const aggregateDiagnostics: SpineEvent[] = [];
+    const aggregate = BoundedContext.multitenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          aggregateDiagnostics.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const processManagerDiagnostics: SpineEvent[] = [];
+    const processManager = BoundedContext.multitenant("ProcessManagers")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          processManagerDiagnostics.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await aggregate.commandBus().post(createAggregateCommand("diagnostic-a", "same", "A", "a"));
+      await aggregate.commandBus().post(createAggregateCommand("diagnostic-b", "same", "B", "b"));
+      await processManager
+        .commandBus()
+        .post(createAggregateCommand("diagnostic-pm", "pm", "PM", "pm-tenant"));
+      await waitForCondition(
+        () => aggregateDiagnostics.length === 2 && processManagerDiagnostics.length === 1,
+      );
+
+      expect(diagnosticTenants(aggregateDiagnostics)).toEqual(["a", "b"]);
+      expect(diagnosticTenants(processManagerDiagnostics)).toEqual(["pm-tenant"]);
+      expect(
+        AnyMessages.unpack(
+          processManagerDiagnostics[0]?.message as never,
+          CommandDispatchedToHandlerSchema,
+        ),
+      ).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        entityType: { impl: { case: "javaClassName", value: "RoutingProcessManager" } },
+      });
+    } finally {
+      await Promise.all([aggregate.close(), processManager.close()]);
+    }
+  });
+
+  it("isolates command diagnostic publication failure from admitted handler work", async () => {
+    ExecutingTaskAggregate.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          diagnostics.push(event);
+          return Promise.reject(new Error("diagnostic dispatch failed"));
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("diagnostic-failure", "failure-id")),
+      ).resolves.toBeUndefined();
+      await waitForFailures(context, 1);
+
+      expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
+      await expect(context.stand().read(AggregateStateSchema, "failure-id")).resolves.toMatchObject(
+        {
+          name: "Task (applied)",
+        },
+      );
+      expect(diagnostics).toHaveLength(1);
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { error: { message: "diagnostic dispatch failed" } },
+      ]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("writes process-manager commands to a durable inbox before local delivery", async () => {
@@ -4363,6 +4695,151 @@ describe("repository signal routing", () => {
     );
   });
 
+  it("retains one reactor diagnostic when an admitted Process Manager reactor fails", async () => {
+    const failure = new Error("admitted Process Manager reactor failed");
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent("pm-reactor-diagnostic-failure", "pm-reactor-failure");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      RoutingProcessManager.reset(failure);
+      await expect(context.eventBus().post(event)).rejects.toThrow(failure);
+      await context.close();
+
+      expect(RoutingProcessManager.eventCalls).toBe(1);
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToReactorSchema),
+      ).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        payload: event,
+      });
+    } finally {
+      RoutingProcessManager.reset();
+      await context.close();
+    }
+  });
+
+  it("emits distinct command and reactor diagnostics for a routed Process Manager", async () => {
+    RoutingProcessManager.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProcessManagerCommandAndReactRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema, EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const command = createAggregateCommand(
+      "pm-diagnostic-command",
+      "pm-diagnostic",
+      "Command",
+      "a",
+    );
+    const event = createProjectionEvent("pm-diagnostic-event", "pm-diagnostic", {
+      pastMessageTenantId: "a",
+    });
+
+    try {
+      await context.commandBus().post(command);
+      await context.eventBus().post(event);
+      await waitForCondition(() => diagnostics.length >= 2);
+
+      expect(diagnosticTenants(diagnostics).every((tenantId) => tenantId === "a")).toBe(true);
+      const reactor = diagnostics.find(
+        (diagnostic) =>
+          diagnostic.message?.typeUrl === TypeUrls.derive(EventDispatchedToReactorSchema) &&
+          AnyMessages.unpack(diagnostic.message, EventDispatchedToReactorSchema)?.payload?.id
+            ?.value === event.id?.value,
+      );
+      expect(
+        AnyMessages.unpack(reactor?.message as never, EventDispatchedToReactorSchema),
+      ).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        payload: event,
+        entityType: { impl: { case: "javaClassName", value: "RoutingProcessManager" } },
+        whenDispatched: reactor?.context?.timestamp,
+      });
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-diagnostic", { tenantId: "a" }),
+      ).resolves.toMatchObject({
+        queue: "Task reacted",
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not emit reactor diagnostics without a matched reactor", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(createProjectionEvent("pm-no-reactor", "pm-no-reactor"));
+      await context.close();
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("isolates reactor diagnostic publication failure from Process Manager work", async () => {
+    RoutingProcessManager.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.reject(new Error("reactor diagnostic dispatch failed"));
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(createProjectionEvent("pm-reactor-failure", "pm-reactor-failure")),
+      ).resolves.toBeUndefined();
+      await waitForFailures(context, 1);
+
+      expect(RoutingProcessManager.eventCalls).toBe(1);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-reactor-failure"),
+      ).resolves.toMatchObject({
+        queue: "Task reacted",
+      });
+      expect(diagnostics).toHaveLength(1);
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { error: { message: "reactor diagnostic dispatch failed" } },
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("keeps committed process-manager event transitions usable when a Stand subscriber throws", async () => {
     RoutingProcessManager.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -4688,6 +5165,211 @@ describe("repository signal routing", () => {
       },
       version: { number: 1 },
     });
+  });
+
+  it("emits a System subscriber-dispatch diagnostic after projection admission", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent("subscriber-diagnostic", "subscriber-id");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(event);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      const diagnostic = AnyMessages.unpack(
+        diagnostics[0]?.message as never,
+        EventDispatchedToSubscriberSchema,
+      );
+      expect(diagnostic).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+        payload: event,
+        entityType: { impl: { case: "javaClassName", value: "ExecutingTaskProjection" } },
+        whenDispatched: diagnostics[0]?.context?.timestamp,
+      });
+      expect(diagnostics[0]?.context?.origin).toMatchObject({
+        case: "pastMessage",
+        value: { message: { typeUrl: TypeUrls.derive(ProjectionStateSchema) } },
+      });
+      expect(context.eventBus().acceptedEventTypes()).not.toContain(
+        TypeUrls.derive(EventDispatchedToSubscriberSchema),
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("retains one subscriber diagnostic when an admitted subscriber fails", async () => {
+    const failure = new Error("admitted projection subscriber failed");
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent(
+      "subscriber-diagnostic-failure",
+      "subscriber-diagnostic-failure",
+    );
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createThrowingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      ThrowingTaskProjection.reset(failure);
+      await expect(context.eventBus().post(event)).rejects.toThrow(failure);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToSubscriberSchema),
+      ).toMatchObject({ payload: event });
+    } finally {
+      ThrowingTaskProjection.reset();
+      await context.close();
+    }
+  });
+
+  it("keeps subscriber diagnostics tenant-scoped and emits them for catch-up replay", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(
+        createProjectionEvent("subscriber-tenant", "subscriber-id", {
+          pastMessageTenantId: "tenant-a",
+        }),
+      );
+      await waitForCondition(() => diagnostics.length === 1);
+      expect(diagnosticTenants(diagnostics)).toEqual(["tenant-a"]);
+
+      diagnostics.splice(0);
+      ExecutingTaskProjection.reset();
+      await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).resolves.toMatchObject({
+        replayedEventCount: 1,
+      });
+      await waitForCondition(() => diagnostics.length === 1);
+      expect(diagnosticTenants(diagnostics)).toEqual(["tenant-a"]);
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not emit subscriber diagnostics before projection subscriber admission", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.eventBus().post(
+        SignalEnvelopes.event({
+          id: create(EventIdSchema, { value: "subscriber-unmatched" }),
+          context: create(EventContextSchema),
+          schema: NumberRouteEventSchema,
+          message: create(NumberRouteEventSchema, { id: 7 }),
+        }),
+      );
+      await context.close();
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not emit subscriber diagnostics when event routing refuses before invocation", async () => {
+    ExecutingTaskProjection.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRoutingRepository())
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(
+          createProjectionEvent("subscriber-routing-refusal", "first-field-task", {
+            producerId: "producer-task",
+          }),
+        ),
+      ).rejects.toThrow(/same entity/i);
+      await context.close();
+
+      expect(diagnostics).toEqual([]);
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("isolates subscriber diagnostic publication failure from projection work", async () => {
+    ExecutingTaskProjection.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToSubscriberSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.reject(new Error("subscriber diagnostic dispatch failed"));
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.eventBus().post(createProjectionEvent("subscriber-failure", "subscriber-failure")),
+      ).resolves.toBeUndefined();
+      await waitForFailures(context, 1);
+
+      expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+      await expect(
+        context.stand().read(ProjectionStateSchema, "subscriber-failure"),
+      ).resolves.toMatchObject({
+        name: "Task (projected)",
+      });
+      expect(diagnostics).toHaveLength(1);
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { error: { message: "subscriber diagnostic dispatch failed" } },
+      ]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("does not expose projection state when its atomic commit fails", async () => {
@@ -7608,6 +8290,36 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
   });
 }
 
+function createProcessManagerCommandAndReactRepository(): Repository<typeof RoutingProcessManager> {
+  const handlers = HandlerMetadataValues.defineArity(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.react(ProjectionStateSchema, "reactTask"),
+    ],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        emittedSchemas: [ProjectionStateSchema],
+      },
+      {
+        kind: "event-reaction",
+        methodName: "reactTask",
+        parameterCount: 1,
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
 function createDiagnosticOnlyProcessManagerRepository(): Repository<
   typeof DiagnosticOnlyProcessManager
 > {
@@ -7967,6 +8679,17 @@ function readStateChange(event: SpineEvent | undefined) {
     throw new Error("Expected an Entity state change event.");
   }
   return AnyMessages.unpack(event.message, EntityStateChangedSchema);
+}
+
+function diagnosticTenants(events: readonly SpineEvent[]): readonly string[] {
+  return events.map((event) => {
+    const origin = event.context?.origin;
+    if (origin?.case !== "pastMessage") {
+      throw new Error("Expected diagnostic event origin.");
+    }
+    const tenant = origin.value.actorContext?.tenantId?.kind;
+    return tenant?.case === "value" ? tenant.value : "";
+  });
 }
 
 function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
