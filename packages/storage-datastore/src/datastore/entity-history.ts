@@ -777,7 +777,9 @@ export class DatastoreEntityCommitStorage<I, S extends Message> implements Entit
     return this.#codec.run(() => this.#attempt(compatible));
   }
 
-  /** Closes this handle without closing sibling handles or the injected client. */
+  /**
+   * Closes this handle without closing sibling handles or the injected client.
+   */
   close(): void {
     this.#codec.close();
   }
@@ -969,7 +971,6 @@ export class DatastoreEntityCommitStorage<I, S extends Message> implements Entit
 
 const DatastoreCommitValues = Object.freeze({
   delivery<I, S extends Message>(codec: EntityCodec<I, S>, event: Event) {
-    const id = event.id?.value as string;
     const key = codec.client.key({
       path: [
         `${codec.input.context.name}:${EventSchema.typeName}`,
