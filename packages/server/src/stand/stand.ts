@@ -16,10 +16,7 @@ import type {
 } from "@spine-event-engine/storage/internal/entity-history";
 import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
 import type { EventBus } from "../bus/event-bus.js";
-import {
-  observeSubscription,
-  type StandObservedState,
-} from "./subscription-observer.js";
+import { observeSubscription, type StandObservedState } from "./subscription-observer.js";
 import type { SubscriptionUpdate } from "@spine-event-engine/proto/client";
 import type { StandSubscriptionRegistry } from "./subscription-registry.js";
 

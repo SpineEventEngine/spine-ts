@@ -2,8 +2,8 @@ import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/pro
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls } from "@spine-event-engine/core";
-import { VersionSchema, file_spine_options } from "@spine-event-engine/proto";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { EventSchema, VersionSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
   EventStore,
@@ -26,6 +26,7 @@ import {
 } from "../../src/index.js";
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import { standAccess } from "../../src/stand/stand.js";
+import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -126,8 +127,12 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    const firstBus = new EventBus(new EventStore({ name: "Tasks", multitenant: false }, storageFactory));
-    const secondBus = new EventBus(new EventStore({ name: "Tasks", multitenant: false }, storageFactory));
+    const firstBus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
+    );
+    const secondBus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
+    );
     first.register(ProjectionStateSchema);
     second.register(ProjectionStateSchema);
     const subscription = create(SubscriptionSchema, {
@@ -153,6 +158,57 @@ describe("Stand", () => {
     await second.update(ProjectionStateSchema, createState("second", "Second node"));
 
     expect(observed).toEqual({ first: 1, second: 1 });
+    await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
+  });
+
+  it("delivers an event target only from the local EventBus on each reconciled node", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const registry = new InMemorySubscriptionRegistry();
+    const first = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const second = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const firstBus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
+    );
+    const secondBus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
+    );
+    eventBusAccess.registerSchemas(firstBus, [ProjectionStateSchema]);
+    eventBusAccess.registerSchemas(secondBus, [ProjectionStateSchema]);
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "shared-events" }),
+      topic: {
+        id: { value: "events" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    const observed = { first: 0, second: 0 };
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    standAccess.startSubscriptions(first, registry, firstBus);
+    standAccess.startSubscriptions(second, registry, secondBus);
+    await standAccess.consumeSubscription(first, registry, "shared-events", () => observed.first++);
+    await standAccess.consumeSubscription(
+      second,
+      registry,
+      "shared-events",
+      () => observed.second++,
+    );
+
+    await firstBus.post(createSubscriptionEvent("first-event"));
+    expect(observed).toEqual({ first: 1, second: 0 });
+    await secondBus.post(createSubscriptionEvent("second-event"));
+    expect(observed).toEqual({ first: 1, second: 1 });
+
     await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
   });
 
@@ -883,6 +939,15 @@ function createState(id: string, name: string): ProjectionState {
     id,
     name,
     priority: 1,
+  });
+}
+
+function createSubscriptionEvent(id: string) {
+  return create(EventSchema, {
+    id: { value: id },
+    message: AnyMessages.pack(ProjectionStateSchema, createState(id, "Event payload"), {
+      validate: false,
+    }),
   });
 }
 

@@ -346,9 +346,7 @@ export class SpineServices {
     if (registry === undefined) {
       throw new ConnectError("Subscription registry is unavailable.", Code.FailedPrecondition);
     }
-    return registry
-      .create(subscription)
-      .then(() => clone(SubscriptionSchema, subscription));
+    return registry.create(subscription).then(() => clone(SubscriptionSchema, subscription));
   }
 
   async *#activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> {
@@ -371,7 +369,11 @@ export class SpineServices {
     const activation = await this.#subscriptionRegistry(record.route.context)?.activate(
       create(SubscriptionIdSchema, { value: id }),
     );
-    if (activation === undefined || activation.kind === "missing" || activation.kind === "expired") {
+    if (
+      activation === undefined ||
+      activation.kind === "missing" ||
+      activation.kind === "expired"
+    ) {
       return;
     }
     if (record.delivery.closed) return;
@@ -569,7 +571,9 @@ export class SpineServices {
       const route = this.#subscriptionRoute(canonicalTopic);
       if (route.context !== context) continue;
       const tenantId = ServiceValues.topicTenant(canonicalTopic);
-      if (ServiceValues.tenantMismatch(context.isMultitenant, tenantId, "subscription") !== undefined) {
+      if (
+        ServiceValues.tenantMismatch(context.isMultitenant, tenantId, "subscription") !== undefined
+      ) {
         continue;
       }
       return ServiceValues.createSubscriptionRecord({
@@ -587,7 +591,6 @@ export class SpineServices {
     // The stream-owned consumer is closed above. The canonical definition is
     // deleted below; every Stand then detaches its own observer on reconciliation.
   }
-
 
   #subscriptionRegistry(
     context: BoundedContext | undefined,
@@ -609,7 +612,6 @@ export class SpineServices {
       return registry;
     }
   }
-
 }
 
 /**
@@ -693,7 +695,10 @@ interface EventSubscriptionRecord extends SubscriptionRecordBase {
 interface StateSubscriptionRecord extends SubscriptionRecordBase {
   readonly kind: "state";
   readonly route: StateRoute;
-  /** Test-double fallback only; built contexts render in Stand. */
+
+  /**
+   * Supports isolated structural-context test doubles only.
+   */
   readonly matcher?: SubscriptionMatcher;
 }
 
@@ -1384,7 +1389,6 @@ const ServiceValues = (() => {
   function uniqueContexts(contexts: readonly BoundedContext[]): readonly BoundedContext[] {
     return [...new Set(contexts)];
   }
-
 
   function validateTopic(topic: Topic): void {
     if (topic.id?.value === undefined || topic.id.value.trim().length === 0) {
