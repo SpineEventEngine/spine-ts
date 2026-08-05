@@ -86,8 +86,48 @@ physical deletion, restart recovery, one definition row per subscription plus
 the separate control record, and the existing public contract. It must address
 fencing/ownership under arbitrary pauses, not assume a staged operation is
 abandoned merely because its row is absent, and state honestly if the existing
-serialized record cannot express the required invariant. It also specifies the
-minimal MySQL/Datastore conformance execution plan without building Spine JVM.
+  serialized record cannot express the required invariant. It also specifies the
+  minimal MySQL/Datastore conformance execution plan without building Spine JVM.
+
+## Correction Architecture Resolution
+
+The first Sol/high pass established that leases alone cannot fence an arbitrarily
+paused owner, but did not return a final choice after bounded prompts and was
+interrupted. A fresh, narrowly constrained existing `requirements_splitter`,
+again explicit `gpt-5.6-sol` / `high`, selected a permanent generation fence as
+the smaller complete design. Runtime self-introspection was unavailable for both
+passes; immutable role/profile plus explicit dispatch is the metadata evidence.
+
+`StandSubscriptionRecord` gains one internal 16-byte cryptographically random
+generation. It remains constant for a definition lifetime and changes on every
+recreation. Revision zero is reserved for an internal pre-admission row and is
+never returned or counted; admitted rows retain revisions one and above. The
+internal control format is versioned and has clean, staged, and committed states
+with an operation token, kind, ID, generation, expected/resulting revision and
+digests as required. Every definition-row CAS, including reservation discard,
+must occur while holding the matching control operation. Control revision fences
+ABA on the control slot; full-row CAS includes generation and fences same-ID,
+byte-equivalent recreation on the definition slot.
+
+Create first CASes a generation-bearing revision-zero reservation, then stages
+its exact admission, promotes it to revision one, commits the count increment,
+and clears control. Activate stages the exact generation/revision transition,
+updates the row, commits unchanged count, and clears. Delete stages the exact
+generation/revision, removes the row, commits the decrement, and clears. Helpers
+complete the same transitions idempotently. Snapshots fence their bounded
+`limit + 1` admitted-row query through control; revision-zero rows are excluded.
+Cleanup serializes discard/delete and processes at most 25 with one extra row to
+derive `more`. Unexpected generation, revision, digest, count, or control state
+fails closed.
+
+The implementation must directly test paused owners/helpers around every
+transition; same-ID recreation ABA; create/discard ordering; result attribution;
+capacity/count; staged/committed applied-then-thrown recovery; snapshot fencing;
+revision-zero exclusion/cleanup; malformed generation/control; and quiescent
+50-row shape. One reusable conformance suite must run against memory, local
+MySQL, and the Datastore emulator. The earlier assumption that the existing
+record needed no wire change is superseded by the demonstrated P1; this is an
+internal record and no migration compatibility is required.
 
 ## Architecture Evidence
 
