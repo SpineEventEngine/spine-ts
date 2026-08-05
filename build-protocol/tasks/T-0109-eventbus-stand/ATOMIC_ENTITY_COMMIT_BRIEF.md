@@ -10,8 +10,12 @@ other records.
 
 ## Required Internal Contract
 
-Add one provider-internal Entity commit capability to the storage bundle. It is
-not a general application transaction API. One commit unit contains:
+Add one provider-internal `createEntityCommitStorage(input)` capability to the
+structural storage-factory SPI. It is not a general application transaction API
+and is not exported from the end-user storage root. The returned provider handle
+owns direct atomic mutation of the same physical current/history and framework
+EventStore records that the existing independently closeable read/maintenance
+handles expose. One commit unit contains:
 
 - a commit ID scoped by source signal, Entity family, Entity ID, context, and
   tenant;
@@ -27,6 +31,12 @@ commit ID with different content fails closed. `conflict` changes nothing.
 Inputs are cloned and provider limits are checked before mutation. An adapter
 without this capability fails repository assembly; there is no non-atomic
 fallback.
+
+The common storage package must factor the canonical EventStore record layout,
+ID validation, and record materialization into its provider-only internal
+subpath. The commit provider writes those records directly inside its own
+transaction; repositories must not open a separate `EventStore` for the commit.
+The existing public `EventStore` API remains unchanged for its other consumers.
 
 ## Provider Requirements
 
