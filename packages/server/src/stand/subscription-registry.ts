@@ -629,6 +629,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       const id = registryId(subscriptionId);
       for (;;) {
         await this.#recover();
+        const control = await this.#controlState();
         const record = await this.#storage.read(id);
         if (record === undefined) return Object.freeze({ kind: "missing" as const });
         const entry = StandSubscriptionRecords.read(record, id);
@@ -650,7 +651,6 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           },
           record.generation,
         );
-        const control = await this.#controlState();
         const staged = controlWithOperation(control, {
           kind: "activate",
           id,
@@ -689,11 +689,11 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         throw new RangeError("Stand subscription revision must be positive.");
       for (;;) {
         await this.#recover();
+        const control = await this.#controlState();
         const record = await this.#storage.read(id);
         if (record === undefined) return "missing";
         const entry = StandSubscriptionRecords.read(record, id);
         if (expectedRevision !== undefined && expectedRevision !== entry.revision) return "changed";
-        const control = await this.#controlState();
         if (control.count < 1) throw new Error("Malformed Stand subscription control record.");
         const staged = controlWithOperation(control, {
           kind: "delete",

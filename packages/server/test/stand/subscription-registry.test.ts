@@ -464,6 +464,43 @@ describe("StorageSubscriptionRegistry", () => {
     ]);
   });
 
+  it.each([
+    "activate-stage",
+    "activate-definition",
+    "activate-commit",
+    "delete-stage",
+    "delete-definition",
+    "delete-commit",
+  ] as const)(
+    "settles an applied-then-thrown %s operation before same-ID recreation",
+    async (phase) => {
+      const factory = new StandRegistryScriptedStorageFactory(phase);
+      const context = { name: `DurableRegistry${phase}`, multitenant: false };
+      const interrupted = new StorageSubscriptionRegistry(context, factory);
+      const created = await interrupted.create(subscription("one"));
+      if (created.kind !== "created") throw new Error("Expected initial creation.");
+      factory.arm();
+
+      if (phase.startsWith("activate")) {
+        await expect(interrupted.activate(id("one"))).rejects.toThrow("applied-then-thrown");
+        const helper = new StorageSubscriptionRegistry(context, factory);
+        await expect(helper.snapshot()).resolves.toMatchObject([{ phase: "active", revision: 2n }]);
+      } else {
+        await expect(interrupted.delete(id("one"), created.entry.revision)).rejects.toThrow(
+          "applied-then-thrown",
+        );
+        const helper = new StorageSubscriptionRegistry(context, factory);
+        await expect(helper.snapshot()).resolves.toEqual([]);
+        await expect(helper.create(subscription("one", "recreated"))).resolves.toMatchObject({
+          kind: "created",
+        });
+        await expect(helper.snapshot()).resolves.toMatchObject([
+          { subscription: { topic: { id: { value: "recreated" } } }, revision: 1n },
+        ]);
+      }
+    },
+  );
+
   it.each(["delete-stage", "delete-definition"] as const)(
     "recovers staged %s after an applied CAS throws",
     async (phase) => {
@@ -593,6 +630,9 @@ type StandRegistryScriptPhase =
   | "create-definition"
   | "create-promote"
   | "create-commit"
+  | "activate-stage"
+  | "activate-definition"
+  | "activate-commit"
   | "delete-stage"
   | "delete-definition";
 
@@ -681,6 +721,8 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
         return id !== "control" && expected === undefined && next?.revision === 0n;
       case "create-stage":
         return operation === "create";
+      case "activate-stage":
+        return operation === "activate";
       case "delete-stage":
         return operation === "delete";
       case "create-definition":
@@ -689,8 +731,22 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
         return id !== "control" && expected?.revision === 0n && next?.revision === 1n;
       case "create-commit":
         return control && controlState(next as unknown as Any) === "committed";
+      case "activate-definition":
+        return id !== "control" && expected?.revision === 1n && next?.revision === 2n;
+      case "activate-commit":
+        return (
+          control &&
+          controlOperation(next as unknown as Any) === "activate" &&
+          controlState(next as unknown as Any) === "committed"
+        );
       case "delete-definition":
         return id !== "control" && expected !== undefined && next === undefined;
+      case "delete-commit":
+        return (
+          control &&
+          controlOperation(next as unknown as Any) === "delete" &&
+          controlState(next as unknown as Any) === "committed"
+        );
     }
   }
 }
