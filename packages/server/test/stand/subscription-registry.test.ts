@@ -404,13 +404,57 @@ describe("StorageSubscriptionRegistry", () => {
         extractId: () => "control",
       }),
     );
+    const stage = factory.createRecordStorage(
+      context,
+      new RecordSpec<string, StandSubscriptionRecord>({
+        schema: StandSubscriptionRecords.schema,
+        storageKey: "spine.server.StandSubscriptionRecord:staging",
+        idKind: "string",
+        extractId: () => "stage",
+      }),
+    );
     try {
       await expect(definitions.queryEntries({})).resolves.toHaveLength(50);
       await expect(control.queryEntries({})).resolves.toHaveLength(1);
+      await expect(stage.queryEntries({})).resolves.toEqual([]);
     } finally {
       definitions.close();
       control.close();
+      stage.close();
     }
+  });
+
+  it("clones nonempty Any bytes without freezing or aliasing them", async () => {
+    const registry = durableRegistry();
+    const input = create(SubscriptionSchema, {
+      id: id("bytes"),
+      topic: {
+        id: { value: "topic" },
+        target: {
+          criterion: {
+            case: "filters",
+            value: {
+              idFilter: {
+                id: [create(AnySchema, { typeUrl: "type.example/value", value: new Uint8Array([1]) })],
+              },
+            },
+          },
+        },
+      },
+    });
+    const created = await registry.create(input);
+    if (created.kind !== "created") throw new Error("Expected a new definition.");
+    const callerBytes = input.topic?.target?.criterion.value?.idFilter?.id[0]?.value;
+    const returnedBytes = created.entry.subscription.topic?.target?.criterion.value?.idFilter?.id[0]?.value;
+    if (callerBytes === undefined || returnedBytes === undefined) throw new Error("Expected Any bytes.");
+
+    callerBytes[0] = 9;
+    expect(returnedBytes).toEqual(new Uint8Array([1]));
+    returnedBytes[0] = 7;
+    const stored = await registry.get(id("bytes"));
+    expect(stored?.subscription.topic?.target?.criterion.value?.idFilter?.id[0]?.value).toEqual(
+      new Uint8Array([1]),
+    );
   });
 
   it("does not reject an activate-delete race as malformed durable control", async () => {
@@ -471,31 +515,22 @@ describe("StorageSubscriptionRegistry", () => {
     ]);
   }, 5_000);
 
-  it("discards a held expired reservation before its owner retries safely", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(start);
-    try {
-      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
-      const context = { name: "DurableRegistryHeldReservation", multitenant: false };
-      const owner = new StorageSubscriptionRegistry(context, factory, 1);
-      const held = factory.hold("create-reservation");
-      const creating = owner.create(subscription("one"));
+  it("rolls back a held control admission before its owner can write the fixed stage", async () => {
+    const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+    const context = { name: "DurableRegistryHeldControl", multitenant: false };
+    const owner = new StorageSubscriptionRegistry(context, factory, 1);
+    const held = factory.hold("create-reservation");
+    const creating = owner.create(subscription("one"));
 
-      await held.reached.promise;
-      vi.setSystemTime(start + 30_000);
+    await held.reached.promise;
+    const helper = new StorageSubscriptionRegistry(context, factory, 1);
+    await expect(helper.create(subscription("two"))).resolves.toMatchObject({ kind: "created" });
 
-      const helper = new StorageSubscriptionRegistry(context, factory, 1);
-      await expect(helper.cleanup()).resolves.toEqual({ scanned: 1, deleted: 1, more: false });
-
-      held.release.resolve(undefined);
-      await expect(creating).resolves.toMatchObject({ kind: "created", entry: { revision: 1n } });
-      await expect(helper.snapshot()).resolves.toMatchObject([
-        { subscription: { id: { value: "one" } }, revision: 1n },
-      ]);
-      await expect(helper.create(subscription("two"))).rejects.toBeInstanceOf(StandCapacityError);
-    } finally {
-      vi.useRealTimers();
-    }
+    held.release.resolve(undefined);
+    await expect(creating).rejects.toBeInstanceOf(StandCapacityError);
+    await expect(helper.snapshot()).resolves.toMatchObject([
+      { subscription: { id: { value: "two" } }, revision: 1n },
+    ]);
   }, 5_000);
 
   it.each(["create-reservation", "create-stage", "create-promote", "create-commit"] as const)(
@@ -555,25 +590,20 @@ describe("StorageSubscriptionRegistry", () => {
     }
   });
 
-  it.each(["discard-stage", "discard-definition", "discard-commit"] as const)(
-    "recovers an applied-then-thrown %s reservation discard",
+  it.each(["create-reservation", "create-stage", "create-definition", "create-commit"] as const)(
+    "settles an applied-then-thrown %s fixed-stage admission",
     async (phase) => {
-      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+      const factory = new StandRegistryScriptedStorageFactory(phase);
       const context = { name: `DurableRegistry${phase}`, multitenant: false };
       const interrupted = new StorageSubscriptionRegistry(context, factory, 1);
       factory.arm();
       await expect(interrupted.create(subscription("one"))).rejects.toThrow("applied-then-thrown");
 
-      factory.setPhase(phase);
-      factory.arm();
       const helper = new StorageSubscriptionRegistry(context, factory, 1);
-      await expect(helper.create(subscription("one"))).rejects.toThrow("applied-then-thrown");
-
-      const recovered = new StorageSubscriptionRegistry(context, factory, 1);
-      await expect(recovered.create(subscription("one"))).resolves.toMatchObject({
-        kind: "created",
+      await expect(helper.create(subscription("one"))).resolves.toMatchObject({
+        kind: phase === "create-reservation" ? "created" : "existing",
       });
-      await expect(recovered.snapshot()).resolves.toHaveLength(1);
+      await expect(helper.snapshot()).resolves.toHaveLength(1);
     },
   );
 
@@ -886,9 +916,9 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
     const operation = control ? controlOperation(next as unknown as Any) : undefined;
     switch (this.phase()) {
       case "create-reservation":
-        return id !== "control" && expected === undefined && revisionOf(next) === 0n;
+        return control && operation === "create";
       case "create-stage":
-        return operation === "create";
+        return id === "stage" && expected === undefined && revisionOf(next) === 1n;
       case "activate-stage":
         return operation === "activate";
       case "delete-stage":
@@ -896,11 +926,15 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
       case "discard-stage":
         return operation === "discard";
       case "create-definition":
-        return id !== "control" && revisionOf(expected) === 0n && revisionOf(next) === 1n;
+        return id !== "control" && id !== "stage" && expected === undefined && revisionOf(next) === 1n;
       case "create-promote":
-        return id !== "control" && revisionOf(expected) === 0n && revisionOf(next) === 1n;
+        return id !== "control" && id !== "stage" && expected === undefined && revisionOf(next) === 1n;
       case "create-commit":
-        return control && controlState(next as unknown as Any) === "committed";
+        return (
+          control &&
+          controlOperation(next as unknown as Any) === "create" &&
+          controlState(next as unknown as Any) === "committed"
+        );
       case "activate-definition":
         return id !== "control" && revisionOf(expected) === 1n && revisionOf(next) === 2n;
       case "activate-commit":

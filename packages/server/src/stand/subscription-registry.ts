@@ -513,6 +513,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   readonly persistent = true;
   readonly #storage: RecordStorage<string, StandSubscriptionRecord>;
   readonly #control: RecordStorage<string, Any>;
+  readonly #stage: RecordStorage<string, StandSubscriptionRecord>;
   readonly #limit: number;
   #closed = false;
   #activeOperations = 0;
@@ -576,9 +577,23 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         extractId: () => controlSlot,
       }),
     );
-    if (!this.#storage.atomicCompareAndSet || !this.#control.atomicCompareAndSet) {
+    this.#stage = storageFactory.createRecordStorage(
+      context,
+      new RecordSpec<string, StandSubscriptionRecord>({
+        schema: StandSubscriptionRecords.schema,
+        storageKey: "spine.server.StandSubscriptionRecord:staging",
+        idKind: "string",
+        extractId: () => stageSlot,
+      }),
+    );
+    if (
+      !this.#storage.atomicCompareAndSet ||
+      !this.#control.atomicCompareAndSet ||
+      !this.#stage.atomicCompareAndSet
+    ) {
       this.#storage.close();
       this.#control.close();
+      this.#stage.close();
       throw new Error("Stand subscription storage must support atomic compare-and-set.");
     }
   }
@@ -592,29 +607,12 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   async create(subscription: Subscription): Promise<StandCreateResult> {
     return await this.#operation(async () => {
       const id = StorageSubscriptionRegistry.#id(subscription);
-      const createdAt = Date.now();
-      const proposed: StandSubscriptionEntry = Object.freeze({
-        subscription: clone(SubscriptionSchema, subscription),
-        phase: "pending",
-        createdAt,
-        pendingUntil: createdAt + pendingMilliseconds,
-        revision: 1n,
-      });
-      const next = StandSubscriptionRecords.write(proposed);
-      const reservation = StandSubscriptionRecords.write(
-        { ...proposed, revision: 0n },
-        next.generation,
-      );
-      const digest = recordDigest(next);
       for (;;) {
         await this.#recover();
         const existing = await this.#storage.read(id);
         if (existing !== undefined) {
           const entry = StandSubscriptionRecords.read(existing, id);
-          if (entry.revision === 0n) {
-            await this.#discardReservation(id, existing);
-            continue;
-          }
+          if (entry.revision === 0n) continue;
           if (!sameSubscription(entry.subscription, subscription)) throw new StandConflictError(id);
           return Object.freeze({
             kind: "existing" as const,
@@ -623,24 +621,39 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         }
         const control = await this.#controlState();
         if (control.count >= this.#limit) throw new StandCapacityError(this.#limit);
-        if (!(await this.#storage.compareAndSet(id, undefined, reservation))) continue;
+        const createdAt = Date.now();
+        const proposed: StandSubscriptionEntry = Object.freeze({
+          subscription: clone(SubscriptionSchema, subscription),
+          phase: "pending",
+          createdAt,
+          pendingUntil: createdAt + pendingMilliseconds,
+          revision: 1n,
+        });
+        const next = StandSubscriptionRecords.write(proposed);
+        const digest = recordDigest(next);
         const staged = controlWithOperation(control, {
           kind: "create",
           id,
-          expectedDigest: recordDigest(reservation),
+          expectedDigest: digest,
           resultDigest: digest,
           generation: generationToken(next),
           token: randomUUID(),
-          expectedRevision: 0,
+          expectedRevision: 1,
           resultRevision: 1,
-        });
+        }, control.count + 1);
         if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
           continue;
+        if (!(await this.#stage.compareAndSet(stageSlot, undefined, next))) {
+          await this.#settle(staged, writeControl(staged));
+          continue;
+        }
         await this.#settle(staged, writeControl(staged));
-        return Object.freeze({
-          kind: "created" as const,
-          entry: StorageSubscriptionRegistry.#clone(proposed),
-        });
+        const settled = await this.#storage.read(id);
+        if (settled !== undefined && matchesOperation(settled, staged.operation!, "result"))
+          return Object.freeze({
+            kind: "created" as const,
+            entry: StorageSubscriptionRegistry.#clone(proposed),
+          });
       }
     });
   }
@@ -660,6 +673,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         const record = await this.#storage.read(id);
         if (record === undefined) return Object.freeze({ kind: "missing" as const });
         const entry = StandSubscriptionRecords.read(record, id);
+        if (entry.revision === 0n) return Object.freeze({ kind: "missing" as const });
         if (entry.phase === "active")
           return Object.freeze({
             kind: "active" as const,
@@ -720,6 +734,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         const record = await this.#storage.read(id);
         if (record === undefined) return "missing";
         const entry = StandSubscriptionRecords.read(record, id);
+        if (entry.revision === 0n) return "missing";
         if (expectedRevision !== undefined && expectedRevision !== entry.revision) return "changed";
         if (control.count < 1) throw new Error("Malformed Stand subscription control record.");
         const staged = controlWithOperation(control, {
@@ -749,9 +764,9 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       const id = registryId(subscriptionId);
       await this.#recover();
       const record = await this.#storage.read(id);
-      return record === undefined
-        ? undefined
-        : StorageSubscriptionRegistry.#clone(StandSubscriptionRecords.read(record, id));
+      if (record === undefined) return undefined;
+      if (StandSubscriptionRecords.read(record, id).revision === 0n) return undefined;
+      return StorageSubscriptionRegistry.#clone(StandSubscriptionRecords.read(record, id));
     });
   }
 
@@ -820,9 +835,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       const page = expired.slice(0, standSubscriptionLimits.cleanupPageSize);
       for (const row of page) {
         const entry = StandSubscriptionRecords.read(row.record, row.id);
-        if (entry.revision === 0n)
-          deleted += (await this.#discardReservation(row.id, row.record)) ? 1 : 0;
-        else if (await this.#deleteCurrent(row.id, row.record)) deleted += 1;
+        if (entry.revision > 0n && (await this.#deleteCurrent(row.id, row.record))) deleted += 1;
       }
       return Object.freeze({
         scanned: page.length,
@@ -862,7 +875,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
 
   #closeHandles(): void {
     const errors: unknown[] = [];
-    for (const storage of [this.#storage, this.#control]) {
+    for (const storage of [this.#storage, this.#control, this.#stage]) {
       try {
         storage.close();
       } catch (error) {
@@ -912,22 +925,10 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     });
     if (rows.length > this.#limit) throw new Error("Malformed Stand subscription control record.");
     for (const row of rows) {
-      if (StandSubscriptionRecords.read(row.record, row.id).revision === 0n)
+      if (StandSubscriptionRecords.read(row.record, row.id).revision < 1n)
         throw new Error("Malformed Stand subscription control record.");
     }
     return rows;
-  }
-
-  async #reservation(): Promise<void> {
-    const rows = await this.#storage.queryEntries({
-      filters: [{ column: "admitted", value: false }],
-      sort: [{ field: "id" }],
-      limit: 1,
-    });
-    const row = rows[0];
-    if (row === undefined) return;
-    if (StandSubscriptionRecords.read(row.record, row.id).revision !== 0n)
-      throw new Error("Malformed Stand subscription control record.");
   }
 
   async #controlState(): Promise<ControlState> {
@@ -943,7 +944,8 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         const rows = await this.#definitions();
         const initial: Control = { version: 2, state: "clean", revision: 1, count: rows.length };
         if (await this.#control.compareAndSet(controlSlot, undefined, writeControl(initial))) {
-          await this.#reservation();
+          await this.#discardOrphanStage();
+          await this.#discardLegacyReservation();
           return;
         }
         continue;
@@ -953,7 +955,8 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         if ((await this.#definitions()).length !== control.count) {
           throw new Error("Malformed Stand subscription control record.");
         }
-        await this.#reservation();
+        await this.#discardOrphanStage();
+        await this.#discardLegacyReservation();
         return;
       }
       await this.#settle(control, record);
@@ -963,6 +966,12 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   async #settle(control: Control, controlRecord: Any): Promise<void> {
     const operation = control.operation;
     if (operation === undefined) throw new Error("Malformed Stand subscription control record.");
+    const currentControl = await this.#control.read(controlSlot);
+    if (currentControl === undefined || !sameAny(currentControl, controlRecord)) return;
+    if (operation.kind === "create") {
+      await this.#settleCreate(control, controlRecord, operation);
+      return;
+    }
     const current = await this.#storage.read(operation.id);
     const expected = current !== undefined && matchesOperation(current, operation, "expected");
     const result = current !== undefined && matchesOperation(current, operation, "result");
@@ -979,13 +988,78 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       if (await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(committed)))
         await this.#settle(committed, writeControl(committed));
       return;
-      return;
     }
     if (!result && !(current === undefined && operation.resultDigest === undefined))
       throw new Error("Malformed Stand subscription control record.");
     const clean = controlWithOperation(control);
     if (!(await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(clean))))
       return;
+  }
+
+  async #settleCreate(
+    control: Control,
+    controlRecord: Any,
+    operation: ControlOperation,
+  ): Promise<void> {
+    const staged = await this.#stage.read(stageSlot);
+    if (control.state === "staged") {
+      if (staged === undefined) {
+        const rolledBack = controlWithOperation(control, undefined, control.count - 1);
+        await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(rolledBack));
+        return;
+      }
+      if (!matchesOperation(staged, operation, "result"))
+        throw new Error("Malformed Stand subscription control record.");
+      const current = await this.#storage.read(operation.id);
+      if (current === undefined) {
+        const currentControl = await this.#control.read(controlSlot);
+        if (currentControl === undefined || !sameAny(currentControl, controlRecord)) return;
+        if (!(await this.#storage.compareAndSet(operation.id, undefined, staged))) return;
+        await this.#settleCreate(control, controlRecord, operation);
+        return;
+      }
+      if (!matchesOperation(current, operation, "result"))
+        throw new Error("Malformed Stand subscription control record.");
+      const committed = controlCommitted(control);
+      if (await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(committed)))
+        await this.#settleCreate(committed, writeControl(committed), operation);
+      return;
+    }
+    if (staged !== undefined) {
+      if (!matchesOperation(staged, operation, "result"))
+        throw new Error("Malformed Stand subscription control record.");
+      const currentControl = await this.#control.read(controlSlot);
+      if (currentControl === undefined || !sameAny(currentControl, controlRecord)) return;
+      if (!(await this.#stage.compareAndSet(stageSlot, staged, undefined))) return;
+      await this.#settleCreate(control, controlRecord, operation);
+      return;
+    }
+    const current = await this.#storage.read(operation.id);
+    if (current === undefined || !matchesOperation(current, operation, "result"))
+      throw new Error("Malformed Stand subscription control record.");
+    await this.#control.compareAndSet(
+      controlSlot,
+      controlRecord,
+      writeControl(controlWithOperation(control)),
+    );
+  }
+
+  async #discardOrphanStage(): Promise<void> {
+    const stage = await this.#stage.read(stageSlot);
+    if (stage !== undefined) await this.#stage.compareAndSet(stageSlot, stage, undefined);
+  }
+
+  async #discardLegacyReservation(): Promise<void> {
+    const rows = await this.#storage.queryEntries({
+      filters: [{ column: "admitted", value: false }],
+      sort: [{ field: "id" }],
+      limit: 1,
+    });
+    const row = rows[0];
+    if (row === undefined) return;
+    const entry = StandSubscriptionRecords.read(row.record, row.id);
+    if (entry.revision !== 0n) throw new Error("Malformed Stand subscription control record.");
+    await this.#storage.compareAndSet(row.id, row.record, undefined);
   }
 
   #operationResult(
@@ -1055,6 +1129,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
 }
 
 const controlSlot = "control";
+const stageSlot = "stage";
 const controlTypeUrl = "type.spine.io/stand.subscription.control.v1";
 interface ControlOperation {
   readonly kind: "create" | "activate" | "delete" | "discard";
@@ -1105,7 +1180,7 @@ function controlCommitted(control: Control): Control {
 function committedCount(control: Control): number {
   switch (control.operation?.kind) {
     case "create":
-      return control.count + 1;
+      return control.count;
     case "delete":
       return control.count - 1;
     default:
@@ -1285,6 +1360,7 @@ function requireTopicId(subscription: DeepReadonly<Subscription>): void {
 
 function deepFreeze<T>(value: T): T {
   if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
+  if (ArrayBuffer.isView(value)) return value;
   for (const child of Object.values(value)) deepFreeze(child);
   return Object.freeze(value);
 }
