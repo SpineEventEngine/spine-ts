@@ -494,6 +494,48 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("renders unarchive and restore lifecycle events as state updates", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      subscriptionFor(ProjectionStateSchema),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+    for (const [schema, id] of [
+      [EntityLog.EntityUnarchivedSchema, "unarchived"],
+      [EntityLog.EntityRestoredSchema, "restored"],
+    ] as const) {
+      await bus.post(
+        create(EventSchema, {
+          id: { value: id },
+          message: AnyMessages.pack(
+            schema,
+            create(schema, {
+              entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              signalId: [
+                { id: packString(`${id}-signal`), typeUrl: TypeUrls.derive(StringValueSchema) },
+              ],
+              version: { number: 2 },
+              state: AnyMessages.pack(ProjectionStateSchema, createState(id, id, 1)),
+            }),
+            { validate: false },
+          ),
+        }),
+      );
+    }
+    expect(received).toHaveLength(2);
+    expect(
+      received.map(
+        (update) =>
+          update.update.case === "entityUpdates" && update.update.value.update[0]?.kind.case,
+      ),
+    ).toEqual(["state", "state"]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
   it("forwards accepted event targets while redacting client rejection details", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
