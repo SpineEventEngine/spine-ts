@@ -131,6 +131,7 @@ export class SpineServices {
   readonly #stateRoutes = new Map<string, StateRoute>();
   readonly #eventRoutes = new Map<string, EventRoute>();
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
+  readonly #activationTails = new Map<string, Promise<void>>();
   readonly #removals = new Map<string, SubscriptionRemoval>();
   readonly #unknownRemovals = new Set<string>();
   readonly #testRegistries = new WeakMap<object, StandSubscriptionRegistry>();
@@ -355,43 +356,45 @@ export class SpineServices {
       return;
     }
 
-    const local = this.#subscriptions.get(id);
-    const record = local ?? (await this.#findSubscription(id));
-
-    if (record === undefined) {
-      return;
-    }
-
-    if (record.delivery.active) {
-      return;
-    }
-
-    const activation = await this.#subscriptionRegistry(record.route.context)?.activate(
-      create(SubscriptionIdSchema, { value: id }),
-    );
-    if (
-      activation === undefined ||
-      activation.kind === "missing" ||
-      activation.kind === "expired"
-    ) {
-      return;
-    }
-    if (record.delivery.closed) return;
-
-    try {
-      this.#subscriptions.set(id, record);
-      await this.#activateRecord(record);
-    } catch (error) {
-      try {
-        await this.#removeSubscription(id);
-      } catch (cleanupError) {
-        throw new AggregateError(
-          [error, cleanupError],
-          "Subscription activation and cleanup failed.",
-        );
+    let record: SubscriptionRecord | undefined;
+    await this.#serializeActivation(id, async () => {
+      const local = this.#subscriptions.get(id);
+      record = local ?? (await this.#findSubscription(id));
+      if (record === undefined) return;
+      if (record.delivery.active) {
+        record = undefined;
+        return;
       }
-      throw error;
-    }
+
+      const activation = await this.#subscriptionRegistry(record.route.context)?.activate(
+        create(SubscriptionIdSchema, { value: id }),
+      );
+      if (
+        activation === undefined ||
+        activation.kind === "missing" ||
+        activation.kind === "expired" ||
+        record.delivery.closed
+      ) {
+        record = undefined;
+        return;
+      }
+
+      try {
+        this.#subscriptions.set(id, record);
+        await this.#activateRecord(record);
+      } catch (error) {
+        try {
+          await this.#removeSubscription(id);
+        } catch (cleanupError) {
+          throw new AggregateError(
+            [error, cleanupError],
+            "Subscription activation and cleanup failed.",
+          );
+        }
+        throw error;
+      }
+    });
+    if (record === undefined) return;
 
     try {
       for (;;) {
@@ -403,6 +406,23 @@ export class SpineServices {
       }
     } finally {
       await this.#removeSubscription(id);
+    }
+  }
+
+  async #serializeActivation(id: string, work: () => Promise<void>): Promise<void> {
+    const previous = this.#activationTails.get(id) ?? Promise.resolve();
+    let finish: () => void = () => undefined;
+    const settled = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const tail = previous.then(() => settled);
+    this.#activationTails.set(id, tail);
+    await previous;
+    try {
+      await work();
+    } finally {
+      finish();
+      if (this.#activationTails.get(id) === tail) this.#activationTails.delete(id);
     }
   }
 

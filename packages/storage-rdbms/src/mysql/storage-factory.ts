@@ -20,7 +20,7 @@ import {
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
 import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/entity-commit";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-history";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 
 import { CanonicalMysqlValues, SortableMysqlColumnValue } from "./value-codec.js";
 import {

@@ -12,11 +12,12 @@ import {
   UInt32ValueSchema,
   UInt64ValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, type MessageSchema } from "@spine-event-engine/core";
+import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventSchema,
   ResponseSchema,
   StatusSchema,
+  VersionSchema,
   type Event,
   type TenantId,
 } from "@spine-event-engine/proto";
@@ -33,6 +34,7 @@ import {
   type Subscription,
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
+import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import { RecordMask } from "@spine-event-engine/storage";
 
 import { eventBusAccess, type EventBus, type EventSubscription } from "../bus/event-bus.js";
@@ -85,7 +87,6 @@ export class SubscriptionObservers {
    * @param subscription The active canonical subscription definition.
    * @param eventBus The local event source for event targets.
    * @param findState Finds the local state route for a target type.
-   * @param subscribeState Subscribes to local state updates for a state route.
    * @param onUpdate Receives a fully rendered client update.
    * @returns Returns the local observer attachment when the target is known.
    */
@@ -93,11 +94,6 @@ export class SubscriptionObservers {
     subscription: Subscription,
     eventBus: EventBus | undefined,
     findState: (typeUrl: string) => StandObservedState | undefined,
-    subscribeState: (
-      schema: MessageSchema,
-      callback: (update: StandUpdate) => void,
-      tenantId: string | undefined,
-    ) => StandSubscription,
     onUpdate: (update: SubscriptionUpdate) => void,
   ): StandSubscription | EventSubscription | undefined {
     const target = subscription.topic?.target;
@@ -106,15 +102,17 @@ export class SubscriptionObservers {
     const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     const state = findState(typeUrl);
     if (state !== undefined) {
+      if (eventBus === undefined) return undefined;
       const render = SubscriptionObservers.#createStateRenderer(subscription, state);
-      return subscribeState(
-        state.schema,
-        (update) => {
+      return eventBusAccess.subscribe(eventBus, TypeUrls.derive(EntityLog.EntityStateChangedSchema), {
+        onEvent(event) {
+          const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
+          if (update !== undefined) {
           const rendered = render(update);
           if (rendered !== undefined) onUpdate(rendered);
+          }
         },
-        tenantId,
-      );
+      });
     }
     if (eventBus === undefined) return undefined;
     return eventBusAccess.subscribe(eventBus, typeUrl, {
@@ -172,6 +170,40 @@ export class SubscriptionObservers {
           event: [SubscriptionObservers.#cloneClientEvent(event)],
         }),
       },
+    });
+  }
+
+  static #stateChangeUpdate(
+    event: Event,
+    state: StandObservedState,
+    tenantId: string | undefined,
+  ): StandUpdate | undefined {
+    if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId)
+      return undefined;
+    const change =
+      event.message === undefined
+        ? undefined
+        : AnyMessages.unpack(event.message, EntityLog.EntityStateChangedSchema);
+    if (change?.entity?.typeUrl !== TypeUrls.derive(state.schema) || change.newState === undefined)
+      return undefined;
+    const newState = AnyMessages.unpack(change.newState, state.schema);
+    const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
+    const id =
+      change.entity.id === undefined
+        ? undefined
+        : SubscriptionObservers.#unpackValue(change.entity.id, idSchema);
+    if (newState === undefined || id === undefined) return undefined;
+    const oldState =
+      change.oldState === undefined ? undefined : AnyMessages.unpack(change.oldState, state.schema);
+    return Object.freeze({
+      typeUrl: TypeUrls.derive(state.schema),
+      id,
+      ...(oldState === undefined ? {} : { previousState: oldState }),
+      state: newState,
+      ...(change.newVersion === undefined
+        ? {}
+        : { version: clone(VersionSchema, change.newVersion) }),
+      ...(tenantId === undefined ? {} : { tenantId }),
     });
   }
 

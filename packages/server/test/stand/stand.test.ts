@@ -1,7 +1,11 @@
 import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
 import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
 import { EventSchema, VersionSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
@@ -27,6 +31,7 @@ import {
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import { standAccess } from "../../src/stand/stand.js";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
+import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -77,11 +82,61 @@ const fileEntityEmptyFixture = createFixtureFileDescriptor(
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
-  it("fences Stand-owned observers by the exact active revision and sweeps absent snapshots", async () => {
+  it("removes a consumer when its reconciliation cycle fails", async () => {
+    const storageFactory = new InMemoryStorageFactory();
     const stand = new Stand({
       context: { name: "Subscriptions", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
+      storageFactory,
     });
+    const eventBus = new EventBus(
+      new EventStore({ name: "Subscriptions", multitenant: false }, storageFactory),
+    );
+    const registry = new FailingSnapshotRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "failed-consumer" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    stand.register(ProjectionStateSchema);
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
+    standAccess.startSubscriptions(stand, registry, eventBus);
+    await standAccess.reconcileSubscriptions(stand, registry);
+    registry.failNextSnapshot();
+    let failedConsumerDeliveries = 0;
+    await expect(
+      standAccess.consumeSubscription(stand, registry, "failed-consumer", () => {
+        failedConsumerDeliveries++;
+      }),
+    ).rejects.toThrow("snapshot failed");
+    let delivered = 0;
+    await standAccess.consumeSubscription(stand, registry, "failed-consumer", () => {
+      delivered++;
+    });
+
+    await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Recovered"));
+
+    expect(failedConsumerDeliveries).toBe(0);
+    expect(delivered).toBe(1);
+    await Promise.all([stand.close(), eventBus.close()]);
+  });
+
+  it("fences Stand-owned observers by the exact active revision and sweeps absent snapshots", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Subscriptions", multitenant: false },
+      storageFactory,
+    });
+    const eventBus = new EventBus(
+      new EventStore({ name: "Subscriptions", multitenant: false }, storageFactory),
+    );
     stand.register(ProjectionStateSchema);
     const registry = new RevisionFencedRegistry();
     const subscription = create(SubscriptionSchema, {
@@ -98,22 +153,23 @@ describe("Stand", () => {
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
     await registry.create(subscription);
     await registry.activate(subscription.id);
-    standAccess.startSubscriptions(stand, registry, undefined as never);
+    eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
+    standAccess.startSubscriptions(stand, registry, eventBus);
     await standAccess.consumeSubscription(stand, registry, "s-1", () => observed.push(1));
 
-    await stand.update(ProjectionStateSchema, createState("one", "Before fence"));
+    await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Before fence"));
     expect(observed).toEqual([]);
 
     registry.allowExactRevision = true;
     await standAccess.reconcileSubscriptions(stand, registry);
-    await stand.update(ProjectionStateSchema, createState("two", "After fence"));
+    await postStateChange(eventBus, ProjectionStateSchema, createState("two", "After fence"));
     expect(observed).toEqual([1]);
 
     await registry.delete(subscription.id);
     await standAccess.reconcileSubscriptions(stand, registry);
-    await stand.update(ProjectionStateSchema, createState("three", "After sweep"));
+    await postStateChange(eventBus, ProjectionStateSchema, createState("three", "After sweep"));
     expect(observed).toEqual([1]);
-    await stand.close();
+    await Promise.all([stand.close(), eventBus.close()]);
   });
 
   it("observes one shared definition from both nodes without crossing local buses", async () => {
@@ -149,13 +205,15 @@ describe("Stand", () => {
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
     await registry.create(subscription);
     await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(firstBus, [EntityLog.EntityStateChangedSchema]);
+    eventBusAccess.registerSchemas(secondBus, [EntityLog.EntityStateChangedSchema]);
     standAccess.startSubscriptions(first, registry, firstBus);
     standAccess.startSubscriptions(second, registry, secondBus);
     await standAccess.consumeSubscription(first, registry, "shared", () => observed.first++);
     await standAccess.consumeSubscription(second, registry, "shared", () => observed.second++);
 
-    await first.update(ProjectionStateSchema, createState("first", "First node"));
-    await second.update(ProjectionStateSchema, createState("second", "Second node"));
+    await postStateChange(firstBus, ProjectionStateSchema, createState("first", "First node"));
+    await postStateChange(secondBus, ProjectionStateSchema, createState("second", "Second node"));
 
     expect(observed).toEqual({ first: 1, second: 1 });
     await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
@@ -951,6 +1009,40 @@ function createSubscriptionEvent(id: string) {
   });
 }
 
+async function postStateChange(
+  eventBus: EventBus,
+  schema: GenMessage<Message>,
+  state: Message,
+): Promise<void> {
+  await eventBus.post(
+    create(EventSchema, {
+      id: { value: `state-change-${String((state as { id?: unknown }).id)}` },
+      message: AnyMessages.pack(
+        EntityLog.EntityStateChangedSchema,
+        create(EntityLog.EntityStateChangedSchema, {
+          entity: {
+            id: AnyMessages.pack(
+              StringValueSchema,
+              create(StringValueSchema, { value: String((state as { id?: unknown }).id) }),
+            ),
+            typeUrl: TypeUrls.derive(schema),
+          },
+          newState: AnyMessages.pack(schema, state, { validate: false }),
+          signalId: [
+            {
+              id: AnyMessages.pack(
+                StringValueSchema,
+                create(StringValueSchema, { value: "test-signal" }),
+              ),
+              typeUrl: TypeUrls.derive(StringValueSchema),
+            },
+          ],
+        }),
+      ),
+    }),
+  );
+}
+
 async function writeStandCurrent(
   factory: InMemoryStorageFactory,
   state: ProjectionState,
@@ -1055,6 +1147,22 @@ class RevisionFencedRegistry extends InMemorySubscriptionRegistry {
       return entry;
     }
     return Object.freeze({ ...entry, revision: entry.revision + 1n });
+  }
+}
+
+class FailingSnapshotRegistry extends InMemorySubscriptionRegistry {
+  #fail = false;
+
+  failNextSnapshot(): void {
+    this.#fail = true;
+  }
+
+  override async snapshot() {
+    if (this.#fail) {
+      this.#fail = false;
+      throw new Error("snapshot failed");
+    }
+    return await super.snapshot();
   }
 }
 

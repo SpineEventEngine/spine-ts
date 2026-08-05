@@ -77,6 +77,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import type { Ack } from "@spine-event-engine/proto";
 import type { Response } from "@spine-event-engine/proto";
+import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -104,6 +105,7 @@ import { TaskSchema as TodoTaskSchema } from "../../../../examples/todo/generate
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 const GeneratedTaskIdSchema = TodoIdSchema;
+let stateChangeSequence = 0;
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -380,7 +382,10 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectionStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
     await context.stand().update(ProjectionStateSchema, createState("task-1", "x".repeat(2_000)));
     const server = await new Server({ contexts: [context], writeMaxBytes: 512 }).start();
 
@@ -403,7 +408,10 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectionStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
     await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
@@ -537,7 +545,10 @@ describe("SpineServices", () => {
       entityType: MessageIdTaskAggregate,
       schema: TaskSchema,
     });
-    const context = BoundedContext.singleTenant("MessageIdTasks").add(repository).build();
+    const context = BoundedContext.singleTenant("MessageIdTasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
     const taskId = create(TaskIdSchema, { value: "task-message-id" });
     const task = create(TaskSchema, { id: taskId, title: "Message ID" });
     await context.stand().update(TaskSchema, task);
@@ -2111,7 +2122,10 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectionStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
     const server = await startServices(context);
 
     try {
@@ -2125,7 +2139,7 @@ describe("SpineServices", () => {
       const nextUpdate = withTimeout(iterator.next(), "subscription update");
 
       await delay(25);
-      await context.stand().update(ProjectionStateSchema, createState("task-1", "First"));
+      await postEntityStateChanged(context, ProjectionStateSchema, createState("task-1", "First"));
 
       const delivered = await nextUpdate;
       const update = delivered.value as SubscriptionUpdate | undefined;
@@ -2192,10 +2206,12 @@ describe("SpineServices", () => {
     const firstContext = BoundedContext.singleTenant("SharedSubscriptions")
       .withStorageFactory(storageFactory)
       .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
     const secondContext = BoundedContext.singleTenant("SharedSubscriptions")
       .withStorageFactory(storageFactory)
       .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
       .build();
     const first = registeredSubscriptionHandlers(firstContext);
     const second = registeredSubscriptionHandlers(secondContext);
@@ -2205,9 +2221,11 @@ describe("SpineServices", () => {
       const iterator = second.activate(subscription)[Symbol.asyncIterator]();
       const pending = iterator.next();
       await delay(25);
-      await secondContext
-        .stand()
-        .update(ProjectionStateSchema, createState("task-shared", "Shared"));
+      await postEntityStateChanged(
+        secondContext,
+        ProjectionStateSchema,
+        createState("task-shared", "Shared"),
+      );
 
       const delivery = await withTimeout(pending, "cross-service subscription update");
       expect(delivery.done).toBe(false);
@@ -2825,7 +2843,10 @@ describe("SpineServices", () => {
       entityType: MessageIdTaskAggregate,
       schema: TaskSchema,
     });
-    const context = BoundedContext.singleTenant("MessageIdTasks").add(repository).build();
+    const context = BoundedContext.singleTenant("MessageIdTasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
     const handlers = registeredSubscriptionHandlers(context);
     const topic = createFilteredTopicForTask({
       filter: [
@@ -3165,7 +3186,10 @@ describe("SpineServices", () => {
       entityType: MessageIdTaskAggregate,
       schema: TaskSchema,
     });
-    const context = BoundedContext.singleTenant("MessageIdTasks").add(repository).build();
+    const context = BoundedContext.singleTenant("MessageIdTasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
     const handlers = registeredSubscriptionHandlers(context);
     const taskId = create(TaskIdSchema, { value: "task-message-id" });
     const subscription = await handlers.subscribe(createMessageIdFilteredTopic(taskId));
@@ -3173,14 +3197,16 @@ describe("SpineServices", () => {
     const next = iterator.next();
 
     await delay(25);
-    await context.stand().update(
+    await postEntityStateChanged(
+      context,
       TaskSchema,
       create(TaskSchema, {
         id: create(TaskIdSchema, { value: "ignored" }),
         title: "Ignored",
       }),
     );
-    await context.stand().update(
+    await postEntityStateChanged(
+      context,
       TaskSchema,
       create(TaskSchema, {
         id: taskId,
@@ -3376,7 +3402,10 @@ describe("SpineServices", () => {
       entityType: TaskProjection,
       schema: ProjectionStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
     const server = await startServices(context);
 
     try {
@@ -3390,7 +3419,11 @@ describe("SpineServices", () => {
       const iterator = client.activate(subscription)[Symbol.asyncIterator]();
       const nextUpdate = withTimeout(iterator.next(), "post-activation subscription update");
       await delay(25);
-      await context.stand().update(ProjectionStateSchema, createState("task-live", "Live"));
+      await postEntityStateChanged(
+        context,
+        ProjectionStateSchema,
+        createState("task-live", "Live"),
+      );
       const delivered = await nextUpdate;
       const update = delivered.value as SubscriptionUpdate | undefined;
       const unknown = create(SubscriptionSchema, {
@@ -4514,6 +4547,40 @@ function createState(id: string, name: string, priority = 1): ProjectionState {
     name,
     priority,
   });
+}
+
+async function postEntityStateChanged(
+  context: BoundedContext,
+  schema: MessageSchema,
+  state: Message,
+): Promise<void> {
+  const id = (state as Record<string, unknown>)[schema.fields[0]?.localName ?? "id"];
+  const idSchema = schema.fields[0]?.message as MessageSchema | undefined;
+  const packedId =
+    idSchema !== undefined && id !== undefined
+      ? AnyMessages.pack(idSchema, id as never, { validate: false })
+      : AnyMessages.pack(StringValueSchema, create(StringValueSchema, { value: String(id) }));
+  await context.eventBus().post(
+    create(EventSchema, {
+      id: { value: `state-change-${String(++stateChangeSequence)}` },
+      message: AnyMessages.pack(
+        EntityLog.EntityStateChangedSchema,
+        create(EntityLog.EntityStateChangedSchema, {
+          entity: { id: packedId, typeUrl: TypeUrls.derive(schema) },
+          newState: AnyMessages.pack(schema, state, { validate: false }),
+          signalId: [
+            {
+              id: AnyMessages.pack(
+                StringValueSchema,
+                create(StringValueSchema, { value: "test-signal" }),
+              ),
+              typeUrl: TypeUrls.derive(StringValueSchema),
+            },
+          ],
+        }),
+      ),
+    }),
+  );
 }
 
 function packStringId(id: string) {

@@ -1,7 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-history";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { describe, expect, it } from "vitest";
 import {
   EntityHistoryConformance,
@@ -477,9 +477,9 @@ describe("Datastore entity history", () => {
     await firstFactory.createEntityStorage(input()).current.read("task");
     backend.failCommitAppliedOnce = true;
 
-    await expect(EntityCommitStorageFactories.create(firstFactory, input()).commit(mutation)).resolves.toBe(
-      "committed",
-    );
+    await expect(
+      EntityCommitStorageFactories.create(firstFactory, input()).commit(mutation),
+    ).resolves.toBe("committed");
   });
 
   it("rejects an independent-client divergent event-ID race with one global marker set", async () => {

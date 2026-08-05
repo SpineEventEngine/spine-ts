@@ -68,6 +68,14 @@ matching, and listener fencing.
 - No stronger exactly-once, ordered, gap-free, or cluster-complete guarantee.
 - No JVM build or JVM source modification.
 
+## Human-Imposed Requirements Ledger
+
+| Requirement                                                                                | T-0109 disposition                                                                                                                                |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Preserve established Spine/JVM-shaped architecture and avoid invented public abstractions. | Stand remains the internal owner of durable-definition reconciliation and local EventBus observation.                                             |
+| Use behavior-focused tests for runtime changes and retain durable evidence.                | Regression tests cover observer delivery, activation fencing, reconciliation cleanup, and close sequencing; evidence is recorded in the work log. |
+| Do not promise distributed guarantees not supplied by the implementation.                  | Documentation limits reconciliation to immediate plus ten-second best-effort per-node convergence, without cluster completeness.                  |
+
 ## Initial Read-Only Assignments
 
 | Function | Scope                                                                     | Expected profile           | Dispatch                 |

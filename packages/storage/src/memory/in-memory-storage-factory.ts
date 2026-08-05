@@ -11,7 +11,10 @@ import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
 import { MemoryEntityStorageFactory, type EntityStorageInput } from "./in-memory-entity-history.js";
 import { MemoryEntityCommitStorage } from "./in-memory-entity-commit.js";
-import { EntityCommitStorageFactories } from "../internal/entity-commit.js";
+import {
+  EntityCommitStorageFactories,
+  type EntityCommitStorage,
+} from "../internal/entity-commit.js";
 
 /**
  * In-memory factory for record storages and framework delegates such as the event store.
@@ -29,7 +32,7 @@ export class InMemoryStorageFactory extends StorageFactory {
     this.#backend = backend;
     this.#entities = new MemoryEntityStorageFactory(backend);
     EntityCommitStorageFactories.register(this, {
-      createEntityCommitStorage: (input) => this.#createEntityCommitStorage(input),
+      createEntityCommitStorage: (input) => this.createEntityCommitStorage(input),
     });
   }
 
@@ -52,16 +55,15 @@ export class InMemoryStorageFactory extends StorageFactory {
    * @param input Supplies the internal Entity storage configuration.
    * @returns The independently closeable in-memory commit handle.
    */
-  #createEntityCommitStorage(input: unknown): unknown {
+  protected createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     return new MemoryEntityCommitStorage(
       this.#backend,
       this.#entities,
-      this.tenantRecords(
-        (input as EntityStorageInput<unknown, Message>).context,
-        eventStoreRecordSpec,
-      ),
-      input as EntityStorageInput<unknown, Message>,
+      this.tenantRecords(input.context, eventStoreRecordSpec),
+      input as unknown as EntityStorageInput<unknown, Message>,
     );
   }
 

@@ -956,8 +956,8 @@ export class BoundedContext {
       () => commandBusAccess.finishClose(this.#commandBus),
       errors,
     );
-    await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await ContextParts.closeContextPart(() => this.#stand.close(), errors);
+    await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await ContextParts.closeContextPart(() => this.#subscriptionRegistry.close(), errors);
     await ContextParts.closeContextPart(() => {
       ContextParts.requireTenantIndex(this).close();

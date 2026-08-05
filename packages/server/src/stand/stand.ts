@@ -676,20 +676,27 @@ export class Stand {
       this.#subscriptionConsumers.set(id, consumers);
     }
     consumers.add(onUpdate);
-    return this.#reconcileSubscriptions(registry).then(() =>
-      Object.freeze({
-        get closed() {
-          return closed;
-        },
-        unsubscribe: () => {
-          if (closed) return;
-          closed = true;
-          const current = this.#subscriptionConsumers.get(id);
-          current?.delete(onUpdate);
-          if (current?.size === 0) this.#subscriptionConsumers.delete(id);
-        },
-      }),
-    );
+    return this.#reconcileSubscriptions(registry)
+      .then(() =>
+        Object.freeze({
+          get closed() {
+            return closed;
+          },
+          unsubscribe: () => {
+            if (closed) return;
+            closed = true;
+            const current = this.#subscriptionConsumers.get(id);
+            current?.delete(onUpdate);
+            if (current?.size === 0) this.#subscriptionConsumers.delete(id);
+          },
+        }),
+      )
+      .catch((error: unknown) => {
+        const current = this.#subscriptionConsumers.get(id);
+        current?.delete(onUpdate);
+        if (current?.size === 0) this.#subscriptionConsumers.delete(id);
+        throw error;
+      });
   }
 
   #removeSubscription(id: string): void {
@@ -740,9 +747,6 @@ export class Stand {
           ? undefined
           : { schema: registration.schema, idField: registration.idField };
       },
-      (schema, onUpdate, tenantId) => {
-        return this.subscribe(schema, onUpdate, tenantId === undefined ? {} : { tenantId });
-      },
       (update) => {
         this.#notifySubscription(id, update);
       },
@@ -760,7 +764,11 @@ export class Stand {
 
   #notifySubscription(id: string, update: SubscriptionUpdate): void {
     for (const consumer of [...(this.#subscriptionConsumers.get(id) ?? [])]) {
-      consumer(update);
+      try {
+        consumer(update);
+      } catch {
+        // A stream consumer is best effort and cannot suppress later consumers.
+      }
     }
   }
 

@@ -42,9 +42,11 @@ capacity in the control row before writing its full record to one fixed staging
 slot, then promotes that exact staged record. A crash or missing stage is
 recovered on the next operation: the matching fenced stage is finished, while
 a missing stage rolls its reserved count back. A stale writer cannot promote
-after its control token changes. Cross-node polling and listener reconciliation
-are not yet provided, so this registry alone provides no cross-node polling or
-listener completeness guarantee.
+after its control token changes. Each node reconciles its local snapshot
+immediately after context assembly and then every ten seconds. Reconciliation
+is revision-fenced, and physical deletion detaches the local observer after its
+next completed cycle. This is best-effort per-node convergence, not a
+cluster-completeness, replay, ordering, gap-repair, or exactly-once guarantee.
 
 The registry accepts only a generated `SubscriptionId` for activate, get, and
 delete. `create(subscription)` returns `{ kind: "created", entry }` or
@@ -112,10 +114,12 @@ projection state and replays stored events through matching projection
 subscribers; it does not append events or run delivery jobs. Single-tenant
 contexts reject a tenant option; multitenant contexts require one.
 
-Active subscription streams and queues are process-local, while inactive service
-records use the context storage factory. The package does not guarantee
-cluster-complete observations, subscription replay, event-gap repair, or
-exactly-once effects.
+Active subscription streams and queues are process-local. Entity subscriptions
+observe committed `EntityStateChanged` messages on the local EventBus, so a
+direct Stand write alone does not produce a subscription update. Consumer
+callback failures are isolated from post-commit observation and other
+consumers. The package does not guarantee cluster-complete observations,
+subscription replay, event-gap repair, or exactly-once effects.
 
 ### Standalone and browser hosting
 

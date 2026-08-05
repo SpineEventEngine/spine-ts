@@ -7970,8 +7970,10 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
     };
   }
 
-  override createEntityCommitStorage(input: unknown): unknown {
-    const storage = super.createEntityCommitStorage(input) as EntityCommitStorage;
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
     return {
       commit: async <I, S extends Message>(
         unit: EntityCommitInput<I, S>,
@@ -7990,8 +7992,10 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
 class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
   #remainingFailures = 1;
 
-  override createEntityCommitStorage(input: unknown): unknown {
-    const storage = super.createEntityCommitStorage(input) as EntityCommitStorage;
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
     return {
       commit: async <I, S extends Message>(
         unit: EntityCommitInput<I, S>,

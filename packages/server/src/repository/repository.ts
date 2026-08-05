@@ -37,10 +37,8 @@ import type {
   EntityStateHistoryPort,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
-import type {
-  EntityCommitStorage,
-  EntityCommitStorageFactory,
-} from "@spine-event-engine/storage/internal/entity-commit";
+import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/entity-commit";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
@@ -2690,8 +2688,6 @@ interface EntityStorageFactory {
     readonly events: EntityEventHistoryPort<I>;
     close(): void;
   };
-
-  createEntityCommitStorage: EntityCommitStorageFactory["createEntityCommitStorage"];
 }
 
 interface RepositoryEntityStorage<I, S extends Message> {
@@ -3802,16 +3798,13 @@ const RepositoryStorage = {
     input: EntityStorageInput<I, S>,
   ): RepositoryEntityStorage<I, S> {
     const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
-    if (
-      candidate.createEntityStorage === undefined ||
-      candidate.createEntityCommitStorage === undefined
-    ) {
+    if (candidate.createEntityStorage === undefined) {
       throw new Error(
         "StorageFactory does not provide the required atomic Entity commit storage seam.",
       );
     }
     const entity = candidate.createEntityStorage(input);
-    const commits = candidate.createEntityCommitStorage(input);
+    const commits = EntityCommitStorageFactories.create(factory, input);
     return {
       ...entity,
       commits,

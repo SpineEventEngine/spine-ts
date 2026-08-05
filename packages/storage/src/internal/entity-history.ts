@@ -26,4 +26,3 @@ export type {
   EntityCommitStorage,
   EntityCommitStorageFactory,
 } from "./entity-commit.js";
-export { EntityCommitStorageFactories } from "./entity-commit.js";

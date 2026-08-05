@@ -9,7 +9,7 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { EventStore, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-history";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {

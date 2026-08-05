@@ -109,12 +109,39 @@ export interface EntityCommitStorageFactory {
 }
 
 /**
+ * The framework-only access point for provider commit factories.
+ */
+interface EntityCommitFactoryAccess {
+  // prettier-ignore
+
+  /**
+   * Registers the atomic commit capability of one storage factory.
+   *
+   * @param factory Identifies the storage factory that provides the capability.
+   * @param creator Creates atomic commit handles for that provider.
+   */
+  register(factory: StorageFactory, creator: EntityCommitStorageFactory): void;
+
+  /**
+   * Creates an atomic commit handle registered by a storage provider.
+   *
+   * @param factory Identifies the provider storage factory.
+   * @param input Defines the Entity storage layout to commit.
+   * @returns The provider-owned atomic commit handle.
+   */
+  create<I, S extends Message>(
+    factory: StorageFactory,
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage;
+}
+
+/**
  * Provides the typed internal lookup for provider-owned atomic commit handles.
  *
  * Provider adapters register their creator while constructing their factory;
  * the end-user storage root deliberately exposes no commit-construction method.
  */
-export const EntityCommitStorageFactories = Object.freeze({
+export const EntityCommitStorageFactories: EntityCommitFactoryAccess = Object.freeze({
   register(factory: StorageFactory, creator: EntityCommitStorageFactory): void {
     creators.set(factory, creator);
   },

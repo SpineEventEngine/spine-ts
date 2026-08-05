@@ -13,7 +13,7 @@ import type {
   EntityStateHistoryPort,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
-import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-history";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 
 import { DatastoreRecordStorage } from "./record-storage.js";
 import { DatastoreEntityCommitStorage, DatastoreEntityStorage } from "./entity-history.js";

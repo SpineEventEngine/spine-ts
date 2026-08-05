@@ -1101,7 +1101,9 @@ export class MysqlEntityCommitStorage implements EntityCommitStorage {
         false,
       );
       return (
-        receipt !== undefined && EntityValues.same(receipt.digest, digest) && receipt.owner === owner
+        receipt !== undefined &&
+        EntityValues.same(receipt.digest, digest) &&
+        receipt.owner === owner
       );
     } catch {
       return false;
