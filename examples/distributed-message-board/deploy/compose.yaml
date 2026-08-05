@@ -60,7 +60,7 @@ services:
 
   gateway:
     image: spine-ts/standalone-gateway:local
-    ports: ["18080:8080"]
+    ports: ["${GATEWAY_PORT:-18080}:8080"]
     environment:
       HOST: 0.0.0.0
       PORT: 8080

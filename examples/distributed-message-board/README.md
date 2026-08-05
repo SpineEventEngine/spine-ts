@@ -36,7 +36,8 @@ emulator. Both applications use the same application-selected storage and
 delivery endpoint. The Gateway fans out only subscription notices; browser
 queries remain authoritative.
 
-Stop the topology with `Ctrl-C`, or run `docker compose --file deploy/compose.yaml down`.
+Stop the topology with `Ctrl-C`, or from the repository root run
+`docker compose --file examples/distributed-message-board/deploy/compose.yaml down`.
 
 ## Limits
 

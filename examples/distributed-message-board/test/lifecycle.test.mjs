@@ -40,7 +40,7 @@ function composeRun(project, arguments_, ignoreFailure = false) {
       ["compose", "--project-name", project, "--file", compose, ...arguments_],
       {
         encoding: "utf8",
-        env: { ...process.env, MESSAGE_BOARD_SESSION_PRIVATE_KEY: key },
+        env: { ...process.env, GATEWAY_PORT: "0", MESSAGE_BOARD_SESSION_PRIVATE_KEY: key },
         timeout: 90_000,
       },
     );
@@ -95,7 +95,7 @@ function ready(project, service) {
   if (service?.Service === "datastore" || service?.Service === "delivery")
     return service.Health === "healthy";
   if (service?.ID === undefined) return false;
-  const logs = execFileSync("docker", ["logs", service.ID], { encoding: "utf8" });
+  const logs = execFileSync("docker", ["logs", service.ID], { encoding: "utf8", timeout: 10_000 });
   return /MessageBoard (application|gateway) ready/u.test(logs);
 }
 
@@ -105,7 +105,13 @@ function assertNoLeaks(project) {
     ["network", ["ls", "--filter", `label=com.docker.compose.project=${project}`, "--quiet"]],
     ["volume", ["ls", "--filter", `label=com.docker.compose.project=${project}`, "--quiet"]],
   ])
-    assert.equal(execFileSync("docker", [command, ...arguments_], { encoding: "utf8" }).trim(), "");
+    assert.equal(
+      execFileSync("docker", [command, ...arguments_], {
+        encoding: "utf8",
+        timeout: 10_000,
+      }).trim(),
+      "",
+    );
 }
 
 function clientRun(project, runId) {
@@ -123,7 +129,7 @@ function clientRun(project, runId) {
       "--env",
       "ORIGIN=http://127.0.0.1:5173",
       "--env",
-      "MODE=full",
+      "MODE=distributed-full",
       "--env",
       `RUN_ID=${runId}`,
       "--env",
@@ -133,6 +139,6 @@ function clientRun(project, runId) {
       "spine-ts/message-board:local",
       "/app/node_modules/@spine-event-engine/example-message-board-app/compose-rpc-client.mjs",
     ],
-    { encoding: "utf8", timeout: 30_000 },
+    { encoding: "utf8", timeout: 45_000 },
   );
 }

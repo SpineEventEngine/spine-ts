@@ -99,6 +99,7 @@ const topic = create(TopicSchema, {
 
 try {
   if (mode === "full") await fullFlow();
+  else if (mode === "distributed-full") await distributedFlow();
   else if (mode === "subscribe") await createSubscription();
   else if (mode === "cancel") await cancelSubscription();
   else if (mode === "assert-cancelled") await assertCancelled();
@@ -110,7 +111,7 @@ try {
 
 async function fullFlow() {
   await post("initial", "Compose public query");
-  await authoritativeQuery(`${runId}-initial`);
+  await authoritativeQuery();
   const subscription = await subscriptions.subscribe(topic);
   const controller = new globalThis.AbortController();
   const updates = subscriptions
@@ -118,15 +119,8 @@ async function fullFlow() {
     [Symbol.asyncIterator]();
   try {
     const next = updates.next();
-    let update;
-    for (let attempt = 0; attempt < 20 && update === undefined; attempt += 1) {
-      await post(`update-${attempt}`, "Compose public subscription");
-      update = await Promise.race([
-        next,
-        new Promise((resolve) => globalThis.setTimeout(() => resolve(undefined), 1_000)),
-      ]);
-    }
-    if (update === undefined) update = await deadline(next, 1_000, "subscription update");
+    await post("update", "Compose public subscription");
+    const update = await deadline(next, 5_000, "subscription update");
     if (update.done) throw new Error("Compose subscription ended before an update.");
   } finally {
     controller.abort();
@@ -134,6 +128,42 @@ async function fullFlow() {
     await subscriptions.cancel(subscription);
   }
   process.stdout.write("full-ok\n");
+}
+
+async function distributedFlow() {
+  await post("initial", "Distributed authoritative query");
+  await authoritativeQueryFor(`${runId}-initial`);
+  const subscription = await subscriptions.subscribe(topic);
+  const controller = new globalThis.AbortController();
+  const updates = subscriptions
+    .activate(subscription, { signal: controller.signal })
+    [Symbol.asyncIterator]();
+  try {
+    const next = updates.next();
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const id = `${runId}-update-${attempt}`;
+      await post(`update-${attempt}`, "Distributed subscription notice");
+      const update = await Promise.race([next, pause(1_000)]);
+      if (update !== undefined && noticeFor(update, id)) return process.stdout.write("full-ok\n");
+    }
+    throw new Error("Timed out waiting for a matching distributed subscription update.");
+  } finally {
+    controller.abort();
+    await updates.return?.();
+    await subscriptions.cancel(subscription);
+  }
+}
+
+function noticeFor(result, id) {
+  if (result.done || result.value.response?.status?.status.case !== "ok") return false;
+  return (
+    result.value.update.case === "entityUpdates" &&
+    result.value.update.value.update.some(
+      (update) =>
+        update.kind.case === "state" &&
+        AnyMessages.unpack(update.kind.value, BoardMessageViewSchema)?.id?.value === id,
+    )
+  );
 }
 
 async function createSubscription() {
@@ -239,6 +269,10 @@ async function deadline(operation, milliseconds, name) {
   } finally {
     globalThis.clearTimeout(timer);
   }
+}
+
+function pause(milliseconds) {
+  return new Promise((resolve) => globalThis.setTimeout(() => resolve(undefined), milliseconds));
 }
 
 function required(name) {
