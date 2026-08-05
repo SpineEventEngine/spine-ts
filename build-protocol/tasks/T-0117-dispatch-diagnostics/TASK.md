@@ -1,6 +1,6 @@
 # T-0117: Dispatch Diagnostic System Events
 
-Status: Review converged; release verification pending
+Status: Release verified; integration pending
 
 ## Objective
 
