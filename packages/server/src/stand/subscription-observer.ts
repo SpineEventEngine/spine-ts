@@ -38,6 +38,8 @@ import { RecordMask } from "@spine-event-engine/storage";
 import { eventBusAccess, type EventBus, type EventSubscription } from "../bus/event-bus.js";
 import type { StandSubscription, StandUpdate } from "./stand.js";
 
+/* eslint-disable @typescript-eslint/no-extraneous-class */
+
 /**
  * Describes a state type that a Stand can observe for a canonical definition.
  *
@@ -57,24 +59,14 @@ export interface StandObservedState {
   readonly idField: string;
 }
 
-/**
- * Groups the internal operations that observe and render canonical Stand
- * subscription definitions.
- *
- * @internal
- */
-interface SubscriptionObserverOperations {
-  observeSubscription(
-    subscription: Subscription,
-    eventBus: EventBus | undefined,
-    findState: (typeUrl: string) => StandObservedState | undefined,
-    subscribeState: (
-      schema: MessageSchema,
-      callback: (update: StandUpdate) => void,
-      tenantId: string | undefined,
-    ) => StandSubscription,
-    onUpdate: (update: SubscriptionUpdate) => void,
-  ): StandSubscription | EventSubscription | undefined;
+interface StateMatcher {
+  readonly mask: readonly string[] | undefined;
+  match(update: StandUpdate): "state" | "noLongerMatching" | undefined;
+}
+
+interface ResolvedPath {
+  readonly local: readonly string[];
+  readonly leaf: { readonly localName: string; readonly message?: MessageSchema } | undefined;
 }
 
 /**
@@ -83,9 +75,7 @@ interface SubscriptionObserverOperations {
  *
  * @internal
  */
-export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
-  // prettier-ignore
-
+export class SubscriptionObservers {
   /**
    * Attaches one active canonical definition to this node's local state/EventBus
    * sources and renders its client-safe update before delivery to consumers.
@@ -97,7 +87,7 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
    * @param onUpdate Receives a fully rendered client update.
    * @returns Returns the local observer attachment when the target is known.
    */
-  function observeSubscription(
+  static observeSubscription(
     subscription: Subscription,
     eventBus: EventBus | undefined,
     findState: (typeUrl: string) => StandObservedState | undefined,
@@ -111,10 +101,10 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     const target = subscription.topic?.target;
     const typeUrl = target?.type;
     if (typeUrl === undefined || typeUrl.length === 0) return undefined;
-    const tenantId = tenantValue(subscription.topic?.context?.tenantId);
+    const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     const state = findState(typeUrl);
     if (state !== undefined) {
-      const render = createStateRenderer(subscription, state);
+      const render = SubscriptionObservers.#createStateRenderer(subscription, state);
       return subscribeState(
         state.schema,
         (update) => {
@@ -127,29 +117,30 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     if (eventBus === undefined) return undefined;
     return eventBusAccess.subscribe(eventBus, typeUrl, {
       onEvent(event) {
-        if (tenantId !== undefined && eventTenant(event) !== tenantId) return;
-        onUpdate(createEventUpdate(subscription, event));
+        if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId)
+          return;
+        onUpdate(SubscriptionObservers.#createEventUpdate(subscription, event));
       },
     });
   }
 
-  function createStateRenderer(
+  static #createStateRenderer(
     subscription: Subscription,
     state: StandObservedState,
   ): (update: StandUpdate) => SubscriptionUpdate | undefined {
-    const matcher = createMatcher(subscription, state);
+    const matcher = SubscriptionObservers.#createMatcher(subscription, state);
     return (update) => {
       const match = matcher.match(update);
       if (match === undefined) return undefined;
       return create(SubscriptionUpdateSchema, {
         subscription: clone(SubscriptionSchema, subscription),
-        response: okResponse(),
+        response: SubscriptionObservers.#okResponse(),
         update: {
           case: "entityUpdates",
           value: create(EntityUpdatesSchema, {
             update: [
               create(EntityStateUpdateSchema, {
-                id: packEntityId(state, update.id),
+                id: SubscriptionObservers.#packEntityId(state, update.id),
                 kind:
                   match === "state"
                     ? {
@@ -169,35 +160,42 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     };
   }
 
-  function createEventUpdate(subscription: Subscription, event: Event): SubscriptionUpdate {
+  static #createEventUpdate(subscription: Subscription, event: Event): SubscriptionUpdate {
     return create(SubscriptionUpdateSchema, {
       subscription: clone(SubscriptionSchema, subscription),
-      response: okResponse(),
+      response: SubscriptionObservers.#okResponse(),
       update: {
         case: "eventUpdates",
-        value: create(EventUpdatesSchema, { event: [cloneClientEvent(event)] }),
+        value: create(EventUpdatesSchema, {
+          event: [SubscriptionObservers.#cloneClientEvent(event)],
+        }),
       },
     });
   }
 
-  function okResponse() {
+  static #okResponse() {
     return create(ResponseSchema, {
       status: create(StatusSchema, { status: { case: "ok", value: {} } }),
     });
   }
 
-  function createMatcher(subscription: Subscription, state: StandObservedState): StateMatcher {
+  static #createMatcher(subscription: Subscription, state: StandObservedState): StateMatcher {
     const target = subscription.topic?.target;
-    const mask = localMask(subscription, state.schema);
+    const mask = SubscriptionObservers.#localMask(subscription, state.schema);
     if (target?.criterion.case !== "filters") return { mask, match: () => "state" };
     const filters = target.criterion.value;
-    const idField = findField(state.schema, state.idField);
-    const ids = filters.idFilter?.id.map((value) => decodeId(value, idField?.message));
-    const predicate = createPredicate(filters.filter, state.schema);
+    const idField = SubscriptionObservers.#findField(state.schema, state.idField);
+    const ids = filters.idFilter?.id.map((value) =>
+      SubscriptionObservers.#decodeId(value, idField?.message),
+    );
+    const predicate = SubscriptionObservers.#createPredicate(filters.filter, state.schema);
     return {
       mask,
       match(update) {
-        if (ids !== undefined && !ids.some((id) => equals(update.id, id, idField?.message))) {
+        if (
+          ids !== undefined &&
+          !ids.some((id) => SubscriptionObservers.#equals(update.id, id, idField?.message))
+        ) {
           return undefined;
         }
         if (predicate(update.state)) return "state";
@@ -208,26 +206,25 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     };
   }
 
-  interface StateMatcher {
-    readonly mask: readonly string[] | undefined;
-    match(update: StandUpdate): "state" | "noLongerMatching" | undefined;
-  }
-
-  function createPredicate(
+  static #createPredicate(
     filters: readonly CompositeFilter[],
     schema: MessageSchema,
   ): (state: Message) => boolean {
-    const predicates = filters.map((filter) => compositePredicate(filter, schema));
+    const predicates = filters.map((filter) =>
+      SubscriptionObservers.#compositePredicate(filter, schema),
+    );
     return (state) => predicates.every((predicate) => predicate(state));
   }
 
-  function compositePredicate(
+  static #compositePredicate(
     filter: CompositeFilter,
     schema: MessageSchema,
   ): (state: Message) => boolean {
     const parts = [
-      ...filter.filter.map((value) => simplePredicate(value, schema)),
-      ...filter.compositeFilter.map((value) => compositePredicate(value, schema)),
+      ...filter.filter.map((value) => SubscriptionObservers.#simplePredicate(value, schema)),
+      ...filter.compositeFilter.map((value) =>
+        SubscriptionObservers.#compositePredicate(value, schema),
+      ),
     ];
     if (filter.operator === CompositeFilter_CompositeOperator.EITHER) {
       return (state) => parts.some((predicate) => predicate(state));
@@ -235,34 +232,36 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     return (state) => parts.every((predicate) => predicate(state));
   }
 
-  function simplePredicate(filter: Filter, schema: MessageSchema): (state: Message) => boolean {
+  static #simplePredicate(filter: Filter, schema: MessageSchema): (state: Message) => boolean {
     if (filter.operator !== Filter_Operator.EQUAL || filter.value === undefined) return () => false;
-    const path = resolvePath(schema, filter.fieldPath?.fieldName ?? []);
-    const expected = unpackValue(filter.value, path.leaf?.message);
-    return (state) => equals(readPath(state, path.local), expected, path.leaf?.message);
+    const path = SubscriptionObservers.#resolvePath(schema, filter.fieldPath?.fieldName ?? []);
+    const expected = SubscriptionObservers.#unpackValue(filter.value, path.leaf?.message);
+    return (state) =>
+      SubscriptionObservers.#equals(
+        SubscriptionObservers.#readPath(state, path.local),
+        expected,
+        path.leaf?.message,
+      );
   }
 
-  function localMask(
+  static #localMask(
     subscription: Subscription,
     schema: MessageSchema,
   ): readonly string[] | undefined {
     const paths = subscription.topic?.fieldMask?.paths ?? [];
     return paths.length === 0
       ? undefined
-      : paths.map((path) => resolvePath(schema, path.split(".")).local.join("."));
+      : paths.map((path) =>
+          SubscriptionObservers.#resolvePath(schema, path.split(".")).local.join("."),
+        );
   }
 
-  interface ResolvedPath {
-    readonly local: readonly string[];
-    readonly leaf: { readonly localName: string; readonly message?: MessageSchema } | undefined;
-  }
-
-  function resolvePath(schema: MessageSchema, names: readonly string[]): ResolvedPath {
+  static #resolvePath(schema: MessageSchema, names: readonly string[]): ResolvedPath {
     let current: MessageSchema | undefined = schema;
     let leaf: { readonly localName: string; readonly message?: MessageSchema } | undefined;
     const local: string[] = [];
     for (const name of names) {
-      leaf = findField(current, name);
+      leaf = SubscriptionObservers.#findField(current, name);
       if (leaf === undefined) return { local: [], leaf: undefined };
       local.push(leaf.localName);
       current = leaf.message;
@@ -270,7 +269,7 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     return { local, leaf };
   }
 
-  function findField(
+  static #findField(
     schema: MessageSchema | undefined,
     name: string,
   ): { readonly localName: string; readonly message?: MessageSchema } | undefined {
@@ -285,7 +284,7 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     )?.find((field) => field.name === name || field.localName === name);
   }
 
-  function readPath(value: unknown, path: readonly string[]): unknown {
+  static #readPath(value: unknown, path: readonly string[]): unknown {
     let current = value;
     for (const part of path) {
       if (typeof current !== "object" || current === null) return undefined;
@@ -294,23 +293,25 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     return current;
   }
 
-  function decodeId(value: Any, schema: MessageSchema | undefined): unknown {
-    return schema === undefined ? unpackValue(value) : AnyMessages.unpack(value, schema);
+  static #decodeId(value: Any, schema: MessageSchema | undefined): unknown {
+    return schema === undefined
+      ? SubscriptionObservers.#unpackValue(value)
+      : AnyMessages.unpack(value, schema);
   }
 
-  function unpackValue(value: Any, schema?: MessageSchema): unknown {
+  static #unpackValue(value: Any, schema?: MessageSchema): unknown {
     if (schema !== undefined) {
       const message = AnyMessages.unpack(value, schema);
       if (message !== undefined) return message;
     }
-    for (const decoder of valueDecoders) {
+    for (const decoder of SubscriptionObservers.#valueDecoders) {
       const decoded = decoder(value);
       if (decoded !== undefined) return decoded;
     }
     return value;
   }
 
-  const valueDecoders = Object.freeze([
+  static readonly #valueDecoders = Object.freeze([
     (value: Any) => AnyMessages.unpack(value, StringValueSchema)?.value,
     (value: Any) => AnyMessages.unpack(value, BoolValueSchema)?.value,
     (value: Any) => AnyMessages.unpack(value, Int32ValueSchema)?.value,
@@ -322,20 +323,30 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     (value: Any) => AnyMessages.unpack(value, BytesValueSchema)?.value,
   ]);
 
-  function equals(left: unknown, right: unknown, schema?: MessageSchema): boolean {
-    if (schema !== undefined && isMessage(left) && isMessage(right)) {
-      return sameBytes(toBinary(schema, left), toBinary(schema, right));
+  static #equals(left: unknown, right: unknown, schema?: MessageSchema): boolean {
+    if (
+      schema !== undefined &&
+      SubscriptionObservers.#isMessage(left) &&
+      SubscriptionObservers.#isMessage(right)
+    ) {
+      return SubscriptionObservers.#sameBytes(toBinary(schema, left), toBinary(schema, right));
     }
-    if (isAny(left) && isAny(right))
-      return sameBytes(toBinary(AnySchema, left), toBinary(AnySchema, right));
-    if (left instanceof Uint8Array && right instanceof Uint8Array) return sameBytes(left, right);
+    if (SubscriptionObservers.#isAny(left) && SubscriptionObservers.#isAny(right)) {
+      return SubscriptionObservers.#sameBytes(
+        toBinary(AnySchema, left),
+        toBinary(AnySchema, right),
+      );
+    }
+    if (left instanceof Uint8Array && right instanceof Uint8Array) {
+      return SubscriptionObservers.#sameBytes(left, right);
+    }
     return Object.is(left, right);
   }
 
-  function packEntityId(state: StandObservedState, id: unknown): Any | undefined {
-    if (isAny(id)) return clone(AnySchema, id);
-    const idSchema = findField(state.schema, state.idField)?.message;
-    if (idSchema !== undefined && isMessage(id))
+  static #packEntityId(state: StandObservedState, id: unknown): Any | undefined {
+    if (SubscriptionObservers.#isAny(id)) return clone(AnySchema, id);
+    const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
+    if (idSchema !== undefined && SubscriptionObservers.#isMessage(id))
       return AnyMessages.pack(idSchema, id, { validate: false });
     if (id instanceof Uint8Array)
       return AnyMessages.pack(BytesValueSchema, create(BytesValueSchema, { value: id }));
@@ -350,7 +361,7 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
       : undefined;
   }
 
-  function cloneClientEvent(event: Event): Event {
+  static #cloneClientEvent(event: Event): Event {
     const client = clone(EventSchema, event);
     const rejection = client.context?.rejection;
     if (rejection !== undefined) {
@@ -362,18 +373,20 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     return client;
   }
 
-  function eventTenant(event: Event): string | undefined {
+  static #eventTenant(event: Event): string | undefined {
     switch (event.context?.origin.case) {
       case "importContext":
-        return tenantValue(event.context.origin.value.tenantId);
+        return SubscriptionObservers.#tenantValue(event.context.origin.value.tenantId);
       case "pastMessage":
-        return tenantValue(event.context.origin.value.actorContext?.tenantId);
+        return SubscriptionObservers.#tenantValue(
+          event.context.origin.value.actorContext?.tenantId,
+        );
       default:
         return undefined;
     }
   }
 
-  function tenantValue(tenant: TenantId | undefined): string | undefined {
+  static #tenantValue(tenant: TenantId | undefined): string | undefined {
     switch (tenant?.kind.case) {
       case "value":
         return tenant.kind.value;
@@ -386,48 +399,15 @@ export const SubscriptionObservers: SubscriptionObserverOperations = (() => {
     }
   }
 
-  function isMessage(value: unknown): value is Message {
+  static #isMessage(value: unknown): value is Message {
     return typeof value === "object" && value !== null && "$typeName" in value;
   }
 
-  function isAny(value: unknown): value is Any {
-    return isMessage(value) && value.$typeName === "google.protobuf.Any";
+  static #isAny(value: unknown): value is Any {
+    return SubscriptionObservers.#isMessage(value) && value.$typeName === "google.protobuf.Any";
   }
 
-  function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  static #sameBytes(left: Uint8Array, right: Uint8Array): boolean {
     return left.length === right.length && left.every((byte, index) => byte === right[index]);
   }
-
-  return Object.freeze({ observeSubscription });
-})();
-
-/**
- * Attaches one active canonical definition through the internal observer group.
- *
- * @param subscription The active canonical subscription definition.
- * @param eventBus The local event source for event targets.
- * @param findState Finds the local state route for a target type.
- * @param subscribeState Subscribes to local state updates for a state route.
- * @param onUpdate Receives a fully rendered client update.
- * @returns Returns the local observer attachment when the target is known.
- * @internal
- */
-export function observeSubscription(
-  subscription: Subscription,
-  eventBus: EventBus | undefined,
-  findState: (typeUrl: string) => StandObservedState | undefined,
-  subscribeState: (
-    schema: MessageSchema,
-    callback: (update: StandUpdate) => void,
-    tenantId: string | undefined,
-  ) => StandSubscription,
-  onUpdate: (update: SubscriptionUpdate) => void,
-): StandSubscription | EventSubscription | undefined {
-  return SubscriptionObservers.observeSubscription(
-    subscription,
-    eventBus,
-    findState,
-    subscribeState,
-    onUpdate,
-  );
 }

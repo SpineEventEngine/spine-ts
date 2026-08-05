@@ -16,7 +16,7 @@ import type {
 } from "@spine-event-engine/storage/internal/entity-history";
 import { entityStorageDescriptor } from "../entity/entity-storage-descriptor.js";
 import type { EventBus } from "../bus/event-bus.js";
-import { observeSubscription, type StandObservedState } from "./subscription-observer.js";
+import { SubscriptionObservers, type StandObservedState } from "./subscription-observer.js";
 import type { SubscriptionUpdate } from "@spine-event-engine/proto/client";
 import type { StandSubscriptionRegistry } from "./subscription-registry.js";
 
@@ -731,7 +731,7 @@ export class Stand {
     const existing = this.#subscriptionAttachments.get(id);
     if (existing?.revision === revision) return;
     this.#detachSubscription(id);
-    const subscription = observeSubscription(
+    const subscription = SubscriptionObservers.observeSubscription(
       current.subscription as never,
       this.#subscriptionEventBus,
       (typeUrl): StandObservedState | undefined => {
