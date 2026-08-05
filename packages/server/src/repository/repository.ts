@@ -2052,6 +2052,7 @@ class ProjectionEventExecution {
       readonly schema: DescriptorMessageSchema;
       readonly state: unknown;
       readonly version: unknown;
+      readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
     }) => object;
 
     const entity = new entityType({
@@ -2059,6 +2060,7 @@ class ProjectionEventExecution {
       schema: this.#repository.stateSchema,
       state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
+      lifecycle: { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
     });
     const storageInput = RepositoryStorage.entityStorageInput(
       this.#repository,
@@ -2130,6 +2132,7 @@ class ProcessManagerExecutionSupport {
       readonly schema: DescriptorMessageSchema;
       readonly state: unknown;
       readonly version: unknown;
+      readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
     }) => object;
 
     const entity = new entityType({
@@ -2137,6 +2140,7 @@ class ProcessManagerExecutionSupport {
       schema: this.#repository.stateSchema,
       state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
+      lifecycle: { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
     });
     const storageInput = RepositoryStorage.entityStorageInput(
       this.#repository,

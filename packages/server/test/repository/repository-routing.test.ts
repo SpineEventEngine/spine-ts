@@ -865,6 +865,10 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
 
   subscribeTask(event: ProjectionState): void {
     ExecutingTaskProjection.subscriberCalls++;
+    if (event.name === "archive-lifecycle") {
+      this.archiveDraft();
+      return;
+    }
     this.update((draft) =>
       Object.assign(
         draft,
@@ -4981,6 +4985,38 @@ describe("repository signal routing", () => {
           version: { number: index + 2 },
         });
       }
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("emits a lifecycle-only projection archive after rehydration", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema, EntityArchivedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context
+        .eventBus()
+        .post(createProjectionEvent("projection-seed", "projection-lifecycle"));
+      await waitForCondition(() => changes.length === 2);
+      changes.splice(0);
+      await context
+        .eventBus()
+        .post(
+          createProjectionEvent("projection-archive", "projection-lifecycle", {
+            name: "archive-lifecycle",
+          }),
+        );
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
     } finally {
       await context.close();
     }
