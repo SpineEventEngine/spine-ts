@@ -283,3 +283,14 @@ This batch is tests-only unless a RED proof exposes a production defect.
 - Expected and explicitly dispatched reasoning: `medium`.
 - Runtime self-introspection is unavailable; immutable role/profile metadata
   applies.
+
+## Closing Proof Outcome — 2026-08-05
+
+- Implementer `/root/t0115_terminal_impl` used the explicit immutable
+  `gpt-5.6-terra` / medium profile; runtime self-introspection is unavailable.
+- Closing proofs verify all observer detachments settle before registry close,
+  independent detach/registry failures flatten in order, and repeated close
+  shares one outcome. Stateful dispatchers prove both retained buses abort after
+  registration failure without storage leaks.
+- Evidence: focused tests passed 108 tests; server/tooling typechecks,
+  changed-file ESLint, TSDoc, Prettier, and diff checks passed.

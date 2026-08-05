@@ -218,7 +218,9 @@ describe("Stand", () => {
       storageFactory: factory,
     });
     const bus = eventBusAccess.createSystemBus(undefined);
-    const registry = new ClosingRegistry();
+    const registry = new ClosingRegistry(() =>
+      observedEventBusSubscriptions.every((observer) => observer.closed),
+    );
     stand.register(ProjectionStateSchema);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     for (const id of ["detach-one", "detach-two"]) {
@@ -237,8 +239,13 @@ describe("Stand", () => {
     failNextObserverUnsubscribe.value = true;
 
     const closing = runtime.close();
-    await expect(closing).rejects.toMatchObject({ message: "Subscription runtime close failed." });
-    await expect(runtime.close()).rejects.toBe(await closing.catch((error: unknown) => error));
+    const failure = await closing.catch((error: unknown) => error);
+    expect(failure).toMatchObject({ message: "Subscription runtime close failed." });
+    expect((failure as AggregateError).errors.map((error: Error) => error.message)).toEqual([
+      "Observer unsubscribe failed.",
+      "Registry close failed.",
+    ]);
+    await expect(runtime.close()).rejects.toBe(failure);
     expect(registry.closeCalls).toBe(1);
     await expect(runtime.consume("detach-one", () => undefined)).rejects.toThrow(
       "Subscription runtime is closing.",
@@ -1405,9 +1412,15 @@ class GatedSnapshotRegistry extends InMemorySubscriptionRegistry {
 class ClosingRegistry extends InMemorySubscriptionRegistry {
   closeCalls = 0;
 
+  constructor(private readonly observersDetached: () => boolean) {
+    super();
+  }
+
   override async close(): Promise<void> {
     this.closeCalls++;
+    if (!this.observersDetached()) throw new Error("Registry closed before observer detach.");
     await super.close();
+    throw new Error("Registry close failed.");
   }
 }
 

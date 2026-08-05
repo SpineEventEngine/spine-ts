@@ -1645,6 +1645,29 @@ describe("BoundedContext assembly", () => {
     expect(repositories[0]?.stateFullTypeName).toBe(AggregateStateSchema.typeName);
   });
 
+  it("aborts retained domain and System buses when dispatcher registration throws", () => {
+    for (const schema of [ProjectionStateSchema, EntityLog.EntityStateChangedSchema]) {
+      const storageFactory = new ObservingStorageFactory([]);
+      let schemaReads = 0;
+      const dispatcher: EventDispatcher = {
+        messageSchemas: () => {
+          schemaReads++;
+          if (schemaReads > 2) throw new Error(`Registration failed for ${schema.typeName}.`);
+          return [schema];
+        },
+        dispatch: () => Promise.resolve(),
+      };
+
+      expect(() =>
+        BoundedContext.singleTenant("Tasks")
+          .withStorageFactory(storageFactory)
+          .addEventDispatcher(dispatcher)
+          .build(),
+      ).toThrow(`Registration failed for ${schema.typeName}.`);
+      expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
+    }
+  });
+
   it("closes every prepared repository storage when cleanup also fails", () => {
     const storageFactory = new FailingStorageFactory(7, ProcessManagerStateSchema.typeName, [5]);
     const aggregateRepository = new Repository({

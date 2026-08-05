@@ -195,7 +195,14 @@ export class SubscriptionRuntime {
     await SubscriptionRuntime.#closePart(() => this.drainClose(), errors);
     await SubscriptionRuntime.#closePart(() => this.#registry.close(), errors);
     if (errors.length > 0) {
-      throw new AggregateError(errors, "Subscription runtime close failed.");
+      throw new AggregateError(
+        errors.flatMap((error) =>
+          error instanceof AggregateError
+            ? Array.from(error.errors, (nested): unknown => nested)
+            : [error],
+        ),
+        "Subscription runtime close failed.",
+      );
     }
   }
 
