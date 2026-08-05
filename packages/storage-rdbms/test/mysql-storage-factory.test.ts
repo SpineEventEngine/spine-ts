@@ -750,7 +750,16 @@ describe("MysqlStorageFactory", () => {
     await expect(commitStorage.commit(mutation)).resolves.toBe("replayed");
 
     expect(calls.map((call) => call.sql).join("\n")).toMatch(
-      /INSERT INTO spine_ts_entity_current[\s\S]*INSERT INTO spine_ts_entity_states[\s\S]*INSERT INTO spine_ts_entity_events[\s\S]*INSERT INTO spine_ts_records[\s\S]*INSERT INTO spine_ts_entity_commits/u,
+      new RegExp(
+        [
+          "INSERT INTO spine_ts_entity_current",
+          "INSERT INTO spine_ts_entity_states",
+          "INSERT INTO spine_ts_entity_events",
+          "INSERT INTO spine_ts_records",
+          "INSERT INTO spine_ts_entity_commits",
+        ].join("[\\s\\S]*"),
+        "u",
+      ),
     );
     expect(commits).toBe(1);
     await factory.close();
