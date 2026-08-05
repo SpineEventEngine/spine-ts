@@ -1,6 +1,6 @@
 # T-0109 Review Record
 
-Status: Correction batch in progress
+Status: Affected-lane re-review pending
 
 ## Classification And Scope
 
@@ -13,10 +13,10 @@ task and implementation brief. JVM builds and source changes are excluded.
 
 | Concern                     | Existing role                      | Expected profile                    | Status                                                                                                              |
 | --------------------------- | ---------------------------------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Style and maintainability   | `style_maintainability_reviewer`   | `gpt-5.6-terra` / `high`            | Request changes: one P1 and five P2 findings                                                                         |
-| Documentation               | `documentation_reviewer`           | immutable `gpt-5.6-luna` / `medium` | Request changes: one P1 and one P2 finding                                                                           |
-| TypeScript and API          | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / `high`            | Request changes: one P1 and one P2 finding                                                                           |
-| Performance and reliability | `performance_reliability_reviewer` | `gpt-5.6-terra` / `high`            | Request changes: four P1 and three P2 findings                                                                       |
+| Style and maintainability   | `style_maintainability_reviewer`   | `gpt-5.6-terra` / `high`            | Request changes: one P1 and five P2 findings                                                                        |
+| Documentation               | `documentation_reviewer`           | immutable `gpt-5.6-luna` / `medium` | Request changes: one P1 and one P2 finding                                                                          |
+| TypeScript and API          | `typescript_api_docs_reviewer`     | `gpt-5.6-terra` / `high`            | Request changes: one P1 and one P2 finding                                                                          |
+| Performance and reliability | `performance_reliability_reviewer` | `gpt-5.6-terra` / `high`            | Request changes: four P1 and three P2 findings                                                                      |
 | Security                    | Final security reviewer            | N/A provisionally                   | No trust boundary, credential, authorization, or external-input expansion is planned; reassess from the final diff. |
 
 Every dispatch must include explicit model and reasoning fields. Before accepting
@@ -86,3 +86,16 @@ Accepted findings, deduplicated across lanes:
   `gpt-5.6-terra` / `medium`, may not spawn children, and must not touch the
   other owner's paths. One combined correction endpoint will be mechanically
   checked before only substantively affected reviewer lanes are reopened.
+
+## Correction Evidence
+
+- `9bbd7b88` integrates the two correction lanes; the small integration follow-up
+  aligns the accessor export path and isolated-declaration types.
+- The affected seven-file focused profile passes 393 tests with 17 skipped.
+- MySQL 8.4 passes 17/17 live tests; the Datastore-mode emulator passes 8/8.
+- Build/typecheck, cleanup, TSDoc, changed-path ESLint, formatting, and diff
+  checks pass.
+- All four specialist concerns were substantively affected by the correction
+  batch and receive one focused re-review. Security remains provisionally N/A:
+  no trust boundary, authorization, credential, or external-input contract was
+  introduced.
