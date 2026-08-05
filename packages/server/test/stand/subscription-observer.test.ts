@@ -4,14 +4,19 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
+  BoolValueSchema,
+  BytesValueSchema,
+  DoubleValueSchema,
   Int32ValueSchema,
+  Int64ValueSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { AnyMessages, TypeUrls, type MessageSchema } from "@spine-event-engine/core";
 import {
   EventContextSchema,
   EventSchema,
   RejectionEventContextSchema,
+  type EventContext,
   file_spine_options,
 } from "@spine-event-engine/proto";
 import {
@@ -265,6 +270,44 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("round-trips supported scalar entity IDs through state subscription updates", async () => {
+    const cases = [
+      { schema: StringValueSchema, value: "text", rendered: StringValueSchema },
+      { schema: BoolValueSchema, value: true, rendered: BoolValueSchema },
+      { schema: Int32ValueSchema, value: 7, rendered: DoubleValueSchema },
+      { schema: Int64ValueSchema, value: 9n, rendered: Int64ValueSchema },
+      { schema: BytesValueSchema, value: new Uint8Array([1, 2]), rendered: BytesValueSchema },
+    ] as const;
+    const bus = createBus(cases.map(({ schema }) => schema));
+    const received: SubscriptionUpdate[] = [];
+    const observers = cases.map(({ schema }) =>
+      SubscriptionObservers.observeSubscription(
+        subscriptionFor(schema),
+        bus,
+        (typeUrl) =>
+          typeUrl === TypeUrls.derive(schema) ? { schema, idField: "value" } : undefined,
+        (update) => received.push(update),
+      ),
+    );
+
+    for (const { schema, value } of cases) {
+      const state = create(schema, { value } as never);
+      await postObservedStateChange(
+        bus,
+        schema,
+        state,
+        AnyMessages.pack(schema, state, { validate: false }),
+      );
+    }
+
+    expect(received).toHaveLength(cases.length);
+    for (const [index, { value, rendered }] of cases.entries()) {
+      expect(AnyMessages.unpack(entityUpdateId(received[index]), rendered)?.value).toEqual(value);
+    }
+    observers.forEach((observer) => observer?.unsubscribe());
+    await bus.close();
+  });
+
   it("ignores state-change envelopes with a wrong tenant, state type, or malformed payload", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
@@ -378,16 +421,70 @@ describe("SubscriptionObservers", () => {
     observer?.unsubscribe();
     await bus.close();
   });
+
+  it("accepts matching domain tenants from imported and past origins only", async () => {
+    const bus = createBus();
+    const received: SubscriptionUpdate[] = [];
+    const domain = { kind: { case: "domain" as const, value: { value: "example.test" } } };
+    const observer = SubscriptionObservers.observeSubscription(
+      create(SubscriptionSchema, {
+        topic: {
+          context: { tenantId: domain },
+          target: {
+            type: TypeUrls.derive(ProjectionStateSchema),
+            criterion: { case: "includeAll", value: true },
+          },
+        },
+      }),
+      bus,
+      () => undefined,
+      (update) => received.push(update),
+    );
+
+    await postProjectionEvent(
+      bus,
+      "domain-import",
+      create(EventContextSchema, {
+        origin: { case: "importContext", value: { tenantId: domain } },
+      }),
+    );
+    await postProjectionEvent(
+      bus,
+      "email-import",
+      create(EventContextSchema, {
+        origin: {
+          case: "importContext",
+          value: { tenantId: { kind: { case: "email", value: { value: "a@example.test" } } } },
+        },
+      }),
+    );
+    await postProjectionEvent(
+      bus,
+      "domain-past",
+      create(EventContextSchema, {
+        origin: { case: "pastMessage", value: { actorContext: { tenantId: domain } } },
+      }),
+    );
+    await postProjectionEvent(bus, "default-origin", create(EventContextSchema));
+
+    expect(received).toHaveLength(2);
+    observer?.unsubscribe();
+    await bus.close();
+  });
 });
 
-function createBus(): EventBus {
+function createBus(schemas: readonly MessageSchema[] = []): EventBus {
   const storage = new InMemoryStorageFactory();
   const bus = new EventBus(new EventStore({ name: "Observer", multitenant: false }, storage));
-  eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema, ProjectionStateSchema]);
+  eventBusAccess.registerSchemas(bus, [
+    EntityLog.EntityStateChangedSchema,
+    ProjectionStateSchema,
+    ...schemas,
+  ]);
   return bus;
 }
 
-function subscriptionFor(schema: GenMessage<Message>) {
+function subscriptionFor(schema: MessageSchema) {
   return create(SubscriptionSchema, {
     topic: {
       target: {
@@ -413,6 +510,56 @@ function tenantContext(tenantId: string) {
       value: { tenantId: { kind: { case: "value", value: tenantId } } },
     },
   });
+}
+
+function entityUpdateId(update: SubscriptionUpdate | undefined) {
+  const entity =
+    update?.update.case === "entityUpdates" ? update.update.value.update[0] : undefined;
+  if (entity?.id === undefined) throw new Error("Expected an entity update ID.");
+  return entity.id;
+}
+
+async function postProjectionEvent(
+  bus: EventBus,
+  id: string,
+  context: EventContext,
+): Promise<void> {
+  await bus.post(
+    create(EventSchema, {
+      id: { value: id },
+      message: AnyMessages.pack(ProjectionStateSchema, createState(id, "Event", 1), {
+        validate: false,
+      }),
+      context,
+    }),
+  );
+}
+
+async function postObservedStateChange(
+  bus: EventBus,
+  schema: MessageSchema,
+  state: Message,
+  id: ReturnType<typeof AnyMessages.pack>,
+): Promise<void> {
+  await bus.post(
+    create(EventSchema, {
+      id: { value: `scalar-state-${String(++eventSequence)}` },
+      message: AnyMessages.pack(
+        EntityLog.EntityStateChangedSchema,
+        create(EntityLog.EntityStateChangedSchema, {
+          entity: { id, typeUrl: TypeUrls.derive(schema) },
+          newState: AnyMessages.pack(schema, state, { validate: false }),
+          signalId: [
+            {
+              id: packString(`scalar-signal-${String(eventSequence)}`),
+              typeUrl: TypeUrls.derive(StringValueSchema),
+            },
+          ],
+        }),
+        { validate: false },
+      ),
+    }),
+  );
 }
 
 async function postStateChange(
