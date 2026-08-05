@@ -951,6 +951,14 @@ class TopicSubscription implements Subscription {
           throw new ClientProtocolError(
             "subscription update ID does not match the accepted subscription.",
           );
+        if (
+          update.response?.status?.status.case === "error" &&
+          update.response.status.status.value.type === "backend-unavailable" &&
+          update.update.case === undefined
+        ) {
+          this.#pushLifecycle({ state: "gapPossible", generation });
+          continue;
+        }
         const delivery = BrowserClientValues.freezeDelivery({
           kind: "update",
           update: clone(SubscriptionUpdateSchema, update),

@@ -100,7 +100,8 @@ Subscriptions are hints, never authoritative or complete. Duplicate, missing,
 and differently ordered updates are possible. A healthy-looking transport does
 not prove every update arrived. Entity resynchronization restores current
 authoritative state, **not** intermediate history. Event gaps can occur and are
-not replayed. Cross-node subscription propagation is not provided.
+not replayed. Fixed gateway fan-in is best effort and does not provide
+cluster-complete propagation.
 
 For an entity subscription, provide an `authoritativeQuery`; client-web
 evaluates it only during reconnect, verifies a byte-equivalent Topic target,
@@ -414,6 +415,12 @@ it requires an exact HTTPS CORS origin, TLS material, finite headers/request
 limits, gRPC-Web, and explicit binary Connect support. Its Activate route is a
 live stream. Copy and customize the template for hosts, certificates,
 observability, rate limits, and topology.
+
+A fixed gateway topology contains 1–32 ordered origins. Unary calls are
+round-robin without retry; subscriptions are best effort and can duplicate.
+Generic loss notices mean a possible gap and require an authoritative re-query.
+The legacy single-backend form remains supported; durable fan-in fencing rejects
+missing, reordered, or different backend topology before attachment.
 
 Use this test matrix before changing an extension:
 

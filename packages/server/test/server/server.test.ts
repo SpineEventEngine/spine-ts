@@ -49,6 +49,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BoundedContext,
+  DurableSubscriptionBindings,
   EnvironmentType,
   Server,
   ServerEnvironment,
@@ -66,6 +67,122 @@ describe("Server", () => {
 
   afterEach(async () => {
     await resetServerEnvironmentForTest();
+  });
+
+  it("accepts one to thirty-two unique canonical standalone backend origins in configured order", () => {
+    expect(
+      BrowserServer.backendUrls(["https://first.example.test", "https://second.example.test"]),
+    ).toEqual(["https://first.example.test", "https://second.example.test"]);
+    expect(
+      BrowserServer.backendUrls(
+        Array.from({ length: 32 }, (_, index) => `https://node-${index.toString()}.example.test`),
+      ),
+    ).toHaveLength(32);
+  });
+
+  it.each([
+    [[], "between 1 and 32"],
+    [
+      Array.from({ length: 33 }, (_, index) => `https://node-${index.toString()}.example.test`),
+      "between 1 and 32",
+    ],
+    [["https://same.example.test", "https://same.example.test"], "unique"],
+    [["https://backend.example.test/private"], "canonical HTTP(S) origin"],
+  ])("rejects invalid standalone backend topology %j", (baseUrls, error) => {
+    expect(() => BrowserServer.backendUrls(baseUrls)).toThrow(error);
+  });
+
+  it.each([
+    [{ baseUrl: "https://backend.example.test", baseUrls: ["https://other.example.test"] }],
+    [{}],
+  ])("rejects standalone backend configuration with both or neither URL form", (backend) => {
+    expect(() => {
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend,
+          bindings: inMemoryBindings(),
+        } as unknown as BrowserServerOptions,
+        false,
+      );
+    }).toThrow("exactly one of baseUrl or baseUrls");
+  });
+
+  it.each([
+    { baseUrls: [123] },
+    { baseUrls: [] },
+    { baseUrls: ["https://same.example.test", "https://same.example.test"] },
+    { baseUrls: ["https://backend.example.test/path"] },
+    { baseUrls: "https://backend.example.test" },
+  ])("rejects malformed standalone backend URL lists", (backend) => {
+    expect(() => {
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend,
+          bindings: inMemoryBindings(),
+        } as unknown as BrowserServerOptions,
+        false,
+      );
+    }).toThrow();
+  });
+
+  it("accepts ordered backend URL lists with topology-fencing bindings", async () => {
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "fan-in",
+      nextId: () => "binding",
+      dispose: () => Promise.resolve(),
+      leaseMs: 1,
+      cleanupBatchSize: 1,
+      recordLimit: 1,
+      maxRecordBytes: 1,
+    });
+    BrowserServer.requireDurableBindings(
+      {
+        ...browserGateway(),
+        backend: {
+          baseUrls: ["https://first.example.test", "https://second.example.test"],
+        },
+        bindings,
+      },
+      false,
+    );
+    const running = await BrowserServer.open(
+      ["https://first.example.test", "https://second.example.test"],
+      {
+        ...browserGateway(),
+        bindings,
+        host: "127.0.0.1",
+        port: 0,
+        readMaxBytes: 1_048_576,
+        writeMaxBytes: 1_048_576,
+        production: false,
+      },
+    );
+    await running.close();
+  });
+
+  it("starts one array-configured backend and handles empty browser request facts", async () => {
+    const requests = BrowserServer.requests(browserGateway());
+    const requestHeader = new Headers();
+
+    expect(requests.credential({ requestHeader })).toEqual({ kind: "bearer", value: "" });
+    expect(requests.transport({ requestHeader })).toBeDefined();
+
+    const unopened = http.createServer();
+    await expect(BrowserServer.closeListener(unopened)).resolves.toBeUndefined();
+
+    const running = await BrowserServer.open(["http://127.0.0.1:65534"], {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    await running.close();
   });
 
   it("rejects production browser bindings before context assembly or listener startup", async () => {
@@ -174,6 +291,28 @@ describe("Server", () => {
         false,
       );
     }).toThrow("sessions");
+  });
+
+  it.each([
+    [{ sessions: { resolve: "invalid" } }, "sessions"],
+    [{ authorize: "invalid" }, "authorization"],
+    [{ contexts: {} }, "context resolution"],
+    [{ contexts: { resolve: () => undefined } }, "context resolution"],
+    [{ contexts: { resolveContext: () => undefined } }, "context resolution"],
+    [{ clock: { now: "invalid" } }, "clock"],
+    [{ fingerprint: "invalid" }, "fingerprint"],
+    [{ bindings: undefined }, "subscription bindings"],
+  ])("rejects malformed standalone collaborator %j", (malformed, expected) => {
+    expect(() => {
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend: { baseUrl: "https://backend.example.test" },
+          ...malformed,
+        } as unknown as BrowserServerOptions,
+        false,
+      );
+    }).toThrow(expected);
   });
 
   it.each([
@@ -447,6 +586,12 @@ describe("Server", () => {
       await expect(
         fetch(`${server.baseUrl}/auth/exchange`, { headers: { origin: "http://127.0.0.1:5173" } }),
       ).resolves.toMatchObject({ status: 405 });
+      await expect(
+        fetch(`${server.baseUrl}/auth/exchange`, {
+          method: "OPTIONS",
+          headers: { origin: "https://other.example" },
+        }),
+      ).resolves.toMatchObject({ status: 403 });
       await expect(
         fetch(`${server.baseUrl}/auth/exchange`, {
           method: "POST",

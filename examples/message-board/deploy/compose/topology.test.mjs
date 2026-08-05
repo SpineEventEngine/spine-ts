@@ -40,8 +40,7 @@ test("declares a two-gateway and two-application standalone topology", () => {
   assert.match(document, /^ {2}gateway-2:/mu);
   assert.match(document, /^ {2}envoy:/mu);
   assert.match(document, /^ {2}delivery:/mu);
-  assert.match(document, /BACKEND_URL: http:\/\/application-1:8080/mu);
-  assert.match(document, /BACKEND_URL: http:\/\/application-2:8080/mu);
+  assert.match(document, /BACKEND_URLS: http:\/\/application-1:8080,http:\/\/application-2:8080/mu);
   assert.match(document, /SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone/mu);
   assert.match(document, /DATASTORE_EMULATOR_HOST: datastore:8081/mu);
   assert.match(document, /MESSAGE_BOARD_SESSION_ISSUER: message-board/mu);

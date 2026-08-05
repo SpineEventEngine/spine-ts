@@ -207,7 +207,8 @@ export class Server {
 
   async #startOnce(ownership: EnvironmentOwnership): Promise<RunningServer> {
     const browser = this.#browser;
-    if (browser?.backend !== undefined) BrowserServer.backendUrl(browser.backend.baseUrl);
+    if (browser?.backend !== undefined)
+      BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend));
     if (
       browser?.backend !== undefined &&
       (this.#contexts.length > 0 ||
@@ -223,14 +224,17 @@ export class Server {
         this.#environment.environment.type === EnvironmentType.Production,
       );
     if (browser?.backend !== undefined)
-      return BrowserServer.open(BrowserServer.backendUrl(browser.backend.baseUrl), {
-        ...browser,
-        host: browser.host ?? this.#host,
-        port: browser.port ?? this.#port,
-        readMaxBytes: this.#readMaxBytes,
-        writeMaxBytes: this.#writeMaxBytes,
-        production: this.#environment.environment.type === EnvironmentType.Production,
-      });
+      return BrowserServer.open(
+        BrowserServer.backendUrls(ServerValues.browserBackendUrls(browser.backend)),
+        {
+          ...browser,
+          host: browser.host ?? this.#host,
+          port: browser.port ?? this.#port,
+          readMaxBytes: this.#readMaxBytes,
+          writeMaxBytes: this.#writeMaxBytes,
+          production: this.#environment.environment.type === EnvironmentType.Production,
+        },
+      );
     const contexts = await ServerValues.buildContexts(
       this.#contexts,
       this.#environment.storageFactory,
@@ -583,6 +587,13 @@ export interface ServerOptions {
 /**
  * Configures the authenticated browser-facing Connect and gRPC-Web listener.
  */
+type BrowserBackend =
+  | { readonly baseUrl: string; readonly baseUrls?: never }
+  | { readonly baseUrl?: never; readonly baseUrls: readonly string[] };
+
+/**
+ * Configures the authenticated browser-facing Connect and gRPC-Web listener.
+ */
 export interface BrowserServerOptions {
   // prettier-ignore
 
@@ -597,14 +608,14 @@ export interface BrowserServerOptions {
   readonly port?: number;
 
   /**
-   * Selects a separately hosted Spine backend.
+   * Selects one separately hosted Spine backend or an ordered fixed set of 1–32 backends.
    *
-   * The URL must be one canonical HTTP(S) origin without credentials, query,
-   * fragment, or a path beyond `/`.
+   * Each URL must be one canonical HTTP(S) origin without credentials, query,
+   * fragment, or a path beyond `/`. `baseUrl` and `baseUrls` are exclusive;
+   * fan-in is best effort, so clients re-query authoritative state after a
+   * duplicate update or generic loss notice.
    */
-  readonly backend?: {
-    readonly baseUrl: string;
-  };
+  readonly backend?: BrowserBackend;
 
   /**
    * Application-owned, exact authentication endpoints exposed beside the fixed
@@ -1064,6 +1075,19 @@ const ServerValues = Object.freeze({
       throw new Error("Server host must not be blank.");
     }
     return normalized;
+  },
+
+  browserBackendUrls(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
+    const source = backend as { readonly baseUrl?: unknown; readonly baseUrls?: unknown };
+    if (typeof source.baseUrl === "string" && source.baseUrls === undefined)
+      return [source.baseUrl];
+    if (source.baseUrl === undefined && Array.isArray(source.baseUrls)) {
+      const values: readonly unknown[] = source.baseUrls;
+      if (values.some((value) => typeof value !== "string"))
+        throw new Error("Server browser backend URLs must be strings.");
+      return values as readonly string[];
+    }
+    throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
   },
 
   normalizeMessageMaxBytes(value: number, name: "readMaxBytes" | "writeMaxBytes"): number {

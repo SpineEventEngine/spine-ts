@@ -75,6 +75,7 @@ interface Binding {
   readonly reservationOwner?: string;
   readonly reservationUntilMs?: number;
   readonly principalFingerprint?: string;
+  readonly topology?: string;
   readonly tenant?: string;
   readonly expiresAtMs?: number;
   readonly backend?: string;
@@ -125,6 +126,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   readonly durable = true;
 
   /**
+   * Declares that durable records fence backend topology identity.
+   */
+  readonly topologyFencing = true;
+
+  /**
    * Names the validated durable registry shared by standalone gateway replicas.
    */
   readonly namespace: string;
@@ -171,7 +177,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       { name: `spine.gateway.${options.namespace}`, multitenant: false },
       new RecordSpec({
         schema: AnySchema,
-        storageKey: "spine.gateway.SubscriptionBinding:v2",
+        storageKey: "spine.gateway.SubscriptionBinding:v3",
         idKind: "string",
         extractId: (record) => Values.id(record),
       }),
@@ -245,6 +251,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async create(input: {
     readonly backend: BackendSubscriptionEnvelope;
     readonly principalFingerprint: string;
+    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly expiresAtMs: number;
     readonly reservation?: SubscriptionCapacityReservation;
@@ -277,6 +284,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         lifecycle: "inactive",
         fence: 0,
         principalFingerprint: input.principalFingerprint,
+        topology: input.topology ?? "legacy",
         ...(input.tenant === undefined ? {} : { tenant: input.tenant }),
         expiresAtMs: input.expiresAtMs,
         backend: Values.base64(input.backend.bytes),
@@ -305,6 +313,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async activate(input: {
     readonly id: string;
     readonly principalFingerprint: string;
+    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
@@ -322,6 +331,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async #activate(input: {
     readonly id: string;
     readonly principalFingerprint: string;
+    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
@@ -367,6 +377,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   async cancel(input: {
     readonly id: string;
     readonly principalFingerprint: string;
+    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
@@ -1030,6 +1041,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         actual.backendBytes === expected.backendBytes &&
         actual.expiresAtMs === expected.expiresAtMs &&
         actual.principalFingerprint === expected.principalFingerprint &&
+        actual.topology === expected.topology &&
         actual.tenant === expected.tenant
       );
     } catch {
@@ -1070,12 +1082,14 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     binding: Binding,
     input: {
       readonly principalFingerprint: string;
+      readonly topology?: string;
       readonly tenant: string | undefined;
       readonly nowMs: number;
     },
   ): boolean {
     return (
       binding.principalFingerprint === input.principalFingerprint &&
+      binding.topology === (input.topology ?? "legacy") &&
       binding.tenant === input.tenant &&
       (binding.expiresAtMs ?? 0) > input.nowMs
     );
@@ -1157,7 +1171,7 @@ const Values = Object.freeze({
     const record = create(AnySchema, {
       typeUrl,
       value: new TextEncoder().encode(
-        JSON.stringify({ version: value.family === "binding" ? 2 : 1, ...value }),
+        JSON.stringify({ version: value.family === "binding" ? 3 : 1, ...value }),
       ),
     });
     if (record.value.byteLength > maxBytes) throw new Error("backend-envelope-too-large");
@@ -1177,7 +1191,7 @@ const Values = Object.freeze({
     const source = value as Record<string, unknown>;
     const family = source.family;
     const valid =
-      (family === "binding" && record.typeUrl === bindingType && source.version === 2) ||
+      (family === "binding" && record.typeUrl === bindingType && source.version === 3) ||
       (family === "quota" && record.typeUrl === quotaType && source.version === 1) ||
       (family === "cleanup" && record.typeUrl === cleanupType && source.version === 1);
     if (

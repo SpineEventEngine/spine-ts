@@ -70,7 +70,7 @@ services:
       PORT: 8080
       NODE_ENV: production
       BROWSER_ORIGIN: http://localhost:18080
-      BACKEND_URL: http://application-1:8080
+      BACKEND_URLS: http://application-1:8080,http://application-2:8080
       SUBSCRIPTION_REGISTRY_NAMESPACE: message-board-standalone
       DATASTORE_PROJECT_ID: message-board-compose
       DATASTORE_EMULATOR_HOST: datastore:8081
@@ -96,7 +96,6 @@ services:
     image: spine-ts/standalone-gateway:local
     environment:
       <<: *gateway-environment
-      BACKEND_URL: http://application-2:8080
     networks:
       default:
         aliases:

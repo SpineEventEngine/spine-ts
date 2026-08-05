@@ -38,7 +38,7 @@ The images set `NODE_ENV=production`. Supply these values when starting them:
 | ---------------- | ------------------------------------------------------------------------------ |
 | Application only | `HOST`, `PORT`, `DATASTORE_PROJECT_ID`, `SPINE_IPC_DIRECTORY`                  |
 | Combined         | Application values plus `BROWSER_ORIGIN` and `SUBSCRIPTION_REGISTRY_NAMESPACE` |
-| Gateway          | Combined values plus `BACKEND_URL`                                             |
+| Gateway          | Combined values plus preferred `BACKEND_URLS` or legacy `BACKEND_URL`          |
 | Delivery server  | `HOST`, `PORT`                                                                 |
 
 Every browser process additionally requires one shared

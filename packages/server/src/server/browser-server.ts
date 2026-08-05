@@ -1,10 +1,13 @@
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
+import { createHash } from "node:crypto";
 
 import {
   createNativeGatewayServices,
+  FanInSubscriptionCreator,
   InMemorySubscriptionBindings,
   NativeSubscriptionCreator,
+  RoundRobinUnaryForwarder,
   SubscriptionGateway,
   TransportFacts,
   UnaryGateway,
@@ -39,7 +42,10 @@ interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port">
  * @internal
  */
 export const BrowserServer: Readonly<{
-  open(native: RunningServer | string, options: BrowserHostOptions): Promise<RunningServer>;
+  open(
+    native: RunningServer | string | readonly string[],
+    options: BrowserHostOptions,
+  ): Promise<RunningServer>;
   requests(options: BrowserServerOptions): {
     credential(context: { readonly requestHeader: Headers }): {
       readonly kind: "bearer" | "cookie";
@@ -49,6 +55,8 @@ export const BrowserServer: Readonly<{
   };
   origins(origins: readonly string[]): ReadonlySet<string>;
   backendUrl(value: string): string;
+  backendUrls(values: readonly string[]): readonly string[];
+  topologyFingerprint(values: readonly string[]): string;
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   authRoutes(
     routes: readonly BrowserAuthRoute[] | undefined,
@@ -63,7 +71,10 @@ export const BrowserServer: Readonly<{
   listen(server: http.Server, host: string, port: number): Promise<AddressInfo>;
   closeListener(server: http.Server): Promise<void>;
 }> = Object.freeze({
-  async open(native: RunningServer | string, options: BrowserHostOptions): Promise<RunningServer> {
+  async open(
+    native: RunningServer | string | readonly string[],
+    options: BrowserHostOptions,
+  ): Promise<RunningServer> {
     BrowserServer.requireDurableBindings(options, options.production);
     const origins = BrowserServer.origins(options.origins);
     const authRoutes = BrowserServer.authRoutes(options.authRoutes);
@@ -72,8 +83,20 @@ export const BrowserServer: Readonly<{
     if (!Number.isSafeInteger(maxActiveAuthRequests) || maxActiveAuthRequests < 1)
       throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
     let draining = false;
-    const backendBaseUrl = typeof native === "string" ? native : native.baseUrl;
-    const creator = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: backendBaseUrl }));
+    const running = BrowserServerValues.running(native);
+    const backendBaseUrls = Array.isArray(native)
+      ? BrowserServer.backendUrls(native)
+      : [
+          typeof native === "string"
+            ? native
+            : BrowserServerValues.requiredRunning(running).baseUrl,
+        ];
+    const creators = backendBaseUrls.map(
+      (baseUrl) => new NativeSubscriptionCreator(createGrpcTransport({ baseUrl })),
+    );
+    const firstCreator = BrowserServerValues.firstCreator(creators);
+    const creator = creators.length === 1 ? firstCreator : new FanInSubscriptionCreator(creators);
+    const forwarder = creators.length === 1 ? firstCreator : new RoundRobinUnaryForwarder(creators);
     const bindings =
       options.bindings ??
       new InMemorySubscriptionBindings({
@@ -88,7 +111,7 @@ export const BrowserServer: Readonly<{
       authorize: options.authorize,
       contexts: options.contexts,
       clock: options.clock,
-      forward: creator.forward.bind(creator),
+      forward: forwarder.forward.bind(forwarder),
     });
     const subscriptions = new SubscriptionGateway({
       bindings,
@@ -97,6 +120,7 @@ export const BrowserServer: Readonly<{
       contexts: options.contexts,
       clock: options.clock,
       fingerprint: options.fingerprint,
+      topology: BrowserServer.topologyFingerprint(backendBaseUrls),
       creator,
     });
     const services = createNativeGatewayServices({ unary, subscriptions, requests });
@@ -171,16 +195,9 @@ export const BrowserServer: Readonly<{
       }
       throw error;
     }
-    return new RunningBrowserServer(
-      server,
-      typeof native === "string" ? undefined : native,
-      subscriptions,
-      address,
-      activeAuth,
-      () => {
-        draining = true;
-      },
-    );
+    return new RunningBrowserServer(server, running, subscriptions, address, activeAuth, () => {
+      draining = true;
+    });
   },
   requests(options: BrowserServerOptions) {
     return {
@@ -249,10 +266,29 @@ export const BrowserServer: Readonly<{
     }
     return value;
   },
+  backendUrls(values: readonly string[]): readonly string[] {
+    if (values.length < 1 || values.length > 32)
+      throw new Error("Server browser backends must contain between 1 and 32 origins.");
+    const urls = values.map((value) => BrowserServer.backendUrl(value));
+    if (new Set(urls).size !== urls.length)
+      throw new Error("Server browser backends must be unique canonical HTTP(S) origins.");
+    return urls;
+  },
+  topologyFingerprint(values: readonly string[]): string {
+    const hash = createHash("sha256");
+    for (const url of BrowserServer.backendUrls(values)) {
+      const bytes = new TextEncoder().encode(url);
+      const length = new Uint8Array(4);
+      new DataView(length.buffer).setUint32(0, bytes.byteLength);
+      hash.update(length);
+      hash.update(bytes);
+    }
+    return hash.digest("hex");
+  },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
     const supplied = options as Partial<BrowserServerOptions>;
     if (options.backend !== undefined) {
-      BrowserServer.backendUrl(options.backend.baseUrl);
+      BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend));
       if (supplied.sessions === undefined || typeof supplied.sessions.resolve !== "function")
         throw new Error("Standalone browser server requires sessions.");
       if (typeof options.authorize !== "function")
@@ -269,6 +305,13 @@ export const BrowserServer: Readonly<{
         throw new Error("Standalone browser server requires a fingerprint function.");
       if (options.bindings === undefined)
         throw new Error("Standalone browser server requires explicit subscription bindings.");
+      if (
+        BrowserServerValues.backendUrlsFor(options.backend).length > 1 &&
+        options.bindings.topologyFencing !== true
+      )
+        throw new Error(
+          "Standalone browser fan-in requires topology-fencing subscription bindings.",
+        );
     }
     if (options.backend !== undefined && production && options.registry === undefined)
       throw new Error("Production standalone browser server requires a type registry.");
@@ -464,6 +507,35 @@ export const BrowserServer: Readonly<{
         else reject(error);
       });
     });
+  },
+});
+
+const BrowserServerValues = Object.freeze({
+  requiredRunning(value: RunningServer | undefined): RunningServer {
+    if (value === undefined) throw new Error("Browser server local backend is absent.");
+    return value;
+  },
+  firstCreator(values: readonly NativeSubscriptionCreator[]): NativeSubscriptionCreator {
+    const creator = values[0];
+    if (creator === undefined) throw new Error("Browser server backend is absent.");
+    return creator;
+  },
+  running(native: RunningServer | string | readonly string[]): RunningServer | undefined {
+    return typeof native === "string" || Array.isArray(native)
+      ? undefined
+      : (native as RunningServer);
+  },
+  backendUrlsFor(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
+    const source = backend as { readonly baseUrl?: unknown; readonly baseUrls?: unknown };
+    if (typeof source.baseUrl === "string" && source.baseUrls === undefined)
+      return [source.baseUrl];
+    if (source.baseUrl === undefined && Array.isArray(source.baseUrls)) {
+      const values: readonly unknown[] = source.baseUrls;
+      if (values.some((value) => typeof value !== "string"))
+        throw new Error("Server browser backend URLs must be strings.");
+      return values as readonly string[];
+    }
+    throw new Error("Server browser backend must configure exactly one of baseUrl or baseUrls.");
   },
 });
 

@@ -57,6 +57,52 @@ describe("DurableSubscriptionBindings", () => {
     await reopened.close();
   });
 
+  it("fences durable callbacks by exact ordered topology identity", async () => {
+    const bindings = registry(new InMemoryStorageFactory(), "topology");
+    const createBinding = () =>
+      bindings.create({
+        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        principalFingerprint: "principal",
+        topology: "a,b",
+        tenant: undefined,
+        expiresAtMs: 1_000,
+      });
+    const matching = await createBinding();
+    let callbacks = 0;
+    await expect(
+      bindings.activate({
+        id: matching.id,
+        principalFingerprint: "principal",
+        topology: "a,b",
+        tenant: undefined,
+        nowMs: 1,
+        signal: new AbortController().signal,
+        onBackend: () => {
+          callbacks++;
+          return Promise.resolve();
+        },
+      }),
+    ).resolves.toEqual({ kind: "activated" });
+    const rejected = await createBinding();
+    for (const topology of ["b,a", "a,c", undefined]) {
+      await expect(
+        bindings.cancel({
+          id: rejected.id,
+          principalFingerprint: "principal",
+          ...(topology === undefined ? {} : { topology }),
+          tenant: undefined,
+          nowMs: 1,
+          onBackend: () => {
+            callbacks++;
+            return Promise.resolve();
+          },
+        }),
+      ).resolves.toEqual({ kind: "denied" });
+    }
+    expect(callbacks).toBe(1);
+    await bindings.close();
+  });
+
   it("keeps namespaces and ownership facts isolated", async () => {
     const factory = new InMemoryStorageFactory();
     const first = registry(factory, "first");
@@ -1243,6 +1289,7 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "inactive",
         fence: 0,
         principalFingerprint: "principal",
+        topology: "legacy",
         tenant: "tenant",
         expiresAtMs: 10,
         backend: "AQ==",
@@ -1255,6 +1302,7 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "active",
         fence: 1,
         principalFingerprint: "principal",
+        topology: "legacy",
         expiresAtMs: 10,
         backend: "AQ==",
         backendBytes: 1,
@@ -1268,6 +1316,7 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "cancelling",
         fence: 2,
         principalFingerprint: "principal",
+        topology: "legacy",
         expiresAtMs: 10,
         backend: "AQ==",
         backendBytes: 1,
@@ -2545,7 +2594,7 @@ function repairStore(factory: StorageFactory, namespace: string): RecordStorage<
     { name: `spine.gateway.${namespace}`, multitenant: false },
     new RecordSpec({
       schema: AnySchema,
-      storageKey: "spine.gateway.SubscriptionBinding:v2",
+      storageKey: "spine.gateway.SubscriptionBinding:v3",
       idKind: "string",
       extractId: (record) => repairId(record),
     }),
@@ -2607,7 +2656,7 @@ function repairRecord(id: string, lifecycle: "reserved" | "retired"): Any {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
       JSON.stringify({
-        version: 2,
+        version: 3,
         family: "binding",
         id,
         revision: 1,
@@ -2624,7 +2673,7 @@ function malformedRepairRecord(id: string): Any {
   return create(AnySchema, {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
-      JSON.stringify({ version: 2, family: "binding", id, revision: 1 }),
+      JSON.stringify({ version: 3, family: "binding", id, revision: 1 }),
     ),
   });
 }
@@ -2642,7 +2691,7 @@ function durableRecord(
   return create(AnySchema, {
     typeUrl,
     value: new TextEncoder().encode(
-      JSON.stringify({ version: family === "binding" ? 2 : 1, family, ...value }),
+      JSON.stringify({ version: family === "binding" ? 3 : 1, family, ...value }),
     ),
   });
 }

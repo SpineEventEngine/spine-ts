@@ -29,8 +29,42 @@ describe("MessageBoard deployment configuration", () => {
       subscriptionNamespace: "message-board-subscriptions",
     });
     expect(MessageBoardDeployment.gateway(completeEnvironment)).toMatchObject({
-      backendUrl: "http://application:8081",
+      backendUrls: ["http://application:8081"],
     });
+  });
+
+  it("prefers the ordered fixed BACKEND_URLS topology over the legacy backend URL", () => {
+    expect(
+      MessageBoardDeployment.gateway({
+        ...completeEnvironment,
+        BACKEND_URLS: "http://application-a:8081,http://application-b:8081",
+      }).backendUrls,
+    ).toEqual(["http://application-a:8081", "http://application-b:8081"]);
+  });
+
+  it("rejects an empty entry in the ordered backend topology", () => {
+    expect(() =>
+      MessageBoardDeployment.gateway({
+        ...completeEnvironment,
+        BACKEND_URLS: "http://application-a:8081,",
+      }),
+    ).toThrow("Invalid required configuration: BACKEND_URLS.");
+  });
+
+  it("rejects signed sessions outside production", () => {
+    const storage = MessageBoardDeployment.storage(
+      MessageBoardDeployment.application(completeEnvironment),
+    );
+    try {
+      expect(() =>
+        MessageBoardDeployment.sessions(storage, {
+          ...completeEnvironment,
+          NODE_ENV: "development",
+        }),
+      ).toThrow("require production configuration");
+    } finally {
+      storage.close();
+    }
   });
 
   it.each([
