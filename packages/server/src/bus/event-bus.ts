@@ -30,6 +30,9 @@ const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
 const forgettingBus: unique symbol = Symbol("forgetting-bus");
 const forgettingBuses = new WeakSet<EventBus>();
+const eventBusRoles = new WeakMap<EventBus, EventBusRole>();
+
+type EventBusRole = "domain" | "system";
 
 interface EventBusAccess {
   // prettier-ignore
@@ -41,6 +44,10 @@ interface EventBusAccess {
    * @returns the assembled forgetting bus.
    */
   createForgettingBus(dispatchers?: Iterable<EventDispatcher>): EventBus;
+  createSystemBus(
+    eventStore: EventStore | undefined,
+    dispatchers?: Iterable<EventDispatcher>,
+  ): EventBus;
   postStored(eventBus: EventBus, event: Event): Promise<void>;
   postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void>;
   postFollowUp(eventBus: EventBus, event: Event): Promise<void>;
@@ -113,6 +120,7 @@ export class EventBus {
    * @returns the registered dispatcher.
    */
   register<Dispatcher extends EventDispatcher>(dispatcher: Dispatcher): Dispatcher {
+    validateDispatcherRole(eventBusRoles.get(this) ?? "domain", dispatcher);
     this.#registry.register(dispatcher);
     return dispatcher;
   }
@@ -269,6 +277,8 @@ export class EventBus {
       throw new Error(`No event schema registered for "${typeUrl}".`);
     }
 
+    validateSchemaRole(eventBusRoles.get(this) ?? "domain", schema);
+
     const message =
       event.message === undefined ? undefined : AnyMessages.unpack(event.message, schema);
 
@@ -393,6 +403,32 @@ export class EventBus {
   }
 }
 
+function createSystemBus(
+  eventStore: EventStore | undefined,
+  dispatchers: Iterable<EventDispatcher>,
+): EventBus {
+  const eventBus = new EventBus((eventStore ?? forgettingBus) as EventStore, []);
+  eventBusRoles.set(eventBus, "system");
+  if (eventStore === undefined) forgettingBuses.add(eventBus);
+  for (const dispatcher of dispatchers) eventBus.register(dispatcher);
+  return eventBus;
+}
+
+function validateDispatcherRole(role: EventBusRole, dispatcher: EventDispatcher): void {
+  for (const schema of dispatcher.messageSchemas()) validateSchemaRole(role, schema);
+}
+
+function validateSchemaRole(role: EventBusRole, schema: MessageSchema): void {
+  const typeUrl = `type.${schema.typeName}`;
+  const systemSchema = typeUrl.startsWith("type.spine.system.");
+  if (role === "domain" && systemSchema) {
+    throw new Error(`Domain EventBus rejects system event schema "${typeUrl}".`);
+  }
+  if (role === "system" && !systemSchema) {
+    throw new Error(`System EventBus rejects domain event schema "${typeUrl}".`);
+  }
+}
+
 /**
  * Accepts events for framework service adapters.
  *
@@ -444,6 +480,13 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     const eventBus = new EventBus(forgettingBus as never, dispatchers);
     forgettingBuses.add(eventBus);
     return eventBus;
+  },
+
+  createSystemBus(
+    eventStore: EventStore | undefined,
+    dispatchers: Iterable<EventDispatcher> = [],
+  ): EventBus {
+    return createSystemBus(eventStore, dispatchers);
   },
 
   postStored(eventBus: EventBus, event: Event): Promise<void> {
@@ -513,7 +556,11 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
       throw new TypeError("Event schema registration requires an EventBus instance.");
     }
 
-    registerSchemas(schemas);
+    const checked = [...schemas];
+    for (const schema of checked) {
+      validateSchemaRole(eventBusRoles.get(eventBus) ?? "domain", schema);
+    }
+    registerSchemas(checked);
   },
 
   beginClose(eventBus: EventBus): void {

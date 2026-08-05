@@ -23,6 +23,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EventBus, type EventDispatcher } from "../../src/index.js";
 import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 
 const validationChecks = vi.hoisted(() => vi.fn());
 
@@ -174,6 +175,29 @@ describe("EventBus", () => {
 
     await expect(bus.post(createProjectionEvent("event-schema-only"))).resolves.toBeUndefined();
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
+  });
+
+  it("rejects system schemas from a domain bus before EventStore access", () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+
+    expect(() => eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema])).toThrow(
+      'Domain EventBus rejects system event schema "type.spine.system.server.EntityStateChanged".',
+    );
+  });
+
+  it("accepts only system schemas on an internally assembled system bus", () => {
+    const bus = eventBusAccess.createSystemBus(undefined);
+
+    expect(() =>
+      eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]),
+    ).not.toThrow();
+    expect(() => eventBusAccess.registerSchemas(bus, [ProjectionStateSchema])).toThrow(
+      'System EventBus rejects domain event schema "type.ProjectionState".',
+    );
   });
 
   it("rejects untyped construction without an EventStore", () => {

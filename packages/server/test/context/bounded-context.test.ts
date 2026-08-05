@@ -371,6 +371,12 @@ describe("BoundedContext assembly", () => {
     expect(multitenantPairing.system.storesEvents).toBe(false);
   });
 
+  it("persists only paired system events when explicitly enabled", () => {
+    const context = BoundedContext.singleTenant("AuditedTasks").persistSystemEvents().build();
+
+    expect(internalSystemPairing(context).system.storesEvents).toBe(true);
+  });
+
   it("exposes a constant single-tenant index through internal context access", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const tenantIndex = internalTenantIndex(context);

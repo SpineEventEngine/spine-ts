@@ -234,7 +234,8 @@ export class Stand {
   readonly #inFlight = new Set<Promise<void>>();
   readonly #subscriptionConsumers = new Map<string, Set<(update: SubscriptionUpdate) => void>>();
   readonly #subscriptionAttachments = new Map<string, LocalSubscriptionAttachment>();
-  #subscriptionEventBus: EventBus | undefined;
+  #subscriptionDomainEventBus: EventBus | undefined;
+  #subscriptionSystemEventBus: EventBus | undefined;
   #subscriptionTail: Promise<void> = Promise.resolve();
   #subscriptionTimer: ReturnType<typeof setInterval> | undefined;
   #closing = false;
@@ -253,8 +254,8 @@ export class Stand {
       this.#deferUpdate(schema, state, updateOptions),
     );
     currentReads.set(this, (schema, id, readOptions) => this.#readCurrent(schema, id, readOptions));
-    subscriptionStarters.set(this, (registry, eventBus) => {
-      this.#startSubscriptions(registry, eventBus);
+    subscriptionStarters.set(this, (registry, domainEventBus, systemEventBus) => {
+      this.#startSubscriptions(registry, domainEventBus, systemEventBus);
     });
     subscriptionConsumers.set(this, (registry, id, onUpdate) =>
       this.#consumeSubscription(registry, id, onUpdate),
@@ -653,9 +654,14 @@ export class Stand {
     this.#closed = true;
   }
 
-  #startSubscriptions(registry: StandSubscriptionRegistry, eventBus: EventBus): void {
+  #startSubscriptions(
+    registry: StandSubscriptionRegistry,
+    domainEventBus: EventBus,
+    systemEventBus: EventBus = domainEventBus,
+  ): void {
     if (this.#subscriptionTimer !== undefined || this.#closing) return;
-    this.#subscriptionEventBus = eventBus;
+    this.#subscriptionDomainEventBus = domainEventBus;
+    this.#subscriptionSystemEventBus = systemEventBus;
     void this.#reconcileSubscriptions(registry);
     this.#subscriptionTimer = setInterval(
       () => void this.#reconcileSubscriptions(registry),
@@ -740,7 +746,7 @@ export class Stand {
     this.#detachSubscription(id);
     const subscription = SubscriptionObservers.observeSubscription(
       current.subscription as never,
-      this.#subscriptionEventBus,
+      this.#subscriptionDomainEventBus,
       (typeUrl): StandObservedState | undefined => {
         const registration = this.#registrations.get(typeUrl);
         return registration === undefined
@@ -750,6 +756,7 @@ export class Stand {
       (update) => {
         this.#notifySubscription(id, update);
       },
+      this.#subscriptionSystemEventBus,
     );
     if (subscription === undefined) return;
     this.#subscriptionAttachments.set(id, { revision, subscription });
@@ -1072,7 +1079,12 @@ interface StandCurrentRecord<Schema extends MessageSchema> {
 }
 
 interface StandAccess {
-  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry, eventBus: EventBus): void;
+  startSubscriptions(
+    stand: Stand,
+    registry: StandSubscriptionRegistry,
+    domainEventBus: EventBus,
+    systemEventBus?: EventBus,
+  ): void;
   consumeSubscription(
     stand: Stand,
     registry: StandSubscriptionRegistry,
@@ -1101,11 +1113,16 @@ interface StandAccess {
  * @internal
  */
 export const standAccess: StandAccess = Object.freeze({
-  startSubscriptions(stand: Stand, registry: StandSubscriptionRegistry, eventBus: EventBus): void {
+  startSubscriptions(
+    stand: Stand,
+    registry: StandSubscriptionRegistry,
+    domainEventBus: EventBus,
+    systemEventBus?: EventBus,
+  ): void {
     const start = subscriptionStarters.get(stand);
     if (start === undefined)
       throw new TypeError("Stand subscription start requires a Stand instance.");
-    start(registry, eventBus);
+    start(registry, domainEventBus, systemEventBus ?? domainEventBus);
   },
   consumeSubscription(
     stand: Stand,
@@ -1172,7 +1189,7 @@ const currentReads = new WeakMap<
 >();
 const subscriptionStarters = new WeakMap<
   Stand,
-  (registry: StandSubscriptionRegistry, eventBus: EventBus) => void
+  (registry: StandSubscriptionRegistry, domainEventBus: EventBus, systemEventBus: EventBus) => void
 >();
 const subscriptionConsumers = new WeakMap<
   Stand,

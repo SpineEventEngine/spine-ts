@@ -207,6 +207,12 @@ interface RepositoryRegistration {
    */
   readonly registerEventSchema: (schema: MessageSchema) => void;
 
+  /** Registers a schema for an internal system event. */
+  readonly registerSystemEventSchema: (schema: MessageSchema) => void;
+
+  /** Posts a committed system event without affecting domain event storage. */
+  readonly postSystemEventFollowUp: (event: Event) => Promise<void>;
+
   /**
    * Command posting callback into the owning context command bus.
    */
@@ -522,8 +528,11 @@ let constructBoundedContext:
       snapshot: BoundedContextSnapshot,
       commandBus: CommandBus,
       eventBus: EventBus,
+      systemEventBus: EventBus,
       stand: Stand,
+      systemStand: Stand,
       registry: StandSubscriptionRegistry,
+      systemSpec: ContextSpecSnapshot,
       storageFactory: StorageFactory,
       repositories: readonly RepositoryView[],
       deliveryStrategy: DeliveryStrategy,
@@ -543,6 +552,7 @@ export class BoundedContext {
   readonly #snapshot: BoundedContextSnapshot;
   readonly #commandBus: CommandBus;
   readonly #eventBus: EventBus;
+  readonly #systemEventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
   readonly #entityInbox: RegisteredEntityInbox;
@@ -554,6 +564,7 @@ export class BoundedContext {
   readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
+  readonly #systemStand: Stand;
   readonly #subscriptionRegistry: StandSubscriptionRegistry;
   #closed: Promise<void> | undefined;
 
@@ -565,8 +576,11 @@ export class BoundedContext {
       snapshot,
       commandBus,
       eventBus,
+      systemEventBus,
       stand,
+      systemStand,
       registry,
+      systemSpec,
       storageFactory,
       repositories,
       deliveryStrategy,
@@ -576,8 +590,11 @@ export class BoundedContext {
         snapshot,
         commandBus,
         eventBus,
+        systemEventBus,
         stand,
+        systemStand,
         registry,
+        systemSpec,
         storageFactory,
         repositories,
         deliveryStrategy,
@@ -602,8 +619,11 @@ export class BoundedContext {
     snapshot: BoundedContextSnapshot,
     commandBus: CommandBus,
     eventBus: EventBus,
+    systemEventBus: EventBus,
     stand: Stand,
+    systemStand: Stand,
     subscriptionRegistry: StandSubscriptionRegistry,
+    systemSpec: ContextSpecSnapshot,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
@@ -616,7 +636,9 @@ export class BoundedContext {
     this.#snapshot = ContextParts.cloneContextSnapshot(snapshot);
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
+    this.#systemEventBus = systemEventBus;
     this.#stand = stand;
+    this.#systemStand = systemStand;
     this.#subscriptionRegistry = subscriptionRegistry;
     this.#storageFactory = storageFactory;
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(deliveryStrategy);
@@ -649,7 +671,7 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
-    contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot));
+    contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot, systemSpec));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
     contextSubscriptionRegistries.set(this, subscriptionRegistry);
@@ -666,7 +688,12 @@ export class BoundedContext {
     );
     try {
       this.#registerRepositories(repositories);
-      standAccess.startSubscriptions(this.#stand, this.#subscriptionRegistry, this.#eventBus);
+      standAccess.startSubscriptions(
+        this.#stand,
+        this.#subscriptionRegistry,
+        this.#eventBus,
+        this.#systemEventBus,
+      );
     } catch (error) {
       try {
         ContextParts.cleanupFailedContext(this, tenantIndex);
@@ -723,6 +750,10 @@ export class BoundedContext {
       registerEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#eventBus, [schema]);
       },
+      registerSystemEventSchema: (schema) => {
+        eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
+      },
+      postSystemEventFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
       onPostCommand: (command) => commandBusAccess.postInternal(this.#commandBus, command),
       recordDispatchFailure: (event, error) => {
         this.#recordDispatchFailure(event, error);
@@ -958,6 +989,13 @@ export class BoundedContext {
     );
     await ContextParts.closeContextPart(() => this.#stand.close(), errors);
     await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
+    eventBusAccess.beginClose(this.#systemEventBus);
+    await ContextParts.closeContextPart(() => eventBusAccess.drain(this.#systemEventBus), errors);
+    await ContextParts.closeContextPart(() => this.#systemStand.close(), errors);
+    await ContextParts.closeContextPart(
+      () => eventBusAccess.finishClose(this.#systemEventBus),
+      errors,
+    );
     await ContextParts.closeContextPart(() => this.#subscriptionRegistry.close(), errors);
     await ContextParts.closeContextPart(() => {
       ContextParts.requireTenantIndex(this).close();
@@ -1085,6 +1123,7 @@ export class BoundedContextBuilder {
   #storageFactory: StorageFactory | undefined;
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
   #subscriptionLimit: number | undefined;
+  #persistSystemEvents = false;
   #generatedRegistryRoot: string | URL | undefined;
 
   /**
@@ -1236,6 +1275,19 @@ export class BoundedContextBuilder {
   }
 
   /**
+   * Persists internal system events in the paired System Context storage.
+   *
+   * System events are forgotten by default. Enabling this option does not put
+   * them into the domain EventStore.
+   *
+   * @returns Returns this builder for further configuration.
+   */
+  persistSystemEvents(): this {
+    this.#persistSystemEvents = true;
+    return this;
+  }
+
+  /**
    * Sets a complete custom registry and transfers it to the first build attempt.
    *
    * The built context closes the registry. A failed first build also begins its
@@ -1341,7 +1393,9 @@ export class BoundedContextBuilder {
 
     const registeredRepositories = [...repositories];
     let eventStore: EventStore | undefined;
+    let systemEventStore: EventStore | undefined;
     let stand: Stand | undefined;
+    let systemStand: Stand | undefined;
     try {
       ContextParts.preflightRepositories(registeredRepositories);
       const commandBus = new CommandBus([
@@ -1361,6 +1415,18 @@ export class BoundedContextBuilder {
         context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
+      const systemSpec = ContextParts.createSystemSpec(
+        this.#specSnapshot,
+        this.#persistSystemEvents,
+      );
+      systemEventStore = systemSpec.storesEvents
+        ? new EventStore(ContextParts.createStorageContext(systemSpec), storageFactory)
+        : undefined;
+      const systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
+      systemStand = new Stand({
+        context: ContextParts.createStorageContext(systemSpec),
+        storageFactory,
+      });
       registry ??= new StorageSubscriptionRegistry(
         ContextParts.createSubscriptionStorageContext(this.#specSnapshot),
         storageFactory,
@@ -1370,8 +1436,11 @@ export class BoundedContextBuilder {
         this.#specSnapshot,
         commandBus,
         eventBus,
+        systemEventBus,
         stand,
+        systemStand,
         registry,
+        systemSpec,
         storageFactory,
         registeredRepositories,
         this.#deliveryStrategy,
@@ -1379,6 +1448,10 @@ export class BoundedContextBuilder {
     } catch (error) {
       void registry?.close().catch(() => undefined);
       void stand?.close().catch(() => undefined);
+      void systemStand?.close().catch(() => undefined);
+      if (systemEventStore !== undefined) {
+        ContextParts.closeEventStore(systemEventStore, error);
+      }
       if (eventStore !== undefined) {
         ContextParts.closeEventStore(eventStore, error);
       }
@@ -1560,8 +1633,11 @@ const ContextParts = Object.freeze({
     specSnapshot: ContextSpecSnapshot,
     commandBus: CommandBus,
     eventBus: EventBus,
+    systemEventBus: EventBus,
     stand: Stand,
+    systemStand: Stand,
     registry: StandSubscriptionRegistry,
+    systemSpec: ContextSpecSnapshot,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
@@ -1574,8 +1650,11 @@ const ContextParts = Object.freeze({
       },
       commandBus,
       eventBus,
+      systemEventBus,
       stand,
+      systemStand,
       registry,
+      systemSpec,
       storageFactory,
       repositories,
       deliveryStrategy,
@@ -1680,14 +1759,21 @@ const ContextParts = Object.freeze({
     });
   },
 
-  createSystemPairing(snapshot: BoundedContextSnapshot): SystemPairingSnapshot {
+  createSystemSpec(domainSpec: ContextSpecSnapshot, storesEvents: boolean): ContextSpecSnapshot {
+    return Object.freeze({
+      name: ContextParts.createBoundedContextName(`${domainSpec.name.value}_System`),
+      multitenant: domainSpec.multitenant,
+      storesEvents,
+    });
+  },
+
+  createSystemPairing(
+    snapshot: BoundedContextSnapshot,
+    systemSpec: ContextSpecSnapshot,
+  ): SystemPairingSnapshot {
     return Object.freeze({
       domain: ContextParts.cloneContextSnapshot(snapshot),
-      system: Object.freeze({
-        name: ContextParts.createBoundedContextName(`${snapshot.name.value}_System`),
-        multitenant: snapshot.spec.multitenant,
-        storesEvents: false,
-      }),
+      system: ContextParts.cloneSpecSnapshot(systemSpec),
     });
   },
 
@@ -2171,6 +2257,8 @@ const ContextParts = Object.freeze({
       dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
       postEventFollowUp: registration.postEventFollowUp,
       registerEventSchema: registration.registerEventSchema,
+      registerSystemEventSchema: registration.registerSystemEventSchema,
+      postSystemEventFollowUp: registration.postSystemEventFollowUp,
       onPostCommand: registration.onPostCommand,
       recordDispatchFailure: registration.recordDispatchFailure,
     });

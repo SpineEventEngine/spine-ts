@@ -95,7 +95,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("renders a masked matching state then a no-longer-matching state from the local EventBus", async () => {
-    const bus = createBus();
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const subscription = create(SubscriptionSchema, {
       topic: {
@@ -162,7 +162,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("matches EITHER criteria after an ID filter and leaves an explicit empty mask unprojected", async () => {
-    const bus = createBus();
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observer = SubscriptionObservers.observeSubscription(
       create(SubscriptionSchema, {
@@ -220,7 +220,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("suppresses state delivery for unsupported, valueless, and unresolved filters", async () => {
-    const bus = createBus();
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const filters = [
       create(FilterSchema, {
@@ -279,7 +279,7 @@ describe("SubscriptionObservers", () => {
       { schema: Int64ValueSchema, value: 9n, rendered: Int64ValueSchema },
       { schema: BytesValueSchema, value: new Uint8Array([1, 2]), rendered: BytesValueSchema },
     ] as const;
-    const bus = createBus(cases.map(({ schema }) => schema));
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observers = cases.map(({ schema }) =>
       SubscriptionObservers.observeSubscription(
@@ -310,7 +310,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("matches raw Any and byte entity IDs by exact bytes while rejecting unequal values", async () => {
-    const bus = createBus([StringValueSchema]);
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const anyId = create(AnySchema, {
       typeUrl: "type.googleapis.com/example.UnknownId",
@@ -358,7 +358,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("ignores state-change envelopes with a wrong tenant, state type, or malformed payload", async () => {
-    const bus = createBus();
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observer = SubscriptionObservers.observeSubscription(
       create(SubscriptionSchema, {
@@ -453,7 +453,6 @@ describe("SubscriptionObservers", () => {
         context: tenantContext("tenant-b"),
       }),
     );
-    await postStateChange(bus, createState("task-1", "State event", 1), undefined, "tenant-a");
     await bus.post(source);
 
     expect(received).toHaveLength(1);
@@ -522,14 +521,16 @@ describe("SubscriptionObservers", () => {
   });
 });
 
+function createSystemBus(): EventBus {
+  const bus = eventBusAccess.createSystemBus(undefined);
+  eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+  return bus;
+}
+
 function createBus(schemas: readonly MessageSchema[] = []): EventBus {
   const storage = new InMemoryStorageFactory();
   const bus = new EventBus(new EventStore({ name: "Observer", multitenant: false }, storage));
-  eventBusAccess.registerSchemas(bus, [
-    EntityLog.EntityStateChangedSchema,
-    ProjectionStateSchema,
-    ...schemas,
-  ]);
+  eventBusAccess.registerSchemas(bus, [ProjectionStateSchema, ...schemas]);
   return bus;
 }
 

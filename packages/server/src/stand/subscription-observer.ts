@@ -92,9 +92,10 @@ export class SubscriptionObservers {
    */
   static observeSubscription(
     subscription: Subscription,
-    eventBus: EventBus | undefined,
+    domainEventBus: EventBus | undefined,
     findState: (typeUrl: string) => StandObservedState | undefined,
     onUpdate: (update: SubscriptionUpdate) => void,
+    systemEventBus: EventBus | undefined = domainEventBus,
   ): StandSubscription | EventSubscription | undefined {
     const target = subscription.topic?.target;
     const typeUrl = target?.type;
@@ -102,9 +103,9 @@ export class SubscriptionObservers {
     const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     const state = findState(typeUrl);
     if (state !== undefined) {
-      if (eventBus === undefined) return undefined;
+      if (systemEventBus === undefined) return undefined;
       const render = SubscriptionObservers.#createStateRenderer(subscription, state);
-      return eventBusAccess.subscribe(eventBus, TypeUrls.derive(EntityLog.EntityStateChangedSchema), {
+      return eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityStateChangedSchema), {
         onEvent(event) {
           const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
           if (update !== undefined) {
@@ -114,8 +115,8 @@ export class SubscriptionObservers {
         },
       });
     }
-    if (eventBus === undefined) return undefined;
-    return eventBusAccess.subscribe(eventBus, typeUrl, {
+    if (domainEventBus === undefined) return undefined;
+    return eventBusAccess.subscribe(domainEventBus, typeUrl, {
       onEvent(event) {
         if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId)
           return;
