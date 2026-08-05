@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   StandCapacityError,
   StorageSubscriptionRegistry,
+  type StandSubscriptionEntry,
   type StandSubscriptionRegistry,
 } from "../../src/index.js";
 
@@ -123,9 +124,9 @@ describe("provider fixture disposal", () => {
   });
 });
 
-function requiredId(value: Subscription): SubscriptionId {
+function requiredId(value: StandSubscriptionEntry["subscription"]): SubscriptionId {
   if (value.id === undefined) throw new Error("Expected a subscription ID.");
-  return value.id;
+  return id(value.id.value);
 }
 
 async function providerFactory(): Promise<StorageFactory> {

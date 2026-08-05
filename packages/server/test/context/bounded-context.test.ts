@@ -1600,7 +1600,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("does not strand earlier repositories when later storage opening fails", () => {
-    const storageFactory = new FailingStorageFactory(5, ProjectionStateSchema.typeName);
+    const storageFactory = new FailingStorageFactory(6, ProjectionStateSchema.typeName);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
@@ -1632,7 +1632,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("closes every prepared repository storage when cleanup also fails", () => {
-    const storageFactory = new FailingStorageFactory(6, ProcessManagerStateSchema.typeName, [4]);
+    const storageFactory = new FailingStorageFactory(7, ProcessManagerStateSchema.typeName, [5]);
     const aggregateRepository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
@@ -1707,7 +1707,7 @@ describe("BoundedContext assembly", () => {
   });
 
   it("closes tenant-index storage if repository registration fails", () => {
-    const storageFactory = new FailingStorageFactory(5, AggregateStateSchema.typeName);
+    const storageFactory = new FailingStorageFactory(6, AggregateStateSchema.typeName);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
@@ -1788,7 +1788,7 @@ describe("BoundedContext assembly", () => {
         ),
       ).rejects.toThrow("Stand subscription capacity of 1 is exhausted.");
       expect(registry.persistent).toBe(true);
-      expect(storageFactory.creations).toHaveLength(3);
+      expect(storageFactory.creations).toHaveLength(4);
     } finally {
       await context.close();
     }

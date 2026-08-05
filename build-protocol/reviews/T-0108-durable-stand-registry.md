@@ -456,3 +456,10 @@ The documentation check found only one stale snippet comment calling `get()`'s
 result a fully frozen copy. The deterministic record-only correction now calls
 it an isolated snapshot, matching the already-correct surrounding byte-array
 qualification; it does not reopen another review lane.
+
+Cheap preflight corrections were deterministic test-contract updates only: a
+readonly public entry now reconstructs its generated ID in the provider fixture,
+and Bounded Context storage fault/count expectations include the built-in fixed
+staging handle. They do not alter reviewed production behavior or reopen a
+specialist concern. The corrected preflight passed six files / 273 tests and all
+mandatory deterministic repository gates recorded in the work log.
