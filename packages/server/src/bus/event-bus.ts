@@ -29,8 +29,17 @@ const eventBusDrainers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
 const forgettingBus: unique symbol = Symbol("forgetting-bus");
+const forgettingBuses = new WeakSet<EventBus>();
 
 interface EventBusAccess {
+  // prettier-ignore
+
+  /**
+   * Assembles a package-internal bus that owns no event store.
+   *
+   * @param dispatchers the initial dispatchers to register.
+   * @returns the assembled forgetting bus.
+   */
   createForgettingBus(dispatchers?: Iterable<EventDispatcher>): EventBus;
   postStored(eventBus: EventBus, event: Event): Promise<void>;
   postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void>;
@@ -72,7 +81,7 @@ export class EventBus {
    * @param dispatchers the dispatchers to register.
    */
   constructor(eventStore: EventStore, dispatchers: Iterable<EventDispatcher> = []) {
-    const ownedStore = eventStore as EventStore | typeof forgettingBus;
+    const ownedStore = EventBus.#requireEventStore(eventStore);
 
     this.#eventStore = ownedStore === forgettingBus ? undefined : ownedStore;
     this.#started = this.#runtime.start();
@@ -167,7 +176,7 @@ export class EventBus {
 
     const dispatchers = this.#registry.find(typeUrl);
 
-    if (this.#eventStore === undefined) {
+    if (forgettingBuses.has(this)) {
       this.#validate(event, typeUrl);
       await this.#accept(event, dispatchers);
 
@@ -178,7 +187,12 @@ export class EventBus {
       return;
     }
 
-    const stored = await this.#eventStore.acceptThenAppend(event, async (accepted) => {
+    const eventStore = this.#eventStore;
+    if (eventStore === undefined) {
+      throw new Error("EventBus requires an EventStore.");
+    }
+
+    const stored = await eventStore.acceptThenAppend(event, async (accepted) => {
       this.#validate(accepted, typeUrl);
       await this.#accept(accepted, dispatchers);
     });
@@ -369,6 +383,14 @@ export class EventBus {
       errors.push(error);
     }
   }
+
+  static #requireEventStore(eventStore: unknown): EventStore | typeof forgettingBus {
+    if (eventStore === undefined) {
+      throw new TypeError("EventBus requires an EventStore.");
+    }
+
+    return eventStore as EventStore | typeof forgettingBus;
+  }
 }
 
 /**
@@ -418,15 +440,10 @@ interface EventSubscriberRecord {
  * @internal
  */
 export const eventBusAccess: EventBusAccess = Object.freeze({
-  /**
-   * Assembles a package-internal bus that owns no event store.
-   *
-   * @param dispatchers the initial dispatchers to register.
-   * @returns the assembled forgetting bus.
-   * @internal
-   */
   createForgettingBus(dispatchers: Iterable<EventDispatcher> = []): EventBus {
-    return new EventBus(forgettingBus as never, dispatchers);
+    const eventBus = new EventBus(forgettingBus as never, dispatchers);
+    forgettingBuses.add(eventBus);
+    return eventBus;
   },
 
   postStored(eventBus: EventBus, event: Event): Promise<void> {

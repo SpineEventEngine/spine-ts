@@ -176,6 +176,10 @@ describe("EventBus", () => {
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
   });
 
+  it("rejects untyped construction without an EventStore", () => {
+    expect(() => new EventBus(undefined as never)).toThrow("EventBus requires an EventStore.");
+  });
+
   it("forgets events across assembly, posting, and close without event storage", async () => {
     const observed: string[] = [];
     const storage = observeEventStoreAccess();

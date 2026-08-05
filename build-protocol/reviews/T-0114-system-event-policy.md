@@ -1,6 +1,6 @@
 # T-0114 Review Log
 
-Status: Wave 1 correction batch verified; targeted re-review pending
+Status: Final targeted correction verified; re-review and integration pending
 
 ## Scope
 
@@ -19,10 +19,10 @@ events, unchanged public storing construction, and no accidental public API.
 
 | Concern                 | Agent and explicitly dispatched profile                  | Status                                                                                                       |
 | ----------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Style/maintainability   | `/root/t0114_style`; `gpt-5.6-terra` / high              | P2 findings accepted.                                                                                        |
+| Style/maintainability   | `/root/t0114_style`; `gpt-5.6-terra` / high              | Clean after targeted re-review.                                                                              |
 | Documentation           | Existing documentation reviewer; `gpt-5.6-luna` / medium | N/A: no public prose or user workflow changed; deterministic TSDoc checks cover the narrow internal wording. |
-| TypeScript/API docs     | `/root/t0114_api`; `gpt-5.6-terra` / high                | P2 finding accepted.                                                                                         |
-| Performance/reliability | `/root/t0114_reliability`; `gpt-5.6-terra` / high        | P1 and P2 findings accepted.                                                                                 |
+| TypeScript/API docs     | `/root/t0114_api`; `gpt-5.6-terra` / high                | Final P2 correction in progress.                                                                             |
+| Performance/reliability | `/root/t0114_reliability`; `gpt-5.6-terra` / high        | Final P1 correction in progress.                                                                             |
 
 Every relevant dispatch must pass model and reasoning explicitly. Actual
 runtime metadata or the immutable configured role/profile limitation must be
@@ -86,3 +86,33 @@ concerns reopen. Documentation remains N/A.
 - Targeted re-review remains required for style, TypeScript/API, and
   reliability. Documentation remains N/A because public prose and workflows
   did not change.
+
+## Targeted Re-review Result
+
+- Style/maintainability is clean with no P0-P2 findings.
+- Reliability accepted the storage-free factory and ordering/failure behavior,
+  then found one P1: the implementation used absent `#eventStore` as its mode
+  discriminator, allowing untyped JavaScript `new EventBus(undefined)` to
+  select forgetting without the internal factory. The final correction must
+  retain a separate private mode marker and prove invalid public construction
+  cannot create a forgetting bus.
+- TypeScript/API accepted public signature/export isolation and subscriber
+  wording, then found one P2: the factory contract TSDoc belongs on the
+  `EventBusAccess` interface declaration so internal consumers and declarations
+  receive it.
+- These findings return as one final targeted correction batch. Only API and
+  reliability reopen afterward; style remains clean.
+
+## Final Targeted Correction Verification
+
+- P1 reliability correction: forgetting mode now uses a private WeakSet marker
+  set only by the sentinel/internal factory. The public constructor explicitly
+  rejects untyped `undefined`, so it cannot become a forgetting bus.
+- P2 TypeScript/API correction: forgetting-factory TSDoc is on the
+  `EventBusAccess` interface declaration and removed from the object literal.
+- Focused evidence: RED was 1 expected failure in 39 tests; GREEN is 39/39
+  tests passing. Changed-source coverage is 96.81% statements, 91.66%
+  branches, 98.41% functions, and 97.05% lines.
+- Build/tooling typechecks, focused lint, TSDoc, TypeDoc/export,
+  generated-clean, format, and diff checks were run. Reliability and API
+  re-review remain pending.

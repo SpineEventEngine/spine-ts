@@ -1,6 +1,6 @@
 # T-0114: EventBus Persistence Policy
 
-Status: Review corrections verified; re-review and integration pending
+Status: Final targeted review correction verified; re-review and integration pending
 
 ## Objective
 
@@ -111,3 +111,13 @@ dispatchers?)` remains the storing construction path.
   failure suppression.
 - Changed-source coverage: 97.15% statements, 92.64% branches, 98.38%
   functions, and 97.43% lines for `packages/server/src/bus/event-bus.ts`.
+
+## Final Targeted Correction
+
+- Forgetting mode uses a private WeakSet marker set only by the private
+  sentinel/internal factory. Untyped `new EventBus(undefined)` rejects and
+  cannot select forgetting mode.
+- The factory contract TSDoc is attached to the `EventBusAccess` interface
+  declaration, while the object-literal implementation remains undocumented.
+- Focused verification: 39 EventBus tests pass; changed-source coverage is
+  96.81% statements, 91.66% branches, 98.41% functions, and 97.05% lines.
