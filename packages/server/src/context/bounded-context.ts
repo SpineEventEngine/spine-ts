@@ -1487,19 +1487,33 @@ export class BoundedContextBuilder {
         this.#deliveryStrategy,
       );
     } catch (error) {
-      runtime?.abortClose();
-      if (runtime === undefined) void registry?.close().catch(() => undefined);
-      void stand?.close().catch(() => undefined);
-      void systemStand?.close().catch(() => undefined);
-      if (systemEventBus !== undefined) {
-        eventBusAccess.abortClose(systemEventBus);
-      } else if (systemEventStore !== undefined) {
-        ContextParts.closeEventStore(systemEventStore, error);
+      const cleanupErrors: unknown[] = [];
+      ContextParts.attemptCleanup(() => runtime?.abortClose(), cleanupErrors);
+      if (runtime === undefined) {
+        ContextParts.attemptCleanup(
+          () => void registry?.close().catch(() => undefined),
+          cleanupErrors,
+        );
       }
-      if (eventBus !== undefined) {
-        eventBusAccess.abortClose(eventBus);
-      } else if (eventStore !== undefined) {
-        ContextParts.closeEventStore(eventStore, error);
+      ContextParts.attemptCleanup(() => void stand?.close().catch(() => undefined), cleanupErrors);
+      ContextParts.attemptCleanup(
+        () => void systemStand?.close().catch(() => undefined),
+        cleanupErrors,
+      );
+      ContextParts.attemptCleanup(() => {
+        if (systemEventBus !== undefined) eventBusAccess.abortClose(systemEventBus);
+        else if (systemEventStore !== undefined)
+          ContextParts.closeEventStore(systemEventStore, error);
+      }, cleanupErrors);
+      ContextParts.attemptCleanup(() => {
+        if (eventBus !== undefined) eventBusAccess.abortClose(eventBus);
+        else if (eventStore !== undefined) ContextParts.closeEventStore(eventStore, error);
+      }, cleanupErrors);
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...cleanupErrors],
+          "Bounded Context build failed during cleanup.",
+        );
       }
       throw error;
     }
@@ -1661,6 +1675,13 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
+  attemptCleanup(work: () => void, errors: unknown[]): void {
+    try {
+      work();
+    } catch (error) {
+      errors.push(error);
+    }
+  },
   flattenErrors(errors: readonly unknown[]): unknown[] {
     return errors.flatMap((error) =>
       error instanceof AggregateError ? ContextParts.flattenErrors(error.errors) : [error],

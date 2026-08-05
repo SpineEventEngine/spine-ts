@@ -34,7 +34,7 @@ export class SubscriptionRuntime {
   readonly #attachments = new Map<string, LocalSubscriptionAttachment>();
   #tail: Promise<void> = Promise.resolve();
   #timer: ReturnType<typeof setInterval> | undefined;
-  #reconciliation: Promise<void> | undefined;
+  #timerReconciliation: Promise<void> | undefined;
   #closing = false;
   #closed: Promise<void> | undefined;
 
@@ -67,7 +67,7 @@ export class SubscriptionRuntime {
   start(): void {
     if (this.#timer !== undefined || this.#closing) return;
     void this.reconcile().catch(() => undefined);
-    this.#timer = setInterval(() => void this.reconcile().catch(() => undefined), 10_000);
+    this.#timer = setInterval(() => void this.#reconcileTimer().catch(() => undefined), 10_000);
     this.#timer.unref();
   }
 
@@ -100,7 +100,6 @@ export class SubscriptionRuntime {
    * @returns Resolves after the accepted snapshot is reconciled.
    */
   reconcile(): Promise<void> {
-    if (this.#reconciliation !== undefined) return this.#reconciliation;
     const cycle = this.#tail.then(async () => {
       if (this.#closing) return;
       await this.#registry.cleanup();
@@ -116,10 +115,15 @@ export class SubscriptionRuntime {
       for (const id of this.#attachments.keys()) if (!seen.has(id)) this.remove(id);
     });
     this.#tail = cycle.catch(() => undefined);
-    this.#reconciliation = cycle.finally(() => {
-      this.#reconciliation = undefined;
+    return cycle;
+  }
+
+  #reconcileTimer(): Promise<void> {
+    if (this.#timerReconciliation !== undefined) return this.#timerReconciliation;
+    this.#timerReconciliation = this.reconcile().finally(() => {
+      this.#timerReconciliation = undefined;
     });
-    return this.#reconciliation;
+    return this.#timerReconciliation;
   }
 
   /**
@@ -188,8 +192,13 @@ export class SubscriptionRuntime {
 
   async #finishClose(): Promise<void> {
     const errors: unknown[] = [];
-    await SubscriptionRuntime.#closePart(() => this.drainClose(), errors);
-    await SubscriptionRuntime.#closePart(() => this.#registry.close(), errors);
+    await Promise.all([
+      SubscriptionRuntime.#closePart(() => this.drainClose(), errors),
+      SubscriptionRuntime.#closePart(async () => {
+        await this.#tail;
+        await this.#registry.close();
+      }, errors),
+    ]);
     if (errors.length > 0) {
       throw new AggregateError(errors, "Subscription runtime close failed.");
     }
@@ -215,7 +224,7 @@ export class SubscriptionRuntime {
 
   async #abortClose(): Promise<void> {
     this.beginClose();
-    const registryClose = this.#registry.close();
+    const registryClose = SubscriptionRuntime.#closeThunk(() => this.#registry.close());
     await Promise.allSettled([this.drainClose(), registryClose]);
   }
 
@@ -275,6 +284,10 @@ export class SubscriptionRuntime {
     } catch (error) {
       errors.push(error);
     }
+  }
+
+  static async #closeThunk(work: () => Promise<void>): Promise<void> {
+    await work();
   }
 
   #notify(id: string, update: SubscriptionUpdate): void {

@@ -70,6 +70,7 @@ describe("SubscriptionRuntime", () => {
 
 class GatedCleanupRegistry extends InMemorySubscriptionRegistry {
   cleanupCalls = 0;
+  #gated = true;
   #release: (() => void) | undefined;
   #started: (() => void) | undefined;
   readonly cleanupStarted = new Promise<void>((resolve) => {
@@ -82,6 +83,8 @@ class GatedCleanupRegistry extends InMemorySubscriptionRegistry {
 
   override async cleanup() {
     this.cleanupCalls++;
+    if (!this.#gated) return await super.cleanup();
+    this.#gated = false;
     this.#started?.();
     await new Promise<void>((resolve) => {
       this.#release = resolve;

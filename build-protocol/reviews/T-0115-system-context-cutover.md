@@ -172,3 +172,16 @@ activation guarantees. Style and reliability independently confirmed item 2.
 - Expected and explicitly dispatched reasoning: `medium`.
 - Runtime self-introspection is unavailable; the immutable configured role and
   explicit profile are the available metadata.
+
+## Second Accepted Correction Outcome — 2026-08-05
+
+- Implementer: `/root/t0115_terminal_impl`, explicitly dispatched
+  `gpt-5.6-terra` / medium. Runtime self-introspection is unavailable; no
+  visible profile mismatch occurred.
+- Timer ticks now coalesce independently, while explicit reconciliation remains
+  queued behind accepted work. Cleanup catches each synchronous abort failure,
+  retains the original construction failure first, and attempts every remaining
+  owner. Runtime terminal close starts drain and registry-close thunks without
+  allowing a synchronous registry throw to suppress drain.
+- Focused evidence: six affected test files passed 266 tests; server and tooling
+  typechecks, changed-file ESLint, TSDoc, Prettier, and diff checks passed.
