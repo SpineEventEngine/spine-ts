@@ -438,16 +438,18 @@ rejection updates redact rejected-command payload forms and throwable stack;
 internal generated handlers retain full defensive context. Single-tenant
 subscriptions reject tenant options; multitenant subscriptions require
 `tenantId`; state and event delivery are scoped to that tenant scope. Activation
-and cancellation are keyed by subscription ID: unknown, canceled, expired, and
-already-active activations complete without updates; confirmed absence returns
-`OK`, concurrent same-ID cancellation within one `SpineServices` instance
-shares one exact outcome, and foreign active ownership returns `ABORTED`.
-Cleanup is idempotent across cancel, stream
-finalization, inactive expiry, and queue-limit closure. Direct Stand subscriber
-sets, active service delivery handles, queued updates, Stand version metadata,
-and in-memory storage adapter backing data are local process state; this implementation
-does not persist subscription positions, replay missed updates, coordinate
-cross-process stream ownership, or recover active subscriptions after restart.
+and cancellation are keyed by subscription ID. Activating a missing or expired
+definition completes without updates; an active definition is retained without
+creating a second local delivery. Cancellation physically deletes the shared
+definition, and concurrent same-ID cancellation within one `SpineServices`
+instance shares one outcome. Each Stand node reconciles a bounded complete
+registry snapshot every 10 seconds, attaches only its own listeners for active
+definitions, and detaches listeners removed from that snapshot. Cleanup is
+idempotent across cancellation, stream finalization, expired-pending cleanup,
+and queue-limit closure. Active service delivery handles and their queued
+updates are local process state: this implementation does not persist stream
+positions, replay missed updates, coordinate cross-process stream ownership, or
+recover active streams after restart.
 
 The command service error contract remains intentionally small.
 `CommandBus` validates each accepted command payload with the existing core

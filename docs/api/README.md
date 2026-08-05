@@ -29,8 +29,8 @@ set-once transition validation, explicit handler metadata APIs,
 command/event bus exports, the server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services with durable inactive subscription recovery
-over the same storage factory, a small local `Server` lifecycle owner for real
+command/query/subscription services with storage-backed Stand subscription
+definitions and local active streams, a small local `Server` lifecycle owner for real
 Connect/gRPC-compatible services, `@spine-event-engine/transport`
 contracts, `@spine-event-engine/storage` contracts, and the minimal
 `@spine-event-engine/testing` BlackBox test boundary, optional Datastore storage, and
@@ -355,18 +355,25 @@ ordering returns `INVALID_QUERY`. Use proto column names such as
 Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
 with a positive value but without ordering, missing criteria, and `include_all = false` return
 `INVALID_QUERY` before reading Stand storage.
-`Subscribe` allocates opaque IDs, validates subscription criteria,
-`Activate` attaches delivery, and `Cancel`/stream finalization release
-in-process handles. Never-activated subscriptions have a configurable inactive
-TTL: it defaults to 30 seconds; non-positive or non-finite values become 1;
-positive finite values are floored; and an effective value above 2,147,483,647
-milliseconds throws synchronously before storage or timer work. Active delivery
-uses a configurable queue limit for slow consumers.
+`Subscribe` allocates an opaque ID, validates criteria, and creates one pending
+definition in the context's Stand registry. `Activate` changes that definition
+to active before attaching this process's delivery; missing or expired
+definitions, and a definition already active for this process, produce no
+updates. `Cancel` and stream finalization release local delivery and physically
+delete the shared definition. Pending definitions expire after 30 seconds;
+active definitions have no framework TTL.
+
+The context builder's built-in registry capacity is from 1 through 100 admitted
+definitions, or the builder may provide a custom registry. Separately,
+`SpineServices.subscriptionLimit` defaults to 100 per service instance and
+bounds active transport streams plus unknown-cancellation work; it is not a
+registry or distributed quota. `SpineServices.queueLimit` defaults to 100
+queued updates per active local stream and closes slow delivery when exhausted.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
 criteria, unsupported comparison operators, event filters, event field masks,
 and unknown subscription field paths with `INVALID_ARGUMENT` before creating an
-inactive record or attaching a listener. State `Target.include_all = true`
+definition or attaching a listener. State `Target.include_all = true`
 delivers every activated update. State `Target.filters` supports an optional ID filter plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
 fields, including nested message fields; missing ID filters match all IDs.

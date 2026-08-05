@@ -67,8 +67,8 @@ merely because their representation differs:
 After source inspection, the strongest TS-specific or TS-over-explicitness
 candidates are generation,
 registration-scoped retirement, parked operational obligations, readiness
-handoff, exact-drain barriers, delivery-attempt summaries, durable subscription
-claim/cancel state, default first-field routing, generated registry discovery,
+handoff, exact-drain barriers, delivery-attempt summaries, subscription-registry
+staging/control/reconciliation, default first-field routing, generated registry discovery,
 and possibly `RecordSpec` column/mask vocabulary. `RecordSpec` itself is not a
 confirmed invention because the JVM has record/storage specifications.
 
@@ -87,9 +87,10 @@ confirmed invention because the JVM has record/storage specifications.
   `server/src/main/kotlin/io/spine/server/route/MessageRouting.kt` has explicit
   default-route replacement and type-based routing; TS should be checked against
   that contract before retaining its first-field policy.
-- **Not established as an invention:** durable subscription claim/cancel state
-  may be a TS persistence encoding for a service concern; it is not a
-  core-jvm equivalent unless the JVM subscription implementation is compared.
+- **Not established as an invention:** subscription-registry staging, control,
+  and reconciliation are internal TS persistence/listener encodings for the
+  shared definition lifecycle. They need focused JVM subscription comparison
+  before being treated as a core difference.
 
 ## Proposed reduction rules
 
