@@ -342,3 +342,53 @@ the memory/MySQL/Datastore provider script 7/7 each. Server/RDBMS typechecks
 and focused TSDoc, cleanup, API/audience docs, ESLint, Prettier, and diff checks
 pass. The Datastore run emits only its existing Filter-object recommendation.
 Security remains N/A: this correction adds no trust boundary or unbounded input.
+
+## Final Stale-Stage Correction Disposition
+
+- Performance/reliability P1 resolved: under the revalidated current control,
+  create settlement exact-CAS removes a mismatched fixed stage, rolls back the
+  current fenced admission, and retries. A deterministic two-owner fake-time
+  regression proves the stale owner cannot claim the fresh result, the final
+  definition is fresh, count/capacity are exact, and the fixed stage is empty.
+- TypeScript/API P1 resolved: `DeepReadonly` preserves `ArrayBuffer` and
+  `ArrayBufferView` leaves as mutable cloned byte views while keeping message
+  object fields readonly. The compile-time regression rejects topic-ID mutation
+  and accepts returned-byte mutation; runtime clone isolation remains covered.
+- Style/documentation P2 resolved: create settlement is split into named staged
+  promotion and committed cleanup helpers; public `create()` TSDoc documents
+  blank ID/topic `TypeError`, and the root reference says the context owns and
+  closes a supplied registry implementation.
+- Fixture cleanup P2 resolved: registry closures and factory closure run through
+  `allSettled`, and all errors are aggregated after every close attempt. A
+  focused seam proves factory close follows a failed registry close.
+- Mechanical evidence: registry 50/50 and provider-fixture 8/8 with a
+  five-second timeout; server/RDBMS TypeScript, focused ESLint, cleanup, TSDoc,
+  API/audience docs, Prettier, and diff checks pass. Live-provider reruns are
+  not claimed by this correction context.
+
+## Final Proof Execution
+
+The existing `implementer` completed the final proof with the explicitly
+assigned immutable profile `gpt-5.6-terra` / `medium`. Runtime
+self-introspection is unavailable on this surface, so the explicit assignment
+and configured role/profile are the available metadata evidence; no visible
+mismatch was exposed.
+
+- The closest stale-stage test passed 1/1 and the complete registry suite
+  passed 50/50, both with the five-second test timeout. The two-owner fake-time
+  interleaving proves old-owner rollback, fresh-control acquisition, and stale
+  stage publication leave exactly the fresh definition, count one, and an empty
+  fixed stage. Settlement revalidates the exact current control before a
+  mismatched-stage CAS eviction, and token/generation matching prevents stale
+  stage data from being promoted.
+- The provider-fixture suite passed 8/8. Its seven registry lifecycle cases
+  passed against memory, MySQL, and Datastore individually; the eighth focused
+  fixture-disposal test proves factory close is attempted after a registry
+  close rejection. The Datastore emulator emitted only its pre-existing Google
+  Filter-object recommendation warning.
+- The MySQL storage-factory suite passed 103/103. Twenty sequential live MySQL
+  conformance executions passed (each 7/7 lifecycle cases plus the fixture
+  disposal proof), with no admission/count recurrence.
+- Server and RDBMS TypeScript builds, focused ESLint, cleanup, TSDoc, API
+  documentation (235 server exports), documentation-audience, Prettier, and
+  `git diff --check` all exited successfully.

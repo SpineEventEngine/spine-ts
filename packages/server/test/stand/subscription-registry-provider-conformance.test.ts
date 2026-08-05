@@ -61,27 +61,67 @@ async function createFixture(): Promise<RegistryFixture> {
     context,
     registry,
     async dispose(): Promise<void> {
+      let cleanupError: unknown;
       try {
         const cleaner = registry();
         for (const entry of await cleaner.snapshot())
           await cleaner.delete(requiredId(entry.subscription), entry.revision);
       } catch (error) {
-        if (!(error instanceof Error) || !error.message.includes("closed")) throw error;
-        const cleaner = registry();
-        for (const entry of await cleaner.snapshot())
-          await cleaner.delete(requiredId(entry.subscription), entry.revision);
+        if (error instanceof Error && error.message.includes("closed")) {
+          try {
+            const cleaner = registry();
+            for (const entry of await cleaner.snapshot())
+              await cleaner.delete(requiredId(entry.subscription), entry.revision);
+          } catch (retryError) {
+            cleanupError = retryError;
+          }
+        } else {
+          cleanupError = error;
+        }
       } finally {
-        await Promise.all([...registries].map(async (value) => await value.close()));
-        await closeFactory(factory);
+        await disposeFixtureResources(registries, factory, cleanupError);
       }
     },
   };
+}
+
+async function disposeFixtureResources(
+  registries: ReadonlySet<{ close(): Promise<void> }>,
+  factory: StorageFactory,
+  cleanupError?: unknown,
+): Promise<void> {
+  const registryResults = await Promise.allSettled(
+    [...registries].map(async (value) => {
+      await value.close();
+    }),
+  );
+  const factoryResult = await Promise.allSettled([closeFactory(factory)]);
+  const errors: unknown[] = cleanupError === undefined ? [] : [cleanupError];
+  for (const result of registryResults)
+    if (result.status === "rejected") errors.push(result.reason);
+  for (const result of factoryResult) if (result.status === "rejected") errors.push(result.reason);
+  if (errors.length > 0) throw new AggregateError(errors, "Stand registry fixture cleanup failed.");
 }
 
 async function closeFactory(factory: StorageFactory): Promise<void> {
   const closable: { close(): void | Promise<void> } = factory;
   await closable.close();
 }
+
+describe("provider fixture disposal", () => {
+  it("attempts factory close after a registry close fails", async () => {
+    let factoryClosed = false;
+    const factory = { close: () => (factoryClosed = true) } as unknown as StorageFactory;
+    const registry = {
+      close: async () => await Promise.reject(new Error("registry close failed")),
+    };
+
+    await expect(disposeFixtureResources(new Set([registry]), factory)).rejects.toThrow(
+      AggregateError,
+    );
+    expect(factoryClosed).toBe(true);
+  });
+});
 
 function requiredId(value: Subscription): SubscriptionId {
   if (value.id === undefined) throw new Error("Expected a subscription ID.");

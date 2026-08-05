@@ -35,11 +35,13 @@ const pendingMilliseconds = 30_000;
 
 type DeepReadonly<Value> = Value extends (...args: never[]) => unknown
   ? Value
-  : Value extends readonly (infer Item)[]
-    ? readonly DeepReadonly<Item>[]
-    : Value extends object
-      ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
-      : Value;
+  : Value extends ArrayBuffer | ArrayBufferView
+    ? Value
+    : Value extends readonly (infer Item)[]
+      ? readonly DeepReadonly<Item>[]
+      : Value extends object
+        ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
+        : Value;
 
 /**
  * A durable Stand subscription definition.
@@ -226,6 +228,7 @@ export interface StandSubscriptionRegistry {
    *
    * @param subscription Defines the subscription to retain.
    * @returns Resolves to the creation result.
+   * @throws TypeError When the subscription ID or topic ID is blank.
    * @throws StandCapacityError When the configured admitted-definition limit is exhausted.
    * @throws StandConflictError When the ID already has different canonical content.
    * @throws Error When the registry is closed or durable data is malformed.
@@ -1025,40 +1028,56 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     operation: ControlOperation,
   ): Promise<void> {
     const staged = await this.#stage.read(stageSlot);
+    if (staged !== undefined && !matchesOperation(staged, operation, "result")) {
+      await this.#discardMismatchedStage(controlRecord, staged);
+      await this.#rollbackCreate(control, controlRecord);
+      return;
+    }
     if (control.state === "staged") {
-      if (staged === undefined) {
-        const remaining = operation.stagedAt + stageRecoveryMilliseconds - Date.now();
-        if (remaining > 0) {
-          await new Promise<void>((resolve) => setTimeout(resolve, remaining));
-          await this.#settleCreate(control, controlRecord, operation);
-          return;
-        }
-        const rolledBack = controlWithOperation(control, undefined, control.count - 1);
-        await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(rolledBack));
-        return;
-      }
-      if (!matchesOperation(staged, operation, "result"))
-        throw new Error("Malformed Stand subscription control record.");
-      const current = await this.#storage.read(operation.id);
-      if (current === undefined) {
-        const currentControl = await this.#control.read(controlSlot);
-        if (currentControl === undefined || !sameAny(currentControl, controlRecord)) return;
-        if (!(await this.#storage.compareAndSet(operation.id, undefined, staged))) return;
+      await this.#promoteStagedCreate(control, controlRecord, operation, staged);
+      return;
+    }
+    await this.#cleanupCommittedCreate(control, controlRecord, operation, staged);
+  }
+
+  async #promoteStagedCreate(
+    control: Control,
+    controlRecord: Any,
+    operation: ControlOperation,
+    staged: StandSubscriptionRecord | undefined,
+  ): Promise<void> {
+    if (staged === undefined) {
+      const remaining = operation.stagedAt + stageRecoveryMilliseconds - Date.now();
+      if (remaining > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, remaining));
         await this.#settleCreate(control, controlRecord, operation);
         return;
       }
-      if (!matchesOperation(current, operation, "result"))
-        throw new Error("Malformed Stand subscription control record.");
-      const committed = controlCommitted(control);
-      if (await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(committed)))
-        await this.#settleCreate(committed, writeControl(committed), operation);
+      await this.#rollbackCreate(control, controlRecord);
       return;
     }
+    const current = await this.#storage.read(operation.id);
+    if (current === undefined) {
+      if (!(await this.#holdsControl(controlRecord))) return;
+      if (!(await this.#storage.compareAndSet(operation.id, undefined, staged))) return;
+      await this.#settleCreate(control, controlRecord, operation);
+      return;
+    }
+    if (!matchesOperation(current, operation, "result"))
+      throw new Error("Malformed Stand subscription control record.");
+    const committed = controlCommitted(control);
+    if (await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(committed)))
+      await this.#settleCreate(committed, writeControl(committed), operation);
+  }
+
+  async #cleanupCommittedCreate(
+    control: Control,
+    controlRecord: Any,
+    operation: ControlOperation,
+    staged: StandSubscriptionRecord | undefined,
+  ): Promise<void> {
     if (staged !== undefined) {
-      if (!matchesOperation(staged, operation, "result"))
-        throw new Error("Malformed Stand subscription control record.");
-      const currentControl = await this.#control.read(controlSlot);
-      if (currentControl === undefined || !sameAny(currentControl, controlRecord)) return;
+      if (!(await this.#holdsControl(controlRecord))) return;
       if (!(await this.#stage.compareAndSet(stageSlot, staged, undefined))) return;
       await this.#settleCreate(control, controlRecord, operation);
       return;
@@ -1071,6 +1090,25 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       controlRecord,
       writeControl(controlWithOperation(control)),
     );
+  }
+
+  async #discardMismatchedStage(
+    controlRecord: Any,
+    staged: StandSubscriptionRecord,
+  ): Promise<void> {
+    if (!(await this.#holdsControl(controlRecord))) return;
+    await this.#stage.compareAndSet(stageSlot, staged, undefined);
+  }
+
+  async #rollbackCreate(control: Control, controlRecord: Any): Promise<void> {
+    if (!(await this.#holdsControl(controlRecord))) return;
+    const rolledBack = controlWithOperation(control, undefined, control.count - 1);
+    await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(rolledBack));
+  }
+
+  async #holdsControl(controlRecord: Any): Promise<boolean> {
+    const current = await this.#control.read(controlSlot);
+    return current !== undefined && sameAny(current, controlRecord);
   }
 
   async #discardOrphanStage(): Promise<void> {

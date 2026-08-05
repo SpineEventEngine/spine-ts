@@ -282,11 +282,16 @@ describe("InMemorySubscriptionRegistry", () => {
   });
 });
 
-function proveSubscriptionEntryIsDeepReadonly(
-  topicId: NonNullable<NonNullable<StandSubscriptionEntry["subscription"]["topic"]>["id"]>,
-): void {
+function proveSubscriptionEntryIsDeepReadonly(entry: StandSubscriptionEntry): void {
+  const topic = entry.subscription.topic;
+  if (topic?.id === undefined) return;
   // @ts-expect-error Public snapshots do not permit mutation of nested subscription fields.
-  topicId.value = "changed";
+  topic.id.value = "changed";
+  const criterion = entry.subscription.topic?.target?.criterion;
+  if (criterion?.case === "filters") {
+    const bytes = criterion.value.idFilter?.id[0]?.value;
+    if (bytes !== undefined) bytes[0] = 7;
+  }
 }
 
 void proveSubscriptionEntryIsDeepReadonly;
@@ -562,6 +567,48 @@ describe("StorageSubscriptionRegistry", () => {
       await expect(
         new StorageSubscriptionRegistry(context, factory, 1).snapshot(),
       ).resolves.toMatchObject([{ subscription: { id: { value: "fresh" } }, revision: 1n }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 5_000);
+
+  it("evicts a stale stage before a fresh owner can settle its fixed slot", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(start);
+    try {
+      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+      const context = { name: "DurableRegistryStaleStageOwner", multitenant: false };
+      const oldOwner = new StorageSubscriptionRegistry(context, factory, 1);
+      const oldHold = factory.hold("create-reservation");
+      const stale = oldOwner.create(subscription("stale"));
+      const staleOutcome = stale.then(
+        () => "created" as const,
+        (error: unknown) => error,
+      );
+      await oldHold.reached.promise;
+
+      const freshOwner = new StorageSubscriptionRegistry(context, factory, 1);
+      const freshHold = factory.hold("create-reservation");
+      const fresh = freshOwner.create(subscription("fresh"));
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(25);
+      await freshHold.reached.promise;
+
+      oldHold.release.resolve(undefined);
+      await Promise.resolve();
+      freshHold.release.resolve(undefined);
+      await vi.runAllTimersAsync();
+
+      expect(await staleOutcome).toBeInstanceOf(StandCapacityError);
+      await expect(fresh).resolves.toMatchObject({
+        kind: "created",
+        entry: { subscription: { id: { value: "fresh" } }, revision: 1n },
+      });
+      await expect(freshOwner.snapshot()).resolves.toMatchObject([
+        { subscription: { id: { value: "fresh" } }, revision: 1n },
+      ]);
+      await expect(readDurableCount(factory, context)).resolves.toBe(1);
+      await expect(readStage(factory, context)).resolves.toBeUndefined();
     } finally {
       vi.useRealTimers();
     }
@@ -859,6 +906,45 @@ async function writeControl(
   );
   try {
     await storage.compareAndSet("control", undefined, record);
+  } finally {
+    storage.close();
+  }
+}
+
+async function readDurableCount(factory: StorageFactory, context: StorageContext): Promise<number> {
+  const storage = factory.createRecordStorage(
+    context,
+    new RecordSpec<string, Any>({
+      schema: AnySchema,
+      storageKey: "spine.server.StandSubscriptionRecord:control",
+      idKind: "string",
+      extractId: () => "control",
+    }),
+  );
+  try {
+    const control = await storage.read("control");
+    if (control === undefined) throw new Error("Expected durable control.");
+    return (JSON.parse(new TextDecoder().decode(control.value)) as { count: number }).count;
+  } finally {
+    storage.close();
+  }
+}
+
+async function readStage(
+  factory: StorageFactory,
+  context: StorageContext,
+): Promise<StandSubscriptionRecord | undefined> {
+  const storage = factory.createRecordStorage(
+    context,
+    new RecordSpec<string, StandSubscriptionRecord>({
+      schema: StandSubscriptionRecords.schema,
+      storageKey: "spine.server.StandSubscriptionRecord:stage",
+      idKind: "string",
+      extractId: () => "stage",
+    }),
+  );
+  try {
+    return await storage.read("stage");
   } finally {
     storage.close();
   }

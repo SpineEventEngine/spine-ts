@@ -52,7 +52,8 @@ at most 25 expired pending definitions and returns its scanned/deleted counts
 plus `more` when another expired page remains. `close()` is idempotent, waits
 for admitted operations, and makes every later registry operation reject as
 closed. A built-in durable registry owns three storage handles: definition,
-control, and fixed staging. A custom registry remains one owned handle.
+control, and fixed staging. The context owns and closes a supplied custom
+registry implementation.
 
 ## Verification
 
