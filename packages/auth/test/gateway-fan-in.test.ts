@@ -175,17 +175,50 @@ describe("gateway fan-in collaborators", () => {
     expect(() => new FanInSubscriptionCreator([creator("one").creator], 10, timeout)).toThrow();
   });
 
-  it.each([new Uint8Array(), new Uint8Array([2, 1]), new Uint8Array([1, 0, 1])])(
-    "rejects malformed aggregate envelopes",
-    async (encoded) => {
-      await expect(
-        new FanInSubscriptionCreator([creator("one").creator]).dispose(
-          { kind: "backend-subscription-envelope", bytes: encoded },
-          new AbortController().signal,
-        ),
-      ).rejects.toThrow(/Invalid subscription fan-in envelope|Gateway backends/u);
-    },
-  );
+  it.each([
+    new Uint8Array(),
+    new Uint8Array([2, 1]),
+    new Uint8Array([1, 0, 1]),
+    new Uint8Array([1, 1]),
+    new Uint8Array([1, 1, 0, 0, 0, 5]),
+    new Uint8Array([1, 1, 0, 0, 0, 0, 9]),
+  ])("rejects malformed aggregate envelopes", async (encoded) => {
+    await expect(
+      new FanInSubscriptionCreator([creator("one").creator]).dispose(
+        { kind: "backend-subscription-envelope", bytes: encoded },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow(/Invalid subscription fan-in envelope|Gateway backends/u);
+  });
+
+  it("continues lifecycle work after a synchronous child failure and reports it", async () => {
+    const first = creator("first", "cancel");
+    const second = creator("second");
+    const backend = await new FanInSubscriptionCreator([first.creator, second.creator]).subscribe(
+      { kind: "subscription-topic", bytes: bytes("topic") },
+      new AbortController().signal,
+    );
+    await expect(
+      new FanInSubscriptionCreator([first.creator, second.creator]).cancel(
+        { wire: { kind: "public-subscription", bytes: new Uint8Array() }, backend },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Subscription fan-in operation failed");
+    expect(first.calls).toContain("cancel");
+    expect(second.calls).toContain("cancel");
+  });
+
+  it("rejects an aggregate envelope with more children than configured", async () => {
+    await expect(
+      new FanInSubscriptionCreator([creator("one").creator]).dispose(
+        {
+          kind: "backend-subscription-envelope",
+          bytes: new Uint8Array([1, 2, 0, 0, 0, 0, 0, 0, 0, 0]),
+        },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("Subscription fan-in operation failed");
+  });
 });
 
 function unary(

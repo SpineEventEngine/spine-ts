@@ -49,6 +49,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BoundedContext,
+  DurableSubscriptionBindings,
   EnvironmentType,
   Server,
   ServerEnvironment,
@@ -105,6 +106,49 @@ describe("Server", () => {
         false,
       );
     }).toThrow("exactly one of baseUrl or baseUrls");
+  });
+
+  it.each([
+    { baseUrls: [123] },
+    { baseUrls: [] },
+    { baseUrls: ["https://same.example.test", "https://same.example.test"] },
+    { baseUrls: ["https://backend.example.test/path"] },
+    { baseUrls: "https://backend.example.test" },
+  ])("rejects malformed standalone backend URL lists", (backend) => {
+    expect(() => {
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend,
+          bindings: inMemoryBindings(),
+        } as unknown as BrowserServerOptions,
+        false,
+      );
+    }).toThrow();
+  });
+
+  it("accepts ordered backend URL lists with topology-fencing bindings", async () => {
+    const bindings = new DurableSubscriptionBindings({
+      storageFactory: new InMemoryStorageFactory(),
+      namespace: "fan-in",
+      nextId: () => "binding",
+      dispose: () => Promise.resolve(),
+      leaseMs: 1,
+      cleanupBatchSize: 1,
+      recordLimit: 1,
+      maxRecordBytes: 1,
+    });
+    BrowserServer.requireDurableBindings(
+      {
+        ...browserGateway(),
+        backend: {
+          baseUrls: ["https://first.example.test", "https://second.example.test"],
+        },
+        bindings,
+      },
+      false,
+    );
+    await bindings.close();
   });
 
   it("rejects production browser bindings before context assembly or listener startup", async () => {
@@ -213,6 +257,28 @@ describe("Server", () => {
         false,
       );
     }).toThrow("sessions");
+  });
+
+  it.each([
+    [{ sessions: { resolve: "invalid" } }, "sessions"],
+    [{ authorize: "invalid" }, "authorization"],
+    [{ contexts: {} }, "context resolution"],
+    [{ contexts: { resolve: () => undefined } }, "context resolution"],
+    [{ contexts: { resolveContext: () => undefined } }, "context resolution"],
+    [{ clock: { now: "invalid" } }, "clock"],
+    [{ fingerprint: "invalid" }, "fingerprint"],
+    [{ bindings: undefined }, "subscription bindings"],
+  ])("rejects malformed standalone collaborator %j", (malformed, expected) => {
+    expect(() => {
+      BrowserServer.requireDurableBindings(
+        {
+          ...browserGateway(),
+          backend: { baseUrl: "https://backend.example.test" },
+          ...malformed,
+        } as unknown as BrowserServerOptions,
+        false,
+      );
+    }).toThrow(expected);
   });
 
   it.each([

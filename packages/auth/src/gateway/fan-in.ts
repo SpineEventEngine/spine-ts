@@ -206,7 +206,9 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
     try {
       const settled = await Promise.allSettled(
         children.map((backend, index) =>
-          operation(FanInValues.child(this.#children, index), backend),
+          Promise.resolve().then(() =>
+            operation(FanInValues.child(this.#children, index), backend),
+          ),
         ),
       );
       const failures: unknown[] = [];
