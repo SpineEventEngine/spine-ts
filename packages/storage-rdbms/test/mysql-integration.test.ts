@@ -1,9 +1,15 @@
 import { createPool, type RowDataPacket } from "mysql2/promise";
 import { createHash } from "node:crypto";
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
-import { RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import { EventStore, RecordColumn, RecordSpec } from "@spine-event-engine/storage";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
@@ -26,6 +32,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       await pool.query("DROP TABLE IF EXISTS `spine_ts_records`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_events`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_states`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_commits`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_current`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_specs`");
     } finally {
@@ -41,6 +48,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
       await pool.query("DROP TABLE IF EXISTS `spine_ts_records`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_events`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_states`");
+      await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_commits`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_current`");
       await pool.query("DROP TABLE IF EXISTS `spine_ts_entity_specs`");
     } finally {
@@ -106,6 +114,119 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
     ]);
     const incompatible = second.createEntityStorage({ ...input, layout: "entity-v2" });
     await expect(incompatible.current.read("task")).rejects.toThrow(/incompatible/i);
+  });
+
+  it("commits complete Entity units atomically and fences retries and conflicts", async () => {
+    const context = { name: "T0109 Atomic Entity", multitenant: false } as const;
+    const input = {
+      context,
+      id: { clone: (id: string) => id, fingerprint: "string", key: (id: string) => id },
+      extractId: () => "task",
+      columns: [],
+      layout: "entity-v1",
+      stateSchema: StringValueSchema,
+      storageKey: "integration.AtomicTask:current",
+    };
+    const factory = await MysqlStorageFactory.create({ url });
+    factories.push(factory);
+    const commits = EntityCommitStorageFactories.create(factory, input);
+    const storage = factory.createEntityStorage(input);
+    const eventStore = new EventStore(context, factory);
+    const event = create(EventSchema, {
+      id: create(EventIdSchema, { value: "atomic-event" }),
+      message: create(AnySchema, { typeUrl: "type.spine.test/AtomicEvent" }),
+    });
+    const unit = {
+      context,
+      entity: input,
+      id: "atomic-source",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "committed" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+      states: [
+        {
+          entityId: "task",
+          state: create(StringValueSchema, { value: "committed" }),
+          version: 1n,
+          createdAt: create(TimestampSchema, { seconds: 1n }),
+        },
+      ],
+      diagnostics: [
+        {
+          entityId: "task",
+          event,
+          producerVersion: 1n,
+          createdAt: create(TimestampSchema, { seconds: 1n }),
+        },
+      ],
+      events: [event],
+    };
+
+    const outcomes = await Promise.all([commits.commit(unit), commits.commit(unit)]);
+    expect(outcomes.filter((outcome) => outcome === "committed")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome === "replayed")).toHaveLength(1);
+    await expect(storage.current.read("task")).resolves.toMatchObject({
+      state: { value: "committed" },
+      version: 1n,
+    });
+    await expect(storage.states.backward("task", 2)).resolves.toHaveLength(1);
+    await expect(storage.events.backward("task", 2)).resolves.toHaveLength(1);
+    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "atomic-event" } }]);
+    await expect(
+      commits.commit({
+        ...unit,
+        next: { ...unit.next, state: create(StringValueSchema, { value: "divergent" }) },
+      }),
+    ).rejects.toThrow(/different content/i);
+    await expect(
+      commits.commit({
+        ...unit,
+        id: "conflicting-source",
+        expected: { ...unit.next, state: create(StringValueSchema, { value: "wrong" }) },
+        next: { ...unit.next, version: 2n },
+        states: [],
+        diagnostics: [],
+        events: [],
+      }),
+    ).resolves.toBe("conflict");
+
+    const duplicate = create(EventSchema, {
+      id: create(EventIdSchema, { value: "already-stored" }),
+      message: create(AnySchema, { typeUrl: "type.spine.test/AtomicEvent" }),
+    });
+    await eventStore.append(duplicate);
+    const firstState = unit.states[0];
+    if (firstState === undefined) {
+      throw new Error("Expected the atomic commit fixture to contain state history.");
+    }
+    await expect(
+      commits.commit({
+        ...unit,
+        id: "rollback-source",
+        entityId: "rollback",
+        next: {
+          ...unit.next,
+          id: "rollback",
+          state: create(StringValueSchema, { value: "rolled-back" }),
+        },
+        states: [
+          {
+            ...firstState,
+            entityId: "rollback",
+            state: create(StringValueSchema, { value: "rolled-back" }),
+          },
+        ],
+        diagnostics: [],
+        events: [duplicate],
+      }),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    await expect(storage.current.read("rollback")).resolves.toBeUndefined();
+    await expect(storage.states.backward("rollback", 2)).resolves.toEqual([]);
   });
 
   it("verifies the lazy entity schema and truncates only strict pre-boundary history", async () => {
@@ -513,7 +634,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         `SELECT value_data FROM \`spine_ts_columns\`
          WHERE scope_key = ? AND tenant_key = ? AND slot_key = ? AND column_name = ?`,
         [
-          CanonicalMysqlValues.encode(["Rollback", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(["Rollback", false, "StringValueSchema:legacy"], 512),
           CanonicalMysqlValues.encode(null, 255),
           CanonicalMysqlValues.encode("constant-slot", 768),
           CanonicalMysqlValues.encode("value", 255),
@@ -553,7 +674,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         "UPDATE `spine_ts_records` SET payload = ? WHERE scope_key = ? AND tenant_key = ? AND slot_key = ?",
         [
           new Uint8Array([255]),
-          CanonicalMysqlValues.encode([context.name, false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode([context.name, false, "StringValueSchema:legacy"], 512),
           CanonicalMysqlValues.encode(null, 255),
           CanonicalMysqlValues.encode("bad", 768),
         ],
@@ -663,7 +784,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
          WHERE scope_key = ? AND tenant_key = ? AND column_name = ? AND value_kind = ? AND value_data = ?
          ORDER BY slot_key ASC`,
         [
-          CanonicalMysqlValues.encode(["Queries", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(["Queries", false, "StringValueSchema:legacy"], 512),
           CanonicalMysqlValues.encode(null, 255),
           CanonicalMysqlValues.encode("state", 255),
           SortableMysqlColumnValue.encode("open").kind,
@@ -839,7 +960,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         `SELECT payload FROM \`spine_ts_records\`
          WHERE scope_key = ? AND tenant_key = ? AND slot_key = ? FOR UPDATE`,
         [
-          CanonicalMysqlValues.encode(["CloseRace", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(["CloseRace", false, "StringValueSchema:legacy"], 512),
           CanonicalMysqlValues.encode(null, 255),
           CanonicalMysqlValues.encode("admitted", 768),
         ],
@@ -1020,7 +1141,7 @@ mysqlDescribe("MySQL Packet 2 storage", () => {
         `SELECT slot_key, value_data FROM \`spine_ts_columns\`
          WHERE scope_key = ? AND tenant_key = ? ORDER BY slot_key ASC`,
         [
-          CanonicalMysqlValues.encode(["BatchRollback", false, StringValueSchema.typeName], 512),
+          CanonicalMysqlValues.encode(["BatchRollback", false, "StringValueSchema:legacy"], 512),
           CanonicalMysqlValues.encode(null, 255),
         ],
       );

@@ -10,10 +10,12 @@ import {
 } from "@spine-event-engine/core";
 import {
   CommandContextSchema,
+  CommandIdSchema,
   CommandSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  MessageIdSchema,
   RejectionEventContextSchema,
   type Command,
   type Event,
@@ -21,18 +23,21 @@ import {
   type Version,
   VersionSchema,
 } from "@spine-event-engine/proto";
+import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import {
-  EventStore,
   RecordColumn,
   type StorageContext,
   type StorageFactory,
 } from "@spine-event-engine/storage";
 import type {
+  EntityRecord,
   EntityEventHistoryPort,
   EntityRecordStorage,
   EntityStateHistoryPort,
   EntityStorageInput,
 } from "@spine-event-engine/storage/internal/entity-history";
+import type { EntityCommitStorage } from "@spine-event-engine/storage/internal/entity-commit";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
 
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
@@ -666,7 +671,10 @@ const repositoryProducedEventSchemas = new WeakMap<RepositoryView, readonly Mess
 const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
 const repositoryEntityInboxTargets = new WeakMap<RepositoryView, EntityInboxTarget>();
 const repositoryProjectionInboxTargets = new WeakMap<RepositoryView, ProjectionInboxTarget>();
-const repositoryProjectionDirect = new WeakMap<RepositoryView, (event: Event) => Promise<void>>();
+const repositoryProjectionDirect = new WeakMap<
+  RepositoryView,
+  (event: Event, commitScope?: string) => Promise<void>
+>();
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
 const repositoryEntityHandles = new WeakMap<RepositoryView, Map<string, { close(): void }>>();
 const entityStateHistoryCaches = new WeakMap<object, { clear(): void }>();
@@ -923,9 +931,14 @@ export interface RepositoryAccess {
    *
    * @param repository The projection repository to dispatch to.
    * @param event The event to dispatch.
+   * @param commitScope The internal rebuild run that scopes commit receipts.
    * @returns A promise that resolves after the projection receives the event.
    */
-  dispatchProjectionDirect(repository: RepositoryView, event: Event): Promise<void>;
+  dispatchProjectionDirect(
+    repository: RepositoryView,
+    event: Event,
+    commitScope?: string,
+  ): Promise<void>;
 
   /**
    * Binds a built runtime to a repository.
@@ -989,14 +1002,18 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
     return repositoryProjectionInboxTargets.get(repository);
   },
 
-  dispatchProjectionDirect(repository: RepositoryView, event: Event): Promise<void> {
+  dispatchProjectionDirect(
+    repository: RepositoryView,
+    event: Event,
+    commitScope?: string,
+  ): Promise<void> {
     const dispatch = repositoryProjectionDirect.get(repository);
 
     if (dispatch === undefined) {
       throw new TypeError("Direct projection dispatch requires a projection Repository instance.");
     }
 
-    return dispatch(event);
+    return dispatch(event, commitScope);
   },
 
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void {
@@ -1060,10 +1077,21 @@ type RepositoryEventSubscribers = NonNullable<
 const inboxDedupMs = 30_000;
 
 interface LoadedAggregate {
+  readonly commits: EntityCommitStorage;
+  readonly current: EntityRecord<unknown, Message> | undefined;
   readonly entity: object;
+  readonly oldState: Message | undefined;
   readonly states: EntityStateHistoryPort<unknown, Message>;
   readonly events: EntityEventHistoryPort<unknown>;
   readonly version: bigint;
+  readonly storageInput: EntityStorageInput<unknown, Message>;
+}
+
+interface LoadedRepositoryEntity {
+  readonly commits: EntityCommitStorage;
+  readonly current: EntityRecord<unknown, Message> | undefined;
+  readonly entity: object;
+  readonly storageInput: EntityStorageInput<unknown, Message>;
 }
 
 class AggregateExecutionSupport {
@@ -1082,10 +1110,14 @@ class AggregateExecutionSupport {
   }
 
   async loadAggregate(entityId: unknown): Promise<LoadedAggregate> {
+    const storageInput = RepositoryStorage.entityStorageInput(
+      this.#repository,
+      this.#storageContext,
+    );
     const storage = RepositoryStorage.openRepositoryEntityStorage(
       this.#repository,
       this.#runtime.storageFactory,
-      RepositoryStorage.entityStorageInput(this.#repository, this.#storageContext),
+      storageInput,
     );
     const current = await standAccess.readCurrent(
       this.#runtime.stand,
@@ -1099,10 +1131,26 @@ class AggregateExecutionSupport {
     RepositoryHistoryInternals.bindEntityHistory(entity, storage, entityId);
 
     return Object.freeze({
+      commits: storage.commits,
+      current:
+        current === undefined
+          ? undefined
+          : {
+              id: entityId,
+              state: clone(this.#repository.stateSchema, current.state as never),
+              version: current.version,
+              archived: current.archived,
+              deleted: current.deleted,
+            },
       entity,
+      oldState:
+        current === undefined
+          ? undefined
+          : clone(this.#repository.stateSchema, current.state as never),
       states: storage.states,
       events: storage.events,
       version: current?.version ?? 0n,
+      storageInput,
     });
   }
 
@@ -1119,31 +1167,21 @@ class AggregateExecutionSupport {
   }
 
   /**
-   * Persists the framework delivery journal separately from the aggregate diagnostic journal.
-   */
-  async appendDeliveryEvents(events: readonly Event[]): Promise<void> {
-    const store = new EventStore(this.#storageContext, this.#runtime.storageFactory);
-    try {
-      await store.appendAll(events);
-    } finally {
-      store.close();
-    }
-  }
-
-  /**
    * Store the current aggregate record before its diagnostic and delivery journals.
    */
   async persistAggregateUpdate(
     loaded: LoadedAggregate,
+    commitId: string,
     entityId: unknown,
     version: bigint,
     events: readonly Event[],
-  ): Promise<void> {
+  ): Promise<boolean> {
     const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
+    const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
     const deferred = await standAccess.deferUpdate(
       this.#runtime.stand,
       this.#repository.stateSchema,
-      RepositoryEntities.repositoryState(loaded.entity) as never,
+      state,
       RepositoryStand.standUpdateOptions(
         this.#storageContext.tenantId,
         create(VersionSchema, { number: RepositorySignals.eventVersionNumber(version) }),
@@ -1151,24 +1189,48 @@ class AggregateExecutionSupport {
       ),
     );
     try {
-      if (RepositoryStorage.historyConfiguration(this.#repository).stateHistory) {
-        await loaded.states.append({
-          entityId,
-          state: RepositoryEntities.repositoryState(loaded.entity) as Message,
+      const createdAt = events[events.length - 1]?.context?.timestamp ?? create(TimestampSchema);
+      const outcome = await loaded.commits.commit({
+        context: this.#storageContext,
+        entity: loaded.storageInput,
+        id: commitId,
+        entityId,
+        ...(loaded.current === undefined ? {} : { expected: loaded.current }),
+        next: {
+          id: entityId,
+          state,
           version,
-          createdAt: events[events.length - 1]?.context?.timestamp ?? create(TimestampSchema),
-        });
-        entityStateHistoryCaches.get(loaded.entity)?.clear();
-      }
-      for (const event of events) {
-        await loaded.events.append({
+          archived: lifecycle.archived,
+          deleted: lifecycle.deleted,
+        },
+        ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
+          ? {
+              states: [
+                {
+                  entityId,
+                  state,
+                  version,
+                  createdAt,
+                },
+              ],
+            }
+          : {}),
+        diagnostics: events.map((event) => ({
           entityId,
           event,
           producerVersion: RepositorySignals.readEventVersion(event),
           createdAt: event.context?.timestamp ?? create(TimestampSchema),
-        });
+        })),
+        events,
+      });
+      if (outcome !== "committed") {
+        deferred.cancel();
+        if (outcome === "conflict") {
+          throw new Error("Concurrent Aggregate state commit conflict.");
+        }
+        return false;
       }
-      await this.appendDeliveryEvents(events);
+      entityStateHistoryCaches.get(loaded.entity)?.clear();
     } catch (error) {
       deferred.cancel();
       throw error;
@@ -1179,6 +1241,7 @@ class AggregateExecutionSupport {
       const event = events[events.length - 1];
       if (event !== undefined) this.#runtime.recordDispatchFailure(event, error);
     }
+    return true;
   }
 
   async appendDiagnosticEvent(
@@ -1199,12 +1262,22 @@ class AggregateExecutionSupport {
    */
   async persistAggregateAndDispatch(
     loaded: LoadedAggregate,
+    commitId: string,
     entityId: unknown,
     version: bigint,
     events: readonly Event[],
     dispatch: (event: Event) => Promise<void>,
+    onPersisted: () => Promise<void> | void,
   ): Promise<() => Promise<void>> {
-    await this.persistAggregateUpdate(loaded, entityId, version, events);
+    const committed = await this.persistAggregateUpdate(
+      loaded,
+      commitId,
+      entityId,
+      version,
+      events,
+    );
+    if (!committed) return () => Promise.resolve();
+    await onPersisted();
     return async () => {
       await Promise.all(
         events.map(async (event) => {
@@ -1348,10 +1421,23 @@ class AggregateCommandExecution {
     const committedVersion = loaded.version + BigInt(events.length);
     return await this.#support.persistAggregateAndDispatch(
       loaded,
+      RepositorySignals.requireCommandId(this.#command).uuid,
       route.entityId,
       committedVersion,
       events,
       (event) => this.#runtime.dispatchStored(event),
+      () => {
+        if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
+        EntityStateChangePublisher.command(
+          this.#runtime,
+          this.#repository,
+          this.#command,
+          route.entityId,
+          loaded.oldState,
+          RepositoryEntities.repositoryState(loaded.entity) as Message,
+          RepositorySignals.eventVersionNumber(committedVersion),
+        );
+      },
     );
   }
 
@@ -1550,10 +1636,23 @@ class AggregateEventExecution {
     if (produced.events.length > 0) {
       const dispatch = await this.#support.persistAggregateAndDispatch(
         loaded,
+        RepositorySignals.requireEventId(this.#event).value,
         entityId,
         loaded.version + BigInt(produced.events.length),
         produced.events,
         (event) => this.#runtime.dispatchStoredFollowUp(event),
+        () => {
+          if (!RepositoryEntities.repositoryChanged(loaded.entity)) return;
+          EntityStateChangePublisher.event(
+            this.#runtime,
+            this.#repository,
+            this.#event,
+            entityId,
+            loaded.oldState,
+            RepositoryEntities.repositoryState(loaded.entity) as Message,
+            RepositorySignals.eventVersionNumber(loaded.version + BigInt(produced.events.length)),
+          );
+        },
       );
       void dispatch();
     }
@@ -1725,6 +1824,7 @@ class ProjectionEventExecution {
   readonly #routing: RepositoryRouting;
   readonly #runtime: RepositoryRuntime;
   readonly #event: Event;
+  readonly #commitScope: string | undefined;
 
   constructor(
     repository: RepositoryView & {
@@ -1733,11 +1833,13 @@ class ProjectionEventExecution {
     routing: RepositoryRouting,
     runtime: RepositoryRuntime,
     event: Event,
+    commitScope?: string,
   ) {
     this.#repository = repository;
     this.#routing = routing;
     this.#runtime = runtime;
     this.#event = event;
+    this.#commitScope = commitScope;
   }
 
   async run(): Promise<void> {
@@ -1782,10 +1884,15 @@ class ProjectionEventExecution {
   async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
     const packedMessage = EntityInvocation.requireSignalMessage(this.#event.message, "event");
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
-    const entity = await this.#loadProjection(entityId, tenantOptions);
+    const previous = await this.#runtime.stand.readVersioned(
+      this.#repository.stateSchema,
+      entityId,
+      tenantOptions,
+    );
+    const loaded = await this.#loadProjection(entityId, tenantOptions);
 
-    await this.#invokeSubscribers(entity, subscribers, packedMessage);
-    await this.#storeIfChanged(entity, tenantOptions);
+    await this.#invokeSubscribers(loaded.entity, subscribers, packedMessage);
+    await this.#storeIfChanged(loaded, tenantOptions, previous?.state);
   }
 
   #readIntake(): {
@@ -1804,38 +1911,81 @@ class ProjectionEventExecution {
   }
 
   async #storeIfChanged(
-    entity: object,
+    loaded: LoadedRepositoryEntity,
     tenantOptions: { readonly tenantId?: string },
+    oldState: Message | undefined,
   ): Promise<void> {
-    if (!RepositoryEntities.repositoryChanged(entity)) {
+    if (!RepositoryEntities.repositoryChanged(loaded.entity)) {
       return;
     }
 
-    await this.#runtime.stand.update(
+    const entityId = (loaded.entity as { readonly id: unknown }).id;
+    const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
+    const version = BigInt(this.#event.context?.version?.number ?? 0);
+    const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
+    const deferred = await standAccess.deferUpdate(
+      this.#runtime.stand,
       this.#repository.stateSchema,
-      RepositoryEntities.repositoryState(entity) as never,
+      state,
       RepositoryStand.standUpdateOptions(
         tenantOptions.tenantId,
         this.#event.context?.version,
-        RepositoryEntities.repositoryLifecycle(entity),
+        lifecycle,
       ),
     );
-    if (RepositoryStorage.historyConfiguration(this.#repository).stateHistory) {
-      const storage = RepositoryStorage.openRepositoryEntityStorage(
-        this.#repository,
-        this.#runtime.storageFactory,
-        RepositoryStorage.entityStorageInput(
-          this.#repository,
-          RepositoryTenants.storageContextForTenant(this.#runtime.context, tenantOptions.tenantId),
-        ),
-      );
-      await storage.states.append({
-        entityId: (entity as { readonly id: unknown }).id,
-        state: RepositoryEntities.repositoryState(entity) as Message,
-        version: BigInt(this.#event.context?.version?.number ?? 0),
-        createdAt: this.#event.context?.timestamp ?? create(TimestampSchema),
+    try {
+      const outcome = await loaded.commits.commit({
+        context: loaded.storageInput.context,
+        entity: loaded.storageInput,
+        id:
+          this.#commitScope === undefined
+            ? RepositorySignals.requireEventId(this.#event).value
+            : `${RepositorySignals.requireEventId(this.#event).value}.${this.#commitScope}`,
+        entityId,
+        ...(loaded.current === undefined ? {} : { expected: loaded.current }),
+        next: {
+          id: entityId,
+          state,
+          version,
+          archived: lifecycle.archived,
+          deleted: lifecycle.deleted,
+        },
+        ...(RepositoryStorage.historyConfiguration(this.#repository).stateHistory
+          ? {
+              states: [
+                {
+                  entityId,
+                  state,
+                  version,
+                  createdAt: this.#event.context?.timestamp ?? create(TimestampSchema),
+                },
+              ],
+            }
+          : {}),
       });
+      if (outcome !== "committed") {
+        deferred.cancel();
+        if (outcome === "conflict") throw new Error("Concurrent Projection state commit conflict.");
+        return;
+      }
+    } catch (error) {
+      deferred.cancel();
+      throw error;
     }
+    try {
+      deferred.notify();
+    } catch (error) {
+      this.#runtime.recordDispatchFailure(this.#event, error);
+    }
+    EntityStateChangePublisher.event(
+      this.#runtime,
+      this.#repository,
+      this.#event,
+      entityId,
+      oldState,
+      state,
+      this.#event.context?.version?.number ?? 0,
+    );
   }
 
   async #invokeSubscribers(
@@ -1875,8 +2025,9 @@ class ProjectionEventExecution {
   async #loadProjection(
     entityId: unknown,
     options: { readonly tenantId?: string },
-  ): Promise<object> {
-    const stored = await this.#runtime.stand.readVersioned(
+  ): Promise<LoadedRepositoryEntity> {
+    const stored = await standAccess.readCurrent(
+      this.#runtime.stand,
       this.#repository.stateSchema,
       entityId,
       options,
@@ -1891,22 +2042,34 @@ class ProjectionEventExecution {
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored?.state ?? this.#defaultState(entityId),
+      state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
     });
-    RepositoryHistoryInternals.bindEntityHistory(
-      entity,
-      RepositoryStorage.openRepositoryEntityStorage(
-        this.#repository,
-        this.#runtime.storageFactory,
-        RepositoryStorage.entityStorageInput(
-          this.#repository,
-          RepositoryTenants.storageContextForTenant(this.#runtime.context, options.tenantId),
-        ),
-      ),
-      entityId,
+    const storageInput = RepositoryStorage.entityStorageInput(
+      this.#repository,
+      RepositoryTenants.storageContextForTenant(this.#runtime.context, options.tenantId),
     );
-    return entity;
+    const storage = RepositoryStorage.openRepositoryEntityStorage(
+      this.#repository,
+      this.#runtime.storageFactory,
+      storageInput,
+    );
+    RepositoryHistoryInternals.bindEntityHistory(entity, storage, entityId);
+    return Object.freeze({
+      commits: storage.commits,
+      current:
+        stored === undefined
+          ? undefined
+          : {
+              id: entityId,
+              state: clone(this.#repository.stateSchema, stored.state as never),
+              version: stored.version,
+              archived: stored.archived,
+              deleted: stored.deleted,
+            },
+      entity,
+      storageInput,
+    });
   }
 
   #defaultState(entityId: unknown): unknown {
@@ -1937,8 +2100,12 @@ class ProcessManagerExecutionSupport {
     return Object.freeze([produced]);
   }
 
-  async load(entityId: unknown, options: { readonly tenantId?: string }): Promise<object> {
-    const stored = await this.#runtime.stand.readVersioned(
+  async load(
+    entityId: unknown,
+    options: { readonly tenantId?: string },
+  ): Promise<LoadedRepositoryEntity> {
+    const stored = await standAccess.readCurrent(
+      this.#runtime.stand,
       this.#repository.stateSchema,
       entityId,
       options,
@@ -1953,83 +2120,110 @@ class ProcessManagerExecutionSupport {
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored?.state ?? this.#defaultState(entityId),
+      state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
     });
-    RepositoryHistoryInternals.bindEntityHistory(
-      entity,
-      RepositoryStorage.openRepositoryEntityStorage(
-        this.#repository,
-        this.#runtime.storageFactory,
-        RepositoryStorage.entityStorageInput(
-          this.#repository,
-          RepositoryTenants.storageContextForTenant(this.#runtime.context, options.tenantId),
-        ),
-      ),
-      entityId,
+    const storageInput = RepositoryStorage.entityStorageInput(
+      this.#repository,
+      RepositoryTenants.storageContextForTenant(this.#runtime.context, options.tenantId),
     );
-    return entity;
-  }
-
-  async storeIfChanged(
-    entity: object,
-    options: { readonly tenantId?: string },
-    createdAt: Timestamp,
-  ): Promise<void> {
-    if (!RepositoryEntities.repositoryChanged(entity)) {
-      return;
-    }
-
-    await this.#runtime.stand.update(
-      this.#repository.stateSchema,
-      RepositoryEntities.repositoryState(entity) as never,
-      RepositoryStand.standUpdateOptions(
-        options.tenantId,
-        create(VersionSchema, { number: RepositoryStand.processManagerVersion(entity) }),
-        RepositoryEntities.repositoryLifecycle(entity),
-      ),
-    );
-    if (RepositoryStorage.historyConfiguration(this.#repository).stateHistory) {
-      const storage = RepositoryStorage.openRepositoryEntityStorage(
-        this.#repository,
-        this.#runtime.storageFactory,
-        RepositoryStorage.entityStorageInput(
-          this.#repository,
-          RepositoryTenants.storageContextForTenant(this.#runtime.context, options.tenantId),
-        ),
-      );
-      await storage.states.append({
-        entityId: (entity as { readonly id: unknown }).id,
-        state: RepositoryEntities.repositoryState(entity) as Message,
-        version: BigInt(RepositoryStand.processManagerVersion(entity)),
-        createdAt,
-      });
-    }
-  }
-
-  async appendDiagnosticEvents(
-    entity: object,
-    options: { readonly tenantId?: string },
-    events: readonly Event[],
-  ): Promise<void> {
-    if (!RepositoryStorage.historyConfiguration(this.#repository).processManagerEventHistory)
-      return;
     const storage = RepositoryStorage.openRepositoryEntityStorage(
       this.#repository,
       this.#runtime.storageFactory,
-      RepositoryStorage.entityStorageInput(
-        this.#repository,
-        RepositoryTenants.storageContextForTenant(this.#runtime.context, options.tenantId),
-      ),
+      storageInput,
     );
-    for (const event of events) {
-      await storage.events.append({
-        entityId: (entity as { readonly id: unknown }).id,
-        event,
-        producerVersion: RepositorySignals.readEventVersion(event),
-        createdAt: event.context?.timestamp ?? create(TimestampSchema),
+    RepositoryHistoryInternals.bindEntityHistory(entity, storage, entityId);
+    return Object.freeze({
+      commits: storage.commits,
+      current:
+        stored === undefined
+          ? undefined
+          : {
+              id: entityId,
+              state: clone(this.#repository.stateSchema, stored.state as never),
+              version: stored.version,
+              archived: stored.archived,
+              deleted: stored.deleted,
+            },
+      entity,
+      storageInput,
+    });
+  }
+
+  async commit(
+    loaded: LoadedRepositoryEntity,
+    options: { readonly tenantId?: string },
+    commitId: string,
+    createdAt: Timestamp,
+    events: readonly Event[],
+  ): Promise<boolean> {
+    const changed = RepositoryEntities.repositoryChanged(loaded.entity);
+    if (!changed && events.length === 0) return true;
+    const entityId = (loaded.entity as { readonly id: unknown }).id;
+    const state = RepositoryEntities.repositoryState(loaded.entity) as Message;
+    const lifecycle = RepositoryEntities.repositoryLifecycle(loaded.entity);
+    const version = changed
+      ? BigInt(RepositoryStand.processManagerVersion(loaded.entity))
+      : (loaded.current?.version ?? 0n);
+    const deferred = changed
+      ? await standAccess.deferUpdate(
+          this.#runtime.stand,
+          this.#repository.stateSchema,
+          state,
+          RepositoryStand.standUpdateOptions(
+            options.tenantId,
+            create(VersionSchema, { number: Number(version) }),
+            lifecycle,
+          ),
+        )
+      : undefined;
+    try {
+      const history = RepositoryStorage.historyConfiguration(this.#repository);
+      const outcome = await loaded.commits.commit({
+        context: loaded.storageInput.context,
+        entity: loaded.storageInput,
+        id: commitId,
+        entityId,
+        ...(loaded.current === undefined ? {} : { expected: loaded.current }),
+        next: {
+          id: entityId,
+          state,
+          version,
+          archived: lifecycle.archived,
+          deleted: lifecycle.deleted,
+        },
+        ...(changed && history.stateHistory
+          ? { states: [{ entityId, state, version, createdAt }] }
+          : {}),
+        ...(history.processManagerEventHistory
+          ? {
+              diagnostics: events.map((event) => ({
+                entityId,
+                event,
+                producerVersion: RepositorySignals.readEventVersion(event),
+                createdAt: event.context?.timestamp ?? create(TimestampSchema),
+              })),
+            }
+          : {}),
       });
+      if (outcome !== "committed") {
+        deferred?.cancel();
+        if (outcome === "conflict") {
+          throw new Error("Concurrent Process Manager state commit conflict.");
+        }
+        return false;
+      }
+      entityStateHistoryCaches.get(loaded.entity)?.clear();
+    } catch (error) {
+      deferred?.cancel();
+      throw error;
     }
+    try {
+      deferred?.notify();
+    } catch (error) {
+      this.#runtime.recordDispatchFailure(events[events.length - 1] ?? create(EventSchema), error);
+    }
+    return true;
   }
 
   #defaultState(entityId: unknown): unknown {
@@ -2083,10 +2277,15 @@ class ProcessManagerCommandExecution {
       this.#runtime.context,
       this.#command,
     );
-    const entity = await this.#support.load(route.entityId, tenantOptions);
+    const previous = await this.#runtime.stand.readVersioned(
+      this.#repository.stateSchema,
+      route.entityId,
+      tenantOptions,
+    );
+    const loaded = await this.#support.load(route.entityId, tenantOptions);
     let eventSignals: readonly unknown[];
     try {
-      eventSignals = await this.#invoke(entity, assignee, message);
+      eventSignals = await this.#invoke(loaded.entity, assignee, message);
     } catch (error) {
       if (!RejectionThrowable.is(error)) {
         throw error;
@@ -2095,13 +2294,26 @@ class ProcessManagerCommandExecution {
       return;
     }
 
-    await this.#support.storeIfChanged(
-      entity,
-      tenantOptions,
-      RepositorySignals.executionTimestamp(),
-    );
     const events = this.#bindProducedEvents(eventSignals, route.entityId);
-    await this.#support.appendDiagnosticEvents(entity, tenantOptions, events);
+    const committed = await this.#support.commit(
+      loaded,
+      tenantOptions,
+      RepositorySignals.requireCommandId(this.#command).uuid,
+      RepositorySignals.executionTimestamp(),
+      events,
+    );
+    if (!committed) return;
+    if (RepositoryEntities.repositoryChanged(loaded.entity)) {
+      EntityStateChangePublisher.command(
+        this.#runtime,
+        this.#repository,
+        this.#command,
+        route.entityId,
+        previous?.state,
+        RepositoryEntities.repositoryState(loaded.entity) as Message,
+        RepositoryStand.processManagerVersion(loaded.entity),
+      );
+    }
     this.#postEvents(events);
   }
 
@@ -2281,19 +2493,35 @@ class ProcessManagerEventExecution {
     },
   ): Promise<void> {
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
-    const entity = await this.#support.load(entityId, tenantOptions);
-    const produced = await this.#invokeHandlers(entity, intake);
-
-    await this.#support.storeIfChanged(
-      entity,
+    const previous = await this.#runtime.stand.readVersioned(
+      this.#repository.stateSchema,
+      entityId,
       tenantOptions,
-      this.#event.context?.timestamp ?? create(TimestampSchema),
     );
+    const loaded = await this.#support.load(entityId, tenantOptions);
+    const produced = await this.#invokeHandlers(loaded.entity, intake);
+
     const events = this.#bindProducedEvents(produced.events, entityId);
-    await this.#support.appendDiagnosticEvents(entity, tenantOptions, [
-      DispatchGuards.guardedJournalEvent(this.#event, entityId),
-    ]);
-    await this.#support.appendDiagnosticEvents(entity, tenantOptions, events);
+    const diagnostics = [DispatchGuards.guardedJournalEvent(this.#event, entityId), ...events];
+    const committed = await this.#support.commit(
+      loaded,
+      tenantOptions,
+      RepositorySignals.requireEventId(this.#event).value,
+      this.#event.context?.timestamp ?? create(TimestampSchema),
+      diagnostics,
+    );
+    if (!committed) return;
+    if (RepositoryEntities.repositoryChanged(loaded.entity)) {
+      EntityStateChangePublisher.event(
+        this.#runtime,
+        this.#repository,
+        this.#event,
+        entityId,
+        previous?.state,
+        RepositoryEntities.repositoryState(loaded.entity) as Message,
+        RepositoryStand.processManagerVersion(loaded.entity),
+      );
+    }
     this.#postEvents(events);
     await this.#postCommands(this.#bindProducedCommands(produced.commands));
   }
@@ -2455,6 +2683,14 @@ interface EntityStorageFactory {
     readonly events: EntityEventHistoryPort<I>;
     close(): void;
   };
+}
+
+interface RepositoryEntityStorage<I, S extends Message> {
+  readonly current: EntityRecordStorage<I, S>;
+  readonly states: EntityStateHistoryPort<I, S>;
+  readonly events: EntityEventHistoryPort<I>;
+  readonly commits: EntityCommitStorage;
+  close(): void;
 }
 
 interface RoutableId {
@@ -2865,6 +3101,114 @@ const RepositorySignals = {
     });
   },
 };
+
+/**
+ * Builds and best-effort dispatches committed entity state notifications.
+ */
+class EntityStateChangePublishing {
+  command(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    command: Command,
+    entityId: unknown,
+    oldState: Message | undefined,
+    newState: Message,
+    version: number,
+  ): void {
+    const producerId = RepositorySignals.runtimeProducerId(entityId);
+    const metadata = runtime.signalMetadata.eventFromCommand(command, 0, {
+      ...(producerId === undefined ? {} : { producerId }),
+      version,
+    });
+    this.#publish(
+      runtime,
+      repository,
+      metadata,
+      AnyMessages.pack(CommandIdSchema, command.id as never),
+      command.message?.typeUrl ?? "",
+      entityId,
+      oldState,
+      newState,
+      version,
+    );
+  }
+
+  event(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    source: Event,
+    entityId: unknown,
+    oldState: Message | undefined,
+    newState: Message,
+    version: number,
+  ): void {
+    const producerId = RepositorySignals.runtimeProducerId(entityId);
+    const metadata = runtime.signalMetadata.eventFromEvent(source, 0, {
+      ...(producerId === undefined ? {} : { producerId }),
+      version,
+    });
+    this.#publish(
+      runtime,
+      repository,
+      metadata,
+      AnyMessages.pack(EventIdSchema, source.id as never),
+      source.message?.typeUrl ?? "",
+      entityId,
+      oldState,
+      newState,
+      version,
+    );
+  }
+
+  #publish(
+    runtime: RepositoryRuntime,
+    repository: RepositoryView,
+    metadata: ReturnType<SignalMetadata["eventFromCommand"]>,
+    signalId: NonNullable<ReturnType<typeof AnyMessages.pack>>,
+    signalTypeUrl: string,
+    entityId: unknown,
+    oldState: Message | undefined,
+    newState: Message,
+    version: number,
+  ): void {
+    runtime.registerEventSchema(EntityLog.EntityStateChangedSchema);
+    const event = create(EventSchema, {
+      id: metadata.id,
+      message: AnyMessages.pack(
+        EntityLog.EntityStateChangedSchema,
+        create(EntityLog.EntityStateChangedSchema, {
+          entity: create(MessageIdSchema, {
+            id: this.#packEntityId(repository, entityId),
+            typeUrl: TypeUrls.derive(repository.stateSchema),
+          }),
+          ...(oldState === undefined
+            ? {}
+            : { oldState: AnyMessages.pack(repository.stateSchema, oldState as never) }),
+          newState: AnyMessages.pack(repository.stateSchema, newState as never),
+          signalId: [create(MessageIdSchema, { id: signalId, typeUrl: signalTypeUrl })],
+          when: metadata.context.timestamp,
+          newVersion: create(VersionSchema, { number: version }),
+        }),
+      ),
+      context: metadata.context,
+    });
+    try {
+      void runtime.dispatchStoredFollowUp(event).catch((error: unknown) => {
+        runtime.recordDispatchFailure(event, error);
+      });
+    } catch (error) {
+      runtime.recordDispatchFailure(event, error);
+    }
+  }
+
+  #packEntityId(repository: RepositoryView, entityId: unknown) {
+    const field = repository.idField.descriptor;
+    return field.fieldKind === "message"
+      ? AnyMessages.pack(field.message as MessageSchema, entityId as never)
+      : PrimitiveIds.pack(entityId as never);
+  }
+}
+const EntityStateChangePublisher = Object.freeze(new EntityStateChangePublishing());
 Object.freeze(RepositorySignals);
 
 /**
@@ -2887,8 +3231,8 @@ const RepositoryStand = {
     });
   },
 
-  projectionVersion(version: Version | undefined): number {
-    return version?.number ?? 0;
+  projectionVersion(version: Version | bigint | undefined): number {
+    return typeof version === "bigint" ? Number(version) : (version?.number ?? 0);
   },
 
   processManagerVersion(entity: object): number {
@@ -3447,19 +3791,30 @@ const RepositoryStorage = {
   openEntityStorage<I, S extends Message>(
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
-  ): ReturnType<EntityStorageFactory["createEntityStorage"]> {
+  ): RepositoryEntityStorage<I, S> {
     const candidate = factory as StorageFactory & Partial<EntityStorageFactory>;
     if (candidate.createEntityStorage === undefined) {
-      throw new Error("StorageFactory does not provide the required entity-record storage seam.");
+      throw new Error(
+        "StorageFactory does not provide the required atomic Entity commit storage seam.",
+      );
     }
-    return candidate.createEntityStorage(input);
+    const entity = candidate.createEntityStorage(input);
+    const commits = EntityCommitStorageFactories.create(factory, input);
+    return {
+      ...entity,
+      commits,
+      close: () => {
+        commits.close();
+        entity.close();
+      },
+    };
   },
 
   openRepositoryEntityStorage<I, S extends Message>(
     repository: RepositoryView,
     factory: StorageFactory,
     input: EntityStorageInput<I, S>,
-  ): ReturnType<EntityStorageFactory["createEntityStorage"]> {
+  ): RepositoryEntityStorage<I, S> {
     const handle = RepositoryStorage.openEntityStorage(factory, input);
     const key = JSON.stringify({
       context: input.context,
@@ -3475,7 +3830,7 @@ const RepositoryStorage = {
     const existing = handles.get(key);
     if (existing !== undefined) {
       handle.close();
-      return existing as ReturnType<EntityStorageFactory["createEntityStorage"]>;
+      return existing as RepositoryEntityStorage<I, S>;
     }
     handles.set(key, handle);
     return handle;
@@ -4440,8 +4795,8 @@ const RepositoryDispatch = {
       routeEvent(event: Event): RepositoryEventRoute;
     },
     routing: RepositoryRouting,
-  ): (event: Event) => Promise<void> {
-    return (event: Event): Promise<void> => {
+  ): (event: Event, commitScope?: string) => Promise<void> {
+    return (event: Event, commitScope?: string): Promise<void> => {
       const runtime = repositoryRuntimes.get(repository);
 
       if (runtime === undefined) {
@@ -4449,7 +4804,13 @@ const RepositoryDispatch = {
         return Promise.resolve();
       }
 
-      return new ProjectionEventExecution(repository, routing, runtime, event).runDirect();
+      return new ProjectionEventExecution(
+        repository,
+        routing,
+        runtime,
+        event,
+        commitScope,
+      ).runDirect();
     };
   },
 

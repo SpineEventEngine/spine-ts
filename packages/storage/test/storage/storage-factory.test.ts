@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, StringValueSchema, type StringValue } from "@bufbuild/protobuf/wkt";
 import type { Event } from "@spine-event-engine/proto";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
 import { describe, expect, it } from "vitest";
@@ -11,6 +11,8 @@ import {
   RecordSpec,
   type StorageFactory,
 } from "../../src/index.js";
+import { EntityCommitStorageFactories } from "../../src/internal/entity-commit.js";
+import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { StorageScopes } from "../../src/storage/canonical-scope.js";
 
 describe("StorageFactory", () => {
@@ -249,6 +251,16 @@ describe("StorageFactory", () => {
       /closed/,
     );
   });
+
+  it("rejects internal entity and atomic commit storage creation after the factory closes", () => {
+    const factory = new InMemoryStorageFactory();
+    const input = createEntityInput();
+
+    factory.close();
+
+    expect(() => factory.createEntityStorage(input)).toThrow(/closed/);
+    expect(() => EntityCommitStorageFactories.create(factory, input)).toThrow(/closed/);
+  });
 });
 
 function createEventSpec(storageKey = "EventSchema:legacy") {
@@ -272,4 +284,16 @@ function createEvent(id: string, typeUrl: string) {
     id: create(EventIdSchema, { value: id }),
     message: create(AnySchema, { typeUrl }),
   });
+}
+
+function createEntityInput(): EntityStorageInput<string, StringValue> {
+  return {
+    context: { name: "Tasks", multitenant: false },
+    id: { clone: (id) => id, fingerprint: "string", key: (id) => id },
+    extractId: () => "task",
+    columns: [],
+    layout: "entity-v1",
+    stateSchema: StringValueSchema,
+    storageKey: "tasks.Task:current",
+  };
 }

@@ -63,7 +63,7 @@ import {
   type EntityHandlersMetadata,
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
-import { Stand } from "../stand/stand.js";
+import { standAccess, Stand } from "../stand/stand.js";
 import {
   StorageSubscriptionRegistry,
   standSubscriptionLimits,
@@ -481,6 +481,7 @@ const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
 const dispatchFailureLimit = 10;
 const dispatchErrorMessageLimit = 500;
 const dispatchErrorStackLimit = 2_000;
+let catchUpCommitSequence = 0;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
@@ -665,6 +666,7 @@ export class BoundedContext {
     );
     try {
       this.#registerRepositories(repositories);
+      standAccess.startSubscriptions(this.#stand, this.#subscriptionRegistry, this.#eventBus);
     } catch (error) {
       try {
         ContextParts.cleanupFailedContext(this, tenantIndex);
@@ -897,6 +899,7 @@ export class BoundedContext {
     const clearedStateTypes: string[] = [];
     let clearedEntityCount = 0;
     let replayedEventCount = 0;
+    const commitScope = ContextParts.nextCatchUpScope();
 
     for (const target of clearTargets) {
       clearedEntityCount += await this.#stand.clear(target.schema, tenantOptions);
@@ -908,7 +911,11 @@ export class BoundedContext {
     for (const event of events) {
       try {
         ContextParts.validateReplayTenant(storageContext, event);
-        replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(projections, event);
+        replayedEventCount += await ContextParts.dispatchStoredProjectionEvent(
+          projections,
+          event,
+          commitScope,
+        );
       } catch (error) {
         throw ContextParts.catchUpReplayError(event, error);
       }
@@ -949,8 +956,8 @@ export class BoundedContext {
       () => commandBusAccess.finishClose(this.#commandBus),
       errors,
     );
-    await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await ContextParts.closeContextPart(() => this.#stand.close(), errors);
+    await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await ContextParts.closeContextPart(() => this.#subscriptionRegistry.close(), errors);
     await ContextParts.closeContextPart(() => {
       ContextParts.requireTenantIndex(this).close();
@@ -1355,7 +1362,7 @@ export class BoundedContextBuilder {
         storageFactory,
       });
       registry ??= new StorageSubscriptionRegistry(
-        ContextParts.createStorageContext(this.#specSnapshot),
+        ContextParts.createSubscriptionStorageContext(this.#specSnapshot),
         storageFactory,
         this.#subscriptionLimit,
       );
@@ -1580,6 +1587,13 @@ const ContextParts = Object.freeze({
     return Object.freeze({
       name: specSnapshot.name.value,
       multitenant: specSnapshot.multitenant,
+    });
+  },
+
+  createSubscriptionStorageContext(specSnapshot: ContextSpecSnapshot): StorageContext {
+    return Object.freeze({
+      name: `${specSnapshot.name.value}:subscriptions`,
+      multitenant: false,
     });
   },
 
@@ -2398,6 +2412,7 @@ const ContextParts = Object.freeze({
   async dispatchStoredProjectionEvent(
     projections: readonly ProjectionDispatch[],
     event: Event,
+    commitScope: string,
   ): Promise<number> {
     const typeUrl = event.message?.typeUrl;
 
@@ -2414,10 +2429,16 @@ const ContextParts = Object.freeze({
       await repositoryAccess.dispatchProjectionDirect(
         projection.repository,
         clone(EventSchema, event),
+        commitScope,
       );
     }
 
     return matching.length > 0 ? 1 : 0;
+  },
+
+  nextCatchUpScope(): string {
+    catchUpCommitSequence += 1;
+    return `catch-up-${String(Date.now())}-${String(catchUpCommitSequence)}`;
   },
 
   catchUpReplayError(event: Event, cause: unknown): Error {

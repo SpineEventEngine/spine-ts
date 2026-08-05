@@ -210,24 +210,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "cancellationFailedError()#1",
-    "name": "cancellationFailedError",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration cancellationFailedError()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "clearInactiveTimer()#1",
-    "name": "clearInactiveTimer",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration clearInactiveTimer()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "cloneClientEvent()#1",
     "name": "cloneClientEvent",
     "disposition": "migration-debt",
@@ -250,15 +232,6 @@
     "name": "commandTenant",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration commandTenant()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "concurrentCancellationError()#1",
-    "name": "concurrentCancellationError",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration concurrentCancellationError()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -327,15 +300,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "createSubscriptionClaim()#1",
-    "name": "createSubscriptionClaim",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createSubscriptionClaim()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "createSubscriptionPredicate()#1",
     "name": "createSubscriptionPredicate",
     "disposition": "migration-debt",
@@ -367,15 +331,6 @@
     "name": "createSubscriptionShape",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration createSubscriptionShape()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "createSubscriptionStorage()#1",
-    "name": "createSubscriptionStorage",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration createSubscriptionStorage()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -498,28 +453,10 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "foreignSubscriptionError()#1",
-    "name": "foreignSubscriptionError",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration foreignSubscriptionError()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "formatReadError()#1",
     "name": "formatReadError",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration formatReadError()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "inactiveTtl()#1",
-    "name": "inactiveTtl",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration inactiveTtl()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -547,15 +484,6 @@
     "name": "isAny",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration isAny()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "isCancellationConflict()#1",
-    "name": "isCancellationConflict",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration isCancellationConflict()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -592,15 +520,6 @@
     "name": "normalizedFilters",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration normalizedFilters()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "observeRemoval()#1",
-    "name": "observeRemoval",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration observeRemoval()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",
@@ -723,15 +642,6 @@
     "rule": "standalone-function",
     "file": "packages/server/src/services/spine-services.ts",
     "kind": "function-declaration",
-    "identity": "sameAny()#1",
-    "name": "sameAny",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration sameAny()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
     "identity": "stateRouteIdField()#1",
     "name": "stateRouteIdField",
     "disposition": "migration-debt",
@@ -754,24 +664,6 @@
     "name": "subscriptionLimit",
     "disposition": "migration-debt",
     "reason": "Pre-T-0080 observed standalone declaration subscriptionLimit()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "subscriptionStorageContext()#1",
-    "name": "subscriptionStorageContext",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration subscriptionStorageContext()#1 requires remediation by the assigned slice."
-  },
-  {
-    "rule": "standalone-function",
-    "file": "packages/server/src/services/spine-services.ts",
-    "kind": "function-declaration",
-    "identity": "subscriptionStore()#1",
-    "name": "subscriptionStore",
-    "disposition": "migration-debt",
-    "reason": "Pre-T-0080 observed standalone declaration subscriptionStore()#1 requires remediation by the assigned slice."
   },
   {
     "rule": "standalone-function",

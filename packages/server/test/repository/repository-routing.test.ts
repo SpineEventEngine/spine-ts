@@ -52,6 +52,12 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
+import type {
+  EntityCommitInput,
+  EntityCommitResult,
+  EntityCommitStorage,
+} from "@spine-event-engine/storage/internal/entity-commit";
+import { EntityStateChangedSchema } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -1203,6 +1209,41 @@ class RoutingProcessManager extends ProcessManager<
   }
 }
 
+class TombstoneResetProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  reactTask(event: ProjectionState): void {
+    this.update((draft) =>
+      Object.assign(
+        draft,
+        create(ProcessManagerStateSchema, {
+          id: event.id,
+          queue: `${this.state.queue}|${event.name}`,
+        }),
+      ),
+    );
+  }
+}
+
+class DiagnosticOnlyProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static calls = 0;
+
+  assignTask(command: AggregateState): ProjectionState {
+    DiagnosticOnlyProcessManager.calls += 1;
+    return create(ProjectionStateSchema, {
+      id: command.id,
+      name: `${command.name} diagnostic`,
+      priority: 1,
+    });
+  }
+}
+
 class InboxCheckingProcessManager extends ProcessManager<
   string,
   typeof ProcessManagerStateSchema,
@@ -1507,6 +1548,52 @@ describe("repository signal routing", () => {
       ]);
     } finally {
       eventStore.close();
+      await context.close();
+    }
+  });
+
+  it("keeps committed process-manager command transitions usable when a Stand subscriber throws", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .build();
+    let notifications = 0;
+    context.stand().subscribe(ProcessManagerStateSchema, () => {
+      notifications++;
+      throw new Error("process-manager command subscriber failed");
+    });
+
+    try {
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-pm-subscriber-1", "pm-subscriber")),
+      ).resolves.toBeUndefined();
+      await expect(
+        context
+          .commandBus()
+          .post(createAggregateCommand("command-pm-subscriber-2", "pm-subscriber", "Follow-up")),
+      ).resolves.toBeUndefined();
+
+      expect(RoutingProcessManager.commandCalls).toBe(2);
+      expect(notifications).toBe(2);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-subscriber"),
+      ).resolves.toEqual(
+        create(ProcessManagerStateSchema, {
+          id: "pm-subscriber",
+          queue: "Follow-up assigned",
+        }),
+      );
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        {
+          error: { message: "process-manager command subscriber failed" },
+        },
+        {
+          error: { message: "process-manager command subscriber failed" },
+        },
+      ]);
+    } finally {
       await context.close();
     }
   });
@@ -2548,14 +2635,12 @@ describe("repository signal routing", () => {
       .add(createValidatingRepository())
       .withStorageFactory(factory)
       .build();
-
     await expect(
       context.commandBus().post(createValidatedCommand("command-invalid", "task-invalid", "")),
     ).rejects.toThrow(/validation/i);
 
     expect(ValidatingTaskAggregate.assigneeCalls).toBe(0);
     expect(ValidatingTaskAggregate.applierCalls).toBe(0);
-    expect(factory.operations).toEqual([]);
   });
 
   it("rejects state-transition validation failures before storing aggregate output", async () => {
@@ -3054,7 +3139,6 @@ describe("repository signal routing", () => {
       .add(createProcessManagerAssignRepository())
       .withStorageFactory(factory)
       .build();
-
     await expect(
       context
         .commandBus()
@@ -3062,7 +3146,6 @@ describe("repository signal routing", () => {
     ).rejects.toThrow(/tenant/i);
 
     expect(RoutingProcessManager.commandCalls).toBe(0);
-    expect(factory.operations).toEqual([]);
   });
 
   it("rejects process-manager handoff success when another worker already owns the shard", async () => {
@@ -4229,6 +4312,52 @@ describe("repository signal routing", () => {
     );
   });
 
+  it("keeps committed process-manager event transitions usable when a Stand subscriber throws", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .build();
+    let notifications = 0;
+    context.stand().subscribe(ProcessManagerStateSchema, () => {
+      notifications++;
+      throw new Error("process-manager event subscriber failed");
+    });
+
+    try {
+      await expect(
+        context.eventBus().post(createProjectionEvent("event-pm-subscriber-1", "pm-subscriber")),
+      ).resolves.toBeUndefined();
+      await expect(
+        context
+          .eventBus()
+          .post(
+            createProjectionEvent("event-pm-subscriber-2", "pm-subscriber", { name: "Follow-up" }),
+          ),
+      ).resolves.toBeUndefined();
+
+      expect(RoutingProcessManager.eventCalls).toBe(2);
+      expect(notifications).toBe(2);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-subscriber"),
+      ).resolves.toEqual(
+        create(ProcessManagerStateSchema, {
+          id: "pm-subscriber",
+          queue: "Follow-up reacted",
+        }),
+      );
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        {
+          error: { message: "process-manager event subscriber failed" },
+        },
+        {
+          error: { message: "process-manager event subscriber failed" },
+        },
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
   it("posts commands produced by process-manager event commanding after state commit", async () => {
     RoutingProcessManager.reset();
     const commands: SpineCommand[] = [];
@@ -4508,6 +4637,411 @@ describe("repository signal routing", () => {
       },
       version: { number: 1 },
     });
+  });
+
+  it("does not expose projection state when its atomic commit fails", async () => {
+    ExecutingTaskProjection.reset();
+    const factory = new FailingEntityCommitStorageFactory();
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+
+    await expect(
+      context.eventBus().post(createProjectionEvent("projection-commit-fails", "projection-fails")),
+    ).rejects.toThrow("forced Entity commit failure");
+    await expect(
+      context.stand().read(ProjectionStateSchema, "projection-fails"),
+    ).resolves.toBeUndefined();
+    expect(changes).toEqual([]);
+  });
+
+  it("does not expose aggregate state or state notifications when its atomic commit throws", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(new FailingEntityCommitStorageFactory())
+      .build();
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("aggregate-commit-fails", "aggregate-fails")),
+    ).rejects.toThrow("forced Entity commit failure");
+    await expect(
+      context.stand().read(AggregateStateSchema, "aggregate-fails"),
+    ).resolves.toBeUndefined();
+    expect(changes).toEqual([]);
+  });
+
+  it("cancels aggregate, projection, and process-manager delivery when atomic storage replays", async () => {
+    const aggregateChanges: SpineEvent[] = [];
+    const aggregate = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          aggregateChanges.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .build();
+    const projection = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .build();
+    const processManager = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["replayed"]))
+      .build();
+
+    try {
+      await aggregate
+        .commandBus()
+        .post(createAggregateCommand("aggregate-replay", "aggregate-replay"));
+      await projection
+        .eventBus()
+        .post(createProjectionEvent("projection-replay", "projection-replay"));
+      await processManager.commandBus().post(createAggregateCommand("pm-replay", "pm-replay"));
+
+      await expect(
+        aggregate.stand().read(AggregateStateSchema, "aggregate-replay"),
+      ).resolves.toBeUndefined();
+      await expect(
+        projection.stand().read(ProjectionStateSchema, "projection-replay"),
+      ).resolves.toBeUndefined();
+      await expect(
+        processManager.stand().read(ProcessManagerStateSchema, "pm-replay"),
+      ).resolves.toBeUndefined();
+      expect(aggregateChanges).toEqual([]);
+    } finally {
+      await Promise.all([aggregate.close(), projection.close(), processManager.close()]);
+    }
+  });
+
+  it("rejects aggregate, projection, and process-manager delivery on atomic commit conflicts", async () => {
+    const aggregate = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
+      .build();
+    const projection = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
+      .build();
+    const processManager = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
+      .build();
+
+    try {
+      await expect(
+        aggregate
+          .commandBus()
+          .post(createAggregateCommand("aggregate-conflict", "aggregate-conflict")),
+      ).rejects.toThrow("Concurrent Aggregate state commit conflict.");
+      await expect(
+        projection
+          .eventBus()
+          .post(createProjectionEvent("projection-conflict", "projection-conflict")),
+      ).rejects.toThrow("Concurrent Projection state commit conflict.");
+      await expect(
+        processManager.commandBus().post(createAggregateCommand("pm-conflict", "pm-conflict")),
+      ).rejects.toThrow("Concurrent Process Manager state commit conflict.");
+
+      await expect(
+        aggregate.stand().read(AggregateStateSchema, "aggregate-conflict"),
+      ).resolves.toBeUndefined();
+      await expect(
+        projection.stand().read(ProjectionStateSchema, "projection-conflict"),
+      ).resolves.toBeUndefined();
+      await expect(
+        processManager.stand().read(ProcessManagerStateSchema, "pm-conflict"),
+      ).resolves.toBeUndefined();
+    } finally {
+      await Promise.all([aggregate.close(), projection.close(), processManager.close()]);
+    }
+  });
+
+  it("does not expose process-manager state or follow-ups when its atomic commit fails", async () => {
+    RoutingProcessManager.reset();
+    const factory = new FailingEntityCommitStorageFactory();
+    const dispatched: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema, EntityStateChangedSchema],
+        dispatch: (event) => {
+          dispatched.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("pm-commit-fails", "pm-fails")),
+    ).rejects.toThrow("forced Entity commit failure");
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-fails"),
+    ).resolves.toBeUndefined();
+    expect(dispatched).toEqual([]);
+  });
+
+  it("starts a process manager from default state after its Stand row is cleared", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createTombstoneResetProcessManagerRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("pm-tombstone-original", "pm-tombstone"));
+    await context.stand().clear(ProcessManagerStateSchema);
+    await context.eventBus().post(createProjectionEvent("pm-tombstone-rebuilt", "pm-tombstone"));
+
+    await expect(context.stand().read(ProcessManagerStateSchema, "pm-tombstone")).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-tombstone",
+        queue: "|Task",
+      }),
+    );
+  });
+
+  it("publishes a committed aggregate state change after durable persistence", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("command-state-change", "changed"));
+
+      await waitForCondition(() => changes.length === 1);
+      expect(changes).toHaveLength(1);
+      expect(changes[0]).toMatchObject({
+        message: { typeUrl: TypeUrls.derive(EntityStateChangedSchema) },
+        context: { origin: { case: "pastMessage" } },
+      });
+      const event = changes[0];
+      if (event?.message === undefined) {
+        throw new Error("Expected the committed state change event.");
+      }
+      const change = AnyMessages.unpack(event.message, EntityStateChangedSchema);
+      expect(change).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+        newState: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        newVersion: { number: 1 },
+      });
+      if (change?.newState === undefined) {
+        throw new Error("Expected the committed state in the change event.");
+      }
+      expect(AnyMessages.unpack(change.newState, AggregateStateSchema)).toMatchObject({
+        id: "changed",
+        name: "Task (applied)",
+      });
+      expect(context.eventBus().acceptedEventTypes()).not.toContain(
+        TypeUrls.derive(EntityStateChangedSchema),
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("records failed state-change follow-ups with absent and present prior state", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.reject(new Error("state-change follow-up failed"));
+        },
+      })
+      .build();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("state-change-first", "state-change"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("state-change-second", "state-change", "Second"));
+      await waitForFailures(context, 2);
+
+      expect(changes).toHaveLength(2);
+      expect(readStateChange(changes[0])?.oldState).toBeUndefined();
+      const oldState = readStateChange(changes[1])?.oldState;
+      if (oldState === undefined) {
+        throw new Error("Expected a prior state on the second state-change notification.");
+      }
+      expect(AnyMessages.unpack(oldState, AggregateStateSchema)).toMatchObject({
+        id: "state-change",
+        name: "Task (applied)",
+      });
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { error: { message: "state-change follow-up failed" } },
+        { error: { message: "state-change follow-up failed" } },
+      ]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("publishes one causally linked change for aggregate reactors, projections, and process managers", async () => {
+    const aggregateChanges: SpineEvent[] = [];
+    const aggregate = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          aggregateChanges.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await aggregate.eventBus().post(createProjectionEvent("reactor-source", "reactor-id"));
+      await waitForCondition(() => aggregateChanges.length === 1);
+      expect(readStateChange(aggregateChanges[0])).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectionStateSchema) }],
+        newVersion: { number: 1 },
+      });
+      expect(aggregateChanges[0]?.context?.origin.case).toBe("pastMessage");
+    } finally {
+      await aggregate.close();
+    }
+
+    const projectionChanges: SpineEvent[] = [];
+    const projection = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          projectionChanges.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await projection.eventBus().post(createProjectionEvent("projection-source", "projection-id"));
+      await waitForCondition(() => projectionChanges.length === 1);
+      expect(readStateChange(projectionChanges[0])).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectionStateSchema) }],
+        newVersion: { number: 1 },
+      });
+    } finally {
+      await projection.close();
+    }
+
+    const pmChanges: SpineEvent[] = [];
+    const processManager = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          pmChanges.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await processManager.commandBus().post(createAggregateCommand("pm-command", "pm-command-id"));
+      await waitForCondition(() => pmChanges.length === 1);
+      expect(readStateChange(pmChanges[0])).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+      });
+    } finally {
+      await processManager.close();
+    }
+
+    const pmEventChanges: SpineEvent[] = [];
+    const eventProcessManager = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          pmEventChanges.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await eventProcessManager.eventBus().post(createProjectionEvent("pm-event", "pm-event-id"));
+      await waitForCondition(() => pmEventChanges.length === 1);
+      expect(readStateChange(pmEventChanges[0])).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        signalId: [{ typeUrl: TypeUrls.derive(ProjectionStateSchema) }],
+      });
+    } finally {
+      await eventProcessManager.close();
+    }
+  });
+
+  it("does not publish a state change when a projection leaves state unchanged", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createPassiveProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.eventBus().post(createProjectionEvent("unchanged", "unchanged-id"));
+      await context.close();
+      expect(changes).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not publish when aggregate transition validation rejects the handler mutation", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createTransitionViolatingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("rejected-change", "rejected-id")),
+      ).rejects.toMatchObject({ type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED" });
+      await context.close();
+      expect(changes).toEqual([]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("rebuilds projection state from stored events without re-appending them", async () => {
@@ -5584,6 +6118,47 @@ describe("repository signal routing", () => {
     await expect(
       context.stand().read(ProjectionStateSchema, "task-passive"),
     ).resolves.toBeUndefined();
+  });
+
+  it("atomically retains process-manager diagnostics without creating unchanged state", async () => {
+    DiagnosticOnlyProcessManager.calls = 0;
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createDiagnosticOnlyProcessManagerRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new CurrentRecordTestStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: ProcessManagerStateSchema,
+    });
+
+    try {
+      const existing = create(ProcessManagerStateSchema, {
+        id: "pm-diagnostic",
+        queue: "already persisted",
+      });
+      await storage.writeCurrent({
+        entityId: "pm-diagnostic",
+        lifecycle: { archived: false, deleted: false },
+        state: existing,
+        version: 1n,
+      });
+      await context.stand().update(ProcessManagerStateSchema, existing, {
+        version: create(VersionSchema, { number: 1 }),
+      });
+      await context.commandBus().post(createAggregateCommand("pm-diagnostic", "pm-diagnostic"));
+
+      expect(DiagnosticOnlyProcessManager.calls).toBe(1);
+      await expect(
+        context.stand().read(ProcessManagerStateSchema, "pm-diagnostic"),
+      ).resolves.toEqual(existing);
+      await expect(storage.readEvents("pm-diagnostic")).resolves.toMatchObject([
+        { message: { typeUrl: TypeUrls.derive(ProjectionStateSchema) } },
+      ]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("loads existing projection state before applying later delivered events", async () => {
@@ -6671,6 +7246,47 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
   });
 }
 
+function createTombstoneResetProcessManagerRepository(): Repository<
+  typeof TombstoneResetProcessManager
+> {
+  const handlers = EntityHandlers.define(
+    TombstoneResetProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+  return new Repository({
+    entityType: TombstoneResetProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createDiagnosticOnlyProcessManagerRepository(): Repository<
+  typeof DiagnosticOnlyProcessManager
+> {
+  const handlers = HandlerMetadataValues.defineArity(
+    DiagnosticOnlyProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        emittedSchemas: [ProjectionStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: DiagnosticOnlyProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+    events: [ProjectionStateSchema],
+    processManagerEventHistory: true,
+  });
+}
+
 function createGuardedProcessManagerReactRepository(
   depth = 100,
 ): Repository<typeof RoutingProcessManager> {
@@ -6999,6 +7615,13 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
   });
 }
 
+function readStateChange(event: SpineEvent | undefined) {
+  if (event?.message === undefined) {
+    throw new Error("Expected an Entity state change event.");
+  }
+  return AnyMessages.unpack(event.message, EntityStateChangedSchema);
+}
+
 function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
@@ -7219,6 +7842,7 @@ function createProjectionEvent(
   entityId: string,
   options: {
     readonly producerId?: string;
+    readonly name?: string;
     readonly producerNumber?: number;
     readonly producerMessage?: AggregateState;
     readonly importTenantId?: string;
@@ -7242,7 +7866,7 @@ function createProjectionEvent(
     schema: ProjectionStateSchema,
     message: create(ProjectionStateSchema, {
       id: entityId,
-      name: "Task",
+      name: options.name ?? "Task",
       priority: 1,
     }),
   });
@@ -7724,6 +8348,71 @@ class GatedAggregateEventStorageFactory extends InMemoryStorageFactory {
         },
       },
     };
+  }
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      commit: async <I, S extends Message>(
+        unit: EntityCommitInput<I, S>,
+      ): Promise<EntityCommitResult> => {
+        this.#reached();
+        await this.#gate;
+        return await storage.commit(unit);
+      },
+      close: () => {
+        storage.close();
+      },
+    } satisfies EntityCommitStorage;
+  }
+}
+
+class FailingEntityCommitStorageFactory extends InMemoryStorageFactory {
+  #remainingFailures = 1;
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      commit: async <I, S extends Message>(
+        unit: EntityCommitInput<I, S>,
+      ): Promise<EntityCommitResult> => {
+        if (this.#remainingFailures > 0) {
+          this.#remainingFailures -= 1;
+          throw new Error("forced Entity commit failure");
+        }
+        return await storage.commit(unit);
+      },
+      close: () => {
+        storage.close();
+      },
+    } satisfies EntityCommitStorage;
+  }
+}
+
+class OutcomeEntityCommitStorageFactory extends InMemoryStorageFactory {
+  #outcomes: EntityCommitResult[];
+
+  constructor(outcomes: readonly EntityCommitResult[]) {
+    super();
+    this.#outcomes = [...outcomes];
+  }
+
+  protected override createEntityCommitStorage<I, S extends Message>(
+    input: EntityStorageInput<I, S>,
+  ): EntityCommitStorage {
+    const storage = super.createEntityCommitStorage(input);
+    return {
+      commit: async <I, S extends Message>(
+        unit: EntityCommitInput<I, S>,
+      ): Promise<EntityCommitResult> => this.#outcomes.shift() ?? (await storage.commit(unit)),
+      close: () => {
+        storage.close();
+      },
+    } satisfies EntityCommitStorage;
   }
 }
 

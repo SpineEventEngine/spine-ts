@@ -42,6 +42,37 @@ describe("InMemoryRecordStorage", () => {
     ).toMatchObject([{ id: { value: "event-2" } }]);
   });
 
+  it("stops public tenant-record path traversal at primitive and null values", () => {
+    const spec = createSpec();
+    const records = new TenantRecords<EventId, Event>();
+    const primitive = spec.materialize(
+      createEvent("event-primitive", "type.spine.io/tasks.TaskCreated", 1n),
+    );
+    const nullable = spec.materialize(
+      createEvent("event-null", "type.spine.io/tasks.TaskCreated", 2n),
+    );
+
+    records.write(primitive);
+    records.write({
+      ...nullable,
+      record: { ...nullable.record, message: null } as unknown as Event,
+    });
+
+    expect(
+      records.queryEntries(spec, {
+        filters: [
+          { column: "id", value: primitive.id },
+          { column: "context.timestamp.seconds.unreachable", value: undefined },
+        ],
+      }),
+    ).toMatchObject([{ id: { value: "event-primitive" } }]);
+    expect(
+      records.queryEntries(spec, {
+        filters: [{ column: "message.typeUrl", value: undefined }],
+      }),
+    ).toMatchObject([{ id: { value: "event-null" } }]);
+  });
+
   it("conforms to the shared normalized query provider fixture", async () => {
     const storage = new ObservedInMemoryStorage(
       { name: "QueryConformance", multitenant: false },
@@ -215,6 +246,25 @@ describe("InMemoryRecordStorage", () => {
     expect(page[0]?.message).toBeUndefined();
   });
 
+  it("continues descending pages after the ordered row key", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n),
+      createEvent("event-3", "type.spine.io/tasks.TaskClosed", 3n),
+      createEvent("event-2", "type.spine.io/tasks.TaskClosed", 2n),
+    ]);
+
+    await expect(
+      storage.index({
+        sort: [{ field: "timestamp", direction: "desc" }],
+        after: {
+          values: [{ field: "timestamp", value: 3n }],
+          id: create(EventIdSchema, { value: "event-3" }),
+        },
+      }),
+    ).resolves.toMatchObject([{ value: "event-2" }, { value: "event-1" }]);
+  });
+
   it("rejects continuations with the wrong number of ordered values", async () => {
     const storage = createStorage();
     await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
@@ -228,6 +278,22 @@ describe("InMemoryRecordStorage", () => {
         },
       }),
     ).rejects.toThrow(/continuation must match the sort order/i);
+  });
+
+  it("rejects sparse continuation sort entries", async () => {
+    const storage = createStorage();
+    await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskClosed", 1n));
+    const malformed = {
+      sort: [undefined],
+      after: {
+        values: [{ field: undefined, value: 1n }],
+        id: create(EventIdSchema, { value: "event-1" }),
+      },
+    };
+
+    await expect(
+      storage.index(malformed as unknown as Parameters<typeof storage.index>[0]),
+    ).rejects.toThrow(/continuation sort order is invalid/i);
   });
 
   it("rejects continuations without a matching sort order", async () => {
@@ -311,6 +377,39 @@ describe("InMemoryRecordStorage", () => {
     expect(numberOrder.map((id) => id.value)).toEqual(["event-2", "event-10"]);
   });
 
+  it("breaks equal numeric sort keys with stable record IDs", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-b", "type.spine.io/tasks.TaskClosed", 1n, 7),
+      createEvent("event-a", "type.spine.io/tasks.TaskClosed", 2n, 7),
+    ]);
+
+    await expect(
+      storage.index({ sort: [{ field: "nanos", direction: "asc" }] }),
+    ).resolves.toMatchObject([{ value: "event-a" }, { value: "event-b" }]);
+  });
+
+  it("matches any value in an array-valued column filter", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-created", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-updated", "type.spine.io/tasks.TaskUpdated", 2n),
+      createEvent("event-closed", "type.spine.io/tasks.TaskClosed", 3n),
+    ]);
+
+    await expect(
+      storage.index({
+        filters: [
+          {
+            column: "typeUrl",
+            value: ["type.spine.io/tasks.TaskCreated", "type.spine.io/tasks.TaskClosed"],
+          },
+        ],
+        sort: [{ field: "id", direction: "asc" }],
+      }),
+    ).resolves.toMatchObject([{ value: "event-closed" }, { value: "event-created" }]);
+  });
+
   it("sorts mixed value kinds deterministically", async () => {
     const storage = createLookupStorage({
       "event-array": [],
@@ -353,6 +452,16 @@ describe("InMemoryRecordStorage", () => {
       "event-string",
       "event-undefined",
     ]);
+  });
+
+  it("rejects uncloneable runtime column values", async () => {
+    const storage = createLookupStorage({
+      "event-function": () => "uncloneable",
+    });
+
+    await expect(storage.writeAll(createLookupEvents(["event-function"]))).rejects.toThrow(
+      /value could not be cloned/i,
+    );
   });
 
   it("sorts booleans, strings, bytes, arrays, objects, nulls, undefined, and NaN deterministically", async () => {
@@ -432,6 +541,67 @@ describe("InMemoryRecordStorage", () => {
       { value: "event-nan-1" },
       { value: "event-nan-2" },
     ]);
+  });
+
+  it("orders distinct booleans after tied boolean values", async () => {
+    const storage = createLookupStorage({
+      "event-false-b": false,
+      "event-true": true,
+      "event-false-a": false,
+    });
+
+    await storage.writeAll(createLookupEvents(["event-false-b", "event-true", "event-false-a"]));
+
+    await expect(
+      storage.index({ sort: [{ field: "value", direction: "asc" }] }),
+    ).resolves.toMatchObject([
+      { value: "event-false-a" },
+      { value: "event-false-b" },
+      { value: "event-true" },
+    ]);
+  });
+
+  it("orders list lengths and object key boundaries deterministically", async () => {
+    const lists = createLookupStorage({
+      "event-short": [1],
+      "event-long": [1, 0],
+    });
+    await lists.writeAll(createLookupEvents(["event-long", "event-short"]));
+    await expect(
+      lists.index({ sort: [{ field: "value", direction: "asc" }] }),
+    ).resolves.toMatchObject([{ value: "event-short" }, { value: "event-long" }]);
+
+    const objects = createLookupStorage({
+      "event-a-copy": { a: 1 },
+      "event-b": { b: 1 },
+      "event-a": { a: 1 },
+    });
+    await objects.writeAll(createLookupEvents(["event-a-copy", "event-b", "event-a"]));
+    await expect(
+      objects.index({ sort: [{ field: "value", direction: "asc" }] }),
+    ).resolves.toMatchObject([
+      { value: "event-a" },
+      { value: "event-a-copy" },
+      { value: "event-b" },
+    ]);
+  });
+
+  it("treats nested paths beyond scalar and absent values as undefined", async () => {
+    const storage = createStorage();
+    await storage.writeAll([
+      createEvent("event-primitive", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-absent", "type.spine.io/tasks.TaskCreated", 2n),
+    ]);
+
+    await expect(
+      storage.index({
+        filters: [
+          { column: "context.timestamp.seconds.unreachable", value: undefined },
+          { column: "notAField.unreachable", value: undefined },
+        ],
+        sort: [{ field: "id", direction: "asc" }],
+      }),
+    ).resolves.toMatchObject([{ value: "event-absent" }, { value: "event-primitive" }]);
   });
 
   it("treats collision-prone object keys as ordinary record values", async () => {

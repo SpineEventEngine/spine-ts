@@ -67,5 +67,11 @@ fixed-size chunks. A failed chunk can leave earlier chunks durable, so callers
 retry maintenance. Current-record and history actions are separate calls, not
 one cross-storage transaction.
 
+The internal atomic Entity commit port writes current state, configured history,
+framework delivery events, and an invocation-owned receipt in one InnoDB
+transaction. An ambiguous acknowledgement reconciles the durable owner so only
+the committing invocation receives `committed`; later calls receive `replayed`.
+Standalone history operations remain separate.
+
 `MysqlStorageDataError` reports stored bytes that cannot be decoded, and
 `MysqlStorageOperationError` reports sanitized record-operation failures.

@@ -1,11 +1,16 @@
 import { clone, create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { TypeUrls } from "@spine-event-engine/core";
-import { VersionSchema, file_spine_options } from "@spine-event-engine/proto";
+import {
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
+import { AnyMessages, TypeUrls } from "@spine-event-engine/core";
+import { EventSchema, VersionSchema, file_spine_options } from "@spine-event-engine/proto";
 import {
   InMemoryStorageFactory,
+  EventStore,
   RecordColumn,
   RecordStorage,
   type RecordSpec,
@@ -13,15 +18,45 @@ import {
   type StorageContext,
 } from "@spine-event-engine/storage";
 import type { EntityStorageInput } from "@spine-event-engine/storage/internal/entity-history";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
+  InMemorySubscriptionRegistry,
+  EventBus,
   Stand,
   StandStateTypeError,
   type StandSubscription,
   type StandUpdate,
 } from "../../src/index.js";
+import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
+import { standAccess } from "../../src/stand/stand.js";
+import {
+  eventBusAccess,
+  type EventBus as EventBusType,
+  type EventSubscriber,
+} from "../../src/bus/event-bus.js";
+import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+const observedEventBusSubscriptions = vi.hoisted(
+  () => [] as { readonly closed: boolean; unsubscribe(): void }[],
+);
+
+vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/bus/event-bus.js")>();
+
+  return {
+    ...actual,
+    eventBusAccess: Object.freeze({
+      ...actual.eventBusAccess,
+      subscribe(eventBus: EventBusType, typeUrl: string, subscriber: EventSubscriber) {
+        const subscription = actual.eventBusAccess.subscribe(eventBus, typeUrl, subscriber);
+        observedEventBusSubscriptions.push(subscription);
+        return subscription;
+      },
+    }),
+  };
+});
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -71,6 +106,276 @@ const fileEntityEmptyFixture = createFixtureFileDescriptor(
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
+  it("does not attach a deleted definition after its snapshot is released", async () => {
+    const factory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Gated", multitenant: false },
+      storageFactory: factory,
+    });
+    const bus = new EventBus(new EventStore({ name: "Gated", multitenant: false }, factory));
+    const registry = new GatedSnapshotRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "gated-delete" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    stand.register(ProjectionStateSchema);
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    registry.gateNextSnapshot();
+    standAccess.startSubscriptions(stand, registry, bus);
+    await registry.snapshotStarted;
+    await registry.delete(subscription.id);
+    registry.releaseSnapshot();
+    await standAccess.reconcileSubscriptions(stand, registry);
+    let delivered = 0;
+    await standAccess.consumeSubscription(stand, registry, "gated-delete", () => delivered++);
+    await postStateChange(bus, ProjectionStateSchema, createState("deleted", "Deleted"));
+    expect(delivered).toBe(0);
+    await Promise.all([stand.close(), bus.close()]);
+  });
+
+  it("detaches EventBus observers while a reconciliation snapshot is gated during close", async () => {
+    observedEventBusSubscriptions.length = 0;
+    const factory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Closing", multitenant: false },
+      storageFactory: factory,
+    });
+    const bus = new EventBus(new EventStore({ name: "Closing", multitenant: false }, factory));
+    const registry = new GatedSnapshotRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "gated-close" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    stand.register(ProjectionStateSchema);
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    standAccess.startSubscriptions(stand, registry, bus);
+    let deliveries = 0;
+    await standAccess.consumeSubscription(stand, registry, "gated-close", () => deliveries++);
+    expect(observedEventBusSubscriptions).toHaveLength(1);
+    const [observer] = observedEventBusSubscriptions;
+    expect(observer?.closed).toBe(false);
+    await postStateChange(bus, ProjectionStateSchema, createState("before-close", "Before close"));
+    expect(deliveries).toBe(1);
+
+    registry.gateNextSnapshot();
+    const reconciliation = standAccess.reconcileSubscriptions(stand, registry);
+    await registry.snapshotStarted;
+    const closing = stand.close();
+    registry.releaseSnapshot();
+    await reconciliation;
+    await closing;
+    expect(observer?.closed).toBe(true);
+    await postStateChange(bus, ProjectionStateSchema, createState("after-close", "After close"));
+    expect(deliveries).toBe(1);
+    await expect(bus.close()).resolves.toBeUndefined();
+  });
+
+  it("removes a consumer when its reconciliation cycle fails", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Subscriptions", multitenant: false },
+      storageFactory,
+    });
+    const eventBus = new EventBus(
+      new EventStore({ name: "Subscriptions", multitenant: false }, storageFactory),
+    );
+    const registry = new FailingSnapshotRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "failed-consumer" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    stand.register(ProjectionStateSchema);
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
+    standAccess.startSubscriptions(stand, registry, eventBus);
+    await standAccess.reconcileSubscriptions(stand, registry);
+    registry.failNextSnapshot();
+    let failedConsumerDeliveries = 0;
+    await expect(
+      standAccess.consumeSubscription(stand, registry, "failed-consumer", () => {
+        failedConsumerDeliveries++;
+      }),
+    ).rejects.toThrow("snapshot failed");
+    let delivered = 0;
+    await standAccess.consumeSubscription(stand, registry, "failed-consumer", () => {
+      delivered++;
+    });
+
+    await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Recovered"));
+
+    expect(failedConsumerDeliveries).toBe(0);
+    expect(delivered).toBe(1);
+    await Promise.all([stand.close(), eventBus.close()]);
+  });
+
+  it("fences Stand-owned observers by the exact active revision and sweeps absent snapshots", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Subscriptions", multitenant: false },
+      storageFactory,
+    });
+    const eventBus = new EventBus(
+      new EventStore({ name: "Subscriptions", multitenant: false }, storageFactory),
+    );
+    stand.register(ProjectionStateSchema);
+    const registry = new RevisionFencedRegistry();
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-1" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    const observed: number[] = [];
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
+    standAccess.startSubscriptions(stand, registry, eventBus);
+    await standAccess.consumeSubscription(stand, registry, "s-1", () => observed.push(1));
+
+    await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Before fence"));
+    expect(observed).toEqual([]);
+
+    registry.allowExactRevision = true;
+    await standAccess.reconcileSubscriptions(stand, registry);
+    await postStateChange(eventBus, ProjectionStateSchema, createState("two", "After fence"));
+    expect(observed).toEqual([1]);
+
+    await registry.delete(subscription.id);
+    await standAccess.reconcileSubscriptions(stand, registry);
+    await postStateChange(eventBus, ProjectionStateSchema, createState("three", "After sweep"));
+    expect(observed).toEqual([1]);
+    await Promise.all([stand.close(), eventBus.close()]);
+  });
+
+  it("observes one shared definition from both nodes without crossing local buses", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const registry = new InMemorySubscriptionRegistry();
+    const first = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const second = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const firstBus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
+    );
+    const secondBus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
+    );
+    first.register(ProjectionStateSchema);
+    second.register(ProjectionStateSchema);
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "shared" }),
+      topic: {
+        id: { value: "updates" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    const observed = { first: 0, second: 0 };
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    eventBusAccess.registerSchemas(firstBus, [EntityLog.EntityStateChangedSchema]);
+    eventBusAccess.registerSchemas(secondBus, [EntityLog.EntityStateChangedSchema]);
+    standAccess.startSubscriptions(first, registry, firstBus);
+    standAccess.startSubscriptions(second, registry, secondBus);
+    await standAccess.consumeSubscription(first, registry, "shared", () => observed.first++);
+    await standAccess.consumeSubscription(second, registry, "shared", () => observed.second++);
+
+    await postStateChange(firstBus, ProjectionStateSchema, createState("first", "First node"));
+    await postStateChange(secondBus, ProjectionStateSchema, createState("second", "Second node"));
+
+    expect(observed).toEqual({ first: 1, second: 1 });
+    await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
+  });
+
+  it("delivers an event target only from the local EventBus on each reconciled node", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const registry = new InMemorySubscriptionRegistry();
+    const first = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const second = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const firstBus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
+    );
+    const secondBus = new EventBus(
+      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
+    );
+    eventBusAccess.registerSchemas(firstBus, [ProjectionStateSchema]);
+    eventBusAccess.registerSchemas(secondBus, [ProjectionStateSchema]);
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "shared-events" }),
+      topic: {
+        id: { value: "events" },
+        target: {
+          type: TypeUrls.derive(ProjectionStateSchema),
+          criterion: { case: "includeAll", value: true },
+        },
+      },
+    });
+    const observed = { first: 0, second: 0 };
+    if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+    await registry.create(subscription);
+    await registry.activate(subscription.id);
+    standAccess.startSubscriptions(first, registry, firstBus);
+    standAccess.startSubscriptions(second, registry, secondBus);
+    await standAccess.consumeSubscription(first, registry, "shared-events", () => observed.first++);
+    await standAccess.consumeSubscription(
+      second,
+      registry,
+      "shared-events",
+      () => observed.second++,
+    );
+
+    await firstBus.post(createSubscriptionEvent("first-event"));
+    expect(observed).toEqual({ first: 1, second: 0 });
+    await secondBus.post(createSubscriptionEvent("second-event"));
+    expect(observed).toEqual({ first: 1, second: 1 });
+
+    await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
+  });
+
   it("registers known entity state types and rejects unknown reads and subscriptions", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -801,6 +1106,49 @@ function createState(id: string, name: string): ProjectionState {
   });
 }
 
+function createSubscriptionEvent(id: string) {
+  return create(EventSchema, {
+    id: { value: id },
+    message: AnyMessages.pack(ProjectionStateSchema, createState(id, "Event payload"), {
+      validate: false,
+    }),
+  });
+}
+
+async function postStateChange(
+  eventBus: EventBus,
+  schema: GenMessage<Message>,
+  state: Message,
+): Promise<void> {
+  await eventBus.post(
+    create(EventSchema, {
+      id: { value: `state-change-${String((state as { id?: unknown }).id)}` },
+      message: AnyMessages.pack(
+        EntityLog.EntityStateChangedSchema,
+        create(EntityLog.EntityStateChangedSchema, {
+          entity: {
+            id: AnyMessages.pack(
+              StringValueSchema,
+              create(StringValueSchema, { value: String((state as { id?: unknown }).id) }),
+            ),
+            typeUrl: TypeUrls.derive(schema),
+          },
+          newState: AnyMessages.pack(schema, state, { validate: false }),
+          signalId: [
+            {
+              id: AnyMessages.pack(
+                StringValueSchema,
+                create(StringValueSchema, { value: "test-signal" }),
+              ),
+              typeUrl: TypeUrls.derive(StringValueSchema),
+            },
+          ],
+        }),
+      ),
+    }),
+  );
+}
+
 async function writeStandCurrent(
   factory: InMemoryStorageFactory,
   state: ProjectionState,
@@ -893,6 +1241,63 @@ class CountingReadStorageFactory extends InMemoryStorageFactory {
     };
 
     return storage;
+  }
+}
+
+class RevisionFencedRegistry extends InMemorySubscriptionRegistry {
+  allowExactRevision = false;
+
+  override async get(id: Parameters<InMemorySubscriptionRegistry["get"]>[0]) {
+    const entry = await super.get(id);
+    if (entry === undefined || this.allowExactRevision) {
+      return entry;
+    }
+    return Object.freeze({ ...entry, revision: entry.revision + 1n });
+  }
+}
+
+class FailingSnapshotRegistry extends InMemorySubscriptionRegistry {
+  #fail = false;
+
+  failNextSnapshot(): void {
+    this.#fail = true;
+  }
+
+  override async snapshot() {
+    if (this.#fail) {
+      this.#fail = false;
+      throw new Error("snapshot failed");
+    }
+    return await super.snapshot();
+  }
+}
+
+class GatedSnapshotRegistry extends InMemorySubscriptionRegistry {
+  #gate = false;
+  #release: (() => void) | undefined;
+  #started: (() => void) | undefined;
+  readonly snapshotStarted = new Promise<void>((resolve) => {
+    this.#started = resolve;
+  });
+
+  gateNextSnapshot(): void {
+    this.#gate = true;
+  }
+
+  releaseSnapshot(): void {
+    this.#release?.();
+  }
+
+  override async snapshot() {
+    const result = await super.snapshot();
+    if (this.#gate) {
+      this.#gate = false;
+      this.#started?.();
+      await new Promise<void>((resolve) => {
+        this.#release = resolve;
+      });
+    }
+    return result;
   }
 }
 

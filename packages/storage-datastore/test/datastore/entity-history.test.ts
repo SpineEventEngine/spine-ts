@@ -1,6 +1,13 @@
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema, TimestampSchema, type StringValue } from "@bufbuild/protobuf/wkt";
+import {
+  AnySchema,
+  StringValueSchema,
+  TimestampSchema,
+  type StringValue,
+} from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-event-engine/proto";
+import { EntityCommitStorageFactories } from "@spine-event-engine/storage/internal/entity-commit";
+import { EventStore } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 import {
   EntityHistoryConformance,
@@ -417,6 +424,371 @@ describe("Datastore entity history", () => {
     expect(countKinds(backend, "$SpineEntityEventCut")).toBe(1);
     expect(root(backend, "task")).toMatchObject({ revision: { value: "1" } });
     await expect(storage.events.append(historyEvent("once", "other"))).rejects.toThrow("divergent");
+  });
+
+  it("commits current state and history atomically with an immutable receipt", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const factory = new DatastoreStorageFactory({ client: backend.client() as never });
+    const commit = EntityCommitStorageFactories.create(factory, input());
+    const mutation = {
+      context: input().context,
+      entity: input(),
+      id: "command-1",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "one" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+      states: [
+        {
+          entityId: "task",
+          state: create(StringValueSchema, { value: "one" }),
+          version: 1n,
+          createdAt: time(1),
+        },
+      ],
+      diagnostics: [
+        {
+          entityId: "task",
+          event: create(EventSchema, { id: create(EventIdSchema, { value: "diagnostic-1" }) }),
+          producerVersion: 1n,
+          createdAt: time(1),
+        },
+      ],
+      events: [
+        create(EventSchema, {
+          id: create(EventIdSchema, { value: "delivery-1" }),
+          message: create(AnySchema, { typeUrl: "type.spine.test/Delivery" }),
+        }),
+      ],
+    };
+
+    await expect(commit.commit(mutation)).resolves.toBe("committed");
+    await expect(commit.commit(mutation)).resolves.toBe("replayed");
+    await expect(
+      commit.commit({ ...mutation, next: { ...mutation.next, version: 2n } }),
+    ).rejects.toThrow("reused with different content");
+    const normal = factory.createEntityStorage(input());
+    await expect(normal.current.read("task")).resolves.toMatchObject({ version: 1n });
+    await expect(normal.states.backward("task", 1)).resolves.toMatchObject([{ version: 1n }]);
+    await expect(normal.events.backward("task", 1)).resolves.toMatchObject([
+      { id: { value: "diagnostic-1" } },
+    ]);
+    const delivery = new EventStore(input().context, factory);
+    await expect(delivery.read()).resolves.toMatchObject([{ id: { value: "delivery-1" } }]);
+    delivery.close();
+  });
+
+  it("rejects duplicate delivery preflight before starting a Datastore transaction", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+    const delivery = create(EventSchema, { id: create(EventIdSchema, { value: "duplicate" }) });
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        context: inputValue.context,
+        entity: inputValue,
+        id: "duplicate-delivery",
+        entityId: "task",
+        next: {
+          id: "task",
+          state: create(StringValueSchema, { value: "next" }),
+          version: 1n,
+          archived: false,
+          deleted: false,
+        },
+        events: [delivery, delivery],
+      }),
+    ).rejects.toThrow("unique delivery-event IDs");
+
+    expect(client.transactionCalls).toBe(0);
+  });
+
+  it("rejects commits for another Entity scope and closed handles before a transaction", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+    const commit = EntityCommitStorageFactories.create(factory, inputValue);
+    const mutation = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "scope",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "next" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+
+    await expect(
+      commit.commit({ ...mutation, entity: { ...inputValue, storageKey: "other.Task:current" } }),
+    ).rejects.toThrow("another Entity storage scope");
+    commit.close();
+    await expect(commit.commit(mutation)).rejects.toThrow("closed");
+    expect(client.transactionCalls).toBe(0);
+  });
+
+  it("rejects a commit whose delivery groups exceed the provider limit before a transaction", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        context: inputValue.context,
+        entity: inputValue,
+        id: "too-many-deliveries",
+        entityId: "task",
+        next: {
+          id: "task",
+          state: create(StringValueSchema, { value: "next" }),
+          version: 1n,
+          archived: false,
+          deleted: false,
+        },
+        events: Array.from({ length: 25 }, (_, index) =>
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: `delivery-${String(index)}` }),
+          }),
+        ),
+      }),
+    ).rejects.toThrow("25 entity-group limit");
+
+    expect(client.transactionCalls).toBe(0);
+  });
+
+  it("retries a transaction abort and returns conflict without durable mutation", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+    const commit = EntityCommitStorageFactories.create(factory, inputValue);
+    const transaction = client.transaction.bind(client);
+    let aborts = 1;
+    client.transaction = () => {
+      const value = transaction();
+      const run = value.run.bind(value);
+      value.run = async () => {
+        if (aborts > 0) {
+          aborts -= 1;
+          throw Object.assign(new Error("transaction aborted"), { code: 10 });
+        }
+        return run();
+      };
+      return value;
+    };
+    const mutation = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "retry",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "next" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+
+    await expect(commit.commit(mutation)).resolves.toBe("committed");
+    await expect(
+      commit.commit({
+        ...mutation,
+        id: "conflict",
+        expected: { ...mutation.next, state: create(StringValueSchema, { value: "wrong" }) },
+      }),
+    ).resolves.toBe("conflict");
+    expect(client.transactionCalls).toBeGreaterThanOrEqual(3);
+    await expect(
+      factory.createEntityStorage(inputValue).current.read("task"),
+    ).resolves.toMatchObject({
+      state: { value: "next" },
+      version: 1n,
+    });
+  });
+
+  it("surfaces retry exhaustion after three aborted commit transactions", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+    const transaction = client.transaction.bind(client);
+    client.transaction = () => {
+      const value = transaction();
+      value.run = () =>
+        Promise.reject(Object.assign(new Error("transaction aborted"), { code: 10 }));
+      return value;
+    };
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        context: inputValue.context,
+        entity: inputValue,
+        id: "exhaustion",
+        entityId: "task",
+        next: {
+          id: "task",
+          state: create(StringValueSchema, { value: "next" }),
+          version: 1n,
+          archived: false,
+          deleted: false,
+        },
+      }),
+    ).rejects.toThrow("transaction aborted");
+    expect(client.transactionCalls).toBe(3);
+  });
+
+  it("rejects invalid current and retained-history identities without committing", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const factory = new DatastoreStorageFactory({ client: backend.client() as never });
+    const inputValue = input();
+    const base = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "invalid",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "next" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        ...base,
+        states: [{ ...state(1), entityId: "other" }],
+      }),
+    ).rejects.toThrow("state history belongs to another Entity");
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        ...base,
+        diagnostics: [
+          {
+            entityId: "task",
+            event: create(EventSchema),
+            producerVersion: 1n,
+            createdAt: time(1),
+          },
+        ],
+      }),
+    ).rejects.toThrow("Event history requires an event ID");
+    const mismatched = { ...inputValue, extractId: (value: StringValue) => value.value };
+    await expect(
+      EntityCommitStorageFactories.create(factory, mismatched).commit({
+        ...base,
+        entity: mismatched,
+      }),
+    ).rejects.toThrow("current record ID does not match");
+  });
+
+  it("rejects divergent retained state and diagnostic retries after preserving the first commit", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const factory = new DatastoreStorageFactory({ client: backend.client() as never });
+    const inputValue = input();
+    const commit = EntityCommitStorageFactories.create(factory, inputValue);
+    const first = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "first",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "one" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+      states: [state(1)],
+      diagnostics: [historyEvent("diagnostic", "task")],
+    };
+    await expect(commit.commit(first)).resolves.toBe("committed");
+    const expected = first.next;
+    await expect(
+      commit.commit({
+        ...first,
+        id: "state-retry",
+        expected,
+        states: [{ ...state(1), state: create(StringValueSchema, { value: "other" }) }],
+        diagnostics: [],
+      }),
+    ).rejects.toThrow("State-history retry has divergent content");
+    await expect(
+      commit.commit({
+        ...first,
+        id: "event-retry",
+        expected,
+        states: [],
+        diagnostics: [{ ...historyEvent("diagnostic", "task"), producerVersion: 2n }],
+      }),
+    ).rejects.toThrow("Event-history retry has divergent content");
+  });
+
+  it("returns committed to the invocation whose ambiguous acknowledgement persisted", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const firstFactory = new DatastoreStorageFactory({ client: backend.client() as never });
+    const mutation = {
+      context: input().context,
+      entity: input(),
+      id: "ambiguous-command",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "one" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+    // Bind the layout before injecting the lost acknowledgement, so the fault
+    // applies to the commit receipt rather than the first-use layout binding.
+    await firstFactory.createEntityStorage(input()).current.read("task");
+    backend.failCommitAppliedOnce = true;
+
+    await expect(
+      EntityCommitStorageFactories.create(firstFactory, input()).commit(mutation),
+    ).resolves.toBe("committed");
+  });
+
+  it("returns exactly one committed result to competing identical callers", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const inputValue = input();
+    const mutation = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "competing-command",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "one" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+    const first = new DatastoreStorageFactory({ client: backend.client() as never });
+    const second = new DatastoreStorageFactory({ client: backend.client() as never });
+
+    const outcomes = await Promise.all([
+      EntityCommitStorageFactories.create(first, inputValue).commit(mutation),
+      EntityCommitStorageFactories.create(second, inputValue).commit(mutation),
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome === "committed")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome === "replayed")).toHaveLength(1);
   });
 
   it("rejects an independent-client divergent event-ID race with one global marker set", async () => {

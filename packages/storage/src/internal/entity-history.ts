@@ -20,3 +20,9 @@ export {
   type EntityStorageConformance,
 } from "../entity/history-conformance.js";
 export type { EntityIdCodec, EntityStorageInput } from "../memory/in-memory-entity-history.js";
+export type {
+  EntityCommitInput,
+  EntityCommitResult,
+  EntityCommitStorage,
+  EntityCommitStorageFactory,
+} from "./entity-commit.js";
