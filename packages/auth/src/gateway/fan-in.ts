@@ -40,7 +40,8 @@ export class RoundRobinUnaryForwarder implements UnaryForwarder {
   forward(request: Parameters<UnaryForwarder["forward"]>[0]): Promise<Uint8Array> {
     const child = this.#children[this.#next];
     this.#next = (this.#next + 1) % this.#children.length;
-    return child!.forward(request);
+    if (child === undefined) throw new Error("Gateway backend is absent.");
+    return child.forward(request);
   }
 }
 
@@ -77,7 +78,9 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
       return { kind: "backend-subscription-envelope", bytes: FanInValues.encode(created) };
     } catch (error) {
       await Promise.allSettled(
-        created.map((backend, index) => this.#children[index]!.dispose(backend, signal)),
+        created.map((backend, index) =>
+          FanInValues.child(this.#children, index).dispose(backend, signal),
+        ),
       );
       throw error;
     } finally {
@@ -106,7 +109,7 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
       await Promise.all(
         children.map(async (backend, index) => {
           try {
-            await this.#children[index]!.activate(
+            await FanInValues.child(this.#children, index).activate(
               { wire: request.wire, backend, updates: request.updates },
               signal,
             );
@@ -161,11 +164,12 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
     const children = FanInValues.decode(envelope.bytes);
     try {
       const settled = await Promise.allSettled(
-        children.map((backend, index) => operation(this.#children[index]!, backend)),
+        children.map((backend, index) =>
+          operation(FanInValues.child(this.#children, index), backend),
+        ),
       );
-      const failures = settled.flatMap((result) =>
-        result.status === "rejected" ? [result.reason] : [],
-      );
+      const failures: unknown[] = [];
+      for (const result of settled) if (result.status === "rejected") failures.push(result.reason);
       if (failures.length > 0)
         throw new AggregateError(failures, "Subscription fan-in operation failed.");
     } finally {
@@ -198,7 +202,8 @@ const FanInValues = Object.freeze({
   decode(bytes: Uint8Array): BackendSubscriptionEnvelope[] {
     if (bytes.byteLength < 2 || bytes[0] !== envelopeVersion)
       throw new Error("Invalid subscription fan-in envelope.");
-    const count = bytes[1]!;
+    const count = bytes.at(1);
+    if (count === undefined) throw new Error("Invalid subscription fan-in envelope.");
     FanInValues.children(Array.from({ length: count }));
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const result: BackendSubscriptionEnvelope[] = [];
@@ -237,5 +242,10 @@ const FanInValues = Object.freeze({
         }),
       ),
     });
+  },
+  child<T>(children: readonly T[], index: number): T {
+    const child = children[index];
+    if (child === undefined) throw new Error("Subscription fan-in child is absent.");
+    return child;
   },
 });

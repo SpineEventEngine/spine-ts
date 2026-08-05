@@ -35,7 +35,7 @@ describe("gateway fan-in collaborators", () => {
       {
         wire: { kind: "public-subscription", bytes: new Uint8Array() },
         backend,
-        updates: async () => undefined,
+        updates: () => Promise.resolve(),
       },
       signal,
     );
@@ -79,10 +79,10 @@ function unary(
   let calls = 0;
   return {
     forwarder: {
-      async forward(): Promise<Uint8Array> {
+      forward(): Promise<Uint8Array> {
         calls++;
-        if (failure !== undefined) throw failure;
-        return bytes(name);
+        if (failure !== undefined) return Promise.reject(failure);
+        return Promise.resolve(bytes(name));
       },
     },
     calls: () => calls,
@@ -99,22 +99,25 @@ function creator(
   };
   return {
     creator: {
-      async subscribe(): Promise<BackendSubscriptionEnvelope> {
+      subscribe(): Promise<BackendSubscriptionEnvelope> {
         calls.push("subscribe");
         fail("subscribe");
-        return { kind: "backend-subscription-envelope", bytes: bytes(name) };
+        return Promise.resolve({ kind: "backend-subscription-envelope", bytes: bytes(name) });
       },
-      async activate(): Promise<void> {
+      activate(): Promise<void> {
         calls.push("activate");
         fail("activate");
+        return Promise.resolve();
       },
-      async cancel(): Promise<void> {
+      cancel(): Promise<void> {
         calls.push("cancel");
         fail("cancel");
+        return Promise.resolve();
       },
-      async dispose(): Promise<void> {
+      dispose(): Promise<void> {
         calls.push("dispose");
         fail("dispose");
+        return Promise.resolve();
       },
     },
     calls,

@@ -86,12 +86,17 @@ export const BrowserServer: Readonly<{
     const running = BrowserServerValues.running(native);
     const backendBaseUrls = Array.isArray(native)
       ? BrowserServer.backendUrls(native)
-      : [typeof native === "string" ? native : running!.baseUrl];
+      : [
+          typeof native === "string"
+            ? native
+            : BrowserServerValues.requiredRunning(running).baseUrl,
+        ];
     const creators = backendBaseUrls.map(
       (baseUrl) => new NativeSubscriptionCreator(createGrpcTransport({ baseUrl })),
     );
-    const creator = creators.length === 1 ? creators[0]! : new FanInSubscriptionCreator(creators);
-    const forwarder = creators.length === 1 ? creators[0]! : new RoundRobinUnaryForwarder(creators);
+    const firstCreator = BrowserServerValues.firstCreator(creators);
+    const creator = creators.length === 1 ? firstCreator : new FanInSubscriptionCreator(creators);
+    const forwarder = creators.length === 1 ? firstCreator : new RoundRobinUnaryForwarder(creators);
     const bindings =
       options.bindings ??
       new InMemorySubscriptionBindings({
@@ -499,6 +504,15 @@ export const BrowserServer: Readonly<{
 });
 
 const BrowserServerValues = Object.freeze({
+  requiredRunning(value: RunningServer | undefined): RunningServer {
+    if (value === undefined) throw new Error("Browser server local backend is absent.");
+    return value;
+  },
+  firstCreator(values: readonly NativeSubscriptionCreator[]): NativeSubscriptionCreator {
+    const creator = values[0];
+    if (creator === undefined) throw new Error("Browser server backend is absent.");
+    return creator;
+  },
   running(native: RunningServer | string | readonly string[]): RunningServer | undefined {
     return typeof native === "string" || Array.isArray(native)
       ? undefined
