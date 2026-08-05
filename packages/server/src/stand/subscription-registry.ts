@@ -831,7 +831,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       const record = await this.#control.read(controlSlot);
       if (record === undefined) {
         const rows = await this.#definitions();
-        const initial: Control = { revision: 1, count: rows.length };
+        const initial: Control = { version: 2, state: "clean", revision: 1, count: rows.length };
         if (await this.#control.compareAndSet(controlSlot, undefined, writeControl(initial)))
           return;
         continue;
@@ -896,6 +896,8 @@ interface ControlOperation {
   readonly digest: string;
 }
 interface Control {
+  readonly version: 2;
+  readonly state: "clean" | "staged" | "committed";
   readonly revision: number;
   readonly count: number;
   readonly operation?: ControlOperation;
@@ -910,6 +912,8 @@ function controlWithOperation(
   operation?: ControlOperation,
 ): Control {
   return Object.freeze({
+    version: 2,
+    state: operation === undefined ? "clean" : "staged",
     revision: control.revision + 1,
     count,
     ...(operation === undefined ? {} : { operation }),
@@ -928,8 +932,16 @@ function readControl(record: Any, limit: number): Control {
     if (record.typeUrl !== controlTypeUrl) throw Error();
     const value: unknown = JSON.parse(new TextDecoder().decode(record.value));
     if (typeof value !== "object" || value === null) throw Error();
-    const control = value as { revision?: unknown; count?: unknown; operation?: unknown };
+    const control = value as {
+      version?: unknown;
+      state?: unknown;
+      revision?: unknown;
+      count?: unknown;
+      operation?: unknown;
+    };
     if (
+      control.version !== 2 ||
+      (control.state !== "clean" && control.state !== "staged" && control.state !== "committed") ||
       !Number.isSafeInteger(control.revision) ||
       (control.revision as number) < 1 ||
       !Number.isSafeInteger(control.count) ||
@@ -937,11 +949,14 @@ function readControl(record: Any, limit: number): Control {
       (control.count as number) > limit
     )
       throw Error();
-    if (control.operation === undefined)
+    if (control.state === "clean" && control.operation === undefined)
       return Object.freeze({
+        version: 2 as const,
+        state: "clean" as const,
         revision: control.revision as number,
         count: control.count as number,
       });
+    if (control.state === "clean" || control.operation === undefined) throw Error();
     const operation = control.operation as { kind?: unknown; id?: unknown; digest?: unknown };
     if (
       (operation.kind !== "create" && operation.kind !== "delete") ||
@@ -952,6 +967,8 @@ function readControl(record: Any, limit: number): Control {
     )
       throw Error();
     return Object.freeze({
+      version: 2 as const,
+      state: control.state,
       revision: control.revision as number,
       count: control.count as number,
       operation: Object.freeze({
