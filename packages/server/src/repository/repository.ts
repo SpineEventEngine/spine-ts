@@ -2218,7 +2218,11 @@ class ProcessManagerExecutionSupport {
       deferred?.cancel();
       throw error;
     }
-    deferred?.notify();
+    try {
+      deferred?.notify();
+    } catch (error) {
+      this.#runtime.recordDispatchFailure(events[events.length - 1] ?? create(EventSchema), error);
+    }
     return true;
   }
 
