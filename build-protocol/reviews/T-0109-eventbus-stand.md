@@ -238,3 +238,9 @@ limitation is recorded honestly, and the role reported no visible mismatch.
 Security is N/A for final review: T-0109 introduces no credential,
 authorization, external-input, or deployment trust boundary, and its internal
 provider SPI remains non-public.
+
+The release profile exposed one deterministic deleted-state catch-up regression
+after the review wave. `c0bb470b` corrects only Projection and Process Manager
+entity initialization while preserving tombstones as atomic expected records.
+The existing reliability concern receives one exact confirmation under its
+retained explicit Terra/high profile; no broad review lane is reopened.
