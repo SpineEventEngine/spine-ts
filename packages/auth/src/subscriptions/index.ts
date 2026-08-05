@@ -221,6 +221,11 @@ export interface SubscriptionBindings {
   // prettier-ignore
 
   /**
+   * Declares exact topology persistence and equality fencing for durable fan-in bindings.
+   */
+  readonly topologyFencing?: true;
+
+  /**
    * Creates an inactive private binding.
    * @param input Supplies the copied backend envelope and ownership facts.
    * @returns Returns the new public binding identifier.

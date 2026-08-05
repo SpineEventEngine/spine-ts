@@ -610,7 +610,7 @@ export interface BrowserServerOptions {
   /**
    * Selects one separately hosted Spine backend or an ordered fixed set of 1–32 backends.
    *
-   * The URL must be one canonical HTTP(S) origin without credentials, query,
+   * Each URL must be one canonical HTTP(S) origin without credentials, query,
    * fragment, or a path beyond `/`. `baseUrl` and `baseUrls` are exclusive;
    * fan-in is best effort, so clients re-query authoritative state after a
    * duplicate update or generic loss notice.

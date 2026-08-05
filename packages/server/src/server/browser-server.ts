@@ -307,7 +307,7 @@ export const BrowserServer: Readonly<{
         throw new Error("Standalone browser server requires explicit subscription bindings.");
       if (
         BrowserServerValues.backendUrlsFor(options.backend).length > 1 &&
-        (options.bindings as { readonly topologyFencing?: unknown }).topologyFencing !== true
+        options.bindings.topologyFencing !== true
       )
         throw new Error(
           "Standalone browser fan-in requires topology-fencing subscription bindings.",

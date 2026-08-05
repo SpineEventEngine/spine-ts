@@ -14,6 +14,7 @@ import type {
 const maximumChildren = 32;
 const envelopeVersion = 1;
 const defaultEnvelopeBytes = 1_048_576;
+const defaultCleanupTimeoutMs = 30_000;
 
 /**
  * Forwards each accepted unary request to one fixed backend in round-robin order.
@@ -33,7 +34,7 @@ export class RoundRobinUnaryForwarder implements UnaryForwarder {
   }
 
   /**
-   * Returns the selected backend response for one authorized request.
+   * Returns the selected backend response for one authorized request without retry.
    *
    * @param request Supplies the authorized request.
    * @returns Resolves to the selected backend response.
@@ -54,22 +55,28 @@ export class RoundRobinUnaryForwarder implements UnaryForwarder {
 export class FanInSubscriptionCreator implements SubscriptionCreator {
   readonly #children: readonly SubscriptionCreator[];
   readonly #maxEnvelopeBytes: number;
+  readonly #cleanupTimeoutMs: number;
 
   /**
    * Creates a bounded fixed subscription fan-in.
    *
    * @param children Supplies the ordered backend creators.
    * @param maxEnvelopeBytes Limits the aggregate private envelope bytes.
+   * @param cleanupTimeoutMs Limits non-cooperative rollback cleanup.
    */
   constructor(
     children: readonly SubscriptionCreator[],
     maxEnvelopeBytes: number = defaultEnvelopeBytes,
+    cleanupTimeoutMs: number = defaultCleanupTimeoutMs,
   ) {
     FanInValues.children(children);
     if (!Number.isSafeInteger(maxEnvelopeBytes) || maxEnvelopeBytes < 2)
       throw new RangeError("Gateway backend envelope limit must be a safe integer of at least 2.");
+    if (!Number.isSafeInteger(cleanupTimeoutMs) || cleanupTimeoutMs < 1)
+      throw new RangeError("Gateway cleanup timeout must be a positive safe integer.");
     this.#children = [...children];
     this.#maxEnvelopeBytes = maxEnvelopeBytes;
+    this.#cleanupTimeoutMs = cleanupTimeoutMs;
   }
 
   /**
@@ -91,15 +98,27 @@ export class FanInSubscriptionCreator implements SubscriptionCreator {
         bytes: FanInValues.encode(created, this.#maxEnvelopeBytes),
       };
     } catch (error) {
-      await Promise.allSettled(
-        created.map((backend, index) =>
-          FanInValues.child(this.#children, index).dispose(backend, new AbortController().signal),
-        ),
-      );
+      await this.#cleanup(created);
       throw error;
     } finally {
       for (const backend of created) backend.bytes.fill(0);
     }
+  }
+
+  async #cleanup(created: readonly BackendSubscriptionEnvelope[]): Promise<void> {
+    const controller = new AbortController();
+    const settled = Promise.allSettled(
+      created.map((backend, index) =>
+        FanInValues.child(this.#children, index).dispose(backend, controller.signal),
+      ),
+    );
+    const deadline = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        controller.abort();
+        resolve();
+      }, this.#cleanupTimeoutMs);
+    });
+    await Promise.race([settled.then(() => undefined), deadline]);
   }
 
   /**
