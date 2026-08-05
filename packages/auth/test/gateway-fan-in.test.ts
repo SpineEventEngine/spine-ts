@@ -64,6 +64,48 @@ describe("gateway fan-in collaborators", () => {
     expect(second.calls).toEqual(["subscribe"]);
   });
 
+  it("uses a fresh cleanup signal after an aborted child creation", async () => {
+    const controller = new AbortController();
+    let cleanupAborted: boolean | undefined;
+    const first: SubscriptionCreator = {
+      subscribe: () =>
+        Promise.resolve({ kind: "backend-subscription-envelope", bytes: bytes("one") }),
+      activate: () => Promise.resolve(),
+      cancel: () => Promise.resolve(),
+      dispose: (_backend, signal) => {
+        cleanupAborted = signal.aborted;
+        return Promise.resolve();
+      },
+    };
+    const second: SubscriptionCreator = {
+      ...creator("two").creator,
+      subscribe: () => {
+        controller.abort();
+        return Promise.reject(new Error("timed out"));
+      },
+    };
+    await expect(
+      new FanInSubscriptionCreator([first, second]).subscribe(
+        { kind: "subscription-topic", bytes: bytes("topic") },
+        controller.signal,
+      ),
+    ).rejects.toThrow("timed out");
+    expect(cleanupAborted).toBe(false);
+  });
+
+  it("caps aggregate envelopes before allocation and compensates created children", async () => {
+    const first = creator("first");
+    const second = creator("second");
+    await expect(
+      new FanInSubscriptionCreator([first.creator, second.creator], 8).subscribe(
+        { kind: "subscription-topic", bytes: bytes("topic") },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("backend-envelope-too-large");
+    expect(first.calls).toContain("dispose");
+    expect(second.calls).toContain("dispose");
+  });
+
   it("rejects an empty or oversized fixed backend list", () => {
     expect(() => new RoundRobinUnaryForwarder([])).toThrow("between 1 and 32");
     expect(
