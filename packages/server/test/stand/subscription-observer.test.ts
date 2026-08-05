@@ -614,6 +614,47 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("filters unarchive and restore updates by their current state", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      filteredSubscription(ProjectionStateSchema, packString("match")),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+    for (const [schema, id] of [
+      [EntityLog.EntityUnarchivedSchema, "other"],
+      [EntityLog.EntityRestoredSchema, "other"],
+      [EntityLog.EntityUnarchivedSchema, "match"],
+      [EntityLog.EntityRestoredSchema, "match"],
+    ] as const) {
+      await bus.post(
+        create(EventSchema, {
+          id: { value: `${id}-${schema.typeName}` },
+          message: AnyMessages.pack(
+            schema,
+            create(schema, {
+              entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              signalId: [{ id: packString(id), typeUrl: TypeUrls.derive(StringValueSchema) }],
+              version: { number: 1 },
+              state: AnyMessages.pack(ProjectionStateSchema, createState(id, id, 1)),
+            }),
+            { validate: false },
+          ),
+        }),
+      );
+    }
+    expect(received).toHaveLength(2);
+    expect(
+      received.map(
+        (update) => AnyMessages.unpack(entityUpdateId(update), StringValueSchema)?.value,
+      ),
+    ).toEqual(["match", "match"]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
   it("forwards accepted event targets while redacting client rejection details", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
