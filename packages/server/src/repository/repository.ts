@@ -50,6 +50,7 @@ import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
   type Entity,
+  type EntityLifecycleFlags,
   ProcessManager,
   Projection,
   type EntityFamily,
@@ -3140,9 +3141,9 @@ class EntityStateChangePublishing {
     command: Command,
     entityId: unknown,
     oldState: Message | undefined,
-    oldLifecycle: { readonly archived: boolean; readonly deleted: boolean } | undefined,
+    oldLifecycle: EntityLifecycleFlags | undefined,
     newState: Message,
-    lifecycle: { readonly archived: boolean; readonly deleted: boolean },
+    lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
     const producerId = RepositorySignals.runtimeProducerId(entityId);
@@ -3171,9 +3172,9 @@ class EntityStateChangePublishing {
     source: Event,
     entityId: unknown,
     oldState: Message | undefined,
-    oldLifecycle: { readonly archived: boolean; readonly deleted: boolean } | undefined,
+    oldLifecycle: EntityLifecycleFlags | undefined,
     newState: Message,
-    lifecycle: { readonly archived: boolean; readonly deleted: boolean },
+    lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
     const producerId = RepositorySignals.runtimeProducerId(entityId);
@@ -3204,11 +3205,19 @@ class EntityStateChangePublishing {
     signalTypeUrl: string,
     entityId: unknown,
     oldState: Message | undefined,
-    oldLifecycle: { readonly archived: boolean; readonly deleted: boolean } | undefined,
+    oldLifecycle: EntityLifecycleFlags | undefined,
     newState: Message,
-    lifecycle: { readonly archived: boolean; readonly deleted: boolean },
+    lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
+    const metadataByOrdinal = new Map<number, ReturnType<SignalMetadata["eventFromCommand"]>>();
+    const metadata = (ordinal: number) => {
+      const existing = metadataByOrdinal.get(ordinal);
+      if (existing !== undefined) return existing;
+      const created = metadataFor(ordinal);
+      metadataByOrdinal.set(ordinal, created);
+      return created;
+    };
     const entity = create(MessageIdSchema, {
       id: this.#packEntityId(repository, entityId),
       typeUrl: TypeUrls.derive(repository.stateSchema),
@@ -3239,7 +3248,7 @@ class EntityStateChangePublishing {
                   : { oldState: AnyMessages.pack(repository.stateSchema, oldState as never) }),
                 newState: packedState,
                 signalId: signalIdValue,
-                when: metadataFor(0).context.timestamp,
+                when: metadata(0).context.timestamp,
                 newVersion: create(VersionSchema, { number: version }),
               }),
             ] as [MessageSchema, Message],
@@ -3256,14 +3265,14 @@ class EntityStateChangePublishing {
                 ? create(EntityLog.EntityArchivedSchema, {
                     entity,
                     signalId: signalIdValue,
-                    when: metadataFor(0).context.timestamp,
+                    when: metadata(0).context.timestamp,
                     version: create(VersionSchema, { number: version }),
                     lastState: packedState,
                   })
                 : create(EntityLog.EntityUnarchivedSchema, {
                     entity,
                     signalId: signalIdValue,
-                    when: metadataFor(0).context.timestamp,
+                    when: metadata(0).context.timestamp,
                     version: create(VersionSchema, { number: version }),
                     state: packedState,
                   }),
@@ -3278,7 +3287,7 @@ class EntityStateChangePublishing {
                 ? create(EntityLog.EntityDeletedSchema, {
                     entity,
                     signalId: signalIdValue,
-                    when: metadataFor(0).context.timestamp,
+                    when: metadata(0).context.timestamp,
                     version: create(VersionSchema, { number: version }),
                     deletion: { case: "markedAsDeleted", value: true },
                     lastState: packedState,
@@ -3286,7 +3295,7 @@ class EntityStateChangePublishing {
                 : create(EntityLog.EntityRestoredSchema, {
                     entity,
                     signalId: signalIdValue,
-                    when: metadataFor(0).context.timestamp,
+                    when: metadata(0).context.timestamp,
                     version: create(VersionSchema, { number: version }),
                     state: packedState,
                   }),
@@ -3295,20 +3304,28 @@ class EntityStateChangePublishing {
     ];
     messages.forEach(([schema, message], ordinal) => {
       runtime.registerSystemEventSchema(schema);
-      const metadata = metadataFor(ordinal);
+      const eventMetadata = metadata(ordinal);
+      if ("when" in message && eventMetadata.context.timestamp !== undefined)
+        (message as { when?: Timestamp }).when = eventMetadata.context.timestamp;
       const event = create(EventSchema, {
-        id: metadata.id,
+        id: eventMetadata.id,
         message: AnyMessages.pack(schema, message as never),
-        context: metadata.context,
+        context: eventMetadata.context,
       });
-      try {
-        void runtime.postSystemFollowUp(event).catch((error: unknown) => {
+      this.#post(runtime, event);
+    });
+  }
+
+  #post(runtime: RepositoryRuntime, event: Event): void {
+    try {
+      void runtime
+        .postSystemFollowUp(event)
+        .catch((error: unknown) => {
           runtime.recordDispatchFailure(event, error);
         });
-      } catch (error) {
-        runtime.recordDispatchFailure(event, error);
-      }
-    });
+    } catch (error) {
+      runtime.recordDispatchFailure(event, error);
+    }
   }
 
   #sameState(schema: MessageSchema, left: Message, right: Message): boolean {
