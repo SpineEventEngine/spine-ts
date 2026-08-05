@@ -1,6 +1,6 @@
 # T-0116: Entity Lifecycle System Events
 
-Status: Review converged; release verification pending
+Status: Review reconverged; release verification retry pending
 
 ## Objective
 

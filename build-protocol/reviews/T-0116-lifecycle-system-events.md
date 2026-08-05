@@ -133,3 +133,7 @@ match the assignments above. No finding is rejected or deferred.
   production correction and test. Expected and explicitly dispatched profile:
   `gpt-5.6-terra` / `high`; immutable configured metadata applies because
   runtime self-introspection is unavailable.
+- Focused re-review is clean at `e3be0437`: failure aggregation, idempotent
+  cleanup, resource detachment, and registry shutdown ordering have no
+  remaining finding. The reviewer again reported unavailable runtime
+  introspection and the matching immutable configured profile.
