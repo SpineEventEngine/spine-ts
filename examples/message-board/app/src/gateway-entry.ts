@@ -15,7 +15,7 @@ const sessions = MessageBoardDeployment.sessions(storage, process.env);
 const server = await Server.atPort(config.port, {
   host: config.host,
   browser: {
-    backend: { baseUrl: config.backendUrl },
+    backend: { baseUrls: config.backendUrls },
     origins: [config.webOrigin],
     registry: typeRegistry,
     sessions,

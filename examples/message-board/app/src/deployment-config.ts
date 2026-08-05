@@ -27,7 +27,7 @@ interface CombinedConfig extends DeploymentConfig {
 }
 
 interface GatewayConfig extends CombinedConfig {
-  readonly backendUrl: string;
+  readonly backendUrls: readonly string[];
 }
 
 interface DeploymentContract {
@@ -80,7 +80,7 @@ export const MessageBoardDeployment: DeploymentContract = Object.freeze({
   gateway(environment: NodeJS.ProcessEnv): GatewayConfig {
     return {
       ...MessageBoardDeployment.combined(environment),
-      backendUrl: DeploymentValues.required(environment, "BACKEND_URL"),
+      backendUrls: DeploymentValues.backendUrls(environment),
     };
   },
 
@@ -162,6 +162,16 @@ const DeploymentValues = Object.freeze({
     if (value === undefined || value.length === 0)
       throw new Error(`Missing required configuration: ${name}.`);
     return value;
+  },
+
+  backendUrls(environment: NodeJS.ProcessEnv): readonly string[] {
+    const configured = environment.BACKEND_URLS;
+    if (configured === undefined || configured.length === 0)
+      return [DeploymentValues.required(environment, "BACKEND_URL")];
+    const values = configured.split(",").map((value) => value.trim());
+    if (values.some((value) => value.length === 0))
+      throw new Error("Invalid required configuration: BACKEND_URLS.");
+    return values;
   },
 
   /**

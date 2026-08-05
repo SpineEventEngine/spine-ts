@@ -29,8 +29,17 @@ describe("MessageBoard deployment configuration", () => {
       subscriptionNamespace: "message-board-subscriptions",
     });
     expect(MessageBoardDeployment.gateway(completeEnvironment)).toMatchObject({
-      backendUrl: "http://application:8081",
+      backendUrls: ["http://application:8081"],
     });
+  });
+
+  it("prefers the ordered fixed BACKEND_URLS topology over the legacy backend URL", () => {
+    expect(
+      MessageBoardDeployment.gateway({
+        ...completeEnvironment,
+        BACKEND_URLS: "http://application-a:8081,http://application-b:8081",
+      }).backendUrls,
+    ).toEqual(["http://application-a:8081", "http://application-b:8081"]);
   });
 
   it.each([
