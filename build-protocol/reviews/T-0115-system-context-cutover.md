@@ -242,3 +242,14 @@ build and terminal-order requirements without changing public scope.
 - Focused evidence: EventBus, context, runtime, and Stand tests passed 148
   tests; server/tooling typechecks, changed-file ESLint, TSDoc, Prettier, and
   diff checks passed.
+
+## Third Targeted Re-review
+
+- Correction base: `6f949c6f`.
+- Correction endpoint: `94e64416`.
+- Immutable correction diff:
+  `.superpowers/sdd/review-6f949c6f..94e64416.diff`.
+- Style/maintainability and performance/reliability are re-dispatched with
+  their previously recorded explicit roles and `gpt-5.6-terra` / high
+  profiles. Review is limited to resolution of the three accepted findings and
+  regressions introduced by this correction.
