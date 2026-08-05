@@ -1,4 +1,5 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { randomBytes } from "node:crypto";
 import {
   StandSubscriptionRecordSchema,
   SubscriptionPhase,
@@ -15,7 +16,7 @@ const maximumBytes = 1_048_576;
 interface StandSubscriptionRecordCodec {
   readonly schema: typeof StandSubscriptionRecordSchema;
   read(record: StandSubscriptionRecord, expectedId?: string): StandSubscriptionEntry;
-  write(entry: StandSubscriptionEntry): StandSubscriptionRecord;
+  write(entry: StandSubscriptionEntry, generation?: Uint8Array): StandSubscriptionRecord;
   decode(bytes: Uint8Array, expectedId?: string): StandSubscriptionEntry;
 }
 
@@ -38,6 +39,7 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
         throw Error();
       const topicId = subscription.topic?.id?.value;
       if (typeof topicId !== "string" || topicId.trim() === "") throw Error();
+      if (record.generation.byteLength !== 16) throw Error();
       if (record.createdAt === undefined || record.createdAt.seconds < 0n) throw Error();
       if (record.revision < 1n || record.revision > BigInt(Number.MAX_SAFE_INTEGER)) throw Error();
       const createdAtMs =
@@ -70,13 +72,15 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
     }
   },
 
-  write(entry: StandSubscriptionEntry): StandSubscriptionRecord {
+  write(entry: StandSubscriptionEntry, generation = randomBytes(16)): StandSubscriptionRecord {
+    if (generation.byteLength !== 16) throw new RangeError("Stand subscription generation is invalid.");
     const record = create(StandSubscriptionRecordSchema, {
       subscription: entry.subscription,
       phase: entry.phase === "pending" ? SubscriptionPhase.PENDING : SubscriptionPhase.ACTIVE,
       createdAt: timestamp(entry.createdAt),
       ...(entry.pendingUntil === undefined ? {} : { pendingUntil: timestamp(entry.pendingUntil) }),
       revision: entry.revision,
+      generation,
     });
     StandSubscriptionRecords.read(record, entry.subscription.id?.value);
     if (toBinary(StandSubscriptionRecordSchema, record).byteLength > maximumBytes) {

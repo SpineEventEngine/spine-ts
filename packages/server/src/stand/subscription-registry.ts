@@ -630,7 +630,13 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           createdAt: entry.createdAt,
           revision: entry.revision + 1n,
         });
-        if (await this.#storage.compareAndSet(id, record, StandSubscriptionRecords.write(active))) {
+        if (
+          await this.#storage.compareAndSet(
+            id,
+            record,
+            StandSubscriptionRecords.write(active, record.generation),
+          )
+        ) {
           return Object.freeze({
             kind: "activated" as const,
             entry: StorageSubscriptionRegistry.#clone(active),

@@ -29,6 +29,10 @@ message StandSubscriptionRecord {
 
     // The revision used to coordinate concurrent registry updates.
     uint64 revision = 5;
+
+    // A random, opaque 16-byte token that identifies this definition lifetime.
+    // It is internal recovery fencing metadata and changes on recreation.
+    bytes generation = 6;
 }
 
 // A lifecycle state of a durable Stand subscription.
