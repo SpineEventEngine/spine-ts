@@ -1,0 +1,56 @@
+services:
+  datastore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli@sha256:cda01b8c880e9161992c3fd61d7d0e153b4dd073aa4a9d62ad79243907cf8dd4
+    command: [gcloud, emulators, firestore, start, --database-mode=datastore-mode, --host-port=0.0.0.0:8081, --quiet]
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'echo > /dev/tcp/127.0.0.1/8081'"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  delivery:
+    image: spine-ts/simple-delivery-server:local
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8484
+
+  application-1: &application
+    image: spine-ts/message-board:local
+    command: [node_modules/@spine-event-engine/example-message-board-app/dist/src/application-entry.js]
+    environment: &application-environment
+      HOST: 0.0.0.0
+      PORT: 8080
+      NODE_ENV: production
+      DATASTORE_PROJECT_ID: distributed-message-board
+      DATASTORE_EMULATOR_HOST: datastore:8081
+      DELIVERY_SERVER_URL: http://delivery:8484
+      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+      MESSAGE_BOARD_SESSION_ISSUER: message-board
+      MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
+      MESSAGE_BOARD_SESSION_KEY_ID: distributed-fixture
+      MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set a P-256 PKCS8 PEM.}
+    depends_on: [datastore, delivery]
+
+  application-2:
+    <<: *application
+    environment: *application-environment
+
+  gateway:
+    image: spine-ts/standalone-gateway:local
+    ports: ["18080:8080"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8080
+      NODE_ENV: production
+      BROWSER_ORIGIN: http://127.0.0.1:5173
+      BACKEND_URLS: http://application-1:8080,http://application-2:8080
+      SUBSCRIPTION_REGISTRY_NAMESPACE: distributed-message-board
+      DATASTORE_PROJECT_ID: distributed-message-board
+      DATASTORE_EMULATOR_HOST: datastore:8081
+      DELIVERY_SERVER_URL: http://delivery:8484
+      SPINE_IPC_DIRECTORY: /tmp/spine-ipc
+      MESSAGE_BOARD_SESSION_ISSUER: message-board
+      MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
+      MESSAGE_BOARD_SESSION_KEY_ID: distributed-fixture
+      MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set a P-256 PKCS8 PEM.}
+    depends_on: [datastore, delivery, application-1, application-2]

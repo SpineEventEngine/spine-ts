@@ -1,0 +1,10 @@
+{
+  "name": "@spine-event-engine/example-distributed-message-board",
+  "version": "2.0.0-snapshot.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "docker compose --file deploy/compose.yaml up",
+    "test:topology": "node --test test/topology.test.mjs"
+  }
+}
