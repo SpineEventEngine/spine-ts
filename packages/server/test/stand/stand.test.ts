@@ -938,6 +938,21 @@ describe("Stand", () => {
     expect(storageFactory.closedEntityHandles).toBe(1);
   });
 
+  it("closes later entity handles when an earlier handle close fails", async () => {
+    const storageFactory = new FailingEntityHandleFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: true },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("first", "First"), { tenantId: "one" });
+    await stand.update(ProjectionStateSchema, createState("second", "Second"), { tenantId: "two" });
+
+    await expect(stand.close()).rejects.toThrow("Stand close failed.");
+    expect(storageFactory.closedEntityHandles).toBe(2);
+  });
+
   it("does not open a legacy record-storage index for list reads", async () => {
     const storageFactory = new ClosingStorageFactory();
     const stand = new Stand({
@@ -1125,7 +1140,13 @@ function pairedRuntime(
     context: { name: "__spine/System", multitenant: false },
     storageFactory,
   });
-  return new SubscriptionRuntime(domainStand, systemStand, domainEventBus, systemEventBus, registry);
+  return new SubscriptionRuntime(
+    domainStand,
+    systemStand,
+    domainEventBus,
+    systemEventBus,
+    registry,
+  );
 }
 
 function createState(id: string, name: string): ProjectionState {
@@ -1344,6 +1365,25 @@ class EntityHandleCountingFactory extends InMemoryStorageFactory {
       close: () => {
         this.closedEntityHandles++;
         close();
+      },
+    });
+  }
+}
+
+class FailingEntityHandleFactory extends EntityHandleCountingFactory {
+  #failed = false;
+
+  override createEntityStorage(input: unknown): unknown {
+    const handle = super.createEntityStorage(input) as { close(): void } & Record<string, unknown>;
+    const close = handle.close.bind(handle);
+    return Object.freeze({
+      ...handle,
+      close: () => {
+        close();
+        if (!this.#failed) {
+          this.#failed = true;
+          throw new Error("Entity handle close failed.");
+        }
       },
     });
   }

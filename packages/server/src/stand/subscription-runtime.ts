@@ -2,7 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { SubscriptionIdSchema, type SubscriptionUpdate } from "@spine-event-engine/proto/client";
 
 import type { EventBus } from "../bus/event-bus.js";
-import { SubscriptionObservers, type StandObservedState } from "./subscription-observer.js";
+import { SubscriptionObservers } from "./subscription-observer.js";
 import { standAccess, type Stand, type StandSubscription } from "./stand.js";
 import type { StandSubscriptionRegistry } from "./subscription-registry.js";
 
@@ -70,6 +70,7 @@ export class SubscriptionRuntime {
 
   /** Adds a local stream consumer and reconciles before returning its handle. */
   consume(id: string, onUpdate: (update: SubscriptionUpdate) => void): Promise<StandSubscription> {
+    if (this.#closing) return Promise.reject(new Error("Subscription runtime is closing."));
     let consumers = this.#consumers.get(id);
     if (consumers === undefined) {
       consumers = new Set();
@@ -185,14 +186,26 @@ export class SubscriptionRuntime {
     if (current?.phase !== "active" || current.revision !== revision || this.#closing) return;
     if (this.#attachments.get(id)?.revision === revision) return;
     this.#detach(id);
-    const state = standAccess.observedState(this.#domainStand, current.subscription.topic?.target?.type);
+    const state = standAccess.observedState(
+      this.#domainStand,
+      current.subscription.topic?.target?.type,
+    );
     const attachment =
       state === undefined
-        ? SubscriptionObservers.observeEvent(current.subscription as never, this.#domainEventBus, (update) =>
-            this.#notify(id, update),
+        ? SubscriptionObservers.observeEvent(
+            current.subscription as never,
+            this.#domainEventBus,
+            (update) => {
+              this.#notify(id, update);
+            },
           )
-        : SubscriptionObservers.observeState(current.subscription as never, state, this.#systemEventBus, (update) =>
-            this.#notify(id, update),
+        : SubscriptionObservers.observeState(
+            current.subscription as never,
+            state,
+            this.#systemEventBus,
+            (update) => {
+              this.#notify(id, update);
+            },
           );
     // Keep the paired Stand an explicit construction dependency. It owns no
     // copied domain metadata and is the System-side observer boundary.

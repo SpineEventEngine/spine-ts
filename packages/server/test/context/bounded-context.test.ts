@@ -377,6 +377,20 @@ describe("BoundedContext assembly", () => {
     expect(internalSystemPairing(context).system.storesEvents).toBe(true);
   });
 
+  it("acquires the paired System event store before domain resources", async () => {
+    const storageFactory = new ObservingStorageFactory([]);
+    const context = BoundedContext.singleTenant("AcquisitionOrder")
+      .withStorageFactory(storageFactory)
+      .persistSystemEvents()
+      .build();
+
+    expect(storageFactory.creations.slice(0, 2).map((creation) => creation.context.name)).toEqual([
+      "AcquisitionOrder_System",
+      "AcquisitionOrder",
+    ]);
+    await context.close();
+  });
+
   it("exposes a constant single-tenant index through internal context access", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const tenantIndex = internalTenantIndex(context);
@@ -1070,7 +1084,7 @@ describe("BoundedContext assembly", () => {
     expect(observed).toEqual(["store:event-3", "dispatch:event-3"]);
   });
 
-  it("closes the event store when event dispatcher registration fails", () => {
+  it("rejects event dispatcher classification before acquiring event storage", () => {
     const storageFactory = new ObservingStorageFactory([]);
     const dispatcher = createEventDispatcher([ProjectionStateSchema], () => undefined);
     const brokenDispatcher = {
@@ -1088,11 +1102,10 @@ describe("BoundedContext assembly", () => {
         .build(),
     ).toThrow("Cannot read event schemas.");
 
-    expect(storageFactory.storages).toHaveLength(1);
-    expect(storageFactory.storages[0]?.isOpen()).toBe(false);
+    expect(storageFactory.storages).toHaveLength(0);
   });
 
-  it("preserves event registration and event-store cleanup failures", () => {
+  it("does not acquire an event store before dispatcher classification fails", () => {
     const storageFactory = new ObservingStorageFactory([], [1]);
     const brokenDispatcher = {
       messageSchemas: () => {
@@ -1111,14 +1124,8 @@ describe("BoundedContext assembly", () => {
       thrown = error;
     }
 
-    expect(thrown).toBeInstanceOf(AggregateError);
-    const errors = (thrown as AggregateError).errors as Error[];
-    expect(errors.map((error) => error.message)).toEqual([
-      "Cannot read event schemas.",
-      "Cannot close record storage.",
-    ]);
-    expect(storageFactory.storages).toHaveLength(1);
-    expect(storageFactory.storages[0]?.isOpen()).toBe(false);
+    expect(thrown).toMatchObject({ message: "Cannot read event schemas." });
+    expect(storageFactory.storages).toHaveLength(0);
   });
 
   it("registers repositories added to the builder with the built context", () => {

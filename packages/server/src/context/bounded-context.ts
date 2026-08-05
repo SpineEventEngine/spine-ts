@@ -1113,7 +1113,11 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return runtime.registry();
   },
 
-  consumeSubscription(context: BoundedContext, id: string, onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void) {
+  consumeSubscription(
+    context: BoundedContext,
+    id: string,
+    onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
+  ) {
     const runtime = contextSubscriptionRuntimes.get(context);
     if (runtime === undefined) {
       throw new TypeError("Subscription consumption requires a built BoundedContext instance.");
@@ -1425,22 +1429,12 @@ export class BoundedContextBuilder {
         ...ContextParts.repositoryEventDispatchers(registeredRepositories),
         ...this.#eventDispatchers,
       ];
+      const domainEventDispatchers = ContextParts.domainEventDispatchers(eventDispatchers);
+      const systemEventDispatchers = ContextParts.systemEventDispatchers(eventDispatchers);
       const commandBus = new CommandBus([
         ...this.#commandDispatchers,
         ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
       ]);
-      eventStore = this.createEventStore(storageFactory);
-      const eventBus = new EventBus(eventStore, [
-        ...ContextParts.domainEventDispatchers(eventDispatchers),
-      ]);
-      eventBusAccess.registerSchemas(
-        eventBus,
-        ContextParts.repositoryProducedEventSchemas(registeredRepositories),
-      );
-      stand = new Stand({
-        context: ContextParts.createStorageContext(this.#specSnapshot),
-        storageFactory,
-      });
       const systemSpec = ContextParts.createSystemSpec(
         this.#specSnapshot,
         this.#persistSystemEvents,
@@ -1450,10 +1444,20 @@ export class BoundedContextBuilder {
         : undefined;
       const systemEventBus = eventBusAccess.createSystemBus(
         systemEventStore,
-        ContextParts.systemEventDispatchers(eventDispatchers),
+        systemEventDispatchers,
       );
       systemStand = new Stand({
         context: ContextParts.createStorageContext(systemSpec),
+        storageFactory,
+      });
+      eventStore = this.createEventStore(storageFactory);
+      const eventBus = new EventBus(eventStore, [...domainEventDispatchers]);
+      eventBusAccess.registerSchemas(
+        eventBus,
+        ContextParts.repositoryProducedEventSchemas(registeredRepositories),
+      );
+      stand = new Stand({
+        context: ContextParts.createStorageContext(this.#specSnapshot),
         storageFactory,
       });
       registry ??= new StorageSubscriptionRegistry(
