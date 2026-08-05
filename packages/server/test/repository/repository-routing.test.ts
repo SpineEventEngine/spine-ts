@@ -58,6 +58,7 @@ import type {
   EntityCommitStorage,
 } from "@spine-event-engine/storage/internal/entity-commit";
 import {
+  CommandDispatchedToHandlerSchema,
   EntityArchivedSchema,
   EntityCreatedSchema,
   EntityDeletedSchema,
@@ -3044,6 +3045,159 @@ describe("repository signal routing", () => {
         priority: 1,
       }),
     );
+  });
+
+  it("emits a System command-dispatch diagnostic after aggregate handler admission", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const command = createAggregateCommand("command-diagnostic", "diagnostic-id", "Diagnostic");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          diagnostics.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.commandBus().post(command);
+      await waitForCondition(() => diagnostics.length === 1);
+
+      const diagnostic = AnyMessages.unpack(
+        diagnostics[0]?.message as never,
+        CommandDispatchedToHandlerSchema,
+      );
+      expect(diagnostic).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        payload: command,
+        entityType: { impl: { case: "javaClassName", value: "ExecutingTaskAggregate" } },
+        whenDispatched: diagnostics[0]?.context?.timestamp,
+      });
+      expect(diagnostics[0]?.context?.origin).toMatchObject({
+        case: "pastMessage",
+        value: { message: { typeUrl: TypeUrls.derive(AggregateStateSchema) } },
+      });
+      expect(context.eventBus().acceptedEventTypes()).not.toContain(
+        TypeUrls.derive(CommandDispatchedToHandlerSchema),
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("does not emit command diagnostics for refused or unroutable commands", async () => {
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createValidatingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          diagnostics.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.commandBus().post(createValidatedCommand("refused-diagnostic", "refused", "")),
+      ).rejects.toThrow(/validation/i);
+      await expect(
+        context.commandBus().post(createAggregateCommand("unroutable-diagnostic", "unroutable")),
+      ).rejects.toThrow(/dispatcher/i);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("preserves tenant context for aggregate and process-manager command diagnostics", async () => {
+    const aggregateDiagnostics: SpineEvent[] = [];
+    const aggregate = BoundedContext.multitenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          aggregateDiagnostics.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const processManagerDiagnostics: SpineEvent[] = [];
+    const processManager = BoundedContext.multitenant("ProcessManagers")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          processManagerDiagnostics.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await aggregate.commandBus().post(createAggregateCommand("diagnostic-a", "same", "A", "a"));
+      await aggregate.commandBus().post(createAggregateCommand("diagnostic-b", "same", "B", "b"));
+      await processManager
+        .commandBus()
+        .post(createAggregateCommand("diagnostic-pm", "pm", "PM", "pm-tenant"));
+      await waitForCondition(
+        () => aggregateDiagnostics.length === 2 && processManagerDiagnostics.length === 1,
+      );
+
+      expect(diagnosticTenants(aggregateDiagnostics)).toEqual(["a", "b"]);
+      expect(diagnosticTenants(processManagerDiagnostics)).toEqual(["pm-tenant"]);
+      expect(
+        AnyMessages.unpack(
+          processManagerDiagnostics[0]?.message as never,
+          CommandDispatchedToHandlerSchema,
+        ),
+      ).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        entityType: { impl: { case: "javaClassName", value: "RoutingProcessManager" } },
+      });
+    } finally {
+      await Promise.all([aggregate.close(), processManager.close()]);
+    }
+  });
+
+  it("isolates command diagnostic publication failure from admitted handler work", async () => {
+    ExecutingTaskAggregate.reset();
+    const diagnostics: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (event) => {
+          diagnostics.push(event);
+          return Promise.reject(new Error("diagnostic dispatch failed"));
+        },
+      })
+      .build();
+
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("diagnostic-failure", "failure-id")),
+      ).resolves.toBeUndefined();
+      await waitForFailures(context, 1);
+
+      expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
+      await expect(context.stand().read(AggregateStateSchema, "failure-id")).resolves.toMatchObject(
+        {
+          name: "Task (applied)",
+        },
+      );
+      expect(diagnostics).toHaveLength(1);
+      expect(context.storedEventDispatchFailures()).toMatchObject([
+        { error: { message: "diagnostic dispatch failed" } },
+      ]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("writes process-manager commands to a durable inbox before local delivery", async () => {
@@ -7967,6 +8121,16 @@ function readStateChange(event: SpineEvent | undefined) {
     throw new Error("Expected an Entity state change event.");
   }
   return AnyMessages.unpack(event.message, EntityStateChangedSchema);
+}
+
+function diagnosticTenants(events: readonly SpineEvent[]): readonly string[] {
+  return events.map((event) => {
+    const origin = event.context?.origin;
+    if (origin?.case !== "pastMessage") {
+      throw new Error("Expected diagnostic event origin.");
+    }
+    return origin.value.actorContext?.tenantId?.kind.value ?? "";
+  });
 }
 
 function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
