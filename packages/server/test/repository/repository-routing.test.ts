@@ -8519,7 +8519,8 @@ function diagnosticTenants(events: readonly SpineEvent[]): readonly string[] {
     if (origin?.case !== "pastMessage") {
       throw new Error("Expected diagnostic event origin.");
     }
-    return origin.value.actorContext?.tenantId?.kind.value ?? "";
+    const tenant = origin.value.actorContext?.tenantId?.kind;
+    return tenant?.case === "value" ? tenant.value : "";
   });
 }
 
