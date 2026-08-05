@@ -1,6 +1,6 @@
 # T-0118 Review Log
 
-Status: Correction batch implemented; targeted re-review pending
+Status: Targeted re-review complete; final correction batch accepted
 
 ## Scope
 
@@ -9,12 +9,12 @@ race/coalescing behavior, logging, and focused browser/example integration.
 
 ## Planned Dispositions
 
-| Concern                 | Existing role/profile   | Status                                                                                                                    |
-| ----------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Style/maintainability   | `gpt-5.6-terra` / high  | Two findings accepted: raw response logging and duplicate row ordering.                                                   |
-| Documentation           | `gpt-5.6-luna` / medium | Two findings accepted: raw response logging and stale post callback wording.                                              |
-| TypeScript/API docs     | `gpt-5.6-terra` / high  | N/A: no package export, public framework type, Protobuf schema, declaration surface, or public API documentation changes. |
-| Performance/reliability | `gpt-5.6-terra` / high  | Three P1 findings accepted: burst delivery loss, stale pre-reconnect recovery, and post-completion lifecycle races.       |
+| Concern                 | Existing role/profile   | Status                                                                                                                |
+| ----------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Style/maintainability   | `gpt-5.6-terra` / high  | Two findings accepted: raw response logging and duplicate row ordering.                                               |
+| Documentation           | `gpt-5.6-luna` / medium | Two findings accepted: raw response logging and stale post callback wording.                                          |
+| TypeScript/API docs     | `gpt-5.6-terra` / high  | Relevant after correction added optional public subscription callbacks; targeted review found contract and docs gaps. |
+| Performance/reliability | `gpt-5.6-terra` / high  | Three P1 findings accepted: burst delivery loss, stale pre-reconnect recovery, and post-completion lifecycle races.   |
 
 Every dispatch states the existing role, expected model, and expected
 reasoning. Actual runtime metadata or the immutable configured-profile
@@ -94,3 +94,34 @@ ESLint, Prettier, and `git diff --check` pass. Re-review style/maintainability,
 documentation, and performance/reliability; TypeScript/API docs is now
 relevant because the client-react public hook adds documented callback
 parameters.
+
+## Targeted Re-Review
+
+The original raw-response logging, duplicate comparator, stale recovery,
+burst reduction, post lifecycle, and stale TSDoc findings are resolved. The
+reliability reviewer independently ran 83 focused tests. All targeted reviewers
+used their expected immutable profiles; runtime self-introspection remained
+unavailable.
+
+Accepted final correction batch:
+
+1. **P1 — retired/uncommitted callback ownership.** Callback refs are mutated
+   during render and dereferenced by the prior live subscription. An old stream
+   can therefore invoke a new or even abandoned render's callback. Bind
+   callbacks to the committed subscription generation/handle and prove old
+   board notices cannot mutate the new board.
+2. **P1 — API contract gate.** Add the new public callback exports to the
+   deterministic API inventory. Update the exact package reference to document
+   the optional trailing callbacks, every-notice pre-coalescing semantics,
+   subscription-identity behavior, synchronous execution, and error behavior.
+3. **P2 — direct callback contract coverage.** Add client-react tests for
+   delivery/lifecycle ordering, no callback after cleanup, callback replacement
+   without subscription recreation, and throwing callbacks publishing an error
+   and cancelling exactly once.
+4. **P2 — disposition consistency.** The TypeScript/API lane is now relevant,
+   not N/A, because the correction introduced a documented public hook seam.
+
+No targeted finding is rejected. Style, TypeScript/API documentation,
+documentation completeness, and performance/reliability must confirm the
+substantive corrections; deterministic record-only updates do not independently
+reopen a lane.
