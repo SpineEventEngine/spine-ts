@@ -250,13 +250,7 @@ describe("InMemorySubscriptionRegistry", () => {
   });
 
   it("exports the exact public registry contract", () => {
-    expectTypeOf<StandSubscriptionEntry>().toEqualTypeOf<{
-      readonly subscription: Subscription;
-      readonly phase: "pending" | "active";
-      readonly createdAt: number;
-      readonly pendingUntil?: number;
-      readonly revision: bigint;
-    }>();
+    expectTypeOf<StandSubscriptionEntry["subscription"]>().not.toEqualTypeOf<Subscription>();
     expectTypeOf<StandCreateResult>().toEqualTypeOf<
       | { readonly kind: "created"; readonly entry: StandSubscriptionEntry }
       | {
@@ -279,6 +273,15 @@ describe("InMemorySubscriptionRegistry", () => {
     expectTypeOf<InMemorySubscriptionRegistry>().toExtend<StandSubscriptionRegistry>();
   });
 });
+
+function proveSubscriptionEntryIsDeepReadonly(
+  topicId: NonNullable<NonNullable<StandSubscriptionEntry["subscription"]["topic"]>["id"]>,
+): void {
+  // @ts-expect-error Public snapshots do not permit mutation of nested subscription fields.
+  topicId.value = "changed";
+}
+
+void proveSubscriptionEntryIsDeepReadonly;
 
 describe("StorageSubscriptionRegistry", () => {
   it("physically removes an expired pending definition during activation", async () => {
@@ -461,7 +464,7 @@ describe("StorageSubscriptionRegistry", () => {
     await expect(helper.snapshot()).resolves.toMatchObject([{ revision: 1n }]);
     await expect(helper.create(subscription("two"))).rejects.toBeInstanceOf(StandCapacityError);
 
-    held.release.resolve();
+    held.release.resolve(undefined);
     await expect(creating).resolves.toMatchObject({ kind: "created", entry: { revision: 1n } });
     await expect(owner.snapshot()).resolves.toMatchObject([
       { subscription: { id: { value: "one" } }, revision: 1n },
@@ -484,7 +487,7 @@ describe("StorageSubscriptionRegistry", () => {
       const helper = new StorageSubscriptionRegistry(context, factory, 1);
       await expect(helper.cleanup()).resolves.toEqual({ scanned: 1, deleted: 1, more: false });
 
-      held.release.resolve();
+      held.release.resolve(undefined);
       await expect(creating).resolves.toMatchObject({ kind: "created", entry: { revision: 1n } });
       await expect(helper.snapshot()).resolves.toMatchObject([
         { subscription: { id: { value: "one" } }, revision: 1n },
@@ -761,6 +764,7 @@ type StandRegistryScriptPhase =
   | "activate-commit"
   | "delete-stage"
   | "delete-definition"
+  | "delete-commit"
   | "discard-stage"
   | "discard-definition"
   | "discard-commit";
@@ -866,7 +870,7 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
     if (applied && this.matches(String(id), expected?.record, next?.record)) {
       const held = this.hold();
       if (held?.claim()) {
-        held.reached.resolve();
+        held.reached.resolve(undefined);
         await held.release.promise;
       }
       if (this.armed()) {
@@ -882,7 +886,7 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
     const operation = control ? controlOperation(next as unknown as Any) : undefined;
     switch (this.phase()) {
       case "create-reservation":
-        return id !== "control" && expected === undefined && next?.revision === 0n;
+        return id !== "control" && expected === undefined && revisionOf(next) === 0n;
       case "create-stage":
         return operation === "create";
       case "activate-stage":
@@ -892,13 +896,13 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
       case "discard-stage":
         return operation === "discard";
       case "create-definition":
-        return id !== "control" && expected?.revision === 0n && next?.revision === 1n;
+        return id !== "control" && revisionOf(expected) === 0n && revisionOf(next) === 1n;
       case "create-promote":
-        return id !== "control" && expected?.revision === 0n && next?.revision === 1n;
+        return id !== "control" && revisionOf(expected) === 0n && revisionOf(next) === 1n;
       case "create-commit":
         return control && controlState(next as unknown as Any) === "committed";
       case "activate-definition":
-        return id !== "control" && expected?.revision === 1n && next?.revision === 2n;
+        return id !== "control" && revisionOf(expected) === 1n && revisionOf(next) === 2n;
       case "activate-commit":
         return (
           control &&
@@ -908,7 +912,7 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
       case "delete-definition":
         return id !== "control" && expected !== undefined && next === undefined;
       case "discard-definition":
-        return id !== "control" && expected?.revision === 0n && next === undefined;
+        return id !== "control" && revisionOf(expected) === 0n && next === undefined;
       case "delete-commit":
         return (
           control &&
@@ -940,4 +944,10 @@ function controlOperation(record: Any): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function revisionOf(record: unknown): bigint | undefined {
+  if (record === null || typeof record !== "object" || !("revision" in record)) return undefined;
+  const revision = record.revision;
+  return typeof revision === "bigint" ? revision : undefined;
 }

@@ -21,8 +21,25 @@ import { SubscriptionPhase } from "@spine-event-engine/proto/generated/spine/sys
 
 import { StandSubscriptionRecords } from "./subscription-records.js";
 
-const defaultLimit = 100;
+/**
+ *
+ * Defines internal capacity and cleanup bounds shared by Stand registries.
+ *
+ * @internal
+ */
+export const standSubscriptionLimits: Readonly<{
+  maximum: number;
+  cleanupPageSize: number;
+}> = Object.freeze({ maximum: 100, cleanupPageSize: 25 });
 const pendingMilliseconds = 30_000;
+
+type DeepReadonly<Value> = Value extends (...args: never[]) => unknown
+  ? Value
+  : Value extends readonly (infer Item)[]
+    ? readonly DeepReadonly<Item>[]
+    : Value extends object
+      ? { readonly [Key in keyof Value]: DeepReadonly<Value[Key]> }
+      : Value;
 
 /**
  * A durable Stand subscription definition.
@@ -33,7 +50,7 @@ export interface StandSubscriptionEntry {
   /**
    * Stores the canonical subscription definition.
    */
-  readonly subscription: Subscription;
+  readonly subscription: DeepReadonly<Subscription>;
 
   /**
    * Identifies the current lifecycle phase.
@@ -280,8 +297,8 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
    * Creates an in-memory registry.
    * @param limit Maximum number of definitions, from one through 100.
    */
-  constructor(limit: number = defaultLimit) {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > defaultLimit) {
+  constructor(limit: number = standSubscriptionLimits.maximum) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > standSubscriptionLimits.maximum) {
       throw new RangeError(
         "Stand subscription limit must be a positive safe integer no greater than 100.",
       );
@@ -423,7 +440,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
             entry.pendingUntil <= now,
         )
         .sort(([left], [right]) => left.localeCompare(right));
-      const page = expired.slice(0, 25);
+      const page = expired.slice(0, standSubscriptionLimits.cleanupPageSize);
       for (const [id] of page) this.#entries.delete(id);
       return Object.freeze({
         scanned: page.length,
@@ -458,7 +475,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
   static #clone(entry: StandSubscriptionEntry): StandSubscriptionEntry {
     return InMemorySubscriptionRegistry.#freezeEntry({
       ...entry,
-      subscription: clone(SubscriptionSchema, entry.subscription),
+      subscription: clone(SubscriptionSchema, entry.subscription as Subscription),
     });
   }
 
@@ -511,9 +528,9 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   constructor(
     context: StorageContext,
     storageFactory: StorageFactory,
-    limit: number = defaultLimit,
+    limit: number = standSubscriptionLimits.maximum,
   ) {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > defaultLimit) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > standSubscriptionLimits.maximum) {
       throw new RangeError(
         "Stand subscription limit must be a positive safe integer no greater than 100.",
       );
@@ -800,7 +817,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           left.id.localeCompare(right.id)
         );
       });
-      const page = expired.slice(0, 25);
+      const page = expired.slice(0, standSubscriptionLimits.cleanupPageSize);
       for (const row of page) {
         const entry = StandSubscriptionRecords.read(row.record, row.id);
         if (entry.revision === 0n)
@@ -868,7 +885,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   static #clone(entry: StandSubscriptionEntry): StandSubscriptionEntry {
     return Object.freeze({
       ...entry,
-      subscription: deepFreeze(clone(SubscriptionSchema, entry.subscription)),
+      subscription: deepFreeze(clone(SubscriptionSchema, entry.subscription as Subscription)),
     });
   }
 
@@ -1233,9 +1250,12 @@ function matchesOperation(
   );
 }
 
-function sameSubscription(left: Subscription, right: Subscription): boolean {
-  const leftBytes = toBinary(SubscriptionSchema, left);
-  const rightBytes = toBinary(SubscriptionSchema, right);
+function sameSubscription(
+  left: DeepReadonly<Subscription>,
+  right: DeepReadonly<Subscription>,
+): boolean {
+  const leftBytes = toBinary(SubscriptionSchema, left as Subscription);
+  const rightBytes = toBinary(SubscriptionSchema, right as Subscription);
   return (
     leftBytes.length === rightBytes.length &&
     leftBytes.every((byte, index) => byte === rightBytes[index])
@@ -1250,18 +1270,14 @@ function subscriptionIdValue(id: SubscriptionId): string {
 
 function subscriptionEntryId(entry: StandSubscriptionEntry): string {
   if (entry.subscription.id === undefined) throw new Error("Stand subscription record is invalid.");
-  return subscriptionIdValue(entry.subscription.id);
+  return subscriptionIdValue(entry.subscription.id as SubscriptionId);
 }
 
-function registryId(id: SubscriptionId | string): string {
-  if (typeof id === "string") {
-    if (id.trim() === "") throw new TypeError("Stand subscription ID must be non-blank.");
-    return id;
-  }
+function registryId(id: SubscriptionId): string {
   return subscriptionIdValue(id);
 }
 
-function requireTopicId(subscription: Subscription): void {
+function requireTopicId(subscription: DeepReadonly<Subscription>): void {
   const topicId = subscription.topic?.id?.value;
   if (typeof topicId !== "string" || topicId.trim() === "")
     throw new TypeError("Stand subscription topic ID must be non-blank.");

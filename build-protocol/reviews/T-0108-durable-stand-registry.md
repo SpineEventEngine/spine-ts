@@ -76,6 +76,32 @@ All reviewers used the recorded existing roles and configured profiles. Runtime
 self-introspection remained unavailable and no visible model/profile mismatch
 was exposed.
 
+## Public API, Style, And Documentation Correction
+
+- Style/maintainability P2 accepted and resolved: transitional result aliases
+  are absent; canonical `StandCreateResult`, `StandActivateResult`, and
+  `StandDeleteResult` remain the only result names. The builder and both
+  registries share internal 100-definition and 25-entry cleanup bounds without
+  a server-root export. The exact durable standalone helper dispositions are in
+  `build-protocol/standalone-function-necessities/T-0080F.json`.
+- Documentation P2 accepted and resolved: the server README teaches a
+  create-to-close lifecycle and states the atomic compare-and-set provider
+  requirement and construction-time failure. The reference specifies outcomes,
+  errors, bounds, fail-closed malformed data, hidden revision-zero cleanup,
+  provider requirements, and ownership/closure without execution-wave jargon.
+- TypeScript/API P1/P2 accepted and resolved: the nested public subscription
+  view is deeply readonly; focused typechecking rejects mutation. Durable
+  activate, get, and delete accept only generated `SubscriptionId` values; both
+  registries reject negative expected revisions with `RangeError`. Builder
+  TSDoc records ownership transfer, configuration exclusion, and exact throws.
+- Mechanical evidence from the assigned existing `implementer`, explicitly
+  `gpt-5.6-terra` / `medium`: focused registry Vitest with a 5-second timeout
+  passed 43/43; server TypeScript, relevant ESLint, cleanup, TSDoc, API docs
+  (235 server exports), documentation audience, Prettier, and diff checks
+  passed. Runtime self-introspection was unavailable; the configured immutable
+  role/profile and explicit dispatch remain the metadata evidence.
+- Provider conformance is outside this correction and remains unclaimed.
+
 ## Correction Architecture Assignment
 
 The live-operation recovery P1 demonstrates a distributed correctness ambiguity
@@ -86,8 +112,8 @@ physical deletion, restart recovery, one definition row per subscription plus
 the separate control record, and the existing public contract. It must address
 fencing/ownership under arbitrary pauses, not assume a staged operation is
 abandoned merely because its row is absent, and state honestly if the existing
-  serialized record cannot express the required invariant. It also specifies the
-  minimal MySQL/Datastore conformance execution plan without building Spine JVM.
+serialized record cannot express the required invariant. It also specifies the
+minimal MySQL/Datastore conformance execution plan without building Spine JVM.
 
 ## Correction Architecture Resolution
 

@@ -1011,6 +1011,24 @@
     "rule": "standalone-function",
     "file": "packages/server/src/stand/subscription-registry.ts",
     "kind": "function-declaration",
+    "identity": "controlCommitted()#1",
+    "name": "controlCommitted",
+    "disposition": "necessity",
+    "reason": "TypeScript serialization boundary: controlCommitted derives immutable committed control state from a staged lifecycle operation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "committedCount()#1",
+    "name": "committedCount",
+    "disposition": "necessity",
+    "reason": "TypeScript serialization boundary: committedCount derives capacity from one immutable committed lifecycle operation."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
     "identity": "writeControl()#1",
     "name": "writeControl",
     "disposition": "necessity",
@@ -1033,6 +1051,33 @@
     "name": "recordDigest",
     "disposition": "necessity",
     "reason": "TypeScript persistence boundary: recordDigest identifies serialized records across CAS recovery without owning registry state."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "generationToken()#1",
+    "name": "generationToken",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: generationToken serializes a durable definition generation for exact control-operation fencing."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "sameAny()#1",
+    "name": "sameAny",
+    "disposition": "necessity",
+    "reason": "TypeScript storage-value boundary: sameAny compares serialized control records without provider object identity."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "matchesOperation()#1",
+    "name": "matchesOperation",
+    "disposition": "necessity",
+    "reason": "TypeScript persistence boundary: matchesOperation validates a durable row against its exact staged control-operation fence."
   },
   {
     "rule": "standalone-function",
@@ -1069,6 +1114,15 @@
     "name": "registryId",
     "disposition": "necessity",
     "reason": "TypeScript public boundary: registryId normalizes generated and string identifiers before durable registry operations."
+  },
+  {
+    "rule": "standalone-function",
+    "file": "packages/server/src/stand/subscription-registry.ts",
+    "kind": "function-declaration",
+    "identity": "requireTopicId()#1",
+    "name": "requireTopicId",
+    "disposition": "necessity",
+    "reason": "TypeScript public-value boundary: requireTopicId validates a shared immutable topic before memory or durable admission."
   },
   {
     "rule": "standalone-function",

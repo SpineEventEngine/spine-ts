@@ -43,6 +43,25 @@ startup/operation. Cross-node polling and listener reconciliation are not yet
 provided, so this registry alone provides no cross-node polling or listener
 completeness guarantee.
 
+The registry accepts only a generated `SubscriptionId` for activate, get, and
+delete. `create(subscription)` returns `{ kind: "created", entry }` or
+`{ kind: "existing", entry }`; the latter requires byte-equivalent canonical
+content and a different definition with the same ID throws `StandConflictError`.
+`activate(id)` returns `activated`, `active`, `missing`, or `expired`.
+`delete(id, expectedRevision?)` returns `deleted`, `missing`, or `changed`;
+negative expected revisions throw `RangeError`. Capacity admission throws
+`StandCapacityError`. Blank IDs or topics, malformed durable records, unknown
+phases, invalid revisions, and inconsistent control data fail closed.
+
+Entries and nested subscriptions returned by create, activate, get, and
+snapshot are frozen clone-safe views. Snapshots contain at most the configured
+capacity and are ordered by identifier. A temporary internal revision-zero
+reservation may exist while a durable create is admitted or discarded; it is
+never returned or counted, and expiry cleanup can remove it. A durable provider
+must implement atomic compare-and-set for both definition and control records;
+construction rejects a provider that cannot. The registry owns only its two
+opened record-storage handles, while the context owns and closes the registry.
+
 `Entity` is the state base class. `Aggregate`, `Projection`, and
 `ProcessManager` identify the three entity families. Handler decorators are
 `@Assign`, `@Command`, `@React`, `@Subscribe`, and `@Apply`. In a transactional

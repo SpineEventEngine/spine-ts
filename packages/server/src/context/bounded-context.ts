@@ -66,6 +66,7 @@ import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
 import {
   StorageSubscriptionRegistry,
+  standSubscriptionLimits,
   type StandSubscriptionRegistry,
 } from "../stand/subscription-registry.js";
 import type { DeliveryEndpointMessage } from "../delivery/delivery.js";
@@ -1228,9 +1229,15 @@ export class BoundedContextBuilder {
   }
 
   /**
-   * Sets the complete subscription registry that the built context closes.
+   * Sets a complete custom registry and transfers it to the first build attempt.
+   *
+   * The built context closes the registry. A failed first build also begins its
+   * closure, so callers must not reuse it. This option cannot be combined with
+   * {@link withSubscriptionLimit}; either call order throws `Error`.
+   *
    * @param registry Stores this context's Stand subscription definitions.
    * @returns Returns this builder for further configuration.
+   * @throws Error when a built-in subscription limit is already configured.
    */
   withSubscriptionRegistry(registry: StandSubscriptionRegistry): this {
     if (this.#subscriptionLimit !== undefined) {
@@ -1242,14 +1249,20 @@ export class BoundedContextBuilder {
 
   /**
    * Sets the built-in registry capacity from one through 100.
+   *
+   * This option cannot be combined with {@link withSubscriptionRegistry};
+   * either call order throws `Error`.
+   *
    * @param limit Maximum admitted subscription definitions.
    * @returns Returns this builder for further configuration.
+   * @throws Error when a custom subscription registry is already configured.
+   * @throws RangeError when the limit is not a safe integer from one through 100.
    */
   withSubscriptionLimit(limit: number): this {
     if (this.#subscriptionRegistry !== undefined) {
       throw new Error("A custom subscription registry cannot use a subscription limit.");
     }
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > standSubscriptionLimits.maximum) {
       throw new RangeError("Stand subscription limit must be from 1 through 100.");
     }
     this.#subscriptionLimit = limit;
