@@ -32,7 +32,7 @@ services:
       SPINE_IPC_DIRECTORY: /tmp/spine-ipc
       MESSAGE_BOARD_SESSION_ISSUER: message-board
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
-      MESSAGE_BOARD_SESSION_KEY_ID: distributed-fixture
+      MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
       MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set a P-256 PKCS8 PEM.}
     depends_on:
       datastore:
@@ -60,7 +60,7 @@ services:
       SPINE_IPC_DIRECTORY: /tmp/spine-ipc
       MESSAGE_BOARD_SESSION_ISSUER: message-board
       MESSAGE_BOARD_SESSION_AUDIENCE: message-board-web
-      MESSAGE_BOARD_SESSION_KEY_ID: distributed-fixture
+      MESSAGE_BOARD_SESSION_KEY_ID: compose-fixture
       MESSAGE_BOARD_SESSION_PRIVATE_KEY: ${MESSAGE_BOARD_SESSION_PRIVATE_KEY:?Set a P-256 PKCS8 PEM.}
     depends_on:
       datastore:
