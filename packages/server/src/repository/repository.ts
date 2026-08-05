@@ -1,5 +1,5 @@
 import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { AnySchema, TimestampSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
   type MessageSchema,
@@ -16,6 +16,7 @@ import {
   EventIdSchema,
   EventSchema,
   MessageIdSchema,
+  type MessageId,
   RejectionEventContextSchema,
   type Command,
   type Event,
@@ -2055,7 +2056,7 @@ class ProjectionEventExecution {
       readonly schema: DescriptorMessageSchema;
       readonly state: unknown;
       readonly version: unknown;
-      readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
+      readonly lifecycle: EntityLifecycleFlags;
     }) => object;
 
     const entity = new entityType({
@@ -2144,7 +2145,7 @@ class ProcessManagerExecutionSupport {
       readonly schema: DescriptorMessageSchema;
       readonly state: unknown;
       readonly version: unknown;
-      readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean };
+      readonly lifecycle: EntityLifecycleFlags;
     }) => object;
 
     const entity = new entityType({
@@ -3132,6 +3133,45 @@ const RepositorySignals = {
 };
 
 /**
+ * Describes one committed Entity transition to publish on the System EventBus.
+ */
+interface EntityCommitChange {
+  readonly repository: RepositoryView;
+  readonly entityId: unknown;
+  readonly oldState: Message | undefined;
+  readonly oldLifecycle: EntityLifecycleFlags | undefined;
+  readonly newState: Message;
+  readonly lifecycle: EntityLifecycleFlags;
+  readonly version: number;
+}
+
+/**
+ * Identifies the signal that caused a committed Entity transition.
+ */
+interface EventOrigin {
+  readonly id: NonNullable<ReturnType<typeof AnyMessages.pack>>;
+  readonly typeUrl: string;
+}
+
+/**
+ * Provides fields shared by Entity lifecycle event messages.
+ */
+interface SystemEventFields {
+  readonly entity: MessageId;
+  readonly signalId: MessageId[];
+  readonly state: Any;
+  readonly version: Version;
+}
+
+/**
+ * Creates one System event payload after its envelope timestamp is known.
+ */
+interface SystemEventDraft {
+  readonly schema: MessageSchema;
+  readonly messageAt: (when: Timestamp | undefined) => Message;
+}
+
+/**
  * Builds and best-effort dispatches committed entity state notifications.
  */
 class EntityStateChangePublishing {
@@ -3149,20 +3189,16 @@ class EntityStateChangePublishing {
     const producerId = RepositorySignals.runtimeProducerId(entityId);
     this.#publish(
       runtime,
-      repository,
       (ordinal) =>
         runtime.signalMetadata.eventFromCommand(command, ordinal, {
           ...(producerId === undefined ? {} : { producerId }),
           version,
         }),
-      AnyMessages.pack(CommandIdSchema, command.id as never),
-      command.message?.typeUrl ?? "",
-      entityId,
-      oldState,
-      oldLifecycle,
-      newState,
-      lifecycle,
-      version,
+      {
+        id: AnyMessages.pack(CommandIdSchema, command.id as never),
+        typeUrl: command.message?.typeUrl ?? "",
+      },
+      { repository, entityId, oldState, oldLifecycle, newState, lifecycle, version },
     );
   }
 
@@ -3180,149 +3216,171 @@ class EntityStateChangePublishing {
     const producerId = RepositorySignals.runtimeProducerId(entityId);
     this.#publish(
       runtime,
-      repository,
       (ordinal) =>
         runtime.signalMetadata.eventFromEvent(source, ordinal, {
           ...(producerId === undefined ? {} : { producerId }),
           version,
         }),
-      AnyMessages.pack(EventIdSchema, source.id as never),
-      source.message?.typeUrl ?? "",
-      entityId,
-      oldState,
-      oldLifecycle,
-      newState,
-      lifecycle,
-      version,
+      {
+        id: AnyMessages.pack(EventIdSchema, source.id as never),
+        typeUrl: source.message?.typeUrl ?? "",
+      },
+      { repository, entityId, oldState, oldLifecycle, newState, lifecycle, version },
     );
   }
 
   #publish(
     runtime: RepositoryRuntime,
-    repository: RepositoryView,
     metadataFor: (ordinal: number) => ReturnType<SignalMetadata["eventFromCommand"]>,
-    signalId: NonNullable<ReturnType<typeof AnyMessages.pack>>,
-    signalTypeUrl: string,
-    entityId: unknown,
-    oldState: Message | undefined,
-    oldLifecycle: EntityLifecycleFlags | undefined,
-    newState: Message,
-    lifecycle: EntityLifecycleFlags,
-    version: number,
+    origin: EventOrigin,
+    change: EntityCommitChange,
   ): void {
-    const metadataByOrdinal = new Map<number, ReturnType<SignalMetadata["eventFromCommand"]>>();
-    const metadata = (ordinal: number) => {
-      const existing = metadataByOrdinal.get(ordinal);
-      if (existing !== undefined) return existing;
-      const created = metadataFor(ordinal);
-      metadataByOrdinal.set(ordinal, created);
-      return created;
-    };
-    const entity = create(MessageIdSchema, {
-      id: this.#packEntityId(repository, entityId),
-      typeUrl: TypeUrls.derive(repository.stateSchema),
-    });
-    const signalIdValue = [create(MessageIdSchema, { id: signalId, typeUrl: signalTypeUrl })];
-    const packedState = AnyMessages.pack(repository.stateSchema, newState);
-    const previous = oldLifecycle ?? { archived: false, deleted: false };
-    const messages: readonly [MessageSchema, Message][] = [
-      ...(oldState === undefined
-        ? [
-            [
-              EntityLog.EntityCreatedSchema,
-              create(EntityLog.EntityCreatedSchema, {
-                entity,
-                kind: this.#kind(repository.metadata.kind),
-              }),
-            ] as [MessageSchema, Message],
-          ]
-        : []),
-      ...(oldState === undefined || !this.#sameState(repository.stateSchema, oldState, newState)
-        ? [
-            [
-              EntityLog.EntityStateChangedSchema,
-              create(EntityLog.EntityStateChangedSchema, {
-                entity,
-                ...(oldState === undefined
-                  ? {}
-                  : { oldState: AnyMessages.pack(repository.stateSchema, oldState as never) }),
-                newState: packedState,
-                signalId: signalIdValue,
-                when: metadata(0).context.timestamp,
-                newVersion: create(VersionSchema, { number: version }),
-              }),
-            ] as [MessageSchema, Message],
-          ]
-        : []),
-      ...(previous.archived === lifecycle.archived
-        ? []
-        : [
-            [
-              lifecycle.archived
-                ? EntityLog.EntityArchivedSchema
-                : EntityLog.EntityUnarchivedSchema,
-              lifecycle.archived
-                ? create(EntityLog.EntityArchivedSchema, {
-                    entity,
-                    signalId: signalIdValue,
-                    when: metadata(0).context.timestamp,
-                    version: create(VersionSchema, { number: version }),
-                    lastState: packedState,
-                  })
-                : create(EntityLog.EntityUnarchivedSchema, {
-                    entity,
-                    signalId: signalIdValue,
-                    when: metadata(0).context.timestamp,
-                    version: create(VersionSchema, { number: version }),
-                    state: packedState,
-                  }),
-            ] as [MessageSchema, Message],
-          ]),
-      ...(previous.deleted === lifecycle.deleted
-        ? []
-        : [
-            [
-              lifecycle.deleted ? EntityLog.EntityDeletedSchema : EntityLog.EntityRestoredSchema,
-              lifecycle.deleted
-                ? create(EntityLog.EntityDeletedSchema, {
-                    entity,
-                    signalId: signalIdValue,
-                    when: metadata(0).context.timestamp,
-                    version: create(VersionSchema, { number: version }),
-                    deletion: { case: "markedAsDeleted", value: true },
-                    lastState: packedState,
-                  })
-                : create(EntityLog.EntityRestoredSchema, {
-                    entity,
-                    signalId: signalIdValue,
-                    when: metadata(0).context.timestamp,
-                    version: create(VersionSchema, { number: version }),
-                    state: packedState,
-                  }),
-            ] as [MessageSchema, Message],
-          ]),
-    ];
-    messages.forEach(([schema, message], ordinal) => {
-      runtime.registerSystemEventSchema(schema);
-      const eventMetadata = metadata(ordinal);
-      if ("when" in message && eventMetadata.context.timestamp !== undefined)
-        (message as { when?: Timestamp }).when = eventMetadata.context.timestamp;
+    const drafts = this.#drafts(origin, change);
+    drafts.forEach((draft, ordinal) => {
+      const metadata = metadataFor(ordinal);
+      runtime.registerSystemEventSchema(draft.schema);
       const event = create(EventSchema, {
-        id: eventMetadata.id,
-        message: AnyMessages.pack(schema, message as never),
-        context: eventMetadata.context,
+        id: metadata.id,
+        message: AnyMessages.pack(
+          draft.schema,
+          draft.messageAt(metadata.context.timestamp) as never,
+        ),
+        context: metadata.context,
       });
       this.#post(runtime, event);
     });
   }
 
+  #drafts(origin: EventOrigin, change: EntityCommitChange): readonly SystemEventDraft[] {
+    const fields = this.#fields(origin, change);
+    const archive = this.#archiveDraft(fields, change);
+    const deletion = this.#deleteDraft(fields, change);
+    return [...this.#stateDrafts(fields, change), archive, deletion].filter(
+      (draft): draft is SystemEventDraft => draft !== undefined,
+    );
+  }
+
+  #fields(origin: EventOrigin, change: EntityCommitChange): SystemEventFields {
+    const entity = create(MessageIdSchema, {
+      id: this.#packEntityId(change.repository, change.entityId),
+      typeUrl: TypeUrls.derive(change.repository.stateSchema),
+    });
+    return {
+      entity,
+      signalId: [create(MessageIdSchema, { id: origin.id, typeUrl: origin.typeUrl })],
+      state: AnyMessages.pack(change.repository.stateSchema, change.newState),
+      version: create(VersionSchema, { number: change.version }),
+    };
+  }
+
+  #stateDrafts(fields: SystemEventFields, change: EntityCommitChange): readonly SystemEventDraft[] {
+    const drafts: SystemEventDraft[] = [];
+    if (change.oldState === undefined) {
+      drafts.push({
+        schema: EntityLog.EntityCreatedSchema,
+        messageAt: () =>
+          create(EntityLog.EntityCreatedSchema, {
+            entity: fields.entity,
+            kind: this.#kind(change.repository.metadata.kind),
+          }),
+      });
+    }
+    if (
+      change.oldState === undefined ||
+      !this.#sameState(change.repository.stateSchema, change.oldState, change.newState)
+    ) {
+      drafts.push(this.#stateChangedDraft(fields, change));
+    }
+    return drafts;
+  }
+
+  #stateChangedDraft(fields: SystemEventFields, change: EntityCommitChange): SystemEventDraft {
+    return {
+      schema: EntityLog.EntityStateChangedSchema,
+      messageAt: (when) =>
+        create(EntityLog.EntityStateChangedSchema, {
+          entity: fields.entity,
+          ...(change.oldState === undefined
+            ? {}
+            : {
+                oldState: AnyMessages.pack(change.repository.stateSchema, change.oldState as never),
+              }),
+          newState: fields.state,
+          signalId: fields.signalId,
+          when,
+          newVersion: fields.version,
+        }),
+    };
+  }
+
+  #archiveDraft(
+    fields: SystemEventFields,
+    change: EntityCommitChange,
+  ): SystemEventDraft | undefined {
+    const previous = change.oldLifecycle ?? { archived: false, deleted: false };
+    if (previous.archived === change.lifecycle.archived) return undefined;
+    return change.lifecycle.archived
+      ? {
+          schema: EntityLog.EntityArchivedSchema,
+          messageAt: (when) =>
+            create(EntityLog.EntityArchivedSchema, {
+              entity: fields.entity,
+              signalId: fields.signalId,
+              when,
+              version: fields.version,
+              lastState: fields.state,
+            }),
+        }
+      : {
+          schema: EntityLog.EntityUnarchivedSchema,
+          messageAt: (when) =>
+            create(EntityLog.EntityUnarchivedSchema, {
+              entity: fields.entity,
+              signalId: fields.signalId,
+              when,
+              version: fields.version,
+              state: fields.state,
+            }),
+        };
+  }
+
+  #deleteDraft(
+    fields: SystemEventFields,
+    change: EntityCommitChange,
+  ): SystemEventDraft | undefined {
+    const previous = change.oldLifecycle ?? { archived: false, deleted: false };
+    if (previous.deleted === change.lifecycle.deleted) return undefined;
+    return change.lifecycle.deleted
+      ? {
+          schema: EntityLog.EntityDeletedSchema,
+          messageAt: (when) =>
+            create(EntityLog.EntityDeletedSchema, {
+              entity: fields.entity,
+              signalId: fields.signalId,
+              when,
+              version: fields.version,
+              deletion: { case: "markedAsDeleted", value: true },
+              lastState: fields.state,
+            }),
+        }
+      : {
+          schema: EntityLog.EntityRestoredSchema,
+          messageAt: (when) =>
+            create(EntityLog.EntityRestoredSchema, {
+              entity: fields.entity,
+              signalId: fields.signalId,
+              when,
+              version: fields.version,
+              state: fields.state,
+            }),
+        };
+  }
+
   #post(runtime: RepositoryRuntime, event: Event): void {
     try {
-      void runtime
-        .postSystemFollowUp(event)
-        .catch((error: unknown) => {
-          runtime.recordDispatchFailure(event, error);
-        });
+      void runtime.postSystemFollowUp(event).catch((error: unknown) => {
+        runtime.recordDispatchFailure(event, error);
+      });
     } catch (error) {
       runtime.recordDispatchFailure(event, error);
     }

@@ -90,3 +90,18 @@ match the assignments above. No finding is rejected or deferred.
   archived/deleted shapes instead of `EntityLifecycleFlags`.
 - All re-reviewers again report unavailable runtime self-introspection and the
   matching immutable configured `gpt-5.6-terra` / `high` profile.
+
+## Residual Style Correction — 2026-08-05
+
+- The orchestrator completed the bounded structural correction after the
+  implementation owner twice reported that it could not safely replace the
+  assembler atomically.
+- `#publish` now accepts bundled origin/change records, constructs no lifecycle
+  payloads, and only materializes timestamp-late drafts into envelopes and
+  posts them. Focused helpers select state, archive, and delete drafts while
+  preserving the required order.
+- Projection and Process Manager loader contracts now use
+  `EntityLifecycleFlags`.
+- The focused repository and observer suites pass all 177 tests; server
+  typecheck, affected ESLint, formatting, and diff checks pass.
+- Only the style lane requires one final focused re-review of this correction.
