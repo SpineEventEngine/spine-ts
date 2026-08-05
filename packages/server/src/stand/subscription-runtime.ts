@@ -35,6 +35,7 @@ export class SubscriptionRuntime {
   #tail: Promise<void> = Promise.resolve();
   #timer: ReturnType<typeof setInterval> | undefined;
   #closing = false;
+  #closed: Promise<void> | undefined;
 
   /**
    * Creates an unstarted runtime for a paired domain and System Stand.
@@ -121,13 +122,42 @@ export class SubscriptionRuntime {
     return this.#registry;
   }
 
-  /** Stops new reconciliation and detaches local observers. */
-  async close(): Promise<void> {
+  /** Prevents new consumers and stops the reconciliation timer. */
+  beginClose(): void {
     this.#closing = true;
     if (this.#timer !== undefined) clearInterval(this.#timer);
+  }
+
+  /** Waits for accepted reconciliation and detaches every observer. */
+  async drainClose(): Promise<void> {
+    this.beginClose();
     await this.#tail;
-    for (const id of [...this.#attachments.keys()]) this.remove(id);
+    const errors: unknown[] = [];
+    for (const id of [...this.#attachments.keys()]) {
+      try {
+        this.remove(id);
+      } catch (error) {
+        errors.push(error);
+      }
+    }
     this.#consumers.clear();
+    if (errors.length > 0) throw new AggregateError(errors, "Subscription runtime close failed.");
+  }
+
+  /** Closes the shared registry after observer cleanup. */
+  finishClose(): Promise<void> {
+    this.#closed ??= this.#finishClose();
+    return this.#closed;
+  }
+
+  async #finishClose(): Promise<void> {
+    await this.drainClose();
+    await this.#registry.close();
+  }
+
+  /** Performs all close phases for direct runtime owners. */
+  close(): Promise<void> {
+    return this.finishClose();
   }
 
   #consumerHandle(id: string, onUpdate: (update: SubscriptionUpdate) => void): StandSubscription {

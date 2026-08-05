@@ -629,11 +629,17 @@ export class Stand {
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
+    const errors: unknown[] = [];
     for (const handle of this.#entityHandles.values()) {
-      handle.close();
+      try {
+        handle.close();
+      } catch (error) {
+        errors.push(error);
+      }
     }
     this.#entityHandles.clear();
     this.#closed = true;
+    if (errors.length > 0) throw new AggregateError(errors, "Stand close failed.");
   }
 
   #registration<Schema extends MessageSchema>(

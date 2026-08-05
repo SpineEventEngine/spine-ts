@@ -991,17 +991,18 @@ export class BoundedContext {
       () => commandBusAccess.finishClose(this.#commandBus),
       errors,
     );
-    await ContextParts.closeContextPart(() => this.#stand.close(), errors);
     await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
+    this.#subscriptionRuntime.beginClose();
     eventBusAccess.beginClose(this.#systemEventBus);
     await ContextParts.closeContextPart(() => eventBusAccess.drain(this.#systemEventBus), errors);
-    await ContextParts.closeContextPart(() => this.#systemStand.close(), errors);
+    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.drainClose(), errors);
     await ContextParts.closeContextPart(
       () => eventBusAccess.finishClose(this.#systemEventBus),
       errors,
     );
-    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.close(), errors);
-    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.registry().close(), errors);
+    await ContextParts.closeContextPart(() => this.#stand.close(), errors);
+    await ContextParts.closeContextPart(() => this.#systemStand.close(), errors);
+    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.finishClose(), errors);
     await ContextParts.closeContextPart(() => {
       ContextParts.requireTenantIndex(this).close();
     }, errors);
@@ -1019,7 +1020,7 @@ export class BoundedContext {
     }
 
     if (errors.length > 0) {
-      throw new AggregateError(errors, "BoundedContext close failed.");
+      throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
     }
   }
 
@@ -1645,6 +1646,11 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
+  flattenErrors(errors: readonly unknown[]): unknown[] {
+    return errors.flatMap((error) =>
+      error instanceof AggregateError ? ContextParts.flattenErrors(error.errors) : [error],
+    );
+  },
   requireFrameworkConstructionToken(token: unknown, message: string): void {
     if (token !== frameworkConstructionToken) {
       throw new TypeError(message);
