@@ -253,6 +253,7 @@ describe("InMemorySubscriptionRegistry", () => {
 
   it("rejects malformed public inputs with TypeError or RangeError", async () => {
     const registry = new InMemorySubscriptionRegistry();
+    await expect(registry.create(create(SubscriptionSchema))).rejects.toBeInstanceOf(TypeError);
     await expect(
       registry.create(create(SubscriptionSchema, { id: id("missing-topic") })),
     ).rejects.toBeInstanceOf(TypeError);
@@ -374,6 +375,16 @@ describe("InMemorySubscriptionRegistry", () => {
     await expect(registry.snapshot()).rejects.toThrow("closed");
   });
 
+  it("settles admitted work before closing", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+    const creation = registry.create(subscription("admitted"));
+    const closing = registry.close();
+
+    await expect(creation).resolves.toMatchObject({ kind: "created" });
+    await expect(closing).resolves.toBeUndefined();
+    await expect(registry.get(id("admitted"))).rejects.toThrow("closed");
+  });
+
   it("exports the exact public registry contract", () => {
     expectTypeOf<StandSubscriptionEntry["subscription"]>().not.toEqualTypeOf<Subscription>();
     expectTypeOf<StandCreateResult>().toEqualTypeOf<
@@ -414,6 +425,18 @@ function proveSubscriptionEntryIsDeepReadonly(entry: StandSubscriptionEntry): vo
 void proveSubscriptionEntryIsDeepReadonly;
 
 describe("StorageSubscriptionRegistry", () => {
+  it("validates identifiers and distinguishes repeated and conflicting definitions", async () => {
+    const registry = durableRegistry();
+
+    await expect(registry.create(create(SubscriptionSchema))).rejects.toBeInstanceOf(TypeError);
+    await registry.create(subscription("one"));
+    await expect(registry.create(subscription("one", "other"))).rejects.toBeInstanceOf(
+      StandConflictError,
+    );
+    await expect(registry.activate(id("one"))).resolves.toMatchObject({ kind: "activated" });
+    await expect(registry.activate(id("one"))).resolves.toMatchObject({ kind: "active" });
+  });
+
   it("physically removes an expired pending definition during activation", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(start);
@@ -458,6 +481,22 @@ describe("StorageSubscriptionRegistry", () => {
     expect(registry.close()).toBe(first);
     await first;
     await expect(registry.create(subscription("after-close"))).rejects.toThrow("closed");
+  });
+
+  it("settles an admitted durable operation before closing its handles", async () => {
+    const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+    const context = { name: "DurableRegistryCloseSettlement", multitenant: false };
+    const registry = new StorageSubscriptionRegistry(context, factory);
+    const held = factory.hold("create-reservation");
+    const creation = registry.create(subscription("admitted"));
+    await held.reached.promise;
+
+    const closing = registry.close();
+    held.release.resolve(undefined);
+
+    await expect(creation).resolves.toMatchObject({ kind: "created" });
+    await expect(closing).resolves.toBeUndefined();
+    await expect(registry.snapshot()).rejects.toThrow("closed");
   });
 
   it("admits exactly the shared lower capacity across independent handles", async () => {
@@ -967,6 +1006,75 @@ describe("StorageSubscriptionRegistry", () => {
     await expect(
       new StorageSubscriptionRegistry(definitionContext, factory).snapshot(),
     ).rejects.toThrow("Stand subscription record is invalid.");
+  });
+
+  it("rejects every malformed durable control shape before recovery", async () => {
+    const validOperation = {
+      kind: "create",
+      id: "one",
+      expectedDigest: "0123456789abcdef",
+      resultDigest: "0123456789abcdef",
+      generation: "0123456789abcdef0123456789abcdef",
+      token: "01234567-89ab-cdef-0123-456789abcdef",
+      stagedAt: 1,
+      expectedRevision: 1,
+      resultRevision: 1,
+    };
+    const validControl = {
+      version: 2,
+      state: "staged",
+      revision: 1,
+      count: 1,
+      operation: validOperation,
+    };
+    const malformed: readonly unknown[] = [
+      null,
+      {},
+      { ...validControl, version: 1 },
+      { ...validControl, state: "unknown" },
+      { ...validControl, revision: 0 },
+      { ...validControl, count: -1 },
+      { ...validControl, count: 101 },
+      { ...validControl, state: "clean" },
+      { ...validControl, operation: undefined },
+      { ...validControl, operation: { ...validOperation, kind: "unknown" } },
+      { ...validControl, operation: { ...validOperation, id: " " } },
+      { ...validControl, operation: { ...validOperation, expectedDigest: "invalid" } },
+      { ...validControl, operation: { ...validOperation, generation: "invalid" } },
+      { ...validControl, operation: { ...validOperation, token: "invalid" } },
+      { ...validControl, operation: { ...validOperation, stagedAt: -1 } },
+      { ...validControl, operation: { ...validOperation, expectedRevision: -1 } },
+      { ...validControl, operation: { ...validOperation, resultDigest: "invalid" } },
+      { ...validControl, operation: { ...validOperation, resultRevision: 0 } },
+      {
+        ...validControl,
+        operation: { ...validOperation, resultDigest: undefined, resultRevision: undefined },
+      },
+      {
+        ...validControl,
+        operation: { ...validOperation, kind: "delete" },
+      },
+    ];
+
+    for (const [index, control] of malformed.entries()) {
+      const factory = new InMemoryStorageFactory();
+      const context = {
+        name: `DurableRegistryMalformedControl${String(index)}`,
+        multitenant: false,
+      };
+      await writeControl(
+        factory,
+        context,
+        create(AnySchema, {
+          typeUrl: "type.spine.io/stand.subscription.control.v1",
+          value: new TextEncoder().encode(JSON.stringify(control)),
+        }),
+      );
+
+      await expect(new StorageSubscriptionRegistry(context, factory).snapshot()).rejects.toThrow(
+        "Malformed Stand subscription control record.",
+      );
+    }
   });
 
   it("keeps snapshot/delete and concurrent cleanup finite and idempotent", async () => {
