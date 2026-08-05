@@ -53,7 +53,10 @@ describe("InMemoryRecordStorage", () => {
     );
 
     records.write(primitive);
-    records.write({ ...nullable, record: { ...nullable.record, message: null } as Event });
+    records.write({
+      ...nullable,
+      record: { ...nullable.record, message: null } as unknown as Event,
+    });
 
     expect(
       records.queryEntries(spec, {
@@ -288,9 +291,9 @@ describe("InMemoryRecordStorage", () => {
       },
     };
 
-    await expect(storage.index(malformed as Parameters<typeof storage.index>[0])).rejects.toThrow(
-      /continuation sort order is invalid/i,
-    );
+    await expect(
+      storage.index(malformed as unknown as Parameters<typeof storage.index>[0]),
+    ).rejects.toThrow(/continuation sort order is invalid/i);
   });
 
   it("rejects continuations without a matching sort order", async () => {
