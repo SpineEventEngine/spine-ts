@@ -71,6 +71,13 @@ interface ResolvedPath {
   readonly leaf: { readonly localName: string; readonly message?: MessageSchema } | undefined;
 }
 
+interface LifecycleMessage extends Message {
+  readonly entity?: { readonly id?: Any; readonly typeUrl: string };
+  readonly state?: Any;
+  readonly lastState?: Any;
+  readonly version?: import("@spine-event-engine/proto").Version;
+}
+
 /**
  * Groups the internal operations that observe and render canonical Stand
  * subscription definitions.
@@ -116,7 +123,7 @@ export class SubscriptionObservers {
    *
    * @param subscription Defines the state target and tenant filter.
    * @param state Supplies registered entity-state metadata.
-   * @param systemEventBus Delivers `EntityStateChanged` events.
+   * @param systemEventBus Delivers Entity state and lifecycle System events.
    * @param onUpdate Receives the rendered client update.
    * @returns Returns an attachment when the System bus is available.
    * @internal
@@ -130,19 +137,183 @@ export class SubscriptionObservers {
     if (systemEventBus === undefined) return undefined;
     const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     const render = SubscriptionObservers.#createStateRenderer(subscription, state);
-    return eventBusAccess.subscribe(
-      systemEventBus,
-      TypeUrls.derive(EntityLog.EntityStateChangedSchema),
-      {
-        onEvent(event) {
-          const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
-          if (update !== undefined) {
-            const rendered = render(update);
-            if (rendered !== undefined) onUpdate(rendered);
-          }
+    const subscriptions = [
+      eventBusAccess.subscribe(
+        systemEventBus,
+        TypeUrls.derive(EntityLog.EntityStateChangedSchema),
+        {
+          onEvent(event) {
+            const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
+            if (update !== undefined) {
+              const rendered = render(update);
+              if (rendered !== undefined) onUpdate(rendered);
+            }
+          },
         },
+      ),
+      eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityArchivedSchema), {
+        onEvent(event) {
+          SubscriptionObservers.#lifecycleRemoval(
+            event,
+            state,
+            tenantId,
+            EntityLog.EntityArchivedSchema,
+            subscription,
+            onUpdate,
+          );
+        },
+      }),
+      eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityDeletedSchema), {
+        onEvent(event) {
+          SubscriptionObservers.#lifecycleRemoval(
+            event,
+            state,
+            tenantId,
+            EntityLog.EntityDeletedSchema,
+            subscription,
+            onUpdate,
+          );
+        },
+      }),
+      eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityUnarchivedSchema), {
+        onEvent(event) {
+          SubscriptionObservers.#lifecycleState(
+            event,
+            state,
+            tenantId,
+            EntityLog.EntityUnarchivedSchema,
+            render,
+            onUpdate,
+          );
+        },
+      }),
+      eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityRestoredSchema), {
+        onEvent(event) {
+          SubscriptionObservers.#lifecycleState(
+            event,
+            state,
+            tenantId,
+            EntityLog.EntityRestoredSchema,
+            render,
+            onUpdate,
+          );
+        },
+      }),
+    ];
+    return {
+      get closed() {
+        return subscriptions.every((subscription) => subscription.closed);
       },
+      unsubscribe() {
+        const errors: unknown[] = [];
+        for (const subscription of subscriptions) {
+          try {
+            subscription.unsubscribe();
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+        if (errors.length === 1) throw errors[0];
+        if (errors.length > 1)
+          throw new AggregateError(errors, "Entity subscription observer detach failed.");
+      },
+    };
+  }
+
+  static #lifecycleRemoval(
+    event: Event,
+    state: StandObservedState,
+    tenantId: string | undefined,
+    schema: MessageSchema,
+    subscription: Subscription,
+    onUpdate: (update: SubscriptionUpdate) => void,
+  ): void {
+    if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId) return;
+    const lifecycle =
+      event.message === undefined
+        ? undefined
+        : (AnyMessages.unpack(event.message, schema) as LifecycleMessage | undefined);
+    if (
+      lifecycle?.entity?.typeUrl !== TypeUrls.derive(state.schema) ||
+      lifecycle.entity.id === undefined
+    )
+      return;
+    const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
+    const id = SubscriptionObservers.#unpackValue(lifecycle.entity.id, idSchema);
+    if (id === undefined) return;
+    const lastState =
+      lifecycle.lastState === undefined
+        ? undefined
+        : AnyMessages.unpack(lifecycle.lastState, state.schema);
+    if (
+      lastState === undefined ||
+      SubscriptionObservers.#createMatcher(subscription, state).match({
+        typeUrl: TypeUrls.derive(state.schema),
+        id,
+        state: lastState,
+      }) === undefined
+    )
+      return;
+    onUpdate(SubscriptionObservers.#removalUpdate(id, state, subscription));
+  }
+
+  static #lifecycleState(
+    event: Event,
+    state: StandObservedState,
+    tenantId: string | undefined,
+    schema: MessageSchema,
+    render: (update: StandUpdate) => SubscriptionUpdate | undefined,
+    onUpdate: (update: SubscriptionUpdate) => void,
+  ): void {
+    if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId) return;
+    const lifecycle =
+      event.message === undefined
+        ? undefined
+        : (AnyMessages.unpack(event.message, schema) as LifecycleMessage | undefined);
+    if (
+      lifecycle?.entity?.typeUrl !== TypeUrls.derive(state.schema) ||
+      lifecycle.entity.id === undefined ||
+      lifecycle.state === undefined
+    )
+      return;
+    const idSchema = SubscriptionObservers.#findField(state.schema, state.idField)?.message;
+    const id = SubscriptionObservers.#unpackValue(lifecycle.entity.id, idSchema);
+    const entityState = AnyMessages.unpack(lifecycle.state, state.schema);
+    if (id === undefined || entityState === undefined) return;
+    const rendered = render(
+      Object.freeze({
+        typeUrl: TypeUrls.derive(state.schema),
+        id,
+        state: entityState,
+        ...(lifecycle.version === undefined
+          ? {}
+          : { version: clone(VersionSchema, lifecycle.version) }),
+        ...(tenantId === undefined ? {} : { tenantId }),
+      }),
     );
+    if (rendered !== undefined) onUpdate(rendered);
+  }
+
+  static #removalUpdate(
+    id: unknown,
+    state: StandObservedState,
+    subscription: Subscription,
+  ): SubscriptionUpdate {
+    return create(SubscriptionUpdateSchema, {
+      subscription: clone(SubscriptionSchema, subscription),
+      response: SubscriptionObservers.#okResponse(),
+      update: {
+        case: "entityUpdates",
+        value: create(EntityUpdatesSchema, {
+          update: [
+            create(EntityStateUpdateSchema, {
+              id: SubscriptionObservers.#packEntityId(state, id),
+              kind: { case: "noLongerMatching", value: true },
+            }),
+          ],
+        }),
+      },
+    });
   }
 
   static #createStateRenderer(

@@ -1,5 +1,5 @@
-import { clone, create, type Message } from "@bufbuild/protobuf";
-import { AnySchema, TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { clone, create, toBinary, type Message } from "@bufbuild/protobuf";
+import { AnySchema, TimestampSchema, type Any, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
   type MessageSchema,
@@ -16,12 +16,14 @@ import {
   EventIdSchema,
   EventSchema,
   MessageIdSchema,
+  type MessageId,
   RejectionEventContextSchema,
   type Command,
   type Event,
   type TenantId,
   type Version,
   VersionSchema,
+  EntityOption_Kind,
 } from "@spine-event-engine/proto";
 import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import {
@@ -49,6 +51,7 @@ import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
   type Entity,
+  type EntityLifecycleFlags,
   ProcessManager,
   Projection,
   type EntityFamily,
@@ -1436,7 +1439,11 @@ class AggregateCommandExecution {
           this.#command,
           route.entityId,
           loaded.oldState,
+          loaded.current === undefined
+            ? undefined
+            : { archived: loaded.current.archived, deleted: loaded.current.deleted },
           RepositoryEntities.repositoryState(loaded.entity) as Message,
+          RepositoryEntities.repositoryLifecycle(loaded.entity),
           RepositorySignals.eventVersionNumber(committedVersion),
         );
       },
@@ -1651,7 +1658,11 @@ class AggregateEventExecution {
             this.#event,
             entityId,
             loaded.oldState,
+            loaded.current === undefined
+              ? undefined
+              : { archived: loaded.current.archived, deleted: loaded.current.deleted },
             RepositoryEntities.repositoryState(loaded.entity) as Message,
+            RepositoryEntities.repositoryLifecycle(loaded.entity),
             RepositorySignals.eventVersionNumber(loaded.version + BigInt(produced.events.length)),
           );
         },
@@ -1819,6 +1830,8 @@ class AggregateEventExecution {
   }
 }
 
+type EntityLoadMode = "stored" | "rebuild";
+
 class ProjectionEventExecution {
   readonly #repository: RepositoryView & {
     routeEvent(event: Event): RepositoryEventRoute;
@@ -1886,15 +1899,11 @@ class ProjectionEventExecution {
   async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
     const packedMessage = EntityInvocation.requireSignalMessage(this.#event.message, "event");
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
-    const previous = await this.#runtime.stand.readVersioned(
-      this.#repository.stateSchema,
-      entityId,
-      tenantOptions,
-    );
-    const loaded = await this.#loadProjection(entityId, tenantOptions);
+    const mode: EntityLoadMode = this.#commitScope === undefined ? "stored" : "rebuild";
+    const loaded = await this.#loadProjection(entityId, tenantOptions, mode);
 
     await this.#invokeSubscribers(loaded.entity, subscribers, packedMessage);
-    await this.#storeIfChanged(loaded, tenantOptions, previous?.state);
+    await this.#storeIfChanged(loaded, tenantOptions, loaded.current?.state, mode);
   }
 
   #readIntake(): {
@@ -1916,6 +1925,7 @@ class ProjectionEventExecution {
     loaded: LoadedRepositoryEntity,
     tenantOptions: { readonly tenantId?: string },
     oldState: Message | undefined,
+    mode: EntityLoadMode,
   ): Promise<void> {
     if (!RepositoryEntities.repositoryChanged(loaded.entity)) {
       return;
@@ -1985,7 +1995,13 @@ class ProjectionEventExecution {
       this.#event,
       entityId,
       oldState,
+      mode === "rebuild"
+        ? lifecycle
+        : loaded.current === undefined
+          ? undefined
+          : { archived: loaded.current.archived, deleted: loaded.current.deleted },
       state,
+      lifecycle,
       this.#event.context?.version?.number ?? 0,
     );
   }
@@ -2027,6 +2043,7 @@ class ProjectionEventExecution {
   async #loadProjection(
     entityId: unknown,
     options: { readonly tenantId?: string },
+    mode: EntityLoadMode,
   ): Promise<LoadedRepositoryEntity> {
     const stored = await standAccess.readCurrent(
       this.#runtime.stand,
@@ -2039,13 +2056,24 @@ class ProjectionEventExecution {
       readonly schema: DescriptorMessageSchema;
       readonly state: unknown;
       readonly version: unknown;
+      readonly lifecycle: EntityLifecycleFlags;
     }) => object;
 
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
-      version: RepositoryStand.projectionVersion(stored?.version),
+      state:
+        stored === undefined || (mode === "rebuild" && stored.deleted)
+          ? this.#defaultState(entityId)
+          : stored.state,
+      version:
+        mode === "rebuild" && stored?.deleted
+          ? 0
+          : RepositoryStand.projectionVersion(stored?.version),
+      lifecycle:
+        mode === "rebuild" && stored?.deleted
+          ? { archived: false, deleted: false }
+          : { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
     });
     const storageInput = RepositoryStorage.entityStorageInput(
       this.#repository,
@@ -2117,13 +2145,15 @@ class ProcessManagerExecutionSupport {
       readonly schema: DescriptorMessageSchema;
       readonly state: unknown;
       readonly version: unknown;
+      readonly lifecycle: EntityLifecycleFlags;
     }) => object;
 
     const entity = new entityType({
       id: entityId,
       schema: this.#repository.stateSchema,
-      state: stored === undefined || stored.deleted ? this.#defaultState(entityId) : stored.state,
+      state: stored === undefined ? this.#defaultState(entityId) : stored.state,
       version: RepositoryStand.projectionVersion(stored?.version),
+      lifecycle: { archived: stored?.archived ?? false, deleted: stored?.deleted ?? false },
     });
     const storageInput = RepositoryStorage.entityStorageInput(
       this.#repository,
@@ -2279,11 +2309,6 @@ class ProcessManagerCommandExecution {
       this.#runtime.context,
       this.#command,
     );
-    const previous = await this.#runtime.stand.readVersioned(
-      this.#repository.stateSchema,
-      route.entityId,
-      tenantOptions,
-    );
     const loaded = await this.#support.load(route.entityId, tenantOptions);
     let eventSignals: readonly unknown[];
     try {
@@ -2311,8 +2336,12 @@ class ProcessManagerCommandExecution {
         this.#repository,
         this.#command,
         route.entityId,
-        previous?.state,
+        loaded.current?.state,
+        loaded.current === undefined
+          ? undefined
+          : { archived: loaded.current.archived, deleted: loaded.current.deleted },
         RepositoryEntities.repositoryState(loaded.entity) as Message,
+        RepositoryEntities.repositoryLifecycle(loaded.entity),
         RepositoryStand.processManagerVersion(loaded.entity),
       );
     }
@@ -2495,11 +2524,6 @@ class ProcessManagerEventExecution {
     },
   ): Promise<void> {
     const tenantOptions = RepositoryTenants.standTenantOptions(this.#runtime.context, this.#event);
-    const previous = await this.#runtime.stand.readVersioned(
-      this.#repository.stateSchema,
-      entityId,
-      tenantOptions,
-    );
     const loaded = await this.#support.load(entityId, tenantOptions);
     const produced = await this.#invokeHandlers(loaded.entity, intake);
 
@@ -2519,8 +2543,12 @@ class ProcessManagerEventExecution {
         this.#repository,
         this.#event,
         entityId,
-        previous?.state,
+        loaded.current?.state,
+        loaded.current === undefined
+          ? undefined
+          : { archived: loaded.current.archived, deleted: loaded.current.deleted },
         RepositoryEntities.repositoryState(loaded.entity) as Message,
+        RepositoryEntities.repositoryLifecycle(loaded.entity),
         RepositoryStand.processManagerVersion(loaded.entity),
       );
     }
@@ -3105,6 +3133,45 @@ const RepositorySignals = {
 };
 
 /**
+ * Describes one committed Entity transition to publish on the System EventBus.
+ */
+interface EntityCommitChange {
+  readonly repository: RepositoryView;
+  readonly entityId: unknown;
+  readonly oldState: Message | undefined;
+  readonly oldLifecycle: EntityLifecycleFlags | undefined;
+  readonly newState: Message;
+  readonly lifecycle: EntityLifecycleFlags;
+  readonly version: number;
+}
+
+/**
+ * Identifies the signal that caused a committed Entity transition.
+ */
+interface EventOrigin {
+  readonly id: NonNullable<ReturnType<typeof AnyMessages.pack>>;
+  readonly typeUrl: string;
+}
+
+/**
+ * Provides fields shared by Entity lifecycle event messages.
+ */
+interface SystemEventFields {
+  readonly entity: MessageId;
+  readonly signalId: MessageId[];
+  readonly state: Any;
+  readonly version: Version;
+}
+
+/**
+ * Creates one System event payload after its envelope timestamp is known.
+ */
+interface SystemEventDraft {
+  readonly schema: MessageSchema;
+  readonly messageAt: (when: Timestamp | undefined) => Message;
+}
+
+/**
  * Builds and best-effort dispatches committed entity state notifications.
  */
 class EntityStateChangePublishing {
@@ -3114,24 +3181,24 @@ class EntityStateChangePublishing {
     command: Command,
     entityId: unknown,
     oldState: Message | undefined,
+    oldLifecycle: EntityLifecycleFlags | undefined,
     newState: Message,
+    lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
     const producerId = RepositorySignals.runtimeProducerId(entityId);
-    const metadata = runtime.signalMetadata.eventFromCommand(command, 0, {
-      ...(producerId === undefined ? {} : { producerId }),
-      version,
-    });
     this.#publish(
       runtime,
-      repository,
-      metadata,
-      AnyMessages.pack(CommandIdSchema, command.id as never),
-      command.message?.typeUrl ?? "",
-      entityId,
-      oldState,
-      newState,
-      version,
+      (ordinal) =>
+        runtime.signalMetadata.eventFromCommand(command, ordinal, {
+          ...(producerId === undefined ? {} : { producerId }),
+          version,
+        }),
+      {
+        id: AnyMessages.pack(CommandIdSchema, command.id as never),
+        typeUrl: command.message?.typeUrl ?? "",
+      },
+      { repository, entityId, oldState, oldLifecycle, newState, lifecycle, version },
     );
   }
 
@@ -3141,59 +3208,175 @@ class EntityStateChangePublishing {
     source: Event,
     entityId: unknown,
     oldState: Message | undefined,
+    oldLifecycle: EntityLifecycleFlags | undefined,
     newState: Message,
+    lifecycle: EntityLifecycleFlags,
     version: number,
   ): void {
     const producerId = RepositorySignals.runtimeProducerId(entityId);
-    const metadata = runtime.signalMetadata.eventFromEvent(source, 0, {
-      ...(producerId === undefined ? {} : { producerId }),
-      version,
-    });
     this.#publish(
       runtime,
-      repository,
-      metadata,
-      AnyMessages.pack(EventIdSchema, source.id as never),
-      source.message?.typeUrl ?? "",
-      entityId,
-      oldState,
-      newState,
-      version,
+      (ordinal) =>
+        runtime.signalMetadata.eventFromEvent(source, ordinal, {
+          ...(producerId === undefined ? {} : { producerId }),
+          version,
+        }),
+      {
+        id: AnyMessages.pack(EventIdSchema, source.id as never),
+        typeUrl: source.message?.typeUrl ?? "",
+      },
+      { repository, entityId, oldState, oldLifecycle, newState, lifecycle, version },
     );
   }
 
   #publish(
     runtime: RepositoryRuntime,
-    repository: RepositoryView,
-    metadata: ReturnType<SignalMetadata["eventFromCommand"]>,
-    signalId: NonNullable<ReturnType<typeof AnyMessages.pack>>,
-    signalTypeUrl: string,
-    entityId: unknown,
-    oldState: Message | undefined,
-    newState: Message,
-    version: number,
+    metadataFor: (ordinal: number) => ReturnType<SignalMetadata["eventFromCommand"]>,
+    origin: EventOrigin,
+    change: EntityCommitChange,
   ): void {
-    runtime.registerSystemEventSchema(EntityLog.EntityStateChangedSchema);
-    const event = create(EventSchema, {
-      id: metadata.id,
-      message: AnyMessages.pack(
-        EntityLog.EntityStateChangedSchema,
-        create(EntityLog.EntityStateChangedSchema, {
-          entity: create(MessageIdSchema, {
-            id: this.#packEntityId(repository, entityId),
-            typeUrl: TypeUrls.derive(repository.stateSchema),
-          }),
-          ...(oldState === undefined
-            ? {}
-            : { oldState: AnyMessages.pack(repository.stateSchema, oldState as never) }),
-          newState: AnyMessages.pack(repository.stateSchema, newState as never),
-          signalId: [create(MessageIdSchema, { id: signalId, typeUrl: signalTypeUrl })],
-          when: metadata.context.timestamp,
-          newVersion: create(VersionSchema, { number: version }),
-        }),
-      ),
-      context: metadata.context,
+    const drafts = this.#drafts(origin, change);
+    drafts.forEach((draft, ordinal) => {
+      const metadata = metadataFor(ordinal);
+      runtime.registerSystemEventSchema(draft.schema);
+      const event = create(EventSchema, {
+        id: metadata.id,
+        message: AnyMessages.pack(
+          draft.schema,
+          draft.messageAt(metadata.context.timestamp) as never,
+        ),
+        context: metadata.context,
+      });
+      this.#post(runtime, event);
     });
+  }
+
+  #drafts(origin: EventOrigin, change: EntityCommitChange): readonly SystemEventDraft[] {
+    const fields = this.#fields(origin, change);
+    const archive = this.#archiveDraft(fields, change);
+    const deletion = this.#deleteDraft(fields, change);
+    return [...this.#stateDrafts(fields, change), archive, deletion].filter(
+      (draft): draft is SystemEventDraft => draft !== undefined,
+    );
+  }
+
+  #fields(origin: EventOrigin, change: EntityCommitChange): SystemEventFields {
+    const entity = create(MessageIdSchema, {
+      id: this.#packEntityId(change.repository, change.entityId),
+      typeUrl: TypeUrls.derive(change.repository.stateSchema),
+    });
+    return {
+      entity,
+      signalId: [create(MessageIdSchema, { id: origin.id, typeUrl: origin.typeUrl })],
+      state: AnyMessages.pack(change.repository.stateSchema, change.newState),
+      version: create(VersionSchema, { number: change.version }),
+    };
+  }
+
+  #stateDrafts(fields: SystemEventFields, change: EntityCommitChange): readonly SystemEventDraft[] {
+    const drafts: SystemEventDraft[] = [];
+    if (change.oldState === undefined) {
+      drafts.push({
+        schema: EntityLog.EntityCreatedSchema,
+        messageAt: () =>
+          create(EntityLog.EntityCreatedSchema, {
+            entity: fields.entity,
+            kind: this.#kind(change.repository.metadata.kind),
+          }),
+      });
+    }
+    if (
+      change.oldState === undefined ||
+      !this.#sameState(change.repository.stateSchema, change.oldState, change.newState)
+    ) {
+      drafts.push(this.#stateChangedDraft(fields, change));
+    }
+    return drafts;
+  }
+
+  #stateChangedDraft(fields: SystemEventFields, change: EntityCommitChange): SystemEventDraft {
+    return {
+      schema: EntityLog.EntityStateChangedSchema,
+      messageAt: (when) =>
+        create(EntityLog.EntityStateChangedSchema, {
+          entity: fields.entity,
+          ...(change.oldState === undefined
+            ? {}
+            : {
+                oldState: AnyMessages.pack(change.repository.stateSchema, change.oldState as never),
+              }),
+          newState: fields.state,
+          signalId: fields.signalId,
+          when,
+          newVersion: fields.version,
+        }),
+    };
+  }
+
+  #archiveDraft(
+    fields: SystemEventFields,
+    change: EntityCommitChange,
+  ): SystemEventDraft | undefined {
+    const previous = change.oldLifecycle ?? { archived: false, deleted: false };
+    if (previous.archived === change.lifecycle.archived) return undefined;
+    return change.lifecycle.archived
+      ? {
+          schema: EntityLog.EntityArchivedSchema,
+          messageAt: (when) =>
+            create(EntityLog.EntityArchivedSchema, {
+              entity: fields.entity,
+              signalId: fields.signalId,
+              when,
+              version: fields.version,
+              lastState: fields.state,
+            }),
+        }
+      : {
+          schema: EntityLog.EntityUnarchivedSchema,
+          messageAt: (when) =>
+            create(EntityLog.EntityUnarchivedSchema, {
+              entity: fields.entity,
+              signalId: fields.signalId,
+              when,
+              version: fields.version,
+              state: fields.state,
+            }),
+        };
+  }
+
+  #deleteDraft(
+    fields: SystemEventFields,
+    change: EntityCommitChange,
+  ): SystemEventDraft | undefined {
+    const previous = change.oldLifecycle ?? { archived: false, deleted: false };
+    if (previous.deleted === change.lifecycle.deleted) return undefined;
+    return change.lifecycle.deleted
+      ? {
+          schema: EntityLog.EntityDeletedSchema,
+          messageAt: (when) =>
+            create(EntityLog.EntityDeletedSchema, {
+              entity: fields.entity,
+              signalId: fields.signalId,
+              when,
+              version: fields.version,
+              deletion: { case: "markedAsDeleted", value: true },
+              lastState: fields.state,
+            }),
+        }
+      : {
+          schema: EntityLog.EntityRestoredSchema,
+          messageAt: (when) =>
+            create(EntityLog.EntityRestoredSchema, {
+              entity: fields.entity,
+              signalId: fields.signalId,
+              when,
+              version: fields.version,
+              state: fields.state,
+            }),
+        };
+  }
+
+  #post(runtime: RepositoryRuntime, event: Event): void {
     try {
       void runtime.postSystemFollowUp(event).catch((error: unknown) => {
         runtime.recordDispatchFailure(event, error);
@@ -3201,6 +3384,23 @@ class EntityStateChangePublishing {
     } catch (error) {
       runtime.recordDispatchFailure(event, error);
     }
+  }
+
+  #sameState(schema: MessageSchema, left: Message, right: Message): boolean {
+    const leftBytes = toBinary(schema, left as never);
+    const rightBytes = toBinary(schema, right as never);
+    return (
+      leftBytes.length === rightBytes.length &&
+      leftBytes.every((value, index) => value === rightBytes[index])
+    );
+  }
+
+  #kind(kind: EntityMetadata["kind"]): number {
+    return kind === "aggregate"
+      ? EntityOption_Kind.AGGREGATE
+      : kind === "projection"
+        ? EntityOption_Kind.PROJECTION
+        : EntityOption_Kind.PROCESS_MANAGER;
   }
 
   #packEntityId(repository: RepositoryView, entityId: unknown) {

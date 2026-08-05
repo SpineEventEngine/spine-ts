@@ -57,7 +57,14 @@ import type {
   EntityCommitResult,
   EntityCommitStorage,
 } from "@spine-event-engine/storage/internal/entity-commit";
-import { EntityStateChangedSchema } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+import {
+  EntityArchivedSchema,
+  EntityCreatedSchema,
+  EntityDeletedSchema,
+  EntityRestoredSchema,
+  EntityStateChangedSchema,
+  EntityUnarchivedSchema,
+} from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -78,6 +85,8 @@ import { HandlerMetadataValues } from "../../src/handler/handler-metadata.js";
 import { Delivery } from "../../src/delivery/delivery.js";
 import { describeEntityMetadata } from "../../src/entity/entity-metadata.js";
 import { entityStorageDescriptor } from "../../src/entity/entity-storage-descriptor.js";
+import { standAccess } from "../../src/stand/stand.js";
+import { SystemClock } from "../../src/runtime/signal-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -279,6 +288,20 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
 
     if (ExecutingTaskAggregate.failure !== undefined) {
       throw ExecutingTaskAggregate.failure;
+    }
+
+    if (command.name.startsWith("archive-lifecycle")) this.archiveDraft();
+    if (command.name.startsWith("unarchive-lifecycle")) this.unarchiveDraft();
+    if (command.name.startsWith("delete-lifecycle")) this.markDraftDeleted();
+    if (command.name.startsWith("restore-lifecycle")) this.restoreDraft();
+
+    if (command.name.includes("-lifecycle")) {
+      return SignalEnvelopes.event({
+        id: create(EventIdSchema, { value: `event-${command.name}` }),
+        context: create(EventContextSchema),
+        schema: AggregateStateSchema,
+        message: command,
+      });
     }
 
     const name = command.name === "Multi" ? "Multi two" : command.name;
@@ -844,6 +867,13 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
 
   subscribeTask(event: ProjectionState): void {
     ExecutingTaskProjection.subscriberCalls++;
+    if (event.name.endsWith("-lifecycle")) {
+      if (event.name === "archive-lifecycle") this.archiveDraft();
+      if (event.name === "unarchive-lifecycle") this.unarchiveDraft();
+      if (event.name === "delete-lifecycle") this.markDraftDeleted();
+      if (event.name === "restore-lifecycle") this.restoreDraft();
+      return;
+    }
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1137,6 +1167,13 @@ class RoutingProcessManager extends ProcessManager<
 
   assignTask(command: AggregateState): ProjectionState {
     RoutingProcessManager.commandCalls++;
+    if (command.name.endsWith("-lifecycle")) {
+      if (command.name === "archive-lifecycle") this.archiveDraft();
+      if (command.name === "unarchive-lifecycle") this.unarchiveDraft();
+      if (command.name === "delete-lifecycle") this.markDraftDeleted();
+      if (command.name === "restore-lifecycle") this.restoreDraft();
+      return create(ProjectionStateSchema, { id: command.id, name: command.name, priority: 1 });
+    }
     this.update((draft) =>
       Object.assign(
         draft,
@@ -1206,24 +1243,6 @@ class RoutingProcessManager extends ProcessManager<
       name: `${event.name} produced event`,
       archived: false,
     });
-  }
-}
-
-class TombstoneResetProcessManager extends ProcessManager<
-  string,
-  typeof ProcessManagerStateSchema,
-  number
-> {
-  reactTask(event: ProjectionState): void {
-    this.update((draft) =>
-      Object.assign(
-        draft,
-        create(ProcessManagerStateSchema, {
-          id: event.id,
-          queue: `${this.state.queue}|${event.name}`,
-        }),
-      ),
-    );
   }
 }
 
@@ -2084,6 +2103,38 @@ describe("repository signal routing", () => {
       "A (generated)",
       "B (generated)",
     ]);
+  });
+
+  it("keeps lifecycle System event context tenant-scoped", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("tenant-lifecycle-a", "same", "A", "tenant-a"));
+      await context
+        .commandBus()
+        .post(createAggregateCommand("tenant-lifecycle-b", "same", "B", "tenant-b"));
+      await waitForCondition(() => changes.length === 4);
+      expect(
+        changes.map((event) =>
+          event.context?.origin.case === "pastMessage"
+            ? event.context.origin.value.actorContext?.tenantId?.kind.value
+            : undefined,
+        ),
+      ).toEqual(["tenant-a", "tenant-a", "tenant-b", "tenant-b"]);
+    } finally {
+      await context.close();
+    }
   });
 
   it("dispatches events committed by accepted command work before close resolves", async () => {
@@ -4646,7 +4697,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
       .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
         dispatch: (event) => {
           changes.push(event);
           return Promise.resolve();
@@ -4669,7 +4727,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
         dispatch: (event) => {
           changes.push(event);
           return Promise.resolve();
@@ -4736,8 +4801,23 @@ describe("repository signal routing", () => {
   });
 
   it("rejects aggregate, projection, and process-manager delivery on atomic commit conflicts", async () => {
+    const lifecycleEvents: SpineEvent[] = [];
     const aggregate = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
+        dispatch: (event) => {
+          lifecycleEvents.push(event);
+          return Promise.resolve();
+        },
+      })
       .withStorageFactory(new OutcomeEntityCommitStorageFactory(["conflict"]))
       .build();
     const projection = BoundedContext.singleTenant("Tasks")
@@ -4773,6 +4853,7 @@ describe("repository signal routing", () => {
       await expect(
         processManager.stand().read(ProcessManagerStateSchema, "pm-conflict"),
       ).resolves.toBeUndefined();
+      expect(lifecycleEvents).toEqual([]);
     } finally {
       await Promise.all([aggregate.close(), projection.close(), processManager.close()]);
     }
@@ -4808,23 +4889,6 @@ describe("repository signal routing", () => {
       context.stand().read(ProcessManagerStateSchema, "pm-fails"),
     ).resolves.toBeUndefined();
     expect(dispatched).toEqual([]);
-  });
-
-  it("starts a process manager from default state after its Stand row is cleared", async () => {
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createTombstoneResetProcessManagerRepository())
-      .build();
-
-    await context.eventBus().post(createProjectionEvent("pm-tombstone-original", "pm-tombstone"));
-    await context.stand().clear(ProcessManagerStateSchema);
-    await context.eventBus().post(createProjectionEvent("pm-tombstone-rebuilt", "pm-tombstone"));
-
-    await expect(context.stand().read(ProcessManagerStateSchema, "pm-tombstone")).resolves.toEqual(
-      create(ProcessManagerStateSchema, {
-        id: "pm-tombstone",
-        queue: "|Task",
-      }),
-    );
   });
 
   it("publishes a committed aggregate state change after durable persistence", async () => {
@@ -4875,6 +4939,286 @@ describe("repository signal routing", () => {
     }
   });
 
+  it("publishes created before state-changed after the first committed aggregate transition", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("created-first", "created-id"));
+      await waitForCondition(() => changes.length === 2);
+
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityCreatedSchema),
+        TypeUrls.derive(EntityStateChangedSchema),
+      ]);
+      expect(AnyMessages.unpack(changes[0]?.message as never, EntityCreatedSchema)).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        kind: 1,
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("uses each lifecycle envelope timestamp for its payload under an advancing clock", async () => {
+    const changes: SpineEvent[] = [];
+    let clockTick = 0;
+    const clock = vi
+      .spyOn(SystemClock.prototype, "now")
+      .mockImplementation(() => new Date(1_000 + clockTick++ * 1_000));
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema, EntityArchivedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.commandBus().post(createAggregateCommand("clock-created", "clock-id"));
+      await waitForCondition(() => changes.length === 2);
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityCreatedSchema),
+        TypeUrls.derive(EntityStateChangedSchema),
+      ]);
+      const stateChanged = AnyMessages.unpack(
+        changes[1]?.message as never,
+        EntityStateChangedSchema,
+      );
+      expect(stateChanged?.when).toEqual(changes[1]?.context?.timestamp);
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("clock-archive", "clock-id", "archive-lifecycle"));
+      await waitForCondition(() => changes.length === 1);
+      const archived = AnyMessages.unpack(changes[0]?.message as never, EntityArchivedSchema);
+      expect(archived?.when).toEqual(changes[0]?.context?.timestamp);
+    } finally {
+      clock.mockRestore();
+      await context.close();
+    }
+  });
+
+  it("emits lifecycle-only aggregate transitions without EntityStateChanged", async () => {
+    const changes: SpineEvent[] = [];
+    const schemas = [
+      EntityCreatedSchema,
+      EntityStateChangedSchema,
+      EntityArchivedSchema,
+      EntityUnarchivedSchema,
+      EntityDeletedSchema,
+      EntityRestoredSchema,
+    ];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => schemas,
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.commandBus().post(createAggregateCommand("seed-lifecycle", "lifecycle-id"));
+      await waitForCondition(() => changes.length === 2);
+      changes.splice(0);
+      for (const name of [
+        "archive-lifecycle",
+        "archive-lifecycle",
+        "unarchive-lifecycle",
+        "delete-lifecycle",
+        "restore-lifecycle",
+      ]) {
+        await context
+          .commandBus()
+          .post(createAggregateCommand(name, "lifecycle-id", `${name}-${String(changes.length)}`));
+      }
+      await waitForCondition(() => changes.length === 4);
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityArchivedSchema),
+        TypeUrls.derive(EntityUnarchivedSchema),
+        TypeUrls.derive(EntityDeletedSchema),
+        TypeUrls.derive(EntityRestoredSchema),
+      ]);
+      for (const [index, schema] of [
+        EntityArchivedSchema,
+        EntityUnarchivedSchema,
+        EntityDeletedSchema,
+        EntityRestoredSchema,
+      ].entries()) {
+        const lifecycle = AnyMessages.unpack(changes[index]?.message as never, schema);
+        expect(lifecycle).toMatchObject({
+          entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+          signalId: [{ typeUrl: TypeUrls.derive(AggregateStateSchema) }],
+          version: { number: index + 2 },
+        });
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("emits lifecycle-only projection transitions across delete and restore", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context
+        .eventBus()
+        .post(createProjectionEvent("projection-seed", "projection-lifecycle"));
+      await waitForCondition(() => changes.length === 2);
+      changes.splice(0);
+      for (const [index, name] of [
+        "archive-lifecycle",
+        "archive-lifecycle",
+        "unarchive-lifecycle",
+        "delete-lifecycle",
+        "restore-lifecycle",
+      ].entries()) {
+        await context
+          .eventBus()
+          .post(
+            createProjectionEvent(`projection-${String(index)}`, "projection-lifecycle", { name }),
+          );
+      }
+      await waitForCondition(() => changes.length === 4);
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityArchivedSchema),
+        TypeUrls.derive(EntityUnarchivedSchema),
+        TypeUrls.derive(EntityDeletedSchema),
+        TypeUrls.derive(EntityRestoredSchema),
+      ]);
+      await expect(
+        standAccess.readCurrent(context.stand(), ProjectionStateSchema, "projection-lifecycle", {}),
+      ).resolves.toMatchObject({
+        archived: false,
+        deleted: false,
+        state: { name: "Task (projected)" },
+      });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("emits EntityArchived after a seeded process-manager archive", async () => {
+    RoutingProcessManager.reset();
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema, EntityArchivedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.commandBus().post(createAggregateCommand("pm-seed", "pm-archive"));
+      await waitForCondition(() => changes.length === 2);
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-archive", "pm-archive", "archive-lifecycle"));
+      expect(RoutingProcessManager.commandCalls).toBe(2);
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("rehydrates archived process managers for a lifecycle-only unarchive", async () => {
+    RoutingProcessManager.reset();
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    try {
+      await context.commandBus().post(createAggregateCommand("pm-seed-all", "pm-all"));
+      await waitForCondition(() => changes.length === 2);
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-archive-all", "pm-all", "archive-lifecycle"));
+      await waitForCondition(() => changes.length === 1);
+      await expect(
+        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+      ).resolves.toMatchObject({ archived: true });
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-unarchive-all", "pm-all", "unarchive-lifecycle"));
+      expect(RoutingProcessManager.commandCalls).toBe(3);
+      await expect(
+        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+      ).resolves.toMatchObject({ archived: false });
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityUnarchivedSchema));
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-delete-all", "pm-all", "delete-lifecycle"));
+      await expect(
+        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+      ).resolves.toMatchObject({ deleted: true });
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityDeletedSchema));
+      changes.splice(0);
+      await context
+        .commandBus()
+        .post(createAggregateCommand("pm-restore-all", "pm-all", "restore-lifecycle"));
+      await expect(
+        standAccess.readCurrent(context.stand(), ProcessManagerStateSchema, "pm-all", {}),
+      ).resolves.toMatchObject({ deleted: false, state: { queue: "Task assigned" } });
+      await waitForCondition(() => changes.length === 1);
+      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityRestoredSchema));
+    } finally {
+      await context.close();
+    }
+  });
+
   it("records failed state-change follow-ups with absent and present prior state", async () => {
     const changes: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
@@ -4896,6 +5240,9 @@ describe("repository signal routing", () => {
       await waitForFailures(context, 2);
 
       expect(changes).toHaveLength(2);
+      await expect(
+        context.stand().readVersioned(AggregateStateSchema, "state-change"),
+      ).resolves.toMatchObject({ state: { name: "Second (applied)" }, version: { number: 2 } });
       expect(readStateChange(changes[0])?.oldState).toBeUndefined();
       const oldState = readStateChange(changes[1])?.oldState;
       if (oldState === undefined) {
@@ -4909,6 +5256,7 @@ describe("repository signal routing", () => {
         { error: { message: "state-change follow-up failed" } },
         { error: { message: "state-change follow-up failed" } },
       ]);
+      expect(changes).toHaveLength(2);
     } finally {
       await context.close();
     }
@@ -5033,7 +5381,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createTransitionViolatingRepository())
       .addEventDispatcher({
-        messageSchemas: () => [EntityStateChangedSchema],
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
         dispatch: (event) => {
           changes.push(event);
           return Promise.resolve();
@@ -7248,21 +7603,6 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
 
   return new Repository({
     entityType: RoutingProcessManager,
-    schema: ProcessManagerStateSchema,
-    handlers,
-  });
-}
-
-function createTombstoneResetProcessManagerRepository(): Repository<
-  typeof TombstoneResetProcessManager
-> {
-  const handlers = EntityHandlers.define(
-    TombstoneResetProcessManager,
-    ProcessManagerStateSchema,
-    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
-  );
-  return new Repository({
-    entityType: TombstoneResetProcessManager,
     schema: ProcessManagerStateSchema,
     handlers,
   });

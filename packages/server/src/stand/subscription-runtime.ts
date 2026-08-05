@@ -44,7 +44,7 @@ export class SubscriptionRuntime {
    * @param domainStand Supplies authoritative domain state metadata.
    * @param systemStand Retained as the paired state-observer owner boundary.
    * @param domainEventBus Delivers domain-event subscription targets.
-   * @param systemEventBus Delivers `EntityStateChanged` subscription targets.
+   * @param systemEventBus Delivers Entity state and lifecycle subscription targets.
    * @param registry Stores canonical subscription definitions in the domain namespace.
    */
   constructor(

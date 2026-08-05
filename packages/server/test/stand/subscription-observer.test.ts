@@ -422,6 +422,239 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("renders archive and delete lifecycle events as entity removals", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      subscriptionFor(ProjectionStateSchema),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+
+    await bus.post(
+      create(EventSchema, {
+        id: { value: "archived" },
+        message: AnyMessages.pack(
+          EntityLog.EntityArchivedSchema,
+          create(EntityLog.EntityArchivedSchema, {
+            entity: {
+              id: packString("task-archived"),
+              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+            },
+            signalId: [
+              { id: packString("archive-signal"), typeUrl: TypeUrls.derive(StringValueSchema) },
+            ],
+            version: { number: 1 },
+            lastState: AnyMessages.pack(
+              ProjectionStateSchema,
+              createState("task-archived", "Archived", 1),
+            ),
+          }),
+          { validate: false },
+        ),
+      }),
+    );
+    await bus.post(
+      create(EventSchema, {
+        id: { value: "deleted" },
+        message: AnyMessages.pack(
+          EntityLog.EntityDeletedSchema,
+          create(EntityLog.EntityDeletedSchema, {
+            entity: {
+              id: packString("task-deleted"),
+              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+            },
+            signalId: [
+              { id: packString("delete-signal"), typeUrl: TypeUrls.derive(StringValueSchema) },
+            ],
+            version: { number: 1 },
+            deletion: { case: "markedAsDeleted", value: true },
+            lastState: AnyMessages.pack(
+              ProjectionStateSchema,
+              createState("task-deleted", "Deleted", 1),
+            ),
+          }),
+          { validate: false },
+        ),
+      }),
+    );
+
+    expect(received).toHaveLength(2);
+    expect(received[0]?.subscription?.topic?.target?.type).toBe(
+      TypeUrls.derive(ProjectionStateSchema),
+    );
+    expect(
+      received.map(
+        (update) =>
+          update.update.case === "entityUpdates" && update.update.value.update[0]?.kind.case,
+      ),
+    ).toEqual(["noLongerMatching", "noLongerMatching"]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
+  it("renders unarchive and restore lifecycle events as state updates", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      subscriptionFor(ProjectionStateSchema),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+    for (const [schema, id] of [
+      [EntityLog.EntityUnarchivedSchema, "unarchived"],
+      [EntityLog.EntityRestoredSchema, "restored"],
+    ] as const) {
+      await bus.post(
+        create(EventSchema, {
+          id: { value: id },
+          message: AnyMessages.pack(
+            schema,
+            create(schema, {
+              entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              signalId: [
+                { id: packString(`${id}-signal`), typeUrl: TypeUrls.derive(StringValueSchema) },
+              ],
+              version: { number: 2 },
+              state: AnyMessages.pack(ProjectionStateSchema, createState(id, id, 1)),
+            }),
+            { validate: false },
+          ),
+        }),
+      );
+    }
+    expect(received).toHaveLength(2);
+    expect(
+      received.map(
+        (update) =>
+          update.update.case === "entityUpdates" && update.update.value.update[0]?.kind.case,
+      ),
+    ).toEqual(["state", "state"]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
+  it("isolates lifecycle removals by subscription tenant", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      create(SubscriptionSchema, {
+        topic: {
+          context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
+          target: {
+            type: TypeUrls.derive(ProjectionStateSchema),
+            criterion: { case: "includeAll", value: true },
+          },
+        },
+      }),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+    for (const tenant of ["tenant-b", "tenant-a"]) {
+      await bus.post(
+        create(EventSchema, {
+          id: { value: tenant },
+          context: tenantContext(tenant),
+          message: AnyMessages.pack(
+            EntityLog.EntityArchivedSchema,
+            create(EntityLog.EntityArchivedSchema, {
+              entity: { id: packString(tenant), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              signalId: [{ id: packString(tenant), typeUrl: TypeUrls.derive(StringValueSchema) }],
+              version: { number: 1 },
+              lastState: AnyMessages.pack(ProjectionStateSchema, createState(tenant, tenant, 1)),
+            }),
+            { validate: false },
+          ),
+        }),
+      );
+    }
+    expect(received).toHaveLength(1);
+    expect(AnyMessages.unpack(entityUpdateId(received[0]), StringValueSchema)?.value).toBe(
+      "tenant-a",
+    );
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
+  it("does not leak archive removals to a nonmatching filtered subscription", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      filteredSubscription(ProjectionStateSchema, packString("other-id")),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+    await bus.post(
+      create(EventSchema, {
+        id: { value: "archive-filter" },
+        message: AnyMessages.pack(
+          EntityLog.EntityArchivedSchema,
+          create(EntityLog.EntityArchivedSchema, {
+            entity: {
+              id: packString("archived-id"),
+              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+            },
+            signalId: [{ id: packString("signal"), typeUrl: TypeUrls.derive(StringValueSchema) }],
+            version: { number: 1 },
+            lastState: AnyMessages.pack(
+              ProjectionStateSchema,
+              createState("archived-id", "Archived", 1),
+            ),
+          }),
+          { validate: false },
+        ),
+      }),
+    );
+    expect(received).toEqual([]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
+  it("filters unarchive and restore updates by their current state", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      filteredSubscription(ProjectionStateSchema, packString("match")),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+    for (const [schema, id] of [
+      [EntityLog.EntityUnarchivedSchema, "other"],
+      [EntityLog.EntityRestoredSchema, "other"],
+      [EntityLog.EntityUnarchivedSchema, "match"],
+      [EntityLog.EntityRestoredSchema, "match"],
+    ] as const) {
+      await bus.post(
+        create(EventSchema, {
+          id: { value: `${id}-${schema.typeName}` },
+          message: AnyMessages.pack(
+            schema,
+            create(schema, {
+              entity: { id: packString(id), typeUrl: TypeUrls.derive(ProjectionStateSchema) },
+              signalId: [{ id: packString(id), typeUrl: TypeUrls.derive(StringValueSchema) }],
+              version: { number: 1 },
+              state: AnyMessages.pack(ProjectionStateSchema, createState(id, id, 1)),
+            }),
+            { validate: false },
+          ),
+        }),
+      );
+    }
+    expect(received).toHaveLength(2);
+    expect(
+      received.map(
+        (update) => AnyMessages.unpack(entityUpdateId(update), StringValueSchema)?.value,
+      ),
+    ).toEqual(["match", "match"]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
   it("forwards accepted event targets while redacting client rejection details", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
@@ -549,7 +782,13 @@ function observeSubscription(
 
 function createSystemBus(): EventBus {
   const bus = eventBusAccess.createSystemBus(undefined);
-  eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+  eventBusAccess.registerSchemas(bus, [
+    EntityLog.EntityStateChangedSchema,
+    EntityLog.EntityArchivedSchema,
+    EntityLog.EntityUnarchivedSchema,
+    EntityLog.EntityDeletedSchema,
+    EntityLog.EntityRestoredSchema,
+  ]);
   return bus;
 }
 

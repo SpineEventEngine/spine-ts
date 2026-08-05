@@ -191,9 +191,9 @@ describe("Stand", () => {
     runtime.start();
     let deliveries = 0;
     await runtime.consume("gated-close", () => deliveries++);
-    expect(observedEventBusSubscriptions).toHaveLength(1);
-    const [observer] = observedEventBusSubscriptions;
-    expect(observer?.closed).toBe(false);
+    expect(observedEventBusSubscriptions).toHaveLength(5);
+    const observers = [...observedEventBusSubscriptions];
+    expect(observers.every((observer) => !observer.closed)).toBe(true);
     await postStateChange(bus, ProjectionStateSchema, createState("before-close", "Before close"));
     expect(deliveries).toBe(1);
 
@@ -204,7 +204,7 @@ describe("Stand", () => {
     registry.releaseSnapshot();
     await reconciliation;
     await closing;
-    expect(observer?.closed).toBe(true);
+    expect(observers.every((observer) => observer.closed)).toBe(true);
     await postStateChange(bus, ProjectionStateSchema, createState("after-close", "After close"));
     expect(deliveries).toBe(1);
     await expect(bus.close()).resolves.toBeUndefined();
@@ -235,7 +235,7 @@ describe("Stand", () => {
     const runtime = pairedRuntime(stand, factory, registry, bus, bus);
     await runtime.consume("detach-one", () => undefined);
     await runtime.consume("detach-two", () => undefined);
-    expect(observedEventBusSubscriptions).toHaveLength(2);
+    expect(observedEventBusSubscriptions).toHaveLength(10);
     failNextObserverUnsubscribe.value = true;
 
     const closing = runtime.close();
