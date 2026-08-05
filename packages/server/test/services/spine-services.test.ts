@@ -3558,6 +3558,34 @@ describe("SpineServices", () => {
     expect(unsubscribeCount).toBe(1);
   });
 
+  it("serializes simultaneous activation before the registry activation await", async () => {
+    const registry = new GatedActivateRegistry();
+    const context = BoundedContext.singleTenant("ActivationRace")
+      .withSubscriptionRegistry(registry)
+      .add(new Repository({ entityType: TaskProjection, schema: ProjectionStateSchema }))
+      .addEventDispatcher(createDomainEventDispatcher(EntityLog.EntityStateChangedSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const first = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const second = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const firstNext = first.next();
+    const secondNext = second.next();
+
+    await registry.activationStarted;
+    registry.releaseActivation();
+
+    const duplicate = await withTimeout(secondNext, "simultaneous duplicate activation close");
+    await postEntityStateChanged(context, ProjectionStateSchema, createState("race", "Delivered"));
+    const primary = await withTimeout(firstNext, "simultaneous primary activation update");
+
+    expect(duplicate.done).toBe(true);
+    expect(primary.done).toBe(false);
+    expect(registry.activations).toBe(1);
+    await first.return?.();
+    await context.close();
+  });
+
   it("removes inactive subscription records when activation attachment fails", async () => {
     let subscribeCalls = 0;
     const context = createFakeContext({
@@ -4708,6 +4736,28 @@ function createRejectingReadContext() {
       throw new Error("unsupported query must not read storage.");
     },
   });
+}
+
+class GatedActivateRegistry extends InMemorySubscriptionRegistry {
+  activations = 0;
+  #release: (() => void) | undefined;
+  #started: (() => void) | undefined;
+  readonly activationStarted = new Promise<void>((resolve) => {
+    this.#started = resolve;
+  });
+
+  releaseActivation(): void {
+    this.#release?.();
+  }
+
+  override async activate(id: Parameters<InMemorySubscriptionRegistry["activate"]>[0]) {
+    this.activations += 1;
+    this.#started?.();
+    await new Promise<void>((resolve) => {
+      this.#release = resolve;
+    });
+    return await super.activate(id);
+  }
 }
 
 function createFakeContext(options: {
