@@ -53,6 +53,41 @@ const ProjectionStateSchema = messageDesc(fixture, 0) as GenMessage<ProjectionSt
 let eventSequence = 0;
 
 describe("SubscriptionObservers", () => {
+  it("does not attach incomplete, state, or event targets without a local EventBus", () => {
+    const state = { schema: ProjectionStateSchema, idField: "id" };
+    const missingTarget = SubscriptionObservers.observeSubscription(
+      create(SubscriptionSchema),
+      undefined,
+      () => state,
+      () => undefined,
+    );
+    const emptyTarget = SubscriptionObservers.observeSubscription(
+      create(SubscriptionSchema, { topic: { target: { type: "" } } }),
+      undefined,
+      () => state,
+      () => undefined,
+    );
+    const stateTarget = SubscriptionObservers.observeSubscription(
+      subscriptionFor(ProjectionStateSchema),
+      undefined,
+      () => state,
+      () => undefined,
+    );
+    const eventTarget = SubscriptionObservers.observeSubscription(
+      subscriptionFor(ProjectionStateSchema),
+      undefined,
+      () => undefined,
+      () => undefined,
+    );
+
+    expect([missingTarget, emptyTarget, stateTarget, eventTarget]).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("renders a masked matching state then a no-longer-matching state from the local EventBus", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
@@ -178,6 +213,58 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("suppresses state delivery for unsupported, valueless, and unresolved filters", async () => {
+    const bus = createBus();
+    const received: SubscriptionUpdate[] = [];
+    const filters = [
+      create(FilterSchema, {
+        fieldPath: { fieldName: ["priority"] },
+        operator: Filter_Operator.GREATER_THAN,
+        value: AnyMessages.pack(Int32ValueSchema, create(Int32ValueSchema, { value: 1 })),
+      }),
+      create(FilterSchema, {
+        fieldPath: { fieldName: ["priority"] },
+        operator: Filter_Operator.EQUAL,
+      }),
+      create(FilterSchema, {
+        fieldPath: { fieldName: ["missing"] },
+        operator: Filter_Operator.EQUAL,
+        value: packString("value"),
+      }),
+    ];
+    const observers = filters.map((filter) =>
+      SubscriptionObservers.observeSubscription(
+        create(SubscriptionSchema, {
+          topic: {
+            target: {
+              type: TypeUrls.derive(ProjectionStateSchema),
+              criterion: {
+                case: "filters",
+                value: {
+                  filter: [
+                    create(CompositeFilterSchema, {
+                      operator: CompositeFilter_CompositeOperator.ALL,
+                      filter: [filter],
+                    }),
+                  ],
+                },
+              },
+            },
+          },
+        }),
+        bus,
+        () => ({ schema: ProjectionStateSchema, idField: "id" }),
+        (update) => received.push(update),
+      ),
+    );
+
+    await postStateChange(bus, createState("task-filter", "Candidate", 1));
+
+    expect(received).toEqual([]);
+    observers.forEach((observer) => observer?.unsubscribe());
+    await bus.close();
+  });
+
   it("ignores state-change envelopes with a wrong tenant, state type, or malformed payload", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
@@ -298,6 +385,17 @@ function createBus(): EventBus {
   const bus = new EventBus(new EventStore({ name: "Observer", multitenant: false }, storage));
   eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema, ProjectionStateSchema]);
   return bus;
+}
+
+function subscriptionFor(schema: GenMessage<Message>) {
+  return create(SubscriptionSchema, {
+    topic: {
+      target: {
+        type: TypeUrls.derive(schema),
+        criterion: { case: "includeAll", value: true },
+      },
+    },
+  });
 }
 
 function createState(id: string, name: string, priority: number): ProjectionState {
