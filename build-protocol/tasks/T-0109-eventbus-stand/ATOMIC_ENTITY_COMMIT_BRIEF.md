@@ -36,8 +36,14 @@ fallback.
   serialization.
 - Datastore uses one bounded provider transaction, rejects oversized commits
   before mutation, and reconciles ambiguous acknowledgement through the exact
-  receipt and committed records. Implementation must verify current provider
-  limits from official documentation.
+  receipt and committed records. Google currently documents a 10 MiB
+  transaction-size limit and 270-second transaction lifetime. The 25
+  entity-group limit applies specifically to legacy/`OPTIMISTIC_WITH_ENTITY_GROUPS`
+  concurrency mode, so the portable implementation must remain within that
+  bound without claiming it constrains every Datastore-mode database. See the
+  official [limits](https://docs.cloud.google.com/datastore/docs/concepts/limits)
+  and [transaction](https://docs.cloud.google.com/datastore/docs/concepts/transactions)
+  documentation.
 - Future PostgreSQL can implement the same port with one SQL transaction and
   row or advisory serialization; no public framework redesign is allowed.
 
