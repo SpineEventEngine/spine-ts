@@ -1452,13 +1452,15 @@ export class BoundedContextBuilder {
       systemEventStore = systemSpec.storesEvents
         ? new EventStore(ContextParts.createStorageContext(systemSpec), storageFactory)
         : undefined;
-      systemEventBus = eventBusAccess.createSystemBus(systemEventStore, systemEventDispatchers);
+      systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
+      for (const dispatcher of systemEventDispatchers) systemEventBus.register(dispatcher);
       systemStand = new Stand({
         context: ContextParts.createStorageContext(systemSpec),
         storageFactory,
       });
       eventStore = this.createEventStore(storageFactory);
-      eventBus = new EventBus(eventStore, [...domainEventDispatchers]);
+      eventBus = new EventBus(eventStore);
+      for (const dispatcher of domainEventDispatchers) eventBus.register(dispatcher);
       eventBusAccess.registerSchemas(
         eventBus,
         ContextParts.repositoryProducedEventSchemas(registeredRepositories),
@@ -1502,12 +1504,11 @@ export class BoundedContextBuilder {
       );
       ContextParts.attemptCleanup(() => {
         if (systemEventBus !== undefined) eventBusAccess.abortClose(systemEventBus);
-        else if (systemEventStore !== undefined)
-          ContextParts.closeEventStore(systemEventStore, error);
+        else if (systemEventStore !== undefined) systemEventStore.close();
       }, cleanupErrors);
       ContextParts.attemptCleanup(() => {
         if (eventBus !== undefined) eventBusAccess.abortClose(eventBus);
-        else if (eventStore !== undefined) ContextParts.closeEventStore(eventStore, error);
+        else if (eventStore !== undefined) eventStore.close();
       }, cleanupErrors);
       if (cleanupErrors.length > 0) {
         throw new AggregateError(
@@ -2197,17 +2198,6 @@ const ContextParts = Object.freeze({
     }
 
     return Object.freeze([...schemas.values()]);
-  },
-
-  closeEventStore(eventStore: EventStore, buildError: unknown): void {
-    try {
-      eventStore.close();
-    } catch (closeError) {
-      throw new AggregateError(
-        [buildError, closeError],
-        "Bounded Context build failed, and event store cleanup also failed.",
-      );
-    }
   },
 
   cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {

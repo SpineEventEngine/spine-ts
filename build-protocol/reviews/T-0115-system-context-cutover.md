@@ -229,3 +229,16 @@ build and terminal-order requirements without changing public scope.
 - Expected and explicitly dispatched reasoning: `medium`.
 - Runtime self-introspection is unavailable; immutable role/profile metadata
   applies.
+
+## Third Accepted Correction Outcome — 2026-08-05
+
+- Implementer: `/root/t0115_terminal_impl`, explicitly dispatched
+  `gpt-5.6-terra` / medium. Runtime self-introspection is unavailable; no
+  visible profile mismatch occurred.
+- Runtime drain completes before registry close starts, while its failure still
+  permits and aggregates registry closure. EventBus instances are retained
+  before dispatcher registration, and raw EventStore cleanup contributes its
+  own failure once after the primary construction failure.
+- Focused evidence: EventBus, context, runtime, and Stand tests passed 148
+  tests; server/tooling typechecks, changed-file ESLint, TSDoc, Prettier, and
+  diff checks passed.

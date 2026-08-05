@@ -192,13 +192,8 @@ export class SubscriptionRuntime {
 
   async #finishClose(): Promise<void> {
     const errors: unknown[] = [];
-    await Promise.all([
-      SubscriptionRuntime.#closePart(() => this.drainClose(), errors),
-      SubscriptionRuntime.#closePart(async () => {
-        await this.#tail;
-        await this.#registry.close();
-      }, errors),
-    ]);
+    await SubscriptionRuntime.#closePart(() => this.drainClose(), errors);
+    await SubscriptionRuntime.#closePart(() => this.#registry.close(), errors);
     if (errors.length > 0) {
       throw new AggregateError(errors, "Subscription runtime close failed.");
     }
