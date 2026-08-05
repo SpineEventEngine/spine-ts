@@ -1,6 +1,6 @@
 # T-0115 Review Log
 
-Status: One accepted correction batch in implementation
+Status: Targeted correction re-review dispatched
 
 ## Scope
 
@@ -118,3 +118,18 @@ finding duplicates item 1 and does not create a seventh correction.
   directs System events to the package-internal System factory.
 - Focused evidence: six affected test files passed 266 tests; server typecheck,
   changed-file ESLint, TSDoc, Prettier, and diff checks passed.
+
+## Targeted Re-review
+
+- Correction base: `a1f4999a`.
+- Correction endpoint: `0a187aed`.
+- Immutable correction diff:
+  `.superpowers/sdd/review-a1f4999a..0a187aed.diff`.
+- Expanded evidence: 63 server test files and 1,897 tests pass. Diff-scoped
+  coverage is 94.46% statements, 93.24% functions, and 90.52% branches. All
+  deterministic pre-review gates pass.
+- Style/maintainability, documentation, TypeScript/API docs, and
+  performance/reliability are all substantively affected and are re-dispatched
+  with the same explicit roles and expected profiles recorded above. Review is
+  read-only and limited to resolution of the accepted batch plus regressions
+  introduced by its correction diff.
