@@ -63,7 +63,8 @@ import {
   type EntityHandlersMetadata,
 } from "../handler/handler-metadata.js";
 import { SignalMetadata } from "../runtime/signal-metadata.js";
-import { standAccess, Stand } from "../stand/stand.js";
+import { Stand } from "../stand/stand.js";
+import { SubscriptionRuntime } from "../stand/subscription-runtime.js";
 import {
   StorageSubscriptionRegistry,
   standSubscriptionLimits,
@@ -206,6 +207,16 @@ interface RepositoryRegistration {
    * Registers a schema for a framework-produced event before it enters the event bus.
    */
   readonly registerEventSchema: (schema: MessageSchema) => void;
+
+  /**
+   * Registers a schema for an internal system event.
+   */
+  readonly registerSystemEventSchema: (schema: MessageSchema) => void;
+
+  /**
+   * Posts a committed system event without affecting domain event storage.
+   */
+  readonly postSystemFollowUp: (event: Event) => Promise<void>;
 
   /**
    * Command posting callback into the owning context command bus.
@@ -494,7 +505,8 @@ const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>
 const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 const contextDeliveryDescriptors = new WeakMap<BoundedContext, ContextDeliveryDescriptor>();
-const contextSubscriptionRegistries = new WeakMap<BoundedContext, StandSubscriptionRegistry>();
+const contextSubscriptionRuntimes = new WeakMap<BoundedContext, SubscriptionRuntime>();
+const systemEventPosters = new WeakMap<BoundedContext, (event: Event) => Promise<void>>();
 const builderBuilds = new WeakMap<
   BoundedContextBuilder,
   (defaultStorageFactory: StorageFactory) => Promise<BoundedContext>
@@ -511,10 +523,16 @@ interface BoundedContextAccess {
     typeUrl: string,
     subscriber: EventSubscriber,
   ): EventSubscription;
+  postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
   systemPairing(context: BoundedContext): SystemPairingSnapshot;
   tenantIndex(context: BoundedContext): TenantIndex;
   storageFactory(context: BoundedContext): StorageFactory;
   subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry;
+  consumeSubscription(
+    context: BoundedContext,
+    id: string,
+    onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
+  ): Promise<import("../stand/stand.js").StandSubscription>;
   delivery(context: BoundedContext): ContextDeliveryDescriptor;
 }
 let constructBoundedContext:
@@ -522,8 +540,11 @@ let constructBoundedContext:
       snapshot: BoundedContextSnapshot,
       commandBus: CommandBus,
       eventBus: EventBus,
+      systemEventBus: EventBus,
       stand: Stand,
-      registry: StandSubscriptionRegistry,
+      systemStand: Stand,
+      runtime: SubscriptionRuntime,
+      systemSpec: ContextSpecSnapshot,
       storageFactory: StorageFactory,
       repositories: readonly RepositoryView[],
       deliveryStrategy: DeliveryStrategy,
@@ -543,6 +564,7 @@ export class BoundedContext {
   readonly #snapshot: BoundedContextSnapshot;
   readonly #commandBus: CommandBus;
   readonly #eventBus: EventBus;
+  readonly #systemEventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
   readonly #entityInbox: RegisteredEntityInbox;
@@ -554,7 +576,8 @@ export class BoundedContext {
   readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
-  readonly #subscriptionRegistry: StandSubscriptionRegistry;
+  readonly #systemStand: Stand;
+  readonly #subscriptionRuntime: SubscriptionRuntime;
   #closed: Promise<void> | undefined;
 
   /**
@@ -565,8 +588,11 @@ export class BoundedContext {
       snapshot,
       commandBus,
       eventBus,
+      systemEventBus,
       stand,
-      registry,
+      systemStand,
+      runtime,
+      systemSpec,
       storageFactory,
       repositories,
       deliveryStrategy,
@@ -576,8 +602,11 @@ export class BoundedContext {
         snapshot,
         commandBus,
         eventBus,
+        systemEventBus,
         stand,
-        registry,
+        systemStand,
+        runtime,
+        systemSpec,
         storageFactory,
         repositories,
         deliveryStrategy,
@@ -591,8 +620,11 @@ export class BoundedContext {
    * @param snapshot Contains the immutable context metadata.
    * @param commandBus Dispatches commands accepted by this context.
    * @param eventBus Dispatches events accepted by this context.
+   * @param systemEventBus Dispatches framework-only System events.
    * @param stand Stores read-side state for this context.
-   * @param subscriptionRegistry Stores this context's Stand subscription definitions.
+   * @param systemStand Stores read-side state for the paired System Context.
+   * @param subscriptionRuntime Coordinates pair-owned subscription delivery.
+   * @param systemSpec Contains paired System Context metadata.
    * @param storageFactory Creates context storage.
    * @param repositories Lists repositories to register.
    * @param deliveryStrategy Selects immutable Entity Inbox shards.
@@ -602,8 +634,11 @@ export class BoundedContext {
     snapshot: BoundedContextSnapshot,
     commandBus: CommandBus,
     eventBus: EventBus,
+    systemEventBus: EventBus,
     stand: Stand,
-    subscriptionRegistry: StandSubscriptionRegistry,
+    systemStand: Stand,
+    subscriptionRuntime: SubscriptionRuntime,
+    systemSpec: ContextSpecSnapshot,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
@@ -616,8 +651,10 @@ export class BoundedContext {
     this.#snapshot = ContextParts.cloneContextSnapshot(snapshot);
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
+    this.#systemEventBus = systemEventBus;
     this.#stand = stand;
-    this.#subscriptionRegistry = subscriptionRegistry;
+    this.#systemStand = systemStand;
+    this.#subscriptionRuntime = subscriptionRuntime;
     this.#storageFactory = storageFactory;
     this.#deliveryStrategy = ContextParts.snapshotDeliveryStrategy(deliveryStrategy);
     this.#commandEndpoint = Object.freeze({
@@ -649,10 +686,11 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
-    contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot));
+    systemEventPosters.set(this, (event) => this.#systemEventBus.post(event));
+    contextSystemPairings.set(this, ContextParts.createSystemPairing(this.#snapshot, systemSpec));
     contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
-    contextSubscriptionRegistries.set(this, subscriptionRegistry);
+    contextSubscriptionRuntimes.set(this, subscriptionRuntime);
     contextDeliveryDescriptors.set(
       this,
       ContextParts.createDeliveryDescriptor(
@@ -666,7 +704,7 @@ export class BoundedContext {
     );
     try {
       this.#registerRepositories(repositories);
-      standAccess.startSubscriptions(this.#stand, this.#subscriptionRegistry, this.#eventBus);
+      this.#subscriptionRuntime.start();
     } catch (error) {
       try {
         ContextParts.cleanupFailedContext(this, tenantIndex);
@@ -723,6 +761,10 @@ export class BoundedContext {
       registerEventSchema: (schema) => {
         eventBusAccess.registerSchemas(this.#eventBus, [schema]);
       },
+      registerSystemEventSchema: (schema) => {
+        eventBusAccess.registerSchemas(this.#systemEventBus, [schema]);
+      },
+      postSystemFollowUp: (event) => eventBusAccess.postFollowUp(this.#systemEventBus, event),
       onPostCommand: (command) => commandBusAccess.postInternal(this.#commandBus, command),
       recordDispatchFailure: (event, error) => {
         this.#recordDispatchFailure(event, error);
@@ -956,9 +998,18 @@ export class BoundedContext {
       () => commandBusAccess.finishClose(this.#commandBus),
       errors,
     );
-    await ContextParts.closeContextPart(() => this.#stand.close(), errors);
     await ContextParts.closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
-    await ContextParts.closeContextPart(() => this.#subscriptionRegistry.close(), errors);
+    this.#subscriptionRuntime.beginClose();
+    eventBusAccess.beginClose(this.#systemEventBus);
+    await ContextParts.closeContextPart(() => eventBusAccess.drain(this.#systemEventBus), errors);
+    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.drainClose(), errors);
+    await ContextParts.closeContextPart(
+      () => eventBusAccess.finishClose(this.#systemEventBus),
+      errors,
+    );
+    await ContextParts.closeContextPart(() => this.#stand.close(), errors);
+    await ContextParts.closeContextPart(() => this.#systemStand.close(), errors);
+    await ContextParts.closeContextPart(() => this.#subscriptionRuntime.finishClose(), errors);
     await ContextParts.closeContextPart(() => {
       ContextParts.requireTenantIndex(this).close();
     }, errors);
@@ -974,9 +1025,10 @@ export class BoundedContext {
         storage.close();
       }, errors);
     }
+    ContextParts.clearContextMetadata(this);
 
     if (errors.length > 0) {
-      throw new AggregateError(errors, "BoundedContext close failed.");
+      throw new AggregateError(ContextParts.flattenErrors(errors), "BoundedContext close failed.");
     }
   }
 
@@ -1035,6 +1087,14 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     return subscribe(typeUrl, subscriber);
   },
 
+  postSystemEvent(context: BoundedContext, event: Event): Promise<void> {
+    const post = systemEventPosters.get(context);
+    if (post === undefined) {
+      throw new TypeError("System event posting requires a built BoundedContext instance.");
+    }
+    return post(event);
+  },
+
   systemPairing(context: BoundedContext): SystemPairingSnapshot {
     return ContextParts.cloneSystemPairing(ContextParts.requireSystemPairing(context));
   },
@@ -1054,11 +1114,23 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
   },
 
   subscriptionRegistry(context: BoundedContext): StandSubscriptionRegistry {
-    const registry = contextSubscriptionRegistries.get(context);
-    if (registry === undefined) {
+    const runtime = contextSubscriptionRuntimes.get(context);
+    if (runtime === undefined) {
       throw new TypeError("Subscription registry access requires a built BoundedContext instance.");
     }
-    return registry;
+    return runtime.registry();
+  },
+
+  consumeSubscription(
+    context: BoundedContext,
+    id: string,
+    onUpdate: (update: import("@spine-event-engine/proto/client").SubscriptionUpdate) => void,
+  ) {
+    const runtime = contextSubscriptionRuntimes.get(context);
+    if (runtime === undefined) {
+      throw new TypeError("Subscription consumption requires a built BoundedContext instance.");
+    }
+    return runtime.consume(id, onUpdate);
   },
 
   delivery(context: BoundedContext): ContextDeliveryDescriptor {
@@ -1085,6 +1157,7 @@ export class BoundedContextBuilder {
   #storageFactory: StorageFactory | undefined;
   #subscriptionRegistry: StandSubscriptionRegistry | undefined;
   #subscriptionLimit: number | undefined;
+  #persistSystemEvents = false;
   #generatedRegistryRoot: string | URL | undefined;
 
   /**
@@ -1236,6 +1309,19 @@ export class BoundedContextBuilder {
   }
 
   /**
+   * Persists internal system events in the paired System Context storage.
+   *
+   * System events are forgotten by default. Enabling this option does not put
+   * them into the domain EventStore.
+   *
+   * @returns Returns this builder for further configuration.
+   */
+  persistSystemEvents(): this {
+    this.#persistSystemEvents = true;
+    return this;
+  }
+
+  /**
    * Sets a complete custom registry and transfers it to the first build attempt.
    *
    * The built context closes the registry. A failed first build also begins its
@@ -1341,18 +1427,40 @@ export class BoundedContextBuilder {
 
     const registeredRepositories = [...repositories];
     let eventStore: EventStore | undefined;
+    let systemEventStore: EventStore | undefined;
+    let eventBus: EventBus | undefined;
+    let systemEventBus: EventBus | undefined;
     let stand: Stand | undefined;
+    let systemStand: Stand | undefined;
+    let runtime: SubscriptionRuntime | undefined;
     try {
       ContextParts.preflightRepositories(registeredRepositories);
+      const eventDispatchers = [
+        ...ContextParts.repositoryEventDispatchers(registeredRepositories),
+        ...this.#eventDispatchers,
+      ];
+      const domainEventDispatchers = ContextParts.domainEventDispatchers(eventDispatchers);
+      const systemEventDispatchers = ContextParts.systemEventDispatchers(eventDispatchers);
       const commandBus = new CommandBus([
         ...this.#commandDispatchers,
         ...ContextParts.repositoryCommandDispatchers(registeredRepositories),
       ]);
+      const systemSpec = ContextParts.createSystemSpec(
+        this.#specSnapshot,
+        this.#persistSystemEvents,
+      );
+      systemEventStore = systemSpec.storesEvents
+        ? new EventStore(ContextParts.createStorageContext(systemSpec), storageFactory)
+        : undefined;
+      systemEventBus = eventBusAccess.createSystemBus(systemEventStore);
+      for (const dispatcher of systemEventDispatchers) systemEventBus.register(dispatcher);
+      systemStand = new Stand({
+        context: ContextParts.createStorageContext(systemSpec),
+        storageFactory,
+      });
       eventStore = this.createEventStore(storageFactory);
-      const eventBus = new EventBus(eventStore, [
-        ...ContextParts.repositoryEventDispatchers(registeredRepositories),
-        ...this.#eventDispatchers,
-      ]);
+      eventBus = new EventBus(eventStore);
+      for (const dispatcher of domainEventDispatchers) eventBus.register(dispatcher);
       eventBusAccess.registerSchemas(
         eventBus,
         ContextParts.repositoryProducedEventSchemas(registeredRepositories),
@@ -1366,21 +1474,47 @@ export class BoundedContextBuilder {
         storageFactory,
         this.#subscriptionLimit,
       );
+      runtime = new SubscriptionRuntime(stand, systemStand, eventBus, systemEventBus, registry);
       return ContextParts.createBoundedContext(
         this.#specSnapshot,
         commandBus,
         eventBus,
+        systemEventBus,
         stand,
-        registry,
+        systemStand,
+        runtime,
+        systemSpec,
         storageFactory,
         registeredRepositories,
         this.#deliveryStrategy,
       );
     } catch (error) {
-      void registry?.close().catch(() => undefined);
-      void stand?.close().catch(() => undefined);
-      if (eventStore !== undefined) {
-        ContextParts.closeEventStore(eventStore, error);
+      const cleanupErrors: unknown[] = [];
+      ContextParts.attemptCleanup(() => runtime?.abortClose(), cleanupErrors);
+      if (runtime === undefined) {
+        ContextParts.attemptCleanup(
+          () => void registry?.close().catch(() => undefined),
+          cleanupErrors,
+        );
+      }
+      ContextParts.attemptCleanup(() => void stand?.close().catch(() => undefined), cleanupErrors);
+      ContextParts.attemptCleanup(
+        () => void systemStand?.close().catch(() => undefined),
+        cleanupErrors,
+      );
+      ContextParts.attemptCleanup(() => {
+        if (systemEventBus !== undefined) eventBusAccess.abortClose(systemEventBus);
+        else if (systemEventStore !== undefined) systemEventStore.close();
+      }, cleanupErrors);
+      ContextParts.attemptCleanup(() => {
+        if (eventBus !== undefined) eventBusAccess.abortClose(eventBus);
+        else if (eventStore !== undefined) eventStore.close();
+      }, cleanupErrors);
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError(
+          [error, ...cleanupErrors],
+          "Bounded Context build failed during cleanup.",
+        );
       }
       throw error;
     }
@@ -1542,6 +1676,18 @@ class CatchUpReplayError extends Error {
  * Assembles private bounded-context lifecycle and replay details.
  */
 const ContextParts = Object.freeze({
+  attemptCleanup(onCleanup: () => void, errors: unknown[]): void {
+    try {
+      onCleanup();
+    } catch (error) {
+      errors.push(error);
+    }
+  },
+  flattenErrors(errors: readonly unknown[]): unknown[] {
+    return errors.flatMap((error) =>
+      error instanceof AggregateError ? ContextParts.flattenErrors(error.errors) : [error],
+    );
+  },
   requireFrameworkConstructionToken(token: unknown, message: string): void {
     if (token !== frameworkConstructionToken) {
       throw new TypeError(message);
@@ -1560,8 +1706,11 @@ const ContextParts = Object.freeze({
     specSnapshot: ContextSpecSnapshot,
     commandBus: CommandBus,
     eventBus: EventBus,
+    systemEventBus: EventBus,
     stand: Stand,
-    registry: StandSubscriptionRegistry,
+    systemStand: Stand,
+    runtime: SubscriptionRuntime,
+    systemSpec: ContextSpecSnapshot,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     deliveryStrategy: DeliveryStrategy,
@@ -1574,8 +1723,11 @@ const ContextParts = Object.freeze({
       },
       commandBus,
       eventBus,
+      systemEventBus,
       stand,
-      registry,
+      systemStand,
+      runtime,
+      systemSpec,
       storageFactory,
       repositories,
       deliveryStrategy,
@@ -1680,14 +1832,21 @@ const ContextParts = Object.freeze({
     });
   },
 
-  createSystemPairing(snapshot: BoundedContextSnapshot): SystemPairingSnapshot {
+  createSystemSpec(domainSpec: ContextSpecSnapshot, storesEvents: boolean): ContextSpecSnapshot {
+    return Object.freeze({
+      name: ContextParts.createBoundedContextName(`${domainSpec.name.value}_System`),
+      multitenant: domainSpec.multitenant,
+      storesEvents,
+    });
+  },
+
+  createSystemPairing(
+    snapshot: BoundedContextSnapshot,
+    systemSpec: ContextSpecSnapshot,
+  ): SystemPairingSnapshot {
     return Object.freeze({
       domain: ContextParts.cloneContextSnapshot(snapshot),
-      system: Object.freeze({
-        name: ContextParts.createBoundedContextName(`${snapshot.name.value}_System`),
-        multitenant: snapshot.spec.multitenant,
-        storesEvents: false,
-      }),
+      system: ContextParts.cloneSpecSnapshot(systemSpec),
     });
   },
 
@@ -2006,6 +2165,27 @@ const ContextParts = Object.freeze({
     });
   },
 
+  domainEventDispatchers(dispatchers: readonly EventDispatcher[]): readonly EventDispatcher[] {
+    return Object.freeze(
+      dispatchers.filter((dispatcher) => !ContextParts.isSystemEventDispatcher(dispatcher)),
+    );
+  },
+
+  systemEventDispatchers(dispatchers: readonly EventDispatcher[]): readonly EventDispatcher[] {
+    return Object.freeze(
+      dispatchers.filter((dispatcher) => ContextParts.isSystemEventDispatcher(dispatcher)),
+    );
+  },
+
+  isSystemEventDispatcher(dispatcher: EventDispatcher): boolean {
+    const schemas = [...dispatcher.messageSchemas()];
+    const systemSchemas = schemas.filter((schema) => schema.typeName.startsWith("spine.system."));
+    if (systemSchemas.length > 0 && systemSchemas.length !== schemas.length) {
+      throw new Error("An EventDispatcher cannot mix domain and system event schemas.");
+    }
+    return systemSchemas.length > 0;
+  },
+
   repositoryProducedEventSchemas(
     repositories: readonly RepositoryView[],
   ): readonly MessageSchema[] {
@@ -2020,24 +2200,19 @@ const ContextParts = Object.freeze({
     return Object.freeze([...schemas.values()]);
   },
 
-  closeEventStore(eventStore: EventStore, buildError: unknown): void {
-    try {
-      eventStore.close();
-    } catch (closeError) {
-      throw new AggregateError(
-        [buildError, closeError],
-        "Bounded Context build failed, and event store cleanup also failed.",
-      );
-    }
+  cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {
+    ContextParts.clearContextMetadata(context);
+    tenantIndex.close();
   },
 
-  cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {
+  clearContextMetadata(context: BoundedContext): void {
     contextSystemPairings.delete(context);
     contextTenantIndexes.delete(context);
     contextStorageFactories.delete(context);
     contextDeliveryDescriptors.delete(context);
+    contextSubscriptionRuntimes.delete(context);
     eventSubscribers.delete(context);
-    tenantIndex.close();
+    systemEventPosters.delete(context);
   },
 
   createDeliveryDescriptor(
@@ -2171,6 +2346,8 @@ const ContextParts = Object.freeze({
       dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
       postEventFollowUp: registration.postEventFollowUp,
       registerEventSchema: registration.registerEventSchema,
+      registerSystemEventSchema: registration.registerSystemEventSchema,
+      postSystemFollowUp: registration.postSystemFollowUp,
       onPostCommand: registration.onPostCommand,
       recordDispatchFailure: registration.recordDispatchFailure,
     });

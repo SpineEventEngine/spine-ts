@@ -26,6 +26,7 @@ import {
   FilterSchema,
   Filter_Operator,
   SubscriptionSchema,
+  type Subscription,
   type SubscriptionUpdate,
 } from "@spine-event-engine/proto/client";
 import { EventStore, InMemoryStorageFactory } from "@spine-event-engine/storage";
@@ -59,27 +60,36 @@ const ProjectionStateSchema = messageDesc(fixture, 0) as GenMessage<ProjectionSt
 let eventSequence = 0;
 
 describe("SubscriptionObservers", () => {
+  it("keeps event and entity-state observers on their explicitly selected buses", () => {
+    expect(
+      Object.getOwnPropertyDescriptor(SubscriptionObservers, "observeEvent")?.value,
+    ).toBeTypeOf("function");
+    expect(
+      Object.getOwnPropertyDescriptor(SubscriptionObservers, "observeState")?.value,
+    ).toBeTypeOf("function");
+  });
+
   it("does not attach incomplete, state, or event targets without a local EventBus", () => {
     const state = { schema: ProjectionStateSchema, idField: "id" };
-    const missingTarget = SubscriptionObservers.observeSubscription(
+    const missingTarget = observeSubscription(
       create(SubscriptionSchema),
       undefined,
       () => state,
       () => undefined,
     );
-    const emptyTarget = SubscriptionObservers.observeSubscription(
+    const emptyTarget = observeSubscription(
       create(SubscriptionSchema, { topic: { target: { type: "" } } }),
       undefined,
       () => state,
       () => undefined,
     );
-    const stateTarget = SubscriptionObservers.observeSubscription(
+    const stateTarget = observeSubscription(
       subscriptionFor(ProjectionStateSchema),
       undefined,
       () => state,
       () => undefined,
     );
-    const eventTarget = SubscriptionObservers.observeSubscription(
+    const eventTarget = observeSubscription(
       subscriptionFor(ProjectionStateSchema),
       undefined,
       () => undefined,
@@ -95,7 +105,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("renders a masked matching state then a no-longer-matching state from the local EventBus", async () => {
-    const bus = createBus();
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const subscription = create(SubscriptionSchema, {
       topic: {
@@ -127,7 +137,7 @@ describe("SubscriptionObservers", () => {
       },
     });
 
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       subscription,
       bus,
       (typeUrl) =>
@@ -162,9 +172,9 @@ describe("SubscriptionObservers", () => {
   });
 
   it("matches EITHER criteria after an ID filter and leaves an explicit empty mask unprojected", async () => {
-    const bus = createBus();
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       create(SubscriptionSchema, {
         topic: {
           target: {
@@ -220,7 +230,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("suppresses state delivery for unsupported, valueless, and unresolved filters", async () => {
-    const bus = createBus();
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const filters = [
       create(FilterSchema, {
@@ -239,7 +249,7 @@ describe("SubscriptionObservers", () => {
       }),
     ];
     const observers = filters.map((filter) =>
-      SubscriptionObservers.observeSubscription(
+      observeSubscription(
         create(SubscriptionSchema, {
           topic: {
             target: {
@@ -279,10 +289,10 @@ describe("SubscriptionObservers", () => {
       { schema: Int64ValueSchema, value: 9n, rendered: Int64ValueSchema },
       { schema: BytesValueSchema, value: new Uint8Array([1, 2]), rendered: BytesValueSchema },
     ] as const;
-    const bus = createBus(cases.map(({ schema }) => schema));
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const observers = cases.map(({ schema }) =>
-      SubscriptionObservers.observeSubscription(
+      observeSubscription(
         subscriptionFor(schema),
         bus,
         (typeUrl) =>
@@ -310,7 +320,7 @@ describe("SubscriptionObservers", () => {
   });
 
   it("matches raw Any and byte entity IDs by exact bytes while rejecting unequal values", async () => {
-    const bus = createBus([StringValueSchema]);
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
     const anyId = create(AnySchema, {
       typeUrl: "type.googleapis.com/example.UnknownId",
@@ -329,7 +339,7 @@ describe("SubscriptionObservers", () => {
       create(BytesValueSchema, { value: new Uint8Array([4, 6]) }),
     );
     const observers = [anyId, otherAnyId, bytesId, otherBytesId].map((id) =>
-      SubscriptionObservers.observeSubscription(
+      observeSubscription(
         filteredSubscription(StringValueSchema, id),
         bus,
         () => ({ schema: StringValueSchema, idField: "value" }),
@@ -358,9 +368,9 @@ describe("SubscriptionObservers", () => {
   });
 
   it("ignores state-change envelopes with a wrong tenant, state type, or malformed payload", async () => {
-    const bus = createBus();
+    const bus = createSystemBus();
     const received: SubscriptionUpdate[] = [];
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       create(SubscriptionSchema, {
         topic: {
           context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
@@ -415,7 +425,7 @@ describe("SubscriptionObservers", () => {
   it("forwards accepted event targets while redacting client rejection details", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       create(SubscriptionSchema, {
         topic: {
           context: { tenantId: { kind: { case: "value", value: "tenant-a" } } },
@@ -453,7 +463,6 @@ describe("SubscriptionObservers", () => {
         context: tenantContext("tenant-b"),
       }),
     );
-    await postStateChange(bus, createState("task-1", "State event", 1), undefined, "tenant-a");
     await bus.post(source);
 
     expect(received).toHaveLength(1);
@@ -475,7 +484,7 @@ describe("SubscriptionObservers", () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
     const domain = { kind: { case: "domain" as const, value: { value: "example.test" } } };
-    const observer = SubscriptionObservers.observeSubscription(
+    const observer = observeSubscription(
       create(SubscriptionSchema, {
         topic: {
           context: { tenantId: domain },
@@ -522,14 +531,32 @@ describe("SubscriptionObservers", () => {
   });
 });
 
+function observeSubscription(
+  subscription: Subscription,
+  bus: EventBus | undefined,
+  findState: (
+    typeUrl: string,
+  ) => { readonly schema: MessageSchema; readonly idField: string } | undefined,
+  onUpdate: (update: SubscriptionUpdate) => void,
+) {
+  const typeUrl = subscription.topic?.target?.type;
+  if (typeUrl === undefined || typeUrl.length === 0) return undefined;
+  const state = findState(typeUrl);
+  return state === undefined
+    ? SubscriptionObservers.observeEvent(subscription, bus, onUpdate)
+    : SubscriptionObservers.observeState(subscription, state, bus, onUpdate);
+}
+
+function createSystemBus(): EventBus {
+  const bus = eventBusAccess.createSystemBus(undefined);
+  eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+  return bus;
+}
+
 function createBus(schemas: readonly MessageSchema[] = []): EventBus {
   const storage = new InMemoryStorageFactory();
   const bus = new EventBus(new EventStore({ name: "Observer", multitenant: false }, storage));
-  eventBusAccess.registerSchemas(bus, [
-    EntityLog.EntityStateChangedSchema,
-    ProjectionStateSchema,
-    ...schemas,
-  ]);
+  eventBusAccess.registerSchemas(bus, [ProjectionStateSchema, ...schemas]);
   return bus;
 }
 

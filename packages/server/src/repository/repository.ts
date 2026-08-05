@@ -1061,6 +1061,8 @@ interface RepositoryRuntime {
   readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
   readonly postEventFollowUp: (event: Event) => Promise<void>;
   readonly registerEventSchema: (schema: MessageSchema) => void;
+  readonly postSystemFollowUp: (event: Event) => Promise<void>;
+  readonly registerSystemEventSchema: (schema: MessageSchema) => void;
   readonly onPostCommand: (command: Command) => Promise<void>;
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
@@ -3171,7 +3173,7 @@ class EntityStateChangePublishing {
     newState: Message,
     version: number,
   ): void {
-    runtime.registerEventSchema(EntityLog.EntityStateChangedSchema);
+    runtime.registerSystemEventSchema(EntityLog.EntityStateChangedSchema);
     const event = create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(
@@ -3193,7 +3195,7 @@ class EntityStateChangePublishing {
       context: metadata.context,
     });
     try {
-      void runtime.dispatchStoredFollowUp(event).catch((error: unknown) => {
+      void runtime.postSystemFollowUp(event).catch((error: unknown) => {
         runtime.recordDispatchFailure(event, error);
       });
     } catch (error) {

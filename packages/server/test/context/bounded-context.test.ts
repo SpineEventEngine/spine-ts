@@ -8,7 +8,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import type { Any } from "@bufbuild/protobuf/wkt";
+import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { TypeUrls, AnyMessages, SignalEnvelopes } from "@spine-event-engine/core";
 import {
   ActorContextSchema,
@@ -61,6 +61,7 @@ import { serverEnvironmentAccess } from "../../src/server/server-environment.js"
 import { ServerEnvironment } from "../../src/server/server-environment.js";
 import { InMemorySubscriptionRegistry } from "../../src/stand/subscription-registry.js";
 import { Stand } from "../../src/stand/stand.js";
+import * as EntityLog from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 interface InternalSystemPairing {
@@ -369,6 +370,26 @@ describe("BoundedContext assembly", () => {
     expect(multitenantPairing.system.name.value).toBe("Customers_System");
     expect(multitenantPairing.system.multitenant).toBe(true);
     expect(multitenantPairing.system.storesEvents).toBe(false);
+  });
+
+  it("persists only paired system events when explicitly enabled", () => {
+    const context = BoundedContext.singleTenant("AuditedTasks").persistSystemEvents().build();
+
+    expect(internalSystemPairing(context).system.storesEvents).toBe(true);
+  });
+
+  it("acquires the paired System event store before domain resources", async () => {
+    const storageFactory = new ObservingStorageFactory([]);
+    const context = BoundedContext.singleTenant("AcquisitionOrder")
+      .withStorageFactory(storageFactory)
+      .persistSystemEvents()
+      .build();
+
+    expect(storageFactory.creations.slice(0, 2).map((creation) => creation.context.name)).toEqual([
+      "AcquisitionOrder_System",
+      "AcquisitionOrder",
+    ]);
+    await context.close();
   });
 
   it("exposes a constant single-tenant index through internal context access", async () => {
@@ -1064,7 +1085,7 @@ describe("BoundedContext assembly", () => {
     expect(observed).toEqual(["store:event-3", "dispatch:event-3"]);
   });
 
-  it("closes the event store when event dispatcher registration fails", () => {
+  it("rejects event dispatcher classification before acquiring event storage", () => {
     const storageFactory = new ObservingStorageFactory([]);
     const dispatcher = createEventDispatcher([ProjectionStateSchema], () => undefined);
     const brokenDispatcher = {
@@ -1082,11 +1103,10 @@ describe("BoundedContext assembly", () => {
         .build(),
     ).toThrow("Cannot read event schemas.");
 
-    expect(storageFactory.storages).toHaveLength(1);
-    expect(storageFactory.storages[0]?.isOpen()).toBe(false);
+    expect(storageFactory.storages).toHaveLength(0);
   });
 
-  it("preserves event registration and event-store cleanup failures", () => {
+  it("does not acquire an event store before dispatcher classification fails", () => {
     const storageFactory = new ObservingStorageFactory([], [1]);
     const brokenDispatcher = {
       messageSchemas: () => {
@@ -1105,14 +1125,8 @@ describe("BoundedContext assembly", () => {
       thrown = error;
     }
 
-    expect(thrown).toBeInstanceOf(AggregateError);
-    const errors = (thrown as AggregateError).errors as Error[];
-    expect(errors.map((error) => error.message)).toEqual([
-      "Cannot read event schemas.",
-      "Cannot close record storage.",
-    ]);
-    expect(storageFactory.storages).toHaveLength(1);
-    expect(storageFactory.storages[0]?.isOpen()).toBe(false);
+    expect(thrown).toMatchObject({ message: "Cannot read event schemas." });
+    expect(storageFactory.storages).toHaveLength(0);
   });
 
   it("registers repositories added to the builder with the built context", () => {
@@ -1631,6 +1645,59 @@ describe("BoundedContext assembly", () => {
     expect(repositories[0]?.stateFullTypeName).toBe(AggregateStateSchema.typeName);
   });
 
+  it("aborts retained domain and System buses when dispatcher registration throws", () => {
+    for (const schema of [ProjectionStateSchema, EntityLog.EntityStateChangedSchema]) {
+      const storageFactory = new ObservingStorageFactory([]);
+      let schemaReads = 0;
+      const dispatcher: EventDispatcher = {
+        messageSchemas: () => {
+          schemaReads++;
+          if (schemaReads > 2) throw new Error(`Registration failed for ${schema.typeName}.`);
+          return [schema];
+        },
+        dispatch: () => Promise.resolve(),
+      };
+
+      expect(() =>
+        BoundedContext.singleTenant("Tasks")
+          .withStorageFactory(storageFactory)
+          .addEventDispatcher(dispatcher)
+          .build(),
+      ).toThrow(`Registration failed for ${schema.typeName}.`);
+      expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
+    }
+  });
+
+  it("keeps one primary registration failure and one System-store cleanup failure", () => {
+    const storageFactory = new ObservingStorageFactory([], [1]);
+    const primary = new Error("System dispatcher registration failed.");
+    let schemaReads = 0;
+    const dispatcher: EventDispatcher = {
+      messageSchemas: () => {
+        schemaReads++;
+        if (schemaReads > 2) throw primary;
+        return [EntityLog.EntityStateChangedSchema];
+      },
+      dispatch: () => Promise.resolve(),
+    };
+
+    let failure: unknown;
+    try {
+      BoundedContext.singleTenant("Tasks")
+        .persistSystemEvents()
+        .withStorageFactory(storageFactory)
+        .addEventDispatcher(dispatcher)
+        .build();
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([
+      primary,
+      expect.objectContaining({ message: "Cannot close record storage." }),
+    ]);
+  });
+
   it("closes every prepared repository storage when cleanup also fails", () => {
     const storageFactory = new FailingStorageFactory(7, ProcessManagerStateSchema.typeName, [5]);
     const aggregateRepository = new Repository({
@@ -1915,6 +1982,135 @@ describe("BoundedContext assembly", () => {
     }
   });
 
+  it("drains accepted domain work through the System bus before terminal cleanup", async () => {
+    const order: string[] = [];
+    const domainHandleFailure = new Error("domain Stand close failed");
+    const systemHandleFailure = new Error("System Stand close failed");
+    const registryFailure = new Error("registry close failed");
+    const storageFactory = new OrderedStorageFactory(order);
+    const registry = new OrderedFailingRegistry(order, registryFailure);
+    let releaseCommand!: () => void;
+    const commandReleased = new Promise<void>((resolve) => {
+      releaseCommand = resolve;
+    });
+    const systemDispatcher = createEventDispatcher([EntityLog.EntityStateChangedSchema], () => {
+      order.push("system event dispatched");
+    });
+    const commandDispatcher = createCommandDispatcher([ProjectionStateSchema], async () => {
+      order.push("domain command accepted");
+      await commandReleased;
+      await (
+        boundedContextAccess as unknown as {
+          postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
+        }
+      ).postSystemEvent(
+        context,
+        create(EventSchema, {
+          id: { value: "terminal-system-event" },
+          message: AnyMessages.pack(
+            EntityLog.EntityStateChangedSchema,
+            create(EntityLog.EntityStateChangedSchema, {
+              entity: {
+                id: AnyMessages.pack(
+                  StringValueSchema,
+                  create(StringValueSchema, { value: "task-1" }),
+                ),
+                typeUrl: TypeUrls.derive(ProjectionStateSchema),
+              },
+              newState: AnyMessages.pack(
+                ProjectionStateSchema,
+                create(ProjectionStateSchema, { id: "task-1", name: "Closed", priority: 1 }),
+              ),
+              signalId: [
+                {
+                  id: AnyMessages.pack(
+                    StringValueSchema,
+                    create(StringValueSchema, { value: "terminal-command" }),
+                  ),
+                  typeUrl: TypeUrls.derive(StringValueSchema),
+                },
+              ],
+            }),
+          ),
+        }),
+      );
+      order.push("domain command finished");
+    });
+    const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(function () {
+      const role = order.includes("domain Stand close") ? "System" : "domain";
+      order.push(`${role} Stand close`);
+      return Promise.reject(role === "domain" ? domainHandleFailure : systemHandleFailure);
+    });
+    const context = BoundedContext.multitenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .withSubscriptionRegistry(registry)
+      .addCommandDispatcher(commandDispatcher)
+      .addEventDispatcher(systemDispatcher)
+      .build();
+
+    try {
+      const command = context.commandBus().post(createProjectionCommand("terminal-command"));
+      await vi.waitFor(() => {
+        expect(order).toEqual(["domain command accepted"]);
+      });
+      const firstClose = context.close();
+      const secondClose = context.close();
+      expect(secondClose).toBe(firstClose);
+      releaseCommand();
+      await expect(command).resolves.toBeUndefined();
+      const failure = await firstClose.then(
+        () => {
+          throw new Error("Expected terminal close to fail.");
+        },
+        (error: unknown) => error,
+      );
+
+      expect(order).toEqual([
+        "domain command accepted",
+        "system event dispatched",
+        "domain command finished",
+        "storage:Tasks",
+        "domain Stand close",
+        "System Stand close",
+        "registry",
+        "storage:__spine/Tasks/tenants",
+      ]);
+      expect(failure).toBeInstanceOf(AggregateError);
+      expect((failure as AggregateError).errors).toEqual([
+        domainHandleFailure,
+        systemHandleFailure,
+        registryFailure,
+      ]);
+      await expect(secondClose).rejects.toBe(failure);
+      expect(registry.closeCalls).toBe(1);
+      await expect(
+        context.commandBus().post(createProjectionCommand("late-command")),
+      ).rejects.toThrow("server runtime is closed");
+      await expect(context.eventBus().post(createProjectionEvent("late-event"))).rejects.toThrow(
+        "server runtime is closed",
+      );
+      expect(() =>
+        (
+          boundedContextAccess as unknown as { systemPairing(context: BoundedContext): unknown }
+        ).systemPairing(context),
+      ).toThrow("System pairing requires a built BoundedContext instance.");
+      expect(() => boundedContextAccess.tenantIndex(context)).toThrow(
+        "Tenant index requires a built BoundedContext instance.",
+      );
+      expect(() => boundedContextAccess.storageFactory(context)).toThrow(
+        "Storage access requires a built BoundedContext instance.",
+      );
+      expect(() => boundedContextAccess.delivery(context)).toThrow(
+        "Delivery access requires a built BoundedContext instance.",
+      );
+      expect(() => boundedContextAccess.subscriptionRegistry(context)).toThrow(
+        "Subscription registry access requires a built BoundedContext instance.",
+      );
+    } finally {
+      closeStand.mockRestore();
+    }
+  });
+
   it("does not expose repository, delivery, gRPC, or transport APIs on BoundedContext", () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const forbiddenMembers = [
@@ -2040,13 +2236,19 @@ class ObservingSubscriptionRegistry extends InMemorySubscriptionRegistry {
 }
 
 class OrderedFailingRegistry extends InMemorySubscriptionRegistry {
-  constructor(private readonly order: string[]) {
+  closeCalls = 0;
+
+  constructor(
+    private readonly order: string[],
+    private readonly failure = new Error("Registry close failed."),
+  ) {
     super();
   }
 
   override close(): Promise<void> {
+    this.closeCalls += 1;
     this.order.push("registry");
-    return Promise.reject(new Error("Registry close failed."));
+    return Promise.reject(this.failure);
   }
 }
 

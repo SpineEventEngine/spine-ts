@@ -4785,7 +4785,14 @@ describe("repository signal routing", () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProcessManagerAssignRepository())
       .addEventDispatcher({
-        messageSchemas: () => [AggregateStateSchema, EntityStateChangedSchema],
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          dispatched.push(event);
+          return Promise.resolve();
+        },
+      })
+      .addEventDispatcher({
+        messageSchemas: () => [EntityStateChangedSchema],
         dispatch: (event) => {
           dispatched.push(event);
           return Promise.resolve();

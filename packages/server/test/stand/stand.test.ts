@@ -30,6 +30,7 @@ import {
 } from "../../src/index.js";
 import { SubscriptionIdSchema, SubscriptionSchema } from "@spine-event-engine/proto/client";
 import { standAccess } from "../../src/stand/stand.js";
+import { SubscriptionRuntime } from "../../src/stand/subscription-runtime.js";
 import {
   eventBusAccess,
   type EventBus as EventBusType,
@@ -41,6 +42,7 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 const observedEventBusSubscriptions = vi.hoisted(
   () => [] as { readonly closed: boolean; unsubscribe(): void }[],
 );
+const failNextObserverUnsubscribe = vi.hoisted(() => ({ value: false }));
 
 vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/bus/event-bus.js")>();
@@ -51,8 +53,20 @@ vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
       ...actual.eventBusAccess,
       subscribe(eventBus: EventBusType, typeUrl: string, subscriber: EventSubscriber) {
         const subscription = actual.eventBusAccess.subscribe(eventBus, typeUrl, subscriber);
-        observedEventBusSubscriptions.push(subscription);
-        return subscription;
+        const observed = Object.freeze({
+          get closed() {
+            return subscription.closed;
+          },
+          unsubscribe() {
+            subscription.unsubscribe();
+            if (failNextObserverUnsubscribe.value) {
+              failNextObserverUnsubscribe.value = false;
+              throw new Error("Observer unsubscribe failed.");
+            }
+          },
+        });
+        observedEventBusSubscriptions.push(observed);
+        return observed;
       },
     }),
   };
@@ -106,13 +120,19 @@ const fileEntityEmptyFixture = createFixtureFileDescriptor(
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
+  it("keeps subscription lifecycle operations out of the Stand access seam", () => {
+    expect("startSubscriptions" in standAccess).toBe(false);
+    expect("consumeSubscription" in standAccess).toBe(false);
+    expect("reconcileSubscriptions" in standAccess).toBe(false);
+  });
+
   it("does not attach a deleted definition after its snapshot is released", async () => {
     const factory = new InMemoryStorageFactory();
     const stand = new Stand({
       context: { name: "Gated", multitenant: false },
       storageFactory: factory,
     });
-    const bus = new EventBus(new EventStore({ name: "Gated", multitenant: false }, factory));
+    const bus = eventBusAccess.createSystemBus(undefined);
     const registry = new GatedSnapshotRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "gated-delete" }),
@@ -130,16 +150,17 @@ describe("Stand", () => {
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
     registry.gateNextSnapshot();
-    standAccess.startSubscriptions(stand, registry, bus);
+    const runtime = pairedRuntime(stand, factory, registry, bus, bus);
+    runtime.start();
     await registry.snapshotStarted;
     await registry.delete(subscription.id);
     registry.releaseSnapshot();
-    await standAccess.reconcileSubscriptions(stand, registry);
+    await runtime.reconcile();
     let delivered = 0;
-    await standAccess.consumeSubscription(stand, registry, "gated-delete", () => delivered++);
+    await runtime.consume("gated-delete", () => delivered++);
     await postStateChange(bus, ProjectionStateSchema, createState("deleted", "Deleted"));
     expect(delivered).toBe(0);
-    await Promise.all([stand.close(), bus.close()]);
+    await Promise.all([runtime.close(), stand.close(), bus.close()]);
   });
 
   it("detaches EventBus observers while a reconciliation snapshot is gated during close", async () => {
@@ -149,7 +170,7 @@ describe("Stand", () => {
       context: { name: "Closing", multitenant: false },
       storageFactory: factory,
     });
-    const bus = new EventBus(new EventStore({ name: "Closing", multitenant: false }, factory));
+    const bus = eventBusAccess.createSystemBus(undefined);
     const registry = new GatedSnapshotRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "gated-close" }),
@@ -166,9 +187,10 @@ describe("Stand", () => {
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
-    standAccess.startSubscriptions(stand, registry, bus);
+    const runtime = pairedRuntime(stand, factory, registry, bus, bus);
+    runtime.start();
     let deliveries = 0;
-    await standAccess.consumeSubscription(stand, registry, "gated-close", () => deliveries++);
+    await runtime.consume("gated-close", () => deliveries++);
     expect(observedEventBusSubscriptions).toHaveLength(1);
     const [observer] = observedEventBusSubscriptions;
     expect(observer?.closed).toBe(false);
@@ -176,9 +198,9 @@ describe("Stand", () => {
     expect(deliveries).toBe(1);
 
     registry.gateNextSnapshot();
-    const reconciliation = standAccess.reconcileSubscriptions(stand, registry);
+    const reconciliation = runtime.reconcile();
     await registry.snapshotStarted;
-    const closing = stand.close();
+    const closing = runtime.close();
     registry.releaseSnapshot();
     await reconciliation;
     await closing;
@@ -188,15 +210,57 @@ describe("Stand", () => {
     await expect(bus.close()).resolves.toBeUndefined();
   });
 
+  it("detaches every observer and clears consumers when one observer unsubscribe fails", async () => {
+    observedEventBusSubscriptions.length = 0;
+    const factory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "DetachFailures", multitenant: false },
+      storageFactory: factory,
+    });
+    const bus = eventBusAccess.createSystemBus(undefined);
+    const registry = new ClosingRegistry(() =>
+      observedEventBusSubscriptions.every((observer) => observer.closed),
+    );
+    stand.register(ProjectionStateSchema);
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    for (const id of ["detach-one", "detach-two"]) {
+      const subscription = create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: id }),
+        topic: { id: { value: id }, target: { type: TypeUrls.derive(ProjectionStateSchema) } },
+      });
+      if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+      await registry.create(subscription);
+      await registry.activate(subscription.id);
+    }
+    const runtime = pairedRuntime(stand, factory, registry, bus, bus);
+    await runtime.consume("detach-one", () => undefined);
+    await runtime.consume("detach-two", () => undefined);
+    expect(observedEventBusSubscriptions).toHaveLength(2);
+    failNextObserverUnsubscribe.value = true;
+
+    const closing = runtime.close();
+    const failure = await closing.catch((error: unknown) => error);
+    expect(failure).toMatchObject({ message: "Subscription runtime close failed." });
+    expect((failure as AggregateError).errors.map((error: Error) => error.message)).toEqual([
+      "Observer unsubscribe failed.",
+      "Registry close failed.",
+    ]);
+    await expect(runtime.close()).rejects.toBe(failure);
+    expect(registry.closeCalls).toBe(1);
+    await expect(runtime.consume("detach-one", () => undefined)).rejects.toThrow(
+      "Subscription runtime is closing.",
+    );
+    expect(observedEventBusSubscriptions.every((observer) => observer.closed)).toBe(true);
+    await Promise.all([stand.close(), bus.close()]);
+  });
+
   it("removes a consumer when its reconciliation cycle fails", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const stand = new Stand({
       context: { name: "Subscriptions", multitenant: false },
       storageFactory,
     });
-    const eventBus = new EventBus(
-      new EventStore({ name: "Subscriptions", multitenant: false }, storageFactory),
-    );
+    const eventBus = eventBusAccess.createSystemBus(undefined);
     const registry = new FailingSnapshotRegistry();
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: "failed-consumer" }),
@@ -213,17 +277,18 @@ describe("Stand", () => {
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
-    standAccess.startSubscriptions(stand, registry, eventBus);
-    await standAccess.reconcileSubscriptions(stand, registry);
+    const runtime = pairedRuntime(stand, storageFactory, registry, eventBus, eventBus);
+    runtime.start();
+    await runtime.reconcile();
     registry.failNextSnapshot();
     let failedConsumerDeliveries = 0;
     await expect(
-      standAccess.consumeSubscription(stand, registry, "failed-consumer", () => {
+      runtime.consume("failed-consumer", () => {
         failedConsumerDeliveries++;
       }),
     ).rejects.toThrow("snapshot failed");
     let delivered = 0;
-    await standAccess.consumeSubscription(stand, registry, "failed-consumer", () => {
+    await runtime.consume("failed-consumer", () => {
       delivered++;
     });
 
@@ -231,7 +296,7 @@ describe("Stand", () => {
 
     expect(failedConsumerDeliveries).toBe(0);
     expect(delivered).toBe(1);
-    await Promise.all([stand.close(), eventBus.close()]);
+    await Promise.all([runtime.close(), stand.close(), eventBus.close()]);
   });
 
   it("fences Stand-owned observers by the exact active revision and sweeps absent snapshots", async () => {
@@ -240,9 +305,7 @@ describe("Stand", () => {
       context: { name: "Subscriptions", multitenant: false },
       storageFactory,
     });
-    const eventBus = new EventBus(
-      new EventStore({ name: "Subscriptions", multitenant: false }, storageFactory),
-    );
+    const eventBus = eventBusAccess.createSystemBus(undefined);
     stand.register(ProjectionStateSchema);
     const registry = new RevisionFencedRegistry();
     const subscription = create(SubscriptionSchema, {
@@ -260,22 +323,23 @@ describe("Stand", () => {
     await registry.create(subscription);
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(eventBus, [EntityLog.EntityStateChangedSchema]);
-    standAccess.startSubscriptions(stand, registry, eventBus);
-    await standAccess.consumeSubscription(stand, registry, "s-1", () => observed.push(1));
+    const runtime = pairedRuntime(stand, storageFactory, registry, eventBus, eventBus);
+    runtime.start();
+    await runtime.consume("s-1", () => observed.push(1));
 
     await postStateChange(eventBus, ProjectionStateSchema, createState("one", "Before fence"));
     expect(observed).toEqual([]);
 
     registry.allowExactRevision = true;
-    await standAccess.reconcileSubscriptions(stand, registry);
+    await runtime.reconcile();
     await postStateChange(eventBus, ProjectionStateSchema, createState("two", "After fence"));
     expect(observed).toEqual([1]);
 
     await registry.delete(subscription.id);
-    await standAccess.reconcileSubscriptions(stand, registry);
+    await runtime.reconcile();
     await postStateChange(eventBus, ProjectionStateSchema, createState("three", "After sweep"));
     expect(observed).toEqual([1]);
-    await Promise.all([stand.close(), eventBus.close()]);
+    await Promise.all([runtime.close(), stand.close(), eventBus.close()]);
   });
 
   it("observes one shared definition from both nodes without crossing local buses", async () => {
@@ -289,12 +353,8 @@ describe("Stand", () => {
       context: { name: "Tasks", multitenant: false },
       storageFactory,
     });
-    const firstBus = new EventBus(
-      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
-    );
-    const secondBus = new EventBus(
-      new EventStore({ name: "Tasks", multitenant: false }, storageFactory),
-    );
+    const firstBus = eventBusAccess.createSystemBus(undefined);
+    const secondBus = eventBusAccess.createSystemBus(undefined);
     first.register(ProjectionStateSchema);
     second.register(ProjectionStateSchema);
     const subscription = create(SubscriptionSchema, {
@@ -313,16 +373,25 @@ describe("Stand", () => {
     await registry.activate(subscription.id);
     eventBusAccess.registerSchemas(firstBus, [EntityLog.EntityStateChangedSchema]);
     eventBusAccess.registerSchemas(secondBus, [EntityLog.EntityStateChangedSchema]);
-    standAccess.startSubscriptions(first, registry, firstBus);
-    standAccess.startSubscriptions(second, registry, secondBus);
-    await standAccess.consumeSubscription(first, registry, "shared", () => observed.first++);
-    await standAccess.consumeSubscription(second, registry, "shared", () => observed.second++);
+    const firstRuntime = pairedRuntime(first, storageFactory, registry, firstBus, firstBus);
+    const secondRuntime = pairedRuntime(second, storageFactory, registry, secondBus, secondBus);
+    firstRuntime.start();
+    secondRuntime.start();
+    await firstRuntime.consume("shared", () => observed.first++);
+    await secondRuntime.consume("shared", () => observed.second++);
 
     await postStateChange(firstBus, ProjectionStateSchema, createState("first", "First node"));
     await postStateChange(secondBus, ProjectionStateSchema, createState("second", "Second node"));
 
     expect(observed).toEqual({ first: 1, second: 1 });
-    await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
+    await Promise.all([
+      firstRuntime.close(),
+      secondRuntime.close(),
+      first.close(),
+      second.close(),
+      firstBus.close(),
+      secondBus.close(),
+    ]);
   });
 
   it("delivers an event target only from the local EventBus on each reconciled node", async () => {
@@ -358,22 +427,26 @@ describe("Stand", () => {
     if (subscription.id === undefined) throw new Error("Expected subscription ID.");
     await registry.create(subscription);
     await registry.activate(subscription.id);
-    standAccess.startSubscriptions(first, registry, firstBus);
-    standAccess.startSubscriptions(second, registry, secondBus);
-    await standAccess.consumeSubscription(first, registry, "shared-events", () => observed.first++);
-    await standAccess.consumeSubscription(
-      second,
-      registry,
-      "shared-events",
-      () => observed.second++,
-    );
+    const firstRuntime = pairedRuntime(first, storageFactory, registry, firstBus, firstBus);
+    const secondRuntime = pairedRuntime(second, storageFactory, registry, secondBus, secondBus);
+    firstRuntime.start();
+    secondRuntime.start();
+    await firstRuntime.consume("shared-events", () => observed.first++);
+    await secondRuntime.consume("shared-events", () => observed.second++);
 
     await firstBus.post(createSubscriptionEvent("first-event"));
     expect(observed).toEqual({ first: 1, second: 0 });
     await secondBus.post(createSubscriptionEvent("second-event"));
     expect(observed).toEqual({ first: 1, second: 1 });
 
-    await Promise.all([first.close(), second.close(), firstBus.close(), secondBus.close()]);
+    await Promise.all([
+      firstRuntime.close(),
+      secondRuntime.close(),
+      first.close(),
+      second.close(),
+      firstBus.close(),
+      secondBus.close(),
+    ]);
   });
 
   it("registers known entity state types and rejects unknown reads and subscriptions", async () => {
@@ -922,6 +995,21 @@ describe("Stand", () => {
     expect(storageFactory.closedEntityHandles).toBe(1);
   });
 
+  it("closes later entity handles when an earlier handle close fails", async () => {
+    const storageFactory = new FailingEntityHandleFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: true },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("first", "First"), { tenantId: "one" });
+    await stand.update(ProjectionStateSchema, createState("second", "Second"), { tenantId: "two" });
+
+    await expect(stand.close()).rejects.toThrow("Stand close failed.");
+    expect(storageFactory.closedEntityHandles).toBe(2);
+  });
+
   it("does not open a legacy record-storage index for list reads", async () => {
     const storageFactory = new ClosingStorageFactory();
     const stand = new Stand({
@@ -1097,6 +1185,26 @@ describe("Stand", () => {
     expect(observed?.version).toEqual(expectedVersion);
   });
 });
+
+function pairedRuntime(
+  domainStand: Stand,
+  storageFactory: InMemoryStorageFactory,
+  registry: InMemorySubscriptionRegistry,
+  domainEventBus: EventBusType,
+  systemEventBus: EventBusType,
+): SubscriptionRuntime {
+  const systemStand = new Stand({
+    context: { name: "__spine/System", multitenant: false },
+    storageFactory,
+  });
+  return new SubscriptionRuntime(
+    domainStand,
+    systemStand,
+    domainEventBus,
+    systemEventBus,
+    registry,
+  );
+}
 
 function createState(id: string, name: string): ProjectionState {
   return create(ProjectionStateSchema, {
@@ -1301,6 +1409,21 @@ class GatedSnapshotRegistry extends InMemorySubscriptionRegistry {
   }
 }
 
+class ClosingRegistry extends InMemorySubscriptionRegistry {
+  closeCalls = 0;
+
+  constructor(private readonly observersDetached: () => boolean) {
+    super();
+  }
+
+  override async close(): Promise<void> {
+    this.closeCalls++;
+    if (!this.observersDetached()) throw new Error("Registry closed before observer detach.");
+    await super.close();
+    throw new Error("Registry close failed.");
+  }
+}
+
 class EntityHandleCountingFactory extends InMemoryStorageFactory {
   openedEntityHandles = 0;
   closedEntityHandles = 0;
@@ -1314,6 +1437,25 @@ class EntityHandleCountingFactory extends InMemoryStorageFactory {
       close: () => {
         this.closedEntityHandles++;
         close();
+      },
+    });
+  }
+}
+
+class FailingEntityHandleFactory extends EntityHandleCountingFactory {
+  #failed = false;
+
+  override createEntityStorage(input: unknown): unknown {
+    const handle = super.createEntityStorage(input) as { close(): void } & Record<string, unknown>;
+    const close = handle.close.bind(handle);
+    return Object.freeze({
+      ...handle,
+      close: () => {
+        close();
+        if (!this.#failed) {
+          this.#failed = true;
+          throw new Error("Entity handle close failed.");
+        }
       },
     });
   }
