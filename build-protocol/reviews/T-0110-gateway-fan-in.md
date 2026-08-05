@@ -122,3 +122,13 @@ substantively affected reliability/API/docs concerns require confirmation.
   boundary and prove later compensation after an earlier synchronous throw.
 - These two deterministic changes return once to the existing implementer. API
   and reliability receive final exact confirmation; documentation is closed.
+
+## Review Closure
+
+- `a0a14139` puts every rollback disposal behind a promise boundary, proves a
+  later child is attempted after an earlier synchronous throw while preserving
+  the original creation failure, and documents the `legacy` topology default.
+- Final API confirmation is clean. Final reliability confirmation is clean with
+  8/8 fan-in tests. Documentation and style were already closed.
+- All four canonical concerns are closed; security remains N/A for the recorded
+  no-new-trust-boundary reason. T-0110 may enter final release verification.
