@@ -68,6 +68,29 @@ describe("Server", () => {
     await resetServerEnvironmentForTest();
   });
 
+  it("accepts one to thirty-two unique canonical standalone backend origins in configured order", () => {
+    expect(
+      BrowserServer.backendUrls(["https://first.example.test", "https://second.example.test"]),
+    ).toEqual(["https://first.example.test", "https://second.example.test"]);
+    expect(
+      BrowserServer.backendUrls(
+        Array.from({ length: 32 }, (_, index) => `https://node-${index.toString()}.example.test`),
+      ),
+    ).toHaveLength(32);
+  });
+
+  it.each([
+    [[], "between 1 and 32"],
+    [
+      Array.from({ length: 33 }, (_, index) => `https://node-${index.toString()}.example.test`),
+      "between 1 and 32",
+    ],
+    [["https://same.example.test", "https://same.example.test"], "unique"],
+    [["https://backend.example.test/private"], "canonical HTTP(S) origin"],
+  ])("rejects invalid standalone backend topology %j", (baseUrls, error) => {
+    expect(() => BrowserServer.backendUrls(baseUrls)).toThrow(error);
+  });
+
   it("rejects production browser bindings before context assembly or listener startup", async () => {
     EnvironmentTests.use(EnvironmentType.Production);
     ServerEnvironment.when(EnvironmentType.Production).use({

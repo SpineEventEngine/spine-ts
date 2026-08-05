@@ -3,8 +3,10 @@ import type { AddressInfo } from "node:net";
 
 import {
   createNativeGatewayServices,
+  FanInSubscriptionCreator,
   InMemorySubscriptionBindings,
   NativeSubscriptionCreator,
+  RoundRobinUnaryForwarder,
   SubscriptionGateway,
   TransportFacts,
   UnaryGateway,
@@ -39,7 +41,10 @@ interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port">
  * @internal
  */
 export const BrowserServer: Readonly<{
-  open(native: RunningServer | string, options: BrowserHostOptions): Promise<RunningServer>;
+  open(
+    native: RunningServer | string | readonly string[],
+    options: BrowserHostOptions,
+  ): Promise<RunningServer>;
   requests(options: BrowserServerOptions): {
     credential(context: { readonly requestHeader: Headers }): {
       readonly kind: "bearer" | "cookie";
@@ -49,6 +54,7 @@ export const BrowserServer: Readonly<{
   };
   origins(origins: readonly string[]): ReadonlySet<string>;
   backendUrl(value: string): string;
+  backendUrls(values: readonly string[]): readonly string[];
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   authRoutes(
     routes: readonly BrowserAuthRoute[] | undefined,
@@ -72,8 +78,14 @@ export const BrowserServer: Readonly<{
     if (!Number.isSafeInteger(maxActiveAuthRequests) || maxActiveAuthRequests < 1)
       throw new Error("Browser maxActiveAuthRequests must be a positive safe integer.");
     let draining = false;
-    const backendBaseUrl = typeof native === "string" ? native : native.baseUrl;
-    const creator = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: backendBaseUrl }));
+    const backendBaseUrls = Array.isArray(native)
+      ? BrowserServer.backendUrls(native)
+      : [typeof native === "string" ? native : native.baseUrl];
+    const creators = backendBaseUrls.map(
+      (baseUrl) => new NativeSubscriptionCreator(createGrpcTransport({ baseUrl })),
+    );
+    const creator = creators.length === 1 ? creators[0]! : new FanInSubscriptionCreator(creators);
+    const forwarder = creators.length === 1 ? creators[0]! : new RoundRobinUnaryForwarder(creators);
     const bindings =
       options.bindings ??
       new InMemorySubscriptionBindings({
@@ -88,7 +100,7 @@ export const BrowserServer: Readonly<{
       authorize: options.authorize,
       contexts: options.contexts,
       clock: options.clock,
-      forward: creator.forward.bind(creator),
+      forward: forwarder.forward.bind(forwarder),
     });
     const subscriptions = new SubscriptionGateway({
       bindings,
@@ -173,7 +185,7 @@ export const BrowserServer: Readonly<{
     }
     return new RunningBrowserServer(
       server,
-      typeof native === "string" ? undefined : native,
+      typeof native === "string" || Array.isArray(native) ? undefined : native,
       subscriptions,
       address,
       activeAuth,
@@ -249,10 +261,18 @@ export const BrowserServer: Readonly<{
     }
     return value;
   },
+  backendUrls(values: readonly string[]): readonly string[] {
+    if (values.length < 1 || values.length > 32)
+      throw new Error("Server browser backends must contain between 1 and 32 origins.");
+    const urls = values.map((value) => BrowserServer.backendUrl(value));
+    if (new Set(urls).size !== urls.length)
+      throw new Error("Server browser backends must be unique canonical HTTP(S) origins.");
+    return urls;
+  },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
     const supplied = options as Partial<BrowserServerOptions>;
     if (options.backend !== undefined) {
-      BrowserServer.backendUrl(options.backend.baseUrl);
+      BrowserServer.backendUrls(BrowserServerValues.backendUrlsFor(options.backend));
       if (supplied.sessions === undefined || typeof supplied.sessions.resolve !== "function")
         throw new Error("Standalone browser server requires sessions.");
       if (typeof options.authorize !== "function")
@@ -464,6 +484,12 @@ export const BrowserServer: Readonly<{
         else reject(error);
       });
     });
+  },
+});
+
+const BrowserServerValues = Object.freeze({
+  backendUrlsFor(backend: NonNullable<BrowserServerOptions["backend"]>): readonly string[] {
+    return "baseUrl" in backend ? [backend.baseUrl] : backend.baseUrls;
   },
 });
 
