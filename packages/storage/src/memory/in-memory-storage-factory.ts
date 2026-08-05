@@ -9,6 +9,7 @@ import { InMemoryStorageBackend } from "./in-memory-storage-backend.js";
 import { InMemoryRecordStorage } from "./in-memory-record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
 import { MemoryEntityStorageFactory, type EntityStorageInput } from "./in-memory-entity-history.js";
+import { InMemoryEntityCommitStorage } from "./in-memory-entity-commit.js";
 
 /**
  * In-memory factory for record storages and framework delegates such as the event store.
@@ -38,6 +39,22 @@ export class InMemoryStorageFactory extends StorageFactory {
   createEntityStorage(input: unknown): unknown {
     if (!this.isOpen()) throw new Error("StorageFactory is closed.");
     return this.#entities.create(input as EntityStorageInput<unknown, Message>);
+  }
+
+  /**
+   * Creates the provider-only atomic Entity commit seam used by repositories.
+   *
+   * @param input Supplies the internal Entity storage configuration.
+   * @returns The independently closeable in-memory commit handle.
+   */
+  createEntityCommitStorage(input: unknown): unknown {
+    if (!this.isOpen()) throw new Error("StorageFactory is closed.");
+    return new InMemoryEntityCommitStorage(
+      this.#backend,
+      this.#entities,
+      this,
+      input as EntityStorageInput<unknown, Message>,
+    );
   }
 
   /**

@@ -30,7 +30,7 @@ export class EventStore {
   constructor(context: StorageContext, factory: StorageFactory) {
     this.#context = context;
     this.#factory = factory;
-    this.#storage = factory.createRecordStorage(context, eventSpec);
+    this.#storage = factory.createRecordStorage(context, eventStoreRecordSpec);
   }
 
   /**
@@ -149,7 +149,7 @@ export class EventStore {
     EventIds.rejectDuplicates(ids);
 
     await EventStoreLocks.withLock(this.#factory, context, async () => {
-      const storage = this.#factory.createRecordStorage(context, eventSpec);
+      const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
       try {
         await EventIds.rejectStored(storage, ids);
         await storage.writeAll(records);
@@ -163,7 +163,7 @@ export class EventStore {
     this.requireOpen();
 
     await EventStoreLocks.withLock(this.#factory, context, async () => {
-      const storage = this.#factory.createRecordStorage(context, eventSpec);
+      const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
       try {
         for (const id of ids) {
           await storage.delete(id);
@@ -179,7 +179,7 @@ export class EventStore {
     EventIds.rejectDuplicates(ids);
 
     await EventStoreLocks.withLock(this.#factory, context, async () => {
-      const storage = this.#factory.createRecordStorage(context, eventSpec);
+      const storage = this.#factory.createRecordStorage(context, eventStoreRecordSpec);
       try {
         await EventIds.rejectStored(storage, ids);
       } finally {
@@ -372,7 +372,12 @@ const EventContexts = {
   },
 };
 
-const eventSpec = new RecordSpec<EventId, Event>({
+/**
+ * Provides the canonical event-store record layout to provider-only internals.
+ *
+ * @internal
+ */
+export const eventStoreRecordSpec: RecordSpec<EventId, Event> = new RecordSpec<EventId, Event>({
   schema: EventSchema,
   storageKey: "spine.core.Event:event-store",
   idSchema: EventIdSchema,
