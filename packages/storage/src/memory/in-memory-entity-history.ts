@@ -45,9 +45,19 @@ export class MemoryEntityStorageFactory {
    * @returns Returns the scoped in-memory entity storage.
    */
   create<I, S extends Message>(input: EntityStorageInput<I, S>): InMemoryEntityStorage<I, S> {
+    return new InMemoryEntityStorage(input, this.backend(input));
+  }
+
+  /**
+   * Opens the provider-owned maps used by an atomic in-memory commit.
+   *
+   * @param input Supplies the Entity storage configuration.
+   * @returns The compatible backend maps for this Entity scope.
+   */
+  backend<I, S extends Message>(input: EntityStorageInput<I, S>): EntityBackend {
     const scope = StorageScopes.canonical(input.context, input.storageKey);
     const fingerprint = EntitySnapshots.fingerprint(input);
-    const backend = InMemoryStorageBackend.bind(
+    return InMemoryStorageBackend.bind(
       this.#backend,
       scope,
       fingerprint,
@@ -59,7 +69,6 @@ export class MemoryEntityStorageFactory {
           states: new Map<string, unknown>(),
         }) satisfies EntityBackend,
     );
-    return new InMemoryEntityStorage(input, backend);
   }
 }
 
@@ -195,7 +204,7 @@ export interface EntityIdCodec<I> {
   readonly key: (id: I) => string;
 }
 
-interface EntityBackend {
+export interface EntityBackend {
   readonly current: Map<string, unknown>;
   readonly events: Map<string, unknown>;
   readonly stateQueue: KeyedSerialQueue;

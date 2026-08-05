@@ -9,6 +9,10 @@ import type {
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordEntry } from "../record/record-storage.js";
 
+const tenantRecordsHost = globalThis as typeof globalThis & {
+  structuredClone<Value>(value: Value): Value;
+};
+
 /**
  * Record slice owned by one tenant of an in-memory record storage.
  */
@@ -93,6 +97,25 @@ export class TenantRecords<I, R extends Message> {
     for (const record of records) {
       this.write(record);
     }
+  }
+
+  /**
+   * Copies the materialized rows for a provider-owned staged commit.
+   *
+   * @returns An independent snapshot of the current rows.
+   */
+  snapshot(): Map<string, StoredEntry<I, R>> {
+    return tenantRecordsHost.structuredClone(this.#records);
+  }
+
+  /**
+   * Replaces all rows from a fully validated staged snapshot.
+   *
+   * @param snapshot Supplies the staged materialized rows.
+   */
+  replace(snapshot: Map<string, StoredEntry<I, R>>): void {
+    this.#records.clear();
+    for (const [key, value] of snapshot) this.#records.set(key, value);
   }
 }
 

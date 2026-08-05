@@ -1,5 +1,6 @@
 import type { Message } from "@bufbuild/protobuf";
 
+import { eventStoreRecordSpec } from "../event/event-store.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageContext } from "../storage/storage.js";
@@ -52,7 +53,10 @@ export class InMemoryStorageFactory extends StorageFactory {
     return new InMemoryEntityCommitStorage(
       this.#backend,
       this.#entities,
-      this,
+      this.tenantRecords(
+        (input as EntityStorageInput<unknown, Message>).context,
+        eventStoreRecordSpec,
+      ),
       input as EntityStorageInput<unknown, Message>,
     );
   }
