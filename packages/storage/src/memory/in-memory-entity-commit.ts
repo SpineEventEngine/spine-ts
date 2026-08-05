@@ -26,7 +26,7 @@ const commitHost = globalThis as typeof globalThis & {
 /**
  * Implements provider-owned Entity commits for one shared in-memory backend.
  */
-export class InMemoryEntityCommitStorage implements EntityCommitStorage {
+export class MemoryEntityCommitStorage implements EntityCommitStorage {
   readonly #backend: InMemoryStorageBackend;
   readonly #entities: MemoryEntityStorageFactory;
   readonly #events: TenantRecords<EventId, Event>;

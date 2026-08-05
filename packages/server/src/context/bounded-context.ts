@@ -481,7 +481,7 @@ const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
 const dispatchFailureLimit = 10;
 const dispatchErrorMessageLimit = 500;
 const dispatchErrorStackLimit = 2_000;
-let readCatchUpCommitSequence = 0;
+let catchUpCommitSequence = 0;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const internalStoragePrefix = "__spine/";
@@ -899,7 +899,7 @@ export class BoundedContext {
     const clearedStateTypes: string[] = [];
     let clearedEntityCount = 0;
     let replayedEventCount = 0;
-    const commitScope = ContextParts.nextCatchUpCommitScope();
+    const commitScope = ContextParts.nextCatchUpScope();
 
     for (const target of clearTargets) {
       clearedEntityCount += await this.#stand.clear(target.schema, tenantOptions);
@@ -2436,9 +2436,9 @@ const ContextParts = Object.freeze({
     return matching.length > 0 ? 1 : 0;
   },
 
-  nextCatchUpCommitScope(): string {
-    readCatchUpCommitSequence += 1;
-    return `catch-up-${String(Date.now())}-${String(readCatchUpCommitSequence)}`;
+  nextCatchUpScope(): string {
+    catchUpCommitSequence += 1;
+    return `catch-up-${String(Date.now())}-${String(catchUpCommitSequence)}`;
   },
 
   catchUpReplayError(event: Event, cause: unknown): Error {

@@ -11,7 +11,7 @@ import type {
 import type { EntityStorageInput } from "../../src/internal/entity-history.js";
 import { InMemoryStorageFactory } from "../../src/memory/in-memory-storage-factory.js";
 
-describe("InMemoryEntityCommitStorage", () => {
+describe("MemoryEntityCommitStorage", () => {
   it("makes current, histories, events, and receipt visible as one commit", async () => {
     const factory = new InMemoryStorageFactory();
     const input = entityInput();

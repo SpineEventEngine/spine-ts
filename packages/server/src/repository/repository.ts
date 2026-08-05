@@ -23,7 +23,7 @@ import {
   type Version,
   VersionSchema,
 } from "@spine-event-engine/proto";
-import { EntityStateChangedSchema } from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
+import * as EntityLog from "@spine-event-engine/proto/generated/spine/system/server/entity_log_events_pb.js";
 import {
   EventStore,
   RecordColumn,
@@ -3180,12 +3180,12 @@ class EntityStateChangePublishing {
     newState: Message,
     version: number,
   ): void {
-    runtime.registerEventSchema(EntityStateChangedSchema);
+    runtime.registerEventSchema(EntityLog.EntityStateChangedSchema);
     const event = create(EventSchema, {
       id: metadata.id,
       message: AnyMessages.pack(
-        EntityStateChangedSchema,
-        create(EntityStateChangedSchema, {
+        EntityLog.EntityStateChangedSchema,
+        create(EntityLog.EntityStateChangedSchema, {
           entity: create(MessageIdSchema, {
             id: this.#packEntityId(repository, entityId),
             typeUrl: TypeUrls.derive(repository.stateSchema),
