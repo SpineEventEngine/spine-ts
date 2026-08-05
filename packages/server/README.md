@@ -18,6 +18,24 @@ application-owned listener or CORS code.
 For detailed contracts intended for coding agents, see the
 [REFERENCE.md documentation for agents](REFERENCE.md).
 
+## Delivery and subscriptions
+
+An `@Assign` command for an Aggregate or Process Manager is first persisted in
+that Entity's Inbox. Delivery then invokes the handler; it is not a request
+thread callback. With shared remote delivery, every matching application node
+receives shard-change hints and attempts the shard, but one lease owner drains
+deliverable Inbox rows until none remain before releasing it. Events and later
+Process Manager commands use the same path.
+
+`Stand` observes domain events and committed Entity state changes from the
+EventBus. Its default registry uses the application's `StorageFactory`; a
+builder may supply another implementation. A durable definition occupies one
+record: pending definitions expire after 30 seconds, active definitions have no
+framework TTL, and cancel physically deletes the record. Nodes reconcile a
+bounded complete snapshot every 10 seconds. In-memory bindings remain valid for
+development and tests, with a production warning; active streams and queues are
+process-local.
+
 ## 💡 Why use it?
 
 - ✅ Builds bounded contexts with Aggregates, Process Managers, and query-side

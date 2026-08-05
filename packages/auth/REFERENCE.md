@@ -4,6 +4,16 @@ This reference is for agents and other automated tools that need the exact publi
 
 ## Purpose and trust boundary
 
+## Fixed gateway topology
+
+A standalone browser Gateway accepts a fixed list of 1–32 backend origins.
+Commands and queries select one backend with bounded round-robin forwarding and
+do not retry a failed request. Subscription creation and activation fan out to
+the configured nodes; merged notices can be duplicated, missing, or lost.
+Browser code must treat notices as refresh hints and use Queries as the
+authoritative state source. The list is configured at startup: there is no
+dynamic backend discovery or redeployment protocol.
+
 The package supplies provider-neutral gateway building blocks. An application places its gateway in front of a Spine TS or Spine JVM backend, then supplies the listener, credential extraction, identity provider, session storage, authorization rules, actor/tenant resolution, and forwarding implementation. The framework does not enforce a particular proxy, route topology, identity provider, tenant policy, or deployment configuration.
 
 `TransportFacts.from()` exposes only allowlisted request facts. Credentials are passed only to `Authenticator` or `SessionResolver`; they are not included in `IncomingRequest`. `IncomingRequest` is a discriminated union for command, query, subscription creation, activation, and cancellation. Command facts can include a decoded message when a `TypeRegistryLookup` knows its packed type; unknown and malformed `Any` values remain type-URL-only facts.
