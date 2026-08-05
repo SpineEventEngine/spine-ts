@@ -1,6 +1,6 @@
 # T-0117 Review Log
 
-Status: Accepted correction batch implemented; re-review pending
+Status: Residual reliability correction implemented; re-review pending
 
 ## Scope
 
@@ -14,7 +14,7 @@ fidelity, System-only routing, multitenancy, and failure isolation.
 | Style/maintainability   | `gpt-5.6-terra` / high  | Two P2 findings implemented; re-review pending. |
 | Documentation           | `gpt-5.6-luna` / medium | N/A: no public prose or end-user claim changed. |
 | TypeScript/API docs     | `gpt-5.6-terra` / high  | Clean.                                          |
-| Performance/reliability | `gpt-5.6-terra` / high  | One P2 finding implemented; re-review pending.  |
+| Performance/reliability | `gpt-5.6-terra` / high  | Residual P2 implemented; re-review pending.     |
 
 Every dispatch must state the existing role, expected model, and expected
 reasoning. Actual runtime metadata or the immutable configured-profile
@@ -86,3 +86,15 @@ immutable configured profile. No finding is rejected or deferred.
   same failing-invocation/exactly-one-diagnostic proof.
 - Both reviewers again report unavailable runtime self-introspection and the
   matching immutable configured `gpt-5.6-terra` / `high` profile.
+
+## Residual Reliability Correction — 2026-08-05
+
+- Added focused Process Manager assignment and reactor invocation-failure
+  coverage. Each accepted operation rejects with its original failure, then
+  drains the paired System bus through `context.close()` before proving exactly
+  one diagnostic with the source payload and Process Manager receiver.
+- The current dispatch policy already satisfied both cases, so this correction
+  changes tests and durable records only; no production behavior changed.
+- Evidence: focused PM failure cases pass, followed by repository-routing plus
+  EventBus regression, root typechecks, generated lint/cleanup/TSDoc, format,
+  and diff checks.

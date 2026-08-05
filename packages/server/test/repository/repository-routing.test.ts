@@ -3160,6 +3160,40 @@ describe("repository signal routing", () => {
     );
   });
 
+  it("retains one command diagnostic when an admitted Process Manager assignment fails", async () => {
+    const failure = new Error("admitted Process Manager assignment failed");
+    const diagnostics: SpineEvent[] = [];
+    const command = createAggregateCommand("pm-command-diagnostic-failure", "pm-command-failure");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [CommandDispatchedToHandlerSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      RoutingProcessManager.reset(failure);
+      await expect(context.commandBus().post(command)).rejects.toThrow(failure);
+      await context.close();
+
+      expect(RoutingProcessManager.commandCalls).toBe(1);
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, CommandDispatchedToHandlerSchema),
+      ).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        payload: command,
+      });
+    } finally {
+      RoutingProcessManager.reset();
+      await context.close();
+    }
+  });
+
   it("emits a System command-dispatch diagnostic after aggregate handler admission", async () => {
     const diagnostics: SpineEvent[] = [];
     const command = createAggregateCommand("command-diagnostic", "diagnostic-id", "Diagnostic");
@@ -4659,6 +4693,40 @@ describe("repository signal routing", () => {
         queue: "Task reacted",
       }),
     );
+  });
+
+  it("retains one reactor diagnostic when an admitted Process Manager reactor fails", async () => {
+    const failure = new Error("admitted Process Manager reactor failed");
+    const diagnostics: SpineEvent[] = [];
+    const event = createProjectionEvent("pm-reactor-diagnostic-failure", "pm-reactor-failure");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EventDispatchedToReactorSchema],
+        dispatch: (diagnostic) => {
+          diagnostics.push(diagnostic);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      RoutingProcessManager.reset(failure);
+      await expect(context.eventBus().post(event)).rejects.toThrow(failure);
+      await context.close();
+
+      expect(RoutingProcessManager.eventCalls).toBe(1);
+      expect(diagnostics).toHaveLength(1);
+      expect(
+        AnyMessages.unpack(diagnostics[0]?.message as never, EventDispatchedToReactorSchema),
+      ).toMatchObject({
+        receiver: { typeUrl: TypeUrls.derive(ProcessManagerStateSchema) },
+        payload: event,
+      });
+    } finally {
+      RoutingProcessManager.reset();
+      await context.close();
+    }
   });
 
   it("emits distinct command and reactor diagnostics for a routed Process Manager", async () => {
