@@ -238,3 +238,42 @@ the 1 MiB definition bound, and current public APIs. It must choose the smallest
 recoverable pre-admission representation and specify direct RED tests. The
 Desktop surface supports explicit dispatch; runtime self-introspection may be
 unavailable and will be recorded honestly.
+
+## Reservation Correction Resolution
+
+The bounded existing `requirements_splitter`, explicitly `gpt-5.6-sol` /
+`high`, selected a single fixed temporary staging slot as the smallest complete
+repair. Runtime self-introspection was unavailable. The agent returned the
+decisive invariant but did not return its requested expanded final after
+repeated bounded prompts, so it was interrupted to avoid further delay; that
+limitation is recorded rather than presented as a clean completion.
+
+Creation must serialize pre-admission through the sole control record and one
+separate fixed staging storage/slot. The full definition payload is kept in the
+1 MiB-capable staging record, never duplicated into the control payload. Control
+accounts for the in-flight capacity slot before any subscription-ID definition
+row can exist. Operation token, definition generation, ID, revision, and digest
+are revalidated around every single-row CAS. Helpers either finish the exact
+staged definition or roll back its reserved count; a stale owner can at worst
+occupy the one fixed staging slot and cannot promote it after its control token
+changes. A newer operation removes a mismatched stale stage with exact CAS
+before reusing the slot. At quiescence the staging storage is empty, leaving the
+approved 50 definition records plus one control record for 50 active
+subscriptions. No pair-CAS, transaction SPI, duplicated control payload, or
+public API change is introduced.
+
+The correction owner must make crash/missing-stage liveness explicit and prove
+that any timeout used only enables recovery after fencing; it cannot be the
+safety fence. RED coverage must hold owners before/after control acquisition and
+staging-slot writes, start more creators than the configured capacity, exercise
+same/different IDs and stale-stage reuse, restart helpers, assert one bounded
+stage row and exact count, and confirm public get/activate/delete/snapshot never
+observe revision zero. Retry must create a fresh generation and 30-second
+pending lifetime. The same correction also owns typed-array-safe clone/freeze,
+fixture closure, TSDoc/reference, ledger wording, and dead-code findings.
+
+The complete finding batch is assigned to one fresh existing `implementer`,
+explicitly `gpt-5.6-terra` / `medium`, with exclusive ownership of the registry,
+its focused tests/docs/ledger, and the provider fixture. The Desktop surface
+supports the explicit dispatch. Runtime self-introspection may be unavailable;
+the immutable role/profile and explicit dispatch remain the acceptance evidence.
