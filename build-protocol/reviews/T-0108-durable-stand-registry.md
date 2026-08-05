@@ -321,6 +321,16 @@ guarantee/aggregate teardown, and correct the two documentation statements.
 Runtime self-introspection may be unavailable; immutable role/profile plus
 explicit dispatch are the acceptance evidence.
 
+## Closure Re-Review Assignments
+
+Endpoint `6ed03ce4` is assigned one last narrow re-review of only the corrected
+open findings. TypeScript/API and performance/reliability use their existing
+reviewers with explicit `gpt-5.6-terra` / `high`; style/maintainability uses its
+existing reviewer with explicit `gpt-5.6-terra` / `high`; documentation uses its
+immutable existing `gpt-5.6-luna` / `medium` reviewer. Security remains N/A.
+Runtime self-introspection may be unavailable; immutable role/profile and
+explicit dispatch remain the metadata evidence.
+
 ## Final Correction Evidence
 
 The existing `implementer` correction used explicit `gpt-5.6-terra` / `medium`.
