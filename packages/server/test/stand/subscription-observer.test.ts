@@ -2,6 +2,7 @@ import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
+  AnySchema,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
   BoolValueSchema,
@@ -308,6 +309,54 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("matches raw Any and byte entity IDs by exact bytes while rejecting unequal values", async () => {
+    const bus = createBus([StringValueSchema]);
+    const received: SubscriptionUpdate[] = [];
+    const anyId = create(AnySchema, {
+      typeUrl: "type.googleapis.com/example.UnknownId",
+      value: new Uint8Array([1, 2]),
+    });
+    const otherAnyId = create(AnySchema, {
+      typeUrl: anyId.typeUrl,
+      value: new Uint8Array([1, 3]),
+    });
+    const bytesId = AnyMessages.pack(
+      BytesValueSchema,
+      create(BytesValueSchema, { value: new Uint8Array([4, 5]) }),
+    );
+    const otherBytesId = AnyMessages.pack(
+      BytesValueSchema,
+      create(BytesValueSchema, { value: new Uint8Array([4, 6]) }),
+    );
+    const observers = [anyId, otherAnyId, bytesId, otherBytesId].map((id) =>
+      SubscriptionObservers.observeSubscription(
+        filteredSubscription(StringValueSchema, id),
+        bus,
+        () => ({ schema: StringValueSchema, idField: "value" }),
+        (update) => received.push(update),
+      ),
+    );
+
+    await postObservedStateChange(
+      bus,
+      StringValueSchema,
+      create(StringValueSchema, { value: "Any ID" }),
+      anyId,
+    );
+    await postObservedStateChange(
+      bus,
+      StringValueSchema,
+      create(StringValueSchema, { value: "Bytes ID" }),
+      bytesId,
+    );
+
+    expect(received).toHaveLength(2);
+    expect(entityUpdateId(received[0])).toEqual(anyId);
+    expect(entityUpdateId(received[1])).toEqual(bytesId);
+    observers.forEach((observer) => observer?.unsubscribe());
+    await bus.close();
+  });
+
   it("ignores state-change envelopes with a wrong tenant, state type, or malformed payload", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
@@ -490,6 +539,20 @@ function subscriptionFor(schema: MessageSchema) {
       target: {
         type: TypeUrls.derive(schema),
         criterion: { case: "includeAll", value: true },
+      },
+    },
+  });
+}
+
+function filteredSubscription(schema: MessageSchema, id: ReturnType<typeof AnyMessages.pack>) {
+  return create(SubscriptionSchema, {
+    topic: {
+      target: {
+        type: TypeUrls.derive(schema),
+        criterion: {
+          case: "filters",
+          value: { idFilter: { id: [id] } },
+        },
       },
     },
   });
