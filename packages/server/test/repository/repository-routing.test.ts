@@ -57,7 +57,10 @@ import type {
   EntityCommitResult,
   EntityCommitStorage,
 } from "@spine-event-engine/storage/internal/entity-commit";
-import { EntityStateChangedSchema } from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
+import {
+  EntityCreatedSchema,
+  EntityStateChangedSchema,
+} from "../../../proto/generated/spine/system/server/entity_log_events_pb.js";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -4870,6 +4873,36 @@ describe("repository signal routing", () => {
       expect(context.eventBus().acceptedEventTypes()).not.toContain(
         TypeUrls.derive(EntityStateChangedSchema),
       );
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("publishes created before state-changed after the first committed aggregate transition", async () => {
+    const changes: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema],
+        dispatch: (event) => {
+          changes.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    try {
+      await context.commandBus().post(createAggregateCommand("created-first", "created-id"));
+      await waitForCondition(() => changes.length === 2);
+
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityCreatedSchema),
+        TypeUrls.derive(EntityStateChangedSchema),
+      ]);
+      expect(AnyMessages.unpack(changes[0]?.message as never, EntityCreatedSchema)).toMatchObject({
+        entity: { typeUrl: TypeUrls.derive(AggregateStateSchema) },
+        kind: 1,
+      });
     } finally {
       await context.close();
     }

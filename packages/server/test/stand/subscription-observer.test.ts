@@ -422,6 +422,75 @@ describe("SubscriptionObservers", () => {
     await bus.close();
   });
 
+  it("renders archive and delete lifecycle events as entity removals", async () => {
+    const bus = createSystemBus();
+    const received: SubscriptionUpdate[] = [];
+    const observer = observeSubscription(
+      subscriptionFor(ProjectionStateSchema),
+      bus,
+      () => ({ schema: ProjectionStateSchema, idField: "id" }),
+      (update) => received.push(update),
+    );
+
+    await bus.post(
+      create(EventSchema, {
+        id: { value: "archived" },
+        message: AnyMessages.pack(
+          EntityLog.EntityArchivedSchema,
+          create(EntityLog.EntityArchivedSchema, {
+            entity: {
+              id: packString("task-archived"),
+              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+            },
+            signalId: [
+              { id: packString("archive-signal"), typeUrl: TypeUrls.derive(StringValueSchema) },
+            ],
+            version: { number: 1 },
+            lastState: AnyMessages.pack(
+              ProjectionStateSchema,
+              createState("task-archived", "Archived", 1),
+            ),
+          }),
+          { validate: false },
+        ),
+      }),
+    );
+    await bus.post(
+      create(EventSchema, {
+        id: { value: "deleted" },
+        message: AnyMessages.pack(
+          EntityLog.EntityDeletedSchema,
+          create(EntityLog.EntityDeletedSchema, {
+            entity: {
+              id: packString("task-deleted"),
+              typeUrl: TypeUrls.derive(ProjectionStateSchema),
+            },
+            signalId: [
+              { id: packString("delete-signal"), typeUrl: TypeUrls.derive(StringValueSchema) },
+            ],
+            version: { number: 1 },
+            deletion: { case: "markedAsDeleted", value: true },
+            lastState: AnyMessages.pack(
+              ProjectionStateSchema,
+              createState("task-deleted", "Deleted", 1),
+            ),
+          }),
+          { validate: false },
+        ),
+      }),
+    );
+
+    expect(received).toHaveLength(2);
+    expect(
+      received.map(
+        (update) =>
+          update.update.case === "entityUpdates" && update.update.value.update[0]?.kind.case,
+      ),
+    ).toEqual(["noLongerMatching", "noLongerMatching"]);
+    observer?.unsubscribe();
+    await bus.close();
+  });
+
   it("forwards accepted event targets while redacting client rejection details", async () => {
     const bus = createBus();
     const received: SubscriptionUpdate[] = [];
@@ -549,7 +618,13 @@ function observeSubscription(
 
 function createSystemBus(): EventBus {
   const bus = eventBusAccess.createSystemBus(undefined);
-  eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+  eventBusAccess.registerSchemas(bus, [
+    EntityLog.EntityStateChangedSchema,
+    EntityLog.EntityArchivedSchema,
+    EntityLog.EntityUnarchivedSchema,
+    EntityLog.EntityDeletedSchema,
+    EntityLog.EntityRestoredSchema,
+  ]);
   return bus;
 }
 
