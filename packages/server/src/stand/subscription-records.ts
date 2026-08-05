@@ -36,7 +36,8 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
         (expectedId !== undefined && id !== expectedId)
       )
         throw Error();
-      if (subscription.topic === undefined) throw Error();
+      const topicId = subscription.topic?.id?.value;
+      if (typeof topicId !== "string" || topicId.trim() === "") throw Error();
       if (record.createdAt === undefined || record.createdAt.seconds < 0n) throw Error();
       if (record.revision < 1n || record.revision > BigInt(Number.MAX_SAFE_INTEGER)) throw Error();
       const createdAtMs =

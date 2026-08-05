@@ -453,8 +453,7 @@ export class InMemorySubscriptionRegistry implements StandSubscriptionRegistry {
   static #subscriptionId(subscription: Subscription): string {
     if (subscription.id === undefined)
       throw new TypeError("Stand subscription ID must be non-blank.");
-    if (subscription.topic === undefined)
-      throw new TypeError("Stand subscription topic must be present.");
+    requireTopicId(subscription);
     return subscriptionIdValue(subscription.id);
   }
 
@@ -654,6 +653,8 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
   ): Promise<StandSubscriptionDeleteResult> {
     return await this.#operation(async () => {
       const id = registryId(subscriptionId);
+      if (expectedRevision !== undefined && expectedRevision < 1n)
+        throw new RangeError("Stand subscription revision must be positive.");
       for (;;) {
         await this.#recover();
         const record = await this.#storage.read(id);
@@ -777,6 +778,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
     const id = subscription.id?.value;
     if (typeof id !== "string" || id.trim() === "")
       throw new TypeError("Stand subscription ID must be non-blank.");
+    requireTopicId(subscription);
     return id;
   }
 
@@ -991,6 +993,12 @@ function registryId(id: SubscriptionId | string): string {
     return id;
   }
   return subscriptionIdValue(id);
+}
+
+function requireTopicId(subscription: Subscription): void {
+  const topicId = subscription.topic?.id?.value;
+  if (typeof topicId !== "string" || topicId.trim() === "")
+    throw new TypeError("Stand subscription topic ID must be non-blank.");
 }
 
 function deepFreeze<T>(value: T): T {

@@ -134,6 +134,19 @@ describe("InMemorySubscriptionRegistry", () => {
     await expect(registry.delete(id("one"), -1n)).rejects.toBeInstanceOf(RangeError);
   });
 
+  it("rejects a topic without a non-blank identifier", async () => {
+    const registry = new InMemorySubscriptionRegistry();
+
+    await expect(
+      registry.create(create(SubscriptionSchema, { id: id("missing-topic-id"), topic: {} })),
+    ).rejects.toBeInstanceOf(TypeError);
+    await expect(
+      registry.create(
+        create(SubscriptionSchema, { id: id("blank-topic-id"), topic: { id: { value: "  " } } }),
+      ),
+    ).rejects.toBeInstanceOf(TypeError);
+  });
+
   it("accepts an encoded record at the 1 MiB boundary and rejects the next byte", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(start);
