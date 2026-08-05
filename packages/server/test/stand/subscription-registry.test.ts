@@ -9,6 +9,7 @@ import {
 import {
   InMemoryStorageFactory,
   RecordSpec,
+  RecordColumn,
   RecordStorage,
   StorageFactory,
   type RecordEntry,
@@ -371,6 +372,7 @@ describe("StorageSubscriptionRegistry", () => {
         storageKey: "spine.server.StandSubscriptionRecord:definition",
         idKind: "string",
         extractId: (record) => StandSubscriptionRecords.read(record).subscription.id?.value ?? "",
+        columns: [new RecordColumn("admitted", (record) => record.revision > 0n, "boolean")],
       }),
     );
     const control = factory.createRecordStorage(
@@ -421,12 +423,46 @@ describe("StorageSubscriptionRegistry", () => {
       await expect(interrupted.create(subscription("one"))).rejects.toThrow("applied-then-thrown");
 
       const restarted = new StorageSubscriptionRegistry(context, factory);
-      await expect(restarted.snapshot()).resolves.toHaveLength(phase === "create-stage" ? 0 : 1);
+      await expect(restarted.snapshot()).resolves.toHaveLength(1);
       await expect(restarted.create(subscription("two"))).resolves.toMatchObject({
         kind: "created",
       });
     },
   );
+
+  it.each(["create-reservation", "create-stage", "create-promote", "create-commit"] as const)(
+    "settles an applied-then-thrown %s create without leaking a revision-zero reservation",
+    async (phase) => {
+      const factory = new StandRegistryScriptedStorageFactory(phase);
+      const context = { name: `DurableRegistry${phase}`, multitenant: false };
+      const interrupted = new StorageSubscriptionRegistry(context, factory, 1);
+      factory.arm();
+
+      await expect(interrupted.create(subscription("one"))).rejects.toThrow("applied-then-thrown");
+
+      const helper = new StorageSubscriptionRegistry(context, factory, 1);
+      await expect(helper.create(subscription("one"))).resolves.toMatchObject({
+        kind: phase === "create-reservation" ? "created" : "existing",
+      });
+      await expect(helper.snapshot()).resolves.toMatchObject([{ revision: 1n }]);
+      await expect(helper.create(subscription("two"))).rejects.toBeInstanceOf(StandCapacityError);
+    },
+  );
+
+  it("releases a thrown revision-zero reservation for a distinct ID at limit one", async () => {
+    const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+    const context = { name: "DurableRegistryReservationCapacity", multitenant: false };
+    const interrupted = new StorageSubscriptionRegistry(context, factory, 1);
+    factory.arm();
+
+    await expect(interrupted.create(subscription("one"))).rejects.toThrow("applied-then-thrown");
+
+    const helper = new StorageSubscriptionRegistry(context, factory, 1);
+    await expect(helper.create(subscription("two"))).resolves.toMatchObject({ kind: "created" });
+    await expect(helper.snapshot()).resolves.toMatchObject([
+      { subscription: { id: { value: "two" } } },
+    ]);
+  });
 
   it.each(["delete-stage", "delete-definition"] as const)(
     "recovers staged %s after an applied CAS throws",
@@ -541,6 +577,7 @@ async function writeDefinition(
       storageKey: "spine.server.StandSubscriptionRecord:definition",
       idKind: "string",
       extractId: () => "malformed",
+      columns: [new RecordColumn("admitted", (entry) => entry.revision > 0n, "boolean")],
     }),
   );
   try {
@@ -551,7 +588,13 @@ async function writeDefinition(
 }
 
 type StandRegistryScriptPhase =
-  "create-stage" | "create-definition" | "delete-stage" | "delete-definition";
+  | "create-reservation"
+  | "create-stage"
+  | "create-definition"
+  | "create-promote"
+  | "create-commit"
+  | "delete-stage"
+  | "delete-definition";
 
 class StandRegistryScriptedStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
@@ -634,15 +677,29 @@ class StandRegistryScriptedStorage<I, R extends Message> extends RecordStorage<I
     const control = id === "control" && next instanceof Object && "value" in next;
     const operation = control ? controlOperation(next as unknown as Any) : undefined;
     switch (this.phase) {
+      case "create-reservation":
+        return id !== "control" && expected === undefined && next?.revision === 0n;
       case "create-stage":
         return operation === "create";
       case "delete-stage":
         return operation === "delete";
       case "create-definition":
-        return id !== "control" && expected === undefined && next !== undefined;
+        return id !== "control" && expected?.revision === 0n && next?.revision === 1n;
+      case "create-promote":
+        return id !== "control" && expected?.revision === 0n && next?.revision === 1n;
+      case "create-commit":
+        return control && controlState(next as unknown as Any) === "committed";
       case "delete-definition":
         return id !== "control" && expected !== undefined && next === undefined;
     }
+  }
+}
+
+function controlState(record: Any): string | undefined {
+  try {
+    return (JSON.parse(new TextDecoder().decode(record.value)) as { state?: string }).state;
+  } catch {
+    return undefined;
   }
 }
 

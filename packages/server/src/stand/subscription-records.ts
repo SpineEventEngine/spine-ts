@@ -41,7 +41,7 @@ export const StandSubscriptionRecords: StandSubscriptionRecordCodec = Object.fre
       if (typeof topicId !== "string" || topicId.trim() === "") throw Error();
       if (record.generation.byteLength !== 16) throw Error();
       if (record.createdAt === undefined || record.createdAt.seconds < 0n) throw Error();
-      if (record.revision < 1n || record.revision > BigInt(Number.MAX_SAFE_INTEGER)) throw Error();
+      if (record.revision < 0n || record.revision > BigInt(Number.MAX_SAFE_INTEGER)) throw Error();
       const createdAtMs =
         Number(record.createdAt.seconds) * 1000 + Math.floor(record.createdAt.nanos / 1_000_000);
       if (!Number.isSafeInteger(createdAtMs)) throw Error();

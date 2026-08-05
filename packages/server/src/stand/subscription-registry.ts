@@ -8,6 +8,7 @@ import {
 } from "@spine-event-engine/proto/client";
 import {
   RecordSpec,
+  RecordColumn,
   type RecordStorage,
   type StorageContext,
   type StorageFactory,
@@ -530,6 +531,13 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         idKind: "string",
         extractId: (record: StandSubscriptionRecord) =>
           subscriptionEntryId(StandSubscriptionRecords.read(record)),
+        columns: [
+          new RecordColumn(
+            "admitted",
+            (record: StandSubscriptionRecord) => record.revision > 0n,
+            "boolean",
+          ),
+        ],
       }),
     );
     this.#control = storageFactory.createRecordStorage(
@@ -554,7 +562,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    * @param subscription Defines the subscription to retain.
    * @returns Resolves to the creation result.
    */
-  async create(subscription: Subscription): Promise<StandSubscriptionCreateResult> {
+  async create(subscription: Subscription): Promise<StandCreateResult> {
     return await this.#operation(async () => {
       const id = StorageSubscriptionRegistry.#id(subscription);
       const createdAt = Date.now();
@@ -566,12 +574,20 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         revision: 1n,
       });
       const next = StandSubscriptionRecords.write(proposed);
+      const reservation = StandSubscriptionRecords.write(
+        { ...proposed, revision: 0n },
+        next.generation,
+      );
       const digest = recordDigest(next);
       for (;;) {
         await this.#recover();
         const existing = await this.#storage.read(id);
         if (existing !== undefined) {
           const entry = StandSubscriptionRecords.read(existing, id);
+          if (entry.revision === 0n) {
+            await this.#discardReservation(id, existing);
+            continue;
+          }
           if (!sameSubscription(entry.subscription, subscription)) throw new StandConflictError(id);
           return Object.freeze({
             kind: "existing" as const,
@@ -580,20 +596,20 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         }
         const control = await this.#controlState();
         if (control.count >= this.#limit) throw new StandCapacityError(this.#limit);
-        const staged = controlWithOperation(control, control.count + 1, {
+        if (!(await this.#storage.compareAndSet(id, undefined, reservation))) continue;
+        const staged = controlWithOperation(control, {
           kind: "create",
           id,
-          digest,
+          expectedDigest: recordDigest(reservation),
+          resultDigest: digest,
           generation: generationToken(next),
           token: randomUUID(),
+          expectedRevision: 0,
+          resultRevision: 1,
         });
         if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
           continue;
-        if (!(await this.#storage.compareAndSet(id, undefined, next))) {
-          await this.#recover();
-          continue;
-        }
-        await this.#recover();
+        await this.#settle(staged, writeControl(staged));
         return Object.freeze({
           kind: "created" as const,
           entry: StorageSubscriptionRegistry.#clone(proposed),
@@ -608,9 +624,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    * @param subscriptionId Identifies the definition to activate.
    * @returns Resolves to the activation result.
    */
-  async activate(
-    subscriptionId: SubscriptionId | string,
-  ): Promise<StandSubscriptionActivateResult> {
+  async activate(subscriptionId: SubscriptionId): Promise<StandActivateResult> {
     return await this.#operation(async () => {
       const id = registryId(subscriptionId);
       for (;;) {
@@ -627,22 +641,31 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
           await this.#deleteCurrent(id, record);
           return Object.freeze({ kind: "expired" as const });
         }
-        const active: StandSubscriptionEntry = Object.freeze({
-          subscription: entry.subscription,
-          phase: "active",
-          createdAt: entry.createdAt,
-          revision: entry.revision + 1n,
+        const active = StandSubscriptionRecords.write(
+          {
+            subscription: entry.subscription,
+            phase: "active",
+            createdAt: entry.createdAt,
+            revision: entry.revision + 1n,
+          },
+          record.generation,
+        );
+        const control = await this.#controlState();
+        const staged = controlWithOperation(control, {
+          kind: "activate",
+          id,
+          expectedDigest: recordDigest(record),
+          resultDigest: recordDigest(active),
+          generation: generationToken(record),
+          token: randomUUID(),
+          expectedRevision: Number(entry.revision),
+          resultRevision: Number(entry.revision + 1n),
         });
-        if (
-          await this.#storage.compareAndSet(
-            id,
-            record,
-            StandSubscriptionRecords.write(active, record.generation),
-          )
-        ) {
+        if (await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))) {
+          await this.#settle(staged, writeControl(staged));
           return Object.freeze({
             kind: "activated" as const,
-            entry: StorageSubscriptionRegistry.#clone(active),
+            entry: StorageSubscriptionRegistry.#clone(StandSubscriptionRecords.read(active, id)),
           });
         }
       }
@@ -657,9 +680,9 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    * @returns Resolves to the deletion result.
    */
   async delete(
-    subscriptionId: SubscriptionId | string,
+    subscriptionId: SubscriptionId,
     expectedRevision?: bigint,
-  ): Promise<StandSubscriptionDeleteResult> {
+  ): Promise<StandDeleteResult> {
     return await this.#operation(async () => {
       const id = registryId(subscriptionId);
       if (expectedRevision !== undefined && expectedRevision < 1n)
@@ -672,18 +695,18 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         if (expectedRevision !== undefined && expectedRevision !== entry.revision) return "changed";
         const control = await this.#controlState();
         if (control.count < 1) throw new Error("Malformed Stand subscription control record.");
-        const staged = controlWithOperation(control, control.count, {
+        const staged = controlWithOperation(control, {
           kind: "delete",
           id,
-          digest: recordDigest(record),
+          expectedDigest: recordDigest(record),
           generation: generationToken(record),
           token: randomUUID(),
+          expectedRevision: Number(entry.revision),
         });
         if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
           continue;
-        const deleted = await this.#storage.compareAndSet(id, record, undefined);
-        await this.#recover();
-        return deleted ? "deleted" : "changed";
+        await this.#settle(staged, writeControl(staged));
+        return "deleted";
       }
     });
   }
@@ -694,7 +717,7 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
    * @param subscriptionId Identifies the definition to find.
    * @returns Resolves to a clone or undefined.
    */
-  async get(subscriptionId: SubscriptionId | string): Promise<StandSubscriptionEntry | undefined> {
+  async get(subscriptionId: SubscriptionId): Promise<StandSubscriptionEntry | undefined> {
     return await this.#operation(async () => {
       const id = registryId(subscriptionId);
       await this.#recover();
@@ -817,12 +840,28 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
 
   async #definitions() {
     const rows = await this.#storage.queryEntries({
+      filters: [{ column: "admitted", value: true }],
       sort: [{ field: "id" }],
       limit: this.#limit + 1,
     });
     if (rows.length > this.#limit) throw new Error("Malformed Stand subscription control record.");
-    for (const row of rows) StandSubscriptionRecords.read(row.record, row.id);
+    for (const row of rows) {
+      if (StandSubscriptionRecords.read(row.record, row.id).revision === 0n)
+        throw new Error("Malformed Stand subscription control record.");
+    }
     return rows;
+  }
+
+  async #reservation(): Promise<void> {
+    const rows = await this.#storage.queryEntries({
+      filters: [{ column: "admitted", value: false }],
+      sort: [{ field: "id" }],
+      limit: 1,
+    });
+    const row = rows[0];
+    if (row === undefined) return;
+    if (StandSubscriptionRecords.read(row.record, row.id).revision !== 0n)
+      throw new Error("Malformed Stand subscription control record.");
   }
 
   async #controlState(): Promise<ControlState> {
@@ -837,8 +876,10 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
       if (record === undefined) {
         const rows = await this.#definitions();
         const initial: Control = { version: 2, state: "clean", revision: 1, count: rows.length };
-        if (await this.#control.compareAndSet(controlSlot, undefined, writeControl(initial)))
+        if (await this.#control.compareAndSet(controlSlot, undefined, writeControl(initial))) {
+          await this.#reservation();
           return;
+        }
         continue;
       }
       const control = readControl(record, this.#limit);
@@ -846,54 +887,101 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
         if ((await this.#definitions()).length !== control.count) {
           throw new Error("Malformed Stand subscription control record.");
         }
+        await this.#reservation();
         return;
       }
-      const current = await this.#storage.read(control.operation.id);
-      const matches =
-        current !== undefined &&
-        recordDigest(current) === control.operation.digest &&
-        generationToken(current) === control.operation.generation;
-      if (current !== undefined && !matches) {
-        if (control.operation.kind === "delete") {
-          const unchanged = controlWithOperation(control, control.count);
-          if (await this.#control.compareAndSet(controlSlot, record, writeControl(unchanged)))
-            return;
-          continue;
-        }
+      await this.#settle(control, record);
+    }
+  }
+
+  async #settle(control: Control, controlRecord: Any): Promise<void> {
+    const operation = control.operation;
+    if (operation === undefined) throw new Error("Malformed Stand subscription control record.");
+    const current = await this.#storage.read(operation.id);
+    const expected = current !== undefined && matchesOperation(current, operation, "expected");
+    const result = current !== undefined && matchesOperation(current, operation, "result");
+    if (control.state === "staged") {
+      if (expected) {
+        const next = this.#operationResult(current, operation);
+        if (!(await this.#storage.compareAndSet(operation.id, current, next))) return;
+        return await this.#settle(control, controlRecord);
+      }
+      if (!result && !(current === undefined && operation.resultDigest === undefined))
         throw new Error("Malformed Stand subscription control record.");
-      }
-      let next: Control;
-      if (control.operation.kind === "create") {
-        next = controlWithOperation(control, matches ? control.count : control.count - 1);
-      } else {
-        if (
-          matches &&
-          !(await this.#storage.compareAndSet(control.operation.id, current, undefined))
-        )
-          continue;
-        next = controlWithOperation(control, control.count - 1);
-      }
-      if (next.count < 0) throw new Error("Malformed Stand subscription control record.");
-      if (await this.#control.compareAndSet(controlSlot, record, writeControl(next))) return;
+      const committed = controlCommitted(control);
+      if (await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(committed)))
+        return await this.#settle(committed, writeControl(committed));
+      return;
+    }
+    if (!result && !(current === undefined && operation.resultDigest === undefined))
+      throw new Error("Malformed Stand subscription control record.");
+    const clean = controlWithOperation(control);
+    if (!(await this.#control.compareAndSet(controlSlot, controlRecord, writeControl(clean))))
+      return;
+  }
+
+  #operationResult(
+    current: StandSubscriptionRecord,
+    operation: ControlOperation,
+  ): StandSubscriptionRecord | undefined {
+    if (operation.kind === "delete" || operation.kind === "discard") return undefined;
+    const entry = StandSubscriptionRecords.read(current, operation.id);
+    if (operation.kind === "create")
+      return StandSubscriptionRecords.write(
+        { ...entry, revision: BigInt(operation.resultRevision ?? -1) },
+        current.generation,
+      );
+    return StandSubscriptionRecords.write(
+      {
+        subscription: entry.subscription,
+        phase: "active",
+        createdAt: entry.createdAt,
+        revision: BigInt(operation.resultRevision ?? -1),
+      },
+      current.generation,
+    );
+  }
+
+  async #discardReservation(id: string, record: StandSubscriptionRecord): Promise<void> {
+    const entry = StandSubscriptionRecords.read(record, id);
+    if (entry.revision !== 0n) throw new Error("Malformed Stand subscription control record.");
+    for (;;) {
+      await this.#recover();
+      const control = await this.#controlState();
+      const staged = controlWithOperation(control, {
+        kind: "discard",
+        id,
+        expectedDigest: recordDigest(record),
+        generation: generationToken(record),
+        token: randomUUID(),
+        expectedRevision: 0,
+      });
+      if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
+        continue;
+      await this.#settle(staged, writeControl(staged));
+      return;
     }
   }
 
   async #deleteCurrent(id: string, record: StandSubscriptionRecord): Promise<boolean> {
     for (;;) {
+      await this.#recover();
       const control = await this.#controlState();
+      const current = await this.#storage.read(id);
+      if (current === undefined || recordDigest(current) !== recordDigest(record)) return false;
       if (control.count < 1) throw new Error("Malformed Stand subscription control record.");
-      const staged = controlWithOperation(control, control.count, {
+      const staged = controlWithOperation(control, {
         kind: "delete",
         id,
-        digest: recordDigest(record),
+        expectedDigest: recordDigest(record),
         generation: generationToken(record),
         token: randomUUID(),
+        expectedRevision: Number(StandSubscriptionRecords.read(record, id).revision),
       });
       if (!(await this.#control.compareAndSet(controlSlot, control.record, writeControl(staged))))
         continue;
-      const deleted = await this.#storage.compareAndSet(id, record, undefined);
-      await this.#recover();
-      return deleted;
+      await this.#settle(staged, writeControl(staged));
+      return true;
     }
   }
 }
@@ -901,11 +989,14 @@ export class StorageSubscriptionRegistry implements StandSubscriptionRegistry {
 const controlSlot = "control";
 const controlTypeUrl = "type.spine.io/stand.subscription.control.v1";
 interface ControlOperation {
-  readonly kind: "create" | "delete";
+  readonly kind: "create" | "activate" | "delete" | "discard";
   readonly id: string;
-  readonly digest: string;
+  readonly expectedDigest: string;
+  readonly resultDigest?: string;
   readonly generation: string;
   readonly token: string;
+  readonly expectedRevision: number;
+  readonly resultRevision?: number;
 }
 interface Control {
   readonly version: 2;
@@ -920,8 +1011,8 @@ interface ControlState extends Control {
 
 function controlWithOperation(
   control: Control,
-  count: number,
   operation?: ControlOperation,
+  count: number = control.count,
 ): Control {
   return Object.freeze({
     version: 2,
@@ -930,6 +1021,28 @@ function controlWithOperation(
     count,
     ...(operation === undefined ? {} : { operation }),
   });
+}
+
+function controlCommitted(control: Control): Control {
+  if (control.operation === undefined)
+    throw new Error("Malformed Stand subscription control record.");
+  return Object.freeze({
+    ...control,
+    state: "committed" as const,
+    revision: control.revision + 1,
+    count: committedCount(control),
+  });
+}
+
+function committedCount(control: Control): number {
+  switch (control.operation?.kind) {
+    case "create":
+      return control.count + 1;
+    case "delete":
+      return control.count - 1;
+    default:
+      return control.count;
+  }
 }
 
 function writeControl(control: Control): Any {
@@ -972,33 +1085,59 @@ function readControl(record: Any, limit: number): Control {
     const operation = control.operation as {
       kind?: unknown;
       id?: unknown;
-      digest?: unknown;
+      expectedDigest?: unknown;
+      resultDigest?: unknown;
       generation?: unknown;
       token?: unknown;
+      expectedRevision?: unknown;
+      resultRevision?: unknown;
     };
     if (
-      (operation.kind !== "create" && operation.kind !== "delete") ||
+      (operation.kind !== "create" &&
+        operation.kind !== "activate" &&
+        operation.kind !== "delete" &&
+        operation.kind !== "discard") ||
       typeof operation.id !== "string" ||
       operation.id.trim() === "" ||
-      typeof operation.digest !== "string" ||
-      !/^[0-9a-f]{16}$/.test(operation.digest) ||
+      typeof operation.expectedDigest !== "string" ||
+      !/^[0-9a-f]{16}$/.test(operation.expectedDigest) ||
       typeof operation.generation !== "string" ||
       !/^[0-9a-f]{32}$/.test(operation.generation) ||
       typeof operation.token !== "string" ||
-      !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(operation.token)
+      !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(operation.token) ||
+      !Number.isSafeInteger(operation.expectedRevision) ||
+      (operation.expectedRevision as number) < 0 ||
+      (operation.resultDigest !== undefined &&
+        (typeof operation.resultDigest !== "string" ||
+          !/^[0-9a-f]{16}$/.test(operation.resultDigest))) ||
+      (operation.resultRevision !== undefined &&
+        (!Number.isSafeInteger(operation.resultRevision) ||
+          (operation.resultRevision as number) < 1)) ||
+      ((operation.kind === "create" || operation.kind === "activate") &&
+        (operation.resultDigest === undefined || operation.resultRevision === undefined)) ||
+      ((operation.kind === "delete" || operation.kind === "discard") &&
+        (operation.resultDigest !== undefined || operation.resultRevision !== undefined))
     )
       throw Error();
+    const validOperation = operation as ControlOperation;
     return Object.freeze({
       version: 2 as const,
       state: control.state,
       revision: control.revision as number,
       count: control.count as number,
       operation: Object.freeze({
-        kind: operation.kind,
-        id: operation.id,
-        digest: operation.digest,
-        generation: operation.generation,
-        token: operation.token,
+        kind: validOperation.kind,
+        id: validOperation.id,
+        expectedDigest: validOperation.expectedDigest,
+        ...(validOperation.resultDigest === undefined
+          ? {}
+          : { resultDigest: validOperation.resultDigest }),
+        generation: validOperation.generation,
+        token: validOperation.token,
+        expectedRevision: validOperation.expectedRevision,
+        ...(validOperation.resultRevision === undefined
+          ? {}
+          : { resultRevision: validOperation.resultRevision }),
       }),
     });
   } catch {
@@ -1016,6 +1155,22 @@ function recordDigest(record: StandSubscriptionRecord): string {
 
 function generationToken(record: StandSubscriptionRecord): string {
   return Buffer.from(record.generation).toString("hex");
+}
+
+function matchesOperation(
+  record: StandSubscriptionRecord,
+  operation: ControlOperation,
+  stage: "expected" | "result",
+): boolean {
+  const digest = stage === "expected" ? operation.expectedDigest : operation.resultDigest;
+  const revision = stage === "expected" ? operation.expectedRevision : operation.resultRevision;
+  return (
+    digest !== undefined &&
+    revision !== undefined &&
+    recordDigest(record) === digest &&
+    generationToken(record) === operation.generation &&
+    record.revision === BigInt(revision)
+  );
 }
 
 function sameSubscription(left: Subscription, right: Subscription): boolean {
