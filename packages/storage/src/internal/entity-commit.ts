@@ -17,31 +17,51 @@ import type { EntityStorageInput } from "./entity-history.js";
  * transaction API.
  */
 export interface EntityCommitInput<I, S extends Message> {
-  /** Identifies the storage scope that owns this commit. */
+  // prettier-ignore
+
+  /**
+   * Identifies the storage scope that owns this commit.
+   */
   readonly context: StorageContext;
 
-  /** Defines the Entity storage layout mutated by this commit. */
+  /**
+   * Defines the Entity storage layout mutated by this commit.
+   */
   readonly entity: EntityStorageInput<I, S>;
 
-  /** Identifies this source-signal commit within the Entity scope. */
+  /**
+   * Identifies this source-signal commit within the Entity scope.
+   */
   readonly id: string;
 
-  /** Identifies the Entity record being changed. */
+  /**
+   * Identifies the Entity record being changed.
+   */
   readonly entityId: I;
 
-  /** Requires this current record before applying the next record. */
+  /**
+   * Requires this current record before applying the next record.
+   */
   readonly expected?: EntityRecord<I, S>;
 
-  /** Stores the next current record. */
+  /**
+   * Stores the next current record.
+   */
   readonly next: EntityRecord<I, S>;
 
-  /** Appends retained Entity state-history rows. */
+  /**
+   * Appends retained Entity state-history rows.
+   */
   readonly states?: readonly EntityStateHistoryRecord<I, S>[];
 
-  /** Appends retained diagnostic Entity-event rows. */
+  /**
+   * Appends retained diagnostic Entity-event rows.
+   */
   readonly diagnostics?: readonly EntityEventHistoryRecord<I>[];
 
-  /** Appends canonical framework delivery events. */
+  /**
+   * Appends canonical framework delivery events.
+   */
   readonly events?: readonly Event[];
 }
 
@@ -51,9 +71,11 @@ export interface EntityCommitInput<I, S extends Message> {
 export type EntityCommitResult = "committed" | "replayed" | "conflict";
 
 /**
- * Owns atomic provider mutation for one bounded Entity scope.
+ * A provider handle for atomic changes to one bounded Entity scope.
  */
 export interface EntityCommitStorage {
+  // prettier-ignore
+
   /**
    * Applies one complete Entity mutation or returns its durable prior outcome.
    *
@@ -62,7 +84,9 @@ export interface EntityCommitStorage {
    */
   commit<I, S extends Message>(input: EntityCommitInput<I, S>): Promise<EntityCommitResult>;
 
-  /** Closes this independently owned commit handle. */
+  /**
+   * Closes this independently owned commit handle.
+   */
   close(): void;
 }
 
@@ -70,6 +94,8 @@ export interface EntityCommitStorage {
  * Defines the provider-only storage-factory capability required by repositories.
  */
 export interface EntityCommitStorageFactory {
+  // prettier-ignore
+
   /**
    * Creates a handle that atomically mutates Entity persistence for one provider.
    *

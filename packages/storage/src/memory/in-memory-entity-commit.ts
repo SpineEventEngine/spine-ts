@@ -65,7 +65,9 @@ export class MemoryEntityCommitStorage implements EntityCommitStorage {
     return InMemoryCommitLocks.run(this.#backend, this.#scope(input), () => this.#commit(input));
   }
 
-  /** Closes this commit handle without closing sibling handles. */
+  /**
+   * Closes this commit handle without closing sibling handles.
+   */
   close(): void {
     this.#open = false;
   }

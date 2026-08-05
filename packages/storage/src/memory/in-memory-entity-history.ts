@@ -204,10 +204,30 @@ export interface EntityIdCodec<I> {
   readonly key: (id: I) => string;
 }
 
+/**
+ * The shared maps and write queue behind one in-memory Entity storage.
+ */
 export interface EntityBackend {
+  // prettier-ignore
+
+  /**
+   * The latest record for each Entity identifier.
+   */
   readonly current: Map<string, unknown>;
+
+  /**
+   * The retained diagnostic events keyed by their durable identity.
+   */
   readonly events: Map<string, unknown>;
+
+  /**
+   * Serializes state-history changes for the same Entity identifier.
+   */
   readonly stateQueue: KeyedSerialQueue;
+
+  /**
+   * The retained state history keyed by its durable identity.
+   */
   readonly states: Map<string, unknown>;
 }
 

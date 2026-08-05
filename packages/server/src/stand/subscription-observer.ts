@@ -76,6 +76,8 @@ interface ResolvedPath {
  * @internal
  */
 export class SubscriptionObservers {
+  // prettier-ignore
+
   /**
    * Attaches one active canonical definition to this node's local state/EventBus
    * sources and renders its client-safe update before delivery to consumers.
