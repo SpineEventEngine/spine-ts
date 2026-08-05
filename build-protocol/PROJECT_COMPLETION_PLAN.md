@@ -1,6 +1,6 @@
 # Spine TS Project Completion Plan
 
-Status: Initial release, post-release JVM parity Waves 1 through 5, and T-0080
+Status: Initial release, post-release JVM parity Waves 1 through 6, and T-0080
 authored-API/example quality correction complete
 
 Plan date: 2026-07-12
@@ -18,8 +18,9 @@ listener reconciliation is reviewed, release-verified, integrated, post-merge
 verified, and pushed. T-0110 multi-node Gateway fan-in is reviewed,
 release-gated, merged, post-merge verified, and pushed. T-0111 Distributed
 Message Board and example migration is reviewed, release-gated, merged,
-post-merge verified, and pushed. T-0112 documentation and Wave closure is the
-current action.
+post-merge verified, and pushed. T-0112 documentation and Wave closure is
+reviewed, release-gated, merged, post-merge verified, and pushed. Wave 6 is
+durably closed; Wave 7 requires its separate human Q&A before work starts.
 Autonomous implementation follows
 `build-protocol/planning/WAVE_6_DISTRIBUTED_DELIVERY_STAND_PLAN.md`.
 
@@ -136,10 +137,10 @@ durably closed.
   cluster-complete guarantee; queries remain authoritative. Its Q&A must also
   decide application redeployment and update behavior.
 
-Wave 6 Q&A and T-0104 planning are complete. T-0105 begins the autonomous
-runtime sequence with exact system-event and Inbox contracts. Wave 7 still
-requires a separate human Q&A. Do not publish packages to npm until all waves
-are complete and publication is revisited with the human.
+Wave 6 Q&A, planning, implementation, review, release verification, integration,
+and documentation closure are complete. Wave 7 still requires a separate human
+Q&A. Do not publish packages to npm until all waves are complete and publication
+is revisited with the human.
 
 ## Authored API And Example Quality Correction
 
