@@ -82,3 +82,20 @@ substantively affected reliability/API/docs concerns require confirmation.
   under explicit Terra/high and documentation under immutable Luna/medium.
   Runtime metadata handling is unchanged; reviewers remain read-only and may not
   spawn children.
+
+## Narrow Confirmation Results
+
+- Reliability confirms aggregate caps/compensation, exact loss with healthy
+  continuation, durable topology variants, cancellation, and bounds. One P1
+  remains: fresh rollback cleanup is not time-bounded when `dispose()` ignores
+  abort. Add a finite timeout/race and non-cooperative regression.
+- API confirms exact notice and exclusive backend configuration. One P2 remains:
+  `SubscriptionBindings` does not publicly declare/document its
+  `topologyFencing: true` capability, lifecycle topology persistence/equality,
+  or the Gateway's `legacy` default; BrowserServer relies on a cast.
+- Documentation confirms Kubernetes, Message Board, server README/reference,
+  and main fan-in guidance. Three exact sentences remain: remove the stale
+  cross-node contradiction, state no automatic unary retry, and make
+  BrowserBackend's URL wording plural-aware.
+- One final bounded correction returns to the existing Terra/medium owner. Only
+  reliability, API, and documentation receive finding-specific confirmation.
