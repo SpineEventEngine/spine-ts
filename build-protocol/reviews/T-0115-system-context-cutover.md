@@ -329,3 +329,13 @@ failure]`, with each error present once and no nested primary error.
 - Expected and explicitly dispatched profile remains `gpt-5.6-terra` /
   medium. Runtime self-introspection is unavailable; immutable role/profile
   metadata applies.
+
+## Final Proof Re-review
+
+- Proof base: `c3b9112b`.
+- Proof endpoint: `b52ed588`.
+- Immutable proof diff:
+  `.superpowers/sdd/review-c3b9112b..b52ed588.diff`.
+- The existing `performance_reliability_reviewer` role is explicitly
+  re-dispatched with `gpt-5.6-terra` / high to assess only the persisted-System
+  cleanup proof it requested.
