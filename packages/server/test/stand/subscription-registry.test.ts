@@ -481,6 +481,29 @@ describe("StorageSubscriptionRegistry", () => {
     ]);
   });
 
+  it("does not let an unexpired revision-zero reservation starve an expired definition", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(start);
+    try {
+      const factory = new StandRegistryScriptedStorageFactory("create-reservation");
+      const context = { name: "DurableRegistryUnexpiredReservation", multitenant: false };
+      const registry = new StorageSubscriptionRegistry(context, factory);
+      await registry.create(subscription("expired"));
+      vi.setSystemTime(start + 1_000);
+      factory.arm();
+      await expect(registry.create(subscription("held"))).rejects.toThrow("applied-then-thrown");
+      vi.setSystemTime(start + 30_000);
+
+      await expect(new StorageSubscriptionRegistry(context, factory).cleanup()).resolves.toEqual({
+        scanned: 1,
+        deleted: 1,
+        more: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each(["discard-stage", "discard-definition", "discard-commit"] as const)(
     "recovers an applied-then-thrown %s reservation discard",
     async (phase) => {
