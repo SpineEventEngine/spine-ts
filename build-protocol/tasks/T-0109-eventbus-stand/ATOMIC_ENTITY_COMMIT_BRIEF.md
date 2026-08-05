@@ -62,8 +62,11 @@ commit. It does not promise distributed or cross-provider transactions.
 
 ## Runtime Sequencing
 
-Stand's deferred update becomes notification-only: it captures independent old
-and new states plus the subscriber snapshot without writing. The repository
+Stand's internal deferred update becomes notification-only: it captures
+independent old and new states plus the subscriber snapshot without writing.
+The public low-level `Stand.update()` retains its single-current-record direct
+write and then notifies; it does not participate in repository history or
+EventStore transactions. The repository
 executes the provider commit and notifies Stand, publishes
 `EntityStateChanged`, and dispatches domain events only for `committed`.
 `replayed`, `conflict`, and failure settle without notification or dispatch.
