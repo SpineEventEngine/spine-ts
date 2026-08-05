@@ -176,32 +176,98 @@ describe("EventBus", () => {
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-schema-only" } }]);
   });
 
-  it("forgets accepted events without using the EventStore", async () => {
-    const acceptThenAppend = vi.fn();
-    const read = vi.fn();
-    const eventStore = {
-      acceptThenAppend,
-      close: vi.fn(),
-      read,
-    } as unknown as EventStore;
+  it("forgets events across assembly, posting, and close without event storage", async () => {
     const observed: string[] = [];
-    const bus = eventBusAccess.createForgettingBus(eventStore, [
-      createEventDispatcher([ProjectionStateSchema], (event) => {
-        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
-      }),
+    const storage = observeEventStoreAccess();
+    validationChecks.mockImplementation(() => {
+      observed.push("validate");
+    });
+    const bus = eventBusAccess.createForgettingBus([
+      {
+        messageSchemas: () => [ValidatedTaskEventSchema],
+        accept: () => {
+          observed.push("accept");
+          return Promise.resolve();
+        },
+        dispatch: () => {
+          observed.push("dispatch");
+          return Promise.resolve();
+        },
+      },
     ]);
-    eventBusAccess.subscribe(bus, TypeUrls.derive(ProjectionStateSchema), {
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ValidatedTaskEventSchema), {
       onEvent: (event) => {
         observed.push(`subscriber:${event.id?.value ?? "missing"}`);
       },
     });
 
-    await bus.post(createProjectionEvent("event-forgotten"));
+    await bus.post(createValidatedEvent("event-forgotten", "name"));
+    await bus.close();
 
-    expect(observed).toEqual(["dispatch:event-forgotten", "subscriber:event-forgotten"]);
+    expect(observed).toEqual(["validate", "accept", "dispatch", "subscriber:event-forgotten"]);
     expect(validationChecks).toHaveBeenCalledTimes(1);
-    expect(acceptThenAppend).not.toHaveBeenCalled();
-    expect(read).not.toHaveBeenCalled();
+    storage.expectNoAccess();
+    storage.restore();
+  });
+
+  it("stops forgotten events after validation failure without event storage", async () => {
+    const observed: string[] = [];
+    const storage = observeEventStoreAccess();
+    validationChecks.mockImplementation(() => {
+      observed.push("validate");
+    });
+    const bus = eventBusAccess.createForgettingBus([
+      createEventDispatcher([ValidatedTaskEventSchema], () => {
+        observed.push("dispatch");
+      }),
+    ]);
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ValidatedTaskEventSchema), {
+      onEvent: () => {
+        observed.push("subscriber");
+      },
+    });
+
+    await expect(bus.post(createValidatedEvent("event-forgotten-invalid", ""))).rejects.toThrow();
+    await bus.close();
+
+    expect(observed).toEqual(["validate"]);
+    storage.expectNoAccess();
+    storage.restore();
+  });
+
+  it("stops forgotten events after admission failure without event storage", async () => {
+    const observed: string[] = [];
+    const storage = observeEventStoreAccess();
+    validationChecks.mockImplementation(() => {
+      observed.push("validate");
+    });
+    const bus = eventBusAccess.createForgettingBus([
+      {
+        messageSchemas: () => [ValidatedTaskEventSchema],
+        accept: () => {
+          observed.push("accept");
+          return Promise.reject(new Error("admission failed"));
+        },
+        dispatch: () => {
+          observed.push("dispatch");
+          return Promise.resolve();
+        },
+      },
+    ]);
+    eventBusAccess.subscribe(bus, TypeUrls.derive(ValidatedTaskEventSchema), {
+      onEvent: () => {
+        observed.push("subscriber");
+      },
+    });
+
+    await expect(
+      bus.post(createValidatedEvent("event-forgotten-rejected", "name")),
+    ).rejects.toThrow("admission failed");
+    await bus.close();
+
+    expect(observed).toEqual(["validate", "accept"]);
+    storage.expectNoAccess();
+    storage.restore();
   });
 
   it("rejects events without a message", async () => {
@@ -1032,6 +1098,28 @@ function createValidatedEvent(id: string, name: string) {
     message: create(ValidatedTaskEventSchema, { id: "task-1", name }),
     validate: false,
   });
+}
+
+function observeEventStoreAccess() {
+  const createStorage = vi.spyOn(InMemoryStorageFactory.prototype, "createRecordStorage");
+  const acceptThenAppend = vi.spyOn(EventStore.prototype, "acceptThenAppend");
+  const read = vi.spyOn(EventStore.prototype, "read");
+  const close = vi.spyOn(EventStore.prototype, "close");
+
+  return {
+    expectNoAccess() {
+      expect(createStorage).not.toHaveBeenCalled();
+      expect(acceptThenAppend).not.toHaveBeenCalled();
+      expect(read).not.toHaveBeenCalled();
+      expect(close).not.toHaveBeenCalled();
+    },
+    restore() {
+      createStorage.mockRestore();
+      acceptThenAppend.mockRestore();
+      read.mockRestore();
+      close.mockRestore();
+    },
+  };
 }
 
 function delay(ms: number): Promise<"pending"> {

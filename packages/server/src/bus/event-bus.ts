@@ -28,10 +28,10 @@ const eventBusCloseStarters = new WeakMap<EventBus, () => void>();
 const eventBusDrainers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
 const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
-const forgettingBuses = new WeakSet<EventBus>();
+const forgettingBus: unique symbol = Symbol("forgetting-bus");
 
 interface EventBusAccess {
-  createForgettingBus(eventStore: EventStore, dispatchers?: Iterable<EventDispatcher>): EventBus;
+  createForgettingBus(dispatchers?: Iterable<EventDispatcher>): EventBus;
   postStored(eventBus: EventBus, event: Event): Promise<void>;
   postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void>;
   postFollowUp(eventBus: EventBus, event: Event): Promise<void>;
@@ -50,13 +50,13 @@ type EventBusIntakeState = "open" | "closing" | "closed";
 /**
  * Small single-process multicast event bus.
  *
- * Public construction stores events. Internally assembled forgetting buses
- * validate, accept, and dispatch without using their injected `EventStore`.
+ * Public construction stores events. Internally assembled forgetting buses own
+ * no `EventStore` and validate, accept, and dispatch without event storage.
  * Events with no matching dispatcher resolve without dispatch. Events with no
  * registered schema reject deterministically before storage or dispatch.
  */
 export class EventBus {
-  readonly #eventStore: EventStore;
+  readonly #eventStore: EventStore | undefined;
   readonly #registry = new EventDispatcherRegistry();
   readonly #subscribers = new Map<string, Set<EventSubscriberRecord>>();
   readonly #runtime = new SingleProcessServerRuntime();
@@ -72,7 +72,9 @@ export class EventBus {
    * @param dispatchers the dispatchers to register.
    */
   constructor(eventStore: EventStore, dispatchers: Iterable<EventDispatcher> = []) {
-    this.#eventStore = eventStore;
+    const ownedStore = eventStore as EventStore | typeof forgettingBus;
+
+    this.#eventStore = ownedStore === forgettingBus ? undefined : ownedStore;
     this.#started = this.#runtime.start();
     storedDispatchers.set(this, (event) => this.#postStored(event));
     storedFollowUpDispatchers.set(this, (event) => this.#postStoredFollowUp(event));
@@ -123,7 +125,7 @@ export class EventBus {
   }
 
   /**
-   * Stops accepting new event work, drains accepted work, and closes the event store.
+   * Stops accepting new event work, drains accepted work, and closes an owned event store.
    *
    * Close is idempotent and returns the same close outcome on repeated calls.
    * Runtime and event-store close hooks are both attempted; failures reject as
@@ -144,9 +146,12 @@ export class EventBus {
     await EventBus.#closePart(() => this.#started.then(() => this.#runtime.close()), errors);
     this.#intakeState = "closed";
     this.#clearSubscribers();
-    await EventBus.#closePart(() => {
-      this.#eventStore.close();
-    }, errors);
+    const eventStore = this.#eventStore;
+    if (eventStore !== undefined) {
+      await EventBus.#closePart(() => {
+        eventStore.close();
+      }, errors);
+    }
 
     if (errors.length > 0) {
       throw new AggregateError(errors, "EventBus close failed.");
@@ -162,7 +167,7 @@ export class EventBus {
 
     const dispatchers = this.#registry.find(typeUrl);
 
-    if (forgettingBuses.has(this)) {
+    if (this.#eventStore === undefined) {
       this.#validate(event, typeUrl);
       await this.#accept(event, dispatchers);
 
@@ -375,7 +380,7 @@ export interface EventSubscriber {
   // prettier-ignore
 
   /**
-   * Accepts a cloned stored event.
+   * Accepts a cloned dispatched event.
    *
    * @param event the event received by the subscription.
    */
@@ -408,18 +413,20 @@ interface EventSubscriberRecord {
 }
 
 /**
- * Provides event-bus access for events that are already stored.
+ * Provides package-internal EventBus access and assembly.
  *
  * @internal
  */
 export const eventBusAccess: EventBusAccess = Object.freeze({
-  createForgettingBus(
-    eventStore: EventStore,
-    dispatchers: Iterable<EventDispatcher> = [],
-  ): EventBus {
-    const eventBus = new EventBus(eventStore, dispatchers);
-    forgettingBuses.add(eventBus);
-    return eventBus;
+  /**
+   * Assembles a package-internal bus that owns no event store.
+   *
+   * @param dispatchers the initial dispatchers to register.
+   * @returns the assembled forgetting bus.
+   * @internal
+   */
+  createForgettingBus(dispatchers: Iterable<EventDispatcher> = []): EventBus {
+    return new EventBus(forgettingBus as never, dispatchers);
   },
 
   postStored(eventBus: EventBus, event: Event): Promise<void> {

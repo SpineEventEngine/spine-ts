@@ -1,6 +1,6 @@
 # T-0114: EventBus Persistence Policy
 
-Status: Implementation in progress
+Status: Review corrections verified; re-review and integration pending
 
 ## Objective
 
@@ -43,7 +43,8 @@ those belong to T-0115.
 
 - Focused tests visibly fail before production changes and distinguish storing,
   already-stored, and forgotten posting.
-- Forgetting does not call EventStore append, lookup, or open paths.
+- Forgetting owns no EventStore and does not construct, open, append, read, or
+  close event storage.
 - Validation and dispatcher notification remain identical after admission.
 - The server package root and generated TypeDoc expose no new policy symbol.
 - Existing EventBus tests and changed-source coverage pass.
@@ -55,9 +56,9 @@ those belong to T-0115.
 - Scope: EventBus policy, focused tests, and current TSDoc/task records only.
 - Expected model, explicitly dispatched: `gpt-5.6-terra`.
 - Expected reasoning, explicitly dispatched: `medium`.
-- Runtime metadata: pending. The Desktop surface supports explicit dispatch;
-  independent child self-introspection may be unavailable and will be recorded
-  honestly before acceptance.
+- Runtime metadata: the immutable implementer role/profile confirms
+  `gpt-5.6-terra` / medium. Independent child self-introspection was not
+  exposed, and no visible mismatch occurred.
 
 ## Skill Applicability
 
@@ -96,3 +97,17 @@ those belong to T-0115.
 Focused EventBus tests and changed-source coverage run before review. Because
 shared runtime persistence behavior changes, the converged task uses
 `verify:release` once after review.
+
+## Review-Correction Verification
+
+- The forgetting assembly seam now accepts only dispatchers and creates an
+  EventBus with no owned EventStore. Public `new EventBus(eventStore,
+dispatchers?)` remains the storing construction path.
+- Focused RED tests failed before production correction because the former
+  factory still consumed an EventStore and close invoked its lifecycle hook.
+- Focused GREEN evidence is 38 passing EventBus tests, including zero backing
+  storage creation/access/close through construction, post, and close;
+  validate-to-accept-to-dispatch-to-subscriber order; and validation/admission
+  failure suppression.
+- Changed-source coverage: 97.15% statements, 92.64% branches, 98.38%
+  functions, and 97.43% lines for `packages/server/src/bus/event-bus.ts`.
