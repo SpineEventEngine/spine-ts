@@ -76,6 +76,7 @@ const entityCommitReceipts = new Map<
   string,
   { readonly digest: Uint8Array; readonly owner: string }
 >();
+let persistEntityCommitReceipts = true;
 
 vi.mock("mysql2/promise", () => ({
   createPool: vi.fn((options) => {
@@ -207,10 +208,15 @@ vi.mock("mysql2/promise", () => ({
               if (!(digest instanceof Uint8Array) || typeof owner !== "string") {
                 throw new Error("invalid entity commit receipt fixture row");
               }
-              entityCommitReceipts.set(`${fakeKey(scope)}:${fakeKey(entity)}:${fakeKey(commit)}`, {
-                digest,
-                owner,
-              });
+              if (persistEntityCommitReceipts) {
+                entityCommitReceipts.set(
+                  `${fakeKey(scope)}:${fakeKey(entity)}:${fakeKey(commit)}`,
+                  {
+                    digest,
+                    owner,
+                  },
+                );
+              }
               return [{ affectedRows: 1 }, []];
             }
             if (sql.startsWith("SELECT fingerprint FROM spine_ts_entity_specs")) {
@@ -772,6 +778,84 @@ describe("MysqlStorageFactory", () => {
     await factory.close();
   });
 
+  it.each([
+    [
+      "blank commit ID",
+      (mutation: ReturnType<typeof atomicMutation>) => ({ ...mutation, id: " " }),
+    ],
+    [
+      "out-of-range next version",
+      (mutation: ReturnType<typeof atomicMutation>) => ({
+        ...mutation,
+        next: { ...mutation.next, version: 1n << 63n },
+      }),
+    ],
+    [
+      "blank delivery ID",
+      (mutation: ReturnType<typeof atomicMutation>) => ({
+        ...mutation,
+        events: [create(EventSchema, { id: create(EventIdSchema, { value: " " }) })],
+      }),
+    ],
+  ])("rejects %s before acquiring a commit connection", async (_name, invalid) => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_invalid",
+    });
+    const input = entityHistoryInput();
+    connectionAcquires = 0;
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit(
+        invalid(atomicMutation(input, "valid")),
+      ),
+    ).rejects.toThrow();
+
+    expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
+
+  it("commits without optional state, diagnostic, or delivery arrays", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_optional",
+    });
+    const input = entityHistoryInput();
+    const mutation = atomicMutation(input, "no-optionals");
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit({
+        context: mutation.context,
+        entity: mutation.entity,
+        id: mutation.id,
+        entityId: mutation.entityId,
+        next: mutation.next,
+      }),
+    ).resolves.toBe("committed");
+    expect(calls.some(({ sql }) => sql.startsWith("INSERT INTO spine_ts_entity_states"))).toBe(
+      false,
+    );
+    expect(calls.some(({ sql }) => sql.startsWith("INSERT INTO spine_ts_entity_events"))).toBe(
+      false,
+    );
+    await factory.close();
+  });
+
+  it("rejects a closed commit handle without acquiring a connection", async () => {
+    const { MysqlStorageFactory } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_closed",
+    });
+    const input = entityHistoryInput();
+    const commitStorage = EntityCommitStorageFactories.create(factory, input);
+    commitStorage.close();
+    connectionAcquires = 0;
+
+    await expect(commitStorage.commit(atomicMutation(input, "closed"))).rejects.toThrow("closed");
+    expect(connectionAcquires).toBe(0);
+    await factory.close();
+  });
+
   it("returns conflict without write statements when the expected current record differs", async () => {
     const { MysqlStorageFactory } = await import("../src/index.js");
     const factory = await MysqlStorageFactory.create({
@@ -831,6 +915,61 @@ describe("MysqlStorageFactory", () => {
     expect(destroys).toBe(1);
     await factory.close();
   });
+
+  it("sanitizes failed commit attempts after the receipt probe cannot reconcile them", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_failures",
+    });
+    const input = entityHistoryInput();
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO spine_ts_entity_current")
+        ? new Error("provider secret")
+        : undefined;
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit(atomicMutation(input, "ordinary")),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+
+    executeFailure = undefined;
+    persistEntityCommitReceipts = false;
+    commitFailure = new Error("commit failed");
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit(atomicMutation(input, "commit")),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+
+    commitFailure = undefined;
+    persistEntityCommitReceipts = true;
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO spine_ts_entity_current")
+        ? Object.assign(new Error("lost"), { code: "ECONNRESET" })
+        : undefined;
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit(atomicMutation(input, "broken")),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    expect(destroys).toBe(1);
+    await factory.close();
+  });
+
+  it("stops after three retryable commit failures", async () => {
+    const { MysqlStorageFactory, MysqlStorageOperationError } = await import("../src/index.js");
+    const factory = await MysqlStorageFactory.create({
+      url: "mysql://spine:secret@localhost:3306/spine_packet_atomic_exhaustion",
+    });
+    const input = entityHistoryInput();
+    executeFailure = (sql) =>
+      sql.startsWith("INSERT INTO spine_ts_entity_current")
+        ? Object.assign(new Error("deadlock"), { code: "ER_LOCK_DEADLOCK" })
+        : undefined;
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, input).commit(
+        atomicMutation(input, "exhaustion"),
+      ),
+    ).rejects.toBeInstanceOf(MysqlStorageOperationError);
+    expect(transactionStarts).toBe(3);
+    await factory.close();
+  });
   beforeEach(() => {
     calls.length = 0;
     endCalls = 0;
@@ -870,6 +1009,7 @@ describe("MysqlStorageFactory", () => {
     entitySpecifications.clear();
     entityCurrent.clear();
     entityCommitReceipts.clear();
+    persistEntityCommitReceipts = true;
     poolOptions = undefined;
   });
 

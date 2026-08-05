@@ -509,6 +509,64 @@ describe("Datastore entity history", () => {
     expect(client.transactionCalls).toBe(0);
   });
 
+  it("rejects commits for another Entity scope and closed handles before a transaction", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+    const commit = EntityCommitStorageFactories.create(factory, inputValue);
+    const mutation = {
+      context: inputValue.context,
+      entity: inputValue,
+      id: "scope",
+      entityId: "task",
+      next: {
+        id: "task",
+        state: create(StringValueSchema, { value: "next" }),
+        version: 1n,
+        archived: false,
+        deleted: false,
+      },
+    };
+
+    await expect(
+      commit.commit({ ...mutation, entity: { ...inputValue, storageKey: "other.Task:current" } }),
+    ).rejects.toThrow("another Entity storage scope");
+    commit.close();
+    await expect(commit.commit(mutation)).rejects.toThrow("closed");
+    expect(client.transactionCalls).toBe(0);
+  });
+
+  it("rejects a commit whose delivery groups exceed the provider limit before a transaction", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        context: inputValue.context,
+        entity: inputValue,
+        id: "too-many-deliveries",
+        entityId: "task",
+        next: {
+          id: "task",
+          state: create(StringValueSchema, { value: "next" }),
+          version: 1n,
+          archived: false,
+          deleted: false,
+        },
+        events: Array.from({ length: 25 }, (_, index) =>
+          create(EventSchema, {
+            id: create(EventIdSchema, { value: `delivery-${String(index)}` }),
+          }),
+        ),
+      }),
+    ).rejects.toThrow("25 entity-group limit");
+
+    expect(client.transactionCalls).toBe(0);
+  });
+
   it("retries a transaction abort and returns conflict without durable mutation", async () => {
     const backend = new HistoryDatastoreBackend();
     const client = backend.client();
@@ -558,6 +616,37 @@ describe("Datastore entity history", () => {
       state: { value: "next" },
       version: 1n,
     });
+  });
+
+  it("surfaces retry exhaustion after three aborted commit transactions", async () => {
+    const backend = new HistoryDatastoreBackend();
+    const client = backend.client();
+    const factory = new DatastoreStorageFactory({ client: client as never });
+    const inputValue = input();
+    const transaction = client.transaction.bind(client);
+    client.transaction = () => {
+      const value = transaction();
+      value.run = () =>
+        Promise.reject(Object.assign(new Error("transaction aborted"), { code: 10 }));
+      return value;
+    };
+
+    await expect(
+      EntityCommitStorageFactories.create(factory, inputValue).commit({
+        context: inputValue.context,
+        entity: inputValue,
+        id: "exhaustion",
+        entityId: "task",
+        next: {
+          id: "task",
+          state: create(StringValueSchema, { value: "next" }),
+          version: 1n,
+          archived: false,
+          deleted: false,
+        },
+      }),
+    ).rejects.toThrow("transaction aborted");
+    expect(client.transactionCalls).toBe(3);
   });
 
   it("returns committed to the invocation whose ambiguous acknowledgement persisted", async () => {
