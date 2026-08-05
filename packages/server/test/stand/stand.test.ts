@@ -42,6 +42,7 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 const observedEventBusSubscriptions = vi.hoisted(
   () => [] as { readonly closed: boolean; unsubscribe(): void }[],
 );
+const failNextObserverUnsubscribe = vi.hoisted(() => ({ value: false }));
 
 vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/bus/event-bus.js")>();
@@ -52,8 +53,20 @@ vi.mock("../../src/bus/event-bus.js", async (importOriginal) => {
       ...actual.eventBusAccess,
       subscribe(eventBus: EventBusType, typeUrl: string, subscriber: EventSubscriber) {
         const subscription = actual.eventBusAccess.subscribe(eventBus, typeUrl, subscriber);
-        observedEventBusSubscriptions.push(subscription);
-        return subscription;
+        const observed = Object.freeze({
+          get closed() {
+            return subscription.closed;
+          },
+          unsubscribe() {
+            subscription.unsubscribe();
+            if (failNextObserverUnsubscribe.value) {
+              failNextObserverUnsubscribe.value = false;
+              throw new Error("Observer unsubscribe failed.");
+            }
+          },
+        });
+        observedEventBusSubscriptions.push(observed);
+        return observed;
       },
     }),
   };
@@ -195,6 +208,41 @@ describe("Stand", () => {
     await postStateChange(bus, ProjectionStateSchema, createState("after-close", "After close"));
     expect(deliveries).toBe(1);
     await expect(bus.close()).resolves.toBeUndefined();
+  });
+
+  it("detaches every observer and clears consumers when one observer unsubscribe fails", async () => {
+    observedEventBusSubscriptions.length = 0;
+    const factory = new InMemoryStorageFactory();
+    const stand = new Stand({
+      context: { name: "DetachFailures", multitenant: false },
+      storageFactory: factory,
+    });
+    const bus = eventBusAccess.createSystemBus(undefined);
+    const registry = new InMemorySubscriptionRegistry();
+    stand.register(ProjectionStateSchema);
+    eventBusAccess.registerSchemas(bus, [EntityLog.EntityStateChangedSchema]);
+    for (const id of ["detach-one", "detach-two"]) {
+      const subscription = create(SubscriptionSchema, {
+        id: create(SubscriptionIdSchema, { value: id }),
+        topic: { id: { value: id }, target: { type: TypeUrls.derive(ProjectionStateSchema) } },
+      });
+      if (subscription.id === undefined) throw new Error("Expected subscription ID.");
+      await registry.create(subscription);
+      await registry.activate(subscription.id);
+    }
+    const runtime = pairedRuntime(stand, factory, registry, bus, bus);
+    await runtime.consume("detach-one", () => undefined);
+    await runtime.consume("detach-two", () => undefined);
+    expect(observedEventBusSubscriptions).toHaveLength(2);
+    failNextObserverUnsubscribe.value = true;
+
+    const closing = runtime.close();
+    await expect(closing).rejects.toMatchObject({ message: "Subscription runtime close failed." });
+    await expect(runtime.consume("detach-one", () => undefined)).rejects.toThrow(
+      "Subscription runtime is closing.",
+    );
+    expect(observedEventBusSubscriptions.every((observer) => observer.closed)).toBe(true);
+    await Promise.all([stand.close(), bus.close()]);
   });
 
   it("removes a consumer when its reconciliation cycle fails", async () => {

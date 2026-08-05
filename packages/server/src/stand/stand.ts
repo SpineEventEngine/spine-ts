@@ -296,7 +296,13 @@ export class Stand {
     return Object.freeze([...this.#registrations.keys()]);
   }
 
-  /** @internal */
+  /**
+   * Finds state-observer metadata for one type URL.
+   *
+   * @param typeUrl Identifies the candidate entity state type.
+   * @returns Returns observer metadata when the state is registered.
+   * @internal
+   */
   observedState(typeUrl: string): StandObservedState | undefined {
     const registration = this.#registrations.get(typeUrl);
     return registration === undefined
@@ -959,7 +965,8 @@ interface StandAccess {
  */
 export const standAccess: StandAccess = Object.freeze({
   observedState(stand: Stand, typeUrl: string | undefined): StandObservedState | undefined {
-    if (!(stand instanceof Stand)) throw new TypeError("State observation requires a Stand instance.");
+    if (!(stand instanceof Stand))
+      throw new TypeError("State observation requires a Stand instance.");
     if (typeUrl === undefined) return undefined;
     return stand.observedState(typeUrl);
   },

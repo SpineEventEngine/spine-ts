@@ -85,6 +85,10 @@ export class SubscriptionObservers {
    * {@link observeState} after classifying the target against domain Stand
    * metadata, so one definition cannot attach to both buses.
    *
+   * @param subscription Defines the event target and tenant filter.
+   * @param domainEventBus Delivers accepted domain events.
+   * @param onUpdate Receives the rendered client update.
+   * @returns Returns an attachment when the target is valid.
    * @internal
    */
   static observeEvent(
@@ -93,11 +97,13 @@ export class SubscriptionObservers {
     onUpdate: (update: SubscriptionUpdate) => void,
   ): EventSubscription | undefined {
     const typeUrl = subscription.topic?.target?.type;
-    if (typeUrl === undefined || typeUrl.length === 0 || domainEventBus === undefined) return undefined;
+    if (typeUrl === undefined || typeUrl.length === 0 || domainEventBus === undefined)
+      return undefined;
     const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     return eventBusAccess.subscribe(domainEventBus, typeUrl, {
       onEvent(event) {
-        if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId) return;
+        if (tenantId !== undefined && SubscriptionObservers.#eventTenant(event) !== tenantId)
+          return;
         onUpdate(SubscriptionObservers.#createEventUpdate(subscription, event));
       },
     });
@@ -106,6 +112,11 @@ export class SubscriptionObservers {
   /**
    * Observes one known entity-state target through the paired System EventBus.
    *
+   * @param subscription Defines the state target and tenant filter.
+   * @param state Supplies registered entity-state metadata.
+   * @param systemEventBus Delivers `EntityStateChanged` events.
+   * @param onUpdate Receives the rendered client update.
+   * @returns Returns an attachment when the System bus is available.
    * @internal
    */
   static observeState(
@@ -117,27 +128,30 @@ export class SubscriptionObservers {
     if (systemEventBus === undefined) return undefined;
     const tenantId = SubscriptionObservers.#tenantValue(subscription.topic?.context?.tenantId);
     const render = SubscriptionObservers.#createStateRenderer(subscription, state);
-    return eventBusAccess.subscribe(systemEventBus, TypeUrls.derive(EntityLog.EntityStateChangedSchema), {
-      onEvent(event) {
-        const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
-        if (update !== undefined) {
-          const rendered = render(update);
-          if (rendered !== undefined) onUpdate(rendered);
-        }
+    return eventBusAccess.subscribe(
+      systemEventBus,
+      TypeUrls.derive(EntityLog.EntityStateChangedSchema),
+      {
+        onEvent(event) {
+          const update = SubscriptionObservers.#stateChangeUpdate(event, state, tenantId);
+          if (update !== undefined) {
+            const rendered = render(update);
+            if (rendered !== undefined) onUpdate(rendered);
+          }
+        },
       },
-    });
+    );
   }
-
-  // prettier-ignore
 
   /**
    * Attaches one active canonical definition to this node's local state/EventBus
    * sources and renders its client-safe update before delivery to consumers.
    *
    * @param subscription The active canonical subscription definition.
-   * @param eventBus The local event source for event targets.
+   * @param domainEventBus The local domain event source.
    * @param findState Finds the local state route for a target type.
    * @param onUpdate Receives a fully rendered client update.
+   * @param systemEventBus The paired System event source.
    * @returns Returns the local observer attachment when the target is known.
    */
   static observeSubscription(

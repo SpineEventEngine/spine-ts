@@ -208,10 +208,14 @@ interface RepositoryRegistration {
    */
   readonly registerEventSchema: (schema: MessageSchema) => void;
 
-  /** Registers a schema for an internal system event. */
+  /**
+   * Registers a schema for an internal system event.
+   */
   readonly registerSystemEventSchema: (schema: MessageSchema) => void;
 
-  /** Posts a committed system event without affecting domain event storage. */
+  /**
+   * Posts a committed system event without affecting domain event storage.
+   */
   readonly postSystemEventFollowUp: (event: Event) => Promise<void>;
 
   /**
@@ -616,8 +620,11 @@ export class BoundedContext {
    * @param snapshot Contains the immutable context metadata.
    * @param commandBus Dispatches commands accepted by this context.
    * @param eventBus Dispatches events accepted by this context.
+   * @param systemEventBus Dispatches framework-only System events.
    * @param stand Stores read-side state for this context.
-   * @param subscriptionRegistry Stores this context's Stand subscription definitions.
+   * @param systemStand Stores read-side state for the paired System Context.
+   * @param subscriptionRuntime Coordinates pair-owned subscription delivery.
+   * @param systemSpec Contains paired System Context metadata.
    * @param storageFactory Creates context storage.
    * @param repositories Lists repositories to register.
    * @param deliveryStrategy Selects immutable Entity Inbox shards.

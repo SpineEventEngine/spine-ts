@@ -60,7 +60,9 @@ export class SubscriptionRuntime {
     this.#registry = registry;
   }
 
-  /** Starts immediate and ten-second complete-snapshot reconciliation. */
+  /**
+   * Starts immediate and ten-second complete-snapshot reconciliation.
+   */
   start(): void {
     if (this.#timer !== undefined || this.#closing) return;
     void this.reconcile().catch(() => undefined);
@@ -68,7 +70,13 @@ export class SubscriptionRuntime {
     this.#timer.unref();
   }
 
-  /** Adds a local stream consumer and reconciles before returning its handle. */
+  /**
+   * Adds a local stream consumer and reconciles before returning its handle.
+   *
+   * @param id Identifies the durable subscription definition.
+   * @param onUpdate Receives rendered subscription updates.
+   * @returns Resolves to the consumer removal handle.
+   */
   consume(id: string, onUpdate: (update: SubscriptionUpdate) => void): Promise<StandSubscription> {
     if (this.#closing) return Promise.reject(new Error("Subscription runtime is closing."));
     let consumers = this.#consumers.get(id);
@@ -85,7 +93,11 @@ export class SubscriptionRuntime {
       });
   }
 
-  /** Runs one complete registry snapshot for explicit convergence and tests. */
+  /**
+   * Updates local attachments from one complete registry snapshot.
+   *
+   * @returns Resolves after the accepted snapshot is reconciled.
+   */
   reconcile(): Promise<void> {
     const cycle = this.#tail.then(async () => {
       if (this.#closing) return;
@@ -105,7 +117,11 @@ export class SubscriptionRuntime {
     return cycle;
   }
 
-  /** Removes all local delivery state for one canonical subscription ID. */
+  /**
+   * Removes all local delivery state for one canonical subscription ID.
+   *
+   * @param id Identifies the durable subscription definition.
+   */
   remove(id: string): void {
     this.#consumers.delete(id);
     this.#detach(id);
@@ -118,18 +134,28 @@ export class SubscriptionRuntime {
     attachment.subscription.unsubscribe();
   }
 
-  /** Returns the pair-owned durable registry. */
+  /**
+   * Returns the pair-owned durable registry.
+   *
+   * @returns Returns the durable subscription registry.
+   */
   registry(): StandSubscriptionRegistry {
     return this.#registry;
   }
 
-  /** Prevents new consumers and stops the reconciliation timer. */
+  /**
+   * Marks the runtime terminal and stops its reconciliation timer.
+   */
   beginClose(): void {
     this.#closing = true;
     if (this.#timer !== undefined) clearInterval(this.#timer);
   }
 
-  /** Waits for accepted reconciliation and detaches every observer. */
+  /**
+   * Waits for accepted reconciliation and detaches every observer.
+   *
+   * @returns Resolves after every local observer has been detached.
+   */
   async drainClose(): Promise<void> {
     this.beginClose();
     await this.#tail;
@@ -145,7 +171,11 @@ export class SubscriptionRuntime {
     if (errors.length > 0) throw new AggregateError(errors, "Subscription runtime close failed.");
   }
 
-  /** Closes the shared registry after observer cleanup. */
+  /**
+   * Closes the shared registry after observer cleanup.
+   *
+   * @returns Resolves after the durable registry closes.
+   */
   finishClose(): Promise<void> {
     this.#closed ??= this.#finishClose();
     return this.#closed;
@@ -156,7 +186,11 @@ export class SubscriptionRuntime {
     await this.#registry.close();
   }
 
-  /** Performs all close phases for direct runtime owners. */
+  /**
+   * Performs all close phases for direct runtime owners.
+   *
+   * @returns Resolves after runtime shutdown completes.
+   */
   close(): Promise<void> {
     return this.finishClose();
   }
