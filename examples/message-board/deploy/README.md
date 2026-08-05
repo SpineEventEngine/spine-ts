@@ -5,6 +5,19 @@ Agents should use the nearby [reference](REFERENCE.md) for exact guarantees.
 
 ## 🧭 Choose a topology
 
+```mermaid
+flowchart LR
+  Browser --> Gateway[Authenticated Gateway]
+  Gateway --> Select[Unary routing: select one backend]
+  Select -->|one bounded round-robin attempt| AppOne[Application replica 1]
+  Select -->|one bounded round-robin attempt| AppTwo[Application replica 2]
+  Gateway -->|subscription fan-in| AppOne
+  Gateway -->|subscription fan-in| AppTwo
+```
+
+The two application connections shown for unary routing are alternatives, not
+fan-out: one command or query is sent to one selected backend without retry.
+
 Combined mode runs one Message Board application and authenticated browser
 gateway in the same process. Use it to understand the smallest browser-facing
 deployment. Standalone mode runs application replicas separately from gateway

@@ -366,9 +366,9 @@ active definitions have no framework TTL.
 The context builder's built-in registry capacity is from 1 through 100 admitted
 definitions, or the builder may provide a custom registry. Separately,
 `SpineServices.subscriptionLimit` defaults to 100 per service instance and
-bounds active transport streams plus unknown-cancellation work; it is not a
-registry or distributed quota. `SpineServices.queueLimit` defaults to 100
-queued updates per active local stream and closes slow delivery when exhausted.
+bounds concurrent unknown-ID cancellation work; it is not a registry or
+distributed quota. `SpineServices.queueLimit` defaults to 100 queued updates
+per active local stream and closes slow delivery when exhausted.
 `Subscribe` accepts registered state targets and event targets exposed by
 built-context event dispatchers. It rejects unknown/private targets, invalid
 criteria, unsupported comparison operators, event filters, event field masks,
@@ -394,8 +394,9 @@ reconciles a bounded complete snapshot every 10 seconds before attaching or
 removing its local listener. Single-tenant subscriptions reject tenant options;
 multitenant subscriptions require `tenantId`. Durable definitions do not make
 live streams durable: active streams and their bounded queues remain
-process-local and are not replayed after restart. In-memory registry use is
-valid for development and tests and warns in production.
+process-local and are not replayed after restart. `InMemorySubscriptionRegistry`
+is valid for development and tests. A context using it emits a warning only
+when attached to a production `ServerEnvironment`.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `Environment`, `EnvironmentType`,
 `ServerEnvironment`, and `ServerEnvironmentSettings` select one process-wide

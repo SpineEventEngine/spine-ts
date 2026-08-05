@@ -3,11 +3,15 @@
 These notes are for framework maintainers and coding agents. Application
 developers should start with the [end-user guide](../USER_GUIDE.md).
 
-They explain how package boundaries fit together: delivery/inbox
-processing, command/query/subscription services, same-host ZeroMQ transport
-for multi-process use, and a `Server` lifecycle owner that starts and closes
-those pieces together. It does not claim production deployment supervision,
-durable transport, authentication, or cross-host topology behavior.
+They explain the server-owned scope: delivery/inbox processing,
+command/query/subscription services, same-host ZeroMQ transport for
+multi-process use, and a `Server` lifecycle owner that starts and closes those
+pieces together. Gateway hosting and remote delivery are supported integration
+paths, not claims of production deployment supervision or topology ownership.
+Read the [browser and Gateway guide](../BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md)
+and the [delivery-client](../../packages/delivery-client/README.md) and
+[delivery-server](../../packages/delivery-server/README.md) guides for those
+boundaries.
 
 The notes describe current code rather than a learning sequence. Use the package
 READMEs for beginner examples and the adjacent `REFERENCE.md` files for
@@ -18,12 +22,13 @@ package-specific details.
 ```mermaid
 flowchart LR
   Browser --> Gateway[Gateway: fixed 1–32 backend list]
-  Gateway -->|command or query: one bounded round-robin attempt| AppA[Application node A]
-  Gateway -->|command or query: one bounded round-robin attempt| AppB[Application node B]
+  Gateway --> Select[Unary router: selects one backend]
+  Select -->|one bounded round-robin attempt| AppA[Application node A]
+  Select -->|one bounded round-robin attempt| AppB[Application node B]
   AppA --> Inbox[(Entity Inbox)]
   AppB --> Inbox
   Inbox --> Delivery[Shared remote delivery shard]
-  Delivery -->|one lease owner drains until empty| Entity[Entity handler]
+  Delivery -->|one active lease owner performs one bounded drain| Entity[Entity handler]
   Entity --> Events[Domain events and EntityStateChanged]
   Events --> Stand[Stand EventBus]
   Stand -->|best-effort notice fan-in| Gateway
@@ -32,8 +37,9 @@ flowchart LR
 
 An `@Assign` command to an Aggregate or Process Manager is persisted in its
 Entity Inbox before delivery. Every server node can attempt a shared delivery
-shard, while one lease owner drains it until it is empty; Process Manager
-delivery uses the same mechanism. Stand observes domain events and
+shard, while one active lease owner performs one bounded drain; a later drain
+can have a different owner. Process Manager delivery uses the same mechanism.
+Stand observes domain events and
 `EntityStateChanged`, then routes notices through the Gateway. Subscription
 notices can duplicate, gap, or be lost, so browser clients re-query the
 authoritative state. Gateway backend membership is a configured startup list,
