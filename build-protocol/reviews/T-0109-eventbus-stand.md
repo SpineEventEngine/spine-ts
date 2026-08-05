@@ -217,3 +217,10 @@ visible mismatch occurred. The two assigned files add Process Manager command
 and event failure-isolation regressions plus an active-observer close proof.
 Focused evidence passes 187 tests, server TypeScript, ESLint, formatting, and
 diff checks; no further production correction was required.
+
+The narrow reliability confirmation closes both Process Manager paths and
+finds no remaining production lifecycle defect. It keeps one test-only gap:
+post-close non-delivery can also result from the cleared consumer map, so the
+test must assert the EventBus observer's unsubscribe or detachment directly.
+The same implementer retains test-only ownership under its explicit
+Terra/medium profile; no production change or broad re-review is authorized.
