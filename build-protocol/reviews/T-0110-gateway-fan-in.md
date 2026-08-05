@@ -109,3 +109,16 @@ substantively affected reliability/API/docs concerns require confirmation.
 - Fresh focused preflight passes every deterministic gate and 375 tests.
 - Reliability, API, and documentation receive final confirmation of only their
   previously remaining findings.
+
+## Final Confirmation Results
+
+- Documentation is clean for the requested scope; topology manifest tests pass
+  8/8.
+- API is clean except one exact TSDoc sentence: omission of
+  `SubscriptionGatewayOptions.topology` must state its runtime `legacy` default.
+- Reliability confirms finite non-cooperative timeout behavior but finds one P1
+  synchronous-throw edge: direct `dispose()` invocation during `map()` can stop
+  later child cleanup calls from starting. Put each call behind a promise
+  boundary and prove later compensation after an earlier synchronous throw.
+- These two deterministic changes return once to the existing implementer. API
+  and reliability receive final exact confirmation; documentation is closed.
