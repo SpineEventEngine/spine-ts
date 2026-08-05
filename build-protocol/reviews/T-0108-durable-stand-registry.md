@@ -449,3 +449,10 @@ The corrected README wording is assigned one final narrow pass to the immutable
 existing documentation reviewer, `gpt-5.6-luna` / `medium`. Runtime
 self-introspection may be unavailable; immutable role/profile and explicit
 dispatch remain the metadata evidence.
+
+The performance/reliability closure check is CLEAN: the regression reads the
+exact production staging namespace and proves it empty after both owners settle.
+The documentation check found only one stale snippet comment calling `get()`'s
+result a fully frozen copy. The deterministic record-only correction now calls
+it an isolated snapshot, matching the already-correct surrounding byte-array
+qualification; it does not reopen another review lane.

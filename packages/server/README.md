@@ -95,7 +95,7 @@ const definition = create(SubscriptionSchema, {
 
 await registry.create(definition); // pending for up to 30 seconds
 await registry.activate(id); // active definitions do not expire
-const current = await registry.get(id); // one frozen copy
+const current = await registry.get(id); // one isolated snapshot
 const all = await registry.snapshot(); // bounded, identifier-sorted copies
 if (current !== undefined) await registry.delete(id, current.revision);
 await registry.cleanup(); // removes one finite page of expired pending entries
