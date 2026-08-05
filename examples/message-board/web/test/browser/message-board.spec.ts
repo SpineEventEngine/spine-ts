@@ -54,6 +54,7 @@ test("keeps live updates connected beyond the former local session boundary", as
     await sender.getByRole("textbox", { name: "Message" }).fill(message);
     await sender.getByRole("button", { name: "Post message" }).click();
     await expect(page.getByRole("list", { name: "Messages" }).getByText(message)).toBeVisible();
+    await expect(sender.getByRole("button", { name: "Post message" })).toBeEnabled();
   } finally {
     await sender.close();
   }
