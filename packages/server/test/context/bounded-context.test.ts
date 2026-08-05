@@ -1936,11 +1936,10 @@ describe("BoundedContext assembly", () => {
     const registryFailure = new Error("registry close failed");
     const storageFactory = new OrderedStorageFactory(order);
     const registry = new OrderedFailingRegistry(order, registryFailure);
-    let releaseCommand: (() => void) | undefined;
+    let releaseCommand!: () => void;
     const commandReleased = new Promise<void>((resolve) => {
       releaseCommand = resolve;
     });
-    let context: BoundedContext | undefined;
     const systemDispatcher = createEventDispatcher([EntityLog.EntityStateChangedSchema], () => {
       order.push("system event dispatched");
     });
@@ -1952,7 +1951,7 @@ describe("BoundedContext assembly", () => {
           postSystemEvent(context: BoundedContext, event: Event): Promise<void>;
         }
       ).postSystemEvent(
-        context as BoundedContext,
+        context,
         create(EventSchema, {
           id: { value: "terminal-system-event" },
           message: AnyMessages.pack(
@@ -1984,12 +1983,12 @@ describe("BoundedContext assembly", () => {
       );
       order.push("domain command finished");
     });
-    const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(async function () {
+    const closeStand = vi.spyOn(Stand.prototype, "close").mockImplementation(function () {
       const role = order.includes("domain Stand close") ? "System" : "domain";
       order.push(`${role} Stand close`);
-      throw role === "domain" ? domainHandleFailure : systemHandleFailure;
+      return Promise.reject(role === "domain" ? domainHandleFailure : systemHandleFailure);
     });
-    context = BoundedContext.multitenant("Tasks")
+    const context = BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
       .withSubscriptionRegistry(registry)
       .addCommandDispatcher(commandDispatcher)
@@ -1998,11 +1997,13 @@ describe("BoundedContext assembly", () => {
 
     try {
       const command = context.commandBus().post(createProjectionCommand("terminal-command"));
-      await vi.waitFor(() => expect(order).toEqual(["domain command accepted"]));
+      await vi.waitFor(() => {
+        expect(order).toEqual(["domain command accepted"]);
+      });
       const firstClose = context.close();
       const secondClose = context.close();
       expect(secondClose).toBe(firstClose);
-      releaseCommand?.();
+      releaseCommand();
       await expect(command).resolves.toBeUndefined();
       const failure = await firstClose.then(
         () => {
@@ -2038,18 +2039,18 @@ describe("BoundedContext assembly", () => {
       expect(() =>
         (
           boundedContextAccess as unknown as { systemPairing(context: BoundedContext): unknown }
-        ).systemPairing(context as BoundedContext),
+        ).systemPairing(context),
       ).toThrow("System pairing requires a built BoundedContext instance.");
-      expect(() => boundedContextAccess.tenantIndex(context as BoundedContext)).toThrow(
+      expect(() => boundedContextAccess.tenantIndex(context)).toThrow(
         "Tenant index requires a built BoundedContext instance.",
       );
-      expect(() => boundedContextAccess.storageFactory(context as BoundedContext)).toThrow(
+      expect(() => boundedContextAccess.storageFactory(context)).toThrow(
         "Storage access requires a built BoundedContext instance.",
       );
-      expect(() => boundedContextAccess.delivery(context as BoundedContext)).toThrow(
+      expect(() => boundedContextAccess.delivery(context)).toThrow(
         "Delivery access requires a built BoundedContext instance.",
       );
-      expect(() => boundedContextAccess.subscriptionRegistry(context as BoundedContext)).toThrow(
+      expect(() => boundedContextAccess.subscriptionRegistry(context)).toThrow(
         "Subscription registry access requires a built BoundedContext instance.",
       );
     } finally {

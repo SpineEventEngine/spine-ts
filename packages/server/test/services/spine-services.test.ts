@@ -44,6 +44,7 @@ import {
   ValidationErrorSchema,
   VersionSchema,
   file_spine_options,
+  type Event,
 } from "@spine-event-engine/proto";
 import { CommandService } from "@spine-event-engine/proto/client";
 import {

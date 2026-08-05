@@ -60,8 +60,12 @@ let eventSequence = 0;
 
 describe("SubscriptionObservers", () => {
   it("keeps event and entity-state observers on their explicitly selected buses", () => {
-    expect(SubscriptionObservers.observeEvent).toBeTypeOf("function");
-    expect(SubscriptionObservers.observeState).toBeTypeOf("function");
+    expect(
+      Object.getOwnPropertyDescriptor(SubscriptionObservers, "observeEvent")?.value,
+    ).toBeTypeOf("function");
+    expect(
+      Object.getOwnPropertyDescriptor(SubscriptionObservers, "observeState")?.value,
+    ).toBeTypeOf("function");
   });
 
   it("does not attach incomplete, state, or event targets without a local EventBus", () => {

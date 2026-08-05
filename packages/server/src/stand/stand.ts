@@ -1,7 +1,6 @@
 import { clone, create, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { type MessageSchema, TypeUrls } from "@spine-event-engine/core";
 import { VersionSchema, type Version } from "@spine-event-engine/proto";
-import { SubscriptionIdSchema } from "@spine-event-engine/proto/client";
 import {
   RecordColumn,
   RecordMask,
