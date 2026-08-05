@@ -1,6 +1,6 @@
 # T-0117: Dispatch Diagnostic System Events
 
-Status: Release verified; integration pending
+Status: Complete; merged, post-merge verified, and pushed
 
 ## Objective
 
