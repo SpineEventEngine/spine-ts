@@ -52,6 +52,16 @@ const minimumInt64 = -(1n << 63n);
 const maximumInt64 = (1n << 63n) - 1n;
 
 /**
+ * Spaces bounded transaction retries after Datastore aborts a conflicting attempt.
+ */
+const DatastoreRetries = Object.freeze({
+  afterAbort(attempt: number): Promise<void> {
+    const delayMs = 25 * 2 ** attempt + Math.floor(Math.random() * 100);
+    return new Promise((resolve) => setTimeout(resolve, delayMs));
+  },
+});
+
+/**
  * Datastore implementation bundle for the provider-only entity-history SPI.
  */
 export class DatastoreEntityStorage<I, S extends Message> {
@@ -470,7 +480,10 @@ class EntityCodec<I, S extends Message> {
         return;
       } catch (error) {
         await transaction.rollback().catch(() => undefined);
-        if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+        if ((error as { code?: unknown }).code === 10 && attempt < 2) {
+          await DatastoreRetries.afterAbort(attempt);
+          continue;
+        }
         // A commit acknowledgement may be lost. Re-open once and accept only
         // the exact durable fingerprint, never a divergent first binding.
         const reopened = DatastoreResults.first(await this.client.get(key));
@@ -961,7 +974,10 @@ export class DatastoreEntityCommitStorage<I, S extends Message> implements Entit
           await this.#codec.client.get(receiptKey, { wrapNumbers: true }),
         );
         if (receipt?.digest === digest) return "replayed";
-        if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+        if ((error as { code?: unknown }).code === 10 && attempt < 2) {
+          await DatastoreRetries.afterAbort(attempt);
+          continue;
+        }
         throw error;
       }
     }
@@ -1126,7 +1142,10 @@ const HistoryWrites = Object.freeze({
         return;
       } catch (error) {
         await transaction.rollback().catch(() => undefined);
-        if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+        if ((error as { code?: unknown }).code === 10 && attempt < 2) {
+          await DatastoreRetries.afterAbort(attempt);
+          continue;
+        }
         const durable = DatastoreResults.first(await codec.client.get(key));
         if (durable !== undefined && DatastoreValues.same(durable, data)) return;
         throw error;
@@ -1170,7 +1189,10 @@ const HistoryWrites = Object.freeze({
         return;
       } catch (error) {
         await transaction.rollback().catch(() => undefined);
-        if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+        if ((error as { code?: unknown }).code === 10 && attempt < 2) {
+          await DatastoreRetries.afterAbort(attempt);
+          continue;
+        }
         const durable = DatastoreResults.first(await codec.client.get(key));
         if (durable !== undefined && DatastoreValues.same(durable, data)) return;
         throw error;
@@ -1387,7 +1409,10 @@ const HistoryRetention = Object.freeze({
         return { revision: DatastoreValues.integer(root.revision), remaining, after: undefined };
       } catch (error) {
         await transaction.rollback().catch(() => undefined);
-        if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+        if ((error as { code?: unknown }).code === 10 && attempt < 2) {
+          await DatastoreRetries.afterAbort(attempt);
+          continue;
+        }
         throw error;
       }
     }
@@ -1444,7 +1469,10 @@ const HistoryRetention = Object.freeze({
         };
       } catch (error) {
         await transaction.rollback().catch(() => undefined);
-        if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+        if ((error as { code?: unknown }).code === 10 && attempt < 2) {
+          await DatastoreRetries.afterAbort(attempt);
+          continue;
+        }
         throw error;
       }
     }
@@ -1533,7 +1561,10 @@ const HistoryRetention = Object.freeze({
         return;
       } catch (error) {
         await transaction.rollback().catch(() => undefined);
-        if ((error as { code?: unknown }).code === 10 && attempt < 2) continue;
+        if ((error as { code?: unknown }).code === 10 && attempt < 2) {
+          await DatastoreRetries.afterAbort(attempt);
+          continue;
+        }
         throw error;
       }
     }
