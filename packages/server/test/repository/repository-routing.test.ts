@@ -866,8 +866,11 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
 
   subscribeTask(event: ProjectionState): void {
     ExecutingTaskProjection.subscriberCalls++;
-    if (event.name === "archive-lifecycle") {
-      this.archiveDraft();
+    if (event.name.endsWith("-lifecycle")) {
+      if (event.name === "archive-lifecycle") this.archiveDraft();
+      if (event.name === "unarchive-lifecycle") this.unarchiveDraft();
+      if (event.name === "delete-lifecycle") this.markDraftDeleted();
+      if (event.name === "restore-lifecycle") this.restoreDraft();
       return;
     }
     this.update((draft) =>
@@ -4998,12 +5001,19 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("emits a lifecycle-only projection archive after rehydration", async () => {
+  it("emits lifecycle-only projection transitions across delete and restore", async () => {
     const changes: SpineEvent[] = [];
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
       .addEventDispatcher({
-        messageSchemas: () => [EntityCreatedSchema, EntityStateChangedSchema, EntityArchivedSchema],
+        messageSchemas: () => [
+          EntityCreatedSchema,
+          EntityStateChangedSchema,
+          EntityArchivedSchema,
+          EntityUnarchivedSchema,
+          EntityDeletedSchema,
+          EntityRestoredSchema,
+        ],
         dispatch: (event) => {
           changes.push(event);
           return Promise.resolve();
@@ -5016,13 +5026,33 @@ describe("repository signal routing", () => {
         .post(createProjectionEvent("projection-seed", "projection-lifecycle"));
       await waitForCondition(() => changes.length === 2);
       changes.splice(0);
-      await context.eventBus().post(
-        createProjectionEvent("projection-archive", "projection-lifecycle", {
-          name: "archive-lifecycle",
-        }),
-      );
-      await waitForCondition(() => changes.length === 1);
-      expect(changes[0]?.message?.typeUrl).toBe(TypeUrls.derive(EntityArchivedSchema));
+      for (const [index, name] of [
+        "archive-lifecycle",
+        "archive-lifecycle",
+        "unarchive-lifecycle",
+        "delete-lifecycle",
+        "restore-lifecycle",
+      ].entries()) {
+        await context
+          .eventBus()
+          .post(
+            createProjectionEvent(`projection-${String(index)}`, "projection-lifecycle", { name }),
+          );
+      }
+      await waitForCondition(() => changes.length === 4);
+      expect(changes.map((event) => event.message?.typeUrl)).toEqual([
+        TypeUrls.derive(EntityArchivedSchema),
+        TypeUrls.derive(EntityUnarchivedSchema),
+        TypeUrls.derive(EntityDeletedSchema),
+        TypeUrls.derive(EntityRestoredSchema),
+      ]);
+      await expect(
+        standAccess.readCurrent(context.stand(), ProjectionStateSchema, "projection-lifecycle", {}),
+      ).resolves.toMatchObject({
+        archived: false,
+        deleted: false,
+        state: { name: "Task (projected)" },
+      });
     } finally {
       await context.close();
     }
