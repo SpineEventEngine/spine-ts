@@ -626,9 +626,9 @@ describe("DatastoreStorageFactory", () => {
     await expect(storage.queryEntries({})).rejects.toThrow(
       "Datastore query exceeded the client-side scan limit of 1",
     );
-    await expect(storage.queryEntries({ sort: [{ field: "id" }], limit: 1 })).resolves.toMatchObject([
-      { id: "a" },
-    ]);
+    await expect(
+      storage.queryEntries({ sort: [{ field: "id" }], limit: 1 }),
+    ).resolves.toMatchObject([{ id: "a" }]);
     expect(client.lastQuery?.limitValue).toBe(1);
     await expect(
       storage.queryEntries({
@@ -1216,10 +1216,12 @@ class MemoryDatastoreClient {
   > {
     this.runQueryCalls += 1;
     this.lastRunQueryOptions = options;
-    const entities = [...this.entities.entries()].map(([serializedKey, entity]) => ({
-      ...decodeProviderIntegers(entity, options),
-      [this.KEY]: memoryKey(serializedKey),
-    }));
+    const entities: Record<string | symbol, unknown>[] = [...this.entities.entries()].map(
+      ([serializedKey, entity]) => ({
+        ...decodeProviderIntegers(entity, options),
+        [this.KEY]: memoryKey(serializedKey),
+      }),
+    );
     const keyAfter = query.filters.find(
       (filter) => filter[0] === "__key__" && filter[1] === ">",
     )?.[2] as MemoryKey | undefined;
