@@ -1216,12 +1216,21 @@ class MemoryDatastoreClient {
       ...decodeProviderIntegers(entity, options),
       [this.KEY]: memoryKey(serializedKey),
     }));
+    const keyAfter = query.filters.find(
+      (filter) => filter[0] === "__key__" && filter[1] === ">",
+    )?.[2] as MemoryKey | undefined;
+    const filtered =
+      keyAfter === undefined
+        ? entities
+        : entities.filter(
+            (entity) => keyString(entity[this.KEY] as MemoryKey) > keyString(keyAfter),
+          );
     const offset =
       query.startCursor === undefined
         ? (query.offsetValue ?? 0)
         : Number(query.startCursor.toString());
     const end = query.limitValue === undefined ? undefined : offset + query.limitValue;
-    const page = entities.slice(offset, end);
+    const page = filtered.slice(offset, end);
     const next = offset + page.length;
     return Promise.resolve([
       page,

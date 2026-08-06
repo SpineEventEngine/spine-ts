@@ -517,6 +517,7 @@ const DatastoreQueryPushdown = Object.freeze(
         });
       }
       if (!(recordQuery.sort ?? []).some((order) => order.field === "id")) query.order("__key__");
+      if (DatastoreRecordQuery.isKeysetPage(recordQuery)) query.filter("__key__", ">", keyFor(recordQuery.after.id));
     }
 
     /**
@@ -628,6 +629,7 @@ const DatastoreRecordQuery = Object.freeze(
      * @returns The finite provider row bound.
      */
     limit<I>(query: RecordQuery<I>, scanLimit: number): number {
+      if (this.isKeysetPage(query)) return query.limit as number;
       if (
         query.limit !== undefined &&
         query.ids === undefined &&
@@ -638,6 +640,26 @@ const DatastoreRecordQuery = Object.freeze(
       )
         return query.limit;
       return scanLimit;
+    }
+
+    /** Returns whether a legacy query is exactly an ascending identifier keyset page. */
+    isKeysetPage<I>(query: RecordQuery<I>): boolean {
+      const order = query.sort;
+      return (
+        query.limit !== undefined &&
+        query.ids === undefined &&
+        query.filters === undefined &&
+        query.offset === undefined &&
+        order?.length === 1 &&
+        order[0]?.field === "id" &&
+        order[0].direction !== "desc" &&
+        query.after !== undefined &&
+        typeof query.after.id === "string" &&
+        query.after.values.length === 1 &&
+        query.after.values[0]?.field === "id" &&
+        typeof query.after.values[0]?.value === "string" &&
+        RecordValues.equal(query.after.values[0]?.value, query.after.id)
+      );
     }
   })(),
 );
