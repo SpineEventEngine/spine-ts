@@ -11,7 +11,7 @@ import {
   type ApplicationNodeLease,
 } from "@spine-event-engine/proto/generated/spine/system/deployment/application_node_lease_pb.js";
 
-import { ApplicationNode } from "./index.js";
+import { ApplicationNode } from "../index.js";
 
 const storageKey = "spine.deployment.ApplicationNodeLease:v1";
 const defaultCleanupBatchSize = 32;
@@ -132,7 +132,8 @@ export class LeasedNodeRegistry {
         ...(this.#cleanupAfter === undefined ? {} : { after: this.#cleanupAfter }),
         limit: this.#cleanupBatchSize,
       });
-      this.#cleanupAfter = records.length === 0 ? undefined : pageContinuation(records.at(-1));
+      this.#cleanupAfter =
+        records.length === 0 ? undefined : LeasePages.continuation(records.at(-1));
       if (records.length < this.#cleanupBatchSize) this.#cleanupAfter = undefined;
       const removals = await Promise.all(
         records.map(async ({ id, record }) => {
@@ -253,10 +254,15 @@ export const leaseRecordSpec: RecordSpec<string, ApplicationNodeLease> = new Rec
   schema: ApplicationNodeLeaseSchema,
   storageKey,
   idKind: "string",
-  extractId: (record) => recordId(record),
+  extractId: (record) => LeaseRecords.id(record),
 });
 
 const LeaseRecords = Object.freeze({
+  id(record: ApplicationNodeLease): string {
+    if (!record.nodeId.trim()) throw new Error("Application node lease record has no node ID.");
+    return record.nodeId;
+  },
+
   read(record: ApplicationNodeLease, expectedId?: string): NodeLease {
     const version = record.encodingVersion;
     const id = record.nodeId;
@@ -302,15 +308,11 @@ const LeaseRecords = Object.freeze({
   },
 });
 
-function recordId(record: ApplicationNodeLease): string {
-  const id = record.nodeId;
-  if (!id.trim()) throw new Error("Application node lease record has no node ID.");
-  return id;
-}
-
-function pageContinuation(
-  entry: RecordEntry<string, ApplicationNodeLease> | undefined,
-): RecordContinuation<string> {
-  if (entry === undefined) throw new Error("Lease page has no continuation row.");
-  return { values: [{ field: "id", value: entry.id }], id: entry.id };
-}
+const LeasePages = Object.freeze({
+  continuation(
+    entry: RecordEntry<string, ApplicationNodeLease> | undefined,
+  ): RecordContinuation<string> {
+    if (entry === undefined) throw new Error("Lease page has no continuation row.");
+    return { values: [{ field: "id", value: entry.id }], id: entry.id };
+  },
+});

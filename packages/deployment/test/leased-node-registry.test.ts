@@ -7,7 +7,7 @@ import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { ApplicationNode, LeasedNodeRegistry } from "../src/index.js";
-import { leaseRecordSpec } from "../src/leased-node-registry.js";
+import { leaseRecordSpec } from "../src/registry/leased-node-registry.js";
 
 describe("LeasedNodeRegistry", () => {
   it("fences a stale registration after a node ID is reused", async () => {
