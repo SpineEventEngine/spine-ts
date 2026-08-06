@@ -1,6 +1,6 @@
 # T-0123 Review Record
 
-Status: Accepted; final release rerun pending
+Status: Accepted; full release verification passed
 
 ## Second correction evidence
 
@@ -153,3 +153,10 @@ Final API re-review at `93280dd6` is clean. The public storage root remains at
 33 exports, the emitted provider-only subpath resolves, Datastore imports that
 subpath, and TSDoc/typechecking/API docs pass. All review concerns are accepted;
 only the fresh full release rerun remains.
+
+Fresh `pnpm verify:release` at `06e260fd` plus the accepted release corrections
+passes 192 test files with 3 skipped and 3,873 tests with 26 skipped. Coverage
+is 94.02% statements, 90.06% branches, 94.57% functions, and 95.04% lines.
+Every generated, build, lint, TSDoc, formatting, documentation/API, Buf,
+generated-clean, release-readiness, test, and coverage gate passes. T-0123 is
+accepted for integration.
