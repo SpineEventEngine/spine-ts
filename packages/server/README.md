@@ -27,6 +27,33 @@ For detailed contracts intended for coding agents, see the
 - ✅ Optionally exposes authenticated Connect and gRPC-Web browser access.
 - ✅ Owns readiness, rollback, process signals, and ordered shutdown.
 
+## 🧭 Understand the two event paths
+
+Each domain bounded context has an internal paired System Context. Domain events
+go to the domain `EventBus` and are durably appended to the domain `EventStore`.
+System events, such as committed entity-state notifications, go only to the
+System Context's `EventBus`; they never enter the domain EventStore. By default
+system events are forgotten after validation and notification. Call
+`persistSystemEvents()` when the application needs a separate optional System
+Context event store.
+
+Enable that option while assembling the context, before `build()` or
+`buildAsync()`:
+
+```ts
+import { BoundedContext } from "@spine-event-engine/server";
+
+const context = BoundedContext.singleTenant("Tasks").persistSystemEvents().build();
+await context.close();
+```
+
+`Stand` is the read side: it serves queries from current entity state. Exposed
+domain-event subscriptions observe domain events on the domain `EventBus`.
+Entity subscriptions observe `EntityStateChanged` on the paired System Context
+`EventBus` and turn those notifications into updates. A subscription is best
+effort, so clients use a query for initial state and recovery after reconnect
+or a possible gap.
+
 ## 🧱 Build a bounded context
 
 Start with an explicit tenant mode. Register entity classes after their Proto
@@ -177,13 +204,14 @@ one bounded drain; later drains can have a different lease owner. Events and
 later Process Manager commands use the same path. See [REFERENCE.md](REFERENCE.md)
 for operational delivery details.
 
-`Stand` observes domain events and committed Entity state changes from the
-EventBus. Its default registry uses the application's `StorageFactory`; a
-builder may supply another implementation. A definition is pending for at most
-30 seconds, active definitions have no framework TTL, and cancellation
-physically deletes the definition. Nodes reconcile their local listeners from a
-bounded complete snapshot every 10 seconds. Active streams and queues are
-process-local.
+Domain-event subscriptions observe exposed domain events on the domain
+`EventBus`. Entity subscriptions observe committed `EntityStateChanged`
+notifications on the paired System Context `EventBus`. Stand's default registry
+uses the application's `StorageFactory`; a builder may supply another
+implementation. A definition is pending for at most 30 seconds, active
+definitions have no framework TTL, and cancellation physically deletes the
+definition. Nodes reconcile their local listeners from a bounded complete
+snapshot every 10 seconds. Active streams and queues are process-local.
 
 ### Serve browser clients
 

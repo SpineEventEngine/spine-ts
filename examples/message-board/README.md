@@ -11,7 +11,7 @@ context, and a query-side view fit together.
 - ✅ How an Aggregate accepts a write and a Projection builds the read model.
 - ✅ Why browser traffic goes through an authenticated gateway while native
   gRPC remains private.
-- ✅ Why queries are authoritative and subscription updates only prompt refresh.
+- ✅ How normal complete subscription payloads update rows locally and when to recover by query.
 
 ## 🗺️ Application map
 
@@ -65,9 +65,9 @@ flowchart LR
   React -->|authoritative query| Gateway
   Native -->|query response| Gateway
   Gateway -->|query response| React
-  Projection -->|best-effort update hint| Native
-  Native -->|subscription hint| Gateway
-  Gateway -->|subscription hint| React
+  Projection -->|complete entity payload| Native
+  Native -->|best-effort payload fan-in| Gateway
+  Gateway -->|complete payload| React
 ```
 
 The browser never receives the native backend address. For local development,
@@ -115,11 +115,11 @@ class BoardMessageAggregate extends Aggregate<MessageId, typeof BoardMessageSche
 
 `BoardViewProjection.onMessagePosted()` turns that event into a
 `BoardMessageView` row. The UI queries rows oldest-first and listens to the
-same Projection topic. Its `useBoardSync` hook deliberately treats every
-delivery as a reason to re-query: notices can be duplicated, reordered, or
-missed, while the query result is authoritative. `Updating live` means the
-subscription is connected; posting and the follow-up query remain available
-when it is not.
+same Projection topic. Its `useBoardSync` hook applies a normal complete,
+validated payload directly to local rows. It uses an authoritative query only
+for initial state, reconnect, a possible gap, malformed data, or a successful
+post while disconnected. `Updating live` means the subscription is connected;
+posting and recovery remain available when it is not.
 
 Message Board messages are entities, not domain-event subscriptions. Reusing a
 `MessageId` leaves the first message unchanged and yields the generated

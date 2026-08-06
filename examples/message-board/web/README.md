@@ -12,8 +12,8 @@ is down, the UI reports the failure.
   Command+Enter or Control+Enter post shortcut.
 - ✅ Server-authored Proto validation messages displayed beside each field.
 - ✅ Oldest-first messages with approximate relative time.
-- ✅ A board query followed by Projection subscription notices.
-- ✅ Re-query after reconnect or a possible update gap.
+- ✅ A board query followed by complete Projection update payloads.
+- ✅ Local updates for normal payloads and authoritative recovery when needed.
 - ✅ One live-status badge: `Updating live` only for a connected subscription,
   otherwise `No live updates`.
 
@@ -33,9 +33,11 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The UI connects to
 
 The page posts `PostMessage`, queries the `BoardMessageView` read-side
 Projection for board `general`, and subscribes to the same Projection topic.
-An update tells the UI to refresh; it is not a complete message history.
-Duplicate, reordered, and missing notices are allowed, so authoritative query
-results always win.
+A normal complete entity payload is validated and applied to the local oldest-
+first rows without another query. The page queries only for its initial state,
+after reconnect, a possible gap, a malformed payload, or a successful post
+while live updates are disconnected. Duplicate, reordered, and missing delivery
+are still possible, so those recovery queries remain authoritative.
 
 The Message label describes the keyboard shortcut. In the textarea, press
 Command+Enter on macOS or Control+Enter on other platforms to post; plain Enter

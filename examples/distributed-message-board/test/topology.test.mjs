@@ -30,9 +30,11 @@ test("creates a local development signing key instead of referring to an absent 
   assert.match(source, /fixture-private-key\.pem/u);
   assert.doesNotMatch(source, /BEGIN PRIVATE KEY/u);
   assert.match(readFileSync(gitignore, "utf8"), /^fixture-private-key\.pem$/mu);
-  const lines = source.split("\n");
-  for (const line of [lines[19], lines[21], lines[28]])
-    assert.equal(line.match(/\\+$/u)?.[0].length, 1);
+  const command = source.match(
+    /openssl genpkey[^\n]*\\\n\s+-out examples\/distributed-message-board\/fixture-private-key\.pem\nMESSAGE_BOARD_SESSION_PRIVATE_KEY=[^\n]*\\\n\s+pnpm --dir examples\/distributed-message-board start/u,
+  );
+  assert.notEqual(command, null, "the key and startup command must retain their continuations");
+  assert.equal(command[0].match(/\\+$/gmu)?.length, 2);
 });
 
 test("documents the reuse boundary and finite operator lifecycle", () => {
