@@ -152,6 +152,11 @@ export class GceRegistrar {
     this.#scheduler = options.scheduler ?? systemScheduler;
     this.#now = options.now ?? Date.now;
     this.#deadlines = options.deadlines ?? systemDeadlines;
+    if (
+      options.operationTimeoutMs !== undefined &&
+      (!Number.isSafeInteger(options.operationTimeoutMs) || options.operationTimeoutMs < 1)
+    )
+      throw new RangeError("GCE registrar operation timeout must be a positive safe integer.");
     this.#operationTimeoutMs = options.operationTimeoutMs ?? 20_000;
   }
 

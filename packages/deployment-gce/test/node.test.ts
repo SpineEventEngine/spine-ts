@@ -107,6 +107,63 @@ describe("GceApplicationNode", () => {
       globalThis.fetch = original;
     }
   });
+
+  it("rejects failed, malformed, and cancelled metadata reads", async () => {
+    const original = globalThis.fetch;
+    try {
+      for (const status of [400, 503]) {
+        globalThis.fetch = async () => new Response("unavailable", { status });
+        await expect(new GceMetadataService().read(new AbortController().signal)).rejects.toThrow(
+          "metadata request failed",
+        );
+      }
+
+      for (const [path, value] of [
+        ["project/project-id", " "],
+        ["instance/zone", " "],
+        ["instance/id", "not-a-number"],
+        ["instance/network-interfaces/0/ip", " "],
+      ]) {
+        globalThis.fetch = async (input) => {
+          const requested = String(input).replace(
+            "http://metadata.google.internal/computeMetadata/v1/",
+            "",
+          );
+          const body =
+            requested === path
+              ? value
+              : new Map([
+                  ["project/project-id", "project"],
+                  ["instance/zone", "projects/1/zones/zone-a"],
+                  ["instance/id", "42"],
+                  ["instance/network-interfaces/0/ip", "10.0.0.1"],
+                ]).get(requested) ?? "";
+          return new Response(body, { status: 200 });
+        };
+        await expect(new GceMetadataService().read(new AbortController().signal)).rejects.toThrow(
+          "metadata response is invalid",
+        );
+      }
+
+      const signals: AbortSignal[] = [];
+      globalThis.fetch = async (_input, init) => {
+        const signal = init?.signal;
+        if (!(signal instanceof AbortSignal)) throw new Error("missing abort signal");
+        signals.push(signal);
+        return await new Promise<Response>((_resolve, reject) =>
+          signal.addEventListener("abort", () => reject(new Error("cancelled")), { once: true }),
+        );
+      };
+      const controller = new AbortController();
+      const reading = new GceMetadataService().read(controller.signal);
+      controller.abort();
+      await expect(reading).rejects.toThrow("cancelled");
+      expect(signals).toHaveLength(4);
+      expect(signals.every((signal) => signal.aborted)).toBe(true);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
   it("derives a stable private node and preserves canonical overrides", () => {
     expect(
       GceApplicationNode.create(
@@ -195,6 +252,55 @@ describe("GceApplicationNode", () => {
     await registrar.close();
     expect(calls).toEqual(["register", "cancel", "renew", "cleanup", "remove"]);
   });
+
+  it("uses exact twenty-second renewal and sixty-second lease-expiry timing", async () => {
+    const ticks: (() => void)[] = [];
+    const delays: number[] = [];
+    const expiries: number[] = [];
+    let now = 100;
+    let secondSchedule: (() => void) | undefined;
+    const renewed = new Promise<void>((resolve) => (secondSchedule = resolve));
+    const registrar = new GceRegistrar({
+      registry: {
+        register: async (lease: { expiresAt: number }) => (expiries.push(lease.expiresAt), true),
+        renew: async (_nodeId: string, _identity: string, expiresAt: number) =>
+          (expiries.push(expiresAt), true),
+        cleanup: async () => 0,
+        remove: async () => true,
+      } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      now: () => now,
+      scheduler: {
+        schedule: (delay, onTick) => (
+          delays.push(delay),
+          ticks.push(onTick),
+          delays.length === 2 && secondSchedule?.(),
+          () => undefined
+        ),
+      },
+    });
+    await registrar.start();
+    now = 20_100;
+    ticks.shift()?.();
+    await renewed;
+    await registrar.close();
+    expect(delays).toEqual([20_000, 20_000]);
+    expect(expiries).toEqual([60_100, 80_100]);
+  });
+
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects an invalid registrar operation timeout of %s",
+    (operationTimeoutMs) => {
+      expect(
+        () =>
+          new GceRegistrar({
+            registry: {} as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+            node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+            operationTimeoutMs,
+          }),
+      ).toThrow("operation timeout");
+    },
+  );
 
   it("reads complete registry snapshots using its injected clock", async () => {
     const registry = {
