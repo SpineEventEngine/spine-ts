@@ -22,6 +22,7 @@ describe("GceApplicationNode", () => {
     const registry = {
       register: async () => (calls.push("register"), true),
       renew: async () => (calls.push("renew"), true),
+      cleanup: async () => (calls.push("cleanup"), 0),
       remove: async () => (calls.push("remove"), true),
     } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
     const registrar = new GceRegistrar({
@@ -41,7 +42,7 @@ describe("GceApplicationNode", () => {
     tick?.();
     await Promise.resolve();
     await registrar.close();
-    expect(calls).toEqual(["register", "renew", "cancel", "remove"]);
+    expect(calls).toEqual(["register", "renew", "cancel", "cleanup", "remove"]);
   });
 
   it("reads complete registry snapshots using its injected clock", async () => {
