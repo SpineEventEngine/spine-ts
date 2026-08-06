@@ -151,15 +151,26 @@ durably closed.
   Managers, delivery-server shard fan-out and single-owner drain, EventBus-driven
   Stand, a configurable durable Stand subscription registry, one Gateway
   connected to all application nodes, and a Distributed Message Board.
-- **Wave 7:** horizontal best-effort subscription hardening. It retains no
-  cluster-complete guarantee; queries remain authoritative. Its Q&A must also
-  decide application redeployment and update behavior.
+- **Wave 7:** one Gateway dynamically discovers all current application nodes
+  on GKE or GCE; operators scale identical nodes and perform compatible rolling
+  or explicit incompatible replacements. It adds generic and platform-specific
+  deployment packages, Terraform, scale-to-zero behavior, and detailed GKE/GCE
+  guides. Cloud Run and multiple Gateways are excluded.
+- **Wave 8:** multiple-Gateway behavior, framework operational logging and a
+  Google Cloud Logging adapter, the then-current `validation-ts` upgrade, and
+  Datastore/RDBMS physical-layout tuning controls. It does not promise that the
+  framework can make an operator's Gateway replacement interruption-free. Its
+  logging work emits an ERROR when application-node discovery exceeds the
+  configured expected count, while service continues across all nodes.
 
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
 subsequent System Context and payload-first correction that must precede Wave 7.
-Wave 7 still requires a separate human Q&A. Do not publish packages to npm until
-all waves are complete and publication is revisited with the human.
+Wave 7 Q&A and its dependency-ordered T-0121 through T-0128 plan are approved
+under T-0120. T-0121 may start after T-0120 review convergence, integration,
+post-merge verification, and remote synchronization. Do not publish packages
+to npm until all waves are complete and publication is revisited with the
+human.
 
 ## Authored API And Example Quality Correction
 
