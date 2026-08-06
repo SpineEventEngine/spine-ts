@@ -134,16 +134,6 @@ export type OnSubscriptionDefinition = (
 ) => Promise<void>;
 
 /**
- * @deprecated Uses a backend envelope only at the native seam. New binding implementations use
- * `OnSubscriptionDefinition` so durable records never retain backend-specific data.
- */
-export type OnBackendSubscription = (
-  envelope: BackendSubscriptionEnvelope,
-  signal: SubscriptionAbortSignal,
-  guard?: () => Promise<boolean>,
-) => Promise<void>;
-
-/**
  * Opaque result of an ownership transition.
  */
 export interface SubscriptionBindingTransition {
@@ -261,8 +251,6 @@ export interface SubscriptionBindings {
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
-    /** @deprecated Uses `onDefinition` instead. */
-    readonly onBackend?: OnBackendSubscription;
 
     /**
      * Active-effect cancellation signal. A pre-aborted signal starts no backend work.
@@ -282,8 +270,6 @@ export interface SubscriptionBindings {
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onDefinition: OnSubscriptionDefinition;
-    /** @deprecated Uses `onDefinition` instead. */
-    readonly onBackend?: OnBackendSubscription;
   }): Promise<SubscriptionBindingTransition>;
 
   /**
@@ -406,9 +392,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
    * @returns Returns the new public binding identifier.
    */
   create(input: {
-    readonly definition?: PublicSubscriptionWire;
-    /** @deprecated Uses `definition` instead. */
-    readonly backend?: BackendSubscriptionEnvelope;
+    readonly definition: PublicSubscriptionWire;
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly expiresAtMs: number;
@@ -416,13 +400,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   }): Promise<{ readonly id: string }> {
     try {
       if (this.#closed) throw new Error("subscription bindings are closed");
-      const definition =
-        input.definition ??
-        (input.backend === undefined
-          ? undefined
-          : { kind: "public-subscription" as const, bytes: input.backend.bytes });
-      if (definition === undefined) throw new Error("subscription definition is required");
-      if (definition.bytes.byteLength > this.#limits.maxBackendEnvelopeBytes)
+      if (input.definition.bytes.byteLength > this.#limits.maxBackendEnvelopeBytes)
         throw new Error("backend-envelope-too-large");
       const reservation = input.reservation;
       if (
@@ -434,7 +412,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       if (id.length === 0 || this.#bindings.has(id))
         throw new Error("subscription ID must be unique");
       this.#bindings.set(id, {
-        definition: definition.bytes.slice(),
+        definition: input.definition.bytes.slice(),
         principalFingerprint: input.principalFingerprint,
         tenant: input.tenant,
         expiresAtMs: input.expiresAtMs,
@@ -465,9 +443,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onDefinition?: OnSubscriptionDefinition;
-    /** @deprecated Uses `onDefinition` instead. */
-    readonly onBackend?: OnBackendSubscription;
+    readonly onDefinition: OnSubscriptionDefinition;
     readonly signal: AbortSignal;
   }): Promise<SubscriptionBindingTransition> {
     if (input.signal.aborted) return { kind: "denied" };
@@ -482,7 +458,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       };
       input.signal.addEventListener("abort", abort, { once: true });
       try {
-        await this.#runEffect(binding, input.onDefinition ?? this.#legacyCallback(input.onBackend));
+        await this.#runEffect(binding, input.onDefinition);
       } catch (error) {
         if (binding.cancelRequested) return { kind: "activated" };
         binding.state = "inactive";
@@ -504,9 +480,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onDefinition?: OnSubscriptionDefinition;
-    /** @deprecated Uses `onDefinition` instead. */
-    readonly onBackend?: OnBackendSubscription;
+    readonly onDefinition: OnSubscriptionDefinition;
   }): Promise<SubscriptionBindingTransition> {
     const admission = this.#precheck(input);
     if (admission === "absent") return { kind: "closed" };
@@ -522,7 +496,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
       if (binding.state === "closed") return { kind: "closed" };
       binding.state = "cancelling";
       binding.controller = new AbortController();
-      await this.#runEffect(binding, input.onDefinition ?? this.#legacyCallback(input.onBackend));
+      await this.#runEffect(binding, input.onDefinition);
       this.#dispose(input.id, binding);
       return { kind: "closed" };
     });
@@ -603,24 +577,6 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
     } finally {
       void settled.then(() => definition.bytes.fill(0));
     }
-  }
-  #legacyCallback(callback: OnBackendSubscription | undefined): OnSubscriptionDefinition {
-    if (callback === undefined) throw new Error("subscription definition callback is required");
-    return async (definition, signal, guard) => {
-      const envelope: BackendSubscriptionEnvelope = {
-        kind: "backend-subscription-envelope",
-        bytes: definition.bytes.slice(),
-      };
-      try {
-        await callback(envelope, signal, guard);
-      } catch (error) {
-        throw error instanceof Error
-          ? error
-          : new Error("Subscription backend callback threw a non-Error value.", { cause: error });
-      } finally {
-        envelope.bytes.fill(0);
-      }
-    };
   }
   #disposeAfterWork(id: string, binding: Binding): Promise<void> {
     const cleanup = binding.tail
@@ -1052,13 +1008,6 @@ export class SubscriptionGateway {
         signal: active,
         onDefinition: (definition, effectSignal, guard) =>
           this.#forwardActivate(definition, updates, effectSignal, guard),
-        onBackend: (backend, effectSignal, guard) =>
-          this.#forwardActivate(
-            { kind: "public-subscription", bytes: backend.bytes.slice() },
-            updates,
-            effectSignal,
-            guard,
-          ),
       });
       if (result.kind !== "activated") return SubscriptionGatewayValues.rejected("denied");
       await this.#cleanupAfterActivationFailure(id, fingerprint, tenant, nowMs);
@@ -1087,12 +1036,6 @@ export class SubscriptionGateway {
         nowMs,
         onDefinition: (definition, effectSignal, guard) =>
           this.#forwardCancel(definition, effectSignal, guard),
-        onBackend: (backend, effectSignal, guard) =>
-          this.#forwardCancel(
-            { kind: "public-subscription", bytes: backend.bytes.slice() },
-            effectSignal,
-            guard,
-          ),
       });
       return result.kind === "denied"
         ? SubscriptionGatewayValues.rejected("denied")

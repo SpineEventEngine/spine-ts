@@ -15,6 +15,19 @@ interface PendingSnapshot {
   readonly generation: number;
 }
 
+interface SubscriptionChild {
+  readonly backend: BackendSubscriptionEnvelope;
+  readonly controller: AbortController;
+  activation: Promise<void>;
+  readonly token: string;
+  readonly incarnation: number;
+}
+
+interface FailedChildCleanup {
+  readonly client: DynamicUnaryClient;
+  readonly backend: BackendSubscriptionEnvelope;
+}
+
 /**
  * Represents a connected unary backend with deterministic disposal.
  */
@@ -63,6 +76,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       readonly endpoint: string;
       readonly tlsServerName: string | undefined;
       readonly client: DynamicUnaryClient;
+      readonly incarnation: number;
     }
   >();
   #next = 0;
@@ -75,13 +89,15 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #closing: Promise<void> | undefined;
   #generation = 0;
   readonly #failedDisposals = new Set<DynamicUnaryClient>();
+  readonly #failedChildCleanup = new Set<FailedChildCleanup>();
+  #nextIncarnation = 0;
   #nodes: readonly ApplicationNode[] = [];
   readonly #definitions = new Map<
     string,
     {
       wire: PublicSubscriptionWire;
       updates: SubscriptionUpdateSink;
-      readonly children: Map<string, BackendSubscriptionEnvelope>;
+      readonly children: Map<string, SubscriptionChild>;
     }
   >();
 
@@ -143,6 +159,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   async #replace(nodes: readonly ApplicationNode[], generation: number): Promise<void> {
     if (this.#closed || generation !== this.#generation) return;
     await this.#retryDisposals();
+    await this.#retryChildCleanup();
     const wanted = new Map<string, ApplicationNode>();
     for (const node of nodes) {
       const previous = wanted.get(node.id);
@@ -159,6 +176,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       if (node?.endpoint === current.endpoint && node.tlsServerName === current.tlsServerName)
         continue;
       this.#clients.delete(id);
+      await this.#removeNodeChildren(id, current.client);
       await this.#dispose(current.client);
       if (generation !== this.#generation) return;
     }
@@ -204,27 +222,17 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
 
   async #reconcileDefinitions(generation: number): Promise<void> {
     for (const definition of this.#definitions.values()) {
-      for (const [id] of definition.children)
-        if (!this.#clients.has(id)) definition.children.delete(id);
+      for (const [id, child] of definition.children)
+        if (!this.#clients.has(id)) {
+          definition.children.delete(id);
+          await this.#cleanupChild(child, undefined);
+        }
       const missing = [...this.#clients.entries()].filter(([id]) => !definition.children.has(id));
       for (let index = 0; index < missing.length; index += this.#maxConcurrentStarts)
         await Promise.all(
-          missing.slice(index, index + this.#maxConcurrentStarts).map(async ([id, current]) => {
-            if (generation !== this.#generation || this.#closed) return;
-            const backend = await current.client.subscribe(
-              { kind: "public-subscription", bytes: definition.wire.bytes.slice() },
-              new AbortController().signal,
-            );
-            if (generation !== this.#generation || !this.#clients.has(id)) {
-              await current.client.dispose(backend, new AbortController().signal);
-              return;
-            }
-            definition.children.set(id, backend);
-            void current.client.activate(
-              { wire: definition.wire, updates: definition.updates },
-              new AbortController().signal,
-            );
-          }),
+          missing
+            .slice(index, index + this.#maxConcurrentStarts)
+            .map(([id, current]) => this.#startChild(definition, id, current, generation)),
         );
     }
   }
@@ -247,7 +255,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       [...definition.children].map(async ([id, child]) => {
         const client = this.#clients.get(id)?.client;
         if (client === undefined) return;
-        await client.dispose(child, signal);
+        child.controller.abort();
+        await client.dispose(child.backend, signal);
+        await child.activation;
       }),
     );
   }
@@ -271,6 +281,100 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     definition.wire = { kind: "public-subscription", bytes: wire.bytes.slice() };
     definition.updates = updates;
     await this.reconcile([...this.#nodes.values()]);
+  }
+
+  async #startChild(
+    definition: {
+      wire: PublicSubscriptionWire;
+      updates: SubscriptionUpdateSink;
+      children: Map<string, SubscriptionChild>;
+    },
+    id: string,
+    current: {
+      readonly client: DynamicUnaryClient;
+      readonly incarnation: number;
+    },
+    generation: number,
+  ): Promise<void> {
+    if (generation !== this.#generation || this.#closed) return;
+    const controller = new AbortController();
+    const backend = await current.client.subscribe(
+      { kind: "public-subscription", bytes: definition.wire.bytes.slice() },
+      controller.signal,
+    );
+    if (
+      generation !== this.#generation ||
+      this.#clients.get(id)?.incarnation !== current.incarnation ||
+      this.#closed
+    ) {
+      await this.#cleanupChild(
+        {
+          backend,
+          controller,
+          activation: Promise.resolve(),
+          token: "stale",
+          incarnation: current.incarnation,
+        },
+        current.client,
+      );
+      return;
+    }
+    const token = crypto.randomUUID();
+    const child: SubscriptionChild = {
+      backend,
+      controller,
+      token,
+      incarnation: current.incarnation,
+      activation: Promise.resolve(),
+    };
+    definition.children.set(id, child);
+    child.activation = current.client
+      .activate({ wire: definition.wire, updates: definition.updates }, controller.signal)
+      .catch(() => undefined)
+      .then(() => this.#completeChild(definition, id, child));
+  }
+
+  async #completeChild(
+    definition: { children: Map<string, SubscriptionChild> },
+    id: string,
+    child: SubscriptionChild,
+  ): Promise<void> {
+    if (definition.children.get(id) !== child || child.controller.signal.aborted) return;
+  }
+
+  async #removeNodeChildren(id: string, client: DynamicUnaryClient): Promise<void> {
+    for (const definition of this.#definitions.values()) {
+      const child = definition.children.get(id);
+      if (child === undefined) continue;
+      definition.children.delete(id);
+      await this.#cleanupChild(child, client);
+    }
+  }
+
+  async #cleanupChild(
+    child: SubscriptionChild,
+    client: DynamicUnaryClient | undefined,
+  ): Promise<void> {
+    child.controller.abort();
+    const cleanupClient = client;
+    if (cleanupClient !== undefined) {
+      try {
+        await cleanupClient.dispose(child.backend, new AbortController().signal);
+      } catch {
+        this.#failedChildCleanup.add({ client: cleanupClient, backend: child.backend });
+      }
+    }
+    await child.activation.catch(() => undefined);
+  }
+
+  async #retryChildCleanup(): Promise<void> {
+    for (const pending of [...this.#failedChildCleanup])
+      try {
+        await pending.client.dispose(pending.backend, new AbortController().signal);
+        this.#failedChildCleanup.delete(pending);
+      } catch {
+        // A later membership reconciliation retries this cleanup.
+      }
   }
 
   async #dispose(client: DynamicUnaryClient): Promise<void> {
@@ -301,6 +405,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         endpoint: node.endpoint,
         tlsServerName: node.tlsServerName,
         client,
+        incarnation: ++this.#nextIncarnation,
       });
   }
 
@@ -335,9 +440,11 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     this.#closed = true;
     for (const controller of this.#creating) controller.abort();
     await this.#running;
+    for (const [id, current] of this.#clients) await this.#removeNodeChildren(id, current.client);
     await Promise.all([...this.#clients.values()].map(({ client }) => this.#dispose(client)));
     this.#clients.clear();
     await this.#retryDisposals();
+    await this.#retryChildCleanup();
     if (this.#failedDisposals.size > 0)
       throw new Error("Gateway dynamic client cleanup remains incomplete.");
   }

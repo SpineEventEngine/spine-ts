@@ -632,7 +632,6 @@ export type {
   SubscriptionTopicWire,
   PublicSubscriptionWire,
   BackendSubscriptionEnvelope,
-  OnBackendSubscription,
   OnSubscriptionDefinition,
   SubscriptionUpdateSink,
   SubscriptionUpdateWire,

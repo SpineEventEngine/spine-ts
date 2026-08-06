@@ -173,7 +173,7 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: undefined,
       expiresAtMs: 100,
@@ -184,7 +184,7 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: async () => {
+      onDefinition: async () => {
         await firstMayFinish;
         throw new Error("first activation failed");
       },
@@ -198,7 +198,7 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 1,
       signal: controller.signal,
-      onBackend: () => {
+      onDefinition: () => {
         queuedNativeCalls++;
         return Promise.resolve();
       },
@@ -218,7 +218,7 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: undefined,
       expiresAtMs: 100,
@@ -230,7 +230,7 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: async (_backend, signal) => {
+      onDefinition: async (_backend, signal) => {
         await new Promise<void>((resolve) => {
           signal.addEventListener(
             "abort",
@@ -248,7 +248,7 @@ describe("SubscriptionGateway", () => {
       principalFingerprint: "owner",
       tenant: undefined,
       nowMs: 1,
-      onBackend: () => {
+      onDefinition: () => {
         cancels++;
         return Promise.resolve();
       },
@@ -478,7 +478,7 @@ describe("SubscriptionGateway", () => {
     });
     await expect(
       unavailableId.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "owner",
         tenant: undefined,
         expiresAtMs: 100,
@@ -495,11 +495,11 @@ describe("SubscriptionGateway", () => {
         principalFingerprint: "owner",
         tenant: undefined,
         nowMs,
-        onBackend: () => Promise.resolve(),
+        onDefinition: () => Promise.resolve(),
       });
     await expect(cancel("missing", 0)).resolves.toEqual({ kind: "closed" });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: undefined,
       expiresAtMs: 1,
@@ -555,7 +555,7 @@ describe("SubscriptionGateway", () => {
     });
     await expect(
       oversize.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1, 2]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1, 2]) },
         principalFingerprint: "p",
         tenant: undefined,
         expiresAtMs: 100,
@@ -567,7 +567,7 @@ describe("SubscriptionGateway", () => {
     });
     await expect(
       emptyId.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
         principalFingerprint: "p",
         tenant: undefined,
         expiresAtMs: 100,
@@ -578,7 +578,7 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     const input = {
-      backend: { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription" as const, bytes: new Uint8Array([1]) },
       principalFingerprint: "p",
       tenant: undefined,
       expiresAtMs: 100,
@@ -623,16 +623,16 @@ describe("SubscriptionGateway", () => {
     const guarded = {
       create: bindings.create.bind(bindings),
       activate: async (input: Parameters<typeof bindings.activate>[0]) => {
-        await input.onBackend(
-          { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        await input.onDefinition(
+          { kind: "public-subscription", bytes: new Uint8Array([1]) },
           new AbortController().signal,
           () => Promise.resolve(false),
         );
         return { kind: "activated" as const };
       },
       cancel: async (input: Parameters<typeof bindings.cancel>[0]) => {
-        await input.onBackend(
-          { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+        await input.onDefinition(
+          { kind: "public-subscription", bytes: new Uint8Array([1]) },
           new AbortController().signal,
           () => Promise.resolve(false),
         );
@@ -686,7 +686,7 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: "tenant",
       expiresAtMs: 100,
@@ -697,7 +697,7 @@ describe("SubscriptionGateway", () => {
         principalFingerprint: "other",
         tenant: "tenant",
         nowMs: 1,
-        onBackend: () => {
+        onDefinition: () => {
           throw new Error("must not run");
         },
       }),
@@ -775,7 +775,7 @@ describe("SubscriptionGateway", () => {
     });
     const source = new Uint8Array([1, 2, 3]);
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: source },
+      definition: { kind: "public-subscription", bytes: source },
       principalFingerprint: "p",
       tenant: undefined,
       expiresAtMs: 100,
@@ -787,7 +787,7 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 1,
       signal: new AbortController().signal,
-      onBackend: ({ bytes }) => {
+      onDefinition: ({ bytes }) => {
         callbackBytes = bytes;
         bytes.fill(8);
         return Promise.resolve();
@@ -800,7 +800,7 @@ describe("SubscriptionGateway", () => {
       principalFingerprint: "p",
       tenant: undefined,
       nowMs: 1,
-      onBackend: ({ bytes }) => {
+      onDefinition: ({ bytes }) => {
         retryBytes = bytes;
         return Promise.resolve();
       },
@@ -904,7 +904,7 @@ describe("SubscriptionGateway", () => {
     });
     const closing = bindings.close();
     const create = bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "p",
       tenant: undefined,
       expiresAtMs: 10,
@@ -926,7 +926,7 @@ describe("SubscriptionGateway", () => {
       },
     });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: undefined,
       expiresAtMs: 100,
@@ -937,7 +937,7 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 0,
       signal: new AbortController().signal,
-      onBackend: async (_envelope, signal) => {
+      onDefinition: async (_envelope, signal) => {
         await new Promise<void>((resolve) => {
           releaseActivation = resolve;
           signal.addEventListener(
@@ -974,7 +974,7 @@ describe("SubscriptionGateway", () => {
       },
     });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: undefined,
       expiresAtMs: 1,
@@ -985,7 +985,7 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 0,
       signal: new AbortController().signal,
-      onBackend: async () =>
+      onDefinition: async () =>
         new Promise<void>((resolve) => {
           releaseActivation = resolve;
         }),
@@ -1002,14 +1002,14 @@ describe("SubscriptionGateway", () => {
     expect(bindings.size).toBe(0);
   });
 
-  it("tracks a synchronous callback failure and releases its private envelope", async () => {
+  it("tracks a synchronous callback failure and releases its subscription definition", async () => {
     let envelope: Uint8Array | undefined;
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
       dispose: () => Promise.resolve(),
     });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1021,7 +1021,7 @@ describe("SubscriptionGateway", () => {
         tenant: undefined,
         nowMs: 0,
         signal: new AbortController().signal,
-        onBackend: (received) => {
+        onDefinition: (received) => {
           envelope = received.bytes;
           throw new Error("synchronous activation failure");
         },
@@ -1038,7 +1038,7 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1051,7 +1051,7 @@ describe("SubscriptionGateway", () => {
         tenant: undefined,
         nowMs: 0,
         signal: new AbortController().signal,
-        onBackend: () => {
+        onDefinition: () => {
           // eslint-disable-next-line @typescript-eslint/only-throw-error -- exercises raw callback normalization.
           throw "non-Error callback failure";
         },
@@ -1075,7 +1075,7 @@ describe("SubscriptionGateway", () => {
       },
     });
     await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "owner",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1086,7 +1086,7 @@ describe("SubscriptionGateway", () => {
       tenant: undefined,
       nowMs: 0,
       signal: new AbortController().signal,
-      onBackend: async () =>
+      onDefinition: async () =>
         new Promise<void>((resolve) => {
           releaseActivation = resolve;
         }),
@@ -1106,7 +1106,7 @@ describe("SubscriptionGateway", () => {
     expect(bindings.size).toBe(0);
   });
 
-  it("rejects a fabricated actor context before the backend callback", async () => {
+  it("rejects a fabricated actor context before the definition callback", async () => {
     const fixture = setup();
     const fabricated = toBinary(
       TopicSchema,
@@ -1180,7 +1180,7 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     const input = {
-      backend: { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription" as const, bytes: new Uint8Array([1]) },
       principalFingerprint: "p",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1207,13 +1207,13 @@ describe("SubscriptionGateway", () => {
       },
     });
     const first = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
       principalFingerprint: "p",
       tenant: undefined,
       expiresAtMs: 1,
     });
     const second = await bindings.create({
-      backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([2]) },
+      definition: { kind: "public-subscription", bytes: new Uint8Array([2]) },
       principalFingerprint: "p",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1227,7 +1227,7 @@ describe("SubscriptionGateway", () => {
         tenant: undefined,
         nowMs: 2,
         signal: new AbortController().signal,
-        onBackend: () => {
+        onDefinition: () => {
           calls.push("activate");
           return Promise.resolve();
         },
@@ -1250,7 +1250,7 @@ describe("SubscriptionGateway", () => {
       dispose: () => Promise.resolve(),
     });
     const input = {
-      backend: { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) },
+      definition: { kind: "public-subscription" as const, bytes: new Uint8Array([1]) },
       principalFingerprint: "p",
       tenant: undefined,
       expiresAtMs: 100,
@@ -1276,7 +1276,7 @@ describe("SubscriptionGateway", () => {
     });
     for (let id = 0; id < 2; id++)
       await bindings.create({
-        backend: { kind: "backend-subscription-envelope", bytes: new Uint8Array([id]) },
+        definition: { kind: "public-subscription", bytes: new Uint8Array([id]) },
         principalFingerprint: "p",
         tenant: undefined,
         expiresAtMs: 100,
@@ -1425,7 +1425,7 @@ describe("SubscriptionGateway", () => {
     expect(fixture.bindings.size).toBe(1);
   });
 
-  it("rejects stale Actor and Tenant Activate and Cancel at the gateway without backend callbacks", async () => {
+  it("rejects stale Actor and Tenant Activate and Cancel at the gateway without definition callbacks", async () => {
     const fixture = setup();
     const subscriptionGateway = gateway(fixture);
     const wire = await subscribe(subscriptionGateway);
