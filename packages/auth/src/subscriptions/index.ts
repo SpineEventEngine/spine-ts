@@ -206,6 +206,11 @@ export interface SubscriptionCapacityReservation {
   // prettier-ignore
 
   /**
+   * Identifies the final public logical subscription before native creation begins.
+   */
+  readonly id: string;
+
+  /**
    * Clears the previously reserved binding slot.
    *
    * @returns Completes after the slot is available again.
@@ -331,6 +336,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
         throw new Error("binding-capacity-exceeded");
       let released = false;
       const reservation: SubscriptionCapacityReservation = {
+        id: this.#nextId(),
         release: () => {
           if (!released) {
             released = true;
@@ -402,7 +408,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
         this.#bindings.size + this.#reservations.size >= this.#limits.bindingLimit
       )
         throw new Error("binding-capacity-exceeded");
-      const id = this.#nextId();
+      const id = reservation?.id ?? this.#nextId();
       if (id.length === 0 || this.#bindings.has(id))
         throw new Error("subscription ID must be unique");
       this.#bindings.set(id, {

@@ -224,6 +224,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       if (admitted === undefined) continue;
       let released = false;
       const reservation: SubscriptionCapacityReservation = {
+        id,
         release: async () => {
           if (released) return;
           released = true;
