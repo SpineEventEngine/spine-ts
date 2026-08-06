@@ -98,6 +98,7 @@ describe("GceApplicationNode", () => {
     const calls: string[] = [];
     let tick: (() => void) | undefined;
     const registry = {
+      lookup: async () => undefined,
       register: async () => (calls.push("register"), true),
       renew: async () => (calls.push("renew"), true),
       cleanup: async () => (calls.push("cleanup"), 0),
@@ -405,6 +406,51 @@ describe("GceApplicationNode", () => {
     ticks.shift()?.();
     await cleanup;
     expect(identities).toEqual(["owner", "owner"]);
+    await registrar.close();
+  });
+
+  it("recovers metadata on one scheduled retry without duplicating timers", async () => {
+    const ticks: (() => void)[] = [];
+    let schedules = 0;
+    let secondScheduled: (() => void) | undefined;
+    const secondScheduledPromise = new Promise<void>((done) => (secondScheduled = done));
+    let reads = 0;
+    let cleanupDone: (() => void) | undefined;
+    const cleanup = new Promise<void>((done) => (cleanupDone = done));
+    const metadata = {
+      read: async () => {
+        reads += 1;
+        if (reads === 1) throw new Error("metadata unavailable");
+        return { projectId: "p", zone: "z", instanceId: "1", privateAddress: "10.0.0.1" };
+      },
+    };
+    const calls: string[] = [];
+    const registry = {
+      lookup: async () => undefined,
+      register: async () => (calls.push("register"), true),
+      cleanup: async () => (calls.push("cleanup"), cleanupDone?.(), 0),
+      remove: async () => true,
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      metadata,
+      port: 8080,
+      scheduler: {
+        schedule: (_delay, onTick) => (
+          (schedules += 1),
+          ticks.push(onTick),
+          schedules === 2 && secondScheduled?.(),
+          () => undefined
+        ),
+      },
+    });
+    await registrar.start();
+    expect(schedules).toBe(1);
+    ticks.shift()?.();
+    await cleanup;
+    expect(calls).toEqual(["register", "cleanup"]);
+    await secondScheduledPromise;
+    expect(schedules).toBe(2);
     await registrar.close();
   });
 });
