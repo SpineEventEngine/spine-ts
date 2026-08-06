@@ -169,6 +169,20 @@ describe("LeasedNodeRegistry", () => {
     await expect(storage.query()).resolves.toHaveLength(1);
   });
 
+  it("returns false when a compare-and-set renewal loses its race", async () => {
+    const factory = new InMemoryStorageFactory();
+    const registry = new LeasedNodeRegistry({ factory, namespace: "lost-renewal" });
+    const node = new ApplicationNode({ id: "node/a", endpoint: "http://10.0.0.1" });
+    await registry.register({ node, registrationId: "owner", expiresAt: 10 });
+    const storage = factory.createRecordStorage(
+      { name: "lost-renewal", multitenant: false },
+      leaseRecordSpec,
+    );
+    const current = await storage.read("node/a");
+    await storage.compareAndSet("node/a", current, leaseRecord("node/a", 1));
+    await expect(registry.renew("node/a", "owner", 20)).resolves.toBe(false);
+  });
+
   it("cleans expired rows in finite repeatable batches under concurrent callers", async () => {
     const factory = new InMemoryStorageFactory();
     const first = new LeasedNodeRegistry({ factory, namespace: "cleanup", cleanupBatchSize: 2 });

@@ -63,6 +63,16 @@ describe("ApplicationNode", () => {
         }),
     ).toThrow("TLS server names require HTTPS");
   });
+
+  it.each([
+    "",
+    "relative/path",
+    "ftp://host.test",
+    "http://user@host.test",
+    "http://host.test/path",
+  ])("rejects a non-canonical application endpoint %s", (endpoint) => {
+    expect(() => new ApplicationNode({ id: "node", endpoint })).toThrow("endpoint");
+  });
 });
 
 describe("StaticNodeDiscovery", () => {
