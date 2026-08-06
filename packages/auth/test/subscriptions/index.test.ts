@@ -1550,6 +1550,33 @@ describe("SubscriptionGateway", () => {
     expect(aborts).toBe(0);
   });
 
+  it("cancels the logical coordinator after durable binding persistence fails", async () => {
+    const fixture = setup();
+    let cancellations = 0;
+    fixture.options.creator.cancel = async () => {
+      cancellations++;
+    };
+    const subscriptionGateway = new SubscriptionGateway({
+      ...fixture.options,
+      bindings: {
+        create: async () => {
+          throw new Error("durable binding write failed");
+        },
+        activate: fixture.bindings.activate.bind(fixture.bindings),
+        cancel: fixture.bindings.cancel.bind(fixture.bindings),
+        reserveCapacity: fixture.bindings.reserveCapacity.bind(fixture.bindings),
+        purgeExpired: fixture.bindings.purgeExpired.bind(fixture.bindings),
+        close: fixture.bindings.close.bind(fixture.bindings),
+      },
+    });
+
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
+      kind: "rejected",
+      reason: "denied",
+    });
+    expect(cancellations).toBe(1);
+  });
+
   it("bounds close-raced compensation, releases capacity, and retains no binding", async () => {
     const fixture = setup();
     const bindings = new InMemorySubscriptionBindings({

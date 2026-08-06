@@ -350,7 +350,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       );
       if (!(await this.#current(input.id, claimed.fence, "active", input.nowMs)))
         return { kind: "denied" };
-      await this.#finalizeActivation(claimed, input.nowMs);
+      if (!this.#closed) await this.#finalizeActivation(claimed, input.nowMs);
       return { kind: "activated" };
     } finally {
       clearTimeout(active.timer);
@@ -470,11 +470,11 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Reclaims active definitions after a Gateway restart and rehydrates their native children.
+   * Reclaims expired active definitions after a Gateway restart and rehydrates their native children.
    *
    * A restarted Gateway has no public update relay to resume. It therefore makes
-   * each recovered binding inactive before exposing its definition; a reconnecting
-   * browser Activate request immediately establishes the new relay.
+   * each successfully rehydrated binding inactive before exposing its definition;
+   * a reconnecting browser Activate request immediately establishes the new relay.
    *
    * @param input Supplies the recovery time and native-membership callback.
    * @returns Completes after one bounded durable scan.
@@ -491,28 +491,46 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     });
     for (const row of rows) {
       if (row.id === quotaId || row.id === cleanupId) continue;
-      const active = Values.read(row.record, row.id, this.#maxRecordBytes) as Binding;
+      let active: Binding;
+      try {
+        active = Values.read(row.record, row.id, this.#maxRecordBytes) as Binding;
+      } catch {
+        continue;
+      }
       if (
         active.lifecycle !== "active" ||
         active.expiresAtMs === undefined ||
-        active.expiresAtMs <= input.nowMs
+        active.expiresAtMs <= input.nowMs ||
+        (active.leaseUntilMs ?? 0) > input.nowMs
       )
         continue;
+      const claimed = this.#work(active, "active", input.nowMs);
+      if (!(await this.#cas(active.id, row.record, Values.write(claimed, this.#maxRecordBytes))))
+        continue;
+      try {
+        await input.onDefinition(Values.definition(claimed));
+      } catch (error) {
+        await this.#relinquish(claimed);
+        throw error;
+      }
       const {
         ownerId: _ownerId,
         leaseUntilMs: _leaseUntilMs,
         reason: _reason,
         ...inactive
-      } = active;
+      } = claimed;
       const recovered: Binding = {
         ...inactive,
-        revision: active.revision + 1,
+        revision: claimed.revision + 1,
         lifecycle: "inactive",
-        fence: active.fence + 1,
+        fence: claimed.fence,
       };
-      if (!(await this.#cas(active.id, row.record, Values.write(recovered, this.#maxRecordBytes))))
+      const claimedRow = await this.#storage.read(claimed.id);
+      if (
+        claimedRow === undefined ||
+        !(await this.#cas(claimed.id, claimedRow, Values.write(recovered, this.#maxRecordBytes)))
+      )
         continue;
-      await input.onDefinition(Values.definition(recovered));
     }
   }
 
@@ -550,7 +568,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Stops local work without removing durable rows needed by a later handle.
+   * Stops local work and relinquishes this handle's active durable leases.
    *
    * @returns Completes after local work is stopped.
    */
@@ -563,6 +581,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     for (const controller of this.#cancelControllers.values()) controller.abort();
     for (const controller of this.#cleanupControllers) controller.abort();
     await Promise.allSettled(this.#running);
+    await this.#relinquishOwned();
     this.#active.clear();
     this.#cancelling.clear();
     this.#cancelControllers.clear();
@@ -570,6 +589,42 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     this.#reservations.clear();
     this.#storage.close();
     await Promise.resolve();
+  }
+
+  async #relinquishOwned(): Promise<void> {
+    const rows = await this.#storage.queryEntries({
+      sort: [{ field: "id" }],
+      limit: this.#recordLimit + 2,
+    });
+    for (const row of rows) {
+      if (row.id === quotaId || row.id === cleanupId) continue;
+      let active: Binding;
+      try {
+        active = Values.read(row.record, row.id, this.#maxRecordBytes) as Binding;
+      } catch {
+        continue;
+      }
+      if (active.lifecycle === "active" && active.ownerId === this.#owner)
+        await this.#relinquish(active);
+    }
+  }
+
+  async #relinquish(active: Binding): Promise<void> {
+    const row = await this.#storage.read(active.id);
+    if (row === undefined) return;
+    const current = Values.read(row, active.id, this.#maxRecordBytes) as Binding;
+    if (
+      current.lifecycle !== "active" ||
+      current.ownerId !== this.#owner ||
+      current.fence !== active.fence
+    )
+      return;
+    const released: Binding = {
+      ...current,
+      revision: current.revision + 1,
+      leaseUntilMs: 0,
+    };
+    await this.#cas(current.id, row, Values.write(released, this.#maxRecordBytes));
   }
 
   async #claim(

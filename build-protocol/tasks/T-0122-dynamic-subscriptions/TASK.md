@@ -1,6 +1,6 @@
 # T-0122: Dynamic Subscription Reconciliation
 
-Status: Correction batch complete; focused re-review pending
+Status: Final correction batch complete; acceptance re-review pending
 
 ## Objective
 

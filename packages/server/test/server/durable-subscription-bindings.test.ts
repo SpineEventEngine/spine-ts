@@ -100,7 +100,7 @@ describe("DurableSubscriptionBindings", () => {
     await bindings.close();
   });
 
-  it("rehydrates a live durable definition without waiting for its former lease", async () => {
+  it("waits for a live owner lease and recovers immediately after graceful relinquishment", async () => {
     const factory = new InMemoryStorageFactory();
     const first = registry(factory, "restart-recovery");
     const binding = await first.create({
@@ -135,6 +135,25 @@ describe("DurableSubscriptionBindings", () => {
       },
     });
 
+    expect(definitions).toEqual([]);
+    await expect(
+      restarted.activate({
+        id: binding.id,
+        principalFingerprint: "principal",
+        tenant: undefined,
+        nowMs: 2,
+        signal: new AbortController().signal,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await first.close();
+    await active;
+    await restarted.recoverActive({
+      nowMs: 2,
+      onDefinition: async (definition) => {
+        definitions.push(definition.bytes.slice());
+      },
+    });
     expect(definitions).toEqual([new Uint8Array([7])]);
     await expect(
       restarted.activate({
@@ -146,9 +165,54 @@ describe("DurableSubscriptionBindings", () => {
         onDefinition: () => Promise.resolve(),
       }),
     ).resolves.toEqual({ kind: "activated" });
-    firstController.abort();
-    await active;
+    await restarted.close();
+  });
+
+  it("makes failed recovery visible to a later rehydration attempt", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "recovery-retry");
+    const binding = await first.create({
+      definition: { kind: "public-subscription", bytes: new Uint8Array([9]) },
+      principalFingerprint: "principal",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+    });
+    const started = Promise.withResolvers<void>();
+    const controller = new AbortController();
+    const active = first.activate({
+      id: binding.id,
+      principalFingerprint: "principal",
+      tenant: undefined,
+      nowMs: 1,
+      signal: controller.signal,
+      onDefinition: async (_definition, signal) => {
+        started.resolve();
+        await new Promise<void>((resolve) =>
+          signal.addEventListener("abort", resolve, { once: true }),
+        );
+      },
+    });
+    await started.promise;
     await first.close();
+    await active;
+    const restarted = registry(factory, "recovery-retry");
+
+    await expect(
+      restarted.recoverActive({
+        nowMs: 2,
+        onDefinition: async () => {
+          throw new Error("native rehydration failed");
+        },
+      }),
+    ).rejects.toThrow("native rehydration failed");
+    const recovered: Uint8Array[] = [];
+    await restarted.recoverActive({
+      nowMs: 2,
+      onDefinition: async (definition) => {
+        recovered.push(definition.bytes.slice());
+      },
+    });
+    expect(recovered).toEqual([new Uint8Array([9])]);
     await restarted.close();
   });
 

@@ -1,6 +1,6 @@
 # T-0122 Review Record
 
-Status: Correction batch implemented; targeted re-review pending
+Status: Final correction batch implemented; acceptance re-review pending
 
 ## Review Range
 
@@ -165,3 +165,15 @@ mismatch was visible. Targeted verification passed 316 tests.
 - Focused correction preflight passed 7 suites / 371 tests, generated
   typechecking, scoped lint/TSDoc, documentation audience checks, and diff
   validation. The next action is targeted re-review, then release verification.
+
+## Final Correction Evidence
+
+- Post-create expiry and durable-persistence failures cancel their logical
+  coordinator definition, letting the dynamic owner dispose all native children.
+- Durable recovery never steals a live lease. Graceful close relinquishes only
+  its owner lease; crash recovery waits for expiry. A failed rehydration leaves
+  a fenced, expired-active record visible to the next recovery attempt.
+- Browser recovery rollback now closes dependent resources in order and reports
+  the recovery failure together with any cleanup failures.
+- Focused preflight passed 7 suites / 373 tests, generated typechecking,
+  scoped lint/TSDoc, documentation audience checks, and diff validation.

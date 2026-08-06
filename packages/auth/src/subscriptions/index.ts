@@ -1120,9 +1120,17 @@ export class SubscriptionGateway {
       await this.#receiveBackend(wire, controller);
       const nowMs = this.#nowMs();
       if (nowMs === undefined || expiresAtMs <= nowMs) {
+        await this.#compensateDefinition(wire, controller);
         return SubscriptionGatewayValues.rejected("denied");
       }
-      return await this.#retainDefinition(wire, fingerprint, tenant, expiresAtMs, reservation);
+      return await this.#retainDefinition(
+        wire,
+        fingerprint,
+        tenant,
+        expiresAtMs,
+        reservation,
+        controller,
+      );
     } finally {
       this.#pendingSubscribes.delete(controller);
       await reservation.release();
@@ -1156,6 +1164,7 @@ export class SubscriptionGateway {
     tenant: string | undefined,
     expiresAtMs: number,
     reservation: SubscriptionCapacityReservation,
+    controller: AbortController,
   ): Promise<SubscriptionGatewayResult> {
     try {
       const binding = await this.#options.bindings.create({
@@ -1168,18 +1177,30 @@ export class SubscriptionGateway {
       if (binding.id !== reservation.id) throw new Error("subscription reservation ID changed");
       return { kind: "subscribed", wire: SubscriptionGatewayValues.copyPublic(wire) };
     } catch (error) {
-      return this.#failedCreation(error, reservation);
+      return this.#failedCreation(error, reservation, wire, controller);
     }
   }
   async #failedCreation(
     error: unknown,
     reservation: SubscriptionCapacityReservation,
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
   ): Promise<SubscriptionGatewayResult> {
-    await reservation.release();
+    await Promise.all([reservation.release(), this.#compensateDefinition(wire, controller)]);
     return SubscriptionGatewayValues.rejected(
       error instanceof Error && error.message === "binding-capacity-exceeded"
         ? "binding-capacity-exceeded"
         : "denied",
+    );
+  }
+  async #compensateDefinition(
+    wire: PublicSubscriptionWire,
+    controller: AbortController,
+  ): Promise<void> {
+    const signal = controller.signal.aborted ? new AbortController().signal : controller.signal;
+    await this.#options.creator.cancel(
+      { wire: SubscriptionGatewayValues.copyPublic(wire) },
+      signal,
     );
   }
   async #cleanupAfterActivationFailure(

@@ -178,8 +178,20 @@ export const BrowserServer: Readonly<{
           });
       }
     } catch (error) {
-      await Promise.allSettled([subscriptions.close(), stopDiscovery?.(), dynamic.close()]);
-      throw error;
+      const failures = [error];
+      for (const cleanup of [
+        () => subscriptions.close(),
+        () => stopDiscovery?.(),
+        () => dynamic.close(),
+        () => running?.close(),
+      ])
+        try {
+          await cleanup();
+        } catch (cleanupError) {
+          failures.push(cleanupError);
+        }
+      if (failures.length === 1) throw error;
+      throw new AggregateError(failures, "Browser subscription recovery startup rollback failed.");
     }
     const services = createNativeGatewayServices({ unary, subscriptions, requests });
     const handler = connectNodeAdapter({

@@ -22,6 +22,19 @@ interface SubscriptionChild {
   active: boolean;
 }
 
+/**
+ * Retains one logical definition and its ephemeral native children.
+ */
+interface LogicalDefinitionState {
+  readonly wire: PublicSubscriptionWire;
+  readonly maxBackendEnvelopeBytes: number;
+  updates: SubscriptionUpdateSink | undefined;
+  active: boolean;
+  readonly starts: Set<AbortController>;
+  readonly children: Map<string, SubscriptionChild>;
+  failure: Error | undefined;
+}
+
 interface FailedChildCleanup {
   readonly client: DynamicUnaryClient;
   readonly backend: BackendSubscriptionEnvelope;
@@ -62,7 +75,7 @@ export interface DynamicUnaryOptions {
   readonly maxConcurrentStarts?: number;
 
   /**
-   * Limits native envelopes created while rehydrating durable definitions.
+   * Limits every native envelope created for a logical definition.
    * Defaults to one mebibyte.
    */
   readonly maxBackendEnvelopeBytes?: number;
@@ -98,18 +111,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   readonly #failedChildCleanup = new Set<FailedChildCleanup>();
   #nextIncarnation = 0;
   #nodes: readonly ApplicationNode[] = [];
-  readonly #definitions = new Map<
-    string,
-    {
-      readonly wire: PublicSubscriptionWire;
-      readonly maxBackendEnvelopeBytes: number;
-      updates: SubscriptionUpdateSink | undefined;
-      active: boolean;
-      readonly starts: Set<AbortController>;
-      readonly children: Map<string, SubscriptionChild>;
-      failure: Error | undefined;
-    }
-  >();
+  readonly #definitions = new Map<string, LogicalDefinitionState>();
 
   /**
    * Creates a dynamic unary router.
@@ -384,15 +386,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   }
 
   async #startChild(
-    definition: {
-      readonly wire: PublicSubscriptionWire;
-      readonly maxBackendEnvelopeBytes: number;
-      updates: SubscriptionUpdateSink | undefined;
-      readonly active: boolean;
-      readonly starts: Set<AbortController>;
-      children: Map<string, SubscriptionChild>;
-      failure: Error | undefined;
-    },
+    definition: LogicalDefinitionState,
     id: string,
     current: {
       readonly client: DynamicUnaryClient;
@@ -449,11 +443,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   }
 
   #activateChild(
-    definition: {
-      readonly wire: PublicSubscriptionWire;
-      readonly updates: SubscriptionUpdateSink | undefined;
-      readonly children: Map<string, SubscriptionChild>;
-    },
+    definition: LogicalDefinitionState,
     id: string,
     child: SubscriptionChild,
     client: DynamicUnaryClient,
@@ -467,7 +457,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   }
 
   async #completeChild(
-    definition: { children: Map<string, SubscriptionChild> },
+    definition: LogicalDefinitionState,
     id: string,
     child: SubscriptionChild,
   ): Promise<void> {
@@ -484,9 +474,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     }
   }
 
-  async #removeDefinitionChildren(definition: {
-    readonly children: Map<string, SubscriptionChild>;
-  }): Promise<void> {
+  async #removeDefinitionChildren(definition: LogicalDefinitionState): Promise<void> {
     await Promise.all(
       [...definition.children].map(async ([id, child]) => {
         definition.children.delete(id);
