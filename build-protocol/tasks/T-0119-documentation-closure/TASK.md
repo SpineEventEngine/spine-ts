@@ -1,6 +1,16 @@
 # T-0119: Documentation And Correction Closure
 
-Status: Planned; documentation audit and implementation pending
+Status: Documentation slices implemented; deterministic preflight and review pending
+
+## Slice Evidence
+
+- `3891ff99` updates server README/reference, architecture, and user-guide
+  surfaces for paired contexts, separate buses/stores, optional persistence,
+  and Stand's read/subscription role.
+- `df6cfaab` updates Message Board and distributed topology documentation for
+  payload-first local application and separate delivery/subscription concerns.
+- The final record slice audits historical Wave 6 wording and marks superseded
+  claims without changing its evidence.
 
 ## Objective
 

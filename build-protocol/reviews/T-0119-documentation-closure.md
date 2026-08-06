@@ -1,6 +1,17 @@
 # T-0119 Review Log
 
-Status: Draft and deterministic preflight pending
+Status: Draft complete; deterministic preflight pending
+
+## Implementation Inventory
+
+- Server README/reference, framework user guide, and architecture notes:
+  paired domain/System Contexts, bus/store separation, optional system storage,
+  and Stand query/subscription responsibilities.
+- Message Board web/example and distributed topology: complete payload-first
+  local updates, bounded authoritative recovery, one Gateway/two equal nodes,
+  and separate simple-delivery coordination/subscription fan-in.
+- Historical Wave 6/T-0113 records: explicitly superseded wording preserved as
+  evidence rather than presented as current behavior.
 
 ## Scope
 

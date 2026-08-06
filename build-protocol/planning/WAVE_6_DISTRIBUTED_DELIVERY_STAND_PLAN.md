@@ -1,6 +1,6 @@
 # Wave 6: Distributed Delivery And Stand
 
-Status: Approved scope; implementation planned
+Status: Historical Wave 6 plan; System Context and payload-first claims superseded by T-0113 through T-0119
 
 Planning task: `T-0104`
 
@@ -20,18 +20,18 @@ a new Q&A about application redeployment and update behavior.
 
 ## Current Gap Matrix
 
-| Area                | Current behavior                                                                                                                              | Wave 6 behavior                                                                                                          |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Aggregate commands  | The normal route may invoke the repository directly.                                                                                          | Route to a sharded Inbox and dispatch only under the shard lease.                                                        |
-| Process Managers    | Command/event Inbox replay exists, but handoff is local and effectively single-shard.                                                         | Use the configured delivery strategy and the same remote shard pickup path as Aggregates.                                |
-| Shard notification  | The delivery client can read Admin snapshots and updates, but the environment supervisor does not turn remote updates into delivery attempts. | Each application node observes the fan-out stream and attempts the reported shard. One lease winner drains it.           |
-| Drain behavior      | Bounded delivery runs exist.                                                                                                                  | A shard owner continues finite runs until no deliverable Inbox message remains, then releases the shard.                 |
-| Stand updates       | `Stand.update()` writes current state and invokes process-local callbacks.                                                                    | Entity commits publish `EntityStateChanged`; Stand observes the EventBus and creates matching Entity updates.            |
-| Event subscriptions | SubscriptionService registers callbacks directly.                                                                                             | Stand observes subscribed events from the EventBus and emits event updates.                                              |
-| Stand registry      | Local callback sets plus service-owned inactive/claim/cancel rows.                                                                            | Durable mode shares definitions across nodes; explicitly selected in-memory mode remains process-local.                  |
-| Cancellation        | Service and Gateway records may retain cancel/retired states.                                                                                 | Stand registry cancellation physically deletes the definition; Gateway stops its streams without waiting for every node. |
-| Gateway backend     | One configured backend URL.                                                                                                                   | One logical Gateway fans out native subscription activation to a fixed configured application-node set.                  |
-| Example topology    | Simple Message Board and deployment templates.                                                                                                | Add Distributed Message Board with two application nodes, one Gateway, and one simple delivery server.                   |
+| Area                | Current behavior                                                                                                                              | Wave 6 behavior                                                                                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Aggregate commands  | The normal route may invoke the repository directly.                                                                                          | Route to a sharded Inbox and dispatch only under the shard lease.                                                                                               |
+| Process Managers    | Command/event Inbox replay exists, but handoff is local and effectively single-shard.                                                         | Use the configured delivery strategy and the same remote shard pickup path as Aggregates.                                                                       |
+| Shard notification  | The delivery client can read Admin snapshots and updates, but the environment supervisor does not turn remote updates into delivery attempts. | Each application node observes the fan-out stream and attempts the reported shard. One lease winner drains it.                                                  |
+| Drain behavior      | Bounded delivery runs exist.                                                                                                                  | A shard owner continues finite runs until no deliverable Inbox message remains, then releases the shard.                                                        |
+| Stand updates       | `Stand.update()` writes current state and invokes process-local callbacks.                                                                    | Historical wording: later superseded. Entity commits publish `EntityStateChanged` on the paired System Context EventBus; Stand creates matching Entity updates. |
+| Event subscriptions | SubscriptionService registers callbacks directly.                                                                                             | Stand observes subscribed events from the EventBus and emits event updates.                                                                                     |
+| Stand registry      | Local callback sets plus service-owned inactive/claim/cancel rows.                                                                            | Durable mode shares definitions across nodes; explicitly selected in-memory mode remains process-local.                                                         |
+| Cancellation        | Service and Gateway records may retain cancel/retired states.                                                                                 | Stand registry cancellation physically deletes the definition; Gateway stops its streams without waiting for every node.                                        |
+| Gateway backend     | One configured backend URL.                                                                                                                   | One logical Gateway fans out native subscription activation to a fixed configured application-node set.                                                         |
+| Example topology    | Simple Message Board and deployment templates.                                                                                                | Add Distributed Message Board with two application nodes, one Gateway, and one simple delivery server.                                                          |
 
 ## Target Message Sequence
 
@@ -50,12 +50,16 @@ a new Q&A about application redeployment and update behavior.
    framework-owned transaction.
 7. The EventBus dispatches domain events. A subscribed Projection handles the
    event through its normal delivery path and commits its state.
-8. Each committed Entity state publishes `EntityStateChanged` after the commit.
-9. The local Stand observes domain/system events. If a durable subscription
+8. Each committed Entity state publishes `EntityStateChanged` after the commit
+   on the paired System Context EventBus, never the domain EventBus or domain
+   EventStore.
+9. The local Stand observes the applicable domain or System Context event. If a durable subscription
    matches, the node emits a native subscription update.
 10. The Gateway has active native streams to both nodes. It forwards received
-    best-effort notices, including possible duplicates, to the browser. The
-    browser re-queries authoritative Entity state.
+    best-effort complete payloads, including possible duplicates, to the
+    browser. Normal complete payloads apply locally; the browser queries for
+    initial state and recovery after reconnects, gaps, malformed data, or a
+    disconnected post.
 
 ## Frozen JVM System Event
 
