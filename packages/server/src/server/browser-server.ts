@@ -14,7 +14,11 @@ import {
   UnaryGateway,
 } from "@spine-event-engine/auth";
 import type { ConnectRouter } from "@connectrpc/connect";
-import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
+import {
+  connectNodeAdapter,
+  createGrpcTransport,
+  Http2SessionManager,
+} from "@connectrpc/connect-node";
 import { AuthenticationService } from "@spine-event-engine/proto/auth";
 import type { ApplicationNode, NodeDiscovery } from "@spine-event-engine/deployment";
 import {
@@ -111,10 +115,23 @@ export const BrowserServer: Readonly<{
           : new RoundRobinUnaryForwarder(creators)
         : (dynamic = new DynamicUnaryForwarder({
             create: async (node) => {
-              const client = new NativeSubscriptionCreator(
-                createGrpcTransport(BrowserServer.dynamicTransportOptions(node)),
+              const manager = new Http2SessionManager(
+                node.endpoint,
+                undefined,
+                node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
               );
-              return { forward: client.forward.bind(client), close: async () => {} };
+              const client = new NativeSubscriptionCreator(
+                createGrpcTransport({
+                  ...BrowserServer.dynamicTransportOptions(node),
+                  sessionManager: manager,
+                }),
+              );
+              return {
+                forward: client.forward.bind(client),
+                close: async () => {
+                  manager.abort();
+                },
+              };
             },
           }));
     if (options.discovery !== undefined && dynamic !== undefined)

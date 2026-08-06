@@ -66,6 +66,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #complete: (() => void) | undefined;
   #closing: Promise<void> | undefined;
   #generation = 0;
+  readonly #failedDisposals = new Set<DynamicUnaryClient>();
 
   /**
    * Creates a dynamic unary router.
@@ -123,6 +124,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
 
   async #replace(nodes: readonly ApplicationNode[], generation: number): Promise<void> {
     if (this.#closed) return;
+    await this.#retryDisposals();
     const wanted = new Map<string, ApplicationNode>();
     for (const node of nodes) {
       const previous = wanted.get(node.id);
@@ -138,7 +140,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       if (node?.endpoint === current.endpoint && node.tlsServerName === current.tlsServerName)
         continue;
       this.#clients.delete(id);
-      await current.client.close().catch(() => undefined);
+      await this.#dispose(current.client);
     }
     const added = [...wanted.values()].filter((node) => !this.#clients.has(node.id));
     for (let index = 0; index < added.length; index += this.#maxConcurrentStarts)
@@ -148,6 +150,19 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
           .map((node) => this.#start(node, generation)),
       );
     this.#next = 0;
+  }
+
+  async #dispose(client: DynamicUnaryClient): Promise<void> {
+    try {
+      await client.close();
+      this.#failedDisposals.delete(client);
+    } catch {
+      this.#failedDisposals.add(client);
+    }
+  }
+
+  async #retryDisposals(): Promise<void> {
+    for (const client of this.#failedDisposals) await this.#dispose(client);
   }
 
   async #start(node: ApplicationNode, generation: number): Promise<void> {
@@ -197,7 +212,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     this.#closed = true;
     for (const controller of this.#creating) controller.abort();
     await this.#running;
-    await Promise.allSettled([...this.#clients.values()].map(({ client }) => client.close()));
+    await Promise.all([...this.#clients.values()].map(({ client }) => this.#dispose(client)));
     this.#clients.clear();
+    await this.#retryDisposals();
   }
 }

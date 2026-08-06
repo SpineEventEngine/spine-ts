@@ -3,6 +3,18 @@ import { describe, expect, it } from "vitest";
 import { ApplicationNode, ScheduledNodeDiscovery, StaticNodeDiscovery } from "../src/index.js";
 
 describe("ApplicationNode", () => {
+  it.each([
+    "user@host.test",
+    "host.test:443",
+    "host.test?x=1",
+    "host.test#x",
+    "[fd00::1]",
+    "10.0.0.1",
+  ])("rejects invalid TLS authority %s", (tlsServerName) => {
+    expect(
+      () => new ApplicationNode({ id: "node", endpoint: "https://10.0.0.1", tlsServerName }),
+    ).toThrow();
+  });
   it("canonicalizes a HTTPS endpoint and its TLS authority", () => {
     const node = new ApplicationNode({
       id: "node/one",

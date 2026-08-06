@@ -61,7 +61,14 @@ export class ApplicationNode {
    */
   static tls(value: string): string {
     const parsed = new URL(`https://${value}`);
-    if (parsed.port || value.endsWith(".") || value.includes("/") || isIP(parsed.hostname) !== 0)
+    if (
+      parsed.username ||
+      parsed.password ||
+      parsed.port ||
+      value.endsWith(".") ||
+      /[@:/?#]/.test(value) ||
+      isIP(parsed.hostname) !== 0
+    )
       throw new Error("TLS server name must be one DNS hostname.");
     return parsed.hostname.toLowerCase();
   }
