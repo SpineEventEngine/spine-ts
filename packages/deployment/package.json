@@ -14,5 +14,8 @@
     "dist",
     "README.md",
     "REFERENCE.md"
-  ]
+  ],
+  "dependencies": {
+    "@spine-event-engine/storage": "workspace:*"
+  }
 }
