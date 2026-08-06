@@ -1,6 +1,6 @@
 # Wave 7: Scaling And Redeployment
 
-Status: Execution authorized; dependency split complete
+Status: Execution authorized; corrected dependency split complete
 
 Planning task: `T-0120`
 
@@ -44,9 +44,10 @@ package attaches a registrar to the application server lifecycle:
 3. It writes one record through the explicitly supplied registry
    `StorageFactory`.
 4. It renews that record every 20 seconds with a 60-second expiry.
-5. On graceful shutdown it conditionally deletes its own record before the
-   listener closes. A crashed node cannot delete anything, so its record simply
-   expires.
+5. On graceful shutdown it fences new registrar work, quiesces initial
+   registration/renewal/cleanup operations, conditionally deletes its own
+   record, and only then closes the listener. A crashed node cannot delete
+   anything, so its record simply expires.
 
 The Gateway is a reader. Every 10 seconds it obtains the complete set
 of non-expired records and reconciles its gRPC clients. It does not register
@@ -55,23 +56,65 @@ application nodes and does not decide how many nodes should exist.
 The internal record needs only a stable node ID, reachable gRPC endpoint,
 lease expiry, and an opaque registration identity. Conditional renew/delete by
 registration identity prevents an old process from overwriting or deleting a
-new process that reused the same node ID. Expired rows are ignored immediately.
-Each healthy registrar also performs a finite, idempotent expired-row cleanup
-after renewing, so abandoned records do not accumulate. If all application
-nodes scale to zero, expired rows are harmless and the first later node resumes
-cleanup.
+new process that reused the same node ID. Its internal encoding version is 1
+and its initial storage key is `spine.deployment.ApplicationNodeLease:v1`.
+Readers accept only well-formed version-1 records. A malformed record or unknown
+encoding version fails the complete snapshot read; it is never silently omitted,
+deleted, or rewritten. The Gateway retains its last still-valid applied snapshot
+and retries discovery. An incompatible future record shape uses a new storage
+key rather than dual-reading, dual-writing, or migrating this one.
+
+Expired rows are ignored immediately. Each healthy registrar also performs a
+finite, idempotent expired-row cleanup after renewing, so abandoned records do
+not accumulate. If all application nodes scale to zero, expired rows are
+harmless and the first later node resumes cleanup.
 
 The default endpoint is the GCE instance's private address plus the configured
 gRPC port. An explicit endpoint override supports proxies, private DNS, or
 other network layouts. Publishing a public address is not a default.
 
+## Node Identity And Endpoint Canonicalization
+
+The platform-neutral node descriptor contains an opaque stable node ID, a
+canonical HTTP(S) origin, and an optional TLS server name. An endpoint is valid
+only when it is an absolute `http:` or `https:` URL with no credentials, query,
+fragment, or non-root path. Canonicalization uses the URL origin: DNS names are
+lowercase, default ports are removed, non-default ports are retained, and IPv6
+literals use brackets. Equality and replacement decisions use that canonical
+form rather than caller spelling.
+
+For HTTPS, certificate verification and SNI use the explicit normalized TLS
+server name when supplied and otherwise use the endpoint host. Resolving a DNS
+name to an IP address must not silently replace its TLS authority. HTTP may use
+private IPv4 or bracketed IPv6 literals directly.
+
+GCE derives its stable node ID as
+`gce/<project-id>/<zone>/<numeric-instance-id>` from metadata. Reuse of a
+logical application label does not reuse that identity; a canonical endpoint
+change for the same instance ID is a replacement. GKE DNS has no Pod UID, so
+its node ID is derived from the canonical address origin plus TLS server name.
+If an address is observed absent and later reused, the reconciliation
+generation treats it as a fresh membership and cannot attach a stale client or
+stream from its previous presence.
+
 ## GKE Discovery
 
 A headless Kubernetes Service publishes the ready application Pods. The
 Gateway resolves that Service and reconciles the complete address set on a
-configurable ten-second interval while respecting DNS TTL behavior. Kubernetes
-readiness controls whether a Pod appears. No storage-backed node registry or
-GCE-style registrar is involved.
+configurable ten-second interval. After a successful answer, the next lookup is
+scheduled at the earlier of that interval and the answer's smallest positive
+TTL. A zero or missing TTL uses the configured interval as the finite fallback
+rather than causing a tight loop. The last successful answer remains usable
+only until its positive TTL expires, or until the fallback interval expires
+when TTL is zero/missing.
+
+An empty answer or NXDOMAIN is a successful empty membership snapshot. A
+resolver failure applies no replacement snapshot: the Gateway retains the last
+successful answer only until that answer's validity deadline, then reconciles
+to empty/backend-unavailable while retrying at the configured interval. A later
+successful answer resumes normal precedence. Kubernetes readiness controls
+whether a Pod appears. No storage-backed node registry or GCE-style registrar
+is involved.
 
 ## Discovery Capacity
 
@@ -88,8 +131,9 @@ discovered node is nevertheless included after reconciliation completes.
 Implementation load tests document tested and recommended capacity. They do
 not create an absolute runtime maximum. Wave 8 operational logging emits an
 ERROR when the discovered count exceeds the configured expectation. Wave 7
-must preserve the observed count and threshold needed by that later logging
-work, but does not introduce the Wave 8 logging subsystem early.
+keeps the observed and expected counts package-internal and tests them for later
+logging work. It exposes no public diagnostics/logging API and does not
+introduce the Wave 8 logging subsystem early.
 
 ## Scaling And Replacement
 
@@ -169,12 +213,32 @@ Every implementation slice must:
   Gateways, and Wave 8 logging out of scope.
 
 The expected node count defaults to 32 in every applicable slice. It is
-diagnostic state, not admission control. No collection validation, envelope
-encoding, batching policy, connection pool, or infrastructure default may turn
-it into a runtime node ceiling. A snapshot above the expectation is processed
-in bounded connection-start batches until every discovered node is in use.
-Wave 7 exposes the observed and expected counts needed by later operational
-reporting but emits no structured ERROR and adds no logging adapter.
+package-internal observation state, not admission control. In the completed
+Wave 7 path, no collection validation, envelope encoding, batching policy,
+connection pool, or infrastructure default may turn it into a runtime node
+ceiling. A snapshot above the expectation is processed in bounded
+connection-start batches until every discovered node is in use. Wave 7 exports
+no count diagnostics, emits no structured ERROR, and adds no logging adapter;
+Wave 8 owns public operational exposure.
+
+One generation-fenced reconciliation owner serializes all membership work.
+While one generation is reconciling, a newer complete snapshot replaces the
+single pending snapshot; intermediate pending generations are coalesced rather
+than queued. Every connection, disposal, and subscription completion carries
+its generation and is discarded if a newer generation or shutdown fence makes
+it stale. Close stops refresh input, prevents new work, waits for the active
+generation to quiesce under its operation bounds, and then releases resources.
+
+## Incompatible Pre-Wave-7 Cutover
+
+The repository has no deployed users and requires no migration or deprecation
+cycle. T-0122 may delete the fixed subscription-topology field and positional
+fan-in envelope, and it bumps durable Gateway bindings from
+`spine.gateway.SubscriptionBinding:v3` to `:v4`. It must not add a legacy
+reader, dual-write path, migration command, compatibility shim, or pre-Wave-7
+restart fixture. Pre-Wave-7 development data is discarded. This cutover does
+not remove fixed backend configuration as a static discovery input; it removes
+the old topology from durable subscription identity.
 
 ## Dependency-Ordered Implementation Slices
 
@@ -198,15 +262,19 @@ No later platform package is created in this slice.
 **Observable acceptance criteria:**
 
 - A platform-neutral discovery source returns a complete snapshot of stable
-  node IDs and canonical private-network gRPC endpoints, including an empty
-  snapshot, and supports cancellation/closure without leaving timers or
-  connection attempts alive.
+  node IDs, canonical private-network HTTP(S) origins, and optional TLS server
+  names, including an empty snapshot. It applies the shared identity,
+  authority, IPv6, and address-reuse rules above and supports
+  cancellation/closure without leaving timers or connection attempts alive.
 - A configurable refresh policy defaults to ten seconds. Deterministic tests use
   an injected clock/scheduler and do not wait on wall-clock time.
 - Adding, removing, replacing, reordering, or repeating a node in successive
   snapshots converges to exactly the latest complete set. Endpoint change for
   the same stable ID is treated as replacement; identical repeated snapshots
   cause no duplicate client creation.
+- Exactly one generation-fenced reconciliation loop owns topology changes. If
+  snapshots B and C arrive while A is still reconciling, only latest pending C
+  follows A; B is coalesced. Late work from A cannot mutate C's client set.
 - Commands and queries use bounded round-robin over the reconciled current set,
   are never broadcast, and are never automatically retried after dispatch.
 - Zero nodes produces the existing backend-unavailable behavior. When a later
@@ -215,23 +283,32 @@ No later platform package is created in this slice.
   explicit concurrency setting. Snapshot processing uses finite batches while
   eventually including every node.
 - A snapshot containing at least 40 nodes proves that the default expected
-  count of 32 is not a cap: all 40 become routable. Reconciliation state retains
-  both `observed = 40` and `expected = 32`, without logging an ERROR.
+  count of 32 is not a cap: all 40 become routable. Package-internal tests retain
+  `observed = 40` and `expected = 32`; no public count API or ERROR log is added.
 - Existing fixed backend configuration remains available as a static discovery
-  input for local/combined usages, but it no longer enforces the former 32-node
-  ceiling.
+  input for local/combined usages. T-0121 separates unary child validation from
+  the shared fixed `FanInSubscriptionCreator` validation so a 40-node dynamic
+  unary pool is routable. The fixed positional subscription fan-in and its
+  1–32 validation remain untouched and unused by dynamic discovery until
+  T-0122 deletes them.
 
-**RED-first tests:** package-contract/export tests; fake-discovery add/remove/
-replace/reorder/idempotence tests; fake-clock refresh and shutdown tests;
-bounded connection-start tests with stalled client creation; zero-to-nonzero
-routing; no-retry unary failure; and 40-node all-used coverage. Capture the
-pre-implementation failures before changing runtime code.
+**RED-first tests:** package-contract/export tests; stable opaque ID validation,
+endpoint canonicalization, TLS authority, IPv6, and observed address-reuse
+tests; fake-discovery add/remove/replace/reorder/idempotence tests; A/B/C churn
+proving latest-pending coalescing and stale-generation fencing; fake-clock
+refresh and shutdown tests; bounded connection-start tests with stalled client
+creation; zero-to-nonzero routing; no-retry unary failure; and unary-only
+40-node all-used coverage. Capture the pre-implementation failures before
+changing runtime code.
 
 **Documentation obligations:** Add `README.md` and `REFERENCE.md` for
 `@spine-event-engine/deployment`; document the discovery snapshot semantics,
-node identity, refresh/cancellation ownership, expected-count diagnostic, and
-bounded reconciliation. Update affected auth/server API prose without claiming
-GKE, GCE, leases, logging, or autoscaling behavior not implemented here.
+node identity, endpoint/TLS canonicalization, refresh/cancellation ownership,
+latest-pending coalescing, expected-count behavior, and bounded reconciliation.
+Expected/observed count fields remain package-internal and absent from public
+API docs. Update affected auth/server API prose without claiming GKE, GCE,
+leases, logging, subscriptions through dynamic discovery, or autoscaling
+behavior not implemented here.
 
 **Review concerns:** style/maintainability, documentation, TypeScript/API docs,
 and performance/reliability are all relevant. Public contracts, connection
@@ -246,7 +323,8 @@ affected-package checks form the mandatory preflight.
 **Risks and exclusions:** The principal risks are stale connection completion,
 an accidentally reintroduced count cap, and retrying a non-idempotent command.
 This slice does not reconcile subscriptions, implement a leased registry,
-resolve DNS, read GCE metadata, create Terraform, or emit operational logs.
+remove the fixed positional subscription envelope/count validation, resolve
+DNS, read GCE metadata, create Terraform, or emit operational logs.
 
 ### T-0122: Dynamic Subscription Reconciliation
 
@@ -272,6 +350,9 @@ node-discovery contract changes only if RED evidence exposes a real blocker.
 - A node added concurrently with activation is included exactly once after
   reconciliation. Late activation/retry completions for a removed node cannot
   resurrect its stream.
+- Subscription work runs inside T-0121's single generation-fenced
+  reconciliation owner; it does not add a second queue or scheduler. Rapid
+  membership churn retains only the latest pending complete snapshot.
 - Reordering or replaying a discovery snapshot creates no duplicate streams.
   Duplicate best-effort updates remain allowed and clients still re-query
   authoritative state.
@@ -282,23 +363,33 @@ node-discovery contract changes only if RED evidence exposes a real blocker.
 - Cancel and Gateway close fence discovery and activation work. A concurrent
   Cancel joins the existing durable cleanup path, no later snapshot can
   reactivate it, and interrupted cleanup remains restart-recoverable.
-- Restart against a different discovered node set accepts existing durable
-  bindings. Fixed-topology fingerprints, ordered child indexes, and private
-  envelopes must not make a dynamic node set part of durable identity or impose
-  a count-width ceiling.
+- Logical subscription ID, principal ownership, tenant, and canonical
+  Subscription definition are the complete durable identity. T-0122 deletes the
+  fixed-topology fingerprint, ordered child indexes, and positional private
+  fan-in envelope, then writes only the new
+  `spine.gateway.SubscriptionBinding:v4` storage key. Restart against a
+  different discovered node set accepts those v4 bindings without making
+  membership durable identity or imposing a count-width ceiling.
+- This is an intentionally incompatible cutover. No v3 read, migration,
+  dual-write, compatibility shim, or pre-Wave-7 restart fixture is implemented;
+  stale development records are discarded.
 - Subscription stream starts use the same bounded connection/work policy as
   discovery. At least 40 discovered nodes receive one stream each even though
   the expected count is 32; no overflow rejection or arbitrary subset exists.
 
 **RED-first tests:** active subscription add/remove/re-add; add-versus-activate
-races; stale completion fencing; reordered/repeated snapshots; zero-node
-survival and recovery; restart with changed topology; cancellation/close races;
-interrupted cleanup; and 40-node full fan-in with bounded concurrent starts.
+races; A/B/C latest-pending snapshot coalescing; stale completion fencing;
+reordered/repeated snapshots; zero-node survival and recovery; v4 restart with
+changed topology; explicit absence of v3/topology/envelope code and fixtures;
+cancellation/close races; interrupted cleanup; and 40-node full fan-in with
+bounded concurrent starts.
 
 **Documentation obligations:** Revise deployment, auth, and server references
 to distinguish durable logical definitions from ephemeral per-node streams and
 to explain loss notices, duplicate tolerance, zero-node behavior, cancellation,
-and reconnect/re-query semantics. Do not promise complete notification history.
+and reconnect/re-query semantics. Record the no-migration v4 cutover for
+repository contributors without presenting a migration path to end users. Do
+not promise complete notification history.
 
 **Review concerns:** all four canonical concerns are relevant. Dynamic durable
 subscription semantics, restart compatibility, cancellation, and concurrency
@@ -312,8 +403,8 @@ durable restart behavior, and cross-package assembly change.
 **Risks and exclusions:** The main risks are deletion of the shared definition
 on ordinary node removal, resurrection after cancellation, and durable state
 tied to a transient topology. No platform adapter, registry, Terraform,
-version-compatibility handshake, deduplication history, or Wave 8 logging is in
-scope.
+version-compatibility handshake, legacy binding migration, deduplication
+history, public count diagnostics, or Wave 8 logging is in scope.
 
 ### T-0123: Storage-Backed Leased Node Registry
 
@@ -335,8 +426,15 @@ physical controls. Generated Protobuf output remains untracked.
   operator-supplied logical storage namespace/context. No application domain
   storage factory or namespace is selected implicitly.
 - Registration stores only stable node ID, canonical endpoint, expiry, and an
-  opaque per-process registration identity. The persisted schema is internal,
-  validated on read, and has a recorded compatibility policy.
+  opaque per-process registration identity as logical data. Its internal
+  encoding version is 1 and its storage key is
+  `spine.deployment.ApplicationNodeLease:v1`.
+- A complete registry read accepts only well-formed version-1 records with a
+  canonical endpoint. One malformed or unknown-version row fails that snapshot
+  without returning a partial node set; the row is not deleted or rewritten.
+  The discovery owner retains its last still-valid successful snapshot and
+  retries. Incompatible future encoding uses a new versioned storage key, with
+  no dual-read, dual-write, or migration layer.
 - Register and renew use atomic compare-and-set storage. A factory without that
   capability is rejected before lifecycle work starts.
 - A previous process cannot renew or delete a replacement process's record
@@ -352,18 +450,22 @@ physical controls. Generated Protobuf output remains untracked.
   identities, and cleanup ordering are tested without wall-clock sleeps.
 
 **RED-first tests:** two-handle registration collision/replacement fencing;
-stale renew/delete; exact expiry boundary; malformed row handling; 40-live-row
-read; concurrent cleanup; finite cleanup batches across repeated passes;
-unsupported atomic storage; namespace isolation; and close/cancellation. Run
-the registry conformance suite against in-memory storage and the existing
-Datastore/RDBMS provider test paths available in the repository.
+stale renew/delete; exact expiry boundary; exact v1 encoding/storage key;
+malformed and unknown-version complete-read failure without partial membership
+or mutation; 40-live-row read; concurrent cleanup; finite cleanup batches
+across repeated passes; unsupported atomic storage; namespace isolation; and
+close/cancellation. Run the registry conformance suite against in-memory
+storage and the existing Datastore/RDBMS provider test paths available in the
+repository.
 
 **Documentation obligations:** Document explicit factory/namespace ownership,
 record fields, atomic storage requirement, expiry versus physical cleanup,
-scale-to-zero behavior, and the fact that the registry is neither a domain
-repository nor the Stand subscription registry. Public exports receive complete
-TSDoc; the persisted record stays out of the end-user root unless generation
-policy makes a technical internal import unavoidable.
+scale-to-zero behavior, supported v1 reads, whole-snapshot failure on malformed
+or unknown versions, versioned-key cutover policy, and the fact that the
+registry is neither a domain repository nor the Stand subscription registry.
+Public exports receive complete TSDoc; the persisted record stays out of the
+end-user root unless generation policy makes a technical internal import
+unavoidable.
 
 **Review concerns:** all four concerns are relevant. Persistence compatibility,
 compare-and-set correctness, identity fencing, cleanup bounds, and lifecycle
@@ -374,8 +476,8 @@ serialized record, and shared runtime behavior change.
 
 **Risks and exclusions:** Risks are ABA-style ownership loss, clock-boundary
 errors, cross-namespace collisions, and unbounded cleanup. GCE metadata,
-registrar scheduling, DNS, provider layout tuning, and infrastructure are not
-owned here.
+registrar scheduling, legacy storage-key migration, DNS, provider layout
+tuning, and infrastructure are not owned here.
 
 ### T-0124: GCE Registration And Discovery Runtime
 
@@ -394,17 +496,23 @@ it does not edit GKE paths or infrastructure templates.
 **Observable acceptance criteria:**
 
 - The registrar obtains stable instance identity and private address through an
-  injectable GCE metadata seam. By default it publishes private address plus
-  configured gRPC port; an explicit canonical endpoint override wins for
-  private DNS, proxies, or nonstandard layouts. Public address selection is
-  never implicit.
+  injectable GCE metadata seam. Its node ID is exactly
+  `gce/<project-id>/<zone>/<numeric-instance-id>`. By default it publishes the
+  canonical private-address HTTP(S) origin plus configured gRPC port; an
+  explicit canonical endpoint/TLS-server-name override wins for private DNS,
+  proxies, or nonstandard layouts. IPv6 and TLS authority follow the shared
+  canonicalization rules. Public address selection is never implicit.
 - Registration starts only after the application gRPC listener reports ready.
   Defaults renew every 20 seconds with a 60-second expiry; fake-clock tests
   prove renewal cadence and expiry without sleeping.
 - Each process creates a new opaque registration identity. Renewal, expired-row
-  cleanup, and graceful conditional deletion use that identity; graceful
-  shutdown attempts deletion before the listener closes and remains finitely
-  bounded.
+  cleanup, and graceful conditional deletion use that identity. Graceful
+  shutdown first fences new scheduled work, then aborts and waits for initial
+  registration, renewal, and cleanup promises to settle under their individual
+  operation deadlines. Only after no registry mutation can complete late does
+  it conditionally delete its registration; only after that attempt settles
+  does the listener close. Timeouts cannot detach a late mutation that could
+  recreate the row after deletion.
 - Crash simulation leaves the row present but undiscoverable at expiry. At
   zero live rows, the Gateway reports backend unavailability; starting a later
   node restores routing and durable subscription streams and resumes cleanup.
@@ -415,16 +523,21 @@ it does not edit GKE paths or infrastructure templates.
   handles, or unhandled rejections; later refresh/renew cycles can recover while
   lease expiry remains the authoritative crash-removal mechanism.
 
-**RED-first tests:** private endpoint default/override and invalid endpoint;
-listener-ready ordering; 20/60 fake-clock cadence; restart with reused instance
-ID; stale-process renew/delete fencing; graceful shutdown order; crash expiry;
-registry read failure and recovery; scale zero/return; and one-Gateway 40-node
-end-to-end routing/subscription coverage.
+**RED-first tests:** exact GCE ID derivation; private endpoint default/override,
+TLS authority, IPv6, and invalid endpoint; listener-ready ordering; 20/60
+fake-clock cadence; restart with reused logical label but new numeric instance
+ID; stale-process renew/delete fencing; stalled initial-registration,
+renewal-versus-shutdown, and cleanup-versus-shutdown quiescence proving no late
+write after conditional delete/listener close; crash expiry; registry read
+failure and recovery; scale zero/return; and one-Gateway 40-node end-to-end
+routing/subscription coverage.
 
 **Documentation obligations:** Add GCE package README/reference for runtime
 assembly, metadata permissions, private networking, explicit registry storage
-and namespace, timings, endpoint override, failure semantics, and shutdown.
-State that Terraform and beginner deployment procedures arrive in T-0127.
+and namespace, stable ID derivation, endpoint/TLS rules, timings, endpoint
+override, failure semantics, and the exact quiesce/delete/listener shutdown
+order. State that Terraform and beginner deployment procedures arrive in
+T-0127.
 
 **Review concerns:** all four concerns are relevant. Metadata trust,
 registration identity, persistence, timers, shutdown order, retry recovery, and
@@ -457,33 +570,48 @@ edit the GCE package or Terraform paths.
 
 - The package resolves a configured headless-Service DNS name through an
   injectable resolver and converts the complete current address set into
-  canonical gRPC endpoints. Kubernetes readiness is the membership authority;
-  no storage registry or registrar is created.
-- Refresh defaults to ten seconds and is configurable. Returned DNS TTL data
-  governs cache lifetime so stale answers are not retained as permanent
-  topology; fake resolver/clock tests cover TTL and refresh interactions
-  without depending on external DNS.
+  canonical HTTP(S) origins. Node IDs derive from canonical address origin plus
+  TLS server name; IPv6 is bracketed, and HTTPS resolution preserves the
+  configured Service DNS name as authority rather than silently replacing it
+  with an IP. Kubernetes readiness is the membership authority; no storage
+  registry or registrar is created.
+- Refresh defaults to ten seconds and is configurable. After a successful
+  answer, the next lookup occurs at the earlier of the configured refresh
+  interval and the smallest positive TTL. Zero or absent TTL falls back to the
+  configured interval for both refresh and validity, avoiding a tight loop. A
+  positive answer is usable only through its TTL deadline.
+- Empty/NXDOMAIN is an immediate successful empty snapshot. A resolver failure
+  does not itself replace membership: the last successful answer remains only
+  until its TTL/fallback deadline, then one empty snapshot is reconciled while
+  retries continue at the configured interval. A later successful answer
+  restores normal scheduling.
 - Address reorder and duplicate answers are idempotent. Address disappearance
-  removes its connection/streams; later appearance restores them.
+  removes its connection/streams; later reuse of the same address creates fresh
+  work in the current reconciliation generation and cannot reuse stale client
+  or stream completion from the earlier presence.
 - Empty answers or name-not-found during a legitimate scale-to-zero state yield
   backend unavailability without terminating discovery. Later valid answers
   restore unary routing and durable subscription reconciliation.
 - Every returned address is used, including a 40-address response when expected
   count is 32. Connection starts remain bounded; no subset selection, overflow
-  rejection, leased-registry access, or ERROR logging occurs.
+  rejection, public count diagnostics, leased-registry access, or ERROR logging
+  occurs.
 - Resolver cancellation and Gateway shutdown leave no DNS requests, timers,
   connection attempts, or streams running.
 
-**RED-first tests:** DNS normalization/deduplication/reordering; configurable
-refresh and TTL expiry with a fake clock; empty/NXDOMAIN then recovery;
-add/remove/re-add; bounded 40-address reconciliation; durable subscription
-reactivation; resolver rejection recovery; and shutdown cancellation.
+**RED-first tests:** DNS normalization/deduplication/reordering; GKE node-ID,
+IPv6, TLS authority, disappearance/address-reuse fencing; configured interval
+shorter than TTL; positive TTL shorter than interval; zero/missing TTL fallback;
+empty/NXDOMAIN; resolver failure before and after the last answer's validity
+deadline; later recovery; bounded 40-address reconciliation; durable
+subscription reactivation; and shutdown cancellation.
 
 **Documentation obligations:** Add GKE package README/reference covering the
 headless Service, readiness ownership, DNS/TTL behavior, service-name and port
-configuration, scale-to-zero semantics, expected-count diagnostic, and package
-assembly. State that Kubernetes manifests/Terraform and the beginner guide
-arrive in T-0126.
+configuration, canonical identity/TLS authority, exact refresh/TTL/failure
+precedence, scale-to-zero semantics, expected-count behavior without a public
+diagnostics API, and package assembly. State that Kubernetes
+manifests/Terraform and the beginner guide arrive in T-0126.
 
 **Review concerns:** all four concerns are relevant. DNS semantics, timer/cache
 lifecycle, cancellation, resource bounds, and public assembly require
@@ -547,11 +675,14 @@ wave/task jargon in end-user prose.
 documentation for teaching quality and factual claims, TypeScript/API docs for
 runtime snippets, and performance/reliability for scaling/replacement claims.
 
-**Verification:** `pnpm verify:task -- --no-tests` after deterministic Terraform
-format/validate/policy and docs/link checks. This is sufficient because the
-slice is isolated infrastructure/docs and changes no runtime, dependency,
-generated, or shared-build behavior. Promote to `verify:release` if that
-assumption becomes false.
+**Verification:** Run
+`pnpm verify:task -- --no-coverage packages/deployment-gke/test/terraform-policy.test.ts`
+so the deterministic Terraform fixture/policy test is part of the focused task
+gate, alongside Terraform format/validate and docs/link checks. No coverage is
+required because this slice changes infrastructure/docs rather than production
+TypeScript. This profile is sufficient only while the slice changes no runtime,
+dependency, generated, or shared-build behavior; otherwise promote to
+`verify:release`.
 
 **Risks and exclusions:** Risks are unsafe production-looking defaults,
 secret-value materialization, and promising autoscaling the templates do not
@@ -611,9 +742,13 @@ documentation for beginner usability and factual claims, TypeScript/API docs
 for runtime snippets, and performance/reliability for leases, scaling,
 replacement, and failure-boundary claims.
 
-**Verification:** `pnpm verify:task -- --no-tests` after deterministic Terraform
-format/validate/policy and docs/link checks. Promote to `verify:release` if any
-runtime, dependency, generated, or shared-build path changes.
+**Verification:** Run
+`pnpm verify:task -- --no-coverage packages/deployment-gce/test/terraform-policy.test.ts`
+so the deterministic Terraform fixture/policy test is part of the focused task
+gate, alongside Terraform format/validate and docs/link checks. No coverage is
+required because this slice changes infrastructure/docs rather than production
+TypeScript. Promote to `verify:release` if any runtime, dependency, generated,
+or shared-build path changes.
 
 **Risks and exclusions:** Risks are public endpoint publication, unbounded
 shutdown/cleanup claims, hidden secret persistence, and presenting the minimal
@@ -656,7 +791,8 @@ refactor stabilized packages.
   execute under the new version.
 - No Wave 8 structured logger, Google Cloud Logging adapter, ERROR emission,
   multiple-Gateway behavior, `validation-ts` upgrade, or storage-layout tuning
-  is present. The observed/expected diagnostic seam is covered for Wave 8 use.
+  is present. Package-internal observed/expected count behavior is covered, but
+  no public diagnostics seam is exported; Wave 8 owns that design and exposure.
 - All task/work/review statuses, completion-plan state, branch/main refs, tags
   if any, and remote pushes are reconciled and verified.
 

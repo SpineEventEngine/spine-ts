@@ -1,6 +1,6 @@
 # T-0120: Wave 7 Scaling And Redeployment Plan
 
-Status: Execution authorized; dependency split complete
+Status: Execution authorized; planning corrections applied; re-review pending
 
 ## Objective
 
@@ -194,6 +194,52 @@ resolved through an explicit incompatible cutover.
 - Configured profile retained from the original explicit dispatch:
   `gpt-5.6-sol` / `high`.
 - Subagents may not spawn subagents.
+
+## Planning Correction Result
+
+The complete accepted batch is applied without runtime implementation:
+
+1. Removed the stale GCE/overflow confirmation sentence from
+   `build-protocol/questions/UNRESOLVED.md`.
+2. T-0121 now changes and validates only unary child limits; T-0122 exclusively
+   removes the fixed subscription limit, topology field, and positional
+   envelope.
+3. T-0126 and T-0127 now run their Terraform policy tests through focused
+   `verify:task -- --no-coverage` invocations rather than `--no-tests`.
+4. One generation-fenced reconciliation owner serializes membership and
+   subscription work while coalescing rapid churn to one latest pending
+   snapshot.
+5. GCE shutdown fences and quiesces initial registration, renewal, and cleanup
+   before conditional deletion and listener close; operation timeouts cannot
+   detach a late registry mutation.
+6. The repository-wide incompatible cutover is explicit: Gateway binding v3
+   development state is discarded, v4 removes fixed topology, and no legacy
+   reader, dual write, migration, compatibility shim, or pre-Wave-7 restart
+   fixture is permitted.
+7. Stable GCE/GKE node-ID derivation and canonical HTTP(S), TLS-authority,
+   address-reuse, and IPv6 rules are frozen.
+8. Observed/expected counts remain package-internal in Wave 7; public
+   diagnostics and logging exposure remain Wave 8 work.
+9. Registry record encoding/storage key v1, complete-read validation, unknown
+   and malformed behavior, and incompatible versioned-key policy are explicit.
+10. GKE DNS scheduling now defines refresh-versus-TTL precedence, zero/missing
+    TTL fallback, empty/NXDOMAIN, resolver failure, validity expiry, and
+    recovery.
+
+Configured runtime remains the explicitly dispatched `gpt-5.6-sol` / `high`
+profile. This surface still exposes no independent model/reasoning
+self-introspection and shows no visible fallback or mismatch.
+
+Focused correction checks are clean:
+
+- `git diff --check`;
+- Prettier check over `TASK.md`, the Wave 7 plan, and `UNRESOLVED.md`; and
+- `pnpm docs:audience:check`.
+
+Because generation ownership, durable cutover semantics, storage versioning,
+shutdown ordering, and DNS failure behavior changed substantively, the
+orchestrator must re-review the affected planning concerns before integrating
+T-0120.
 
 ## Dependency-Ordered Execution Queue
 

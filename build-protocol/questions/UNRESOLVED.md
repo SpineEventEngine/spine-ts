@@ -24,8 +24,7 @@ None as of 2026-06-27.
 - 2026-08-06, T-0120: the human approved the Wave 7 package boundaries,
   explicit storage dependency and namespace for GCE discovery, GCE lease and
   refresh timings, GKE DNS refresh policy, bounded node-count policy, minimal
-  GCE placement, and optional operator-configured autoscaling templates. The
-  GCE registrar explanation and over-limit behavior still require confirmation.
+  GCE placement, and optional operator-configured autoscaling templates.
 - 2026-07-27, T-0074: Wave 4 Q&A is complete. The human approved the browser,
   client packaging, React, best-effort subscription, standalone authentication
   gateway, application-session, Google/GitHub/OIDC, context-resolution,
