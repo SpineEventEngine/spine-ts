@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 /**
  * A stable application-node identity and canonical reachable endpoint.
  */
@@ -249,4 +251,3 @@ export class StaticNodeDiscovery implements NodeDiscovery {
     };
   }
 }
-import { isIP } from "node:net";
