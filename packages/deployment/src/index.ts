@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await */
 
-import { ApplicationNode } from "./application-node.js";
+import { ApplicationNode } from "./discovery/application-node.js";
 
-export { ApplicationNode } from "./application-node.js";
+export { ApplicationNode } from "./discovery/application-node.js";
 
 export {
   LeasedNodeRegistry,

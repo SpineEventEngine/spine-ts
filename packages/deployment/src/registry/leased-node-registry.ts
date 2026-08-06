@@ -11,7 +11,7 @@ import {
   type ApplicationNodeLease,
 } from "@spine-event-engine/proto/generated/spine/system/deployment/application_node_lease_pb.js";
 
-import { ApplicationNode } from "../application-node.js";
+import { ApplicationNode } from "../discovery/application-node.js";
 
 const storageKey = "spine.deployment.ApplicationNodeLease:v1";
 const defaultCleanupBatchSize = 32;
