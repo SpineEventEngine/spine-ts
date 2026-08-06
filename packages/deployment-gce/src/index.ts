@@ -91,7 +91,7 @@ export class GceRegistrar {
 
   #schedule(): void {
     this.#cancel = this.#scheduler.schedule(20_000, () => {
-      void this.#enqueue(() => this.#renew());
+      void this.#enqueue(() => this.#renew()).catch(() => undefined);
     });
   }
 

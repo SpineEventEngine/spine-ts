@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApplicationNode } from "@spine-event-engine/deployment";
+import { ApplicationNode, ScheduledNodeDiscovery } from "@spine-event-engine/deployment";
 import { GceApplicationNode, GceRegistrar, GceRegistryReader } from "../src/index.js";
 
 describe("GceApplicationNode", () => {
@@ -54,5 +54,25 @@ describe("GceApplicationNode", () => {
     await expect(
       new GceRegistryReader(registry, () => 7).read(new AbortController().signal),
     ).resolves.toMatchObject([{ id: "7" }]);
+  });
+
+  it("feeds all live registry nodes through scheduled discovery", async () => {
+    let tick: (() => void) | undefined;
+    const nodes = Array.from(
+      { length: 40 },
+      (_, index) =>
+        new ApplicationNode({ id: String(index), endpoint: `http://10.0.0.${String(index + 1)}` }),
+    );
+    const registry = {
+      read: async () => nodes,
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const discovery = new ScheduledNodeDiscovery({
+      reader: new GceRegistryReader(registry, () => 0),
+      scheduler: { schedule: (_delay, onTick) => ((tick = onTick), () => undefined) },
+    });
+    const stop = discovery.watch((snapshot) => expect(snapshot).toHaveLength(40));
+    tick?.();
+    await Promise.resolve();
+    await stop();
   });
 });
