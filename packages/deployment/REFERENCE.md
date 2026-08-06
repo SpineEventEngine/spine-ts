@@ -27,4 +27,8 @@ no migration, compatibility, dual-read, or dual-write path.
 safe to repeat and to call concurrently; expiry makes abandoned scale-to-zero
 rows immediately undiscoverable even before a later healthy node resumes
 physical cleanup. `close()` is idempotent, closes this registry's storage handle,
-and rejects later operations without closing the caller's factory.
+fences later operations, and waits for already-started operations to settle
+before it closes the handle. It never closes the caller's factory. The typed
+lease record preserves an explicit normalized HTTPS TLS authority alongside its
+canonical origin, so a read returns the same `ApplicationNode` descriptor that
+was registered.
