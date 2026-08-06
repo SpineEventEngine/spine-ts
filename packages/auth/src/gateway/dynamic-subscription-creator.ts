@@ -36,11 +36,10 @@ export class DynamicSubscriptionCreator implements SubscriptionCoordinator {
     signal: AbortSignal,
   ): Promise<void> {
     if (signal.aborted) return Promise.resolve();
-    return this.#owner.activateDefinition(request.wire, request.updates);
+    return this.#owner.activateDefinition(request.wire, request.updates, signal);
   }
 
   cancel(request: { readonly wire: PublicSubscriptionWire }, signal: AbortSignal): Promise<void> {
     return this.#owner.cancelDefinition(request.wire, signal);
   }
-
 }

@@ -17,8 +17,54 @@ describe("DynamicSubscriptionCreator", () => {
     await creator.subscribe(wire, new AbortController().signal);
 
     expect(starts).toEqual([]);
-    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await Promise.resolve();
     expect(starts).toEqual(["a"]);
+    controller.abort();
+    await activation;
+  });
+
+  it("keeps activation open and relays updates until its downstream signal aborts", async () => {
+    const entered = deferred<void>();
+    const delivered = deferred<void>();
+    const controller = new AbortController();
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, []),
+        activate: async (request, signal) => {
+          entered.resolve();
+          await request.updates({ kind: "subscription-update", bytes: new Uint8Array([1]) });
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", resolve, { once: true }),
+          );
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const wire = subscription();
+
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await creator.subscribe(wire, new AbortController().signal, 100);
+    const activation = creator.activate(
+      {
+        wire,
+        updates: async () => {
+          delivered.resolve();
+        },
+      },
+      controller.signal,
+    );
+    await Promise.all([entered.promise, delivered.promise]);
+    let settled = false;
+    void activation.then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    controller.abort();
+    await activation;
   });
 
   it("does not activate a child until its concurrent add has installed it", async () => {
@@ -44,14 +90,14 @@ describe("DynamicSubscriptionCreator", () => {
     await owner.reconcile([node]);
     const creating = creator.subscribe(wire, new AbortController().signal);
     await entered.promise;
-    const activating = creator.activate(
-      { wire, updates: async () => {} },
-      new AbortController().signal,
-    );
+    const controller = new AbortController();
+    const activating = creator.activate({ wire, updates: async () => {} }, controller.signal);
     release.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) });
 
-    await Promise.all([creating, activating]);
+    await creating;
     expect(starts).toEqual(["a"]);
+    controller.abort();
+    await activating;
   });
 
   it("retains an active definition while no nodes exist and resumes it after recovery", async () => {
@@ -63,11 +109,15 @@ describe("DynamicSubscriptionCreator", () => {
 
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
-    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await Promise.resolve();
     await owner.reconcile([]);
     await owner.reconcile([node]);
 
     expect(starts).toEqual(["a", "a"]);
+    controller.abort();
+    await activation;
   });
 
   it("replaces a child after an unexpected activation completion", async () => {
@@ -97,7 +147,9 @@ describe("DynamicSubscriptionCreator", () => {
 
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
-    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await Promise.resolve();
     expect(activations).toBe(1);
 
     firstActivation.resolve();
@@ -108,6 +160,8 @@ describe("DynamicSubscriptionCreator", () => {
     expect(activations).toBe(2);
     await owner.reconcile([node]);
     expect(activations).toBe(2);
+    controller.abort();
+    await activation;
   });
 
   it("rejects a new native subscription while membership is empty", async () => {
@@ -136,9 +190,9 @@ describe("DynamicSubscriptionCreator", () => {
     const creator = new DynamicSubscriptionCreator(owner);
 
     await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
-    await expect(creator.subscribe(subscription(), new AbortController().signal, 1)).rejects.toThrow(
-      "backend-envelope-too-large",
-    );
+    await expect(
+      creator.subscribe(subscription(), new AbortController().signal, 1),
+    ).rejects.toThrow("backend-envelope-too-large");
     expect(disposals).toBe(1);
   });
 
@@ -215,11 +269,15 @@ describe("DynamicSubscriptionCreator", () => {
     const wire = subscription();
     await owner.reconcile([a]);
     await creator.subscribe(wire, new AbortController().signal);
-    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await Promise.resolve();
     await owner.reconcile([a, b]);
     await owner.reconcile([b]);
 
     expect(starts).toEqual(["a", "b"]);
+    controller.abort();
+    await activation;
   });
 
   it("keeps one child per node through reordered replayed snapshots", async () => {
@@ -232,11 +290,15 @@ describe("DynamicSubscriptionCreator", () => {
 
     await owner.reconcile([a, b]);
     await creator.subscribe(wire, new AbortController().signal);
-    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await Promise.resolve();
     await owner.reconcile([b, a]);
     await owner.reconcile([a, b]);
 
     expect(starts.sort()).toEqual(["a", "b"]);
+    controller.abort();
+    await activation;
   });
 
   it("starts one child on every discovered node without a 32-node cap", async () => {
@@ -255,10 +317,14 @@ describe("DynamicSubscriptionCreator", () => {
     const wire = subscription();
     await owner.reconcile(nodes);
     await creator.subscribe(wire, new AbortController().signal);
-    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await Promise.resolve();
 
     expect(starts).toHaveLength(40);
     expect(new Set(starts)).toEqual(new Set(nodes.map((node) => node.id)));
+    controller.abort();
+    await activation;
   });
 
   it("bounds forty native child starts by the configured concurrency", async () => {
@@ -319,11 +385,15 @@ describe("DynamicSubscriptionCreator", () => {
     const wire = subscription();
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
-    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await Promise.resolve();
     await owner.reconcile([]);
 
     expect(activationAborted).toBe(true);
     expect(disposals).toBe(1);
+    controller.abort();
+    await activation;
   });
 
   it("retries failed cleanup on the next membership reconciliation", async () => {
@@ -343,11 +413,15 @@ describe("DynamicSubscriptionCreator", () => {
     const wire = subscription();
     await owner.reconcile([node]);
     await creator.subscribe(wire, new AbortController().signal);
-    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    const controller = new AbortController();
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await Promise.resolve();
     await owner.reconcile([]);
     await owner.reconcile([]);
 
     expect(attempts).toBe(2);
+    controller.abort();
+    await activation;
   });
 });
 

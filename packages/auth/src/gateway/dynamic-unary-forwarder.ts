@@ -317,6 +317,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   async activateDefinition(
     wire: PublicSubscriptionWire,
     updates: SubscriptionUpdateSink,
+    signal: AbortSignal,
   ): Promise<void> {
     const definition = this.#definitions.get(
       fromBinary(SubscriptionSchema, wire.bytes).id?.value ?? "",
@@ -324,7 +325,24 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     if (definition === undefined) return;
     definition.updates = updates;
     definition.active = true;
-    await this.#schedule([...this.#nodes.values()], false);
+    const abort = () => {
+      for (const controller of definition.starts) controller.abort();
+      for (const child of definition.children.values()) child.controller.abort();
+    };
+    if (signal.aborted) {
+      abort();
+      return;
+    }
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+      await this.#schedule([...this.#nodes.values()], false);
+      if (!signal.aborted)
+        await new Promise<void>((resolve) =>
+          signal.addEventListener("abort", resolve, { once: true }),
+        );
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
   }
 
   async #startChild(
