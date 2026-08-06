@@ -236,3 +236,24 @@ tests.
   scoped lint/TSDoc, documentation audience checks, and diff validation.
   Final acceptance re-review is limited to TypeScript/API and
   performance/reliability.
+
+## Final Acceptance
+
+- Style/maintainability: clean after the named logical state correction.
+- Documentation: clean after the deterministic recovery-ordering TSDoc
+  correction.
+- TypeScript/API docs: clean at `5f2a4384`; effective envelope defaults,
+  validation, recovery contracts, exports, and compatibility are accepted.
+  Focused acceptance ran 152 tests.
+- Performance/reliability: clean at `5f2a4384`; child cleanup survives
+  concurrent node removal, client close joins disposal, and exact recovery
+  claim fencing preserves concurrent Cancel. Focused acceptance ran 327 tests.
+- Dedicated security review: N/A for the unchanged authenticated Gateway trust
+  boundary recorded above.
+
+The final API and reliability reviewers used the same explicitly configured
+`gpt-5.6-terra` / `high` profiles. Runtime self-introspection was unavailable
+and no visible mismatch occurred. The final correction preflight passed seven
+suites / 382 tests plus generated typechecking, scoped lint/TSDoc,
+documentation audience, formatting, and diff checks. Release verification
+remains required.
