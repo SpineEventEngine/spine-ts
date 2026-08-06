@@ -153,6 +153,46 @@ mismatch was visible. Targeted verification passed 316 tests.
 8. Run focused regression tests and the complete affected preflight, update
    records, and request acceptance re-review only for these affected concerns.
 
+## Acceptance Re-review
+
+Range: `980ad83f..56d3c15d`.
+
+- Style/maintainability: clean. The named logical state is used consistently.
+- Documentation: all prior findings resolved; one P2 recovery-ordering TSDoc
+  sentence remains.
+- TypeScript/API docs: prior findings resolved; one P1 remains because direct
+  dynamic creation can bypass the owner's documented native-envelope limit and
+  the option is not validated.
+- Performance/reliability: prior findings resolved except two P1 races:
+  cancel/expiry versus node removal can lose child cleanup, and recovery's
+  final write can overwrite a concurrent Cancel tombstone.
+
+Reviewers retained the recorded configured profiles and runtime
+self-introspection remained unavailable. Focused verification passed 318
+tests.
+
+## Residual Correction Batch
+
+1. During logical Cancel or compensation, fence and abort installed children
+   and retain their cleanup client before removing desired definition state or
+   awaiting membership reconciliation. A concurrent node removal must dispose
+   each child before closing its client. Add deterministic explicit-Cancel and
+   post-create-compensation versus node-removal tests.
+2. Fence recovery's final commit by the exact recovery owner, fence, lifecycle,
+   and claimed record. A concurrent Cancel or other winning transition must
+   remain authoritative; recovery must never overwrite a cancelling tombstone.
+   Compensate or retry the local rehydration as appropriate. Add a blocked
+   rehydration/concurrent-Cancel test.
+3. Make direct dynamic creation use the owner's effective
+   `maxBackendEnvelopeBytes` by default. Do not expose an optional unbounded
+   `Number.MAX_SAFE_INTEGER` fallback through the public adapter. Validate a
+   configured limit as a positive safe integer and test default, custom, and
+   invalid values.
+4. Correct recovery TSDoc to state that it claims and rehydrates while fenced,
+   then marks the row inactive before returning.
+5. Run focused regression tests and the complete affected preflight. Return
+   only the two affected API/reliability concerns for final acceptance.
+
 ## Correction Implementation Evidence
 
 - The complete accepted batch is implemented through `e5c05ba7`. Public
