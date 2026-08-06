@@ -196,6 +196,55 @@ describe("DynamicSubscriptionCreator", () => {
     expect(disposals).toBe(1);
   });
 
+  it("uses the owner's default native envelope limit for direct creation", async () => {
+    const owner = new DynamicUnaryForwarder({
+      maxBackendEnvelopeBytes: 1,
+      create: async (node) => ({
+        ...client(node.id, []),
+        subscribe: async () => ({
+          kind: "backend-subscription-envelope" as const,
+          bytes: new Uint8Array([1, 2]),
+        }),
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await expect(creator.subscribe(subscription(), new AbortController().signal)).rejects.toThrow(
+      "backend-envelope-too-large",
+    );
+  });
+
+  it("accepts a custom owner native envelope limit", async () => {
+    const owner = new DynamicUnaryForwarder({
+      maxBackendEnvelopeBytes: 2,
+      create: async (node) => ({
+        ...client(node.id, []),
+        subscribe: async () => ({
+          kind: "backend-subscription-envelope" as const,
+          bytes: new Uint8Array([1, 2]),
+        }),
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await expect(creator.subscribe(subscription(), new AbortController().signal)).resolves.toBeUndefined();
+  });
+
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects an invalid owner native envelope limit of %s",
+    (maxBackendEnvelopeBytes) => {
+      expect(
+        () =>
+          new DynamicUnaryForwarder({
+            maxBackendEnvelopeBytes,
+            create: async (node) => client(node.id, []),
+          }),
+      ).toThrow("maxBackendEnvelopeBytes must be a positive safe integer.");
+    },
+  );
+
   it("compensates every installed child when one current node rejects creation", async () => {
     const disposals: string[] = [];
     const owner = new DynamicUnaryForwarder({
@@ -494,6 +543,76 @@ describe("DynamicSubscriptionCreator", () => {
     expect(disposed).toBe(1);
     controller.abort();
     await activation;
+  });
+
+  it("disposes a cancelled child before a concurrent node removal closes its client", async () => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const order: string[] = [];
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, []),
+        dispose: async () => {
+          order.push("dispose");
+          entered.resolve();
+          await release.promise;
+        },
+        close: async () => {
+          order.push("close");
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const wire = subscription();
+
+    await owner.reconcile([node]);
+    await creator.subscribe(wire, new AbortController().signal);
+    const cancelling = creator.cancel({ wire }, new AbortController().signal);
+    await entered.promise;
+    const removing = owner.reconcile([]);
+    await Promise.resolve();
+    expect(order).toEqual(["dispose"]);
+    release.resolve();
+    await Promise.all([cancelling, removing]);
+    expect(order).toEqual(["dispose", "close"]);
+  });
+
+  it("disposes a failed creation child before concurrent node removal closes its client", async () => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const order: string[] = [];
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, []),
+        subscribe: async () => {
+          if (node.id === "b") throw new Error("native creation failed");
+          return { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) };
+        },
+        dispose: async () => {
+          order.push("dispose");
+          entered.resolve();
+          await release.promise;
+        },
+        close: async () => {
+          order.push("close");
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const a = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const b = new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" });
+
+    await owner.reconcile([a, b]);
+    const creating = creator.subscribe(subscription(), new AbortController().signal);
+    await entered.promise;
+    const removing = owner.reconcile([]);
+    await Promise.resolve();
+    expect(order).toEqual(["dispose"]);
+    release.resolve();
+    await expect(creating).rejects.toThrow("native creation failed");
+    await removing;
+    expect(order).toEqual(["dispose", "close", "close"]);
   });
 });
 

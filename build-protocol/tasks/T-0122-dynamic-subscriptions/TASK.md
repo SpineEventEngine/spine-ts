@@ -113,6 +113,24 @@ accepted evidence with no visible mismatch.
   audience, formatting, and diff checks passed. Specialist review and release
   verification remain required.
 
+## Residual Correction Evidence
+
+- Logical Cancel and post-create compensation now detach, abort, and retain the
+  creating client for every installed child before removing the definition or
+  reconciling membership. Client closure waits for an already-started child
+  disposal, so a concurrent node removal cannot close the connection first.
+- Recovery now verifies the exact active owner, fence, lifecycle, and claimed
+  revision before it changes a rehydrated row to inactive. A concurrent Cancel
+  remains authoritative; the abandoned recovery claim is relinquished for a
+  later retry when appropriate.
+- Direct dynamic creation defaults to the owner's configured native-envelope
+  limit. The owner rejects a non-positive, fractional, or unsafe configured
+  limit rather than exposing an unbounded fallback.
+- Focused preflight passed: 7 suites / 382 tests, generated typechecking,
+  scoped lint/TSDoc, documentation-audience checks, and `git diff --check`.
+  Only the affected TypeScript/API and reliability concerns need final
+  acceptance re-review.
+
 ## Review Concerns
 
 - Style/maintainability: relevant.

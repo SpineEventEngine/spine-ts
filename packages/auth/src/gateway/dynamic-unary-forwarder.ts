@@ -41,6 +41,14 @@ interface FailedChildCleanup {
 }
 
 /**
+ * Retains a child and the client which created it while logical state is removed.
+ */
+interface RetainedChildCleanup {
+  readonly child: SubscriptionChild;
+  readonly client: DynamicUnaryClient | undefined;
+}
+
+/**
  * Represents a connected unary backend with deterministic disposal.
  */
 export interface DynamicUnaryClient extends UnaryForwarder, SubscriptionCreator {
@@ -109,6 +117,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #generation = 0;
   readonly #failedDisposals = new Set<DynamicUnaryClient>();
   readonly #failedChildCleanup = new Set<FailedChildCleanup>();
+  readonly #childCleanup = new Map<DynamicUnaryClient, Set<Promise<void>>>();
   #nextIncarnation = 0;
   #nodes: readonly ApplicationNode[] = [];
   readonly #definitions = new Map<string, LogicalDefinitionState>();
@@ -126,6 +135,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       throw new RangeError("maxConcurrentStarts must be a positive safe integer.");
     this.#options = options;
     this.#maxConcurrentStarts = options.maxConcurrentStarts ?? 8;
+    if (
+      options.maxBackendEnvelopeBytes !== undefined &&
+      (!Number.isSafeInteger(options.maxBackendEnvelopeBytes) ||
+        options.maxBackendEnvelopeBytes < 1)
+    )
+      throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
     this.#maxBackendEnvelopeBytes = options.maxBackendEnvelopeBytes ?? 1_048_576;
   }
 
@@ -223,8 +238,10 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   async subscribeDefinition(
     request: PublicSubscriptionWire,
     signal: AbortSignal,
-    maxBackendEnvelopeBytes: number = Number.MAX_SAFE_INTEGER,
+    maxBackendEnvelopeBytes: number = this.#maxBackendEnvelopeBytes,
   ): Promise<void> {
+    if (!Number.isSafeInteger(maxBackendEnvelopeBytes) || maxBackendEnvelopeBytes < 1)
+      throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
     if (signal.aborted || this.#closed || this.#nodes.length === 0)
       throw new Error("Gateway backend is absent.");
     const wire = { kind: "public-subscription" as const, bytes: request.bytes.slice() };
@@ -248,13 +265,15 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     if (!this.#definitions.has(key) || signal.aborted || this.#closed)
       throw new Error("subscription creation was cancelled");
     if (definition.failure !== undefined) {
+      const cleanup = this.#detachDefinitionChildren(definition);
+      await this.#cleanupRetainedChildren(cleanup);
       this.#definitions.delete(key);
-      await this.#removeDefinitionChildren(definition);
       throw definition.failure;
     }
     if (definition.children.size !== this.#clients.size) {
+      const cleanup = this.#detachDefinitionChildren(definition);
+      await this.#cleanupRetainedChildren(cleanup);
       this.#definitions.delete(key);
-      await this.#removeDefinitionChildren(definition);
       throw new Error("Gateway backend is absent.");
     }
   }
@@ -270,6 +289,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     request: PublicSubscriptionWire,
     maxBackendEnvelopeBytes: number = this.#maxBackendEnvelopeBytes,
   ): Promise<void> {
+    if (!Number.isSafeInteger(maxBackendEnvelopeBytes) || maxBackendEnvelopeBytes < 1)
+      throw new RangeError("maxBackendEnvelopeBytes must be a positive safe integer.");
     if (this.#closed) throw new Error("Gateway dynamic owner is closed.");
     const subscription = fromBinary(SubscriptionSchema, request.bytes);
     const id = subscription.id?.value;
@@ -328,23 +349,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     const key = fromBinary(SubscriptionSchema, wire.bytes).id?.value;
     if (key === undefined || key.length === 0) return;
     const definition = this.#definitions.get(key);
-    this.#definitions.delete(key);
     if (definition === undefined) return;
     for (const controller of definition.starts) controller.abort();
+    const cleanup = this.#detachDefinitionChildren(definition);
+    await this.#cleanupRetainedChildren(cleanup, signal);
+    this.#definitions.delete(key);
     await this.#schedule([...this.#nodes.values()], false);
-    await Promise.allSettled(
-      [...definition.children].map(async ([id, child]) => {
-        const client = this.#clients.get(id)?.client;
-        if (client === undefined) return;
-        child.controller.abort();
-        try {
-          await client.dispose(child.backend, signal);
-        } catch {
-          this.#failedChildCleanup.add({ client, backend: child.backend });
-        }
-        await child.activation.catch(() => undefined);
-      }),
-    );
   }
 
   /**
@@ -474,29 +484,53 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     }
   }
 
-  async #removeDefinitionChildren(definition: LogicalDefinitionState): Promise<void> {
-    await Promise.all(
-      [...definition.children].map(async ([id, child]) => {
-        definition.children.delete(id);
-        await this.#cleanupChild(child, this.#clients.get(id)?.client);
-      }),
-    );
+  #detachDefinitionChildren(definition: LogicalDefinitionState): RetainedChildCleanup[] {
+    const retained: RetainedChildCleanup[] = [];
+    for (const [id, child] of definition.children) {
+      definition.children.delete(id);
+      retained.push({ child, client: this.#clients.get(id)?.client });
+    }
+    return retained;
+  }
+
+  async #cleanupRetainedChildren(
+    retained: readonly RetainedChildCleanup[],
+    signal: AbortSignal = new AbortController().signal,
+  ): Promise<void> {
+    await Promise.all(retained.map(({ child, client }) => this.#cleanupChild(child, client, signal)));
   }
 
   async #cleanupChild(
     child: SubscriptionChild,
     client: DynamicUnaryClient | undefined,
+    signal: AbortSignal = new AbortController().signal,
   ): Promise<void> {
     child.controller.abort();
     const cleanupClient = client;
-    if (cleanupClient !== undefined) {
-      try {
-        await cleanupClient.dispose(child.backend, new AbortController().signal);
-      } catch {
-        this.#failedChildCleanup.add({ client: cleanupClient, backend: child.backend });
+    const cleanup = async (): Promise<void> => {
+      if (cleanupClient !== undefined) {
+        try {
+          await cleanupClient.dispose(child.backend, signal);
+        } catch {
+          this.#failedChildCleanup.add({ client: cleanupClient, backend: child.backend });
+        }
       }
+      await child.activation.catch(() => undefined);
+    };
+    if (cleanupClient === undefined) {
+      await cleanup();
+      return;
     }
-    await child.activation.catch(() => undefined);
+    const running = cleanup();
+    const cleanups = this.#childCleanup.get(cleanupClient) ?? new Set<Promise<void>>();
+    cleanups.add(running);
+    this.#childCleanup.set(cleanupClient, cleanups);
+    try {
+      await running;
+    } finally {
+      cleanups.delete(running);
+      if (cleanups.size === 0) this.#childCleanup.delete(cleanupClient);
+    }
   }
 
   async #retryChildCleanup(): Promise<void> {
@@ -511,6 +545,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
 
   async #dispose(client: DynamicUnaryClient): Promise<void> {
     try {
+      const pending = this.#childCleanup.get(client);
+      if (pending !== undefined) await Promise.allSettled(pending);
       await client.close();
       this.#failedDisposals.delete(client);
     } catch {

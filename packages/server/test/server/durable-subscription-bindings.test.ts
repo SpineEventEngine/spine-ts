@@ -216,6 +216,66 @@ describe("DurableSubscriptionBindings", () => {
     await restarted.close();
   });
 
+  it("does not overwrite a concurrent cancellation after blocked rehydration", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = registry(factory, "recovery-cancel");
+    const binding = await first.create({
+      definition: { kind: "public-subscription", bytes: new Uint8Array([11]) },
+      principalFingerprint: "principal",
+      tenant: undefined,
+      expiresAtMs: 1_000,
+    });
+    const started = Promise.withResolvers<void>();
+    const active = first.activate({
+      id: binding.id,
+      principalFingerprint: "principal",
+      tenant: undefined,
+      nowMs: 1,
+      signal: new AbortController().signal,
+      onDefinition: async (_definition, signal) => {
+        started.resolve();
+        await new Promise<void>((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      },
+    });
+    await started.promise;
+    await first.close();
+    await active;
+    const restarted = registry(factory, "recovery-cancel");
+    const rehydrating = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const recovering = restarted.recoverActive({
+      nowMs: 2,
+      onDefinition: async () => {
+        rehydrating.resolve();
+        await release.promise;
+      },
+    });
+    await rehydrating.promise;
+
+    await expect(
+      restarted.cancel({
+        id: binding.id,
+        principalFingerprint: "principal",
+        tenant: undefined,
+        nowMs: 2,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "closed" });
+    release.resolve();
+    await recovering;
+    await expect(
+      restarted.activate({
+        id: binding.id,
+        principalFingerprint: "principal",
+        tenant: undefined,
+        nowMs: 2,
+        signal: new AbortController().signal,
+        onDefinition: () => Promise.resolve(),
+      }),
+    ).resolves.toEqual({ kind: "denied" });
+    await restarted.close();
+  });
+
   it("keeps namespaces and ownership facts isolated", async () => {
     const factory = new InMemoryStorageFactory();
     const first = registry(factory, "first");

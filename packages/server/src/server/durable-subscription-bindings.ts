@@ -470,11 +470,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Reclaims expired active definitions after a Gateway restart and rehydrates their native children.
+   * Claims and rehydrates expired active definitions while fenced, then marks each row inactive.
    *
-   * A restarted Gateway has no public update relay to resume. It therefore makes
-   * each successfully rehydrated binding inactive before exposing its definition;
-   * a reconnecting browser Activate request immediately establishes the new relay.
+   * A restarted Gateway has no public update relay to resume. A reconnecting
+   * browser Activate request immediately establishes the new relay.
    *
    * @param input Supplies the recovery time and native-membership callback.
    * @returns Completes after one bounded durable scan.
@@ -528,9 +527,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       const claimedRow = await this.#storage.read(claimed.id);
       if (
         claimedRow === undefined ||
+        !this.#claimedRecovery(Values.read(claimedRow, claimed.id, this.#maxRecordBytes), claimed) ||
         !(await this.#cas(claimed.id, claimedRow, Values.write(recovered, this.#maxRecordBytes)))
-      )
+      ) {
+        await this.#relinquish(claimed);
         continue;
+      }
     }
   }
 
@@ -625,6 +627,16 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       leaseUntilMs: 0,
     };
     await this.#cas(current.id, row, Values.write(released, this.#maxRecordBytes));
+  }
+
+  #claimedRecovery(row: Stored, claimed: Binding): row is Binding {
+    return (
+      row.family === "binding" &&
+      row.lifecycle === "active" &&
+      row.ownerId === this.#owner &&
+      row.fence === claimed.fence &&
+      row.revision === claimed.revision
+    );
   }
 
   async #claim(

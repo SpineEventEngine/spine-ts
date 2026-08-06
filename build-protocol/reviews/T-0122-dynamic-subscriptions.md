@@ -217,3 +217,22 @@ tests.
   the recovery failure together with any cleanup failures.
 - Focused preflight passed 7 suites / 373 tests, generated typechecking,
   scoped lint/TSDoc, documentation audience checks, and diff validation.
+
+## Residual Correction Implementation
+
+- Cancel and failed creation now retain each installed child's creating client,
+  abort the child, and dispose it before definition deletion or membership
+  reconciliation. The client disposal path joins active child cleanup before it
+  closes the connection. Deterministic Cancel-versus-removal and
+  post-create-compensation-versus-removal tests prove the ordering.
+- Recovery now makes its final inactive transition only when the stored row is
+  still its exact fenced active claim. A blocked rehydration followed by Cancel
+  leaves the cancelled row authoritative and denies subsequent activation.
+- Dynamic logical creation defaults to the configured owner envelope limit;
+  positive-safe-integer validation and default/custom/invalid limit tests are
+  present. Recovery TSDoc now states its fenced claim, rehydration, then
+  inactive transition ordering.
+- Focused preflight passed: 7 suites / 382 tests, generated typechecking,
+  scoped lint/TSDoc, documentation audience checks, and diff validation.
+  Final acceptance re-review is limited to TypeScript/API and
+  performance/reliability.
