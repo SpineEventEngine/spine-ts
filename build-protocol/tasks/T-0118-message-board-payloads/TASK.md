@@ -1,6 +1,6 @@
 # T-0118: Message Board Payload-First Synchronization
 
-Status: Final review corrections implemented; confirmation review pending
+Status: Confirmation correction implemented; final acceptance pending
 
 ## Objective
 
@@ -130,3 +130,21 @@ converged `verify:release` gate.
   focused client-react plus Message Board Vitest (78/78), the deterministic
   TypeDoc/API inventory (13 client-react exports), changed-source ESLint,
   Prettier, and `git diff --check`.
+
+## Confirmation Correction Evidence
+
+- The prior retained-stream board regression was invalid: it applied the
+  retention option to a different test, and the fixture callback shadowed the
+  outer option. The board-switch test now truly keeps board A's cancelled
+  stream open and emits its late resynchronization after board B commits.
+- Subscription retirement now advances its generation in a layout-effect
+  cleanup, before passive effect cleanup. Stream readers require that committed
+  generation and exact handle before calling a callback, closing the
+  commit-to-passive-cleanup window while retaining callback replacement without
+  subscription recreation.
+- Both public callback aliases now document `delivery` and `lifecycle`
+  parameters. `pnpm lint:tsdoc` passes.
+- Focused confirmation validation passed: client-react and web TypeScript
+  checks, focused client-react plus Message Board Vitest (79/79), exact
+  TypeDoc/API inventory, TSDoc enforcement, changed-source ESLint, Prettier,
+  and `git diff --check`.

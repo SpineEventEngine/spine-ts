@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { createElement, startTransition, StrictMode, Suspense, useEffect } from "react";
+import {
+  createElement,
+  startTransition,
+  StrictMode,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+} from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Subscription, SubscriptionDelivery } from "@spine-event-engine/client-web";
 
@@ -594,6 +601,36 @@ describe("client-react", () => {
     });
     expect(second).not.toHaveBeenCalled();
     replacement.resolve();
+  });
+
+  it("retires an old Entity handle before another layout effect can deliver into a new commit", async () => {
+    const oldHandle = subscription({ cancelEnds: false });
+    const nextHandle = subscription();
+    const pending = [oldHandle, nextHandle];
+    const createSubscription = vi.fn(() => Promise.resolve(pending.shift() ?? nextHandle));
+    const request = { createSubscription } as never;
+    const received: string[] = [];
+    function View({ board }: { readonly board: string }) {
+      useEntitySubscription({} as never, createQuery, [board], () => received.push(board));
+      useLayoutEffect(() => {
+        if (board === "board-b")
+          oldHandle.emitDelivery({ kind: "resynchronization", response: {} as never });
+      }, [board]);
+      return null;
+    }
+    const rendered = render(
+      createElement(SpineClientProvider, { request }, createElement(View, { board: "board-a" })),
+    );
+    await waitFor(() => {
+      expect(oldHandle.activate).toHaveBeenCalledTimes(1);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    rendered.rerender(
+      createElement(SpineClientProvider, { request }, createElement(View, { board: "board-b" })),
+    );
+    await Promise.resolve();
+    expect(received).toEqual([]);
   });
 
   it("does not invoke Entity callbacks after cleanup", async () => {

@@ -574,11 +574,7 @@ describe("MessageBoardApp", () => {
   });
 
   it("refreshes when live updates disconnect before a successful post completes", async () => {
-    const request = requestFixture({
-      queuedQueries: true,
-      deferredPost: true,
-      retainCancelledSubscription: true,
-    });
+    const request = requestFixture({ queuedQueries: true, deferredPost: true });
     render(
       createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
     );
@@ -905,7 +901,11 @@ describe("MessageBoardApp", () => {
   });
 
   it("abandons board A work and starts board B with clean board-owned state", async () => {
-    const request = requestFixture({ queuedQueries: true, deferredPost: true });
+    const request = requestFixture({
+      queuedQueries: true,
+      deferredPost: true,
+      retainCancelledSubscription: true,
+    });
     const rendered = render(
       createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-a" }),
     );
@@ -977,7 +977,7 @@ function fillPost(text: string, username = "Ada"): void {
 }
 
 function requestFixture(
-  options: {
+  fixtureOptions: {
     deferredQuery?: boolean;
     queuedQueries?: boolean;
     postFailure?: boolean;
@@ -993,23 +993,25 @@ function requestFixture(
   const subscriptions: ReturnType<typeof subscriptionFixture>[] = [];
   return {
     send: vi.fn<FixtureSend>(() => {
-      if (options.deferredQuery) return queries[0]!.promise;
-      if (options.queuedQueries) {
+      if (fixtureOptions.deferredQuery) return queries[0]!.promise;
+      if (fixtureOptions.queuedQueries) {
         const current = queries.at(-1)!;
         queries.push(Promise.withResolvers<ReturnType<typeof responseRows>>());
         return current.promise;
       }
       return Promise.resolve(
-        options.initialRows ?? responseRows("general message", "other board message"),
+        fixtureOptions.initialRows ?? responseRows("general message", "other board message"),
       );
     }),
-    post: fixturePost(options, postDeferred),
-    createSubscription: vi.fn(async (_topic, options) => {
+    post: fixturePost(fixtureOptions, postDeferred),
+    createSubscription: vi.fn(async (_topic, subscriptionOptions) => {
       const subscription = subscriptionFixture({
-        cancelEnds: !options.retainCancelledSubscription,
+        cancelEnds: !fixtureOptions.retainCancelledSubscription,
       });
       subscriptions.push(subscription);
-      subscription.authoritativeQuery = vi.fn<() => unknown>(options.authoritativeQuery);
+      subscription.authoritativeQuery = vi.fn<() => unknown>(
+        subscriptionOptions.authoritativeQuery,
+      );
       return subscription;
     }),
     get subscription() {

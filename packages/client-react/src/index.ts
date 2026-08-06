@@ -10,6 +10,7 @@ import {
   useContext,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
@@ -83,12 +84,16 @@ export interface SubscriptionObservation {
 }
 
 /**
- * Receives each active Entity subscription delivery synchronously before React coalesces it.
+ * Delivers each active Entity subscription delivery synchronously before React coalesces it.
+ *
+ * @param delivery The delivery received from the active Entity subscription.
  */
 export type OnSubscriptionDelivery = (delivery: SubscriptionDelivery) => void;
 
 /**
- * Receives each active Entity subscription lifecycle notice synchronously before React coalesces it.
+ * Delivers each active Entity subscription lifecycle notice synchronously before React coalesces it.
+ *
+ * @param lifecycle The lifecycle notice received from the active Entity subscription.
  */
 export type OnSubscriptionLifecycle = (lifecycle: SubscriptionLifecycle) => void;
 
@@ -268,12 +273,18 @@ const SubscriptionObservers = Object.freeze({
     const notifyLifecycle = useEffectEvent((lifecycle: SubscriptionLifecycle) => {
       onLifecycle?.(lifecycle);
     });
-    useEffect(() => {
+    useLayoutEffect(() => {
       const current = ++generation.current;
+      return () => {
+        if (generation.current === current) generation.current += 1;
+      };
+    }, dependencies);
+    useEffect(() => {
+      const current = generation.current;
       let live = true;
       let handle: Subscription | undefined;
       let cancelled: Promise<void> | undefined;
-      const isLive = () => live;
+      const isLive = () => live && generation.current === current;
       const cancel = () => {
         if (handle === undefined) return Promise.resolve();
         cancelled ??= Promise.resolve()
@@ -301,7 +312,7 @@ const SubscriptionObservers = Object.freeze({
             return;
           }
           await handle.activate();
-          if (!live) {
+          if (!isLive()) {
             await cancel();
             return;
           }
@@ -313,21 +324,21 @@ const SubscriptionObservers = Object.freeze({
           });
           void SubscriptionObservers.observeDeliveries(
             handle,
-            () => live && generation.current === current && handle === created,
+            () => isLive() && handle === created,
             setState,
             cancel,
             notifyDelivery,
           );
           void SubscriptionObservers.observeLifecycle(
             handle,
-            () => live && generation.current === current && handle === created,
+            () => isLive() && handle === created,
             setState,
             cancel,
             notifyLifecycle,
           );
         })
         .catch((error: unknown) => {
-          if (live && generation.current === current) {
+          if (isLive()) {
             setState({ status: "error", delivery: undefined, lifecycle: undefined, error });
             void cancel();
           }

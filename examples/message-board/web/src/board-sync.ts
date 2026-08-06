@@ -37,7 +37,7 @@ export interface BoardSyncResult {
   readonly refresh: () => void;
 
   /**
-   * Refreshes after a successful post when live updates are not connected.
+   * Schedules a refresh after a successful post when live updates are not connected.
    */
   readonly onPosted: () => void;
 }

@@ -147,3 +147,21 @@ Focused evidence: client-react and web TypeScript checks pass; focused
 client-react plus Message Board Vitest passes 78/78; the TypeDoc/API inventory
 passes with 13 client-react exports; changed-source ESLint, Prettier, and
 `git diff --check` pass. Confirmation review remains pending.
+
+## Confirmation Correction Evidence
+
+The prior reliability-clean disposition is superseded by concrete fixture
+evidence: the alleged retained old subscription was not retained because the
+option was assigned to a different test and shadowed by subscription options.
+The fixture is corrected, and the Board A/B regression now delivers a late old
+resynchronization from a genuinely retained stream after board B commits.
+
+Subscription retirement now invalidates its generation in layout cleanup, so
+an old reader is ineligible before passive cleanup. Reader eligibility still
+requires the matching created handle. Public callback aliases include complete
+parameter TSDoc.
+
+Focused evidence: client-react and web TypeScript checks pass; focused
+client-react plus Message Board Vitest passes 79/79; exact TypeDoc/API
+inventory, `pnpm lint:tsdoc`, changed-source ESLint, Prettier, and
+`git diff --check` pass. Final review/acceptance is pending.
