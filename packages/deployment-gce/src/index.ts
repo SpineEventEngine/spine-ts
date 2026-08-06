@@ -96,6 +96,7 @@ export interface GceDeadlineFactory {
 const systemScheduler: GceScheduler = {
   schedule: (delayMs, onTick) => {
     const timer = setTimeout(onTick, delayMs);
+    timer.unref();
     return () => clearTimeout(timer);
   },
 };
@@ -215,7 +216,9 @@ export class GceRegistrar {
           this.#registry.renew(node.id, this.#identity, this.#now() + 60_000, signal),
         );
       else {
-        const existing = await this.#registry.lookup(node.id, this.#now(), this.#abort.signal);
+        const existing = await this.#operation((signal) =>
+          this.#registry.lookup(node.id, this.#now(), signal),
+        );
         this.#confirmed = existing?.registrationId === this.#identity;
         if (!this.#confirmed)
           this.#confirmed = await this.#operation((signal) =>

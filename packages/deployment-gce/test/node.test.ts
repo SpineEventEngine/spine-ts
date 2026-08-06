@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { DynamicUnaryForwarder, type DynamicUnaryClient } from "@spine-event-engine/auth";
 import {
   ApplicationNode,
   LeasedNodeRegistry,
   ScheduledNodeDiscovery,
 } from "@spine-event-engine/deployment";
+import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
   GceApplicationNode,
@@ -224,6 +227,57 @@ describe("GceApplicationNode", () => {
     await stop();
   });
 
+  it("reconciles all discovered GCE nodes for gateway routing and subscriptions", async () => {
+    const ticks: (() => void)[] = [];
+    const nodes = Array.from(
+      { length: 40 },
+      (_, index) =>
+        new ApplicationNode({ id: String(index), endpoint: `http://10.0.1.${String(index + 1)}` }),
+    );
+    let reconciled: (() => void) | undefined;
+    const ready = new Promise<void>((resolve) => (reconciled = resolve));
+    const subscribed = new Set<string>();
+    const gateway = new DynamicUnaryForwarder({
+      create: async (node) => gatewayClient(node.id, subscribed),
+    });
+    const discovery = new ScheduledNodeDiscovery({
+      reader: new GceRegistryReader(
+        { read: async () => nodes } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+        () => 0,
+      ),
+      scheduler: { schedule: (_delay, onTick) => (ticks.push(onTick), () => undefined) },
+    });
+    const stop = discovery.watch((snapshot) => {
+      void gateway.reconcile(snapshot).then(() => reconciled?.());
+    });
+    try {
+      ticks.shift()?.();
+      await ready;
+      const routed = new Set<string>();
+      for (let index = 0; index < 40; index++)
+        routed.add(
+          new TextDecoder().decode(
+            await gateway.forward({ service: "spine.client.QueryService", method: "Read", value: new Uint8Array() }),
+          ),
+        );
+      await gateway.subscribeDefinition(
+        {
+          kind: "public-subscription",
+          bytes: toBinary(
+            SubscriptionSchema,
+            create(SubscriptionSchema, { id: { value: "all-nodes" }, topic: create(TopicSchema) }),
+          ),
+        },
+        new AbortController().signal,
+      );
+      expect(routed).toEqual(new Set(nodes.map((node) => node.id)));
+      expect(subscribed).toEqual(new Set(nodes.map((node) => node.id)));
+    } finally {
+      await stop();
+      await gateway.close();
+    }
+  });
+
   it("retains the last discovery snapshot through a registry read failure", async () => {
     const ticks: (() => void)[] = [];
     let reads = 0;
@@ -389,6 +443,64 @@ describe("GceApplicationNode", () => {
     expect(closed).toBe(true);
   });
 
+  it("bounds an unconfirmed ownership lookup with its own operation deadline", async () => {
+    const ticks: (() => void)[] = [];
+    const controllers: AbortController[] = [];
+    let schedules = 0;
+    let retryScheduled: (() => void) | undefined;
+    const retried = new Promise<void>((resolve) => (retryScheduled = resolve));
+    let lookupStarted: (() => void) | undefined;
+    const lookup = new Promise<void>((resolve) => (lookupStarted = resolve));
+    let lookupSignal: AbortSignal | undefined;
+    const registry = {
+      register: async () => {
+        throw new Error("lost response");
+      },
+      lookup: (nodeId: string, now: number, signal: AbortSignal) =>
+        new Promise<undefined>((_resolve, reject) => {
+          expect(nodeId).toBe("node");
+          expect(now).toBe(0);
+          lookupSignal = signal;
+          lookupStarted?.();
+          signal.addEventListener("abort", () => reject(new Error("lookup deadline")), {
+            once: true,
+          });
+        }),
+      cleanup: async () => 0,
+      remove: async () => true,
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      now: () => 0,
+      scheduler: {
+        schedule: (_delay, onTick) => (
+          ticks.push(onTick),
+          (schedules += 1) === 2 && retryScheduled?.(),
+          () => undefined
+        ),
+      },
+      deadlines: {
+        create: () => {
+          const controller = new AbortController();
+          controllers.push(controller);
+          return { signal: controller.signal, close: () => undefined };
+        },
+      },
+    });
+    await registrar.start();
+    expect(ticks).toHaveLength(1);
+    ticks.shift()?.();
+    await lookup;
+    try {
+      controllers.at(-1)?.abort();
+      expect(lookupSignal?.aborted).toBe(true);
+      await retried;
+    } finally {
+      await registrar.close();
+    }
+  });
+
   it("closes each deadline after admitted registry work", async () => {
     let created = 0;
     let closed = 0;
@@ -416,6 +528,30 @@ describe("GceApplicationNode", () => {
     await registrar.close();
     expect(created).toBe(closed);
     expect(created).toBeGreaterThanOrEqual(4);
+  });
+
+  it("unrefs default registrar schedules and operation deadlines", async () => {
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    let unrefs = 0;
+    globalThis.setTimeout = ((_callback: () => void, _delay: number) =>
+      ({ unref: () => (unrefs += 1) }) as unknown as ReturnType<typeof setTimeout>) as typeof setTimeout;
+    globalThis.clearTimeout = (() => undefined) as typeof clearTimeout;
+    const registrar = new GceRegistrar({
+      registry: {
+        register: async () => true,
+        remove: async () => true,
+      } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+    });
+    try {
+      await registrar.start();
+      expect(unrefs).toBe(2);
+    } finally {
+      await registrar.close();
+      globalThis.setTimeout = originalSetTimeout;
+      globalThis.clearTimeout = originalClearTimeout;
+    }
   });
 
   it("confirms a lost initial write through the same owner before renewing", async () => {
@@ -740,3 +876,17 @@ describe("GceApplicationNode", () => {
     await registrar.close();
   });
 });
+
+function gatewayClient(id: string, subscribed: Set<string>): DynamicUnaryClient {
+  return {
+    forward: async () => new TextEncoder().encode(id),
+    close: async () => undefined,
+    subscribe: async () => {
+      subscribed.add(id);
+      return { kind: "backend-subscription-envelope", bytes: new Uint8Array() };
+    },
+    activate: async () => undefined,
+    cancel: async () => undefined,
+    dispose: async () => undefined,
+  };
+}
