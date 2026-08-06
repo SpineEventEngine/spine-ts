@@ -94,7 +94,9 @@ const systemScheduler: GceScheduler = {
 /** Registers one ready GCE node and renews its lease. */
 export class GceRegistrar {
   readonly #registry: LeasedNodeRegistry;
-  readonly #node: ApplicationNode;
+  #node: ApplicationNode | undefined;
+  readonly #metadata: GceMetadataProvider | undefined;
+  readonly #port: number | undefined;
   readonly #identity: string;
   readonly #scheduler: GceScheduler;
   readonly #now: () => number;
@@ -103,17 +105,27 @@ export class GceRegistrar {
   #started = false;
   #confirmed = false;
   #work = Promise.resolve();
+  #abort = new AbortController();
 
   /** Creates a registrar with twenty-second renewal and sixty-second leases by default. */
   constructor(options: {
     readonly registry: LeasedNodeRegistry;
-    readonly node: ApplicationNode;
+    readonly node?: ApplicationNode;
+    readonly metadata?: GceMetadataProvider;
+    readonly port?: number;
     readonly identity?: string;
     readonly scheduler?: GceScheduler;
     readonly now?: () => number;
   }) {
     this.#registry = options.registry;
+    if (
+      options.node === undefined &&
+      (options.metadata === undefined || options.port === undefined)
+    )
+      throw new Error("GCE registrar requires a node or metadata provider and port.");
     this.#node = options.node;
+    this.#metadata = options.metadata;
+    this.#port = options.port;
     this.#identity = options.identity ?? randomUUID();
     this.#scheduler = options.scheduler ?? systemScheduler;
     this.#now = options.now ?? Date.now;
@@ -124,9 +136,12 @@ export class GceRegistrar {
     if (this.#closed) throw new Error("GCE registrar is closed.");
     if (this.#started) return;
     this.#started = true;
+    await this.#resolveNode();
+    const node = this.#node;
+    if (node === undefined) throw new Error("GCE registrar has no resolved node.");
     const registered = await this.#enqueue(async () =>
       this.#registry.register({
-        node: this.#node,
+        node,
         registrationId: this.#identity,
         expiresAt: this.#now() + 60_000,
       }),
@@ -139,9 +154,10 @@ export class GceRegistrar {
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    this.#abort.abort();
     this.#cancel?.();
     await this.#work;
-    await this.#registry.remove(this.#node.id, this.#identity);
+    if (this.#node !== undefined) await this.#registry.remove(this.#node.id, this.#identity);
   }
 
   /** Exposes listener-ready start and pre-network-close removal to a server assembly. */
@@ -157,19 +173,18 @@ export class GceRegistrar {
 
   async #renew(): Promise<void> {
     if (this.#closed) return;
+    await this.#resolveNode();
+    const node = this.#node;
+    if (node === undefined) return;
     try {
       if (this.#confirmed)
-        this.#confirmed = await this.#registry.renew(
-          this.#node.id,
-          this.#identity,
-          this.#now() + 60_000,
-        );
+        this.#confirmed = await this.#registry.renew(node.id, this.#identity, this.#now() + 60_000);
       else {
-        const existing = await this.#registry.lookup(this.#node.id, this.#now());
+        const existing = await this.#registry.lookup(node.id, this.#now());
         this.#confirmed = existing?.registrationId === this.#identity;
         if (!this.#confirmed)
           this.#confirmed = await this.#registry.register({
-            node: this.#node,
+            node,
             registrationId: this.#identity,
             expiresAt: this.#now() + 60_000,
           });
@@ -182,8 +197,20 @@ export class GceRegistrar {
 
   #enqueue<Result>(operation: () => Promise<Result>): Promise<Result> {
     const next = this.#work.then(operation, operation);
-    this.#work = next.catch(() => undefined);
+    this.#work = next.then(
+      () => undefined,
+      () => undefined,
+    );
     return next;
+  }
+
+  async #resolveNode(): Promise<void> {
+    if (this.#node !== undefined) return;
+    const metadata = this.#metadata;
+    const port = this.#port;
+    if (metadata === undefined || port === undefined)
+      throw new Error("GCE registrar has no node source.");
+    this.#node = GceApplicationNode.create(await metadata.read(this.#abort.signal), { port });
   }
 }
 

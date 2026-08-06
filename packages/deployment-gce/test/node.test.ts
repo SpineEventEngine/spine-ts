@@ -42,7 +42,7 @@ describe("GceApplicationNode", () => {
     tick?.();
     await Promise.resolve();
     await registrar.close();
-    expect(calls).toEqual(["register", "renew", "cancel", "cleanup", "remove"]);
+    expect(calls).toEqual(["register", "cancel", "renew", "cleanup", "remove"]);
   });
 
   it("reads complete registry snapshots using its injected clock", async () => {
