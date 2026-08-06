@@ -1,6 +1,6 @@
 # T-0118: Message Board Payload-First Synchronization
 
-Status: Confirmation correction implemented; final acceptance pending
+Status: Accepted and release-verified; merge pending
 
 ## Objective
 

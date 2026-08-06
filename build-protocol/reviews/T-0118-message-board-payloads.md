@@ -1,6 +1,6 @@
 # T-0118 Review Log
 
-Status: Confirmation reviews clean; final release verification pending
+Status: Converged and release-verified; merge pending
 
 ## Scope
 
@@ -182,4 +182,17 @@ inventory, `pnpm lint:tsdoc`, changed-source ESLint, Prettier, and
 
 All confirmation reviewers used their expected immutable profiles. Runtime
 self-introspection remained unavailable; explicit dispatch and configured-role
-metadata are the accepted evidence. The final release verification remains.
+metadata are the accepted evidence.
+
+## Final Release Verification
+
+The first release attempt found one strict tooling-TypeScript error in a
+test-only `PromiseWithResolvers<undefined>` call. Supplying `undefined`
+explicitly fixed the fixture. The complete task preflight was then rerun and
+passed with 90 focused tests and 99.37% line, 97.82% statement, 91.79% branch,
+and 100% function coverage across changed sources.
+
+The required full `pnpm verify:release` retry passed: 188 test files passed and
+3 skipped; 3,777 tests passed and 26 skipped. Repository coverage is 94.08%
+statements, 90.07% branches, 94.61% functions, and 95.05% lines. Review is
+converged and T-0118 is accepted for merge.
