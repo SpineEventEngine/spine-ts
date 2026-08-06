@@ -630,7 +630,8 @@ const DatastoreRecordQuery = Object.freeze(
      * @returns The finite provider row bound.
      */
     limit<I>(query: RecordQuery<I>, scanLimit: number): number {
-      if (this.isKeysetPage(query)) return query.limit as number;
+      const requestedLimit = query.limit;
+      if (requestedLimit !== undefined && this.isKeysetPage(query)) return requestedLimit;
       if (
         query.limit !== undefined &&
         query.ids === undefined &&
@@ -657,9 +658,9 @@ const DatastoreRecordQuery = Object.freeze(
         (query.after === undefined ||
           (typeof query.after.id === "string" &&
             query.after.values.length === 1 &&
-            query.after.values[0]?.field === "id" &&
-            typeof query.after.values[0]?.value === "string" &&
-            RecordValues.equal(query.after.values[0]?.value, query.after.id)))
+            query.after.values[0].field === "id" &&
+            typeof query.after.values[0].value === "string" &&
+            RecordValues.equal(query.after.values[0].value, query.after.id)))
       );
     }
   })(),
