@@ -1,6 +1,6 @@
 # T-0121: Dynamic Discovery And Unary Gateway Routing
 
-Status: Implementation complete; specialist review pending
+Status: Specialist review complete; correction batch in progress
 
 ## Objective
 
