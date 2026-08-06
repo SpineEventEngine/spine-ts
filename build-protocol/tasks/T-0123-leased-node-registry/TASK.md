@@ -1,6 +1,6 @@
 # T-0123: Storage-Backed Leased Node Registry
 
-Status: Open; RED implementation pending
+Status: Correction re-review pending; implementation endpoint `a4cafa50`
 
 ## Objective
 
@@ -105,3 +105,11 @@ the end-user root.
 - Cheap affected-scope preflight before review.
 - `pnpm verify:release` after convergence because shared persistence and
   serialized runtime behavior change.
+
+## Review Correction Status
+
+The complete review wave produced deterministic correction work for paging,
+cleanup progress, allocation, storage-key isolation, and public documentation.
+Corrections through `a4cafa50` are pushed, but final re-review and release
+verification remain pending. External provider integration is limited by unset
+`DATASTORE_EMULATOR_HOST` and `SPINE_TS_MYSQL_URL`.

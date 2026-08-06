@@ -1,21 +1,23 @@
 # T-0123 Review Record
 
-Status: Implementation pending
+Status: Correction re-review pending; not accepted
 
 ## Review Range
 
 - Baseline: `05a5bd85`.
-- Implementation endpoint: pending.
+- Implementation endpoint: `a4cafa50`.
 - Requirements:
   `build-protocol/tasks/T-0123-leased-node-registry/TASK.md`.
 
 ## Required Concern Dispositions
 
-- Style/maintainability: relevant; pending.
-- Documentation: relevant; pending.
-- TypeScript/API docs: relevant; pending.
-- Performance/reliability: relevant; pending.
-- Dedicated security: pending concrete implementation assessment.
+- Style/maintainability: relevant; correction re-review pending.
+- Documentation: relevant; correction re-review pending.
+- TypeScript/API docs: relevant; correction re-review pending.
+- Performance/reliability: relevant; correction re-review pending.
+- Dedicated security: N/A for this task. The change adds no authorization,
+  trust boundary, network-facing service, or secret contract; the opaque
+  registration ID is internal CAS fencing data, not a credential.
 
 ## Reviewer Profiles
 
@@ -27,3 +29,30 @@ Status: Implementation pending
 
 Actual runtime metadata or its surface limitation will be recorded before any
 result is accepted. Review begins only after mechanical preflight passes.
+
+## Complete Review Wave And Corrections
+
+All four relevant lanes used their configured immutable profiles: style,
+TypeScript/API docs, and performance/reliability `gpt-5.6-terra` / `high`;
+documentation `gpt-5.6-luna` / `medium`. The child surfaces exposed no
+independent runtime model/reasoning introspection; configured dispatch and no
+visible fallback are the available evidence.
+
+- Pagination and cleanup starvation: deterministic `id`/`after` paging is
+  covered by RED/GREEN checkpoints `2c7ee528`/`d83e424b` and
+  `13997f0d`/`1aaab0de`.
+- Allocation, simultaneous CAS, exact key, and v1 descriptor regressions are
+  covered through `7a4b1103`, `d0486a4e`, and `8788015f`.
+- Typed record/TLS and close lifecycle corrections are included before this
+  review range; API root verification is recorded in `a4cafa50`.
+- Datastore hard cutover: only generic kind derivation changed; scope is
+  context name, tenancy mode, tenant slice, and storage key. No migration,
+  dual path, or legacy behavior exists. Deterministic matrix coverage is 7/7,
+  including sharing, isolation, tuple/unicode/tenancy distinctions, byte bound,
+  and cross-key CRUD access (`bdf1eddb` through `2b702a2d`).
+- Documentation/TSDoc corrections include lifecycle/TLS/reference scope and
+  API entrypoint work (`a5300e05`, `d24e14d4`, `a4cafa50`).
+
+External Datastore emulator and MySQL integration remain unrun because
+`DATASTORE_EMULATOR_HOST` and `SPINE_TS_MYSQL_URL` are unset. Re-review remains
+required for every affected style, documentation, API, and reliability lane.
