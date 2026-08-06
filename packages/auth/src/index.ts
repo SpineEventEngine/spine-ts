@@ -698,3 +698,4 @@ export {
   type DynamicUnaryClient,
   type DynamicUnaryOptions,
 } from "./gateway/dynamic-unary-forwarder.js";
+export { DynamicSubscriptionCreator } from "./gateway/dynamic-subscription-creator.js";

@@ -1,6 +1,13 @@
 import type { ApplicationNode } from "@spine-event-engine/deployment";
 
 import type { UnaryForwarder } from "./index.js";
+import type {
+  BackendSubscriptionEnvelope,
+  PublicSubscriptionWire,
+  SubscriptionCreator,
+  SubscriptionTopicWire,
+  SubscriptionUpdateSink,
+} from "../subscriptions/index.js";
 
 interface PendingSnapshot {
   readonly nodes: readonly ApplicationNode[];
@@ -10,7 +17,7 @@ interface PendingSnapshot {
 /**
  * Represents a connected unary backend with deterministic disposal.
  */
-export interface DynamicUnaryClient extends UnaryForwarder {
+export interface DynamicUnaryClient extends UnaryForwarder, SubscriptionCreator {
   // prettier-ignore
 
   /**
@@ -67,6 +74,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #closing: Promise<void> | undefined;
   #generation = 0;
   readonly #failedDisposals = new Set<DynamicUnaryClient>();
+  readonly #definitions = new Map<string, {
+    readonly topic: Uint8Array;
+    readonly wire: PublicSubscriptionWire;
+    readonly updates: SubscriptionUpdateSink;
+    readonly children: Set<string>;
+  }>();
 
   /**
    * Creates a dynamic unary router.
@@ -152,7 +165,61 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
           .map((node) => this.#start(node, generation)),
       );
     if (generation !== this.#generation) return;
+    await this.#reconcileDefinitions(generation);
     this.#next = 0;
+  }
+
+  /**
+   * Registers one logical definition with the shared membership owner.
+   *
+   * @param request Supplies canonical logical subscription bytes.
+   * @param signal Cancels creation before it reaches a native node.
+   * @returns The logical definition envelope retained by the durable store.
+   */
+  async subscribeDefinition(
+    request: SubscriptionTopicWire,
+    signal: AbortSignal,
+  ): Promise<BackendSubscriptionEnvelope> {
+    if (signal.aborted || this.#closed || this.#clients.size === 0)
+      throw new Error("Gateway backend is absent.");
+    const bytes = request.bytes.slice();
+    const key = Buffer.from(bytes).toString("base64");
+    if (!this.#definitions.has(key))
+      this.#definitions.set(key, {
+        topic: bytes.slice(),
+        wire: { kind: "public-subscription", bytes },
+        updates: async () => {},
+        children: new Set(),
+      });
+    await this.#reconcileDefinitions(this.#generation);
+    return { kind: "backend-subscription-envelope", bytes };
+  }
+
+  async #reconcileDefinitions(generation: number): Promise<void> {
+    for (const definition of this.#definitions.values()) {
+      for (const id of definition.children)
+        if (!this.#clients.has(id)) definition.children.delete(id);
+      await Promise.all(
+        [...this.#clients.entries()]
+          .filter(([id]) => !definition.children.has(id))
+          .map(async ([id, current]) => {
+            if (generation !== this.#generation || this.#closed) return;
+            const backend = await current.client.subscribe(
+              { kind: "subscription-topic", bytes: definition.topic.slice() },
+              new AbortController().signal,
+            );
+            if (generation !== this.#generation || !this.#clients.has(id)) {
+              await current.client.dispose(backend, new AbortController().signal);
+              return;
+            }
+            definition.children.add(id);
+            void current.client.activate(
+              { wire: definition.wire, backend, updates: definition.updates },
+              new AbortController().signal,
+            );
+          }),
+      );
+    }
   }
 
   async #dispose(client: DynamicUnaryClient): Promise<void> {

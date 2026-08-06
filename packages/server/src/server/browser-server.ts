@@ -135,6 +135,10 @@ export const BrowserServer: Readonly<{
               );
               return {
                 forward: client.forward.bind(client),
+                subscribe: client.subscribe.bind(client),
+                activate: client.activate.bind(client),
+                cancel: client.cancel.bind(client),
+                dispose: client.dispose.bind(client),
                 close: async () => {
                   manager.abort();
                 },
