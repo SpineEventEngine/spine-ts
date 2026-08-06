@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package spine.system.deployment;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option (internal_all) = true;
+option java_multiple_files = true;
+
+// The canonical endpoint used to discover one application node.
+message ApplicationNodeEndpoint {
+
+    // The canonical HTTP(S) origin without a trailing slash.
+    string origin = 1;
+
+    // The normalized HTTPS TLS server name, when explicitly configured.
+    optional string tls_server_name = 2;
+}
+
+// The version-1 durable lease for one application node registration.
+message ApplicationNodeLease {
+
+    // The supported internal record encoding version.
+    uint32 encoding_version = 1;
+
+    // The stable application-node identity.
+    string node_id = 2;
+
+    // The canonical endpoint and optional TLS authority.
+    ApplicationNodeEndpoint endpoint = 3;
+
+    // Exact epoch milliseconds, represented as an unsigned integer.
+    uint64 expires_at_millis = 4;
+
+    // The opaque identity fencing one application process.
+    string registration_id = 5;
+}
