@@ -4,6 +4,53 @@ import { ApplicationNode } from "@spine-event-engine/deployment";
 import { DynamicUnaryForwarder } from "../src/index.js";
 
 describe("DynamicUnaryForwarder", () => {
+  it("aborts every concurrent stalled create and closes repeatedly", async () => {
+    const aborted: string[] = [];
+    const forwarder = new DynamicUnaryForwarder({
+      maxConcurrentStarts: 2,
+      create: (node, signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => {
+            aborted.push(node.id);
+            reject(new Error("aborted"));
+          });
+        }),
+    });
+    void forwarder.reconcile(
+      ["a", "b"].map(
+        (id) => new ApplicationNode({ id, endpoint: `http://10.0.0.${id === "a" ? 1 : 2}` }),
+      ),
+    );
+    await Promise.resolve();
+    await Promise.all([forwarder.close(), forwarder.close()]);
+    expect(aborted.sort()).toEqual(["a", "b"]);
+  });
+
+  it("recovers after a failed factory and ignores close failure during removal", async () => {
+    let fail = true;
+    const forwarder = new DynamicUnaryForwarder({
+      create: async (node) => {
+        if (fail) {
+          fail = false;
+          throw new Error("factory");
+        }
+        return {
+          forward: async () => new TextEncoder().encode(node.id),
+          close: async () => {
+            throw new Error("close");
+          },
+        };
+      },
+    });
+    await forwarder.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await forwarder.reconcile([new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" })]);
+    expect(
+      new TextDecoder().decode(
+        await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+      ),
+    ).toBe("b");
+    await expect(forwarder.close()).resolves.toBeUndefined();
+  });
   it("coalesces B behind A so only the latest pending snapshot is created", async () => {
     const started: string[] = [];
     let releaseA: (() => void) | undefined;

@@ -4,7 +4,6 @@ import type { UnaryForwarder } from "./index.js";
 
 type PendingSnapshot = {
   readonly nodes: readonly ApplicationNode[];
-  readonly done: (() => void)[];
 };
 
 /**
@@ -61,7 +60,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #closed = false;
   #running: Promise<void> | undefined;
   #pending: PendingSnapshot | undefined;
-  #creating: AbortController | undefined;
+  readonly #creating = new Set<AbortController>();
+  #completion = Promise.resolve();
+  #complete: (() => void) | undefined;
 
   /**
    * Creates a dynamic unary router.
@@ -85,14 +86,14 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns Completes after the latest pending snapshot has reconciled.
    */
   reconcile(nodes: readonly ApplicationNode[]): Promise<void> {
-    return new Promise((resolve) => {
-      const pending = this.#pending;
-      this.#pending = {
-        nodes: [...nodes],
-        done: pending === undefined ? [resolve] : [...pending.done, resolve],
-      };
-      if (this.#running === undefined) this.#running = this.#run();
-    });
+    this.#pending = { nodes: [...nodes] };
+    if (this.#running === undefined) {
+      this.#completion = new Promise((resolve) => {
+        this.#complete = resolve;
+      });
+      this.#running = this.#run();
+    }
+    return this.#completion;
   }
 
   async #run(): Promise<void> {
@@ -105,13 +106,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         // A later complete snapshot starts a fresh reconciliation owner.
       }
       const later = await this.#currentPending();
-      if (later === undefined) for (const done of snapshot.done) done();
-      else this.#pending = { nodes: later.nodes, done: [...snapshot.done, ...later.done] };
+      if (later !== undefined) this.#pending = later;
     }
-    const pending = this.#pending;
     this.#pending = undefined;
-    if (pending !== undefined) for (const done of pending.done) done();
     this.#running = undefined;
+    this.#complete?.();
+    this.#complete = undefined;
   }
 
   async #currentPending(): Promise<PendingSnapshot | undefined> {
@@ -135,7 +135,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       if (node?.endpoint === current.endpoint && node.tlsServerName === current.tlsServerName)
         continue;
       this.#clients.delete(id);
-      await current.client.close();
+      await current.client.close().catch(() => undefined);
     }
     const added = [...wanted.values()].filter((node) => !this.#clients.has(node.id));
     for (let index = 0; index < added.length; index += this.#maxConcurrentStarts)
@@ -147,12 +147,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
 
   async #start(node: ApplicationNode): Promise<void> {
     const controller = new AbortController();
-    this.#creating = controller;
+    this.#creating.add(controller);
     let client: DynamicUnaryClient;
     try {
       client = await this.#options.create(node, controller.signal);
     } finally {
-      if (this.#creating === controller) this.#creating = undefined;
+      this.#creating.delete(controller);
     }
     if (this.#closed) await client.close();
     else
@@ -184,9 +184,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    */
   async close(): Promise<void> {
     this.#closed = true;
-    this.#creating?.abort();
+    for (const controller of this.#creating) controller.abort();
     await this.#running;
-    await Promise.all([...this.#clients.values()].map(({ client }) => client.close()));
+    await Promise.allSettled([...this.#clients.values()].map(({ client }) => client.close()));
     this.#clients.clear();
   }
 }
