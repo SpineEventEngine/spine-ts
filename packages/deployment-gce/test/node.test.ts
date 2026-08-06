@@ -319,4 +319,54 @@ describe("GceApplicationNode", () => {
     expect(created).toBe(closed);
     expect(created).toBeGreaterThanOrEqual(4);
   });
+
+  it("confirms a lost initial write through the same owner before renewing", async () => {
+    const ticks: (() => void)[] = [];
+    let scheduleCount = 0;
+    let secondScheduled: (() => void) | undefined;
+    const secondScheduledPromise = new Promise<void>((done) => (secondScheduled = done));
+    let cleanupDone: (() => void) | undefined;
+    const cleanupPromise = new Promise<void>((done) => (cleanupDone = done));
+    let renewDone: (() => void) | undefined;
+    const renewPromise = new Promise<void>((done) => (renewDone = done));
+    const calls: string[] = [];
+    const registry = {
+      register: async () => {
+        calls.push("register");
+        throw new Error("lost response");
+      },
+      lookup: async () => (
+        calls.push("lookup"),
+        {
+          registrationId: "owner",
+          expiresAt: 100,
+          node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+        }
+      ),
+      renew: async () => (calls.push("renew"), renewDone?.(), true),
+      cleanup: async () => (calls.push("cleanup"), cleanupDone?.(), 0),
+      remove: async () => true,
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      identity: "owner",
+      scheduler: {
+        schedule: (_delay, onTick) => (
+          ticks.push(onTick),
+          (scheduleCount += 1) === 2 && secondScheduled?.(),
+          () => undefined
+        ),
+      },
+    });
+    await registrar.start();
+    ticks.shift()?.();
+    await cleanupPromise;
+    expect(calls).toEqual(["register", "lookup", "cleanup"]);
+    await secondScheduledPromise;
+    ticks.shift()?.();
+    await renewPromise;
+    expect(calls).toEqual(["register", "lookup", "cleanup", "renew"]);
+    await registrar.close();
+  });
 });
