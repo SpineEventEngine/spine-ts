@@ -11,7 +11,7 @@ import {
   type ApplicationNodeLease,
 } from "@spine-event-engine/proto/generated/spine/system/deployment/application_node_lease_pb.js";
 
-import { ApplicationNode } from "../index.js";
+import { ApplicationNode } from "../application-node.js";
 
 const storageKey = "spine.deployment.ApplicationNodeLease:v1";
 const defaultCleanupBatchSize = 32;
@@ -293,10 +293,17 @@ const LeaseRecords = Object.freeze({
     this.requireTime(lease.expiresAt);
     if (!lease.registrationId.trim())
       throw new Error("Lease registration identity must be non-empty.");
+    const node = new ApplicationNode({
+      id: lease.node.id,
+      endpoint: lease.node.endpoint,
+      ...(lease.node.tlsServerName === undefined
+        ? {}
+        : { tlsServerName: lease.node.tlsServerName }),
+    });
     return create(ApplicationNodeLeaseSchema, {
       encodingVersion: 1,
-      nodeId: lease.node.id,
-      endpoint: { origin: lease.node.endpoint, tlsServerName: lease.node.tlsServerName },
+      nodeId: node.id,
+      endpoint: { origin: node.endpoint, tlsServerName: node.tlsServerName },
       expiresAtMillis: BigInt(lease.expiresAt),
       registrationId: lease.registrationId,
     });

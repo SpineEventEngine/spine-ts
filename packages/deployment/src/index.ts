@@ -1,92 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await */
 
-import { isIP } from "node:net";
+import { ApplicationNode } from "./application-node.js";
+
+export { ApplicationNode } from "./application-node.js";
 
 export {
   LeasedNodeRegistry,
   type LeasedNodeRegistryOptions,
   type NodeLease,
 } from "./registry/leased-node-registry.js";
-
-/**
- * A stable application-node identity and canonical reachable endpoint.
- */
-export class ApplicationNode {
-  // prettier-ignore
-
-  /**
-   * Identifies this application node independently of its endpoint.
-   */
-  readonly id: string;
-
-  /**
-   * Identifies the canonical HTTP(S) origin without its trailing slash.
-   */
-  readonly endpoint: string;
-
-  /**
-   * Identifies the canonical TLS authority when this node uses HTTPS.
-   */
-  readonly tlsServerName: string | undefined;
-
-  /**
-   * Validates and canonicalizes one discovered application node.
-   * @param input Supplies the stable identity, endpoint, and optional TLS authority.
-   */
-  constructor(input: {
-    readonly id: string;
-    readonly endpoint: string;
-    readonly tlsServerName?: string;
-  }) {
-    if (!input.id.trim()) throw new Error("Application node ID must be non-empty.");
-    let url: URL;
-    try {
-      url = new URL(input.endpoint);
-    } catch {
-      throw new Error("Application node endpoint must be an absolute HTTP(S) origin.");
-    }
-    if (
-      (url.protocol !== "http:" && url.protocol !== "https:") ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      url.pathname !== "/"
-    )
-      throw new Error("Application node endpoint must be an absolute HTTP(S) origin.");
-    if (input.tlsServerName !== undefined && url.protocol !== "https:")
-      throw new Error("TLS server names require HTTPS.");
-    const authority =
-      input.tlsServerName === undefined ? undefined : ApplicationNode.tls(input.tlsServerName);
-    this.id = input.id;
-    this.endpoint = url.origin;
-    this.tlsServerName = authority;
-  }
-
-  /**
-   * Validates and canonicalizes one DNS TLS authority.
-   *
-   * @param value Supplies one DNS hostname.
-   * @returns The normalized ASCII lowercase hostname.
-   */
-  static tls(value: string): string {
-    const parsed = new URL(`https://${value}`);
-    if (
-      parsed.username ||
-      parsed.password ||
-      parsed.port ||
-      value.endsWith(".") ||
-      /[@:/?#]/.test(value) ||
-      isIP(parsed.hostname) !== 0
-    )
-      throw new Error("TLS server name must be one DNS hostname.");
-    if (
-      parsed.hostname.split(".").some((label) => !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label))
-    )
-      throw new Error("TLS server name must use DNS labels.");
-    return parsed.hostname.toLowerCase();
-  }
-}
 
 /**
  * Receives complete application-node snapshots.

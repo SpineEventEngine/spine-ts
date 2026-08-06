@@ -139,9 +139,9 @@ describe("LeasedNodeRegistry", () => {
     });
     const node = { id: "node/a", endpoint: "http://10.0.0.1/not-an-origin" } as ApplicationNode;
 
-    await expect(registry.register({ node, registrationId: "owner", expiresAt: 100 })).rejects.toThrow(
-      "endpoint",
-    );
+    await expect(
+      registry.register({ node, registrationId: "owner", expiresAt: 100 }),
+    ).rejects.toThrow("endpoint");
     await expect(registry.read(0)).resolves.toEqual([]);
   });
 
