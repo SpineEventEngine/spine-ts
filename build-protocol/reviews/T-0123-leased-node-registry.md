@@ -1,6 +1,6 @@
 # T-0123 Review Record
 
-Status: Second correction batch in progress; not accepted
+Status: Accepted; release verification pending
 
 ## Second correction evidence
 
@@ -106,3 +106,23 @@ a volatile-getter regression. API and reliability alone reopen afterward.
 Final deterministic preflight at `43382712` passes 86/86 tests and 91.76%
 branch coverage across the expanded deployment/Datastore source set. API and
 reliability final acceptance remain pending.
+
+## Final Acceptance At `815f3bf3`
+
+- Style/maintainability: clean at `667db8e7`; unchanged by the two final
+  behavioral corrections.
+- Documentation: clean at `667db8e7`; unchanged by the two final behavioral
+  corrections.
+- TypeScript/API docs: clean. The validated serialized node ID selects the CAS
+  slot; volatile-getter coverage passes; nine exports and declarations remain
+  compatible.
+- Performance/reliability: clean. Exact first and continued string-ID keyset
+  pages preserve provider order and requested bounds, the adversarial 257+
+  boundary passes, unsupported shapes remain scan-capped, and base storage
+  still applies masks. The reviewer's interim mask concern was retracted after
+  tracing the base `RecordStorage` path.
+- Dedicated security remains N/A for the previously recorded concrete reason.
+
+All configured profiles matched their explicit dispatches. Runtime
+self-introspection was unavailable, with no visible fallback or mismatch.
+T-0123 is review-accepted and awaits the mandatory full release profile.
