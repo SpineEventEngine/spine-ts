@@ -38,8 +38,9 @@ pushed. T-0116 lifecycle System events is reviewed, release-verified, merged as
 events is reviewed, release-verified, merged as `fa9f4d71`, post-merge verified,
 and pushed. T-0118 Message Board payload-first synchronization is reviewed,
 release-verified, merged as `964d24c0`, post-merge verified, and pushed. T-0119
-documentation and correction closure is the active next task. Complete T-0119
-before Wave 7 Q&A continues.
+documentation and correction closure is reviewed, release-verified, merged as
+`5d3ac54d`, post-merge verified, and pushed. The T-0114 through T-0119
+correction sequence is complete; Wave 7 Q&A may continue.
 
 ## Purpose
 
