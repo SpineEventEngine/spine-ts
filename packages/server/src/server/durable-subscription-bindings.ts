@@ -75,11 +75,10 @@ interface Binding {
   readonly reservationOwner?: string;
   readonly reservationUntilMs?: number;
   readonly principalFingerprint?: string;
-  readonly topology?: string;
   readonly tenant?: string;
   readonly expiresAtMs?: number;
-  readonly backend?: string;
-  readonly backendBytes?: number;
+  readonly definition?: string;
+  readonly definitionBytes?: number;
   readonly ownerId?: string;
   readonly leaseUntilMs?: number | undefined;
   readonly reason?: "client" | "activation-end" | "expired" | undefined;
@@ -125,10 +124,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   readonly durable = true;
 
-  /**
-   * Declares that durable records fence backend topology identity.
-   */
-  readonly topologyFencing = true;
 
   /**
    * Names the validated durable registry shared by standalone gateway replicas.
@@ -284,11 +279,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         lifecycle: "inactive",
         fence: 0,
         principalFingerprint: input.principalFingerprint,
-        topology: input.topology ?? "legacy",
         ...(input.tenant === undefined ? {} : { tenant: input.tenant }),
         expiresAtMs: input.expiresAtMs,
-        backend: Values.base64(input.backend.bytes),
-        backendBytes: input.backend.bytes.byteLength,
+        definition: Values.base64(input.backend.bytes),
+        definitionBytes: input.backend.bytes.byteLength,
       };
       if (!(await this.#cas(old.id, row, Values.write(next, this.#maxRecordBytes)))) {
         const applied = await this.#slot(old.id, held.token);
@@ -1037,11 +1031,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         actual.ownerId === expected.ownerId &&
         actual.leaseUntilMs === expected.leaseUntilMs &&
         actual.reason === expected.reason &&
-        actual.backend === expected.backend &&
-        actual.backendBytes === expected.backendBytes &&
+        actual.definition === expected.definition &&
+        actual.definitionBytes === expected.definitionBytes &&
         actual.expiresAtMs === expected.expiresAtMs &&
         actual.principalFingerprint === expected.principalFingerprint &&
-        actual.topology === expected.topology &&
         actual.tenant === expected.tenant
       );
     } catch {
@@ -1089,7 +1082,6 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   ): boolean {
     return (
       binding.principalFingerprint === input.principalFingerprint &&
-      binding.topology === (input.topology ?? "legacy") &&
       binding.tenant === input.tenant &&
       (binding.expiresAtMs ?? 0) > input.nowMs
     );
@@ -1159,7 +1151,7 @@ const Values = Object.freeze({
   envelope(binding: Binding): BackendSubscriptionEnvelope {
     return {
       kind: "backend-subscription-envelope",
-      bytes: Uint8Array.from(Buffer.from(String(binding.backend), "base64")),
+      bytes: Uint8Array.from(Buffer.from(String(binding.definition), "base64")),
     };
   },
   id(record: Any): string {
@@ -1238,10 +1230,10 @@ const Values = Object.freeze({
     if (["inactive", "active", "cancelling"].includes(binding.lifecycle)) {
       if (
         !binding.principalFingerprint ||
-        !binding.backend ||
-        !Number.isSafeInteger(binding.backendBytes) ||
-        Buffer.from(binding.backend, "base64").toString("base64") !== binding.backend ||
-        Buffer.byteLength(binding.backend, "base64") !== binding.backendBytes ||
+        !binding.definition ||
+        !Number.isSafeInteger(binding.definitionBytes) ||
+        Buffer.from(binding.definition, "base64").toString("base64") !== binding.definition ||
+        Buffer.byteLength(binding.definition, "base64") !== binding.definitionBytes ||
         !Number.isSafeInteger(binding.expiresAtMs)
       )
         throw new Error("Durable subscription registry record is invalid.");
@@ -1253,7 +1245,7 @@ const Values = Object.freeze({
       throw new Error("Durable subscription registry record is invalid.");
     if (
       binding.lifecycle === "retired" &&
-      (binding.backend !== undefined || binding.principalFingerprint !== undefined)
+      (binding.definition !== undefined || binding.principalFingerprint !== undefined)
     )
       throw new Error("Durable subscription registry record is invalid.");
     return binding;

@@ -57,7 +57,7 @@ describe("DurableSubscriptionBindings", () => {
     await reopened.close();
   });
 
-  it("fences durable callbacks by exact ordered topology identity", async () => {
+  it("keeps durable ownership independent of ordered node membership", async () => {
     const bindings = registry(new InMemoryStorageFactory(), "topology");
     const createBinding = () =>
       bindings.create({
@@ -97,9 +97,9 @@ describe("DurableSubscriptionBindings", () => {
             return Promise.resolve();
           },
         }),
-      ).resolves.toEqual({ kind: "denied" });
+      ).resolves.toEqual({ kind: "closed" });
     }
-    expect(callbacks).toBe(1);
+    expect(callbacks).toBe(2);
     await bindings.close();
   });
 
@@ -1289,11 +1289,10 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "inactive",
         fence: 0,
         principalFingerprint: "principal",
-        topology: "legacy",
         tenant: "tenant",
         expiresAtMs: 10,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
       }),
       durableRecord("binding", {
         id: "active",
@@ -1302,10 +1301,9 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "active",
         fence: 1,
         principalFingerprint: "principal",
-        topology: "legacy",
         expiresAtMs: 10,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
         ownerId: "gateway",
         leaseUntilMs: 9,
       }),
@@ -1316,10 +1314,9 @@ describe("DurableSubscriptionBindings", () => {
         lifecycle: "cancelling",
         fence: 2,
         principalFingerprint: "principal",
-        topology: "legacy",
         expiresAtMs: 10,
-        backend: "AQ==",
-        backendBytes: 1,
+        definition: "AQ==",
+        definitionBytes: 1,
         ownerId: "gateway",
         leaseUntilMs: 9,
       }),
