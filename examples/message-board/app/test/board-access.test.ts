@@ -104,14 +104,10 @@ describe("MessageBoard gateway policy", () => {
       creator: {
         subscribe: (wire) => {
           subscriptionWires.push(wire.bytes.slice());
-          return Promise.resolve({
-            kind: "backend-subscription-envelope",
-            bytes: wire.bytes.slice(),
-          });
+          return Promise.resolve();
         },
         activate: () => Promise.resolve(),
         cancel: () => Promise.resolve(),
-        dispose: () => Promise.resolve(),
       },
     });
     const services = createNativeGatewayServices({
@@ -192,7 +188,9 @@ describe("MessageBoard gateway policy", () => {
       ),
     ).rejects.toMatchObject({ code: 7 });
     expect(subscriptionWires).toHaveLength(1);
-    expect(fromBinary(TopicSchema, subscriptionWires[0] ?? new Uint8Array()).context).toMatchObject(
+    expect(
+      fromBinary(SubscriptionSchema, subscriptionWires[0] ?? new Uint8Array()).topic?.context,
+    ).toMatchObject(
       {
         actor: { value: "ada" },
         tenantId: { kind: { case: "value", value: "tenant-a" } },

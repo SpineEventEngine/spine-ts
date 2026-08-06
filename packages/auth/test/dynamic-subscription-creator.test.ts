@@ -3,7 +3,11 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
 
-import { DynamicSubscriptionCreator, DynamicUnaryForwarder } from "../src/index.js";
+import {
+  type DynamicUnaryClient,
+  DynamicSubscriptionCreator,
+  DynamicUnaryForwarder,
+} from "../src/index.js";
 
 describe("DynamicSubscriptionCreator", () => {
   it("keeps native children inactive until the public activation request", async () => {
@@ -36,7 +40,7 @@ describe("DynamicSubscriptionCreator", () => {
           entered.resolve();
           await request.updates({ kind: "subscription-update", bytes: new Uint8Array([1]) });
           await new Promise<void>((resolve) =>
-            signal.addEventListener("abort", resolve, { once: true }),
+            signal.addEventListener("abort", () => resolve(), { once: true }),
           );
         },
       }),
@@ -136,7 +140,7 @@ describe("DynamicSubscriptionCreator", () => {
             return;
           }
           await new Promise<void>((resolve) => {
-            signal.addEventListener("abort", resolve, { once: true });
+            signal.addEventListener("abort", () => resolve(), { once: true });
           });
         },
       }),
@@ -229,7 +233,9 @@ describe("DynamicSubscriptionCreator", () => {
     const creator = new DynamicSubscriptionCreator(owner);
 
     await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
-    await expect(creator.subscribe(subscription(), new AbortController().signal)).resolves.toBeUndefined();
+    await expect(
+      creator.subscribe(subscription(), new AbortController().signal),
+    ).resolves.toBeUndefined();
   });
 
   it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
@@ -522,7 +528,7 @@ describe("DynamicSubscriptionCreator", () => {
         activate: async (_request, signal) => {
           entered.resolve();
           await new Promise<void>((resolve) =>
-            signal.addEventListener("abort", resolve, { once: true }),
+            signal.addEventListener("abort", () => resolve(), { once: true }),
           );
         },
         dispose: async () => {
@@ -626,7 +632,10 @@ function subscription() {
   };
 }
 
-function client(id: string, starts: string[]) {
+/**
+ * Builds a native client fixture with inert operations unrelated to each test.
+ */
+function client(id: string, starts: string[]): DynamicUnaryClient {
   return {
     forward: async () => new Uint8Array(),
     close: async () => {},
@@ -637,7 +646,7 @@ function client(id: string, starts: string[]) {
     activate: async (_request, signal) => {
       starts.push(id);
       await new Promise<void>((resolve) => {
-        signal.addEventListener("abort", resolve, { once: true });
+        signal.addEventListener("abort", () => resolve(), { once: true });
       });
     },
     cancel: async () => {},

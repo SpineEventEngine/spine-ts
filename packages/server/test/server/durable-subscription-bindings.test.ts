@@ -120,7 +120,7 @@ describe("DurableSubscriptionBindings", () => {
       onDefinition: async (_definition, signal) => {
         entered.resolve();
         await new Promise<void>((resolve) =>
-          signal.addEventListener("abort", resolve, { once: true }),
+          signal.addEventListener("abort", () => resolve(), { once: true }),
         );
       },
     });
@@ -188,7 +188,7 @@ describe("DurableSubscriptionBindings", () => {
       onDefinition: async (_definition, signal) => {
         started.resolve();
         await new Promise<void>((resolve) =>
-          signal.addEventListener("abort", resolve, { once: true }),
+          signal.addEventListener("abort", () => resolve(), { once: true }),
         );
       },
     });
@@ -234,7 +234,9 @@ describe("DurableSubscriptionBindings", () => {
       signal: new AbortController().signal,
       onDefinition: async (_definition, signal) => {
         started.resolve();
-        await new Promise<void>((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+        await new Promise<void>((resolve) =>
+          signal.addEventListener("abort", () => resolve(), { once: true }),
+        );
       },
     });
     await started.promise;
@@ -1355,7 +1357,10 @@ describe("DurableSubscriptionBindings", () => {
     const first = limitedRegistry(factory, "first");
     const released = await first.reserveCapacity();
     await released.release();
-    const forged = { release: (): Promise<void> => Promise.resolve() };
+    const forged = {
+      id: "forged-reservation",
+      release: (): Promise<void> => Promise.resolve(),
+    };
 
     await first.create({
       definition: { kind: "public-subscription", bytes: new Uint8Array([1]) },
