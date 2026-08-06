@@ -103,6 +103,26 @@ describe("Server lifecycle integration", () => {
     expect(laterClose).not.toHaveBeenCalled();
     await expect(server.start()).rejects.toThrow("deferred cleanup");
   });
+
+  it("keeps the listener open until a failed lifecycle close retries", async () => {
+    let attempts = 0;
+    const running = await Server.atPort(0)
+      .addListenerLifecycle({
+        start: () => undefined,
+        close: () => {
+          attempts += 1;
+          if (attempts === 1) throw new Error("close failed");
+        },
+      })
+      .start();
+    await expect(running.close()).rejects.toThrow("close failed");
+    const session = http2.connect(running.baseUrl);
+    session.on("error", () => undefined);
+    await once(session, "remoteSettings");
+    session.close();
+    await once(session, "close");
+    await running.close();
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
     createHttp2Server.mockReset();
