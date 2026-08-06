@@ -56,10 +56,13 @@ export class LeasedNodeRegistry {
    * @param lease Supplies the node, owning registration identity, and expiry time.
    * @returns Whether the registration was written.
    */
-  register(lease: NodeLease): Promise<boolean> {
+  register(lease: NodeLease, signal?: AbortSignal): Promise<boolean> {
     return this.start(async () => {
+      signal?.throwIfAborted();
       const record = LeaseRecords.write(lease);
-      return this.#storage.compareAndSet(record.nodeId, undefined, record);
+      const result = await this.#storage.compareAndSet(record.nodeId, undefined, record);
+      signal?.throwIfAborted();
+      return result;
     });
   }
 
@@ -71,17 +74,26 @@ export class LeasedNodeRegistry {
    * @param expiresAt Supplies the renewed expiry in epoch milliseconds.
    * @returns Whether the owner still held and renewed the lease.
    */
-  renew(nodeId: string, registrationId: string, expiresAt: number): Promise<boolean> {
+  renew(
+    nodeId: string,
+    registrationId: string,
+    expiresAt: number,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
     return this.start(async () => {
+      signal?.throwIfAborted();
       const current = await this.#storage.read(nodeId);
+      signal?.throwIfAborted();
       if (current === undefined) return false;
       const lease = LeaseRecords.read(current, nodeId);
       if (lease.registrationId !== registrationId) return false;
-      return this.#storage.compareAndSet(
+      const result = await this.#storage.compareAndSet(
         nodeId,
         current,
         LeaseRecords.write({ ...lease, expiresAt }),
       );
+      signal?.throwIfAborted();
+      return result;
     });
   }
 
@@ -92,15 +104,19 @@ export class LeasedNodeRegistry {
    * @param registrationId Supplies the opaque owning process identity.
    * @returns Whether the caller's lease was deleted.
    */
-  remove(nodeId: string, registrationId: string): Promise<boolean> {
+  remove(nodeId: string, registrationId: string, signal?: AbortSignal): Promise<boolean> {
     return this.start(async () => {
+      signal?.throwIfAborted();
       const current = await this.#storage.read(nodeId);
+      signal?.throwIfAborted();
       if (
         current === undefined ||
         LeaseRecords.read(current, nodeId).registrationId !== registrationId
       )
         return false;
-      return this.#storage.compareAndSet(nodeId, current, undefined);
+      const result = await this.#storage.compareAndSet(nodeId, current, undefined);
+      signal?.throwIfAborted();
+      return result;
     });
   }
 
@@ -141,14 +157,16 @@ export class LeasedNodeRegistry {
    * @param now Supplies epoch milliseconds used for exact expiry filtering.
    * @returns The number of rows this pass removed.
    */
-  cleanup(now: number): Promise<number> {
+  cleanup(now: number, signal?: AbortSignal): Promise<number> {
     return this.start(async () => {
+      signal?.throwIfAborted();
       LeaseRecords.requireTime(now);
       const records = await this.#storage.queryEntries({
         sort: [{ field: "id" }],
         ...(this.#cleanupAfter === undefined ? {} : { after: this.#cleanupAfter }),
         limit: this.#cleanupBatchSize,
       });
+      signal?.throwIfAborted();
       this.#cleanupAfter =
         records.length === 0 ? undefined : LeasePages.continuation(records.at(-1));
       if (records.length < this.#cleanupBatchSize) this.#cleanupAfter = undefined;

@@ -159,12 +159,15 @@ export class GceRegistrar {
       await this.#resolveNode();
       const node = this.#node;
       if (node === undefined) throw new Error("GCE registrar has no resolved node.");
-      return this.#operation(() =>
-        this.#registry.register({
-          node,
-          registrationId: this.#identity,
-          expiresAt: this.#now() + 60_000,
-        }),
+      return this.#operation((signal) =>
+        this.#registry.register(
+          {
+            node,
+            registrationId: this.#identity,
+            expiresAt: this.#now() + 60_000,
+          },
+          signal,
+        ),
       );
     }).catch(() => false);
     this.#schedule();
@@ -179,7 +182,10 @@ export class GceRegistrar {
     this.#cancel?.();
     await this.#work;
     if (this.#node !== undefined)
-      await this.#operation(() => this.#registry.remove(this.#node.id, this.#identity));
+      await this.#operation(
+        (signal) => this.#registry.remove(this.#node.id, this.#identity, signal),
+        false,
+      );
   }
 
   /** Exposes listener-ready start and pre-network-close removal to a server assembly. */
@@ -200,22 +206,25 @@ export class GceRegistrar {
       const node = this.#node;
       if (node === undefined) return;
       if (this.#confirmed)
-        this.#confirmed = await this.#operation(() =>
-          this.#registry.renew(node.id, this.#identity, this.#now() + 60_000),
+        this.#confirmed = await this.#operation((signal) =>
+          this.#registry.renew(node.id, this.#identity, this.#now() + 60_000, signal),
         );
       else {
         const existing = await this.#registry.lookup(node.id, this.#now());
         this.#confirmed = existing?.registrationId === this.#identity;
         if (!this.#confirmed)
-          this.#confirmed = await this.#operation(() =>
-            this.#registry.register({
-              node,
-              registrationId: this.#identity,
-              expiresAt: this.#now() + 60_000,
-            }),
+          this.#confirmed = await this.#operation((signal) =>
+            this.#registry.register(
+              {
+                node,
+                registrationId: this.#identity,
+                expiresAt: this.#now() + 60_000,
+              },
+              signal,
+            ),
           );
       }
-      await this.#operation(() => this.#registry.cleanup(this.#now()));
+      await this.#operation((signal) => this.#registry.cleanup(this.#now(), signal));
     } finally {
       if (!this.#closed) this.#schedule();
     }
@@ -230,10 +239,15 @@ export class GceRegistrar {
     return next;
   }
 
-  async #operation<Result>(operation: (signal: AbortSignal) => Promise<Result>): Promise<Result> {
+  async #operation<Result>(
+    operation: (signal: AbortSignal) => Promise<Result>,
+    includeShutdown = true,
+  ): Promise<Result> {
     const deadline = this.#deadlines.create(this.#operationTimeoutMs);
     try {
-      return await operation(AbortSignal.any([this.#abort.signal, deadline.signal]));
+      return await operation(
+        includeShutdown ? AbortSignal.any([this.#abort.signal, deadline.signal]) : deadline.signal,
+      );
     } finally {
       deadline.close();
     }
