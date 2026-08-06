@@ -102,3 +102,7 @@ The final correction batch must return fully pushed keyset entries without a
 second incompatible local continuation/order pass, with a 257+ adversarial-ID
 regression, and must use the validated serialized node ID as the CAS slot, with
 a volatile-getter regression. API and reliability alone reopen afterward.
+
+Final deterministic preflight at `43382712` passes 86/86 tests and 91.76%
+branch coverage across the expanded deployment/Datastore source set. API and
+reliability final acceptance remain pending.
