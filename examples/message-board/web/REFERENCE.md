@@ -22,10 +22,12 @@ after unmount are ignored. Command transport failures and resolved `error` or
 `rejection` outcomes preserve the generated message ID and raw field values for
 one single-flight retry. Blank values are sent to the server for validation.
 
-Board state comes from an authoritative Query. A `resynchronization` delivery
-already contains authoritative state. Raw updates and `gapPossible` notices
-coalesce into at most one active refresh and one follow-up. A later normal
-refresh supersedes recovered state. Intermediate history is not reconstructed.
+Board state starts with an authoritative Query. A normal complete update is
+validated, identity-checked, board-checked, and applied locally in oldest-first
+order. A `resynchronization` delivery already contains authoritative state.
+Malformed updates, `gapPossible`, and disconnected post success coalesce into
+at most one active refresh and one follow-up. A later normal refresh supersedes
+recovered state. Intermediate history is not reconstructed.
 
 The single status badge says `Updating live` only for the exact `connected`
 subscription lifecycle state; every other state, including an absent lifecycle,
