@@ -27,6 +27,21 @@ For detailed contracts intended for coding agents, see the
 - ✅ Optionally exposes authenticated Connect and gRPC-Web browser access.
 - ✅ Owns readiness, rollback, process signals, and ordered shutdown.
 
+## 🧭 Understand the two event paths
+
+Each domain bounded context has an internal paired System Context. Domain events
+go to the domain `EventBus` and are durably appended to the domain `EventStore`.
+System events, such as committed entity-state notifications, go only to the
+System Context's `EventBus`; they never enter the domain EventStore. By default
+system events are forgotten after validation and notification. Call
+`persistSystemEvents()` when the application needs a separate optional System
+Context event store.
+
+`Stand` is the read side: it serves queries from current entity state and turns
+system entity-state notifications into subscription updates. A subscription is
+best effort, so clients use a query for their initial state and recovery after a
+reconnect or possible gap.
+
 ## 🧱 Build a bounded context
 
 Start with an explicit tenant mode. Register entity classes after their Proto

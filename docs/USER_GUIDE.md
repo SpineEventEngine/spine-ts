@@ -5,6 +5,20 @@ server. It uses one `Tasks` bounded context and generated domain messages.
 `@example/tasks-proto` is a consumer substitution: replace it with the package
 name that publishes your generated Protobuf-ES output.
 
+## Before you start: writes, reads, and live updates
+
+A command changes domain state. Its domain events are stored in the domain
+EventStore and travel on the domain EventBus. The framework also has an internal
+paired System Context for operational events such as a committed entity-state
+change. Those system events use a different EventBus and never enter the domain
+EventStore. They are normally transient; `persistSystemEvents()` makes their
+separate system storage optional and explicit.
+
+`Stand` is the read side. It answers queries from current entity state and
+publishes best-effort subscription updates. Start a screen with a query. Apply
+a normal complete update locally. Query again only to recover after reconnect,
+a possible gap, or an unusable payload.
+
 ## 1. Set up model packages and an application
 
 Spine TS is ESM-first and targets Node 24 LTS or newer. A Spine application has

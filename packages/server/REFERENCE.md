@@ -93,10 +93,14 @@ acknowledgement remains an accepted `Ack`. Rejection-event posting can be
 unobserved by inactive, full, or closed subscriptions and a posting failure is
 an internal diagnostic, not a retry guarantee.
 
-`EventBus` validates stored and live events before user dispatcher code and
-before append. Schemas may come from an external dispatcher or a registered
-internal repository producer. A producer-only schema is not thereby an external
-dispatch route.
+Every domain context has an internal paired System Context. Domain events use
+the domain `EventBus` and domain `EventStore`. System events use only the
+System Context `EventBus`, so they never enter the domain EventStore. System
+event persistence is optional: `persistSystemEvents()` enables the paired
+System Context's separate storage; otherwise the bus validates, dispatches,
+and notifies without appending. Schemas may come from an external dispatcher or
+a registered internal repository producer. A producer-only schema is not
+thereby an external dispatch route.
 
 ## Services, reads, and lifecycle
 
@@ -114,9 +118,10 @@ projection state and replays stored events through matching projection
 subscribers; it does not append events or run delivery jobs. Single-tenant
 contexts reject a tenant option; multitenant contexts require one.
 
-Active subscription streams and queues are process-local. Entity subscriptions
-observe committed `EntityStateChanged` messages on the local EventBus, so a
-direct Stand write alone does not produce a subscription update. Consumer
+Active subscription streams and queues are process-local. `Stand` serves
+authoritative queries from current state and Entity subscriptions observe
+committed `EntityStateChanged` messages on the paired System Context EventBus,
+so a direct Stand write alone does not produce a subscription update. Consumer
 callback failures are isolated from post-commit observation and other
 consumers. The package does not guarantee cluster-complete observations,
 subscription replay, event-gap repair, or exactly-once effects.

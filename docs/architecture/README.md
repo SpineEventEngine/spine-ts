@@ -17,7 +17,7 @@ The notes describe current code rather than a learning sequence. Use the package
 READMEs for beginner examples and the adjacent `REFERENCE.md` files for
 package-specific details.
 
-## Distributed command, delivery, and refresh path
+## Distributed command, delivery, query, and subscription path
 
 ```mermaid
 flowchart LR
@@ -29,21 +29,27 @@ flowchart LR
   AppB --> Inbox
   Inbox --> Delivery[Shared remote delivery shard]
   Delivery -->|one active lease owner performs one bounded drain| Entity[Entity handler]
-  Entity --> Events[Domain events and EntityStateChanged]
-  Events --> Stand[Stand EventBus]
-  Stand -->|best-effort notice fan-in| Gateway
-  Gateway -->|refresh hint| Browser
+  Entity --> DomainEvents[Domain events]
+  DomainEvents --> DomainStore[(Domain EventStore)]
+  Entity --> SystemEvents[System entity-state events]
+  SystemEvents --> SystemBus[System Context EventBus]
+  SystemBus --> Stand[Stand: queries and subscription updates]
+  Stand -->|complete payload fan-in| Gateway
+  Gateway -->|best-effort payload| Browser
 ```
 
 An `@Assign` command to an Aggregate or Process Manager is persisted in its
 Entity Inbox before delivery. Every server node can attempt a shared delivery
 shard, while one active lease owner performs one bounded drain; a later drain
 can have a different owner. Process Manager delivery uses the same mechanism.
-Stand observes domain events and
-`EntityStateChanged`, then routes notices through the Gateway. Subscription
-notices can duplicate, gap, or be lost, so browser clients re-query the
-authoritative state. Gateway backend membership is a configured startup list,
-not a discovery or redeployment protocol.
+Domain events stay on the domain EventBus and in the domain EventStore.
+`EntityStateChanged` is a System Context event: it never enters either domain
+facility. System-event persistence is optional and uses separate system storage
+when enabled. Stand serves authoritative queries and routes complete entity
+payloads through the Gateway. Normal complete payloads update a client locally;
+clients query only for initial state, reconnect, a possible gap, malformed
+payload, or another explicit recovery need. Gateway backend membership is a
+configured startup list, not a discovery or redeployment protocol.
 
 ## Proto Contract Boundary
 
