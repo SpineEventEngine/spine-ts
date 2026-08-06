@@ -208,6 +208,77 @@ describe("Server", () => {
     expect(stops).toBe(1);
   });
 
+  it("aborts owned dynamic session managers on removal and browser close", async () => {
+    let publish: ((nodes: readonly ApplicationNode[]) => void) | undefined;
+    const aborted: string[] = [];
+    const running = await BrowserServer.open("http://127.0.0.1:65534", {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      discovery: {
+        watch: (onSnapshot) => {
+          publish = onSnapshot;
+          return async () => {};
+        },
+      },
+      dynamicManagerFactory: (node) =>
+        ({
+          abort: () => {
+            aborted.push(node.id);
+          },
+        }) as never,
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    publish?.([
+      new ApplicationNode({ id: "a", endpoint: "https://10.0.0.1", tlsServerName: "a.test" }),
+    ]);
+    await Promise.resolve();
+    publish?.([]);
+    await Promise.resolve();
+    publish?.([
+      new ApplicationNode({ id: "b", endpoint: "https://10.0.0.2", tlsServerName: "b.test" }),
+    ]);
+    await Promise.resolve();
+    await running.close();
+    expect(aborted.sort()).toEqual(["a", "b"]);
+  });
+
+  it("retries only a failed discovery-stop phase after later cleanup runs", async () => {
+    let stops = 0;
+    let nativeCloses = 0;
+    const native: RunningServer = {
+      host: "127.0.0.1",
+      port: 1,
+      baseUrl: "http://127.0.0.1:65534",
+      close: async () => {
+        nativeCloses++;
+      },
+    };
+    const running = await BrowserServer.open(native, {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      discovery: {
+        watch: () => async () => {
+          stops++;
+          if (stops === 1) throw new Error("stop failed");
+        },
+      },
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    await expect(running.close()).rejects.toThrow("stop failed");
+    expect(nativeCloses).toBe(1);
+    await expect(running.close()).resolves.toBeUndefined();
+    expect(stops).toBe(2);
+    expect(nativeCloses).toBe(1);
+  });
+
   it("starts one array-configured backend and handles empty browser request facts", async () => {
     const requests = BrowserServer.requests(browserGateway());
     const requestHeader = new Headers();

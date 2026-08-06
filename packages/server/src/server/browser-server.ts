@@ -40,6 +40,7 @@ interface BrowserHostOptions extends Omit<BrowserServerOptions, "host" | "port">
   readonly readMaxBytes: number;
   readonly writeMaxBytes: number;
   readonly production: boolean;
+  readonly dynamicManagerFactory?: (node: ApplicationNode) => Http2SessionManager;
 }
 
 /**
@@ -115,11 +116,13 @@ export const BrowserServer: Readonly<{
           : new RoundRobinUnaryForwarder(creators)
         : (dynamic = new DynamicUnaryForwarder({
             create: async (node) => {
-              const manager = new Http2SessionManager(
-                node.endpoint,
-                undefined,
-                node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
-              );
+              const manager =
+                options.dynamicManagerFactory?.(node) ??
+                new Http2SessionManager(
+                  node.endpoint,
+                  undefined,
+                  node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
+                );
               const client = new NativeSubscriptionCreator(
                 createGrpcTransport({
                   ...BrowserServer.dynamicTransportOptions(node),
