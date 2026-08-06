@@ -58,6 +58,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       if (later === undefined) for (const done of snapshot.done) done();
       else this.#pending = { nodes: later.nodes, done: [...snapshot.done, ...later.done] };
     }
+    const pending = this.#pending;
+    this.#pending = undefined;
+    if (pending !== undefined) for (const done of pending.done) done();
     this.#running = undefined;
   }
 
