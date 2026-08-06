@@ -1,6 +1,6 @@
 # T-0119 Review Log
 
-Status: Deterministic preflight and reader test clean; review wave pending
+Status: First review wave complete; correction batch accepted
 
 ## Implementation Inventory
 
@@ -24,9 +24,9 @@ recovery behavior, and the single-Gateway/multi-node topology.
 | Concern                 | Existing role/profile   | Status                                                                                         |
 | ----------------------- | ----------------------- | ---------------------------------------------------------------------------------------------- |
 | Style/maintainability   | `gpt-5.6-terra` / high  | N/A: no production/test source structure changes; deterministic Markdown rules are mechanical. |
-| Documentation           | `gpt-5.6-luna` / medium | Required after deterministic docs checks and fresh-context reader testing.                     |
-| TypeScript/API docs     | `gpt-5.6-terra` / high  | Required for snippets, package/API names, links, and exact public contracts.                   |
-| Performance/reliability | `gpt-5.6-terra` / high  | Required for EventBus storage, Stand lifecycle, payload/recovery, and topology claims.         |
+| Documentation           | `gpt-5.6-luna` / medium | Clean.                                                                                         |
+| TypeScript/API docs     | `gpt-5.6-terra` / high  | One P2 accepted: a Stand paragraph collapses the two EventBus paths.                           |
+| Performance/reliability | `gpt-5.6-terra` / high  | One P1 accepted: the distributed README command test relies on stale line indexes.             |
 
 Every dispatch states the existing role, expected model, and expected
 reasoning. Actual runtime metadata or the immutable configured-profile
@@ -54,3 +54,24 @@ builder chain. No runtime or Proto change was needed.
 - Status, changed-path inventory, and the no-runtime-change boundary are
   current. No speculative adapter, scheduler, replay, exactly-once, or
   cluster-complete guarantee is claimed.
+
+## First Review Wave
+
+All reviewers used the expected existing role/profile. Runtime
+self-introspection was unavailable, so explicit dispatch and immutable
+configured-profile metadata are the accepted evidence.
+
+Accepted correction batch:
+
+1. **P1 — brittle README command test.** The distributed topology test checks
+   continuation backslashes at hard-coded README line indexes. The new Mermaid
+   section shifted valid commands, so the test fails. Locate and assert the
+   commands structurally, then rerun it.
+2. **P2 — collapsed EventBus wording.** One server README paragraph says Stand
+   observes domain events and committed entity-state changes “from the
+   EventBus.” Name the domain EventBus path for exposed domain events and the
+   paired System Context EventBus path for `EntityStateChanged` explicitly.
+
+No finding is rejected. Documentation is clean. API and reliability require
+targeted confirmation after correction; the mechanical test refactor does not
+make production style/maintainability relevant.
