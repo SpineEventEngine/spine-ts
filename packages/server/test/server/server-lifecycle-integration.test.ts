@@ -59,6 +59,25 @@ describe("Server lifecycle integration", () => {
     expect(successful).toHaveBeenCalledOnce();
     expect(failing).toHaveBeenCalledTimes(2);
   });
+
+  it("rolls back only listener lifecycles admitted before a start failure", async () => {
+    const firstClose = vi.fn();
+    const secondClose = vi.fn();
+    const thirdClose = vi.fn();
+    const server = Server.atPort(0)
+      .addListenerLifecycle({ start: () => undefined, close: firstClose })
+      .addListenerLifecycle({
+        start: () => {
+          throw new Error("start failed");
+        },
+        close: secondClose,
+      })
+      .addListenerLifecycle({ start: () => undefined, close: thirdClose });
+    await expect(server.start()).rejects.toThrow("start failed");
+    expect(firstClose).toHaveBeenCalledOnce();
+    expect(secondClose).not.toHaveBeenCalled();
+    expect(thirdClose).not.toHaveBeenCalled();
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
     createHttp2Server.mockReset();
