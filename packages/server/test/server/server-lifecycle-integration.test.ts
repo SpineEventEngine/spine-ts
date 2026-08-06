@@ -3,7 +3,13 @@ import * as http2 from "node:http2";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TransportTopics } from "@spine-event-engine/transport";
 
-import { BoundedContext, EnvironmentType, Server, ServerEnvironment } from "../../src/index.js";
+import {
+  BoundedContext,
+  type BrowserServerOptions,
+  EnvironmentType,
+  Server,
+  ServerEnvironment,
+} from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import type { EnvironmentAttachmentHandle } from "../../src/server/environment-attachment.js";
 import { serverEnvironmentAccess } from "../../src/server/server-environment.js";
@@ -128,7 +134,7 @@ describe("Server lifecycle integration", () => {
     const start = vi.fn();
     const close = vi.fn();
     const server = new Server({
-      browser: { backend: { baseUrls: ["http://10.0.0.1"] } },
+      browser: { backend: { baseUrls: ["http://10.0.0.1"] } } as BrowserServerOptions,
     }).addListenerLifecycle({ start, close });
     await expect(server.start()).rejects.toThrow("Standalone browser server");
     expect(start).not.toHaveBeenCalled();

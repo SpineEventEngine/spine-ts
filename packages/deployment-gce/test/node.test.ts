@@ -82,7 +82,7 @@ describe("GceApplicationNode", () => {
   });
   it("reads documented GCE metadata paths with the required header", async () => {
     const original = globalThis.fetch;
-    const requests: RequestInfo[] = [];
+    const requests: (RequestInfo | URL)[] = [];
     globalThis.fetch = async (input) => {
       requests.push(input);
       const path = String(input).split("/").slice(-2).join("/");
@@ -324,7 +324,6 @@ describe("GceApplicationNode", () => {
           new ApplicationNode({ id: String(now), endpoint: "http://10.0.0.1" }),
         ],
       } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
-      // @ts-expect-error The default clock is the behavior under test.
       await expect(
         new GceRegistryReader(registry).read(new AbortController().signal),
       ).resolves.toMatchObject([{ id: "7" }]);
