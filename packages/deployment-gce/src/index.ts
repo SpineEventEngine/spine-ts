@@ -37,7 +37,10 @@ export class GceMetadataService implements GceMetadataProvider {
       get("instance/id"),
       get("instance/network-interfaces/0/ip"),
     ]);
-    return { projectId, zone: zonePath.split("/").at(-1) ?? "", instanceId, privateAddress };
+    const zone = zonePath.split("/").at(-1) ?? "";
+    if (!projectId.trim() || !zone.trim() || !/^\d+$/.test(instanceId) || !privateAddress.trim())
+      throw new Error("GCE metadata response is invalid.");
+    return { projectId, zone, instanceId, privateAddress };
   }
 }
 
