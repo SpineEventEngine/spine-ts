@@ -63,6 +63,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   readonly #creating = new Set<AbortController>();
   #completion = Promise.resolve();
   #complete: (() => void) | undefined;
+  #closing: Promise<void> | undefined;
 
   /**
    * Creates a dynamic unary router.
@@ -183,6 +184,11 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns Completes after every current client is closed.
    */
   async close(): Promise<void> {
+    this.#closing ??= this.#closeOnce();
+    return this.#closing;
+  }
+
+  async #closeOnce(): Promise<void> {
     this.#closed = true;
     for (const controller of this.#creating) controller.abort();
     await this.#running;

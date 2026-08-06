@@ -4,6 +4,47 @@ import { ApplicationNode } from "@spine-event-engine/deployment";
 import { DynamicUnaryForwarder } from "../src/index.js";
 
 describe("DynamicUnaryForwarder", () => {
+  it("creates an equal duplicate once and replaces a TLS-only change", async () => {
+    const created: string[] = [];
+    const closed: string[] = [];
+    const forwarder = new DynamicUnaryForwarder({
+      create: async (node) => {
+        created.push(node.tlsServerName ?? "none");
+        return {
+          forward: async () => new Uint8Array(),
+          close: async () => {
+            closed.push(node.tlsServerName ?? "none");
+          },
+        };
+      },
+    });
+    const first = new ApplicationNode({
+      id: "a",
+      endpoint: "https://10.0.0.1",
+      tlsServerName: "one.test",
+    });
+    await forwarder.reconcile([first, first]);
+    await forwarder.reconcile([
+      new ApplicationNode({ id: "a", endpoint: "https://10.0.0.1", tlsServerName: "two.test" }),
+    ]);
+    expect(created).toEqual(["one.test", "two.test"]);
+    expect(closed).toEqual(["one.test"]);
+  });
+
+  it("closes an established client exactly once across concurrent close calls", async () => {
+    let closes = 0;
+    const forwarder = new DynamicUnaryForwarder({
+      create: async () => ({
+        forward: async () => new Uint8Array(),
+        close: async () => {
+          closes++;
+        },
+      }),
+    });
+    await forwarder.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await Promise.all([forwarder.close(), forwarder.close(), forwarder.close()]);
+    expect(closes).toBe(1);
+  });
   it("aborts every concurrent stalled create and closes repeatedly", async () => {
     const aborted: string[] = [];
     const forwarder = new DynamicUnaryForwarder({
