@@ -147,6 +147,27 @@ describe("LeasedNodeRegistry", () => {
     await expect(registry.read(0)).resolves.toEqual([]);
   });
 
+  it("uses the validated serialized node identity as the registration slot", async () => {
+    let reads = 0;
+    const node = {
+      get id() {
+        reads += 1;
+        return reads === 1 ? "node/a" : "node/b";
+      },
+      endpoint: "http://10.0.0.1",
+      tlsServerName: undefined,
+    } as ApplicationNode;
+    const registry = new LeasedNodeRegistry({
+      factory: new InMemoryStorageFactory(),
+      namespace: "volatile-node-id",
+    });
+
+    await expect(registry.register({ node, registrationId: "owner", expiresAt: 100 })).resolves.toBe(
+      true,
+    );
+    await expect(registry.read(0)).resolves.toMatchObject([{ id: "node/a" }]);
+  });
+
   it("rejects an invalid cleanup bound before allocating a storage handle", () => {
     const factory = new CountingFactory();
 
