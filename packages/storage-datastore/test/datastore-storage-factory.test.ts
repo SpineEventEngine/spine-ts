@@ -642,6 +642,33 @@ describe("DatastoreStorageFactory", () => {
     expect(client.lastQuery?.filters).toContainEqual(["__key__", ">", expect.anything()]);
   });
 
+  it("returns every string key across an exact keyset page boundary", async () => {
+    const client = new MemoryDatastoreClient();
+    const factory = new DatastoreStorageFactory({ client: client as never, maxClientSideScan: 1 });
+    const storage = factory.createRecordStorage(
+      { name: "KeysetBoundary", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:keyset-boundary",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+    );
+    const ids = [
+      "\nnode",
+      ...Array.from({ length: 256 }, (_, index) => ` ${String(index)}`),
+    ].sort();
+    await storage.writeAll(ids.map((value) => create(StringValueSchema, { value })));
+    const first = await storage.queryEntries({ sort: [{ field: "id" }], limit: 256 });
+    const last = first.at(-1);
+    const second = await storage.queryEntries({
+      sort: [{ field: "id" }],
+      after: { values: [{ field: "id", value: last?.id }], id: last?.id ?? "" },
+      limit: 256,
+    });
+    expect([...first, ...second].map(({ id }) => id)).toEqual(ids);
+  });
+
   it("does not duplicate an explicit identifier order", async () => {
     const client = new MemoryDatastoreClient();
     const factory = new DatastoreStorageFactory({ client: client as never });
@@ -1231,6 +1258,13 @@ class MemoryDatastoreClient {
         : entities.filter(
             (entity) => keyString(entity[this.KEY] as MemoryKey) > keyString(keyAfter),
           );
+    if (query.orders.some((order) => order[0] === "__key__")) {
+      filtered.sort((left, right) =>
+        keyString(left[this.KEY] as MemoryKey).localeCompare(
+          keyString(right[this.KEY] as MemoryKey),
+        ),
+      );
+    }
     const offset =
       query.startCursor === undefined
         ? (query.offsetValue ?? 0)
