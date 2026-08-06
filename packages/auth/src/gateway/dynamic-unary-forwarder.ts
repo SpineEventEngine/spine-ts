@@ -76,8 +76,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   readonly #failedDisposals = new Set<DynamicUnaryClient>();
   readonly #definitions = new Map<string, {
     readonly topic: Uint8Array;
-    readonly wire: PublicSubscriptionWire;
-    readonly updates: SubscriptionUpdateSink;
+    wire: PublicSubscriptionWire;
+    updates: SubscriptionUpdateSink;
     readonly children: Map<string, BackendSubscriptionEnvelope>;
   }>();
 
@@ -241,6 +241,27 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         await client.dispose(child, signal);
       }),
     );
+  }
+
+  /**
+   * Associates the browser activation wire and update sink with a logical definition.
+   *
+   * @param backend Supplies the retained logical definition.
+   * @param wire Supplies the canonical public subscription wire.
+   * @param updates Receives best-effort native updates.
+   * @returns Completes after current membership has observed the activation.
+   */
+  async activateDefinition(
+    backend: BackendSubscriptionEnvelope,
+    wire: PublicSubscriptionWire,
+    updates: SubscriptionUpdateSink,
+  ): Promise<void> {
+    const definition = this.#definitions.get(Buffer.from(backend.bytes).toString("base64"));
+    if (definition === undefined) return;
+    definition.wire.bytes.fill(0);
+    definition.wire = { kind: "public-subscription", bytes: wire.bytes.slice() };
+    definition.updates = updates;
+    await this.#reconcileDefinitions(this.#generation);
   }
 
   async #dispose(client: DynamicUnaryClient): Promise<void> {

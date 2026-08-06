@@ -27,14 +27,15 @@ export class DynamicSubscriptionCreator implements SubscriptionCreator {
   }
 
   activate(
-    _request: {
+    request: {
       readonly wire: PublicSubscriptionWire;
       readonly backend: BackendSubscriptionEnvelope;
       readonly updates: SubscriptionUpdateSink;
     },
-    _signal: AbortSignal,
+    signal: AbortSignal,
   ): Promise<void> {
-    return Promise.resolve();
+    if (signal.aborted) return Promise.resolve();
+    return this.#owner.activateDefinition(request.backend, request.wire, request.updates);
   }
 
   cancel(
