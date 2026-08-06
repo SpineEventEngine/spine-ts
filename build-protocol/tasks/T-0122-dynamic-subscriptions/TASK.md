@@ -108,8 +108,10 @@ accepted evidence with no visible mismatch.
   node recovery, cancellation and close during delayed creation, unexpected
   child completion followed by replay, reordering, cleanup retry, forty-node
   fan-in, and bounded start concurrency.
-- Focused preflight remains required after this checkpoint, followed by the
-  recorded relevant review concerns and release verification after convergence.
+- Focused preflight passed at `eb74a2ac`: six affected suites ran 330 tests,
+  generated typechecking passed, and scoped lint, Proto, TSDoc, documentation
+  audience, formatting, and diff checks passed. Specialist review and release
+  verification remain required.
 
 ## Review Concerns
 
