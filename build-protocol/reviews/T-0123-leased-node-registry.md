@@ -7,6 +7,7 @@ Status: Second correction batch in progress; not accepted
 - Existing implementer: configured `gpt-5.6-terra` / `medium`; independent runtime metadata is unavailable and no visible fallback or mismatch occurred.
 - The registry paging and close fixtures now wrap `queryEntries`, the actual production path (`55f795e2`).
 - Exact supported Datastore first and continued ascending string-ID pages use requested limits; continued pages add `__key__ >` (`03dd8450`).
+- Final correction evidence: registry registration uses the reconstructed record ID for its CAS slot (`f5c8bace`); exact fully pushed Datastore keyset queries retain provider ordering without a second local continuation pass (`4eaf4307`).
 
 ## Review Range
 
