@@ -4,6 +4,8 @@ import { isIP } from "node:net";
  * A stable application-node identity and canonical reachable endpoint.
  */
 export class ApplicationNode {
+  // prettier-ignore
+
   /**
    * Identifies the application node across discovery refreshes.
    */
