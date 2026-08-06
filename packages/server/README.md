@@ -47,10 +47,12 @@ const context = BoundedContext.singleTenant("Tasks").persistSystemEvents().build
 await context.close();
 ```
 
-`Stand` is the read side: it serves queries from current entity state and turns
-system entity-state notifications into subscription updates. A subscription is
-best effort, so clients use a query for their initial state and recovery after a
-reconnect or possible gap.
+`Stand` is the read side: it serves queries from current entity state. Exposed
+domain-event subscriptions observe domain events on the domain `EventBus`.
+Entity subscriptions observe `EntityStateChanged` on the paired System Context
+`EventBus` and turn those notifications into updates. A subscription is best
+effort, so clients use a query for initial state and recovery after reconnect
+or a possible gap.
 
 ## 🧱 Build a bounded context
 

@@ -75,3 +75,13 @@ Accepted correction batch:
 No finding is rejected. Documentation is clean. API and reliability require
 targeted confirmation after correction; the mechanical test refactor does not
 make production style/maintainability relevant.
+
+## Correction Implementation Evidence
+
+- P2 is corrected: the server README names the domain EventBus for exposed
+  domain events and the paired System Context EventBus for EntityStateChanged.
+- P1 is corrected: the topology test finds the README key/start command block
+  structurally and verifies its two continuation markers without line indexes.
+- The topology test passes 3/3. Targeted TypeScript/API documentation and
+  reliability re-review remain pending; documentation stays clean and style
+  remains N/A.
