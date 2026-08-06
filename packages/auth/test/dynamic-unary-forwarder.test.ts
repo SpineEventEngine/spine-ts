@@ -1,4 +1,6 @@
-/* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/require-await, @typescript-eslint/restrict-template-expressions */
+/* eslint-disable @typescript-eslint/no-empty-function */
+/* eslint-disable @typescript-eslint/require-await */
+/* eslint-disable @typescript-eslint/restrict-template-expressions */
 
 import { describe, expect, it } from "vitest";
 import { ApplicationNode } from "@spine-event-engine/deployment";
