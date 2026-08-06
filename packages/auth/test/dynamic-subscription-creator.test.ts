@@ -280,6 +280,149 @@ describe("DynamicSubscriptionCreator", () => {
     },
   );
 
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects an invalid concurrent-start limit of %s",
+    (maxConcurrentStarts) => {
+      expect(
+        () =>
+          new DynamicUnaryForwarder({
+            maxConcurrentStarts,
+            create: (node) => Promise.resolve(client(node.id, [])),
+          }),
+      ).toThrow("maxConcurrentStarts must be a positive safe integer.");
+    },
+  );
+
+  it("rejects invalid durable rehydration inputs before native creation", async () => {
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, [])),
+    });
+    const missingId = {
+      kind: "public-subscription" as const,
+      bytes: toBinary(SubscriptionSchema, create(SubscriptionSchema, { topic: create(TopicSchema) })),
+    };
+
+    await expect(owner.rehydrateDefinition(subscription(), 0)).rejects.toThrow(
+      "maxBackendEnvelopeBytes must be a positive safe integer.",
+    );
+    await expect(owner.rehydrateDefinition(missingId)).rejects.toThrow("subscription ID is required");
+  });
+
+  it("keeps missing logical definitions inert during activation and cancellation", async () => {
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, [])),
+    });
+    const wire = subscription();
+    const aborted = new AbortController();
+    aborted.abort();
+
+    await expect(owner.cancelDefinition(wire, new AbortController().signal)).resolves.toBeUndefined();
+    await expect(owner.activateDefinition(wire, noUpdates, aborted.signal)).resolves.toBeUndefined();
+  });
+
+  it("rejects forwarding while no dynamic backend is available", async () => {
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, [])),
+    });
+
+    await expect(
+      owner.forward({ service: "spine.client.QueryService", method: "Read", value: new Uint8Array() }),
+    ).rejects.toThrow("Gateway backend is absent.");
+  });
+
+  it("rejects aborted and closed logical creation before it reaches a native client", async () => {
+    let subscriptions = 0;
+    const owner = new DynamicUnaryForwarder({
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () => {
+            subscriptions++;
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1]),
+            });
+          },
+        }),
+    });
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    const aborted = new AbortController();
+    aborted.abort();
+
+    await expect(owner.subscribeDefinition(subscription(), aborted.signal)).rejects.toThrow(
+      "Gateway backend is absent.",
+    );
+    expect(subscriptions).toBe(0);
+    await owner.close();
+    await expect(owner.subscribeDefinition(subscription(), new AbortController().signal)).rejects.toThrow(
+      "Gateway backend is absent.",
+    );
+  });
+
+  it("rejects a conflicting endpoint for one application node identity", async () => {
+    const owner = new DynamicUnaryForwarder({
+      create: (node) => Promise.resolve(client(node.id, [])),
+    });
+
+    await expect(
+      owner.reconcile([
+        new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" }),
+        new ApplicationNode({ id: "a", endpoint: "http://10.0.0.2" }),
+      ]),
+    ).resolves.toBeUndefined();
+    await expect(owner.forward({ service: "s", method: "m", value: new Uint8Array() })).rejects.toThrow(
+      "Gateway backend is absent.",
+    );
+  });
+
+  it("fails durable rehydration when its native child exceeds the configured bound", async () => {
+    const owner = new DynamicUnaryForwarder({
+      maxBackendEnvelopeBytes: 1,
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () =>
+            Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1, 2]),
+            }),
+        }),
+    });
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+
+    await expect(owner.rehydrateDefinition(subscription())).rejects.toThrow("backend-envelope-too-large");
+    await owner.close();
+    await expect(owner.rehydrateDefinition(subscription())).rejects.toThrow("owner is closed");
+  });
+
+  it("reuses an installed logical definition across repeated creation and rehydration", async () => {
+    let subscriptions = 0;
+    const owner = new DynamicUnaryForwarder({
+      create: (node) =>
+        Promise.resolve({
+          ...client(node.id, []),
+          subscribe: () => {
+            subscriptions++;
+            return Promise.resolve({
+              kind: "backend-subscription-envelope" as const,
+              bytes: new Uint8Array([1]),
+            });
+          },
+        }),
+    });
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const wire = subscription();
+
+    await owner.reconcile([node]);
+    await owner.subscribeDefinition(wire, new AbortController().signal);
+    await owner.subscribeDefinition(wire, new AbortController().signal);
+    await owner.rehydrateDefinition(wire);
+
+    expect(subscriptions).toBe(1);
+    await owner.cancelDefinition(wire, new AbortController().signal);
+    await owner.close();
+  });
+
   it("compensates every installed child when one current node rejects creation", async () => {
     const disposals: string[] = [];
     const owner = new DynamicUnaryForwarder({
