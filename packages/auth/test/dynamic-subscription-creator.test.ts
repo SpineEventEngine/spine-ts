@@ -46,6 +46,37 @@ describe("DynamicSubscriptionCreator", () => {
     );
   });
 
+  it("aborts a delayed start when cancellation removes its definition", async () => {
+    let aborted = false;
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, []),
+        subscribe: async (_request, signal) =>
+          new Promise((_, reject) => {
+            signal.addEventListener(
+              "abort",
+              () => {
+                aborted = true;
+                reject(new Error("cancelled"));
+              },
+              { once: true },
+            );
+          }),
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const wire = subscription();
+
+    await owner.reconcile([node]);
+    const creating = creator.subscribe(wire, new AbortController().signal);
+    await Promise.resolve();
+    await creator.cancel({ wire }, new AbortController().signal);
+
+    await expect(creating).rejects.toThrow("subscription creation was cancelled");
+    expect(aborted).toBe(true);
+  });
+
   it("uses the shared dynamic owner to reconcile added and removed native streams", async () => {
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({
