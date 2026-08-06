@@ -1,6 +1,9 @@
 import { create } from "@bufbuild/protobuf";
-import { StructSchema, ValueSchema, type Struct, type Value } from "@bufbuild/protobuf/wkt";
 import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
+import {
+  ApplicationNodeLeaseSchema,
+  type ApplicationNodeLease,
+} from "@spine-event-engine/proto/generated/spine/system/deployment/application_node_lease_pb.js";
 
 import { ApplicationNode } from "./index.js";
 
@@ -11,7 +14,7 @@ const defaultCleanupBatchSize = 32;
  * Stores and reads live application-node leases in one caller-owned storage namespace.
  */
 export class LeasedNodeRegistry {
-  readonly #storage: RecordStorage<string, Struct>;
+  readonly #storage: RecordStorage<string, ApplicationNodeLease>;
   readonly #cleanupBatchSize: number;
   #closed = false;
   #closing: Promise<void> | undefined;
@@ -189,28 +192,35 @@ export interface NodeLease {
  *
  * @internal
  */
-export const leaseRecordSpec: RecordSpec<string, Struct> = new RecordSpec<string, Struct>({
-  schema: StructSchema,
+export const leaseRecordSpec: RecordSpec<string, ApplicationNodeLease> = new RecordSpec<
+  string,
+  ApplicationNodeLease
+>({
+  schema: ApplicationNodeLeaseSchema,
   storageKey,
   idKind: "string",
   extractId: (record) => recordId(record),
 });
 
 const LeaseRecords = Object.freeze({
-  read(record: Struct, expectedId?: string): NodeLease {
-    const fields = record.fields;
-    if (Object.keys(fields).length !== 5)
-      throw new Error("Application node lease record is invalid.");
-    const version = number(fields.version);
-    const id = string(fields.nodeId);
-    const endpoint = string(fields.endpoint);
-    const expiresAt = number(fields.expiresAt);
-    const registrationId = string(fields.registrationId);
+  read(record: ApplicationNodeLease, expectedId?: string): NodeLease {
+    const version = record.encodingVersion;
+    const id = record.nodeId;
+    const endpoint = record.endpoint?.origin;
+    const expiresAt = Number(record.expiresAtMillis);
+    const registrationId = record.registrationId;
     if (version !== 1) throw new Error("Application node lease record has unsupported version.");
     if (expectedId !== undefined && id !== expectedId)
       throw new Error("Application node lease record is invalid.");
     try {
-      const node = new ApplicationNode({ id, endpoint });
+      if (endpoint === undefined || !Number.isSafeInteger(expiresAt)) throw Error();
+      const node = new ApplicationNode({
+        id,
+        endpoint,
+        ...(record.endpoint?.tlsServerName === undefined
+          ? {}
+          : { tlsServerName: record.endpoint.tlsServerName }),
+      });
       this.requireTime(expiresAt);
       if (!registrationId.trim()) throw Error();
       return Object.freeze({ node, registrationId, expiresAt });
@@ -219,18 +229,16 @@ const LeaseRecords = Object.freeze({
     }
   },
 
-  write(lease: NodeLease): Struct {
+  write(lease: NodeLease): ApplicationNodeLease {
     this.requireTime(lease.expiresAt);
     if (!lease.registrationId.trim())
       throw new Error("Lease registration identity must be non-empty.");
-    return create(StructSchema, {
-      fields: {
-        version: value(1),
-        nodeId: value(lease.node.id),
-        endpoint: value(lease.node.endpoint),
-        expiresAt: value(lease.expiresAt),
-        registrationId: value(lease.registrationId),
-      },
+    return create(ApplicationNodeLeaseSchema, {
+      encodingVersion: 1,
+      nodeId: lease.node.id,
+      endpoint: { origin: lease.node.endpoint, tlsServerName: lease.node.tlsServerName },
+      expiresAtMillis: BigInt(lease.expiresAt),
+      registrationId: lease.registrationId,
     });
   },
 
@@ -240,28 +248,8 @@ const LeaseRecords = Object.freeze({
   },
 });
 
-function number(value: Value | undefined): number {
-  if (value?.kind.case !== "numberValue" || !Number.isSafeInteger(value.kind.value)) throw Error();
-  return value.kind.value;
-}
-
-function string(value: Value | undefined): string {
-  if (value?.kind.case !== "stringValue" || !value.kind.value.trim()) throw Error();
-  return value.kind.value;
-}
-
-function value(input: number | string): Value {
-  return create(ValueSchema, {
-    kind:
-      typeof input === "string"
-        ? { case: "stringValue", value: input }
-        : { case: "numberValue", value: input },
-  });
-}
-
-function recordId(record: Struct): string {
-  const id = record.fields.nodeId;
-  if (id?.kind.case !== "stringValue" || !id.kind.value.trim())
-    throw new Error("Application node lease record has no node ID.");
-  return id.kind.value;
+function recordId(record: ApplicationNodeLease): string {
+  const id = record.nodeId;
+  if (!id.trim()) throw new Error("Application node lease record has no node ID.");
+  return id;
 }

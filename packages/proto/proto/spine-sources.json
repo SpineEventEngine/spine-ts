@@ -380,6 +380,10 @@
     {
       "localPath": "packages/proto/proto/spine/system/server/stand_subscription.proto",
       "sha256": "14b27564b72ffa98cf56945812812ff95889f00c76469984b9e8f4fecb1f72a4"
+    },
+    {
+      "localPath": "packages/proto/proto/spine/system/deployment/application_node_lease.proto",
+      "sha256": "201ff753a950331f87fdad7c17579afd440c69cecd262d9732d42aabcc706040"
     }
   ]
 }

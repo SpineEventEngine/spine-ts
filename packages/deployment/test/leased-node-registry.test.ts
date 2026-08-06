@@ -1,5 +1,8 @@
 import { create } from "@bufbuild/protobuf";
-import { StructSchema, ValueSchema } from "@bufbuild/protobuf/wkt";
+import {
+  ApplicationNodeLeaseSchema,
+  type ApplicationNodeLease,
+} from "@spine-event-engine/proto/generated/spine/system/deployment/application_node_lease_pb.js";
 import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
@@ -37,6 +40,21 @@ describe("LeasedNodeRegistry", () => {
     await expect(right.read(99)).resolves.toEqual([]);
   });
 
+  it("round-trips an explicit normalized HTTPS TLS authority", async () => {
+    const registry = new LeasedNodeRegistry({
+      factory: new InMemoryStorageFactory(),
+      namespace: "tls",
+    });
+    const node = new ApplicationNode({
+      id: "node/tls",
+      endpoint: "https://10.0.0.1",
+      tlsServerName: "Api.Example.Test",
+    });
+
+    await registry.register({ node, registrationId: "tls-process", expiresAt: 100 });
+    await expect(registry.read(99)).resolves.toEqual([node]);
+  });
+
   it("returns every live node beyond the expected operational count", async () => {
     const registry = new LeasedNodeRegistry({
       factory: new InMemoryStorageFactory(),
@@ -70,9 +88,7 @@ describe("LeasedNodeRegistry", () => {
       leaseRecordSpec,
     );
     await storage.write(
-      create(StructSchema, {
-        fields: { nodeId: create(ValueSchema, { kind: { case: "stringValue", value: "node/a" } }) },
-      }),
+      create(ApplicationNodeLeaseSchema, { encodingVersion: 1, nodeId: "node/a" }),
     );
 
     await expect(registry.read(0)).rejects.toThrow("invalid");
@@ -136,15 +152,13 @@ describe("LeasedNodeRegistry", () => {
   });
 });
 
-function leaseRecord(nodeId: string, version: number) {
-  return create(StructSchema, {
-    fields: {
-      version: create(ValueSchema, { kind: { case: "numberValue", value: version } }),
-      nodeId: create(ValueSchema, { kind: { case: "stringValue", value: nodeId } }),
-      endpoint: create(ValueSchema, { kind: { case: "stringValue", value: "http://10.0.0.1" } }),
-      expiresAt: create(ValueSchema, { kind: { case: "numberValue", value: 100 } }),
-      registrationId: create(ValueSchema, { kind: { case: "stringValue", value: "process" } }),
-    },
+function leaseRecord(nodeId: string, version: number): ApplicationNodeLease {
+  return create(ApplicationNodeLeaseSchema, {
+    encodingVersion: version,
+    nodeId,
+    endpoint: { origin: "http://10.0.0.1" },
+    expiresAtMillis: 100n,
+    registrationId: "process",
   });
 }
 
@@ -161,11 +175,7 @@ class NonAtomicFactory extends InMemoryStorageFactory {
 
 class DelayedQueryFactory extends InMemoryStorageFactory {
   storage:
-    | import("@spine-event-engine/storage").RecordStorage<
-        string,
-        import("@bufbuild/protobuf/wkt").Struct
-      >
-    | undefined;
+    import("@spine-event-engine/storage").RecordStorage<string, ApplicationNodeLease> | undefined;
   #resolve: (() => void) | undefined;
 
   override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(
