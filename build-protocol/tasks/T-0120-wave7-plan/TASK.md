@@ -1,11 +1,11 @@
 # T-0120: Wave 7 Scaling And Redeployment Plan
 
-Status: Execution authorized; dependency split in progress
+Status: Execution authorized; dependency split complete
 
 ## Objective
 
 Records the approved Wave 7 deployment, discovery, scaling, and redeployment
-boundaries, resolves the remaining human questions, and then produces a
+boundaries, resolves the remaining human questions, and produces the accepted
 dependency-ordered implementation plan.
 
 ## Classification
@@ -96,11 +96,84 @@ approval pause.
   the final human decision.
 - Subagents may not spawn subagents.
 
+## Requirements-Splitter Result
+
+- Existing role performed: requirements splitter.
+- Configured runtime profile: `gpt-5.6-sol` with `high` reasoning, explicitly
+  dispatched by the orchestrator.
+- Actual runtime metadata: this child surface does not expose a self-
+  introspection API for model/reasoning metadata. The immutable configured
+  role/profile and explicit dispatch fields are the available evidence; no
+  visible fallback or mismatch occurred.
+- Skill applicability: the epic-breakdown advisor applied workflow,
+  business-rule-variation, and simple/complex splitting. Interactive questions
+  were unnecessary because T-0120 records complete human-approved context and
+  execution authorization.
+- Result: eight review-sized slices, T-0121 through T-0128, are specified in
+  `WAVE_7_SCALING_REDEPLOYMENT_PLAN.md` with dependencies, observable
+  acceptance criteria, RED-first tests, exclusive ownership, documentation,
+  review dispositions, verification profile, risks, and exclusions.
+- Orchestrator acceptance: accepted. The dispatch explicitly supplied the
+  expected model and reasoning, the result preserves every final human
+  decision, and the dependency order removes transient topology from durable
+  subscription identity before adding platform membership sources.
+
+## Planning Review Assignments
+
+The complete planning diff receives one concern-specific review wave before
+T-0120 integration. Subagents may not spawn subagents.
+
+- Existing style/maintainability reviewer: task sizing, ownership, dependency
+  order, and avoidance of duplicate mechanisms. Expected and explicitly
+  dispatched `gpt-5.6-terra` / `high`.
+- Existing documentation reviewer: plan clarity, human-ledger completeness,
+  and accurate current/future wording. Expected and explicitly dispatched
+  immutable role profile `gpt-5.6-luna` / `medium`.
+- Existing TypeScript/API documentation reviewer: proposed public/package and
+  persisted-contract boundaries. Expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`.
+- Existing performance/reliability reviewer: bounded all-node reconciliation,
+  subscription lifecycle, leases, DNS, cleanup, shutdown, scaling, and
+  replacement semantics. Expected and explicitly dispatched
+  `gpt-5.6-terra` / `high`.
+
+Actual runtime metadata will be recorded with the results when exposed. If a
+reviewer cannot self-introspect, the immutable configured role/profile and
+explicit dispatch fields are the acceptance evidence unless a visible mismatch
+or fallback occurs.
+
+## Dependency-Ordered Execution Queue
+
+1. T-0121: dynamic discovery and unary Gateway routing.
+2. T-0122: dynamic subscription reconciliation.
+3. T-0123: storage-backed leased node registry.
+4. T-0124: GCE registration and discovery runtime.
+5. T-0125: GKE DNS discovery runtime. It depends on T-0122 rather than T-0124,
+   but follows it to keep shared Gateway/server write ownership serial.
+6. T-0126: GKE Terraform and beginner deployment guide.
+7. T-0127: GCE Terraform and beginner deployment guide.
+8. T-0128: cross-platform capacity, replacement, documentation, and Wave 7
+   closure.
+
+The orchestrator may create the child task records just in time, after each
+dependency is integrated and post-merge verified. Implementation does not
+require another routine human approval. If a slice would introduce a hard node
+cap, fail closed above the expected count, omit nodes from an over-expectation
+snapshot, add Wave 8 logging, add Cloud Run, or add a second Gateway, work must
+stop because that contradicts the accepted human ledger rather than being an
+ordinary implementation choice.
+
 ## Review Dispositions
 
-- Style/maintainability: relevant once task boundaries and package ownership
-  are frozen.
-- Documentation: relevant to the deployment plan and operator guidance.
-- TypeScript/API docs: relevant to discovery and registration contracts.
-- Performance/reliability: relevant to leases, refresh, bounds, replacement,
-  and failure behavior.
+- Style/maintainability: relevant to the final task boundaries and package
+  ownership recorded in the planning diff.
+- Documentation: relevant to the accuracy and completeness of the deployment
+  split and operator-guide obligations.
+- TypeScript/API docs: relevant to the planned discovery, registration, and
+  diagnostics contracts.
+- Performance/reliability: relevant to leases, refresh, bounded concurrency,
+  all-node reconciliation, replacement, and failure behavior.
+
+No runtime code, package scaffold, Terraform, or end-user deployment guide was
+implemented by T-0120. Its completion authorizes the orchestrator to create and
+start T-0121 under the autonomous cycle.
