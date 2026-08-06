@@ -85,3 +85,11 @@ make production style/maintainability relevant.
 - The topology test passes 3/3. Targeted TypeScript/API documentation and
   reliability re-review remain pending; documentation stays clean and style
   remains N/A.
+
+## Residual P2 Correction
+
+Both targeted reviewers found the same untouched Delivery and subscriptions
+paragraph. It now explicitly separates domain-event subscriptions on the domain
+EventBus from EntityStateChanged entity subscriptions on the paired System
+Context EventBus. The topology test remains clean. Targeted confirmation review
+is pending.

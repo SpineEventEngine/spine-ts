@@ -204,13 +204,14 @@ one bounded drain; later drains can have a different lease owner. Events and
 later Process Manager commands use the same path. See [REFERENCE.md](REFERENCE.md)
 for operational delivery details.
 
-`Stand` observes domain events and committed Entity state changes from the
-EventBus. Its default registry uses the application's `StorageFactory`; a
-builder may supply another implementation. A definition is pending for at most
-30 seconds, active definitions have no framework TTL, and cancellation
-physically deletes the definition. Nodes reconcile their local listeners from a
-bounded complete snapshot every 10 seconds. Active streams and queues are
-process-local.
+Domain-event subscriptions observe exposed domain events on the domain
+`EventBus`. Entity subscriptions observe committed `EntityStateChanged`
+notifications on the paired System Context `EventBus`. Stand's default registry
+uses the application's `StorageFactory`; a builder may supply another
+implementation. A definition is pending for at most 30 seconds, active
+definitions have no framework TTL, and cancellation physically deletes the
+definition. Nodes reconcile their local listeners from a bounded complete
+snapshot every 10 seconds. Active streams and queues are process-local.
 
 ### Serve browser clients
 
