@@ -99,3 +99,62 @@ The complete wave is accepted as one deduplicated batch:
 The review surface exposed no independent runtime self-introspection. The
 explicit dispatches and immutable configured profiles are the available
 evidence; no visible fallback or mismatch occurred.
+
+## Focused Re-review After First Correction Batch
+
+Range: `7a7d76f4..c8552397`.
+
+The first correction batch resolved bounded latest-only completion, equal
+duplicate coalescing, TLS-only replacement, cancellation of every concurrent
+start, idempotent close entry, factory-failure recovery, normal Browser
+watch/stop, SNI mapping, internal task wording, and the fixed-subscription
+boundary. Coordinator preflight passed 131 focused tests, affected typecheck,
+TSDoc, Prettier, and diff checks.
+
+The complete focused re-review requested one further consolidated batch:
+
+1. Fence every client start with its reconciliation generation. A successful
+   start completing after a sibling failure or newer snapshot must close
+   itself and must not repopulate stale membership. Add the parallel
+   fail/late-success/newer-empty race test.
+2. Own an `Http2SessionManager` for each Browser dynamic transport, pass it to
+   Connect, and abort it when the client leaves or the Gateway closes. Test a
+   live request/session cleanup path so the start/disposal semantics describe
+   real resources rather than wrapper construction.
+3. Retain failed client disposals in retryable cleanup state. Removal and final
+   close must attempt all cleanup, keep failed references, and let a later
+   reconciliation or repeated close retry them without reporting durable
+   cleanup prematurely.
+4. Contain scheduled-reader failures without unhandled rejections, preserve the
+   last delivered snapshot, continue scheduling after transient failure, and
+   join an abort-aware in-flight read during close. Test rejection recovery and
+   abort-on-close.
+5. Make scheduled discovery ownership unambiguous: support independent watches
+   correctly or enforce one active consumer before creating another timer/read.
+   Document and test the selected simple contract.
+6. Reject TLS userinfo, any explicit port (including the default port), query,
+   fragment, empty/trailing port syntax, and bracketed IPv6, while preserving
+   valid IDN-to-ASCII normalization and rejecting IPv4. Cover every form.
+7. Give conflicting duplicate IDs an accurate deterministic contract. Do not
+   name or document the operation as rejection while swallowing the error;
+   either expose the failure safely or define contained invalid-snapshot
+   handling with an observable/reportable policy appropriate before Wave 8
+   logging.
+8. Make Browser startup and shutdown cleanup phase-safe. A listener/startup,
+   subscription-close, or other phase failure must not skip discovery stop,
+   dynamic transport cleanup, listener cleanup, or native-server cleanup;
+   aggregate failures as necessary and test rollback plus close-phase failure.
+9. Correct the remaining public docs: scope the auth fixed-topology statement
+   so it no longer denies dynamic unary discovery; describe current workspace
+   consumption of the still-private deployment package without claiming npm
+   installation; state that the consumer, not the snapshot, performs equality;
+   and keep the future registry-package intent clear without implying
+   publication now.
+10. Move the Node import to the normal import block and keep all affected code,
+    tests, documentation, and package metadata mechanically clean.
+
+Re-review metadata matches the original explicit assignments: style,
+TypeScript/API, and performance/reliability use the existing
+`gpt-5.6-terra` / `high` roles; documentation uses its immutable
+`gpt-5.6-luna` / `medium` role. Independent runtime introspection remains
+unavailable and no fallback or mismatch was visible.
