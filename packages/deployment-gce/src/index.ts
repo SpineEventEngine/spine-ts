@@ -49,6 +49,7 @@ export class GceRegistrar {
   readonly #now: () => number;
   #cancel: (() => void) | undefined;
   #closed = false;
+  #started = false;
   #confirmed = false;
   #work = Promise.resolve();
 
@@ -70,6 +71,8 @@ export class GceRegistrar {
   /** Confirms initial registration after the listener is ready. */
   async start(): Promise<void> {
     if (this.#closed) throw new Error("GCE registrar is closed.");
+    if (this.#started) return;
+    this.#started = true;
     const registered = await this.#enqueue(async () =>
       this.#registry.register({
         node: this.#node,
@@ -103,24 +106,27 @@ export class GceRegistrar {
 
   async #renew(): Promise<void> {
     if (this.#closed) return;
-    if (this.#confirmed)
-      this.#confirmed = await this.#registry.renew(
-        this.#node.id,
-        this.#identity,
-        this.#now() + 60_000,
-      );
-    else {
-      const existing = await this.#registry.lookup(this.#node.id, this.#now());
-      this.#confirmed = existing?.registrationId === this.#identity;
-      if (!this.#confirmed)
-        this.#confirmed = await this.#registry.register({
-          node: this.#node,
-          registrationId: this.#identity,
-          expiresAt: this.#now() + 60_000,
-        });
+    try {
+      if (this.#confirmed)
+        this.#confirmed = await this.#registry.renew(
+          this.#node.id,
+          this.#identity,
+          this.#now() + 60_000,
+        );
+      else {
+        const existing = await this.#registry.lookup(this.#node.id, this.#now());
+        this.#confirmed = existing?.registrationId === this.#identity;
+        if (!this.#confirmed)
+          this.#confirmed = await this.#registry.register({
+            node: this.#node,
+            registrationId: this.#identity,
+            expiresAt: this.#now() + 60_000,
+          });
+      }
+      await this.#registry.cleanup(this.#now());
+    } finally {
+      if (!this.#closed) this.#schedule();
     }
-    await this.#registry.cleanup(this.#now());
-    if (!this.#closed) this.#schedule();
   }
 
   #enqueue<Result>(operation: () => Promise<Result>): Promise<Result> {
