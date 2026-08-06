@@ -21,7 +21,8 @@ export class LeasedNodeRegistry {
    * @param options Supplies the operator-selected storage factory and namespace.
    */
   constructor(options: LeasedNodeRegistryOptions) {
-    if (options.namespace.trim().length === 0) throw new Error("Lease storage namespace must be non-empty.");
+    if (options.namespace.trim().length === 0)
+      throw new Error("Lease storage namespace must be non-empty.");
     this.#storage = options.factory.createRecordStorage(
       { name: options.namespace, multitenant: false },
       leaseRecordSpec,
@@ -61,7 +62,11 @@ export class LeasedNodeRegistry {
     if (current === undefined) return false;
     const lease = LeaseRecords.read(current, nodeId);
     if (lease.registrationId !== registrationId) return false;
-    return this.#storage.compareAndSet(nodeId, current, LeaseRecords.write({ ...lease, expiresAt }));
+    return this.#storage.compareAndSet(
+      nodeId,
+      current,
+      LeaseRecords.write({ ...lease, expiresAt }),
+    );
   }
 
   /**
@@ -74,7 +79,10 @@ export class LeasedNodeRegistry {
   async remove(nodeId: string, registrationId: string): Promise<boolean> {
     this.requireOpen();
     const current = await this.#storage.read(nodeId);
-    if (current === undefined || LeaseRecords.read(current, nodeId).registrationId !== registrationId)
+    if (
+      current === undefined ||
+      LeaseRecords.read(current, nodeId).registrationId !== registrationId
+    )
       return false;
     return this.#storage.compareAndSet(nodeId, current, undefined);
   }
@@ -149,17 +157,23 @@ export interface NodeLease {
   readonly expiresAt: number;
 }
 
-const leaseRecordSpec = new RecordSpec<string, Struct>({
+/**
+ * Declares the internal persisted lease record layout.
+ *
+ * @internal
+ */
+export const leaseRecordSpec: RecordSpec<string, Struct> = new RecordSpec<string, Struct>({
   schema: StructSchema,
   storageKey,
   idKind: "string",
-  extractId: (record) => LeaseRecords.read(record).node.id,
+  extractId: (record) => recordId(record),
 });
 
 const LeaseRecords = Object.freeze({
   read(record: Struct, expectedId?: string): NodeLease {
     const fields = record.fields;
-    if (Object.keys(fields).length !== 5) throw new Error("Application node lease record is invalid.");
+    if (Object.keys(fields).length !== 5)
+      throw new Error("Application node lease record is invalid.");
     const version = number(fields.version);
     const id = string(fields.nodeId);
     const endpoint = string(fields.endpoint);
@@ -179,7 +193,8 @@ const LeaseRecords = Object.freeze({
 
   write(lease: NodeLease): Struct {
     this.requireTime(lease.expiresAt);
-    if (!lease.registrationId.trim()) throw new Error("Lease registration identity must be non-empty.");
+    if (!lease.registrationId.trim())
+      throw new Error("Lease registration identity must be non-empty.");
     return create(StructSchema, {
       fields: {
         version: value(1),
@@ -209,6 +224,16 @@ function string(value: Value | undefined): string {
 
 function value(input: number | string): Value {
   return create(ValueSchema, {
-    kind: typeof input === "string" ? { case: "stringValue", value: input } : { case: "numberValue", value: input },
+    kind:
+      typeof input === "string"
+        ? { case: "stringValue", value: input }
+        : { case: "numberValue", value: input },
   });
+}
+
+function recordId(record: Struct): string {
+  const id = record.fields.nodeId;
+  if (id?.kind.case !== "stringValue" || !id.kind.value.trim())
+    throw new Error("Application node lease record has no node ID.");
+  return id.kind.value;
 }

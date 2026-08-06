@@ -2,7 +2,11 @@
 
 import { isIP } from "node:net";
 
-export { LeasedNodeRegistry, type LeasedNodeRegistryOptions, type NodeLease } from "./leased-node-registry.js";
+export {
+  LeasedNodeRegistry,
+  type LeasedNodeRegistryOptions,
+  type NodeLease,
+} from "./leased-node-registry.js";
 
 /**
  * A stable application-node identity and canonical reachable endpoint.
