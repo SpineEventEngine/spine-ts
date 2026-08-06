@@ -1,6 +1,6 @@
 # T-0123 Review Record
 
-Status: Correction re-review pending; not accepted
+Status: Second correction batch in progress; not accepted
 
 ## Review Range
 
@@ -56,3 +56,25 @@ visible fallback are the available evidence.
 External Datastore emulator and MySQL integration remain unrun because
 `DATASTORE_EMULATOR_HOST` and `SPINE_TS_MYSQL_URL` are unset. Re-review remains
 required for every affected style, documentation, API, and reliability lane.
+
+## Focused Re-review At `19511e06`
+
+All reviewers reported their immutable configured profiles and the lack of
+independent runtime self-introspection; no visible mismatch or fallback
+occurred.
+
+- Performance/reliability, P1: Datastore does not push the registry's ascending
+  record-ID continuation into `__key__ > ...`, and incorrectly retains the
+  1001-row client scan cap. The current 1002-row registry test mocks `query()`
+  although production calls `queryEntries()`.
+- Style/maintainability, P1/P2: paging and close-join doubles override the wrong
+  method; the registry leaf also imports `ApplicationNode` through the public
+  barrel that re-exports the registry, creating an ESM cycle.
+- TypeScript/API docs, P1: structurally spoofed `ApplicationNode` objects can
+  bypass constructor validation and persist malformed or noncanonical endpoint
+  data. The write path must reconstruct and validate the value.
+- Documentation, P2: the beginner README needs a minimal leased-registry
+  constructor/register/read/cleanup/close example.
+
+One correction batch returns all findings to the existing implementer. Only
+substantively affected concerns reopen after deterministic verification.
