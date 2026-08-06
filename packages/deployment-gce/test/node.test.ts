@@ -369,4 +369,42 @@ describe("GceApplicationNode", () => {
     expect(calls).toEqual(["register", "lookup", "cleanup", "renew"]);
     await registrar.close();
   });
+
+  it.each([
+    ["absent", undefined],
+    ["expired", undefined],
+    ["other owner", { registrationId: "other", expiresAt: 100 }],
+  ])("retries one same-identity registration when lookup is %s", async (_name, lookup) => {
+    const ticks: (() => void)[] = [];
+    const identities: string[] = [];
+    let cleanupDone: (() => void) | undefined;
+    const cleanup = new Promise<void>((done) => (cleanupDone = done));
+    let attempts = 0;
+    const registry = {
+      register: async (lease: { registrationId: string }) => {
+        identities.push(lease.registrationId);
+        attempts += 1;
+        if (attempts === 1) throw new Error("lost response");
+        return true;
+      },
+      lookup: async () =>
+        lookup === undefined
+          ? undefined
+          : { ...lookup, node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }) },
+      cleanup: async () => (cleanupDone?.(), 0),
+      remove: async () => true,
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      identity: "owner",
+      now: () => 1,
+      scheduler: { schedule: (_delay, onTick) => (ticks.push(onTick), () => undefined) },
+    });
+    await registrar.start();
+    ticks.shift()?.();
+    await cleanup;
+    expect(identities).toEqual(["owner", "owner"]);
+    await registrar.close();
+  });
 });
