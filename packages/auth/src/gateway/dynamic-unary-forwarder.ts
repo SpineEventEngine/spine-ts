@@ -11,6 +11,8 @@ type PendingSnapshot = {
  * Represents a connected unary backend with deterministic disposal.
  */
 export interface DynamicUnaryClient extends UnaryForwarder {
+  // prettier-ignore
+
   /**
    * Returns after releasing this connection when its node leaves membership.
    *
@@ -23,6 +25,8 @@ export interface DynamicUnaryClient extends UnaryForwarder {
  * Configures unary clients for discovered application nodes.
  */
 export interface DynamicUnaryOptions {
+  // prettier-ignore
+
   /**
    * Creates the client for one canonical application node.
    *
@@ -45,11 +49,19 @@ export interface DynamicUnaryOptions {
 export class DynamicUnaryForwarder implements UnaryForwarder {
   readonly #options: DynamicUnaryOptions;
   readonly #maxConcurrentStarts: number;
-  #clients = new Map<string, { readonly endpoint: string; readonly client: DynamicUnaryClient }>();
+  #clients = new Map<
+    string,
+    {
+      readonly endpoint: string;
+      readonly tlsServerName: string | undefined;
+      readonly client: DynamicUnaryClient;
+    }
+  >();
   #next = 0;
   #closed = false;
   #running: Promise<void> | undefined;
   #pending: PendingSnapshot | undefined;
+  #creating: AbortController | undefined;
 
   /**
    * Creates a dynamic unary router.
@@ -104,14 +116,24 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
 
   async #replace(nodes: readonly ApplicationNode[]): Promise<void> {
     if (this.#closed) return;
-    const wanted = new Map(nodes.map((node) => [node.id, node]));
+    const wanted = new Map<string, ApplicationNode>();
+    for (const node of nodes) {
+      const previous = wanted.get(node.id);
+      if (
+        previous !== undefined &&
+        (previous.endpoint !== node.endpoint || previous.tlsServerName !== node.tlsServerName)
+      )
+        throw new Error("Application node IDs must not identify conflicting endpoints.");
+      wanted.set(node.id, node);
+    }
     for (const [id, current] of this.#clients) {
       const node = wanted.get(id);
-      if (node?.endpoint === current.endpoint) continue;
+      if (node?.endpoint === current.endpoint && node.tlsServerName === current.tlsServerName)
+        continue;
       this.#clients.delete(id);
       await current.client.close();
     }
-    const added = nodes.filter((node) => !this.#clients.has(node.id));
+    const added = [...wanted.values()].filter((node) => !this.#clients.has(node.id));
     for (let index = 0; index < added.length; index += this.#maxConcurrentStarts)
       await Promise.all(
         added.slice(index, index + this.#maxConcurrentStarts).map((node) => this.#start(node)),
@@ -120,9 +142,17 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   }
 
   async #start(node: ApplicationNode): Promise<void> {
-    const client = await this.#options.create(node, new AbortController().signal);
+    const controller = new AbortController();
+    this.#creating = controller;
+    const client = await this.#options.create(node, controller.signal);
+    if (this.#creating === controller) this.#creating = undefined;
     if (this.#closed) await client.close();
-    else this.#clients.set(node.id, { endpoint: node.endpoint, client });
+    else
+      this.#clients.set(node.id, {
+        endpoint: node.endpoint,
+        tlsServerName: node.tlsServerName,
+        client,
+      });
   }
 
   /**
@@ -146,6 +176,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    */
   async close(): Promise<void> {
     this.#closed = true;
+    this.#creating?.abort();
     await this.#running;
     await Promise.all([...this.#clients.values()].map(({ client }) => client.close()));
     this.#clients.clear();

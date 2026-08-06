@@ -288,4 +288,4 @@ environment: attachment supervisors and their source reads are facility-owned.
 
 # Dynamic unary discovery
 
-`BrowserServerOptions.discovery` may supply changing complete application-node snapshots alongside fixed `backend` configuration. In T-0121, discovery changes command/query routing only; the fixed backend configuration remains the subscription fan-in topology until T-0122.
+`BrowserServerOptions.discovery` may supply changing complete application-node snapshots alongside fixed `backend` configuration. Discovery changes command/query routing; fixed backend configuration remains the subscription fan-in input.

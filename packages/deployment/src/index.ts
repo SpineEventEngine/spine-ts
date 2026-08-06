@@ -2,6 +2,8 @@
  * A stable application-node identity and canonical reachable endpoint.
  */
 export class ApplicationNode {
+  // prettier-ignore
+
   /**
    * Identifies this application node independently of its endpoint.
    */
@@ -59,12 +61,7 @@ export class ApplicationNode {
    */
   static tls(value: string): string {
     const parsed = new URL(`https://${value}`);
-    if (
-      parsed.hostname !== value.toLowerCase() ||
-      parsed.port ||
-      value.endsWith(".") ||
-      parsed.hostname.includes(":")
-    )
+    if (parsed.port || value.endsWith(".") || value.includes("/") || isIP(parsed.hostname) !== 0)
       throw new Error("TLS server name must be one DNS hostname.");
     return parsed.hostname.toLowerCase();
   }
@@ -74,6 +71,8 @@ export class ApplicationNode {
  * Receives complete application-node snapshots.
  */
 export interface NodeDiscovery {
+  // prettier-ignore
+
   /**
    * Starts complete snapshot delivery.
    *
@@ -83,6 +82,114 @@ export interface NodeDiscovery {
   watch(
     onSnapshot: (nodes: readonly ApplicationNode[]) => void,
   ): Promise<() => Promise<void>> | (() => Promise<void>);
+}
+
+/**
+ * Schedules node refresh callbacks.
+ */
+export interface NodeScheduler {
+  // prettier-ignore
+
+  /**
+   * Schedules one refresh callback.
+   *
+   * @param delayMs Supplies the delay in milliseconds.
+   * @param onTick Receives the callback to run.
+   * @returns Cancels the scheduled callback.
+   */
+  schedule(delayMs: number, onTick: () => void): () => void;
+}
+
+/**
+ * Reads one complete node snapshot.
+ */
+export interface NodeSnapshotReader {
+  // prettier-ignore
+
+  /**
+   * Reads current membership.
+   *
+   * @param signal Cancels the read during close.
+   * @returns The complete current node snapshot.
+   */
+  read(signal: AbortSignal): Promise<readonly ApplicationNode[]>;
+}
+
+/**
+ * Publishes complete snapshots on an injected, cancellable schedule.
+ */
+export class ScheduledNodeDiscovery implements NodeDiscovery {
+  readonly #reader: NodeSnapshotReader;
+  readonly #scheduler: NodeScheduler;
+  readonly #intervalMs: number;
+  #cancel: (() => void) | undefined;
+  #controller: AbortController | undefined;
+  #watcher: ((nodes: readonly ApplicationNode[]) => void) | undefined;
+  #closed = false;
+
+  /**
+   * Creates a scheduled source with a ten-second default refresh interval.
+   *
+   * @param options Supplies the snapshot reader, scheduler, and interval.
+   */
+  constructor(options: {
+    readonly reader: NodeSnapshotReader;
+    readonly scheduler: NodeScheduler;
+    readonly intervalMs?: number;
+  }) {
+    if (
+      options.intervalMs !== undefined &&
+      (!Number.isSafeInteger(options.intervalMs) || options.intervalMs < 1)
+    )
+      throw new RangeError("Node refresh interval must be a positive safe integer.");
+    this.#reader = options.reader;
+    this.#scheduler = options.scheduler;
+    this.#intervalMs = options.intervalMs ?? 10_000;
+  }
+
+  /**
+   * Starts scheduled complete snapshot delivery.
+   *
+   * @param onSnapshot Receives each successful complete snapshot.
+   * @returns Stops scheduling and cancels an in-flight read.
+   */
+  watch(onSnapshot: (nodes: readonly ApplicationNode[]) => void): () => Promise<void> {
+    this.#watcher = onSnapshot;
+    this.#schedule(0);
+    return () => this.close();
+  }
+
+  /**
+   * Stops scheduled refresh work.
+   *
+   * @returns Completes after cancellation is requested.
+   */
+  async close(): Promise<void> {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#cancel?.();
+    this.#controller?.abort();
+    this.#watcher = undefined;
+  }
+
+  #schedule(delayMs: number): void {
+    this.#cancel = this.#scheduler.schedule(delayMs, () => {
+      void this.#refresh();
+    });
+  }
+
+  async #refresh(): Promise<void> {
+    if (this.#closed) return;
+    const controller = new AbortController();
+    this.#controller = controller;
+    try {
+      const nodes = await this.#reader.read(controller.signal);
+      if (!this.#closed) this.#watcher?.([...nodes]);
+    } finally {
+      this.#controller = undefined;
+      if (!this.#closed) this.#schedule(this.#intervalMs);
+    }
+  }
 }
 
 /**
@@ -125,3 +232,4 @@ export class StaticNodeDiscovery implements NodeDiscovery {
     };
   }
 }
+import { isIP } from "node:net";

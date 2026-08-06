@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ApplicationNode, StaticNodeDiscovery } from "../src/index.js";
+import { ApplicationNode, ScheduledNodeDiscovery, StaticNodeDiscovery } from "../src/index.js";
 
 describe("ApplicationNode", () => {
   it("canonicalizes a HTTPS endpoint and its TLS authority", () => {
@@ -40,5 +40,29 @@ describe("StaticNodeDiscovery", () => {
     await close();
 
     expect(snapshots).toEqual([[], ["node/a"], []]);
+  });
+});
+
+describe("ScheduledNodeDiscovery", () => {
+  it("uses an injected zero then ten-second schedule", async () => {
+    const delays: number[] = [];
+    let tick: (() => void) | undefined;
+    const source = new ScheduledNodeDiscovery({
+      reader: { read: async () => [new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })] },
+      scheduler: {
+        schedule: (delay, onTick) => {
+          delays.push(delay);
+          tick = onTick;
+          return () => {};
+        },
+      },
+    });
+    const seen: string[][] = [];
+    source.watch((nodes) => seen.push(nodes.map((node) => node.id)));
+    tick?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(delays).toEqual([0, 10_000]);
+    expect(seen).toEqual([["a"]]);
   });
 });
