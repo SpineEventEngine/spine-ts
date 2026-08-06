@@ -14,6 +14,8 @@ export class LeasedNodeRegistry {
   readonly #storage: RecordStorage<string, Struct>;
   readonly #cleanupBatchSize: number;
   #closed = false;
+  #closing: Promise<void> | undefined;
+  readonly #operations = new Set<Promise<unknown>>();
 
   /**
    * Creates a leased node registry over an explicit atomic record storage handle.
@@ -42,10 +44,11 @@ export class LeasedNodeRegistry {
    * @param lease Supplies the node, owning registration identity, and expiry time.
    * @returns Whether the registration was written.
    */
-  async register(lease: NodeLease): Promise<boolean> {
-    this.requireOpen();
-    const record = LeaseRecords.write(lease);
-    return this.#storage.compareAndSet(lease.node.id, undefined, record);
+  register(lease: NodeLease): Promise<boolean> {
+    return this.start(async () => {
+      const record = LeaseRecords.write(lease);
+      return this.#storage.compareAndSet(lease.node.id, undefined, record);
+    });
   }
 
   /**
@@ -56,17 +59,18 @@ export class LeasedNodeRegistry {
    * @param expiresAt Supplies the renewed expiry in epoch milliseconds.
    * @returns Whether the owner still held and renewed the lease.
    */
-  async renew(nodeId: string, registrationId: string, expiresAt: number): Promise<boolean> {
-    this.requireOpen();
-    const current = await this.#storage.read(nodeId);
-    if (current === undefined) return false;
-    const lease = LeaseRecords.read(current, nodeId);
-    if (lease.registrationId !== registrationId) return false;
-    return this.#storage.compareAndSet(
-      nodeId,
-      current,
-      LeaseRecords.write({ ...lease, expiresAt }),
-    );
+  renew(nodeId: string, registrationId: string, expiresAt: number): Promise<boolean> {
+    return this.start(async () => {
+      const current = await this.#storage.read(nodeId);
+      if (current === undefined) return false;
+      const lease = LeaseRecords.read(current, nodeId);
+      if (lease.registrationId !== registrationId) return false;
+      return this.#storage.compareAndSet(
+        nodeId,
+        current,
+        LeaseRecords.write({ ...lease, expiresAt }),
+      );
+    });
   }
 
   /**
@@ -76,15 +80,16 @@ export class LeasedNodeRegistry {
    * @param registrationId Supplies the opaque owning process identity.
    * @returns Whether the caller's lease was deleted.
    */
-  async remove(nodeId: string, registrationId: string): Promise<boolean> {
-    this.requireOpen();
-    const current = await this.#storage.read(nodeId);
-    if (
-      current === undefined ||
-      LeaseRecords.read(current, nodeId).registrationId !== registrationId
-    )
-      return false;
-    return this.#storage.compareAndSet(nodeId, current, undefined);
+  remove(nodeId: string, registrationId: string): Promise<boolean> {
+    return this.start(async () => {
+      const current = await this.#storage.read(nodeId);
+      if (
+        current === undefined ||
+        LeaseRecords.read(current, nodeId).registrationId !== registrationId
+      )
+        return false;
+      return this.#storage.compareAndSet(nodeId, current, undefined);
+    });
   }
 
   /**
@@ -93,11 +98,12 @@ export class LeasedNodeRegistry {
    * @param now Supplies epoch milliseconds used for exact expiry filtering.
    * @returns Every non-expired node after every stored row validates.
    */
-  async read(now: number): Promise<readonly ApplicationNode[]> {
-    this.requireOpen();
-    LeaseRecords.requireTime(now);
-    const leases = (await this.#storage.query()).map((record) => LeaseRecords.read(record));
-    return leases.filter((lease) => lease.expiresAt > now).map((lease) => lease.node);
+  read(now: number): Promise<readonly ApplicationNode[]> {
+    return this.start(async () => {
+      LeaseRecords.requireTime(now);
+      const leases = (await this.#storage.query()).map((record) => LeaseRecords.read(record));
+      return leases.filter((lease) => lease.expiresAt > now).map((lease) => lease.node);
+    });
   }
 
   /**
@@ -106,30 +112,51 @@ export class LeasedNodeRegistry {
    * @param now Supplies epoch milliseconds used for exact expiry filtering.
    * @returns The number of rows this pass removed.
    */
-  async cleanup(now: number): Promise<number> {
-    this.requireOpen();
-    LeaseRecords.requireTime(now);
-    const records = await this.#storage.queryEntries({ limit: this.#cleanupBatchSize });
-    const removals = await Promise.all(
-      records.map(async ({ id, record }) => {
-        const lease = LeaseRecords.read(record, id);
-        return lease.expiresAt <= now && (await this.#storage.compareAndSet(id, record, undefined));
-      }),
-    );
-    return removals.filter(Boolean).length;
+  cleanup(now: number): Promise<number> {
+    return this.start(async () => {
+      LeaseRecords.requireTime(now);
+      const records = await this.#storage.queryEntries({ limit: this.#cleanupBatchSize });
+      const removals = await Promise.all(
+        records.map(async ({ id, record }) => {
+          const lease = LeaseRecords.read(record, id);
+          return (
+            lease.expiresAt <= now && (await this.#storage.compareAndSet(id, record, undefined))
+          );
+        }),
+      );
+      return removals.filter(Boolean).length;
+    });
   }
 
   /**
-   * Closes the independently owned storage handle and rejects later operations.
+   * Fences new operations, joins started operations, then closes this handle once.
+   *
+   * @returns Completes after every active registry operation settles.
    */
-  close(): void {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#closing !== undefined) return this.#closing;
     this.#closed = true;
-    this.#storage.close();
+    this.#closing = Promise.allSettled([...this.#operations]).then(() => this.#storage.close());
+    return this.#closing;
   }
 
   private requireOpen(): void {
     if (this.#closed) throw new Error("Leased node registry is closed.");
+  }
+
+  private start<Result>(operation: () => Promise<Result>): Promise<Result> {
+    try {
+      this.requireOpen();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const pending = operation();
+    this.#operations.add(pending);
+    void pending.then(
+      () => this.#operations.delete(pending),
+      () => this.#operations.delete(pending),
+    );
+    return pending;
   }
 }
 
@@ -179,7 +206,8 @@ const LeaseRecords = Object.freeze({
     const endpoint = string(fields.endpoint);
     const expiresAt = number(fields.expiresAt);
     const registrationId = string(fields.registrationId);
-    if (version !== 1 || (expectedId !== undefined && id !== expectedId))
+    if (version !== 1) throw new Error("Application node lease record has unsupported version.");
+    if (expectedId !== undefined && id !== expectedId)
       throw new Error("Application node lease record is invalid.");
     try {
       const node = new ApplicationNode({ id, endpoint });
