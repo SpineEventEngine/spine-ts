@@ -159,7 +159,7 @@ export class GceRegistrar {
       await this.#resolveNode();
       const node = this.#node;
       if (node === undefined) throw new Error("GCE registrar has no resolved node.");
-      return this.#operation(
+      return this.#operation(() =>
         this.#registry.register({
           node,
           registrationId: this.#identity,
@@ -179,7 +179,7 @@ export class GceRegistrar {
     this.#cancel?.();
     await this.#work;
     if (this.#node !== undefined)
-      await this.#operation(this.#registry.remove(this.#node.id, this.#identity));
+      await this.#operation(() => this.#registry.remove(this.#node.id, this.#identity));
   }
 
   /** Exposes listener-ready start and pre-network-close removal to a server assembly. */
@@ -200,14 +200,14 @@ export class GceRegistrar {
       const node = this.#node;
       if (node === undefined) return;
       if (this.#confirmed)
-        this.#confirmed = await this.#operation(
+        this.#confirmed = await this.#operation(() =>
           this.#registry.renew(node.id, this.#identity, this.#now() + 60_000),
         );
       else {
         const existing = await this.#registry.lookup(node.id, this.#now());
         this.#confirmed = existing?.registrationId === this.#identity;
         if (!this.#confirmed)
-          this.#confirmed = await this.#operation(
+          this.#confirmed = await this.#operation(() =>
             this.#registry.register({
               node,
               registrationId: this.#identity,
@@ -215,7 +215,7 @@ export class GceRegistrar {
             }),
           );
       }
-      await this.#operation(this.#registry.cleanup(this.#now()));
+      await this.#operation(() => this.#registry.cleanup(this.#now()));
     } finally {
       if (!this.#closed) this.#schedule();
     }
@@ -230,10 +230,10 @@ export class GceRegistrar {
     return next;
   }
 
-  async #operation<Result>(operation: Promise<Result>): Promise<Result> {
+  async #operation<Result>(operation: (signal: AbortSignal) => Promise<Result>): Promise<Result> {
     const deadline = this.#deadlines.create(this.#operationTimeoutMs);
     try {
-      return await operation;
+      return await operation(AbortSignal.any([this.#abort.signal, deadline.signal]));
     } finally {
       deadline.close();
     }
