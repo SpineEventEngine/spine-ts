@@ -2,7 +2,9 @@ import type { StorageContext } from "@spine-event-engine/storage";
 
 import { CanonicalValue } from "./value-codec.js";
 
-/** Canonical Datastore kinds shared by generic records and event delivery. */
+/**
+ * Provides canonical Datastore kinds shared by generic records and event delivery.
+ */
 export const DatastoreRecordKinds: Readonly<{
   derive(context: StorageContext, storageKey: string): string;
 }> = Object.freeze({

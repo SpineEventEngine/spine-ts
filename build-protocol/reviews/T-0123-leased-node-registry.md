@@ -140,3 +140,11 @@ Datastore record-kind derivation between generic record storage and entity
 commit delivery writes, preserve the hard cutover with no legacy path, and
 update the two generated-inventory expectations. Reliability/API review reopen
 only if the production layout helper changes their accepted contracts.
+
+Release-correction reliability re-review is clean. API re-review found that
+`eventStoreRecordSpec` had been added to the end-user storage root and that the
+new kind helper used a one-line TSDoc opener. The correction exposes the record
+layout only at `@spine-event-engine/storage/internal/event-store`, restores the
+root to 33 exports, and expands the helper documentation. Build, API docs,
+formatting, ESLint, and the three affected suites pass 88/88. Final API
+acceptance remains pending.

@@ -3,7 +3,7 @@ import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { randomUUID } from "node:crypto";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
-import { eventStoreRecordSpec } from "@spine-event-engine/storage";
+import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
 import type {
   EntityCommitInput,
   EntityCommitResult,
