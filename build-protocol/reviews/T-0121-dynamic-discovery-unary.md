@@ -158,3 +158,30 @@ TypeScript/API, and performance/reliability use the existing
 `gpt-5.6-terra` / `high` roles; documentation uses its immutable
 `gpt-5.6-luna` / `medium` role. Independent runtime introspection remains
 unavailable and no fallback or mismatch was visible.
+
+## Final Narrow Correction Batch
+
+Coordinator preflight at `d127ffa6` passed 143 focused tests, affected
+typecheck, TSDoc, Prettier, and diff checks. Final re-review accepted all prior
+resource ownership, retry, refresh, conflict containment, topology, and public
+wording corrections except these bounded edge cases:
+
+1. Fence every topology mutation after an await. An older snapshot must not
+   remove a client after a newer generation appears; add a stale-removal race
+   that preserves the newer live client without unnecessary recreation.
+2. Settle every start in a failed parallel batch before processing the next
+   snapshot, so stale stalled siblings cannot overlap a fresh batch above the
+   global start bound. Add fast-fail/stalled-sibling/new-snapshot peak coverage.
+3. Validate normalized DNS labels, rejecting empty labels, underscores, and
+   leading/trailing hyphens while preserving valid IDN normalization.
+4. Make scheduled discovery explicitly single-watch and terminal after close.
+   Reject post-close watch, document the contract in TSDoc and the deployment
+   reference, and test it.
+5. Preserve secondary Browser cleanup failures for non-`Error` primary
+   rejection values by normalizing unknown reasons or using an equivalent
+   deterministic error contract. Test the non-Error case.
+6. Document that dynamic-forwarder close aborts in-flight creation and owns
+   current-client cleanup. Move the `node:net` import to the actual import block.
+
+All final reviewers used the same explicit configured profiles and reported the
+same independent-runtime-introspection limitation with no visible mismatch.
