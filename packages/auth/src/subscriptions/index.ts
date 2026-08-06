@@ -1128,10 +1128,7 @@ export class SubscriptionGateway {
       );
     }
   }
-  async #receiveBackend(
-    wire: PublicSubscriptionWire,
-    controller: AbortController,
-  ): Promise<void> {
+  async #receiveBackend(wire: PublicSubscriptionWire, controller: AbortController): Promise<void> {
     return SubscriptionGatewayValues.withTimeout(
       this.#options.creator.subscribe(
         SubscriptionGatewayValues.copyPublic(wire),
