@@ -1,6 +1,6 @@
 # T-0119: Documentation And Correction Closure
 
-Status: Review converged; final release verification pending
+Status: Accepted and release-verified; merge pending
 
 ## Slice Evidence
 
