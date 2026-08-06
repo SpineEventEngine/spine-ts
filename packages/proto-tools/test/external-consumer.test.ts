@@ -64,6 +64,7 @@ function packSpinePackages(destination: string): readonly PackedPackage[] {
   const sources = [
     "packages/proto-tools",
     "packages/server",
+    "packages/deployment",
     "packages/auth",
     "packages/proto",
     "packages/core",

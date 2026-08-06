@@ -182,6 +182,7 @@ describe("package metadata", () => {
       "packages/core",
       "packages/delivery-client",
       "packages/delivery-server",
+      "packages/deployment",
       "packages/proto",
       "packages/proto-tools",
       "packages/server",
