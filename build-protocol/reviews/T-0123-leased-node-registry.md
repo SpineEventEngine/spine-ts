@@ -1,6 +1,6 @@
 # T-0123 Review Record
 
-Status: Accepted review; release-verification correction pending
+Status: Accepted; final release rerun pending
 
 ## Second correction evidence
 
@@ -148,3 +148,8 @@ layout only at `@spine-event-engine/storage/internal/event-store`, restores the
 root to 33 exports, and expands the helper documentation. Build, API docs,
 formatting, ESLint, and the three affected suites pass 88/88. Final API
 acceptance remains pending.
+
+Final API re-review at `93280dd6` is clean. The public storage root remains at
+33 exports, the emitted provider-only subpath resolves, Datastore imports that
+subpath, and TSDoc/typechecking/API docs pass. All review concerns are accepted;
+only the fresh full release rerun remains.
