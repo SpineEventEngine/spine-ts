@@ -299,13 +299,18 @@ describe("DynamicSubscriptionCreator", () => {
     });
     const missingId = {
       kind: "public-subscription" as const,
-      bytes: toBinary(SubscriptionSchema, create(SubscriptionSchema, { topic: create(TopicSchema) })),
+      bytes: toBinary(
+        SubscriptionSchema,
+        create(SubscriptionSchema, { topic: create(TopicSchema) }),
+      ),
     };
 
     await expect(owner.rehydrateDefinition(subscription(), 0)).rejects.toThrow(
       "maxBackendEnvelopeBytes must be a positive safe integer.",
     );
-    await expect(owner.rehydrateDefinition(missingId)).rejects.toThrow("subscription ID is required");
+    await expect(owner.rehydrateDefinition(missingId)).rejects.toThrow(
+      "subscription ID is required",
+    );
   });
 
   it("keeps missing logical definitions inert during activation and cancellation", async () => {
@@ -316,8 +321,12 @@ describe("DynamicSubscriptionCreator", () => {
     const aborted = new AbortController();
     aborted.abort();
 
-    await expect(owner.cancelDefinition(wire, new AbortController().signal)).resolves.toBeUndefined();
-    await expect(owner.activateDefinition(wire, noUpdates, aborted.signal)).resolves.toBeUndefined();
+    await expect(
+      owner.cancelDefinition(wire, new AbortController().signal),
+    ).resolves.toBeUndefined();
+    await expect(
+      owner.activateDefinition(wire, noUpdates, aborted.signal),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects forwarding while no dynamic backend is available", async () => {
@@ -326,7 +335,11 @@ describe("DynamicSubscriptionCreator", () => {
     });
 
     await expect(
-      owner.forward({ service: "spine.client.QueryService", method: "Read", value: new Uint8Array() }),
+      owner.forward({
+        service: "spine.client.QueryService",
+        method: "Read",
+        value: new Uint8Array(),
+      }),
     ).rejects.toThrow("Gateway backend is absent.");
   });
 
@@ -354,9 +367,9 @@ describe("DynamicSubscriptionCreator", () => {
     );
     expect(subscriptions).toBe(0);
     await owner.close();
-    await expect(owner.subscribeDefinition(subscription(), new AbortController().signal)).rejects.toThrow(
-      "Gateway backend is absent.",
-    );
+    await expect(
+      owner.subscribeDefinition(subscription(), new AbortController().signal),
+    ).rejects.toThrow("Gateway backend is absent.");
   });
 
   it("rejects a conflicting endpoint for one application node identity", async () => {
@@ -370,9 +383,9 @@ describe("DynamicSubscriptionCreator", () => {
         new ApplicationNode({ id: "a", endpoint: "http://10.0.0.2" }),
       ]),
     ).resolves.toBeUndefined();
-    await expect(owner.forward({ service: "s", method: "m", value: new Uint8Array() })).rejects.toThrow(
-      "Gateway backend is absent.",
-    );
+    await expect(
+      owner.forward({ service: "s", method: "m", value: new Uint8Array() }),
+    ).rejects.toThrow("Gateway backend is absent.");
   });
 
   it("fails durable rehydration when its native child exceeds the configured bound", async () => {
@@ -390,7 +403,9 @@ describe("DynamicSubscriptionCreator", () => {
     });
     await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
 
-    await expect(owner.rehydrateDefinition(subscription())).rejects.toThrow("backend-envelope-too-large");
+    await expect(owner.rehydrateDefinition(subscription())).rejects.toThrow(
+      "backend-envelope-too-large",
+    );
     await owner.close();
     await expect(owner.rehydrateDefinition(subscription())).rejects.toThrow("owner is closed");
   });
