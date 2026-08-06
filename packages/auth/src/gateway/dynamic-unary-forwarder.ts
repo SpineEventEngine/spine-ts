@@ -162,7 +162,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   async #replace(nodes: readonly ApplicationNode[], generation: number): Promise<void> {
     if (this.#closed || generation !== this.#generation) return;
     await this.#retryDisposals();
-    await this.#retryChildCleanup();
+    if (this.#failedChildCleanup.size > 0) await this.#retryChildCleanup();
     const wanted = new Map<string, ApplicationNode>();
     for (const node of nodes) {
       const previous = wanted.get(node.id);
@@ -179,7 +179,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       if (node?.endpoint === current.endpoint && node.tlsServerName === current.tlsServerName)
         continue;
       this.#clients.delete(id);
-      await this.#removeNodeChildren(id, current.client);
+      if (this.#definitions.size > 0) await this.#removeNodeChildren(id, current.client);
       await this.#dispose(current.client);
       if (generation !== this.#generation) return;
     }
