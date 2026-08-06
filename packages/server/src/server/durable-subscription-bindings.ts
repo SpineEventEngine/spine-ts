@@ -177,7 +177,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       { name: `spine.gateway.${options.namespace}`, multitenant: false },
       new RecordSpec({
         schema: AnySchema,
-        storageKey: "spine.gateway.SubscriptionBinding:v3",
+        storageKey: "spine.gateway.SubscriptionBinding:v4",
         idKind: "string",
         extractId: (record) => Values.id(record),
       }),
@@ -1171,7 +1171,7 @@ const Values = Object.freeze({
     const record = create(AnySchema, {
       typeUrl,
       value: new TextEncoder().encode(
-        JSON.stringify({ version: value.family === "binding" ? 3 : 1, ...value }),
+        JSON.stringify({ version: value.family === "binding" ? 4 : 1, ...value }),
       ),
     });
     if (record.value.byteLength > maxBytes) throw new Error("backend-envelope-too-large");
@@ -1191,7 +1191,7 @@ const Values = Object.freeze({
     const source = value as Record<string, unknown>;
     const family = source.family;
     const valid =
-      (family === "binding" && record.typeUrl === bindingType && source.version === 3) ||
+      (family === "binding" && record.typeUrl === bindingType && source.version === 4) ||
       (family === "quota" && record.typeUrl === quotaType && source.version === 1) ||
       (family === "cleanup" && record.typeUrl === cleanupType && source.version === 1);
     if (

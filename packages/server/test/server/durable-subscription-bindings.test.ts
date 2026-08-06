@@ -2594,7 +2594,7 @@ function repairStore(factory: StorageFactory, namespace: string): RecordStorage<
     { name: `spine.gateway.${namespace}`, multitenant: false },
     new RecordSpec({
       schema: AnySchema,
-      storageKey: "spine.gateway.SubscriptionBinding:v3",
+      storageKey: "spine.gateway.SubscriptionBinding:v4",
       idKind: "string",
       extractId: (record) => repairId(record),
     }),
@@ -2656,7 +2656,7 @@ function repairRecord(id: string, lifecycle: "reserved" | "retired"): Any {
     typeUrl: "type.spine-event-engine.gateway/DurableSubscriptionBinding",
     value: new TextEncoder().encode(
       JSON.stringify({
-        version: 3,
+        version: 4,
         family: "binding",
         id,
         revision: 1,
@@ -2691,7 +2691,7 @@ function durableRecord(
   return create(AnySchema, {
     typeUrl,
     value: new TextEncoder().encode(
-      JSON.stringify({ version: family === "binding" ? 3 : 1, family, ...value }),
+      JSON.stringify({ version: family === "binding" ? 4 : 1, family, ...value }),
     ),
   });
 }
