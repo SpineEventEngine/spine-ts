@@ -134,6 +134,24 @@ describe("LeasedNodeRegistry", () => {
     await expect(registry.read(-1)).rejects.toThrow("expiry");
   });
 
+  it("renews the current owner and distinguishes live from expired lookup", async () => {
+    const registry = new LeasedNodeRegistry({
+      factory: new InMemoryStorageFactory(),
+      namespace: "renew-and-lookup",
+    });
+    const node = new ApplicationNode({ id: "node/a", endpoint: "http://10.0.0.1" });
+
+    await registry.register({ node, registrationId: "owner", expiresAt: 10 });
+    await expect(registry.renew(node.id, "owner", 20)).resolves.toBe(true);
+    await expect(registry.lookup(node.id, 19)).resolves.toMatchObject({
+      registrationId: "owner",
+      expiresAt: 20,
+      node,
+    });
+    await expect(registry.lookup(node.id, 20)).resolves.toBeUndefined();
+    await expect(registry.lookup("missing", 0)).resolves.toBeUndefined();
+  });
+
   it("revalidates structurally supplied nodes before persisting a lease", async () => {
     const registry = new LeasedNodeRegistry({
       factory: new InMemoryStorageFactory(),
