@@ -244,4 +244,33 @@ describe("GceApplicationNode", () => {
     await registrar.close();
     expect(closed).toBe(true);
   });
+
+  it("closes each deadline after admitted registry work", async () => {
+    let created = 0;
+    let closed = 0;
+    let tick: (() => void) | undefined;
+    const registry = {
+      register: async () => true,
+      renew: async () => true,
+      cleanup: async () => 0,
+      remove: async () => true,
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      scheduler: { schedule: (_delay, onTick) => ((tick = onTick), () => undefined) },
+      deadlines: {
+        create: () => {
+          created += 1;
+          return { signal: new AbortController().signal, close: () => (closed += 1) };
+        },
+      },
+    });
+    await registrar.start();
+    tick?.();
+    await Promise.resolve();
+    await registrar.close();
+    expect(created).toBe(closed);
+    expect(created).toBeGreaterThanOrEqual(4);
+  });
 });
