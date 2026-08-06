@@ -28,6 +28,24 @@ describe("LeasedNodeRegistry", () => {
     await expect(second.read(199)).resolves.toEqual([node]);
   });
 
+  it("allows exactly one simultaneous registration for one node ID", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = new LeasedNodeRegistry({ factory, namespace: "collision" });
+    const second = new LeasedNodeRegistry({ factory, namespace: "collision" });
+    const node = new ApplicationNode({ id: "node/collision", endpoint: "http://10.0.0.1" });
+
+    const results = await Promise.all([
+      first.register({ node, registrationId: "first", expiresAt: 100 }),
+      second.register({ node, registrationId: "second", expiresAt: 100 }),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("uses the v1 storage key and typed persisted fields", () => {
+    expect(leaseRecordSpec.storageKey).toBe("spine.deployment.ApplicationNodeLease:v1");
+    expect(leaseRecordSpec.schema.typeName).toBe("spine.system.deployment.ApplicationNodeLease");
+  });
+
   it("omits a lease exactly at its expiry and keeps namespaces isolated", async () => {
     const factory = new InMemoryStorageFactory();
     const left = new LeasedNodeRegistry({ factory, namespace: "left" });
