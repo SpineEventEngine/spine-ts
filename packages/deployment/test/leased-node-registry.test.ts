@@ -132,6 +132,19 @@ describe("LeasedNodeRegistry", () => {
     await expect(registry.read(-1)).rejects.toThrow("expiry");
   });
 
+  it("revalidates structurally supplied nodes before persisting a lease", async () => {
+    const registry = new LeasedNodeRegistry({
+      factory: new InMemoryStorageFactory(),
+      namespace: "spoofed-node",
+    });
+    const node = { id: "node/a", endpoint: "http://10.0.0.1/not-an-origin" } as ApplicationNode;
+
+    await expect(registry.register({ node, registrationId: "owner", expiresAt: 100 })).rejects.toThrow(
+      "endpoint",
+    );
+    await expect(registry.read(0)).resolves.toEqual([]);
+  });
+
   it("rejects an invalid cleanup bound before allocating a storage handle", () => {
     const factory = new CountingFactory();
 
