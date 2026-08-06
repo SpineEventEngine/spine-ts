@@ -98,6 +98,61 @@ The complete wave is accepted as one deduplicated batch:
 The unchanged pre-existing `B4` wording is recorded as out-of-scope baseline
 debt rather than a T-0122 finding.
 
+## Focused Re-review
+
+Range: `af4225e0..00b70013`.
+
+- Style/maintainability: prior fabricated-envelope and unused-token findings
+  are resolved. One P2 requests a single private named type for logical
+  definition state instead of repeated partial anonymous structures.
+- Documentation: prior canonical-definition wording is resolved. One P2
+  requests that `maxBackendEnvelopeBytes` describe all per-node native
+  envelopes, not recovery only.
+- TypeScript/API docs: real per-node envelope enforcement is resolved. Three
+  P1 findings remain around post-create compensation, retry-safe recovery, and
+  the intentional public coordinator contract break; one P2 requests the
+  remaining coordinator method TSDoc.
+- Performance/reliability: activation lifetime and bounded cleanup are
+  resolved. Three overlapping P1 findings remain around post-create
+  compensation, live-lease recovery, retry-safe rehydration, and ordered
+  startup rollback.
+
+Focused reviewers retained their original explicit configured profiles. The
+surface still exposes no independent runtime self-introspection and no profile
+mismatch was visible. Targeted verification passed 316 tests.
+
+## Final Narrow Correction Batch
+
+1. Compensate through the logical coordinator after every failure that follows
+   successful native creation, including expiry discovered after creation and
+   durable binding persistence failure. Dispose every installed child and
+   remove the unbound logical definition. Replace the test that currently
+   expects no compensation with integration coverage through the dynamic
+   coordinator.
+2. Make durable recovery respect active leases. A second Gateway must not
+   reclaim a definition while its current owner lease is live. Graceful
+   shutdown durably relinquishes only this instance's owned active leases so a
+   replacement Gateway can recover immediately; crash recovery waits for lease
+   expiry.
+3. Make recovery claim and rehydration retry-safe. Concurrent recovery obtains
+   one fenced claim; failed native rehydration restores a state visible to the
+   next recovery, while successful rehydration commits the inactive definition
+   used by immediate client Activate. Test failure, restart, changed
+   membership, and immediate activation.
+4. Make Browser startup rollback ordered and phase-safe. Attempt every relevant
+   cleanup phase and aggregate primary recovery plus rollback failures instead
+   of suppressing cleanup errors or running dependent phases concurrently.
+5. Record and document the intentional public TypeScript replacement of
+   `SubscriptionGateway`'s native creator input with the logical
+   `SubscriptionCoordinator`. No compatibility adapter or deprecation cycle is
+   required because the repository has no deployed users.
+6. Introduce one private named logical-definition state type in the dynamic
+   owner and use it consistently across helpers.
+7. Correct `maxBackendEnvelopeBytes` wording and add semantic TSDoc for every
+   public dynamic coordinator method and affected native method.
+8. Run focused regression tests and the complete affected preflight, update
+   records, and request acceptance re-review only for these affected concerns.
+
 ## Correction Implementation Evidence
 
 - The complete accepted batch is implemented through `e5c05ba7`. Public
