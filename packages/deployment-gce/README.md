@@ -1,58 +1,96 @@
 # GCE registration and discovery
 
-`@spine-event-engine/deployment-gce` registers a ready GCE application process
-in a caller-owned `LeasedNodeRegistry` and exposes its live rows to the
-standalone Gateway through `ScheduledNodeDiscovery`.
+`@spine-event-engine/deployment-gce` lets a GCE application process publish its
+ready gRPC listener in a caller-owned leased registry. A standalone Gateway
+reads that registry as complete live-node snapshots for routing and durable
+subscriptions.
 
-The registry storage factory and namespace are explicit operator decisions. The
-package neither selects a storage backend nor creates an authentication,
-Terraform, autoscaling, or public-address configuration. Terraform and
-beginner deployment procedures arrive in T-0127.
+The application process owns its registrar and the Gateway process owns its
+discovery. Both processes receive the same explicit storage factory and
+registry namespace. This package does not choose a storage backend,
+authentication provider, public address, Terraform configuration, or autoscale
+policy.
 
-## Application-node assembly
+## Application process
 
-`GceMetadataService` reads the GCE metadata service with the required
-`Metadata-Flavor: Google` header. It needs permission to read the current
-instance project ID, zone, numeric instance ID, and first private network
-interface address. `GceApplicationNode.create()` derives the stable ID
-`gce/<project-id>/<zone>/<numeric-instance-id>`.
+The Compute Engine metadata server is available to software running on the VM.
+It is not an identity boundary: any process that can run on that VM can request
+its metadata. Treat VM process access and the private network as trusted
+operator-controlled boundaries. `GceMetadataService` sends the required
+`Metadata-Flavor: Google` header, then derives the stable node ID
+`gce/<project-id>/<zone>/<numeric-instance-id>` from the current VM.
 
-The default endpoint is an HTTP origin built from the private address and the
-configured gRPC port. IPv6 addresses are bracketed. A canonical endpoint and
-TLS-server-name can be supplied for private DNS, proxies, or HTTPS; public
-address selection is never implicit.
+Create the registry with your storage factory and a namespace shared by all
+application nodes and the Gateway. Attach the registrar before startup; the
+server starts it only after the gRPC listener is reachable.
 
 ```ts
-const metadata = new GceMetadataService();
-const node = GceApplicationNode.create(await metadata.read(new AbortController().signal), {
-  port: 8080,
-  endpoint: "https://app.internal.example",
-  tlsServerName: "app.internal.example",
+import { LeasedNodeRegistry } from "@spine-event-engine/deployment";
+import { GceMetadataService, GceRegistrar } from "@spine-event-engine/deployment-gce";
+import { Server } from "@spine-event-engine/server";
+
+const registry = new LeasedNodeRegistry({
+  factory: storageFactory, // your StorageFactory
+  namespace: "production-application-nodes",
 });
-const registrar = new GceRegistrar({ registry, node });
+const registrar = new GceRegistrar({
+  registry,
+  metadata: new GceMetadataService(),
+  port: 8080,
+});
+const application = Server.atPort(8080, applicationServerOptions);
+application.addListenerLifecycle(registrar.lifecycle());
+const runningApplication = await application.run();
 ```
 
-## Lifecycle and discovery
+By default the published endpoint is private-address HTTP plus `port`; IPv6 is
+bracketed. For private DNS, a proxy, or HTTPS, create the node explicitly with
+`GceApplicationNode.create(metadata, { port, endpoint, tlsServerName })` and
+pass it as `node`. Public-address selection is never implicit.
 
-Attach `registrar.lifecycle()` to the application `Server` before startup. The
-server starts it only after its gRPC listener is reachable. Registration uses a
-new opaque identity per process, renews every 20 seconds, and sets a 60-second
-lease expiry. A lost initial response is read-confirmed before one
-same-identity conditional retry. Every metadata or registry operation has a
-cooperative deadline; production timers are unref'ed.
+Registration uses a new opaque identity per process, renews every 20 seconds,
+and expires after 60 seconds. An unknown initial write is read-confirmed before
+a same-identity retry. Each metadata and registry operation is deadline-bound;
+production timers do not keep Node.js alive on their own.
+
+## Standalone Gateway process
+
+Give the Gateway a registry reader with the same factory/namespace and put it
+in `browser.discovery` within your existing standalone Gateway options. The
+reader publishes complete snapshots—including empty membership—to the Gateway.
+`ScheduledNodeDiscovery` refreshes every ten seconds by default.
 
 ```ts
-server.addListenerLifecycle(registrar.lifecycle());
+import { LeasedNodeRegistry, ScheduledNodeDiscovery } from "@spine-event-engine/deployment";
+import { GceRegistryReader } from "@spine-event-engine/deployment-gce";
+import { Server } from "@spine-event-engine/server";
+
+const registry = new LeasedNodeRegistry({
+  factory: storageFactory,
+  namespace: "production-application-nodes",
+});
+const discovery = new ScheduledNodeDiscovery({
+  reader: new GceRegistryReader(registry, Date.now),
+  scheduler: gatewayScheduler,
+});
+const gateway = Server.atPort(8081, {
+  ...gatewayServerOptions,
+  browser: { ...gatewayServerOptions.browser, discovery },
+});
+const runningGateway = await gateway.run();
 ```
 
-On shutdown, the lifecycle first cancels scheduling, aborts and joins admitted
-metadata/registry work, then conditionally removes only its own lease. Only
-after that attempt settles does server listener shutdown continue. Crashed
-process rows simply become undiscoverable at expiry; a healthy later registrar
-performs finite expired-row cleanup.
+When every lease expires, discovery publishes an empty set and the Gateway
+reports backend unavailability while continuing refreshes. A later registered
+node restores routing and subscription reconciliation. Healthy registrars also
+perform finite cleanup of abandoned expired rows.
 
-For Gateway assembly, pass a `GceRegistryReader` to `ScheduledNodeDiscovery`.
-It supplies complete live snapshots (including an empty snapshot) to the
-existing dynamic Gateway, whose default refresh interval is ten seconds.
+On application shutdown, call `runningApplication.close()`: the listener
+lifecycle first stops scheduling, aborts and joins admitted work, and
+conditionally removes only its own lease before listener network close. Close
+the Gateway's running server and its registry when that process exits; close
+the storage factory only when its owning process no longer needs it.
 
-See [REFERENCE.md](REFERENCE.md) for public API contracts and failure details.
+See [REFERENCE.md](REFERENCE.md) for API contracts and metadata failure
+semantics. Infrastructure and end-to-end deployment guidance belongs in the
+project's deployment guide.
