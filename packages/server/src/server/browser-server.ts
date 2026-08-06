@@ -100,14 +100,19 @@ export const BrowserServer: Readonly<{
     const creator = creators.length === 1 ? firstCreator : new FanInSubscriptionCreator(creators);
     let dynamic: DynamicUnaryForwarder | undefined;
     let stopDiscovery: (() => Promise<void>) | undefined;
-    const forwarder = options.discovery === undefined
-      ? creators.length === 1 ? firstCreator : new RoundRobinUnaryForwarder(creators)
-      : (dynamic = new DynamicUnaryForwarder({
-          create: async (node) => {
-            const client = new NativeSubscriptionCreator(createGrpcTransport({ baseUrl: node.endpoint }));
-            return { forward: client.forward.bind(client), close: async () => {} };
-          },
-        }));
+    const forwarder =
+      options.discovery === undefined
+        ? creators.length === 1
+          ? firstCreator
+          : new RoundRobinUnaryForwarder(creators)
+        : (dynamic = new DynamicUnaryForwarder({
+            create: async (node) => {
+              const client = new NativeSubscriptionCreator(
+                createGrpcTransport({ baseUrl: node.endpoint }),
+              );
+              return { forward: client.forward.bind(client), close: async () => {} };
+            },
+          }));
     if (options.discovery !== undefined && dynamic !== undefined)
       stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
     const bindings =
@@ -202,17 +207,26 @@ export const BrowserServer: Readonly<{
       address = await BrowserServer.listen(server, options.host, options.port);
     } catch (error) {
       try {
-      await subscriptions.close();
-      await stopDiscovery?.();
-      await dynamic?.close();
+        await subscriptions.close();
+        await stopDiscovery?.();
+        await dynamic?.close();
       } catch (closeError) {
         throw new AggregateError([error, closeError], "Server browser startup rollback failed.");
       }
       throw error;
     }
-    return new RunningBrowserServer(server, running, subscriptions, address, activeAuth, () => {
-      draining = true;
-    }, stopDiscovery, dynamic);
+    return new RunningBrowserServer(
+      server,
+      running,
+      subscriptions,
+      address,
+      activeAuth,
+      () => {
+        draining = true;
+      },
+      stopDiscovery,
+      dynamic,
+    );
   },
   requests(options: BrowserServerOptions) {
     return {
@@ -526,8 +540,13 @@ export const BrowserServer: Readonly<{
 });
 
 const BrowserServerValues = Object.freeze({
-  async watch(source: NodeDiscovery, forwarder: DynamicUnaryForwarder): Promise<() => Promise<void>> {
-    return await source.watch((nodes) => { void forwarder.reconcile(nodes); });
+  async watch(
+    source: NodeDiscovery,
+    forwarder: DynamicUnaryForwarder,
+  ): Promise<() => Promise<void>> {
+    return await source.watch((nodes) => {
+      void forwarder.reconcile(nodes);
+    });
   },
   requiredRunning(value: RunningServer | undefined): RunningServer {
     if (value === undefined) throw new Error("Browser server local backend is absent.");

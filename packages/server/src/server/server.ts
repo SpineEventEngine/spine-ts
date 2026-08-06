@@ -620,7 +620,7 @@ export interface BrowserServerOptions {
 
   /**
    * Supplies changing complete membership for unary command and query routing.
-   * Fixed backend configuration continues to own subscription fan-in in T-0121.
+   * Fixed backend configuration continues to own subscription fan-in.
    */
   readonly discovery?: NodeDiscovery;
 

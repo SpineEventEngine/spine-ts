@@ -2,20 +2,39 @@ import type { ApplicationNode } from "@spine-event-engine/deployment";
 
 import type { UnaryForwarder } from "./index.js";
 
-type PendingSnapshot = { readonly nodes: readonly ApplicationNode[]; readonly done: (() => void)[] };
+type PendingSnapshot = {
+  readonly nodes: readonly ApplicationNode[];
+  readonly done: (() => void)[];
+};
 
-/** A connected unary backend with deterministic disposal. */
+/**
+ * Represents a connected unary backend with deterministic disposal.
+ */
 export interface DynamicUnaryClient extends UnaryForwarder {
-  /** Releases the connection after its node leaves membership. */
+  /**
+   * Returns after releasing this connection when its node leaves membership.
+   *
+   * @returns Completes after the connection is released.
+   */
   close(): Promise<void>;
 }
 
-/** Creates one unary client for a discovered node. */
+/**
+ * Configures unary clients for discovered application nodes.
+ */
 export interface DynamicUnaryOptions {
-  /** Creates the client for one canonical application node. */
+  /**
+   * Creates the client for one canonical application node.
+   *
+   * @param node Supplies the canonical application node.
+   * @param signal Cancels connection creation during shutdown.
+   * @returns The connected unary client.
+   */
   readonly create: (node: ApplicationNode, signal: AbortSignal) => Promise<DynamicUnaryClient>;
 
-  /** Bounds simultaneous connection starts. Defaults to eight. */
+  /**
+   * Bounds simultaneous connection starts. Defaults to eight.
+   */
   readonly maxConcurrentStarts?: number;
 }
 
@@ -32,19 +51,34 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #running: Promise<void> | undefined;
   #pending: PendingSnapshot | undefined;
 
-  /** @param options Supplies the per-node client factory. */
+  /**
+   * Creates a dynamic unary router.
+   *
+   * @param options Supplies the per-node client factory.
+   */
   constructor(options: DynamicUnaryOptions) {
-    if (options.maxConcurrentStarts !== undefined && (!Number.isSafeInteger(options.maxConcurrentStarts) || options.maxConcurrentStarts < 1))
+    if (
+      options.maxConcurrentStarts !== undefined &&
+      (!Number.isSafeInteger(options.maxConcurrentStarts) || options.maxConcurrentStarts < 1)
+    )
       throw new RangeError("maxConcurrentStarts must be a positive safe integer.");
     this.#options = options;
     this.#maxConcurrentStarts = options.maxConcurrentStarts ?? 8;
   }
 
-  /** Replaces membership, retaining only clients with identical node identities and endpoints. */
+  /**
+   * Replaces membership while retaining clients with equal node identities and endpoints.
+   *
+   * @param nodes Supplies the replacement complete membership snapshot.
+   * @returns Completes after the latest pending snapshot has reconciled.
+   */
   reconcile(nodes: readonly ApplicationNode[]): Promise<void> {
     return new Promise((resolve) => {
       const pending = this.#pending;
-      this.#pending = { nodes: [...nodes], done: pending === undefined ? [resolve] : [...pending.done, resolve] };
+      this.#pending = {
+        nodes: [...nodes],
+        done: pending === undefined ? [resolve] : [...pending.done, resolve],
+      };
       if (this.#running === undefined) this.#running = this.#run();
     });
   }
@@ -64,7 +98,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     this.#running = undefined;
   }
 
-  async #currentPending(): Promise<PendingSnapshot | undefined> { return this.#pending; }
+  async #currentPending(): Promise<PendingSnapshot | undefined> {
+    return this.#pending;
+  }
 
   async #replace(nodes: readonly ApplicationNode[]): Promise<void> {
     if (this.#closed) return;
@@ -77,7 +113,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     }
     const added = nodes.filter((node) => !this.#clients.has(node.id));
     for (let index = 0; index < added.length; index += this.#maxConcurrentStarts)
-      await Promise.all(added.slice(index, index + this.#maxConcurrentStarts).map((node) => this.#start(node)));
+      await Promise.all(
+        added.slice(index, index + this.#maxConcurrentStarts).map((node) => this.#start(node)),
+      );
     this.#next = 0;
   }
 
@@ -87,7 +125,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     else this.#clients.set(node.id, { endpoint: node.endpoint, client });
   }
 
-  /** Forwards once to the next current client. */
+  /**
+   * Returns one response from the next current client without retrying it.
+   *
+   * @param request Supplies the authorized unary request.
+   * @returns The selected backend response bytes.
+   */
   forward(request: Parameters<UnaryForwarder["forward"]>[0]): Promise<Uint8Array> {
     const clients = [...this.#clients.values()];
     const selected = clients[this.#next % clients.length];
@@ -96,7 +139,11 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     return selected.client.forward(request);
   }
 
-  /** Stops later reconciliation and closes every current client. */
+  /**
+   * Stops later reconciliation and closes every current client.
+   *
+   * @returns Completes after every current client is closed.
+   */
   async close(): Promise<void> {
     this.#closed = true;
     await this.#running;

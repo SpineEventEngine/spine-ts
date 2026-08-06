@@ -15,12 +15,17 @@ describe("ApplicationNode", () => {
   });
 
   it("keeps bracketed IPv6 origins and rejects TLS names for HTTP", () => {
-    expect(new ApplicationNode({ id: "node/v6", endpoint: "http://[fd00::1]:8080/" }).endpoint).toBe(
-      "http://[fd00::1]:8080",
-    );
-    expect(() => new ApplicationNode({ id: "node/http", endpoint: "http://10.0.0.1", tlsServerName: "a.test" })).toThrow(
-      "TLS server names require HTTPS",
-    );
+    expect(
+      new ApplicationNode({ id: "node/v6", endpoint: "http://[fd00::1]:8080/" }).endpoint,
+    ).toBe("http://[fd00::1]:8080");
+    expect(
+      () =>
+        new ApplicationNode({
+          id: "node/http",
+          endpoint: "http://10.0.0.1",
+          tlsServerName: "a.test",
+        }),
+    ).toThrow("TLS server names require HTTPS");
   });
 });
 

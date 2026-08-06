@@ -45,6 +45,7 @@ ResolveContext validates the current session and returns informational actor, te
 Public callbacks may reject; applications decide how their native listener maps those failures. Values handed to request collaborators are defensive gateway facts, while applications remain responsible for their own mutable state and cleanup. Always give gateway operations a finite request limit and make credential, provider, session, and forwarding adapters cancellation-aware.
 
 Read the [browser client and gateway guide](../../docs/BROWSER_CLIENT_AUTH_EXTENSION_GUIDE.md) for composition examples and deployment guidance.
+
 # Dynamic unary discovery
 
 `DynamicUnaryForwarder` accepts complete current application-node snapshots. It serializes reconciliation, retains only the latest pending snapshot during churn, starts clients in bounded batches, disposes departed clients, and round-robins commands and queries across the resulting set. A dispatched unary request is never retried. Empty membership reports backend unavailability until a later snapshot restores clients.

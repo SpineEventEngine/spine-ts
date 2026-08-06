@@ -8,11 +8,14 @@ describe("DynamicUnaryForwarder", () => {
     const started: string[] = [];
     let releaseA: (() => void) | undefined;
     const forwarder = new DynamicUnaryForwarder({
-      create: (node) => new Promise((resolve) => {
-        started.push(node.id);
-        if (node.id === "a") releaseA = () => resolve({ forward: async () => new Uint8Array(), close: async () => {} });
-        else resolve({ forward: async () => new Uint8Array(), close: async () => {} });
-      }),
+      create: (node) =>
+        new Promise((resolve) => {
+          started.push(node.id);
+          if (node.id === "a")
+            releaseA = () =>
+              resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+          else resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+        }),
     });
     const a = forwarder.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
     await Promise.resolve();
@@ -36,33 +39,79 @@ describe("DynamicUnaryForwarder", () => {
         return { forward: async () => new TextEncoder().encode(node.id), close: async () => {} };
       },
     });
-    await forwarder.reconcile(Array.from({ length: 40 }, (_, index) => new ApplicationNode({ id: `${index}`, endpoint: `http://10.0.2.${index + 1}` })));
+    await forwarder.reconcile(
+      Array.from(
+        { length: 40 },
+        (_, index) =>
+          new ApplicationNode({ id: `${index}`, endpoint: `http://10.0.2.${index + 1}` }),
+      ),
+    );
     expect(peak).toBe(2);
   });
 
   it("routes every node in round-robin order and recovers from empty membership", async () => {
     const calls: string[] = [];
     const forwarder = new DynamicUnaryForwarder({
-      create: async (node) => ({ forward: async () => new TextEncoder().encode(node.id), close: async () => calls.push(`close:${node.id}`) }),
+      create: async (node) => ({
+        forward: async () => new TextEncoder().encode(node.id),
+        close: async () => calls.push(`close:${node.id}`),
+      }),
     });
-    await forwarder.reconcile(["a", "b", "c"].map((id) => new ApplicationNode({ id, endpoint: `http://10.0.0.${id.charCodeAt(0)}` })));
-    for (let index = 0; index < 6; index++) calls.push(new TextDecoder().decode(await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() })));
+    await forwarder.reconcile(
+      ["a", "b", "c"].map(
+        (id) => new ApplicationNode({ id, endpoint: `http://10.0.0.${id.charCodeAt(0)}` }),
+      ),
+    );
+    for (let index = 0; index < 6; index++)
+      calls.push(
+        new TextDecoder().decode(
+          await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+        ),
+      );
     await forwarder.reconcile([]);
-    await expect(forwarder.forward({ service: "s", method: "m", value: new Uint8Array() })).rejects.toThrow("absent");
+    await expect(
+      forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+    ).rejects.toThrow("absent");
     await forwarder.reconcile([new ApplicationNode({ id: "d", endpoint: "http://10.0.0.4" })]);
-    calls.push(new TextDecoder().decode(await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() })));
+    calls.push(
+      new TextDecoder().decode(
+        await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+      ),
+    );
     expect(calls).toEqual(["a", "b", "c", "a", "b", "c", "close:a", "close:b", "close:c", "d"]);
   });
 
   it("uses all 40 nodes without retrying a selected failure", async () => {
     let creates = 0;
     const forwarder = new DynamicUnaryForwarder({
-      create: async (node) => { creates++; return { forward: async () => { if (node.id === "0") throw new Error("dispatched"); return new TextEncoder().encode(node.id); }, close: async () => {} }; },
+      create: async (node) => {
+        creates++;
+        return {
+          forward: async () => {
+            if (node.id === "0") throw new Error("dispatched");
+            return new TextEncoder().encode(node.id);
+          },
+          close: async () => {},
+        };
+      },
     });
-    await forwarder.reconcile(Array.from({ length: 40 }, (_, index) => new ApplicationNode({ id: String(index), endpoint: `http://10.0.1.${index + 1}` })));
-    await expect(forwarder.forward({ service: "s", method: "m", value: new Uint8Array() })).rejects.toThrow("dispatched");
+    await forwarder.reconcile(
+      Array.from(
+        { length: 40 },
+        (_, index) =>
+          new ApplicationNode({ id: String(index), endpoint: `http://10.0.1.${index + 1}` }),
+      ),
+    );
+    await expect(
+      forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+    ).rejects.toThrow("dispatched");
     const used = new Set<string>();
-    for (let index = 1; index < 40; index++) used.add(new TextDecoder().decode(await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() })));
+    for (let index = 1; index < 40; index++)
+      used.add(
+        new TextDecoder().decode(
+          await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+        ),
+      );
     expect(creates).toBe(40);
     expect(used.size).toBe(39);
   });
