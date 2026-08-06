@@ -3,6 +3,7 @@ import {
   type LeasedNodeRegistry,
   type NodeSnapshotReader,
 } from "@spine-event-engine/deployment";
+import { randomUUID } from "node:crypto";
 
 /** Supplies trusted GCE instance metadata. */
 export interface GceMetadata {
@@ -55,13 +56,13 @@ export class GceRegistrar {
   constructor(options: {
     readonly registry: LeasedNodeRegistry;
     readonly node: ApplicationNode;
-    readonly identity: string;
+    readonly identity?: string;
     readonly scheduler: GceScheduler;
     readonly now: () => number;
   }) {
     this.#registry = options.registry;
     this.#node = options.node;
-    this.#identity = options.identity;
+    this.#identity = options.identity ?? randomUUID();
     this.#scheduler = options.scheduler;
     this.#now = options.now;
   }
