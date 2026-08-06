@@ -93,8 +93,9 @@ describe("LeasedNodeRegistry", () => {
   });
 
   it("reads a complete snapshot through bounded provider pages", async () => {
+    const factory = new CappedQueryFactory();
     const registry = new LeasedNodeRegistry({
-      factory: new CappedQueryFactory(),
+      factory,
       namespace: "pages",
     });
     for (let index = 0; index < 1_002; index++) {
@@ -108,6 +109,7 @@ describe("LeasedNodeRegistry", () => {
       });
     }
     await expect(registry.read(0)).resolves.toHaveLength(1_002);
+    expect(factory.limits).toEqual([256, 256, 256, 256]);
   });
 
   it("rejects an atomicity-free factory before accepting lease lifecycle work", () => {
@@ -312,13 +314,21 @@ class CountingFactory extends InMemoryStorageFactory {
 }
 
 class CappedQueryFactory extends InMemoryStorageFactory {
+  readonly limits: number[] = [];
+
   override createRecordStorage<I, R extends import("@bufbuild/protobuf").Message>(
     context: import("@spine-event-engine/storage").StorageContext,
     recordSpec: import("@spine-event-engine/storage").RecordSpec<I, R>,
   ): import("@spine-event-engine/storage").RecordStorage<I, R> {
     const storage = super.createRecordStorage(context, recordSpec);
-    Object.defineProperty(storage, "query", {
-      value: () => Promise.reject(new Error("Provider requires a bounded page.")),
+    const queryEntries = storage.queryEntries.bind(storage);
+    Object.defineProperty(storage, "queryEntries", {
+      value: async (query: import("@spine-event-engine/storage").RecordQuery<I>) => {
+        if (query.limit === undefined || query.limit > 256)
+          throw new Error("Provider requires a bounded page.");
+        this.limits.push(query.limit);
+        return queryEntries(query);
+      },
     });
     return storage;
   }
@@ -336,8 +346,10 @@ class DelayedQueryFactory extends InMemoryStorageFactory {
     const storage = super.createRecordStorage(context, recordSpec);
     if (this.storage === undefined) {
       this.storage = storage as unknown as typeof this.storage;
-      Object.defineProperty(storage, "query", {
-        value: () => new Promise<void>((resolve) => (this.#resolve = resolve)).then(() => []),
+      const queryEntries = storage.queryEntries.bind(storage);
+      Object.defineProperty(storage, "queryEntries", {
+        value: (query: import("@spine-event-engine/storage").RecordQuery<I>) =>
+          new Promise<void>((resolve) => (this.#resolve = resolve)).then(() => queryEntries(query)),
       });
     }
     return storage;
