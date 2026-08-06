@@ -108,7 +108,12 @@ export const BrowserServer: Readonly<{
         : (dynamic = new DynamicUnaryForwarder({
             create: async (node) => {
               const client = new NativeSubscriptionCreator(
-                createGrpcTransport({ baseUrl: node.endpoint }),
+                createGrpcTransport({
+                  baseUrl: node.endpoint,
+                  ...(node.tlsServerName === undefined
+                    ? {}
+                    : { nodeOptions: { servername: node.tlsServerName } }),
+                }),
               );
               return { forward: client.forward.bind(client), close: async () => {} };
             },

@@ -99,7 +99,11 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     while (this.#pending !== undefined && !this.#closed) {
       const snapshot = this.#pending;
       this.#pending = undefined;
-      await this.#replace(snapshot.nodes);
+      try {
+        await this.#replace(snapshot.nodes);
+      } catch {
+        // A later complete snapshot starts a fresh reconciliation owner.
+      }
       const later = await this.#currentPending();
       if (later === undefined) for (const done of snapshot.done) done();
       else this.#pending = { nodes: later.nodes, done: [...snapshot.done, ...later.done] };
@@ -144,8 +148,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   async #start(node: ApplicationNode): Promise<void> {
     const controller = new AbortController();
     this.#creating = controller;
-    const client = await this.#options.create(node, controller.signal);
-    if (this.#creating === controller) this.#creating = undefined;
+    let client: DynamicUnaryClient;
+    try {
+      client = await this.#options.create(node, controller.signal);
+    } finally {
+      if (this.#creating === controller) this.#creating = undefined;
+    }
     if (this.#closed) await client.close();
     else
       this.#clients.set(node.id, {
