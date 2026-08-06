@@ -1,4 +1,9 @@
-export { EventStore, type EventRollback, type OnEventAccepted } from "./event/event-store.js";
+export {
+  EventStore,
+  eventStoreRecordSpec,
+  type EventRollback,
+  type OnEventAccepted,
+} from "./event/event-store.js";
 export type {
   EntityEventStorage,
   EntityStateHistoryStorage,

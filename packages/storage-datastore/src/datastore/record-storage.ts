@@ -12,6 +12,7 @@ import {
 } from "@spine-event-engine/storage";
 
 import { CanonicalValue } from "./value-codec.js";
+import { DatastoreRecordKinds } from "./record-kind.js";
 
 const payloadProperty = "$spine.payload";
 const idProperty = "$spine.id";
@@ -33,9 +34,7 @@ class FlatEntityCodec<I, R extends Message> {
     private readonly recordSpec: RecordSpec<I, R>,
     private readonly maxClientSideScan: number,
   ) {
-    this.#kind = CanonicalValue.encode([context.name, context.multitenant, recordSpec.storageKey]);
-    if (Buffer.byteLength(this.#kind, "utf8") > 1_500)
-      throw new Error("Datastore record kind exceeds the 1500-byte UTF-8 limit.");
+    this.#kind = DatastoreRecordKinds.derive(context, recordSpec.storageKey);
   }
 
   key(client: Datastore, id: I): ReturnType<Datastore["key"]> {
