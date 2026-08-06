@@ -63,6 +63,37 @@ describe("GceApplicationNode", () => {
     ).toThrow();
   });
 
+  it("lets an explicit canonical HTTPS override win and rejects invalid endpoint inputs", () => {
+    const metadata = { projectId: "p", zone: "z", instanceId: "1", privateAddress: "10.0.0.1" };
+    expect(
+      GceApplicationNode.create(metadata, {
+        port: 8080,
+        endpoint: "https://API.Example.Test",
+        tlsServerName: "Api.Example.Test",
+      }),
+    ).toMatchObject({ endpoint: "https://api.example.test", tlsServerName: "api.example.test" });
+    expect(() =>
+      GceApplicationNode.create(metadata, {
+        port: 8080,
+        endpoint: "http://10.0.0.1",
+        tlsServerName: "api.test",
+      }),
+    ).toThrow("TLS");
+    expect(() =>
+      GceApplicationNode.create(metadata, { port: 8080, endpoint: "https://user@api.test/path" }),
+    ).toThrow("endpoint");
+    expect(() =>
+      GceApplicationNode.create(metadata, { port: 8080, endpoint: "ftp://api.test" }),
+    ).toThrow("endpoint");
+  });
+
+  it("uses the numeric GCE instance identity to distinguish restarts", () => {
+    const base = { projectId: "p", zone: "z", privateAddress: "10.0.0.1" };
+    expect(GceApplicationNode.create({ ...base, instanceId: "1" }, { port: 8080 }).id).not.toBe(
+      GceApplicationNode.create({ ...base, instanceId: "2" }, { port: 8080 }).id,
+    );
+  });
+
   it("registers after start, renews at twenty seconds, and removes on close", async () => {
     const calls: string[] = [];
     let tick: (() => void) | undefined;
