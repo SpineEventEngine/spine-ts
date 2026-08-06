@@ -5,3 +5,30 @@
 A consumer treats conflicting descriptors for one stable ID in one snapshot as an invalid snapshot. The dynamic unary consumer contains that invalid input, keeps its last valid membership, and waits for a later complete snapshot; it does not emit operational logging in this package.
 
 `ScheduledNodeDiscovery` permits one active watch. It is terminal after close: close is idempotent, cancels and joins its active read, and later `watch()` calls reject.
+
+## Leased node registry
+
+`LeasedNodeRegistry` persists application-node discovery leases through an
+explicit caller-owned `StorageFactory` and a non-empty operator-owned namespace.
+It requires atomic compare-and-set storage at construction. A lease contains
+only a stable node ID, canonical endpoint, epoch-millisecond expiry, and opaque
+registration identity. The v1 layout uses the storage key
+`spine.deployment.ApplicationNodeLease:v1`.
+
+`register()` only creates an absent row. `renew()` and `remove()` compare the
+stored registration identity, fencing a stale process after node-ID reuse.
+`read(now)` validates the complete stored snapshot before it returns any live
+nodes, then excludes expiry values less than or equal to `now`. Malformed or
+unknown-version rows fail the entire read and are neither deleted nor rewritten.
+Future incompatible records use another versioned storage key; this package has
+no migration, compatibility, dual-read, or dual-write path.
+
+`cleanup(now)` conditionally removes one finite batch of expired rows. It is
+safe to repeat and to call concurrently; expiry makes abandoned scale-to-zero
+rows immediately undiscoverable even before a later healthy node resumes
+physical cleanup. `close()` is idempotent, closes this registry's storage handle,
+fences later operations, and waits for already-started operations to settle
+before it closes the handle. It never closes the caller's factory. The typed
+lease record preserves an explicit normalized HTTPS TLS authority alongside its
+canonical origin, so a read returns the same `ApplicationNode` descriptor that
+was registered.

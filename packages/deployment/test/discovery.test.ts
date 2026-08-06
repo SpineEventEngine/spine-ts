@@ -63,6 +63,16 @@ describe("ApplicationNode", () => {
         }),
     ).toThrow("TLS server names require HTTPS");
   });
+
+  it.each([
+    "",
+    "relative/path",
+    "ftp://host.test",
+    "http://user@host.test",
+    "http://host.test/path",
+  ])("rejects a non-canonical application endpoint %s", (endpoint) => {
+    expect(() => new ApplicationNode({ id: "node", endpoint })).toThrow("endpoint");
+  });
 });
 
 describe("StaticNodeDiscovery", () => {
@@ -80,6 +90,59 @@ describe("StaticNodeDiscovery", () => {
 });
 
 describe("ScheduledNodeDiscovery", () => {
+  it("validates refresh intervals and accepts the default", async () => {
+    expect(
+      () =>
+        new ScheduledNodeDiscovery({
+          reader: { read: async () => [] },
+          scheduler: { schedule: () => () => {} },
+          intervalMs: 0,
+        }),
+    ).toThrow("positive safe integer");
+    const source = new ScheduledNodeDiscovery({
+      reader: { read: async () => [] },
+      scheduler: { schedule: () => () => {} },
+    });
+    await source.close();
+  });
+
+  it("cancels a scheduled tick when closed before it runs", async () => {
+    let tick: (() => void) | undefined;
+    let cancelled = 0;
+    const source = new ScheduledNodeDiscovery({
+      reader: { read: async () => [] },
+      scheduler: {
+        schedule: (_delay, scheduled) => {
+          tick = scheduled;
+          return () => cancelled++;
+        },
+      },
+    });
+    source.watch(() => undefined);
+    await source.close();
+    tick?.();
+    await Promise.resolve();
+    await source.close();
+    expect(cancelled).toBe(1);
+  });
+
+  it("suppresses a successful callback when close races the read", async () => {
+    let resolveRead: ((nodes: readonly ApplicationNode[]) => void) | undefined;
+    const ticks: (() => void)[] = [];
+    const snapshots: (readonly ApplicationNode[])[] = [];
+    const source = new ScheduledNodeDiscovery({
+      reader: { read: () => new Promise((resolve) => (resolveRead = resolve)) },
+      scheduler: { schedule: (_delay, tick) => (ticks.push(tick), () => {}) },
+    });
+    source.watch((nodes) => snapshots.push(nodes));
+    ticks.shift()?.();
+    await Promise.resolve();
+    const closing = source.close();
+    resolveRead?.([]);
+    await closing;
+    expect(snapshots).toEqual([]);
+  });
+
   it("aborts and joins a pending reader on close", async () => {
     let rejectRead: ((reason: Error) => void) | undefined;
     let aborted = false;

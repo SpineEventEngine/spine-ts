@@ -21,7 +21,11 @@ closeable through the base storage contract.
 
 For a multitenant `StorageContext`, the tenant ID selects the Datastore
 namespace. The adapter stores record payload bytes and materialized columns in
-private entities. Indexed column values permit strings, finite
+private entities. Its record kind is a collision-safe canonical encoding of
+context name, tenancy mode, and `RecordSpec.storageKey`; schema type is payload
+codec metadata. This is a hard cutover with no migration, legacy reader, or
+dual-write path. Datastore kinds are limited to 1500 UTF-8 bytes and an
+oversized kind fails before client activity. Indexed column values permit strings, finite
 Datastore-compatible numbers, booleans, `null`, and exact signed 64-bit
 bigints. An out-of-range bigint fails before an RPC.
 

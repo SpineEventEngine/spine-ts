@@ -3,6 +3,7 @@ import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { Datastore } from "@google-cloud/datastore";
 import { randomUUID } from "node:crypto";
 import { EventSchema, type Event } from "@spine-event-engine/proto";
+import { eventStoreRecordSpec } from "@spine-event-engine/storage/internal/event-store";
 import type {
   EntityCommitInput,
   EntityCommitResult,
@@ -22,6 +23,7 @@ import {
 } from "@spine-event-engine/storage";
 
 import { CanonicalValue } from "./value-codec.js";
+import { DatastoreRecordKinds } from "./record-kind.js";
 
 const payload = "$spine.payload";
 const entity = "$spine.entity";
@@ -994,7 +996,7 @@ const DatastoreCommitValues = Object.freeze({
   delivery<I, S extends Message>(codec: EntityCodec<I, S>, event: Event) {
     const key = codec.client.key({
       path: [
-        `${codec.input.context.name}:${EventSchema.typeName}`,
+        DatastoreRecordKinds.derive(codec.input.context, eventStoreRecordSpec.storageKey),
         CanonicalValue.encode(event.id),
       ],
       ...(codec.input.context.multitenant

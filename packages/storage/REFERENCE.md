@@ -21,9 +21,9 @@ closeable `RecordStorage`. A context contains a bounded-context name,
 multitenancy flag, and optional tenant ID. A `RecordSpec` fixes the Protobuf
 schema, storage key, identity extractor, ID schema or primitive ID kind, and
 materialized columns. Generic durable providers key their physical scope by the
-context and record schema, but do not verify a complete `RecordSpec`
-compatibility fingerprint. Application and framework code must reuse compatible
-specifications for one logical scope.
+backend, context name, tenancy mode, tenant slice, and `RecordSpec.storageKey`;
+the schema is codec metadata rather than scope identity. Application and
+framework code must reuse a storage key for one logical scope.
 
 `RecordStorage` supports `write`, `writeAll`, `read`, `delete`, `compareAndSet`,
 `index`, `query`, `queryEntries`, `queryPlan`, and `queryPlanEntries`. It clones

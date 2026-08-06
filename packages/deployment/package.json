@@ -14,5 +14,10 @@
     "dist",
     "README.md",
     "REFERENCE.md"
-  ]
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@spine-event-engine/proto": "workspace:*",
+    "@spine-event-engine/storage": "workspace:*"
+  }
 }

@@ -627,14 +627,46 @@ describe("DatastoreStorageFactory", () => {
       "Datastore query exceeded the client-side scan limit of 1",
     );
     await expect(
+      storage.queryEntries({ sort: [{ field: "id" }], limit: 1 }),
+    ).resolves.toMatchObject([{ id: "a" }]);
+    expect(client.lastQuery?.limitValue).toBe(1);
+    await expect(
       storage.queryEntries({
         sort: [{ field: "id" }],
         after: { values: [{ field: "id", value: "a" }], id: "a" },
         limit: 1,
       }),
-    ).rejects.toThrow("Datastore query exceeded the client-side scan limit of 1");
-    expect(client.lastQuery?.limitValue).toBe(2);
+    ).resolves.toMatchObject([{ id: "b" }]);
+    expect(client.lastQuery?.limitValue).toBe(1);
     expect(client.lastQuery?.orders).toContainEqual(["__key__", { descending: false }]);
+    expect(client.lastQuery?.filters).toContainEqual(["__key__", ">", expect.anything()]);
+  });
+
+  it("returns every string key across an exact keyset page boundary", async () => {
+    const client = new MemoryDatastoreClient();
+    const factory = new DatastoreStorageFactory({ client: client as never, maxClientSideScan: 1 });
+    const storage = factory.createRecordStorage(
+      { name: "KeysetBoundary", multitenant: false },
+      new RecordSpec({
+        schema: StringValueSchema,
+        storageKey: "StringValueSchema:keyset-boundary",
+        idKind: "string",
+        extractId: (record) => record.value,
+      }),
+    );
+    const ids = [
+      "\nnode",
+      ...Array.from({ length: 256 }, (_, index) => ` ${String(index)}`),
+    ].sort();
+    await storage.writeAll(ids.map((value) => create(StringValueSchema, { value })));
+    const first = await storage.queryEntries({ sort: [{ field: "id" }], limit: 256 });
+    const last = first.at(-1);
+    const second = await storage.queryEntries({
+      sort: [{ field: "id" }],
+      after: { values: [{ field: "id", value: last?.id }], id: last?.id ?? "" },
+      limit: 256,
+    });
+    expect([...first, ...second].map(({ id }) => id)).toEqual(ids);
   });
 
   it("does not duplicate an explicit identifier order", async () => {
@@ -939,7 +971,8 @@ describe("DatastoreStorageFactory", () => {
       }),
     );
 
-    client.putRaw("Tasks:google.protobuf.StringValue", "task-1", {
+    const kind = CanonicalValue.encode(["Tasks", false, "StringValueSchema:legacy"]);
+    client.putRaw(kind, "task-1", {
       "$spine.id": JSON.stringify("task-1"),
       "$spine.payload": "credential=top-secret payload=do-not-disclose",
     });
@@ -949,7 +982,7 @@ describe("DatastoreStorageFactory", () => {
     await expect(storage.read("task-1")).rejects.not.toThrow("do-not-disclose");
     await storage.delete("task-1");
 
-    client.putRaw("Tasks:google.protobuf.StringValue", "task-2", {
+    client.putRaw(kind, "task-2", {
       "$spine.id": "not-json",
       "$spine.payload": new Uint8Array([255]),
     });
@@ -958,7 +991,7 @@ describe("DatastoreStorageFactory", () => {
     );
     await expect(storage.read("task-2")).rejects.toThrow("Datastore entity cannot be decoded.");
     await storage.delete("task-2");
-    client.putRaw("Tasks:google.protobuf.StringValue", "task-3", {
+    client.putRaw(kind, "task-3", {
       "$spine.id": 3,
       "$spine.payload": new Uint8Array([10, 0]),
     });
@@ -1008,10 +1041,14 @@ describe("DatastoreStorageFactory", () => {
         }),
       );
       const id = `invalid-${String(index)}`;
-      client.putRaw("MalformedIds:google.protobuf.StringValue", id, {
-        "$spine.id": JSON.stringify(invalid),
-        "$spine.payload": new Uint8Array([10, 0]),
-      });
+      client.putRaw(
+        CanonicalValue.encode(["MalformedIds", false, "StringValueSchema:legacy"]),
+        id,
+        {
+          "$spine.id": JSON.stringify(invalid),
+          "$spine.payload": new Uint8Array([10, 0]),
+        },
+      );
 
       await expect(storage.queryEntries({})).rejects.toThrow(
         "Datastore entity has no valid Spine record identifier.",
@@ -1206,16 +1243,39 @@ class MemoryDatastoreClient {
   > {
     this.runQueryCalls += 1;
     this.lastRunQueryOptions = options;
-    const entities = [...this.entities.entries()].map(([serializedKey, entity]) => ({
-      ...decodeProviderIntegers(entity, options),
-      [this.KEY]: memoryKey(serializedKey),
-    }));
+    const entities: Record<string | symbol, unknown>[] = [...this.entities.entries()].map(
+      ([serializedKey, entity]) => ({
+        ...decodeProviderIntegers(entity, options),
+        [this.KEY]: memoryKey(serializedKey),
+      }),
+    );
+    const keyAfter = query.filters.find(
+      (filter) => filter[0] === "__key__" && filter[1] === ">",
+    )?.[2] as MemoryKey | undefined;
+    const filtered =
+      keyAfter === undefined
+        ? entities
+        : entities.filter(
+            (entity) =>
+              (memoryKeyId(entity[this.KEY] as MemoryKey) as string) >
+              (memoryKeyId(keyAfter) as string),
+          );
+    if (
+      query.orders.some((order) => order[0] === "__key__") &&
+      filtered.every((entity) => typeof memoryKeyId(entity[this.KEY] as MemoryKey) === "string")
+    ) {
+      filtered.sort((left, right) =>
+        (memoryKeyId(left[this.KEY] as MemoryKey) as string).localeCompare(
+          memoryKeyId(right[this.KEY] as MemoryKey) as string,
+        ),
+      );
+    }
     const offset =
       query.startCursor === undefined
         ? (query.offsetValue ?? 0)
         : Number(query.startCursor.toString());
     const end = query.limitValue === undefined ? undefined : offset + query.limitValue;
-    const page = entities.slice(offset, end);
+    const page = filtered.slice(offset, end);
     const next = offset + page.length;
     return Promise.resolve([
       page,
@@ -1299,6 +1359,9 @@ interface MemoryReadOptions {
 }
 function keyString(key: MemoryKey): string {
   return JSON.stringify([key.namespace, ...key.path]);
+}
+function memoryKeyId(key: MemoryKey): unknown {
+  return (JSON.parse(key.path[1]) as [string, unknown])[1];
 }
 function memoryKey(serialized: string): MemoryKey {
   const [namespace, kind, id] = JSON.parse(serialized) as [string | null, string, string];

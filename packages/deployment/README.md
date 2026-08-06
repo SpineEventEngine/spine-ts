@@ -13,3 +13,29 @@ const discovery = new StaticNodeDiscovery([
 
 discovery.replace([]);
 ```
+
+For storage-backed GCE-style discovery, create `LeasedNodeRegistry` with both
+the application's chosen `StorageFactory` and a separate operator-chosen
+namespace. The registry is a discovery directory, not a domain repository or
+Stand subscription registry. Read its [reference contract](REFERENCE.md) before
+assembling a registrar.
+
+```ts
+import { ApplicationNode, LeasedNodeRegistry } from "@spine-event-engine/deployment";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
+
+const factory = new InMemoryStorageFactory(); // The application owns this factory.
+const registry = new LeasedNodeRegistry({ factory, namespace: "gateway-nodes" });
+
+try {
+  await registry.register({
+    node: new ApplicationNode({ id: "node/a", endpoint: "https://10.0.0.1" }),
+    registrationId: "process-startup-identity",
+    expiresAt: Date.now() + 30_000,
+  });
+  const liveNodes = await registry.read(Date.now());
+  await registry.cleanup(Date.now()); // Expiry filtering works even without cleanup.
+} finally {
+  await registry.close(); // Closes this registry handle; the caller still owns factory.close().
+}
+```

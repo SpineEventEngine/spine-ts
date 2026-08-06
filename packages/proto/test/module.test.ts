@@ -30,6 +30,7 @@ import * as languageSchemas from "../generated/spine/ui/language_pb.js";
 import * as validationSchemas from "../generated/spine/validation/validation_error_pb.js";
 import * as catchUpSchemas from "../generated/spine/server/catchup/catch_up_pb.js";
 import * as environmentSchemas from "../generated/spine/server/server_environment_pb.js";
+import * as deploymentSchemas from "../generated/spine/system/deployment/application_node_lease_pb.js";
 import * as systemEventSchemas from "../generated/spine/system/server/entity_log_events_pb.js";
 import * as systemTypeSchemas from "../generated/spine/system/server/entity_type_pb.js";
 import * as standSchemas from "../generated/spine/system/server/stand_subscription_pb.js";
@@ -83,7 +84,7 @@ describe("spineProtoModule", () => {
       dependencies: [],
       moduleExport: "spineProtoModule",
     });
-    expect(manifest.protoFiles).toHaveLength(43);
+    expect(manifest.protoFiles).toHaveLength(44);
     expect(Object.keys(manifest.generatedExports)).toEqual(manifest.protoFiles);
     expect(Object.values(manifest.generatedExports)).toEqual(
       manifest.protoFiles.map((path) => `generated/${path.replace(/\.proto$/, "_pb.js")}`),
@@ -128,6 +129,7 @@ describe("spineProtoModule", () => {
       ...schemaNames(deliveryServerSchemas),
       ...schemaNames(catchUpSchemas),
       ...schemaNames(environmentSchemas),
+      ...schemaNames(deploymentSchemas),
       ...schemaNames(systemEventSchemas),
       ...schemaNames(systemTypeSchemas),
       ...schemaNames(standSchemas),

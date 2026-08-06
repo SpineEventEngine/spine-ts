@@ -358,6 +358,17 @@ const expectedDeliveryServerExports = [
   "DeliveryServer",
   "DeliveryServerOptions",
 ];
+const expectedDeploymentExports = [
+  "ApplicationNode",
+  "LeasedNodeRegistry",
+  "LeasedNodeRegistryOptions",
+  "NodeDiscovery",
+  "NodeLease",
+  "NodeScheduler",
+  "NodeSnapshotReader",
+  "ScheduledNodeDiscovery",
+  "StaticNodeDiscovery",
+];
 const expectedStorageExports = [
   "EventStore",
   "EventRollback",
@@ -691,6 +702,7 @@ const clientWebIndexPath = join("packages", "client-web", "src", "index.ts");
 const clientReactIndexPath = join("packages", "client-react", "src", "index.ts");
 const deliveryClientIndexPath = join("packages", "delivery-client", "src", "index.ts");
 const deliveryServerIndexPath = join("packages", "delivery-server", "src", "index.ts");
+const deploymentIndexPath = join("packages", "deployment", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const datastoreStorageIndexPath = join("packages", "storage-datastore", "src", "index.ts");
 const rdbmsStorageIndexPath = join("packages", "storage-rdbms", "src", "index.ts");
@@ -730,6 +742,7 @@ const clientWebModuleNames = collectDirectModuleNames(apiDocs, "packages/client-
 const clientReactModuleNames = collectDirectModuleNames(apiDocs, "packages/client-react/src");
 const deliveryClientModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-client/src");
 const deliveryServerModuleNames = collectDirectModuleNames(apiDocs, "packages/delivery-server/src");
+const deploymentModuleNames = collectDirectModuleNames(apiDocs, "packages/deployment/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
 const datastoreStorageModuleNames = collectDirectModuleNames(
   apiDocs,
@@ -1055,6 +1068,7 @@ const declaredClientExports = collectNamedExports(clientIndexPath);
 const declaredClientWebExports = collectNamedExports(clientWebIndexPath);
 const declaredDeliveryClientExports = collectNamedExports(deliveryClientIndexPath);
 const declaredDeliveryServerExports = collectNamedExports(deliveryServerIndexPath);
+const declaredDeploymentExports = collectNamedExports(deploymentIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const declaredDatastoreStorageExports = collectNamedExports(datastoreStorageIndexPath);
 const declaredRdbmsStorageExports = collectNamedExports(rdbmsStorageIndexPath);
@@ -1117,6 +1131,15 @@ const missingDeclaredDeliveryServerExports = expectedDeliveryServerExports.filte
 );
 const unexpectedDeliveryServerExports = declaredDeliveryServerExports.filter(
   (name) => !expectedDeliveryServerExports.includes(name),
+);
+const missingDeploymentExports = expectedDeploymentExports.filter(
+  (name) => !deploymentModuleNames.has(name),
+);
+const missingDeclaredDeploymentExports = expectedDeploymentExports.filter(
+  (name) => !declaredDeploymentExports.includes(name),
+);
+const unexpectedDeploymentExports = declaredDeploymentExports.filter(
+  (name) => !expectedDeploymentExports.includes(name),
 );
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
@@ -1297,6 +1320,22 @@ if (unexpectedDeliveryServerExports.length > 0) {
   console.error(
     "@spine-event-engine/delivery-server exports changed without updating docs expectations: " +
       unexpectedDeliveryServerExports.join(", "),
+  );
+  process.exit(1);
+}
+
+if (missingDeploymentExports.length > 0 || missingDeclaredDeploymentExports.length > 0) {
+  console.error(
+    "@spine-event-engine/deployment is missing expected exports: " +
+      [...missingDeploymentExports, ...missingDeclaredDeploymentExports].join(", "),
+  );
+  process.exit(1);
+}
+
+if (unexpectedDeploymentExports.length > 0) {
+  console.error(
+    "@spine-event-engine/deployment root exports changed without updating docs expectations: " +
+      unexpectedDeploymentExports.join(", "),
   );
   process.exit(1);
 }
@@ -1516,6 +1555,7 @@ console.log(
     `${expectedClientReactExports.length} expected @spine-event-engine/client-react exports`,
     `${expectedDeliveryClientExports.length} expected @spine-event-engine/delivery-client exports`,
     `${expectedDeliveryServerExports.length} expected @spine-event-engine/delivery-server exports`,
+    `${expectedDeploymentExports.length} expected @spine-event-engine/deployment exports`,
     `${expectedServerExports.length} expected @spine-event-engine/server exports`,
     `${expectedStorageExports.length} expected @spine-event-engine/storage exports`,
     `${expectedTransportExports.length} expected @spine-event-engine/transport exports`,

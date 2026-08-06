@@ -16,6 +16,10 @@
     "./internal/entity-commit": {
       "types": "./dist/internal/entity-commit.d.ts",
       "default": "./dist/internal/entity-commit.js"
+    },
+    "./internal/event-store": {
+      "types": "./dist/internal/event-store.d.ts",
+      "default": "./dist/internal/event-store.js"
     }
   },
   "files": [

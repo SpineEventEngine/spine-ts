@@ -12,6 +12,7 @@ import {
 } from "@spine-event-engine/storage";
 
 import { CanonicalValue } from "./value-codec.js";
+import { DatastoreRecordKinds } from "./record-kind.js";
 
 const payloadProperty = "$spine.payload";
 const idProperty = "$spine.id";
@@ -33,7 +34,7 @@ class FlatEntityCodec<I, R extends Message> {
     private readonly recordSpec: RecordSpec<I, R>,
     private readonly maxClientSideScan: number,
   ) {
-    this.#kind = `${context.name}:${recordSpec.schema.typeName}`;
+    this.#kind = DatastoreRecordKinds.derive(context, recordSpec.storageKey);
   }
 
   key(client: Datastore, id: I): ReturnType<Datastore["key"]> {
@@ -202,6 +203,8 @@ export class DatastoreRecordStorage<I, R extends Message> extends RecordStorage<
       columns: this.#codec.columns(entity),
     }));
 
+    if (DatastoreRecordQuery.isKeysetPage(_query))
+      return entries.map(({ id, record }) => ({ id, record }));
     return LocalQueryResults.apply(entries, _query);
   }
 
@@ -515,6 +518,8 @@ const DatastoreQueryPushdown = Object.freeze(
         });
       }
       if (!(recordQuery.sort ?? []).some((order) => order.field === "id")) query.order("__key__");
+      if (recordQuery.after !== undefined && DatastoreRecordQuery.isKeysetPage(recordQuery))
+        query.filter("__key__", ">", keyFor(recordQuery.after.id));
     }
 
     /**
@@ -626,6 +631,8 @@ const DatastoreRecordQuery = Object.freeze(
      * @returns The finite provider row bound.
      */
     limit<I>(query: RecordQuery<I>, scanLimit: number): number {
+      const requestedLimit = query.limit;
+      if (requestedLimit !== undefined && this.isKeysetPage(query)) return requestedLimit;
       if (
         query.limit !== undefined &&
         query.ids === undefined &&
@@ -636,6 +643,33 @@ const DatastoreRecordQuery = Object.freeze(
       )
         return query.limit;
       return scanLimit;
+    }
+
+    /**
+     * Returns whether a legacy query is exactly an ascending identifier keyset page.
+     *
+     * @param query The record query to classify.
+     * @returns `true` when Datastore can apply its limit and continuation completely.
+     */
+    isKeysetPage<I>(query: RecordQuery<I>): boolean {
+      const order = query.sort;
+      const continuation = query.after;
+      const continuationValue = continuation?.values[0];
+      return (
+        query.limit !== undefined &&
+        query.ids === undefined &&
+        query.filters === undefined &&
+        query.offset === undefined &&
+        order?.length === 1 &&
+        order[0]?.field === "id" &&
+        order[0].direction !== "desc" &&
+        (continuation === undefined ||
+          (typeof continuation.id === "string" &&
+            continuation.values.length === 1 &&
+            continuationValue?.field === "id" &&
+            typeof continuationValue.value === "string" &&
+            RecordValues.equal(continuationValue.value, continuation.id)))
+      );
     }
   })(),
 );
