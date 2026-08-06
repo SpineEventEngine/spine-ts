@@ -113,7 +113,7 @@ export class LeasedNodeRegistry {
   read(now: number): Promise<readonly ApplicationNode[]> {
     return this.start(async () => {
       LeaseRecords.requireTime(now);
-      const leases = (await this.readAll()).map(({ record }) => LeaseRecords.read(record));
+      const leases = (await this.readAll()).map(({ id, record }) => LeaseRecords.read(record, id));
       return leases.filter((lease) => lease.expiresAt > now).map((lease) => lease.node);
     });
   }
