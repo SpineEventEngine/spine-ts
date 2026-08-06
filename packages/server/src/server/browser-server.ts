@@ -109,32 +109,32 @@ export const BrowserServer: Readonly<{
     let dynamic: DynamicUnaryForwarder | undefined;
     let stopDiscovery: (() => Promise<void>) | undefined;
     const forwarder = (dynamic = new DynamicUnaryForwarder({
-            create: async (node) => {
-              const manager =
-                options.dynamicManagerFactory?.(node) ??
-                new Http2SessionManager(
-                  node.endpoint,
-                  undefined,
-                  node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
-                );
-              const client = new NativeSubscriptionCreator(
-                createGrpcTransport({
-                  ...BrowserServer.dynamicTransportOptions(node),
-                  sessionManager: manager,
-                }),
-              );
-              return {
-                forward: client.forward.bind(client),
-                subscribe: client.subscribe.bind(client),
-                activate: client.activate.bind(client),
-                cancel: client.cancel.bind(client),
-                dispose: client.dispose.bind(client),
-                close: async () => {
-                  manager.abort();
-                },
-              };
-            },
-          }));
+      create: async (node) => {
+        const manager =
+          options.dynamicManagerFactory?.(node) ??
+          new Http2SessionManager(
+            node.endpoint,
+            undefined,
+            node.tlsServerName === undefined ? undefined : { servername: node.tlsServerName },
+          );
+        const client = new NativeSubscriptionCreator(
+          createGrpcTransport({
+            ...BrowserServer.dynamicTransportOptions(node),
+            sessionManager: manager,
+          }),
+        );
+        return {
+          forward: client.forward.bind(client),
+          subscribe: client.subscribe.bind(client),
+          activate: client.activate.bind(client),
+          cancel: client.cancel.bind(client),
+          dispose: client.dispose.bind(client),
+          close: async () => {
+            manager.abort();
+          },
+        };
+      },
+    }));
     if (options.discovery !== undefined && dynamic !== undefined)
       stopDiscovery = await BrowserServerValues.watch(options.discovery, dynamic);
     else await dynamic.reconcile(fixedNodes);
@@ -143,7 +143,7 @@ export const BrowserServer: Readonly<{
       options.bindings ??
       new InMemorySubscriptionBindings({
         nextId: () => globalThis.crypto.randomUUID(),
-        dispose: creator.dispose.bind(creator),
+        dispose: (definition, signal) => creator.cancel({ wire: definition }, signal),
       });
     const requests = BrowserServer.requests(options);
     const unary = new UnaryGateway({

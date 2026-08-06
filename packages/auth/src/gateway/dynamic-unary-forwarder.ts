@@ -1,3 +1,5 @@
+import { fromBinary } from "@bufbuild/protobuf";
+import { SubscriptionSchema } from "@spine-event-engine/proto/client";
 import type { ApplicationNode } from "@spine-event-engine/deployment";
 
 import type { UnaryForwarder } from "./index.js";
@@ -5,7 +7,6 @@ import type {
   BackendSubscriptionEnvelope,
   PublicSubscriptionWire,
   SubscriptionCreator,
-  SubscriptionTopicWire,
   SubscriptionUpdateSink,
 } from "../subscriptions/index.js";
 
@@ -75,12 +76,14 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #generation = 0;
   readonly #failedDisposals = new Set<DynamicUnaryClient>();
   #nodes: readonly ApplicationNode[] = [];
-  readonly #definitions = new Map<string, {
-    readonly topic: Uint8Array;
-    wire: PublicSubscriptionWire;
-    updates: SubscriptionUpdateSink;
-    readonly children: Map<string, BackendSubscriptionEnvelope>;
-  }>();
+  readonly #definitions = new Map<
+    string,
+    {
+      wire: PublicSubscriptionWire;
+      updates: SubscriptionUpdateSink;
+      readonly children: Map<string, BackendSubscriptionEnvelope>;
+    }
+  >();
 
   /**
    * Creates a dynamic unary router.
@@ -179,22 +182,24 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns The logical definition envelope retained by the durable store.
    */
   async subscribeDefinition(
-    request: SubscriptionTopicWire,
+    request: PublicSubscriptionWire,
     signal: AbortSignal,
   ): Promise<BackendSubscriptionEnvelope> {
     if (signal.aborted || this.#closed || this.#clients.size === 0)
       throw new Error("Gateway backend is absent.");
-    const bytes = request.bytes.slice();
-    const key = Buffer.from(bytes).toString("base64");
+    const wire = { kind: "public-subscription" as const, bytes: request.bytes.slice() };
+    const subscription = fromBinary(SubscriptionSchema, wire.bytes);
+    const id = subscription.id?.value;
+    if (id === undefined || id.length === 0) throw new Error("subscription ID is required");
+    const key = id;
     if (!this.#definitions.has(key))
       this.#definitions.set(key, {
-        topic: bytes.slice(),
-        wire: { kind: "public-subscription", bytes },
+        wire,
         updates: async () => {},
         children: new Map(),
       });
     await this.reconcile([...this.#nodes.values()]);
-    return { kind: "backend-subscription-envelope", bytes };
+    return { kind: "backend-subscription-envelope", bytes: request.bytes.slice() };
   }
 
   async #reconcileDefinitions(generation: number): Promise<void> {
@@ -207,7 +212,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
           missing.slice(index, index + this.#maxConcurrentStarts).map(async ([id, current]) => {
             if (generation !== this.#generation || this.#closed) return;
             const backend = await current.client.subscribe(
-              { kind: "subscription-topic", bytes: definition.topic.slice() },
+              { kind: "public-subscription", bytes: definition.wire.bytes.slice() },
               new AbortController().signal,
             );
             if (generation !== this.#generation || !this.#clients.has(id)) {
@@ -216,7 +221,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
             }
             definition.children.set(id, backend);
             void current.client.activate(
-              { wire: definition.wire, backend, updates: definition.updates },
+              { wire: definition.wire, updates: definition.updates },
               new AbortController().signal,
             );
           }),
@@ -227,12 +232,13 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   /**
    * Removes one logical definition and cancels its currently installed children.
    *
-   * @param backend Supplies the logical definition envelope.
+   * @param wire Supplies the logical definition.
    * @param signal Cancels native cleanup.
    * @returns Completes after every current child cancellation settles.
    */
-  async cancelDefinition(backend: BackendSubscriptionEnvelope, signal: AbortSignal): Promise<void> {
-    const key = Buffer.from(backend.bytes).toString("base64");
+  async cancelDefinition(wire: PublicSubscriptionWire, signal: AbortSignal): Promise<void> {
+    const key = fromBinary(SubscriptionSchema, wire.bytes).id?.value;
+    if (key === undefined || key.length === 0) return;
     const definition = this.#definitions.get(key);
     this.#definitions.delete(key);
     if (definition === undefined) return;
@@ -249,17 +255,17 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   /**
    * Associates the browser activation wire and update sink with a logical definition.
    *
-   * @param backend Supplies the retained logical definition.
    * @param wire Supplies the canonical public subscription wire.
    * @param updates Receives best-effort native updates.
    * @returns Completes after current membership has observed the activation.
    */
   async activateDefinition(
-    backend: BackendSubscriptionEnvelope,
     wire: PublicSubscriptionWire,
     updates: SubscriptionUpdateSink,
   ): Promise<void> {
-    const definition = this.#definitions.get(Buffer.from(backend.bytes).toString("base64"));
+    const definition = this.#definitions.get(
+      fromBinary(SubscriptionSchema, wire.bytes).id?.value ?? "",
+    );
     if (definition === undefined) return;
     definition.wire.bytes.fill(0);
     definition.wire = { kind: "public-subscription", bytes: wire.bytes.slice() };

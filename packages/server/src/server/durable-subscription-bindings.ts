@@ -3,6 +3,8 @@ import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import type {
   BackendSubscriptionEnvelope,
   OnBackendSubscription,
+  OnSubscriptionDefinition,
+  PublicSubscriptionWire,
   SubscriptionBindingTransition,
   SubscriptionBindings,
   SubscriptionCapacityReservation,
@@ -42,7 +44,7 @@ export interface DurableSubscriptionBindingsOptions {
   /**
    * Disposes one backend subscription.
    */
-  readonly dispose: OnBackendSubscription;
+  readonly dispose: OnSubscriptionDefinition;
 
   /**
    * Limits one durable ownership lease in milliseconds.
@@ -124,13 +126,12 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
    */
   readonly durable = true;
 
-
   /**
    * Names the validated durable registry shared by standalone gateway replicas.
    */
   readonly namespace: string;
   readonly #storage: RecordStorage<string, Any>;
-  readonly #dispose: OnBackendSubscription;
+  readonly #dispose: OnSubscriptionDefinition;
   readonly #nextId: () => string;
   readonly #leaseMs: number;
   readonly #cleanupBatchSize: number;
@@ -239,20 +240,22 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Converts an owned reserved slot to an inactive private binding.
+   * Converts an owned reserved slot to an inactive logical binding.
    *
-   * @param input Supplies the private envelope, ownership facts, and optional slot.
+   * @param input Supplies the canonical definition, ownership facts, and optional slot.
    * @returns The public binding identifier.
    */
   async create(input: {
-    readonly backend: BackendSubscriptionEnvelope;
+    readonly definition?: PublicSubscriptionWire;
+    /** @deprecated Uses `definition` instead. */
+    readonly backend?: BackendSubscriptionEnvelope;
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly expiresAtMs: number;
     readonly reservation?: SubscriptionCapacityReservation;
   }): Promise<{ readonly id: string }> {
     this.#open();
-    Values.input(input);
+    const definition = Values.input(input);
     const supplied =
       input.reservation === undefined ? undefined : this.#reservations.get(input.reservation);
     const acquired =
@@ -281,8 +284,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         principalFingerprint: input.principalFingerprint,
         ...(input.tenant === undefined ? {} : { tenant: input.tenant }),
         expiresAtMs: input.expiresAtMs,
-        definition: Values.base64(input.backend.bytes),
-        definitionBytes: input.backend.bytes.byteLength,
+        definition: Values.base64(definition.bytes),
+        definitionBytes: definition.bytes.byteLength,
       };
       if (!(await this.#cas(old.id, row, Values.write(next, this.#maxRecordBytes)))) {
         const applied = await this.#slot(old.id, held.token);
@@ -309,7 +312,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onBackend: OnBackendSubscription;
+    readonly onDefinition?: OnSubscriptionDefinition;
+    /** @deprecated Uses `onDefinition` instead. */
+    readonly onBackend?: OnBackendSubscription;
     readonly signal: AbortSignal;
   }): Promise<SubscriptionBindingTransition> {
     const task = this.#activate(input);
@@ -326,7 +331,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onBackend: OnBackendSubscription;
+    readonly onDefinition?: OnSubscriptionDefinition;
+    readonly onBackend?: OnBackendSubscription;
     readonly signal: AbortSignal;
   }): Promise<SubscriptionBindingTransition> {
     if (input.signal.aborted) return { kind: "denied" };
@@ -346,7 +352,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     this.#active.add(active);
     this.#scheduleRenew(active);
     try {
-      await input.onBackend(Values.envelope(claimed), controller.signal, () =>
+      await this.#callback(input)(Values.definition(claimed), controller.signal, () =>
         this.#current(input.id, claimed.fence, "active", Date.now()),
       );
       if (!(await this.#current(input.id, claimed.fence, "active", input.nowMs)))
@@ -371,7 +377,9 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onBackend: OnBackendSubscription;
+    readonly onDefinition?: OnSubscriptionDefinition;
+    /** @deprecated Uses `onDefinition` instead. */
+    readonly onBackend?: OnBackendSubscription;
   }): Promise<SubscriptionBindingTransition> {
     const pending = this.#cancelling.get(input.id);
     if (pending !== undefined) return pending;
@@ -391,7 +399,8 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     readonly principalFingerprint: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
-    readonly onBackend: OnBackendSubscription;
+    readonly onDefinition?: OnSubscriptionDefinition;
+    readonly onBackend?: OnBackendSubscription;
   }): Promise<SubscriptionBindingTransition> {
     const row = await this.#storage.read(input.id);
     if (row === undefined) return { kind: "closed" };
@@ -424,7 +433,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
     const controller = new AbortController();
     this.#cancelControllers.set(input.id, controller);
     try {
-      await input.onBackend(Values.envelope(next), controller.signal, () =>
+      await this.#callback(input)(Values.definition(next), controller.signal, () =>
         this.#current(input.id, next.fence, "cancelling", Date.now()),
       );
     } catch {
@@ -793,7 +802,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       const reread = await this.#storage.read(old.id);
       if (reread === undefined || !this.#sameBinding(reread, next)) return;
     }
-    await this.#dispose(Values.envelope(next), signal, () =>
+    await this.#dispose(Values.definition(next), signal, () =>
       this.#current(next.id, next.fence, "cancelling", nowMs),
     );
     await this.#retire(next);
@@ -815,7 +824,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       if (reread === undefined || !this.#sameBinding(reread, cancelling)) return;
     }
     try {
-      await this.#dispose(Values.envelope(cancelling), new AbortController().signal, () =>
+      await this.#dispose(Values.definition(cancelling), new AbortController().signal, () =>
         this.#current(cancelling.id, cancelling.fence, "cancelling", nowMs),
       );
     } catch {
@@ -1085,6 +1094,20 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
   #open(): void {
     if (this.#closed) throw new Error("subscription bindings are closed");
   }
+  #callback(input: {
+    readonly onDefinition?: OnSubscriptionDefinition;
+    readonly onBackend?: OnBackendSubscription;
+  }): OnSubscriptionDefinition {
+    if (input.onDefinition !== undefined) return input.onDefinition;
+    if (input.onBackend === undefined)
+      throw new Error("subscription definition callback is required");
+    return (definition, signal, guard) =>
+      input.onBackend!(
+        { kind: "backend-subscription-envelope", bytes: definition.bytes.slice() },
+        signal,
+        guard,
+      );
+  }
 }
 
 /**
@@ -1126,13 +1149,24 @@ const Values = Object.freeze({
       throw new Error("Subscription registry namespace must be non-blank.");
   },
   input(input: {
-    readonly backend: BackendSubscriptionEnvelope;
+    readonly definition?: PublicSubscriptionWire;
+    readonly backend?: BackendSubscriptionEnvelope;
     readonly principalFingerprint: string;
     readonly expiresAtMs: number;
-  }): void {
-    if (!input.principalFingerprint.trim() || input.backend.bytes.byteLength === 0)
+  }): PublicSubscriptionWire {
+    const definition =
+      input.definition ??
+      (input.backend === undefined
+        ? undefined
+        : { kind: "public-subscription" as const, bytes: input.backend.bytes });
+    if (
+      !input.principalFingerprint.trim() ||
+      definition === undefined ||
+      definition.bytes.byteLength === 0
+    )
       throw new Error("subscription owner and backend are required");
     this.time(input.expiresAtMs);
+    return definition;
   },
   time(value: number): void {
     if (!Number.isSafeInteger(value) || value < 0)
@@ -1144,9 +1178,9 @@ const Values = Object.freeze({
   base64(bytes: Uint8Array): string {
     return Buffer.from(bytes).toString("base64");
   },
-  envelope(binding: Binding): BackendSubscriptionEnvelope {
+  definition(binding: Binding): PublicSubscriptionWire {
     return {
-      kind: "backend-subscription-envelope",
+      kind: "public-subscription",
       bytes: Uint8Array.from(Buffer.from(String(binding.definition), "base64")),
     };
   },

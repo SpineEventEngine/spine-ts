@@ -270,11 +270,11 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
    * @returns The private backend subscription envelope.
    */
   async subscribe(
-    request: SubscriptionTopicWire,
+    request: PublicSubscriptionWire,
     signal: SubscriptionAbortSignal,
   ): Promise<BackendSubscriptionEnvelope> {
     const result = await createClient(SubscriptionService, this.#transport).subscribe(
-      fromBinary(TopicSchema, request.bytes),
+      fromBinary(SubscriptionSchema, request.bytes).topic ?? create(TopicSchema),
       { signal },
     );
     return { kind: "backend-subscription-envelope", bytes: toBinary(SubscriptionSchema, result) };
@@ -289,12 +289,11 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   async activate(
     request: {
       readonly wire: PublicSubscriptionWire;
-      readonly backend: BackendSubscriptionEnvelope;
       readonly updates: SubscriptionUpdateSink;
     },
     signal: SubscriptionAbortSignal,
   ): Promise<void> {
-    const subscription = fromBinary(SubscriptionSchema, request.backend.bytes);
+    const subscription = fromBinary(SubscriptionSchema, request.wire.bytes);
     for await (const update of createClient(SubscriptionService, this.#transport).activate(
       subscription,
       { signal },
@@ -312,14 +311,11 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
    * @returns Completes after native cancellation ends.
    */
   async cancel(
-    request: {
-      readonly wire: PublicSubscriptionWire;
-      readonly backend: BackendSubscriptionEnvelope;
-    },
+    request: { readonly wire: PublicSubscriptionWire },
     signal: SubscriptionAbortSignal,
   ): Promise<void> {
     await createClient(SubscriptionService, this.#transport).cancel(
-      fromBinary(SubscriptionSchema, request.backend.bytes),
+      fromBinary(SubscriptionSchema, request.wire.bytes),
       { signal },
     );
   }

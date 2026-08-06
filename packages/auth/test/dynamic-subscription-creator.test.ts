@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { create, toBinary } from "@bufbuild/protobuf";
 import { ApplicationNode } from "@spine-event-engine/deployment";
+import { SubscriptionSchema, TopicSchema } from "@spine-event-engine/proto/client";
 
 import { DynamicSubscriptionCreator, DynamicUnaryForwarder } from "../src/index.js";
 
@@ -14,7 +16,16 @@ describe("DynamicSubscriptionCreator", () => {
     const b = new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" });
 
     await owner.reconcile([a]);
-    await creator.subscribe({ kind: "subscription-topic", bytes: new Uint8Array([7]) }, new AbortController().signal);
+    await creator.subscribe(
+      {
+        kind: "public-subscription",
+        bytes: toBinary(
+          SubscriptionSchema,
+          create(SubscriptionSchema, { id: { value: "board" }, topic: create(TopicSchema) }),
+        ),
+      },
+      new AbortController().signal,
+    );
     await owner.reconcile([a, b]);
     await owner.reconcile([b]);
 
@@ -26,7 +37,10 @@ function client(id: string, starts: string[]) {
   return {
     forward: async () => new Uint8Array(),
     close: async () => {},
-    subscribe: async () => ({ kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) }),
+    subscribe: async () => ({
+      kind: "backend-subscription-envelope" as const,
+      bytes: new Uint8Array([1]),
+    }),
     activate: async () => {
       starts.push(id);
     },

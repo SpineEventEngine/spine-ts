@@ -633,6 +633,7 @@ export type {
   PublicSubscriptionWire,
   BackendSubscriptionEnvelope,
   OnBackendSubscription,
+  OnSubscriptionDefinition,
   SubscriptionUpdateSink,
   SubscriptionUpdateWire,
 } from "./subscriptions/index.js";
