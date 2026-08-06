@@ -213,4 +213,35 @@ describe("GceApplicationNode", () => {
     await closing;
     expect(calls).toEqual(["cancel", "renew", "cleanup", "remove"]);
   });
+
+  it("aborts metadata at its deadline and closes the deadline handle", async () => {
+    let abort: (() => void) | undefined;
+    let closed = false;
+    const metadata = {
+      read: (signal: AbortSignal) =>
+        new Promise<import("../src/index.js").GceMetadata>((_done, reject) =>
+          signal.addEventListener("abort", () => reject(new Error("aborted"))),
+        ),
+    };
+    const registrar = new GceRegistrar({
+      registry: {
+        remove: async () => true,
+      } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+      metadata,
+      port: 8080,
+      deadlines: {
+        create: () => {
+          const controller = new AbortController();
+          abort = () => controller.abort();
+          return { signal: controller.signal, close: () => (closed = true) };
+        },
+      },
+    });
+    const starting = registrar.start();
+    await Promise.resolve();
+    abort?.();
+    await starting;
+    await registrar.close();
+    expect(closed).toBe(true);
+  });
 });
