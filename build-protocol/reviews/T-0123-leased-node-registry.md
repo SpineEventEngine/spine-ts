@@ -1,6 +1,6 @@
 # T-0123 Review Record
 
-Status: Accepted; full release verification passed
+Status: Accepted, post-merge verified, and integrated into `main`
 
 ## Second correction evidence
 
@@ -12,16 +12,16 @@ Status: Accepted; full release verification passed
 ## Review Range
 
 - Baseline: `05a5bd85`.
-- Implementation endpoint: `a4cafa50`.
+- Final implementation endpoint: `3414c09a`.
 - Requirements:
   `build-protocol/tasks/T-0123-leased-node-registry/TASK.md`.
 
 ## Required Concern Dispositions
 
-- Style/maintainability: relevant; correction re-review pending.
-- Documentation: relevant; correction re-review pending.
-- TypeScript/API docs: relevant; correction re-review pending.
-- Performance/reliability: relevant; correction re-review pending.
+- Style/maintainability: accepted clean.
+- Documentation: accepted clean.
+- TypeScript/API docs: accepted clean.
+- Performance/reliability: accepted clean.
 - Dedicated security: N/A for this task. The change adds no authorization,
   trust boundary, network-facing service, or secret contract; the opaque
   registration ID is internal CAS fencing data, not a credential.

@@ -1,6 +1,6 @@
 # T-0123: Storage-Backed Leased Node Registry
 
-Status: Correction re-review pending; implementation endpoint `a4cafa50`
+Status: Complete; integrated into `main` at `6a7b510a`
 
 ## Objective
 
