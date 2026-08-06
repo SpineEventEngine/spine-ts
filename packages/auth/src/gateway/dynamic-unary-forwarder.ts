@@ -201,10 +201,10 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     for (const definition of this.#definitions.values()) {
       for (const [id] of definition.children)
         if (!this.#clients.has(id)) definition.children.delete(id);
-      await Promise.all(
-        [...this.#clients.entries()]
-          .filter(([id]) => !definition.children.has(id))
-          .map(async ([id, current]) => {
+      const missing = [...this.#clients.entries()].filter(([id]) => !definition.children.has(id));
+      for (let index = 0; index < missing.length; index += this.#maxConcurrentStarts)
+        await Promise.all(
+          missing.slice(index, index + this.#maxConcurrentStarts).map(async ([id, current]) => {
             if (generation !== this.#generation || this.#closed) return;
             const backend = await current.client.subscribe(
               { kind: "subscription-topic", bytes: definition.topic.slice() },
@@ -220,7 +220,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
               new AbortController().signal,
             );
           }),
-      );
+        );
     }
   }
 
