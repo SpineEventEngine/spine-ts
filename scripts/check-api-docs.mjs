@@ -307,6 +307,8 @@ const expectedClientWebExports = [
   "SubscriptionScheduler",
 ];
 const expectedClientReactExports = [
+  "OnSubscriptionDelivery",
+  "OnSubscriptionLifecycle",
   "RequestObservation",
   "SpineClientProvider",
   "SpineClientProviderProps",

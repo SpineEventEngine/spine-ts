@@ -58,7 +58,7 @@ export interface PostFormProps {
   readonly createMessageId?: () => string;
 
   /**
-   * Schedules an authoritative board refresh after a successful post.
+   * Notifies the board after a successful post.
    */
   readonly onPosted: () => void;
 }
@@ -66,7 +66,7 @@ export interface PostFormProps {
 /**
  * Renders and submits the server-validated message form.
  *
- * @param props The board, actor, request, identifier source, and refresh callback.
+ * @param props The board, actor, request, identifier source, and post-success callback.
  * @returns The MessageBoard post form.
  */
 export const PostForm = (props: PostFormProps): ReactElement => {
@@ -99,12 +99,12 @@ export const PostForm = (props: PostFormProps): ReactElement => {
     const controller = new AbortController();
     const generation = postGeneration.current;
     postController.current = controller;
-    console.info("MessageBoard is sending a post command.", { board, command: next });
+    console.info("MessageBoard is sending a post command.", { board });
     void request.post(PostMessageSchema, next, { signal: controller.signal }).then(
       (outcome) => {
         if (generation !== postGeneration.current) return;
         if (outcome.kind !== "ok") {
-          console.warn("MessageBoard post command was rejected.", { board, outcome });
+          console.warn("MessageBoard post command was rejected.", { board });
           const nextFeedback = PostFeedback.from(outcome);
           setFeedback(nextFeedback);
           if (Object.keys(nextFeedback.fields).length > 0) pendingPost.current = undefined;
@@ -117,7 +117,7 @@ export const PostForm = (props: PostFormProps): ReactElement => {
         setText("");
         setFeedback({ fields: {} });
         setPosting(false);
-        console.info("MessageBoard post command was accepted.", { board, outcome });
+        console.info("MessageBoard post command was accepted.", { board });
         onPosted();
       },
       () => {

@@ -1,15 +1,19 @@
 import {
   useEntityQuery,
   useEntitySubscription,
-  useSubscriptionDelivery,
   useSubscriptionLifecycle,
 } from "@spine-event-engine/client-react";
-import type { ClientRequest, SubscriptionLifecycle } from "@spine-event-engine/client-web";
+import type {
+  ClientRequest,
+  SubscriptionDelivery,
+  SubscriptionLifecycle,
+} from "@spine-event-engine/client-web";
 import type { BoardMessageView } from "@spine-event-engine/example-message-board-model/generated/spine/examples/messageboard/message_board_pb.js";
 import type { QueryResponse } from "@spine-event-engine/proto/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { BoardView } from "./board-view.js";
+import { BoardPayloads } from "./board-payloads.js";
 
 /**
  * Describes authoritative board state and its refresh operation.
@@ -31,6 +35,11 @@ export interface BoardSyncResult {
    * Schedules an authoritative board query.
    */
   readonly refresh: () => void;
+
+  /**
+   * Schedules a refresh after a successful post when live updates are not connected.
+   */
+  readonly onPosted: () => void;
 }
 
 /**
@@ -42,16 +51,22 @@ export interface BoardSyncResult {
  */
 export const useBoardSync = (board: string, request: ClientRequest): BoardSyncResult => {
   const view = useMemo(() => new BoardView(board), [board]);
+  const [applied, setApplied] = useState<readonly BoardMessageView[]>();
   const [recovered, setRecovered] = useState<QueryResponse>();
   const [refreshed, setRefreshed] = useState<QueryResponse>();
   const refreshInFlight = useRef(false);
   const refreshRequest = useRef(0);
   const refreshController = useRef<AbortController | undefined>(undefined);
   const refreshGeneration = useRef(0);
+  const updateGeneration = useRef(0);
+  const activeBoard = useRef(board);
+  const rows = useRef<readonly BoardMessageView[]>([]);
+  const lifecycleRef = useRef<SubscriptionLifecycle | undefined>(undefined);
+  activeBoard.current = board;
   const query = useEntityQuery(() => view.query(), [view]);
-  const subscription = useEntitySubscription(view.topic(), () => view.query(), [view]);
-  const lifecycle = useSubscriptionLifecycle(subscription);
-  const delivery = useSubscriptionDelivery(subscription);
+  const response = recovered ?? refreshed ?? (query.status === "success" ? query.value : undefined);
+  const displayedRows = applied ?? (response === undefined ? [] : view.rows(response));
+  rows.current = displayedRows;
 
   useEffect(() => {
     console.info("MessageBoard is activating live updates.", {
@@ -72,22 +87,27 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
     refreshInFlight.current = true;
     const controller = new AbortController();
     const generation = refreshGeneration.current;
+    const capturedBoard = board;
     refreshController.current = controller;
     void (async () => {
       try {
         let completedRequest: number;
         do {
           completedRequest = refreshRequest.current;
+          const capturedUpdate = updateGeneration.current;
           let response: QueryResponse | undefined;
           try {
             response = await request.send(view.query(), { signal: controller.signal });
           } catch {
             if (controller.signal.aborted) return;
           }
-          if (generation !== refreshGeneration.current) return;
-          if (response !== undefined) {
+          if (generation !== refreshGeneration.current || capturedBoard !== activeBoard.current)
+            return;
+          if (response !== undefined && capturedUpdate === updateGeneration.current) {
+            rows.current = view.rows(response);
             setRefreshed(response);
             setRecovered(undefined);
+            setApplied(undefined);
           }
         } while (completedRequest !== refreshRequest.current);
       } finally {
@@ -99,9 +119,64 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
     })();
   }, [request, view]);
 
+  const onDelivery = useCallback(
+    (delivery: SubscriptionDelivery) => {
+      if (delivery.kind === "resynchronization") {
+        updateGeneration.current += 1;
+        const recoveredRows = view.rows(delivery.response);
+        rows.current = recoveredRows;
+        console.info("MessageBoard received authoritative board state after reconnecting.", {
+          board,
+          target: view.topic().target,
+          rows: recoveredRows.length,
+        });
+        setRecovered(delivery.response);
+        setRefreshed(undefined);
+        setApplied(undefined);
+        return;
+      }
+      const result = BoardPayloads.apply(board, rows.current, delivery.update);
+      if (result.kind === "applied") {
+        updateGeneration.current += 1;
+        if (refreshInFlight.current) refreshRequest.current += 1;
+        rows.current = result.rows;
+        console.info("MessageBoard applied a server payload.", {
+          board,
+          target: view.topic().target,
+          rows: result.rows.length,
+        });
+        setApplied(result.rows);
+      } else {
+        console.warn("MessageBoard is refreshing after an unusable live update.", {
+          board,
+          target: view.topic().target,
+          reason: result.reason,
+        });
+        refresh();
+      }
+    },
+    [board, refresh, view],
+  );
+  const onLifecycle = useCallback((next: SubscriptionLifecycle) => {
+    lifecycleRef.current = next;
+  }, []);
+  const subscription = useEntitySubscription(
+    view.topic(),
+    () => view.query(),
+    [view],
+    onDelivery,
+    onLifecycle,
+  );
+  const lifecycle = useSubscriptionLifecycle(subscription);
+  lifecycleRef.current = lifecycle;
+  const onPosted = useCallback(() => {
+    if (lifecycleRef.current?.state !== "connected") refresh();
+  }, [refresh]);
+
   useEffect(
     () => () => {
       refreshGeneration.current += 1;
+      updateGeneration.current += 1;
       refreshController.current?.abort();
     },
     [view],
@@ -130,29 +205,10 @@ export const useBoardSync = (board: string, request: ClientRequest): BoardSyncRe
     if (lifecycle.state === "gapPossible") refresh();
   }, [board, lifecycle, refresh, view]);
 
-  useEffect(() => {
-    if (delivery === undefined) return;
-    if (delivery.kind === "resynchronization") {
-      console.info("MessageBoard received authoritative board state after reconnecting.", {
-        board,
-        target: view.topic().target,
-        response: delivery.response,
-      });
-      setRecovered(delivery.response);
-    } else {
-      console.info("MessageBoard received a server update and is refreshing the board.", {
-        board,
-        target: view.topic().target,
-        update: delivery.update,
-      });
-      refresh();
-    }
-  }, [board, delivery, refresh, view]);
-
-  const response = recovered ?? refreshed ?? (query.status === "success" ? query.value : undefined);
   return {
-    rows: response === undefined ? [] : view.rows(response),
+    rows: displayedRows,
     lifecycle,
     refresh,
+    onPosted,
   };
 };

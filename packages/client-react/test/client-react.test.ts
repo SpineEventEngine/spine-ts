@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { createElement, StrictMode, useEffect } from "react";
+import {
+  createElement,
+  startTransition,
+  StrictMode,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+} from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Subscription } from "@spine-event-engine/client-web";
+import type { Subscription, SubscriptionDelivery } from "@spine-event-engine/client-web";
 
 import {
   SpineClientProvider,
+  type OnSubscriptionDelivery,
   useEntityQuery,
   useEntitySubscription,
   useEventSubscription,
@@ -271,6 +279,8 @@ describe("client-react", () => {
     await waitFor(() => {
       expect(handle.activate).toHaveBeenCalledTimes(1);
     });
+    await Promise.resolve();
+    await Promise.resolve();
     handle.emitLifecycle({ state: "gapPossible", generation: 2 });
     handle.emitDelivery({ kind: "update", update: {} as never });
     await waitFor(() => {
@@ -449,19 +459,14 @@ describe("client-react", () => {
   it("creates Entity subscriptions with the public authoritative re-query contract", async () => {
     const handle = subscription();
     const createSubscription = vi.fn(() => Promise.resolve(handle));
+    const request = { createSubscription } as never;
     const topic = {} as never;
     const authoritativeQuery = vi.fn(createQuery);
     function View() {
       useEntitySubscription(topic, authoritativeQuery, []);
       return null;
     }
-    render(
-      createElement(
-        SpineClientProvider,
-        { request: { createSubscription } as never },
-        createElement(View),
-      ),
-    );
+    render(createElement(SpineClientProvider, { request }, createElement(View)));
     await waitFor(() => {
       expect(createSubscription).toHaveBeenCalledTimes(1);
     });
@@ -471,6 +476,240 @@ describe("client-react", () => {
     });
     expect(authoritativeQuery).not.toHaveBeenCalled();
   });
+
+  it("calls Entity delivery and lifecycle callbacks for every notice before coalescing", async () => {
+    const handle = subscription();
+    const createSubscription = vi.fn(() => Promise.resolve(handle));
+    const request = { createSubscription } as never;
+    const notices: string[] = [];
+    function View() {
+      useEntitySubscription(
+        {} as never,
+        createQuery,
+        [],
+        (delivery) => notices.push(`delivery:${delivery.kind}`),
+        (lifecycle) => notices.push(`lifecycle:${lifecycle.state}`),
+      );
+      return null;
+    }
+    render(createElement(SpineClientProvider, { request }, createElement(View)));
+    await waitFor(() => {
+      expect(handle.activate).toHaveBeenCalledTimes(1);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    handle.emitDelivery({ kind: "update", update: {} as never });
+    handle.emitDelivery({ kind: "update", update: {} as never });
+    handle.emitLifecycle({ state: "connecting", generation: 1, attempt: 0 });
+    handle.emitLifecycle({ state: "connected", generation: 1 });
+    await waitFor(() => {
+      expect(notices.filter((notice) => notice.startsWith("delivery:"))).toEqual([
+        "delivery:update",
+        "delivery:update",
+      ]);
+      expect(notices.filter((notice) => notice.startsWith("lifecycle:"))).toEqual([
+        "lifecycle:connecting",
+        "lifecycle:connected",
+      ]);
+    });
+  });
+
+  it("uses a committed replacement callback without recreating its Entity subscription", async () => {
+    const handle = subscription();
+    const createSubscription = vi.fn(() => Promise.resolve(handle));
+    const request = { createSubscription } as never;
+    const first = vi.fn();
+    const second = vi.fn();
+    function View({ onDelivery }: { readonly onDelivery: OnSubscriptionDelivery }) {
+      useEntitySubscription({} as never, createQuery, [], onDelivery);
+      return null;
+    }
+    const rendered = render(
+      createElement(SpineClientProvider, { request }, createElement(View, { onDelivery: first })),
+    );
+    await waitFor(() => {
+      expect(handle.activate).toHaveBeenCalledTimes(1);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    rendered.rerender(
+      createElement(SpineClientProvider, { request }, createElement(View, { onDelivery: second })),
+    );
+    handle.emitDelivery({ kind: "update", update: {} as never });
+    await waitFor(() => {
+      expect(second).toHaveBeenCalledTimes(1);
+    });
+    expect(first).not.toHaveBeenCalled();
+    expect(createSubscription).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps an active Entity handle bound to its committed callback during a suspended replacement", async () => {
+    const handle = subscription();
+    const createSubscription = vi.fn(() => Promise.resolve(handle));
+    const request = { createSubscription } as never;
+    const first = vi.fn();
+    const second = vi.fn();
+    const replacement = Promise.withResolvers<undefined>();
+    const suspendedRender = Object.assign(new Error("Suspended replacement render."), {
+      then: replacement.promise.then.bind(replacement.promise),
+    });
+    function View({
+      onDelivery,
+      suspended,
+    }: {
+      readonly onDelivery: OnSubscriptionDelivery;
+      readonly suspended: boolean;
+    }) {
+      useEntitySubscription({} as never, createQuery, [], onDelivery);
+      if (suspended) throw suspendedRender;
+      return null;
+    }
+    const rendered = render(
+      createElement(
+        SpineClientProvider,
+        { request },
+        createElement(
+          Suspense,
+          { fallback: null },
+          createElement(View, { onDelivery: first, suspended: false }),
+        ),
+      ),
+    );
+    await waitFor(() => {
+      expect(handle.activate).toHaveBeenCalledTimes(1);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    startTransition(() => {
+      rendered.rerender(
+        createElement(
+          SpineClientProvider,
+          { request },
+          createElement(
+            Suspense,
+            { fallback: null },
+            createElement(View, { onDelivery: second, suspended: true }),
+          ),
+        ),
+      );
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    handle.emitDelivery({ kind: "update", update: {} as never });
+    await waitFor(() => {
+      expect(first).toHaveBeenCalledTimes(1);
+    });
+    expect(second).not.toHaveBeenCalled();
+    replacement.resolve(undefined);
+  });
+
+  it("retires an old Entity handle before another layout effect can deliver into a new commit", async () => {
+    const oldHandle = subscription({ cancelEnds: false });
+    const nextHandle = subscription();
+    const pending = [oldHandle, nextHandle];
+    const createSubscription = vi.fn(() => Promise.resolve(pending.shift() ?? nextHandle));
+    const request = { createSubscription } as never;
+    const received: string[] = [];
+    function View({ board }: { readonly board: string }) {
+      useEntitySubscription({} as never, createQuery, [board], () => received.push(board));
+      useLayoutEffect(() => {
+        if (board === "board-b")
+          oldHandle.emitDelivery({ kind: "resynchronization", response: {} as never });
+      }, [board]);
+      return null;
+    }
+    const rendered = render(
+      createElement(SpineClientProvider, { request }, createElement(View, { board: "board-a" })),
+    );
+    await waitFor(() => {
+      expect(oldHandle.activate).toHaveBeenCalledTimes(1);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    rendered.rerender(
+      createElement(SpineClientProvider, { request }, createElement(View, { board: "board-b" })),
+    );
+    await Promise.resolve();
+    expect(received).toEqual([]);
+  });
+
+  it("does not invoke Entity callbacks after cleanup", async () => {
+    const handle = subscription({ cancelEnds: false });
+    const createSubscription = vi.fn(() => Promise.resolve(handle));
+    const onDelivery = vi.fn();
+    const onLifecycle = vi.fn();
+    function View() {
+      useEntitySubscription({} as never, createQuery, [], onDelivery, onLifecycle);
+      return null;
+    }
+    const rendered = render(
+      createElement(
+        SpineClientProvider,
+        { request: { createSubscription } as never },
+        createElement(View),
+      ),
+    );
+    await waitFor(() => {
+      expect(handle.activate).toHaveBeenCalledTimes(1);
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    rendered.unmount();
+    handle.emitDelivery({ kind: "update", update: {} as never });
+    handle.emitLifecycle({ state: "gapPossible", generation: 1 });
+    await Promise.resolve();
+    expect(onDelivery).not.toHaveBeenCalled();
+    expect(onLifecycle).not.toHaveBeenCalled();
+  });
+
+  it.each(["delivery", "lifecycle"] as const)(
+    "publishes a throwing Entity %s callback error and cancels once",
+    async (kind) => {
+      const handle = subscription();
+      const createSubscription = vi.fn(() => Promise.resolve(handle));
+      const failure = new Error(`${kind} callback failed`);
+      let observed: unknown;
+      function View() {
+        const state = useEntitySubscription(
+          {} as never,
+          createQuery,
+          [],
+          kind === "delivery"
+            ? () => {
+                throw failure;
+              }
+            : undefined,
+          kind === "lifecycle"
+            ? () => {
+                throw failure;
+              }
+            : undefined,
+        );
+        useEffect(() => {
+          observed = state.status === "error" ? state.error : undefined;
+        }, [state]);
+        return null;
+      }
+      render(
+        createElement(
+          SpineClientProvider,
+          { request: { createSubscription } as never },
+          createElement(View),
+        ),
+      );
+      await waitFor(() => {
+        expect(handle.activate).toHaveBeenCalledTimes(1);
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      if (kind === "delivery") handle.emitDelivery({ kind: "update", update: {} as never });
+      else handle.emitLifecycle({ state: "gapPossible", generation: 1 });
+      await waitFor(() => {
+        expect(observed).toBe(failure);
+      });
+      expect(handle.cancel).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("publishes stream failures from either independent subscription iterator", async () => {
     const handle = subscription();
@@ -584,7 +823,13 @@ function iterable<T>() {
     readonly resolve: (result: IteratorResult<T>) => void;
     readonly reject: (error: unknown) => void;
   }[] = [];
+  const values: T[] = [];
   let ended = false;
+  const take = (): T => {
+    const value = values.shift();
+    if (value === undefined) throw new Error("Expected a buffered async iterable value.");
+    return value;
+  };
   return {
     values: {
       [Symbol.asyncIterator]() {
@@ -592,14 +837,18 @@ function iterable<T>() {
           next: () =>
             ended
               ? Promise.resolve({ done: true as const, value: undefined })
-              : new Promise<IteratorResult<T>>((resolve, reject) =>
-                  waiting.push({ resolve, reject }),
-                ),
+              : values.length > 0
+                ? Promise.resolve({ done: false as const, value: take() })
+                : new Promise<IteratorResult<T>>((resolve, reject) =>
+                    waiting.push({ resolve, reject }),
+                  ),
         };
       },
     },
     emit: (value: T) => {
-      waiting.shift()?.resolve({ done: false, value });
+      const next = waiting.shift();
+      if (next === undefined) values.push(value);
+      else next.resolve({ done: false, value });
     },
     fail: (error: unknown) => {
       waiting.shift()?.reject(error);

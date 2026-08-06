@@ -20,7 +20,12 @@ import type {
   ClientOutcome,
   ClientRequest,
 } from "@spine-event-engine/client-web";
-import type { Query } from "@spine-event-engine/proto/client";
+import {
+  EntityStateUpdateSchema,
+  EntityUpdatesSchema,
+  SubscriptionUpdateSchema,
+  type Query,
+} from "@spine-event-engine/proto/client";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -205,6 +210,177 @@ describe("MessageBoardApp", () => {
     await screen.findByText("refresh two");
   });
 
+  it("applies valid subscription payloads locally without another board query", async () => {
+    const request = requestFixture({ initialRows: responseRows("initial") });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(stateUpdate(view("live", "general", 2n)));
+    await screen.findByText("live");
+    request.subscription.emitUpdate(removeUpdate("initial"));
+    await waitFor(() => expect(screen.queryByText("initial")).toBeNull());
+
+    expect(request.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies every payload from a burst before React renders", async () => {
+    const request = requestFixture({ initialRows: responseRows("initial") });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("initial");
+
+    request.subscription.emitUpdate(stateUpdate(view("burst one", "general", 2n)));
+    request.subscription.emitUpdate(stateUpdate(view("burst two", "general", 3n)));
+
+    await screen.findByText("burst one");
+    await screen.findByText("burst two");
+    expect(request.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("coalesces malformed subscription payload recovery into one board query", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+
+    expect(request.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("replaces local rows from reconnect recovery and coalesces a gap query", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(stateUpdate(view("live")));
+    await screen.findByText("live");
+
+    request.subscription.emitRecovery(responseRows("reconnected"));
+    await screen.findByText("reconnected");
+    expect(screen.queryByText("live")).toBeNull();
+    request.subscription.emitLifecycle({ state: "gapPossible", generation: 1 });
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitLifecycle({ state: "gapPossible", generation: 1 });
+
+    expect(request.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a newer live payload when an older recovery query completes", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitUpdate(stateUpdate(view("live", "general", 2n)));
+    await screen.findByText("live");
+
+    request.query.resolveAt(1, responseRows("stale recovery"));
+
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    expect(screen.queryByText("stale recovery")).toBeNull();
+    request.query.resolveAt(2, responseRows("current recovery"));
+    await screen.findByText("current recovery");
+  });
+
+  it("keeps reconnect recovery when an older ordinary recovery completes", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+
+    request.subscription.emitRecovery(responseRows("reconnected"));
+    await screen.findByText("reconnected");
+    request.query.resolveAt(1, responseRows("stale recovery"));
+    await Promise.resolve();
+
+    expect(screen.queryByText("stale recovery")).toBeNull();
+    expect(screen.getByText("reconnected")).toBeTruthy();
+  });
+
+  it("coalesces multiple live payloads during one recovery into one follow-up query", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    request.subscription.emitUpdate(stateUpdate(view("live one", "general", 2n)));
+    await screen.findByText("live one");
+    request.subscription.emitUpdate(stateUpdate(view("live two", "general", 3n)));
+    await screen.findByText("live two");
+
+    request.query.resolveAt(1, responseRows("stale recovery"));
+
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    expect(request.send).toHaveBeenCalledTimes(3);
+  });
+
+  it("ignores a board A recovery completion after switching boards", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-a" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseBoardRows("board-a initial", "board-a"));
+    await screen.findByText("board-a initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+
+    rendered.rerender(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-b" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(3));
+    request.query.resolveAt(1, responseBoardRows("board-a stale", "board-a"));
+    request.query.resolveAt(2, responseBoardRows("board-b current", "board-b"));
+
+    await screen.findByText("board-b current");
+    expect(screen.queryByText("board-a stale")).toBeNull();
+  });
+
+  it("ignores a recovery completion after unmount", async () => {
+    const request = requestFixture({ queuedQueries: true });
+    const rendered = render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitUpdate(create(SubscriptionUpdateSchema));
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+    const options = calledOptions(request.send, 1);
+
+    rendered.unmount();
+    request.query.resolveAt(1, responseRows("late recovery"));
+
+    expect(options.signal.aborted).toBe(true);
+    await Promise.resolve();
+    expect(screen.queryByText("late recovery")).toBeNull();
+  });
+
   it("keeps a post-success refresh queued when an earlier hint refresh rejects", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
@@ -353,7 +529,7 @@ describe("MessageBoardApp", () => {
     });
   });
 
-  it("refreshes authoritative messages after a successful post without an update hint", async () => {
+  it("refreshes authoritative messages after a successful post while disconnected", async () => {
     const request = requestFixture({ queuedQueries: true });
     render(
       createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
@@ -369,6 +545,90 @@ describe("MessageBoardApp", () => {
     await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
     request.query.resolveAt(1, responseRows("posted without update"));
     await screen.findByText("posted without update");
+  });
+
+  it("relies on a live payload after a successful post while connected", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const request = requestFixture({ queuedQueries: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitLifecycle({ state: "connected", generation: 1 });
+    await screen.findByText("Updating live");
+    fillPost("posted live");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    expect(request.send).toHaveBeenCalledTimes(1);
+    request.subscription.emitUpdate(stateUpdate(view("posted live", "general", 2n)));
+    await screen.findByText("posted live");
+    expect(request.send).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(
+      "MessageBoard applied a server payload.",
+      expect.objectContaining({ board: "general", rows: 2 }),
+    );
+  });
+
+  it("refreshes when live updates disconnect before a successful post completes", async () => {
+    const request = requestFixture({ queuedQueries: true, deferredPost: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    request.subscription.emitLifecycle({ state: "connected", generation: 1 });
+    await screen.findByText("Updating live");
+    fillPost("disconnecting post");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    request.subscription.emitLifecycle({
+      state: "failed",
+      generation: 1,
+      error: new Error("lost"),
+    });
+
+    request.postDeferred.resolve({ kind: "ok" });
+
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(2));
+  });
+
+  it("avoids refresh when live updates connect before a successful post completes", async () => {
+    const request = requestFixture({ queuedQueries: true, deferredPost: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await waitFor(() => expect(request.send).toHaveBeenCalledTimes(1));
+    request.query.resolveAt(0, responseRows("initial"));
+    await screen.findByText("initial");
+    fillPost("connecting post");
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+    await waitFor(() => expect(request.post).toHaveBeenCalledTimes(1));
+    request.subscription.emitLifecycle({ state: "connected", generation: 1 });
+    await screen.findByText("Updating live");
+
+    request.postDeferred.resolve({ kind: "ok" });
+
+    await Promise.resolve();
+    expect(request.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refresh after a failed post", async () => {
+    const request = requestFixture({ postFailure: true });
+    render(
+      createElement(MessageBoardApp, { session: signedInSession(), request, board: "general" }),
+    );
+    await screen.findByText("general message");
+    fillPost("failed post");
+
+    fireEvent.click(screen.getByRole("button", { name: "Post message" }));
+
+    await screen.findByRole("alert");
+    expect(request.send).toHaveBeenCalledTimes(1);
   });
 
   it("shows the username and message errors returned by the server", async () => {
@@ -444,10 +704,10 @@ describe("MessageBoardApp", () => {
     request.subscription.emitLifecycle({ state: "connected", generation: 2 });
     await waitFor(() => expect(info).toHaveBeenCalledTimes(3));
     request.subscription.emitUpdate();
-    await waitFor(() => expect(info).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(warn).toHaveBeenCalledTimes(2));
     const recovery = responseRows("recovered console message");
     request.subscription.emitRecovery(recovery);
-    await waitFor(() => expect(info).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(info).toHaveBeenCalledTimes(4));
     request.subscription.emitLifecycle({
       state: "failed",
       generation: 2,
@@ -475,29 +735,28 @@ describe("MessageBoardApp", () => {
       "MessageBoard live updates are connected.",
       expect.objectContaining({ generation: 2 }),
     );
-    expect(info).toHaveBeenCalledWith(
-      "MessageBoard received a server update and is refreshing the board.",
-      expect.objectContaining({ board: "general", target: expect.anything(), update: {} }),
+    expect(warn).toHaveBeenCalledWith(
+      "MessageBoard is refreshing after an unusable live update.",
+      expect.objectContaining({
+        board: "general",
+        target: expect.anything(),
+        reason: "wrong-update",
+      }),
     );
     expect(info).toHaveBeenCalledWith(
       "MessageBoard received authoritative board state after reconnecting.",
-      expect.objectContaining({ board: "general", response: recovery }),
+      expect.objectContaining({ board: "general", rows: 1 }),
     );
     expect(error).toHaveBeenCalledWith(
       "MessageBoard live updates failed.",
       expect.objectContaining({ generation: 2 }),
     );
-    expect(info).toHaveBeenCalledWith(
-      "MessageBoard is sending a post command.",
-      expect.objectContaining({
-        board: "general",
-        command: request.post.mock.calls[0]?.[1],
-      }),
-    );
-    expect(info).toHaveBeenCalledWith(
-      "MessageBoard post command was accepted.",
-      expect.objectContaining({ board: "general", outcome: { kind: "ok" } }),
-    );
+    expect(info).toHaveBeenCalledWith("MessageBoard is sending a post command.", {
+      board: "general",
+    });
+    expect(info).toHaveBeenCalledWith("MessageBoard post command was accepted.", {
+      board: "general",
+    });
     expect(info).toHaveBeenCalledWith(
       "MessageBoard is cancelling live updates.",
       expect.objectContaining({ board: "general" }),
@@ -516,13 +775,9 @@ describe("MessageBoardApp", () => {
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
     await screen.findByRole("alert");
 
-    expect(warn).toHaveBeenCalledWith(
-      "MessageBoard post command was rejected.",
-      expect.objectContaining({
-        board: "general",
-        outcome: { kind: "rejection", rejection: {} },
-      }),
-    );
+    expect(warn).toHaveBeenCalledWith("MessageBoard post command was rejected.", {
+      board: "general",
+    });
   });
 
   it("reports a post transport failure in the browser console", async () => {
@@ -646,7 +901,11 @@ describe("MessageBoardApp", () => {
   });
 
   it("abandons board A work and starts board B with clean board-owned state", async () => {
-    const request = requestFixture({ queuedQueries: true, deferredPost: true });
+    const request = requestFixture({
+      queuedQueries: true,
+      deferredPost: true,
+      retainCancelledSubscription: true,
+    });
     const rendered = render(
       createElement(MessageBoardApp, { session: signedInSession(), request, board: "board-a" }),
     );
@@ -680,6 +939,10 @@ describe("MessageBoardApp", () => {
     request.query.resolveAt(2, responseBoardRows("board-b initial", "board-b"));
     await screen.findByText("board-b initial");
     expect(screen.queryByText("board-a initial")).toBeNull();
+    oldSubscription.emitRecovery(responseBoardRows("retired board-a", "board-a"));
+    await Promise.resolve();
+    expect(screen.queryByText("retired board-a")).toBeNull();
+    expect(screen.getByText("board-b initial")).toBeTruthy();
     fillPost("new message");
     fireEvent.click(screen.getByRole("button", { name: "Post message" }));
     await waitFor(() => expect(request.post).toHaveBeenCalledTimes(2));
@@ -714,7 +977,7 @@ function fillPost(text: string, username = "Ada"): void {
 }
 
 function requestFixture(
-  options: {
+  fixtureOptions: {
     deferredQuery?: boolean;
     queuedQueries?: boolean;
     postFailure?: boolean;
@@ -722,6 +985,7 @@ function requestFixture(
     validationFailure?: boolean;
     initialRows?: ReturnType<typeof responseRows>;
     deferredPost?: boolean;
+    retainCancelledSubscription?: boolean;
   } = {},
 ) {
   const queries = [Promise.withResolvers<ReturnType<typeof responseRows>>()];
@@ -729,21 +993,25 @@ function requestFixture(
   const subscriptions: ReturnType<typeof subscriptionFixture>[] = [];
   return {
     send: vi.fn<FixtureSend>(() => {
-      if (options.deferredQuery) return queries[0]!.promise;
-      if (options.queuedQueries) {
+      if (fixtureOptions.deferredQuery) return queries[0]!.promise;
+      if (fixtureOptions.queuedQueries) {
         const current = queries.at(-1)!;
         queries.push(Promise.withResolvers<ReturnType<typeof responseRows>>());
         return current.promise;
       }
       return Promise.resolve(
-        options.initialRows ?? responseRows("general message", "other board message"),
+        fixtureOptions.initialRows ?? responseRows("general message", "other board message"),
       );
     }),
-    post: fixturePost(options, postDeferred),
-    createSubscription: vi.fn(async (_topic, options) => {
-      const subscription = subscriptionFixture();
+    post: fixturePost(fixtureOptions, postDeferred),
+    createSubscription: vi.fn(async (_topic, subscriptionOptions) => {
+      const subscription = subscriptionFixture({
+        cancelEnds: !fixtureOptions.retainCancelledSubscription,
+      });
       subscriptions.push(subscription);
-      subscription.authoritativeQuery = vi.fn<() => unknown>(options.authoritativeQuery);
+      subscription.authoritativeQuery = vi.fn<() => unknown>(
+        subscriptionOptions.authoritativeQuery,
+      );
       return subscription;
     }),
     get subscription() {
@@ -797,14 +1065,48 @@ function view(
   });
 }
 
-function subscriptionFixture() {
+function stateUpdate(value: ReturnType<typeof view>) {
+  return create(SubscriptionUpdateSchema, {
+    update: {
+      case: "entityUpdates",
+      value: create(EntityUpdatesSchema, {
+        update: [
+          create(EntityStateUpdateSchema, {
+            id: AnyMessages.pack(MessageIdSchema, value.id!),
+            kind: { case: "state", value: AnyMessages.pack(BoardMessageViewSchema, value) },
+          }),
+        ],
+      }),
+    },
+  });
+}
+
+function removeUpdate(id: string) {
+  return create(SubscriptionUpdateSchema, {
+    update: {
+      case: "entityUpdates",
+      value: create(EntityUpdatesSchema, {
+        update: [
+          create(EntityStateUpdateSchema, {
+            id: AnyMessages.pack(MessageIdSchema, create(MessageIdSchema, { value: id })),
+            kind: { case: "noLongerMatching", value: true },
+          }),
+        ],
+      }),
+    },
+  });
+}
+
+function subscriptionFixture(options: { readonly cancelEnds?: boolean } = {}) {
   const lifecycle = queue<never>();
   const updates = queue<never>();
   return {
     activate: vi.fn(async () => undefined),
     cancel: vi.fn(async () => {
-      lifecycle.close();
-      updates.close();
+      if (options.cancelEnds !== false) {
+        lifecycle.close();
+        updates.close();
+      }
     }),
     lifecycle: lifecycle.values,
     updates: updates.values,
@@ -815,8 +1117,8 @@ function subscriptionFixture() {
     emitRecovery(response: ReturnType<typeof responseRows>) {
       updates.push({ kind: "resynchronization", response } as never);
     },
-    emitUpdate() {
-      updates.push({ kind: "update", update: {} } as never);
+    emitUpdate(update: unknown = create(SubscriptionUpdateSchema)) {
+      updates.push({ kind: "update", update } as never);
     },
   };
 }
@@ -900,6 +1202,7 @@ function postPayload(message: unknown): {
 
 function queue<T>() {
   const pending: ((result: IteratorResult<T>) => void)[] = [];
+  const values: T[] = [];
   let closed = false;
   return {
     values: {
@@ -908,13 +1211,16 @@ function queue<T>() {
           next: () =>
             new Promise<IteratorResult<T>>((resolve) => {
               if (closed) resolve({ done: true, value: undefined as never });
+              else if (values.length > 0) resolve({ done: false, value: values.shift()! });
               else pending.push(resolve);
             }),
         };
       },
     } as AsyncIterable<T>,
     push(value: T) {
-      pending.shift()?.({ done: false, value });
+      const resolve = pending.shift();
+      if (resolve === undefined) values.push(value);
+      else resolve({ done: false, value });
     },
     close() {
       closed = true;
