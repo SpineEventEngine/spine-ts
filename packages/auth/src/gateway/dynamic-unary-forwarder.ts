@@ -21,6 +21,7 @@ interface SubscriptionChild {
   activation: Promise<void>;
   readonly token: string;
   readonly incarnation: number;
+  active: boolean;
 }
 
 interface FailedChildCleanup {
@@ -95,8 +96,10 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   readonly #definitions = new Map<
     string,
     {
-      wire: PublicSubscriptionWire;
-      updates: SubscriptionUpdateSink;
+      readonly wire: PublicSubscriptionWire;
+      updates: SubscriptionUpdateSink | undefined;
+      active: boolean;
+      readonly starts: Set<AbortController>;
       readonly children: Map<string, SubscriptionChild>;
     }
   >();
@@ -213,10 +216,14 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     if (!this.#definitions.has(key))
       this.#definitions.set(key, {
         wire,
-        updates: async () => {},
+        updates: undefined,
+        active: false,
+        starts: new Set(),
         children: new Map(),
       });
     await this.reconcile([...this.#nodes.values()]);
+    if (!this.#definitions.has(key) || signal.aborted)
+      throw new Error("subscription creation was cancelled");
     return { kind: "backend-subscription-envelope", bytes: request.bytes.slice() };
   }
 
@@ -234,6 +241,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
             .slice(index, index + this.#maxConcurrentStarts)
             .map(([id, current]) => this.#startChild(definition, id, current, generation)),
         );
+      if (definition.active && definition.updates !== undefined)
+        for (const [id, child] of definition.children) {
+          const current = this.#clients.get(id);
+          if (current !== undefined && !child.active)
+            this.#activateChild(definition, id, child, current.client);
+        }
     }
   }
 
@@ -250,14 +263,19 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     const definition = this.#definitions.get(key);
     this.#definitions.delete(key);
     if (definition === undefined) return;
+    for (const controller of definition.starts) controller.abort();
     await this.reconcile([...this.#nodes.values()]);
     await Promise.allSettled(
       [...definition.children].map(async ([id, child]) => {
         const client = this.#clients.get(id)?.client;
         if (client === undefined) return;
         child.controller.abort();
-        await client.dispose(child.backend, signal);
-        await child.activation;
+        try {
+          await client.dispose(child.backend, signal);
+        } catch {
+          this.#failedChildCleanup.add({ client, backend: child.backend });
+        }
+        await child.activation.catch(() => undefined);
       }),
     );
   }
@@ -277,16 +295,17 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       fromBinary(SubscriptionSchema, wire.bytes).id?.value ?? "",
     );
     if (definition === undefined) return;
-    definition.wire.bytes.fill(0);
-    definition.wire = { kind: "public-subscription", bytes: wire.bytes.slice() };
     definition.updates = updates;
+    definition.active = true;
     await this.reconcile([...this.#nodes.values()]);
   }
 
   async #startChild(
     definition: {
-      wire: PublicSubscriptionWire;
-      updates: SubscriptionUpdateSink;
+      readonly wire: PublicSubscriptionWire;
+      updates: SubscriptionUpdateSink | undefined;
+      readonly active: boolean;
+      readonly starts: Set<AbortController>;
       children: Map<string, SubscriptionChild>;
     },
     id: string,
@@ -298,10 +317,16 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   ): Promise<void> {
     if (generation !== this.#generation || this.#closed) return;
     const controller = new AbortController();
-    const backend = await current.client.subscribe(
-      { kind: "public-subscription", bytes: definition.wire.bytes.slice() },
-      controller.signal,
-    );
+    definition.starts.add(controller);
+    let backend: BackendSubscriptionEnvelope;
+    try {
+      backend = await current.client.subscribe(
+        { kind: "public-subscription", bytes: definition.wire.bytes.slice() },
+        controller.signal,
+      );
+    } finally {
+      definition.starts.delete(controller);
+    }
     if (
       generation !== this.#generation ||
       this.#clients.get(id)?.incarnation !== current.incarnation ||
@@ -314,6 +339,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
           activation: Promise.resolve(),
           token: "stale",
           incarnation: current.incarnation,
+          active: false,
         },
         current.client,
       );
@@ -326,10 +352,27 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       token,
       incarnation: current.incarnation,
       activation: Promise.resolve(),
+      active: false,
     };
     definition.children.set(id, child);
-    child.activation = current.client
-      .activate({ wire: definition.wire, updates: definition.updates }, controller.signal)
+    if (definition.active && definition.updates !== undefined)
+      this.#activateChild(definition, id, child, current.client);
+  }
+
+  #activateChild(
+    definition: {
+      readonly wire: PublicSubscriptionWire;
+      readonly updates: SubscriptionUpdateSink | undefined;
+      readonly children: Map<string, SubscriptionChild>;
+    },
+    id: string,
+    child: SubscriptionChild,
+    client: DynamicUnaryClient,
+  ): void {
+    if (child.active || definition.updates === undefined) return;
+    child.active = true;
+    child.activation = client
+      .activate({ wire: definition.wire, updates: definition.updates }, child.controller.signal)
       .catch(() => undefined)
       .then(() => this.#completeChild(definition, id, child));
   }
@@ -340,6 +383,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     child: SubscriptionChild,
   ): Promise<void> {
     if (definition.children.get(id) !== child || child.controller.signal.aborted) return;
+    definition.children.delete(id);
   }
 
   async #removeNodeChildren(id: string, client: DynamicUnaryClient): Promise<void> {
@@ -439,6 +483,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   async #closeOnce(): Promise<void> {
     this.#closed = true;
     for (const controller of this.#creating) controller.abort();
+    for (const definition of this.#definitions.values())
+      for (const controller of definition.starts) controller.abort();
     await this.#running;
     for (const [id, current] of this.#clients) await this.#removeNodeChildren(id, current.client);
     await Promise.all([...this.#clients.values()].map(({ client }) => this.#dispose(client)));
@@ -447,5 +493,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     await this.#retryChildCleanup();
     if (this.#failedDisposals.size > 0)
       throw new Error("Gateway dynamic client cleanup remains incomplete.");
+    if (this.#failedChildCleanup.size > 0)
+      throw new Error("Gateway dynamic subscription cleanup remains incomplete.");
   }
 }
