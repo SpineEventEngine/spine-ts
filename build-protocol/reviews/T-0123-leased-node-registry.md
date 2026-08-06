@@ -84,3 +84,20 @@ occurred.
 
 One correction batch returns all findings to the existing implementer. Only
 substantively affected concerns reopen after deterministic verification.
+
+## Final Re-review At `667db8e7`
+
+- Style/maintainability: clean; all prior findings resolved.
+- Documentation: clean; the beginner workflow and corrected TSDoc resolve the
+  prior omission.
+- Performance/reliability, P1: a fully pushed Datastore page is still passed
+  through raw-string local ordering. JSON-encoded Datastore key order differs
+  for valid control-character IDs, so a page-boundary row can be omitted.
+- TypeScript/API docs, P1: registration validates one read of a structurally
+  typed node but selects the CAS slot with a second read. A volatile `id`
+  getter can persist a record under a different physical slot.
+
+The final correction batch must return fully pushed keyset entries without a
+second incompatible local continuation/order pass, with a 257+ adversarial-ID
+regression, and must use the validated serialized node ID as the CAS slot, with
+a volatile-getter regression. API and reliability alone reopen afterward.
