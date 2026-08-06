@@ -609,7 +609,7 @@ export interface BrowserServerOptions {
   readonly port?: number;
 
   /**
-   * Selects one separately hosted Spine backend or an ordered fixed set of 1–32 backends.
+   * Selects one separately hosted Spine backend or a non-empty fixed node set.
    *
    * Each URL must be one canonical HTTP(S) origin without credentials, query,
    * fragment, or a path beyond `/`. `baseUrl` and `baseUrls` are exclusive;
@@ -619,8 +619,8 @@ export interface BrowserServerOptions {
   readonly backend?: BrowserBackend;
 
   /**
-   * Supplies changing complete membership for unary command and query routing.
-   * Fixed backend configuration continues to own subscription fan-in.
+   * Supplies changing complete membership for unary routing and native streams.
+   * Fixed backend configuration is a static complete membership input.
    */
   readonly discovery?: NodeDiscovery;
 

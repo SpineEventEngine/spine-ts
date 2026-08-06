@@ -164,10 +164,10 @@ application type registry and named durable bindings. `ResolveContext` stays in 
 Post, Read, Subscribe, Activate, and Cancel use the same authenticated policy,
 context-replacement, and native descriptors before reaching the backend.
 
-`browser.backend.baseUrls` is exclusive with `baseUrl` and configures 1–32
-ordered unique origins. Unary calls use bounded round-robin without retry;
-subscriptions fan out best-effort. Durable bindings fence the ordered topology;
-custom durable fan-in stores must declare topology-fencing support. Clients
+`browser.backend.baseUrls` is exclusive with `baseUrl` and configures a
+non-empty ordered unique static node set. Unary calls use bounded round-robin
+without retry; native streams fan out best-effort. Durable bindings retain only
+logical definitions, not topology. Clients
 re-query authoritative state after duplicate updates or generic loss notices.
 
 `browser.authRoutes` is deliberately a bounded callback seam, not a router.

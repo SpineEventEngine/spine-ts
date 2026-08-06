@@ -12,10 +12,10 @@ The package supplies provider-neutral gateway building blocks. An application pl
 
 ## Fixed subscription topology
 
-A standalone browser Gateway may use dynamic unary discovery for commands and
-queries. A fixed list of 1–32 backend origins remains the current positional
-subscription fan-in contract. Subscription creation and activation fan out to
-the configured nodes; merged notices can be duplicated, missing, or lost.
+A standalone browser Gateway uses one complete membership owner for commands,
+queries, and native subscription streams. A fixed backend list is static
+membership input and is not capped; dynamic discovery replaces it with later
+complete snapshots. Notices can be duplicated, missing, or lost.
 Browser code must treat notices as refresh hints and use Queries as the
 authoritative state source. The fixed subscription list is configured at
 startup; dynamic subscription reconciliation is not provided here.
