@@ -123,6 +123,17 @@ describe("Server lifecycle integration", () => {
     await once(session, "close");
     await running.close();
   });
+
+  it("rejects standalone browser backends before listener lifecycle startup", async () => {
+    const start = vi.fn();
+    const close = vi.fn();
+    const server = new Server({
+      browser: { backend: { baseUrls: ["http://10.0.0.1"] } },
+    }).addListenerLifecycle({ start, close });
+    await expect(server.start()).rejects.toThrow("Standalone browser server");
+    expect(start).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
     createHttp2Server.mockReset();
