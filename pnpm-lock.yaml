@@ -420,6 +420,8 @@ importers:
         specifier: 2.0.0-snapshot.1
         version: link:../proto
 
+  packages/deployment: {}
+
   packages/proto:
     dependencies:
       '@bufbuild/protobuf':
