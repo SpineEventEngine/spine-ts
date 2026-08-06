@@ -1,6 +1,6 @@
 # T-0122: Dynamic Subscription Reconciliation
 
-Status: Review complete; release verification pending
+Status: Complete; merged and post-merge verified
 
 ## Objective
 
@@ -149,4 +149,15 @@ accepted evidence with no visible mismatch.
   (19,992/21,042).
 - All deterministic generation, build, tooling typecheck, lint, cleanup,
   TSDoc, documentation, formatting, and diff gates passed. The task is ready
-  for integration into `main`; post-merge verification remains the next gate.
+  for integration into `main`.
+
+## Integration Evidence
+
+- The reviewed task branch merged cleanly into integration commit `9c109082`.
+- The merge tree is byte-for-byte identical to the release-verified task tree.
+- Post-merge `verify:task` passed every deterministic gate and seven focused
+  suites with 384 tests. Coverage was intentionally not recomputed for this
+  partial suite because the identical task tree had already passed the full
+  release coverage profile.
+- `origin/main` was pushed to `9c109082`, and a fresh fetch confirmed exact
+  remote equality.

@@ -1,6 +1,6 @@
 # T-0122 Review Record
 
-Status: Final correction batch implemented; acceptance re-review pending
+Status: Accepted, release-verified, and integrated
 
 ## Review Range
 
@@ -265,4 +265,6 @@ documentation audience, formatting, and diff checks.
   (12,251/13,612), functions 94.54% (5,041/5,332), and lines 95%
   (19,992/21,042).
 - All deterministic gates passed. Final review acceptance is complete; T-0122
-  is ready to integrate into `main` and then receive post-merge verification.
+  merged into `main` at `9c109082`. The merge tree matched the reviewed task
+  tree exactly, and post-merge deterministic gates plus seven focused suites /
+  384 tests passed.
