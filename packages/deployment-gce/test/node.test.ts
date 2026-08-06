@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApplicationNode } from "@spine-event-engine/deployment";
-import { GceApplicationNode, GceRegistrar } from "../src/index.js";
+import { GceApplicationNode, GceRegistrar, GceRegistryReader } from "../src/index.js";
 
 describe("GceApplicationNode", () => {
   it("derives a stable private node and preserves canonical overrides", () => {
@@ -42,5 +42,16 @@ describe("GceApplicationNode", () => {
     await Promise.resolve();
     await registrar.close();
     expect(calls).toEqual(["register", "renew", "cancel", "remove"]);
+  });
+
+  it("reads complete registry snapshots using its injected clock", async () => {
+    const registry = {
+      read: async (now: number) => [
+        new ApplicationNode({ id: String(now), endpoint: "http://10.0.0.1" }),
+      ],
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    await expect(
+      new GceRegistryReader(registry, () => 7).read(new AbortController().signal),
+    ).resolves.toMatchObject([{ id: "7" }]);
   });
 });

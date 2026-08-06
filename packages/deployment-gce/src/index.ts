@@ -1,4 +1,8 @@
-import { ApplicationNode, type LeasedNodeRegistry } from "@spine-event-engine/deployment";
+import {
+  ApplicationNode,
+  type LeasedNodeRegistry,
+  type NodeSnapshotReader,
+} from "@spine-event-engine/deployment";
 
 /** Supplies trusted GCE instance metadata. */
 export interface GceMetadata {
@@ -99,5 +103,19 @@ export class GceRegistrar {
     const next = this.#work.then(operation, operation);
     this.#work = next.catch(() => undefined);
     return next;
+  }
+}
+
+/** Reads complete live-node snapshots from the leased registry. */
+export class GceRegistryReader implements NodeSnapshotReader {
+  /** Creates a reader using an injected clock for deterministic expiry evaluation. */
+  constructor(
+    private readonly registry: LeasedNodeRegistry,
+    private readonly now: () => number,
+  ) {}
+
+  /** Reads every currently live node. */
+  read(_signal: AbortSignal): Promise<readonly ApplicationNode[]> {
+    return this.registry.read(this.now());
   }
 }
