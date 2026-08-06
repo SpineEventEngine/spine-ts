@@ -13,6 +13,7 @@
   "references": [
     { "path": "../auth" },
     { "path": "../core" },
+    { "path": "../deployment" },
     { "path": "../proto" },
     { "path": "../storage" },
     { "path": "../transport" }
