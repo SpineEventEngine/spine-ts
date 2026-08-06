@@ -4,8 +4,19 @@ import { isIP } from "node:net";
  * A stable application-node identity and canonical reachable endpoint.
  */
 export class ApplicationNode {
+  /**
+   * Identifies the application node across discovery refreshes.
+   */
   readonly id: string;
+
+  /**
+   * Provides the canonical HTTP or HTTPS origin used to reach the node.
+   */
   readonly endpoint: string;
+
+  /**
+   * Provides the optional DNS authority expected during TLS verification.
+   */
   readonly tlsServerName: string | undefined;
 
   /**
@@ -41,7 +52,12 @@ export class ApplicationNode {
       input.tlsServerName === undefined ? undefined : ApplicationNode.tls(input.tlsServerName);
   }
 
-  /** Validates and canonicalizes one DNS TLS authority. */
+  /**
+   * Validates and canonicalizes one DNS TLS authority.
+   *
+   * @param value The DNS hostname expected during TLS verification.
+   * @returns The canonical lowercase hostname.
+   */
   static tls(value: string): string {
     const parsed = new URL(`https://${value}`);
     if (

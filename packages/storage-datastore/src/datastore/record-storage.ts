@@ -644,7 +644,12 @@ const DatastoreRecordQuery = Object.freeze(
       return scanLimit;
     }
 
-    /** Returns whether a legacy query is exactly an ascending identifier keyset page. */
+    /**
+     * Returns whether a legacy query is exactly an ascending identifier keyset page.
+     *
+     * @param query The record query to classify.
+     * @returns `true` when Datastore can apply its limit and continuation completely.
+     */
     isKeysetPage<I>(query: RecordQuery<I>): boolean {
       const order = query.sort;
       const continuation = query.after;
