@@ -1,8 +1,40 @@
 import { describe, expect, it } from "vitest";
 import { ApplicationNode, ScheduledNodeDiscovery } from "@spine-event-engine/deployment";
-import { GceApplicationNode, GceRegistrar, GceRegistryReader } from "../src/index.js";
+import {
+  GceApplicationNode,
+  GceMetadataService,
+  GceRegistrar,
+  GceRegistryReader,
+} from "../src/index.js";
 
 describe("GceApplicationNode", () => {
+  it("reads documented GCE metadata paths with the required header", async () => {
+    const original = globalThis.fetch;
+    const requests: RequestInfo[] = [];
+    globalThis.fetch = async (input) => {
+      requests.push(input);
+      const path = String(input).split("/").slice(-2).join("/");
+      const body =
+        new Map([
+          ["project/project-id", " project "],
+          ["instance/zone", "projects/1/zones/zone-a"],
+          ["instance/id", "42"],
+          ["0/ip", "10.0.0.1"],
+        ]).get(path) ?? "";
+      return new Response(body, { status: 200 });
+    };
+    try {
+      await expect(new GceMetadataService().read(new AbortController().signal)).resolves.toEqual({
+        projectId: "project",
+        zone: "zone-a",
+        instanceId: "42",
+        privateAddress: "10.0.0.1",
+      });
+      expect(requests).toHaveLength(4);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
   it("derives a stable private node and preserves canonical overrides", () => {
     expect(
       GceApplicationNode.create(

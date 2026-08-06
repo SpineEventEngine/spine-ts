@@ -136,16 +136,16 @@ export class GceRegistrar {
     if (this.#closed) throw new Error("GCE registrar is closed.");
     if (this.#started) return;
     this.#started = true;
-    await this.#resolveNode();
-    const node = this.#node;
-    if (node === undefined) throw new Error("GCE registrar has no resolved node.");
-    const registered = await this.#enqueue(async () =>
-      this.#registry.register({
+    const registered = await this.#enqueue(async () => {
+      await this.#resolveNode();
+      const node = this.#node;
+      if (node === undefined) throw new Error("GCE registrar has no resolved node.");
+      return this.#registry.register({
         node,
         registrationId: this.#identity,
         expiresAt: this.#now() + 60_000,
-      }),
-    ).catch(() => false);
+      });
+    }).catch(() => false);
     this.#schedule();
     this.#confirmed = registered;
   }
@@ -173,10 +173,10 @@ export class GceRegistrar {
 
   async #renew(): Promise<void> {
     if (this.#closed) return;
-    await this.#resolveNode();
-    const node = this.#node;
-    if (node === undefined) return;
     try {
+      await this.#resolveNode();
+      const node = this.#node;
+      if (node === undefined) return;
       if (this.#confirmed)
         this.#confirmed = await this.#registry.renew(node.id, this.#identity, this.#now() + 60_000);
       else {
