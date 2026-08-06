@@ -1,6 +1,6 @@
 # T-0120: Wave 7 Scaling And Redeployment Plan
 
-Status: Human Q&A in progress; implementation not started
+Status: Human Q&A complete; implementation not started
 
 ## Objective
 
@@ -41,8 +41,9 @@ behavior, rolling replacement, and production infrastructure templates.
    storage system as domain data.
 8. The initial GCE lease policy renews every 20 seconds, expires after 60
    seconds, and lets the Gateway refresh discovery every 10 seconds.
-9. The default application-node limit is 32. An absolute supported maximum
-   will be selected from bounded load-test evidence during implementation.
+9. The default expected application-node count is 32. Discovery continues to
+   use every node when that threshold is exceeded. Load tests document tested
+   capacity but do not impose a hard runtime maximum.
 10. The minimal GCE Terraform topology may colocate the Gateway and the
     in-memory simple delivery server. Production guidance recommends separating
     them.
@@ -59,21 +60,25 @@ behavior, rolling replacement, and production infrastructure templates.
     never select the application's storage engine.
 16. Wave 8 owns multiple-Gateway behavior, framework operational logging and a
     Google Cloud Logging adapter, the then-current `validation-ts` upgrade, and
-    Datastore/RDBMS physical-layout tuning controls.
+    Datastore/RDBMS physical-layout tuning controls. Its logging work emits an
+    ERROR when discovered application nodes exceed the configured expected
+    count; Wave 7 continues serving every node.
 17. No Wave 7 implementation starts until the human approves the completed
     plan.
 18. Do not publish packages to npm or push to the future migration remote.
 19. Push every feature-branch commit to `origin` immediately.
 20. Preserve user-owned files, especially `human-review-1-jul.md` and
     `human-review-22-jul.md`.
+21. Each GCE application process runs its own registrar according to the
+    lifecycle in `WAVE_7_SCALING_REDEPLOYMENT_PLAN.md`.
+22. GCE publishes a private node address by default and permits an explicit
+    endpoint override for nonstandard networking.
 
-## Pending Human Decisions
+## Human Q&A Result
 
-1. Confirm the proposed GCE registrar ownership and lifecycle described in
-   `WAVE_7_SCALING_REDEPLOYMENT_PLAN.md`.
-2. Confirm the exact over-limit discovery behavior described in that plan.
-3. Confirm that GCE publishes a private address by default, with an explicit
-   endpoint override for nonstandard networking.
+Every Wave 7 product decision is resolved. The final planning step may now
+produce and review the dependency-ordered implementation split. Runtime work
+still requires the human's explicit approval of that completed plan.
 
 ## Review Dispositions
 

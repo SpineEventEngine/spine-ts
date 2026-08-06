@@ -159,13 +159,17 @@ durably closed.
 - **Wave 8:** multiple-Gateway behavior, framework operational logging and a
   Google Cloud Logging adapter, the then-current `validation-ts` upgrade, and
   Datastore/RDBMS physical-layout tuning controls. It does not promise that the
-  framework can make an operator's Gateway replacement interruption-free.
+  framework can make an operator's Gateway replacement interruption-free. Its
+  logging work emits an ERROR when application-node discovery exceeds the
+  configured expected count, while service continues across all nodes.
 
 Wave 6 Q&A, its original implementation, review, release verification,
 integration, and documentation closure are complete. T-0113 records the
 subsequent System Context and payload-first correction that must precede Wave 7.
-Wave 7 Q&A is in progress under T-0120. Do not publish packages to npm until all
-waves are complete and publication is revisited with the human.
+Wave 7 Q&A is complete under T-0120. Its dependency-ordered plan must be
+finalized and explicitly approved before implementation. Do not publish
+packages to npm until all waves are complete and publication is revisited with
+the human.
 
 ## Authored API And Example Quality Correction
 

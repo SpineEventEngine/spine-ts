@@ -5096,8 +5096,7 @@ Consequences:
 
 ## D-0110: Discover Scalable Application Nodes On GKE And GCE
 
-Status: Proposed; package, platform, timing, storage, and topology boundaries
-accepted; three detailed policies remain in Q&A
+Status: Accepted
 
 Date: 2026-08-06
 
@@ -5123,8 +5122,10 @@ Accepted direction:
   `StorageFactory`, has a separate logical namespace, renews nodes every 20
   seconds, expires them after 60 seconds, and is read by the Gateway every 10
   seconds.
-- Default to at most 32 application nodes and select an absolute supported
-  maximum from load-test evidence.
+- Treat 32 application nodes as the default expected count, not a hard limit.
+  Continue reconciling and using every discovered node when the expectation is
+  exceeded. Use bounded connection concurrency rather than discarding nodes.
+  Load tests publish tested capacity but do not impose an absolute maximum.
 - Provide optional, operator-configured autoscaling templates. Spine TS does
   not make scaling decisions.
 - Permit a minimal GCE topology to colocate the Gateway and simple delivery
@@ -5132,17 +5133,18 @@ Accepted direction:
 - Support same-version scaling, compatible rolling application replacement,
   explicit stop/start for incompatible logic, and an interrupting single-
   Gateway replacement.
-
-Pending before acceptance:
-
-- confirm the exact GCE registrar ownership and cleanup lifecycle;
-- confirm behavior when discovery exceeds the configured node limit; and
-- confirm private GCE addresses as the default published endpoint.
+- Let every GCE application process maintain its own leased registry record.
+  The Gateway reads registry snapshots but does not register or clean nodes.
+- Publish private GCE addresses by default and allow an explicit endpoint
+  override.
 
 Consequences:
 
 - Wave 7 must include runtime discovery, reconciliation, Terraform, GKE/GCE
   guides, scale-to-zero behavior, and redeployment guidance.
 - Multiple Gateways, operational logging adapters, the next `validation-ts`
-  upgrade, and Datastore/RDBMS physical-layout tuning remain Wave 8 work.
-- No Wave 7 implementation begins while this decision remains proposed.
+  upgrade, and Datastore/RDBMS physical-layout tuning remain Wave 8 work. Wave
+  8 emits an ERROR when node discovery exceeds its configured expectation;
+  service continues across all nodes.
+- Wave 7 implementation begins only after the completed dependency plan is
+  explicitly approved.

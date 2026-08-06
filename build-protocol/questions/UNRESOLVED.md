@@ -8,10 +8,7 @@ Template: `build-protocol/templates/UNRESOLVED_QUESTIONS_TEMPLATE.md`.
 
 ## Blocking Questions
 
-- 2026-08-06, T-0120: Wave 7 implementation remains intentionally blocked on
-  approval of the GCE registrar lifecycle, discovery over-limit behavior, and
-  private-address default recorded in
-  `planning/WAVE_7_SCALING_REDEPLOYMENT_PLAN.md`.
+None.
 
 ## Non-Blocking Questions
 
@@ -19,6 +16,11 @@ None as of 2026-06-27.
 
 ## Resolved In This Round
 
+- 2026-08-06, T-0120: Wave 7 Q&A is complete. Each GCE application process
+  maintains its own leased registration; private addresses are the default;
+  and the Gateway continues serving every discovered node when the configured
+  expected count is exceeded. Wave 8 emits the corresponding ERROR log. No
+  Wave 7 product question remains before final plan approval.
 - 2026-08-06, T-0120: the human approved the Wave 7 package boundaries,
   explicit storage dependency and namespace for GCE discovery, GCE lease and
   refresh timings, GKE DNS refresh policy, bounded node-count policy, minimal

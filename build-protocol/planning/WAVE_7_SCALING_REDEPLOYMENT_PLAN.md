@@ -1,6 +1,6 @@
 # Wave 7: Scaling And Redeployment
 
-Status: Human Q&A in progress; implementation not started
+Status: Human Q&A complete; implementation not started
 
 Planning task: `T-0120`
 
@@ -61,10 +61,9 @@ after renewing, so abandoned records do not accumulate. If all application
 nodes scale to zero, expired rows are harmless and the first later node resumes
 cleanup.
 
-The recommended default endpoint is the GCE instance's private address plus
-the configured gRPC port. An explicit endpoint override supports proxies,
-private DNS, or other network layouts. Publishing a public address is not a
-default.
+The default endpoint is the GCE instance's private address plus the configured
+gRPC port. An explicit endpoint override supports proxies, private DNS, or
+other network layouts. Publishing a public address is not a default.
 
 ## GKE Discovery
 
@@ -74,30 +73,23 @@ configurable ten-second interval while respecting DNS TTL behavior. Kubernetes
 readiness controls whether a Pod appears. No storage-backed node registry or
 GCE-style registrar is involved.
 
-## Bounded Discovery
+## Discovery Capacity
 
-The default accepted application-node count is 32. Implementation load tests
-will select and document an absolute supported maximum.
+The default expected application-node count is 32. It is an operational
+threshold, not a hard limit. When discovery returns more nodes, the Gateway
+continues to reconcile and use all of them. It never selects an arbitrary
+subset and never rejects subscriptions merely because the threshold was
+exceeded.
 
-The proposed over-limit behavior is atomic and fail-closed for cluster-wide
-subscriptions:
+Reconciliation uses bounded connection concurrency and finite work batches so
+a large discovery change does not create one unbounded connection spike. Every
+discovered node is nevertheless included after reconciliation completes.
 
-1. If discovery returns more nodes than configured, the Gateway rejects the
-   whole new snapshot. It never silently chooses the first or an arbitrary
-   subset.
-2. Existing streams to the last accepted node set may continue, but the
-   Gateway reports degraded discovery and a subscription gap because it can no
-   longer claim attachment to every current node.
-3. New subscription activation is rejected until discovery returns a valid
-   complete set. Commands and queries may continue through reachable nodes from
-   the last accepted set because application nodes are functionally identical.
-4. If no valid set has ever been accepted, the Gateway is not ready and cannot
-   serve backend operations.
-5. Discovery retries on its normal bounded interval. It accepts the next
-   complete set that falls within the configured limit.
-
-This behavior prevents hidden partial subscription coverage while preserving
-safe, already-established command/query service when possible.
+Implementation load tests document tested and recommended capacity. They do
+not create an absolute runtime maximum. Wave 8 operational logging emits an
+ERROR when the discovered count exceeds the configured expectation. Wave 7
+must preserve the observed count and threshold needed by that later logging
+work, but does not introduce the Wave 8 logging subsystem early.
 
 ## Scaling And Replacement
 
@@ -140,10 +132,9 @@ The minimal GCE topology may colocate one Gateway and the one in-memory simple
 delivery server. Production guidance recommends separate failure and resource
 boundaries. Templates remain editable examples, not infrastructure enforcement.
 
-## Questions Still Requiring Approval
+## Q&A Closure
 
-1. Does the GCE registrar ownership and lifecycle above match the intended
-   division of responsibility?
-2. Do you approve the exact over-limit behavior above?
-3. Do you approve private GCE addresses by default, with an explicit endpoint
-   override?
+The human approved the registrar lifecycle, private-address default, package
+boundaries, discovery mechanisms, timings, storage ownership, deployment
+topologies, scaling boundary, and replacement semantics. No product question
+remains before the dependency-ordered implementation split is finalized.
