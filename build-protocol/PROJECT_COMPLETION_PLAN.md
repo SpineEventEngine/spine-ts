@@ -36,8 +36,10 @@ is reviewed, release-verified, merged as `4275a6d7`, post-merge verified, and
 pushed. T-0116 lifecycle System events is reviewed, release-verified, merged as
 `5ffe02b7`, post-merge verified, and pushed. T-0117 dispatch diagnostic System
 events is reviewed, release-verified, merged as `fa9f4d71`, post-merge verified,
-and pushed. T-0118 Message Board payload-first synchronization is the active
-next task. Complete T-0118 and T-0119 before Wave 7 Q&A continues.
+and pushed. T-0118 Message Board payload-first synchronization is reviewed,
+release-verified, merged as `964d24c0`, post-merge verified, and pushed. T-0119
+documentation and correction closure is the active next task. Complete T-0119
+before Wave 7 Q&A continues.
 
 ## Purpose
 
