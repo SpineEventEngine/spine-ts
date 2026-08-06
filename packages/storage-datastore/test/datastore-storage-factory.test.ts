@@ -626,6 +626,10 @@ describe("DatastoreStorageFactory", () => {
     await expect(storage.queryEntries({})).rejects.toThrow(
       "Datastore query exceeded the client-side scan limit of 1",
     );
+    await expect(storage.queryEntries({ sort: [{ field: "id" }], limit: 1 })).resolves.toMatchObject([
+      { id: "a" },
+    ]);
+    expect(client.lastQuery?.limitValue).toBe(1);
     await expect(
       storage.queryEntries({
         sort: [{ field: "id" }],
