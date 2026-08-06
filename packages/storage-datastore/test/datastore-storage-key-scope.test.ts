@@ -4,6 +4,7 @@ import { RecordSpec } from "@spine-event-engine/storage";
 import { describe, expect, it } from "vitest";
 
 import { DatastoreRecordStorage } from "../src/datastore/record-storage.js";
+import { CanonicalValue } from "../src/datastore/value-codec.js";
 
 describe("DatastoreRecordStorage storage keys", () => {
   it("isolates identical schemas with distinct storage keys", async () => {
@@ -103,6 +104,28 @@ describe("DatastoreRecordStorage storage keys", () => {
     expect(client.kinds[0]).not.toBe(client.kinds[1]);
     expect(client.namespaces[1]).toBe("tenant");
   });
+
+  it("accepts 1500 kind bytes and rejects 1501 before client activity", async () => {
+    const client = new RecordingClient();
+    const accepted = new DatastoreRecordStorage(
+      { name: "context", multitenant: false },
+      spec(storageKeyForBytes(1_500)),
+      client as never,
+      10,
+    );
+    await accepted.read("id");
+    expect(Buffer.byteLength(client.kinds[0] ?? "", "utf8")).toBe(1_500);
+    expect(
+      () =>
+        new DatastoreRecordStorage(
+          { name: "context", multitenant: false },
+          spec(storageKeyForBytes(1_501)),
+          client as never,
+          10,
+        ),
+    ).toThrow("1500");
+    expect(client.kinds).toHaveLength(1);
+  });
 });
 
 function spec(
@@ -114,6 +137,15 @@ function spec(
     idKind: "string",
     extractId: (value) => value.value,
   });
+}
+
+function storageKeyForBytes(bytes: number): string {
+  for (let length = 0; length < 2_000; length++) {
+    const key = "x".repeat(length);
+    if (Buffer.byteLength(CanonicalValue.encode(["context", false, key]), "utf8") === bytes)
+      return key;
+  }
+  throw new Error(`No storage key encodes to ${String(bytes)} bytes.`);
 }
 
 class RecordingClient {
