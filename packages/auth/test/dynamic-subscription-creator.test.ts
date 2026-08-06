@@ -126,6 +126,23 @@ describe("DynamicSubscriptionCreator", () => {
     expect(starts).toEqual(["a", "b"]);
   });
 
+  it("keeps one child per node through reordered replayed snapshots", async () => {
+    const starts: string[] = [];
+    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, starts) });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const a = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const b = new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" });
+    const wire = subscription();
+
+    await owner.reconcile([a, b]);
+    await creator.subscribe(wire, new AbortController().signal);
+    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    await owner.reconcile([b, a]);
+    await owner.reconcile([a, b]);
+
+    expect(starts.sort()).toEqual(["a", "b"]);
+  });
+
   it("starts one child on every discovered node without a 32-node cap", async () => {
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({
@@ -146,6 +163,35 @@ describe("DynamicSubscriptionCreator", () => {
 
     expect(starts).toHaveLength(40);
     expect(new Set(starts)).toEqual(new Set(nodes.map((node) => node.id)));
+  });
+
+  it("bounds forty native child starts by the configured concurrency", async () => {
+    let active = 0;
+    let peak = 0;
+    const owner = new DynamicUnaryForwarder({
+      maxConcurrentStarts: 3,
+      create: async (node) => ({
+        ...client(node.id, []),
+        subscribe: async () => {
+          active++;
+          peak = Math.max(peak, active);
+          await Promise.resolve();
+          active--;
+          return { kind: "backend-subscription-envelope" as const, bytes: new Uint8Array([1]) };
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const nodes = Array.from(
+      { length: 40 },
+      (_, index) =>
+        new ApplicationNode({ id: `node-${index.toString()}`, endpoint: `http://10.0.0.${index}` }),
+    );
+
+    await owner.reconcile(nodes);
+    await creator.subscribe(subscription(), new AbortController().signal);
+
+    expect(peak).toBeLessThanOrEqual(3);
   });
 
   it("aborts and disposes a removed node child before closing its client", async () => {
