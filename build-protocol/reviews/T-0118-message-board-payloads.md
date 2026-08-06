@@ -1,6 +1,6 @@
 # T-0118 Review Log
 
-Status: Targeted re-review complete; final correction batch accepted
+Status: Confirmation reviews clean; final release verification pending
 
 ## Scope
 
@@ -164,4 +164,22 @@ parameter TSDoc.
 Focused evidence: client-react and web TypeScript checks pass; focused
 client-react plus Message Board Vitest passes 79/79; exact TypeDoc/API
 inventory, `pnpm lint:tsdoc`, changed-source ESLint, Prettier, and
-`git diff --check` pass. Final review/acceptance is pending.
+`git diff --check` pass.
+
+## Final Confirmation
+
+- Style/maintainability: clean. Layout-effect retirement, exact-handle guards,
+  and the genuinely retained Board A stream close the reported race.
+- TypeScript/API docs: clean. Callback parameter TSDoc, the 13-export API
+  inventory, exact reference contract, and backward-compatible trailing
+  parameters pass review and deterministic checks.
+- Performance/reliability: clean after reconciliation against the corrected
+  fixture. The reviewer ran 90 focused tests and confirmed all original and
+  follow-up lifecycle/concurrency findings resolved.
+- Documentation: clean after correcting this status header. Public/reference
+  claims, safe logging, post-success wording, and review dispositions are
+  consistent. This record-only correction does not reopen a specialist lane.
+
+All confirmation reviewers used their expected immutable profiles. Runtime
+self-introspection remained unavailable; explicit dispatch and configured-role
+metadata are the accepted evidence. The final release verification remains.
