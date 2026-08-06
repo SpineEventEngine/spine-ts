@@ -5,7 +5,14 @@
   "type": "module",
   "description": "Platform-neutral application-node discovery for Spine gateways.",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
-  "files": ["dist", "README.md", "REFERENCE.md"]
+  "files": [
+    "dist",
+    "README.md",
+    "REFERENCE.md"
+  ]
 }
