@@ -600,7 +600,7 @@ describe("client-react", () => {
       expect(first).toHaveBeenCalledTimes(1);
     });
     expect(second).not.toHaveBeenCalled();
-    replacement.resolve();
+    replacement.resolve(undefined);
   });
 
   it("retires an old Entity handle before another layout effect can deliver into a new commit", async () => {
