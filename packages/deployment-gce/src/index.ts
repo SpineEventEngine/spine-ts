@@ -22,7 +22,7 @@ export interface GceMetadataProvider {
 export class GceMetadataService implements GceMetadataProvider {
   /** Reads the instance identity and private address. */
   async read(signal: AbortSignal): Promise<GceMetadata> {
-    const root = "http://metadata.google.internal/computeMetadata/v1/instance";
+    const root = "http://metadata.google.internal/computeMetadata/v1";
     const get = async (path: string) => {
       const response = await fetch(`${root}/${path}`, {
         signal,
@@ -33,9 +33,9 @@ export class GceMetadataService implements GceMetadataProvider {
     };
     const [projectId, zonePath, instanceId, privateAddress] = await Promise.all([
       get("project/project-id"),
-      get("zone"),
-      get("id"),
-      get("network-interfaces/0/ip"),
+      get("instance/zone"),
+      get("instance/id"),
+      get("instance/network-interfaces/0/ip"),
     ]);
     return { projectId, zone: zonePath.split("/").at(-1) ?? "", instanceId, privateAddress };
   }
