@@ -185,9 +185,10 @@ export class GceRegistrar {
     this.#abort.abort();
     this.#cancel?.();
     await this.#work;
-    if (this.#node !== undefined)
+    const node = this.#node;
+    if (node !== undefined)
       await this.#operation(
-        (signal) => this.#registry.remove(this.#node.id, this.#identity, signal),
+        (signal) => this.#registry.remove(node.id, this.#identity, signal),
         false,
       );
   }
