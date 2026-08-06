@@ -5093,3 +5093,56 @@ Consequences:
   `build-protocol/planning/T-0113_SYSTEM_CONTEXT_PLAN.md`.
 - Subscription delivery remains best effort; this decision adds no
   cluster-complete, replay-complete, or exactly-once guarantee.
+
+## D-0110: Discover Scalable Application Nodes On GKE And GCE
+
+Status: Proposed; package, platform, timing, storage, and topology boundaries
+accepted; three detailed policies remain in Q&A
+
+Date: 2026-08-06
+
+Task: Wave 7 planning / `T-0120`
+
+Context:
+
+- Wave 6 gives one Gateway a fixed list of application nodes. Wave 7 must let
+  cloud infrastructure scale and replace those nodes without making the
+  Gateway a scaling controller.
+- GKE and GCE expose different discovery mechanisms. Cloud Run is outside the
+  initial offering.
+- The Gateway must not silently attach subscriptions to only an arbitrary
+  subset of the running application nodes.
+
+Accepted direction:
+
+- Add platform-neutral `@spine-event-engine/deployment` plus separate
+  `deployment-gke` and `deployment-gce` packages.
+- Use headless-Service DNS on GKE with a configurable ten-second refresh that
+  respects DNS TTL behavior.
+- Use a storage-backed leased node registry on GCE. It receives an explicit
+  `StorageFactory`, has a separate logical namespace, renews nodes every 20
+  seconds, expires them after 60 seconds, and is read by the Gateway every 10
+  seconds.
+- Default to at most 32 application nodes and select an absolute supported
+  maximum from load-test evidence.
+- Provide optional, operator-configured autoscaling templates. Spine TS does
+  not make scaling decisions.
+- Permit a minimal GCE topology to colocate the Gateway and simple delivery
+  server while recommending separate production failure boundaries.
+- Support same-version scaling, compatible rolling application replacement,
+  explicit stop/start for incompatible logic, and an interrupting single-
+  Gateway replacement.
+
+Pending before acceptance:
+
+- confirm the exact GCE registrar ownership and cleanup lifecycle;
+- confirm behavior when discovery exceeds the configured node limit; and
+- confirm private GCE addresses as the default published endpoint.
+
+Consequences:
+
+- Wave 7 must include runtime discovery, reconciliation, Terraform, GKE/GCE
+  guides, scale-to-zero behavior, and redeployment guidance.
+- Multiple Gateways, operational logging adapters, the next `validation-ts`
+  upgrade, and Datastore/RDBMS physical-layout tuning remain Wave 8 work.
+- No Wave 7 implementation begins while this decision remains proposed.

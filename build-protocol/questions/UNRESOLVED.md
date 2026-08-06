@@ -8,7 +8,10 @@ Template: `build-protocol/templates/UNRESOLVED_QUESTIONS_TEMPLATE.md`.
 
 ## Blocking Questions
 
-None.
+- 2026-08-06, T-0120: Wave 7 implementation remains intentionally blocked on
+  approval of the GCE registrar lifecycle, discovery over-limit behavior, and
+  private-address default recorded in
+  `planning/WAVE_7_SCALING_REDEPLOYMENT_PLAN.md`.
 
 ## Non-Blocking Questions
 
@@ -16,6 +19,11 @@ None as of 2026-06-27.
 
 ## Resolved In This Round
 
+- 2026-08-06, T-0120: the human approved the Wave 7 package boundaries,
+  explicit storage dependency and namespace for GCE discovery, GCE lease and
+  refresh timings, GKE DNS refresh policy, bounded node-count policy, minimal
+  GCE placement, and optional operator-configured autoscaling templates. The
+  GCE registrar explanation and over-limit behavior still require confirmation.
 - 2026-07-27, T-0074: Wave 4 Q&A is complete. The human approved the browser,
   client packaging, React, best-effort subscription, standalone authentication
   gateway, application-session, Google/GitHub/OIDC, context-resolution,
