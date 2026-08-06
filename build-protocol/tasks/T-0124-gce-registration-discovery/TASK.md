@@ -62,3 +62,17 @@ and cross-package server lifecycle integration.
   integration worktree, post-merge verify, push `main`, and remove completed
   branches/worktrees.
 - Push every feature-branch commit to `origin` immediately.
+
+## Current Evidence
+
+- Runtime acceptance checkpoints `b16b0920` and `81040ea3` are pushed to the
+  task branch. They cover deadline-bound ownership lookup, unref'ed timer
+  handles, composed forty-node GCE discovery/Gateway routing/subscription,
+  metadata status/body/cancellation behavior, exact 20/60 timing, and numeric
+  operation-timeout validation.
+- Documentation/API checkpoint verification on 2026-08-07 passed: Prettier,
+  TSDoc enforcement, documentation-audience checking, TypeDoc API checking,
+  deployment-GCE and server no-emit typechecks, and the focused GCE plus
+  listener-lifecycle suites (81 tests).
+- Status remains in progress pending the required specialist review wave,
+  release verification, merge, post-merge verification, and remote main push.

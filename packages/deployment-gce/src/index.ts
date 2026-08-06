@@ -5,22 +5,61 @@ import {
 } from "@spine-event-engine/deployment";
 import { randomUUID } from "node:crypto";
 
-/** Supplies trusted GCE instance metadata. */
+/**
+ * Supplies the trusted GCE metadata used to derive one stable application node.
+ */
 export interface GceMetadata {
+  // prettier-ignore
+
+  /**
+   * Identifies the Google Cloud project containing the instance.
+   */
   readonly projectId: string;
+
+  /**
+   * Identifies the GCE zone containing the instance.
+   */
   readonly zone: string;
+
+  /**
+   * Identifies the numeric GCE instance.
+   */
   readonly instanceId: string;
+
+  /**
+   * Supplies the instance's private IPv4 or IPv6 address.
+   */
   readonly privateAddress: string;
 }
 
-/** Retrieves trusted instance metadata from the GCE metadata service. */
+/**
+ * Retrieves trusted instance metadata from the GCE metadata service.
+ */
 export interface GceMetadataProvider {
+  // prettier-ignore
+
+  /**
+   * Reads the identity and private address of the current instance.
+   *
+   * @param signal Cancels the metadata request during registrar shutdown.
+   * @returns The validated metadata values.
+   */
   read(signal: AbortSignal): Promise<GceMetadata>;
 }
 
-/** Reads GCE metadata using the required metadata-service request header. */
+/**
+ * Reads GCE metadata using the required metadata-service request header.
+ */
 export class GceMetadataService implements GceMetadataProvider {
-  /** Reads the instance identity and private address. */
+  // prettier-ignore
+
+  /**
+   * Reads and validates the instance identity and private address.
+   *
+   * @param signal Cancels all four metadata-service reads.
+   * @returns The normalized GCE metadata.
+   * @throws Error When a response is unsuccessful or contains invalid identity data.
+   */
   async read(signal: AbortSignal): Promise<GceMetadata> {
     const root = "http://metadata.google.internal/computeMetadata/v1";
     const get = async (path: string) => {
@@ -57,13 +96,43 @@ export class GceMetadataService implements GceMetadataProvider {
   }
 }
 
-/** Builds one canonical application node from trusted GCE metadata. */
+/**
+ * Configures the reachable application endpoint derived from GCE metadata.
+ */
+export interface GceApplicationNodeOptions {
+  // prettier-ignore
+
+  /**
+   * Supplies the reachable gRPC TCP port.
+   */
+  readonly port: number;
+
+  /**
+   * Overrides the default private HTTP origin for private DNS or a proxy.
+   */
+  readonly endpoint?: string;
+
+  /**
+   * Supplies the TLS authority required by an HTTPS endpoint.
+   */
+  readonly tlsServerName?: string;
+}
+
+/**
+ * Builds one canonical application node from trusted GCE metadata.
+ */
 export class GceApplicationNode {
-  /** Creates a stable GCE node using the private HTTP address by default. */
-  static create(
-    metadata: GceMetadata,
-    options: { readonly port: number; readonly endpoint?: string; readonly tlsServerName?: string },
-  ): ApplicationNode {
+  // prettier-ignore
+
+  /**
+   * Creates a stable GCE node using the private HTTP address by default.
+   *
+   * @param metadata Supplies trusted project, zone, numeric instance ID, and private address.
+   * @param options Supplies the port and optional canonical endpoint/TLS override.
+   * @returns A canonical application node whose ID is `gce/<project>/<zone>/<instance>`.
+   * @throws Error When metadata identity or endpoint/TLS values are invalid.
+   */
+  static create(metadata: GceMetadata, options: GceApplicationNodeOptions): ApplicationNode {
     if (!metadata.projectId.trim() || !metadata.zone.trim() || !/^\d+$/.test(metadata.instanceId))
       throw new Error("GCE metadata identity is invalid.");
     if (!Number.isSafeInteger(options.port) || options.port < 1 || options.port > 65_535)
@@ -83,14 +152,110 @@ export class GceApplicationNode {
   }
 }
 
-/** Schedules deterministic registrar work. */
+/**
+ * Schedules deterministic registrar renewal work.
+ */
 export interface GceScheduler {
+  // prettier-ignore
+
+  /**
+   * Schedules one renewal callback.
+   *
+   * @param delayMs Supplies a positive delay in milliseconds.
+   * @param onTick Receives the callback to run once after the delay.
+   * @returns Cancels the scheduled callback.
+   */
   schedule(delayMs: number, onTick: () => void): () => void;
 }
 
-/** Creates one cancellable deadline for cooperative operations. */
+/**
+ * Creates one cancellable deadline for cooperative registrar operations.
+ */
 export interface GceDeadlineFactory {
+  // prettier-ignore
+
+  /**
+   * Creates an operation deadline.
+   *
+   * @param timeoutMs Supplies a positive timeout in milliseconds.
+   * @returns An abort signal and an operation that releases the deadline handle.
+   */
   create(timeoutMs: number): { readonly signal: AbortSignal; close(): void };
+}
+
+/**
+ * Configures a ready-node registrar and its deterministic test seams.
+ */
+export interface GceRegistrarOptions {
+  // prettier-ignore
+
+  /**
+   * Supplies the caller-owned leased-node registry.
+   */
+  readonly registry: LeasedNodeRegistry;
+
+  /**
+   * Supplies an already-derived application node.
+   */
+  readonly node?: ApplicationNode;
+
+  /**
+   * Supplies metadata used when `node` is omitted.
+   */
+  readonly metadata?: GceMetadataProvider;
+
+  /**
+   * Supplies the application port used with metadata-derived nodes.
+   */
+  readonly port?: number;
+
+  /**
+   * Supplies the opaque process identity; a UUID is created when omitted.
+   */
+  readonly identity?: string;
+
+  /**
+   * Supplies deterministic renewal scheduling; a production timer is the default.
+   */
+  readonly scheduler?: GceScheduler;
+
+  /**
+   * Returns the clock value used to calculate lease expiry; `Date.now` is the default.
+   *
+   * @returns The current epoch time in milliseconds.
+   */
+  readonly now?: () => number;
+
+  /**
+   * Supplies cooperative operation deadlines; production deadlines are the default.
+   */
+  readonly deadlines?: GceDeadlineFactory;
+
+  /**
+   * Supplies a positive safe-integer operation timeout in milliseconds; defaults to 20 seconds.
+   */
+  readonly operationTimeoutMs?: number;
+}
+
+/**
+ * Couples registrar lifecycle work to an application listener lifecycle.
+ */
+export interface GceRegistrarLifecycle {
+  // prettier-ignore
+
+  /**
+   * Starts registration only after the listener is reachable.
+   *
+   * @returns Completes after the initial registration attempt settles.
+   */
+  start(): Promise<void>;
+
+  /**
+   * Removes the owned lease before listener network shutdown.
+   *
+   * @returns Completes after all admitted work and removal settle.
+   */
+  close(): Promise<void>;
 }
 
 const systemScheduler: GceScheduler = {
@@ -109,8 +274,12 @@ const systemDeadlines: GceDeadlineFactory = {
   },
 };
 
-/** Registers one ready GCE node and renews its lease. */
+/**
+ * Registers one ready GCE node and renews its lease.
+ */
 export class GceRegistrar {
+  // prettier-ignore
+
   readonly #registry: LeasedNodeRegistry;
   #node: ApplicationNode | undefined;
   readonly #metadata: GceMetadataProvider | undefined;
@@ -127,18 +296,12 @@ export class GceRegistrar {
   #work = Promise.resolve();
   #abort = new AbortController();
 
-  /** Creates a registrar with twenty-second renewal and sixty-second leases by default. */
-  constructor(options: {
-    readonly registry: LeasedNodeRegistry;
-    readonly node?: ApplicationNode;
-    readonly metadata?: GceMetadataProvider;
-    readonly port?: number;
-    readonly identity?: string;
-    readonly scheduler?: GceScheduler;
-    readonly now?: () => number;
-    readonly deadlines?: GceDeadlineFactory;
-    readonly operationTimeoutMs?: number;
-  }) {
+  /**
+   * Creates a registrar with twenty-second renewal and sixty-second leases by default.
+   *
+   * @param options Supplies registry ownership, node derivation, and deterministic seams.
+   */
+  constructor(options: GceRegistrarOptions) {
     this.#registry = options.registry;
     if (
       options.node === undefined &&
@@ -160,7 +323,15 @@ export class GceRegistrar {
     this.#operationTimeoutMs = options.operationTimeoutMs ?? 20_000;
   }
 
-  /** Confirms initial registration after the listener is ready. */
+  /**
+   * Starts initial registration after the listener is ready.
+   *
+   * Failed or unknown initial writes are retried on the next renewal interval
+   * under the same process identity.
+   *
+   * @returns Completes after the first registration attempt has settled.
+   * @throws Error When this registrar has already closed.
+   */
   async start(): Promise<void> {
     if (this.#closed) throw new Error("GCE registrar is closed.");
     if (this.#started) return;
@@ -184,7 +355,11 @@ export class GceRegistrar {
     this.#confirmed = registered;
   }
 
-  /** Fences scheduled work and conditionally removes this registrar's lease. */
+  /**
+   * Removes this registrar's lease after fencing scheduled work.
+   *
+   * @returns Completes after admitted work settles and owned-row removal is attempted.
+   */
   async close(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
@@ -199,8 +374,12 @@ export class GceRegistrar {
       );
   }
 
-  /** Exposes listener-ready start and pre-network-close removal to a server assembly. */
-  lifecycle(): { start(): Promise<void>; close(): Promise<void> } {
+  /**
+   * Exposes listener-ready start and pre-network-close removal to a server assembly.
+   *
+   * @returns The lifecycle callbacks accepted by `Server.addListenerLifecycle()`.
+   */
+  lifecycle(): GceRegistrarLifecycle {
     return { start: () => this.start(), close: () => this.close() };
   }
 
@@ -282,15 +461,29 @@ export class GceRegistrar {
   }
 }
 
-/** Reads complete live-node snapshots from the leased registry. */
+/**
+ * Reads complete live-node snapshots from the leased registry.
+ */
 export class GceRegistryReader implements NodeSnapshotReader {
-  /** Creates a reader using an injected clock for deterministic expiry evaluation. */
+  // prettier-ignore
+
+  /**
+   * Creates a reader using an injected clock for deterministic expiry evaluation.
+   *
+   * @param registry Supplies the leased registry to read.
+   * @param now Supplies the current epoch time used for exact expiry filtering.
+   */
   constructor(
     private readonly registry: LeasedNodeRegistry,
     private readonly now: () => number,
   ) {}
 
-  /** Reads every currently live node. */
+  /**
+   * Reads every currently live node.
+   *
+   * @param signal Cancels the registry read during discovery close.
+   * @returns The complete live application-node snapshot.
+   */
   read(signal: AbortSignal): Promise<readonly ApplicationNode[]> {
     return this.registry.read(this.now(), signal);
   }

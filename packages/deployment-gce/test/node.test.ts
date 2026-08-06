@@ -132,12 +132,12 @@ describe("GceApplicationNode", () => {
           const body =
             requested === path
               ? value
-              : new Map([
+              : (new Map([
                   ["project/project-id", "project"],
                   ["instance/zone", "projects/1/zones/zone-a"],
                   ["instance/id", "42"],
                   ["instance/network-interfaces/0/ip", "10.0.0.1"],
-                ]).get(requested) ?? "";
+                ]).get(requested) ?? "");
           return new Response(body, { status: 200 });
         };
         await expect(new GceMetadataService().read(new AbortController().signal)).rejects.toThrow(
@@ -263,8 +263,10 @@ describe("GceApplicationNode", () => {
     const registrar = new GceRegistrar({
       registry: {
         register: async (lease: { expiresAt: number }) => (expiries.push(lease.expiresAt), true),
-        renew: async (_nodeId: string, _identity: string, expiresAt: number) =>
-          (expiries.push(expiresAt), true),
+        renew: async (_nodeId: string, _identity: string, expiresAt: number) => (
+          expiries.push(expiresAt),
+          true
+        ),
         cleanup: async () => 0,
         remove: async () => true,
       } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
@@ -348,7 +350,9 @@ describe("GceApplicationNode", () => {
     });
     const discovery = new ScheduledNodeDiscovery({
       reader: new GceRegistryReader(
-        { read: async () => nodes } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
+        {
+          read: async () => nodes,
+        } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry,
         () => 0,
       ),
       scheduler: { schedule: (_delay, onTick) => (ticks.push(onTick), () => undefined) },
@@ -363,7 +367,11 @@ describe("GceApplicationNode", () => {
       for (let index = 0; index < 40; index++)
         routed.add(
           new TextDecoder().decode(
-            await gateway.forward({ service: "spine.client.QueryService", method: "Read", value: new Uint8Array() }),
+            await gateway.forward({
+              service: "spine.client.QueryService",
+              method: "Read",
+              value: new Uint8Array(),
+            }),
           ),
         );
       await gateway.subscribeDefinition(
@@ -641,7 +649,9 @@ describe("GceApplicationNode", () => {
     const originalClearTimeout = globalThis.clearTimeout;
     let unrefs = 0;
     globalThis.setTimeout = ((_callback: () => void, _delay: number) =>
-      ({ unref: () => (unrefs += 1) }) as unknown as ReturnType<typeof setTimeout>) as typeof setTimeout;
+      ({ unref: () => (unrefs += 1) }) as unknown as ReturnType<
+        typeof setTimeout
+      >) as typeof setTimeout;
     globalThis.clearTimeout = (() => undefined) as typeof clearTimeout;
     const registrar = new GceRegistrar({
       registry: {

@@ -54,6 +54,7 @@ export class LeasedNodeRegistry {
    * Registers one previously absent node lease.
    *
    * @param lease Supplies the node, owning registration identity, and expiry time.
+   * @param signal Cancels this cooperative storage mutation.
    * @returns Whether the registration was written.
    */
   register(lease: NodeLease, signal?: AbortSignal): Promise<boolean> {
@@ -72,6 +73,7 @@ export class LeasedNodeRegistry {
    * @param nodeId Supplies the stable node identity.
    * @param registrationId Supplies the opaque owning process identity.
    * @param expiresAt Supplies the renewed expiry in epoch milliseconds.
+   * @param signal Cancels this cooperative storage mutation.
    * @returns Whether the owner still held and renewed the lease.
    */
   renew(
@@ -102,6 +104,7 @@ export class LeasedNodeRegistry {
    *
    * @param nodeId Supplies the stable node identity.
    * @param registrationId Supplies the opaque owning process identity.
+   * @param signal Cancels this cooperative storage mutation.
    * @returns Whether the caller's lease was deleted.
    */
   remove(nodeId: string, registrationId: string, signal?: AbortSignal): Promise<boolean> {
@@ -124,6 +127,7 @@ export class LeasedNodeRegistry {
    * Reads one complete validated snapshot of live nodes at a supplied clock time.
    *
    * @param now Supplies epoch milliseconds used for exact expiry filtering.
+   * @param signal Cancels this cooperative complete-snapshot read.
    * @returns Every non-expired node after every stored row validates.
    */
   read(now: number, signal?: AbortSignal): Promise<readonly ApplicationNode[]> {
@@ -141,6 +145,7 @@ export class LeasedNodeRegistry {
    *
    * @param nodeId Supplies the stable node identity.
    * @param now Supplies epoch milliseconds for expiry evaluation.
+   * @param signal Cancels this cooperative ownership lookup.
    * @returns The live lease, or undefined when absent or expired.
    */
   lookup(nodeId: string, now: number, signal?: AbortSignal): Promise<NodeLease | undefined> {
@@ -159,6 +164,7 @@ export class LeasedNodeRegistry {
    * Deletes one finite batch of expired leases conditionally.
    *
    * @param now Supplies epoch milliseconds used for exact expiry filtering.
+   * @param signal Cancels this cooperative finite cleanup pass.
    * @returns The number of rows this pass removed.
    */
   cleanup(now: number, signal?: AbortSignal): Promise<number> {

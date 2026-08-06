@@ -39,6 +39,27 @@ const gracefulSessionDrainMs = 100;
 type ServerContext = BoundedContext | BoundedContextBuilder;
 
 /**
+ * Performs work coupled to listener readiness and network shutdown.
+ */
+export interface ListenerLifecycle {
+  // prettier-ignore
+
+  /**
+   * Starts after the native listener accepts connections.
+   *
+   * @returns A value or promise that settles after readiness work.
+   */
+  start(): unknown;
+
+  /**
+   * Completes before the native listener stops accepting connections.
+   *
+   * @returns A value or promise that settles after shutdown work.
+   */
+  close(): unknown;
+}
+
+/**
  * Configures and starts local Spine Connect/gRPC-compatible services.
  *
  * A server assembles its bounded contexts, completes finite environment
@@ -53,7 +74,7 @@ export class Server {
   readonly #writeMaxBytes: number;
   readonly #contexts: ServerContext[] = [];
   readonly #resources: { close(): unknown }[] = [];
-  readonly #listenerLifecycles: { start(): unknown; close(): unknown }[] = [];
+  readonly #listenerLifecycles: ListenerLifecycle[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
   readonly #browser: BrowserServerOptions | undefined;
   readonly #environment: ServerEnvironment;
@@ -125,8 +146,16 @@ export class Server {
     return this;
   }
 
-  /** Adds work that starts after listener readiness and closes before network intake. */
-  addListenerLifecycle(lifecycle: { start(): unknown; close(): unknown }): this {
+  /**
+   * Adds work that starts after listener readiness and closes before network intake stops.
+   *
+   * Failed starts roll back admitted lifecycles in reverse admission order. A
+   * failed close remains retryable and prevents network shutdown until it settles.
+   *
+   * @param lifecycle Supplies listener-coupled lifecycle work, such as GCE registration.
+   * @returns This server builder.
+   */
+  addListenerLifecycle(lifecycle: ListenerLifecycle): this {
     this.#listenerLifecycles.push(lifecycle);
     return this;
   }
@@ -843,7 +872,11 @@ class RunningHttp2Server implements RunningServer {
     return this.#closed;
   }
 
-  /** Starts listener-ready attachments after the native listener accepts connections. */
+  /**
+   * Starts listener-ready attachments after the native listener accepts connections.
+   *
+   * @returns Completes after all attachments start or their admitted rollback settles.
+   */
   async startLifecycles(): Promise<void> {
     try {
       for (const lifecycle of this.#listenerLifecycles as readonly {
