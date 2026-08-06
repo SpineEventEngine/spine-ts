@@ -155,6 +155,25 @@ describe("GceApplicationNode", () => {
     await stop();
   });
 
+  it("retains the last discovery snapshot through a registry read failure", async () => {
+    const ticks: (() => void)[] = [];
+    let reads = 0;
+    const first = [new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })];
+    const second = [new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" })];
+    const registry = { read: async () => { reads += 1; if (reads === 2) throw new Error("read failed"); return reads === 1 ? first : second; } } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const snapshots: string[][] = [];
+    const discovery = new ScheduledNodeDiscovery({ reader: new GceRegistryReader(registry, () => 0), scheduler: { schedule: (_delay, onTick) => (ticks.push(onTick), () => undefined) } });
+    const stop = discovery.watch((nodes) => snapshots.push(nodes.map((node) => node.id)));
+    ticks.shift()?.();
+    await Promise.resolve();
+    ticks.shift()?.();
+    await Promise.resolve();
+    ticks.shift()?.();
+    await Promise.resolve();
+    expect(snapshots).toEqual([["a"], ["b"]]);
+    await stop();
+  });
+
   it("adapts registration to the listener lifecycle contract", async () => {
     const calls: string[] = [];
     const registry = {
