@@ -162,9 +162,9 @@ describe("LeasedNodeRegistry", () => {
       namespace: "volatile-node-id",
     });
 
-    await expect(registry.register({ node, registrationId: "owner", expiresAt: 100 })).resolves.toBe(
-      true,
-    );
+    await expect(
+      registry.register({ node, registrationId: "owner", expiresAt: 100 }),
+    ).resolves.toBe(true);
     await expect(registry.read(0)).resolves.toMatchObject([{ id: "node/a" }]);
   });
 
