@@ -34,19 +34,28 @@ describe("DynamicUnaryForwarder", () => {
     expect(started).toEqual(["a", "999"]);
   });
 
-  it("rejects conflicting duplicate IDs before creating any client", async () => {
+  it("contains a conflicting duplicate snapshot and preserves current membership", async () => {
     let created = 0;
     const forwarder = new DynamicUnaryForwarder({
-      create: async () => {
+      create: async (node) => {
         created++;
-        return { forward: async () => new Uint8Array(), close: async () => {} };
+        return {
+          forward: async () => new TextEncoder().encode(node.endpoint),
+          close: async () => {},
+        };
       },
     });
+    await forwarder.reconcile([new ApplicationNode({ id: "saved", endpoint: "http://10.0.0.9" })]);
     await forwarder.reconcile([
       new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" }),
       new ApplicationNode({ id: "a", endpoint: "http://10.0.0.2" }),
     ]);
-    expect(created).toBe(0);
+    expect(created).toBe(1);
+    expect(
+      new TextDecoder().decode(
+        await forwarder.forward({ service: "s", method: "m", value: new Uint8Array() }),
+      ),
+    ).toBe("http://10.0.0.9");
   });
   it("creates an equal duplicate once and replaces a TLS-only change", async () => {
     const created: string[] = [];
