@@ -126,4 +126,32 @@ describe("GceApplicationNode", () => {
     await lifecycle.close();
     expect(calls).toEqual(["start", "close"]);
   });
+
+  it("aborts and joins stalled metadata before removing its lease", async () => {
+    let resolve: (() => void) | undefined;
+    let aborted = false;
+    const metadata = {
+      read: (signal: AbortSignal) =>
+        new Promise<import("../src/index.js").GceMetadata>((done) => {
+          signal.addEventListener("abort", () => (aborted = true));
+          resolve = () =>
+            done({ projectId: "p", zone: "z", instanceId: "1", privateAddress: "10.0.0.1" });
+        }),
+    };
+    const calls: string[] = [];
+    const registry = {
+      register: async () => (calls.push("register"), true),
+      remove: async () => (calls.push("remove"), true),
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({ registry, metadata, port: 8080 });
+    const starting = registrar.start();
+    await Promise.resolve();
+    const closing = registrar.close();
+    expect(aborted).toBe(true);
+    expect(calls).toEqual([]);
+    resolve?.();
+    await starting;
+    await closing;
+    expect(calls).toEqual(["register", "remove"]);
+  });
 });
