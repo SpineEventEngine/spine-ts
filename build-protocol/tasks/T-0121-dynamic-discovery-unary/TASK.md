@@ -1,6 +1,6 @@
 # T-0121: Dynamic Discovery And Unary Gateway Routing
 
-Status: Ready for implementation
+Status: Implementation complete; specialist review pending
 
 ## Objective
 
@@ -69,6 +69,19 @@ membership, concurrency, cancellation, shutdown, and unary routing behavior.
   workspace/package/API metadata.
 - The implementer must not spawn subagents or modify T-0122 subscription
   behavior.
+
+## Implementer Result
+
+- Accepted implementation endpoint: `5984e087`.
+- Configured and explicitly dispatched role/profile: existing implementer,
+  `gpt-5.6-terra` / `medium`.
+- Actual runtime metadata: the child surface exposes no independent
+  self-introspection. The immutable configured role/profile and explicit
+  dispatch are the available evidence; no visible fallback or mismatch
+  occurred.
+- RED/GREEN evidence, five pushed implementation checkpoints, mechanical
+  correction, focused tests, and preflight results are recorded in
+  `build-protocol/work-logs/T-0121.md`.
 
 ## Verification
 
