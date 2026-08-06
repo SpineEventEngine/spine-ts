@@ -160,3 +160,9 @@ is 94.02% statements, 90.06% branches, 94.57% functions, and 95.04% lines.
 Every generated, build, lint, TSDoc, formatting, documentation/API, Buf,
 generated-clean, release-readiness, test, and coverage gate passes. T-0123 is
 accepted for integration.
+
+Post-merge verification in a fresh worktree found only a missing TypeScript
+project-reference edge from deployment to Proto/storage. Adding those build
+graph references does not change runtime, serialized, API, documentation, or
+reliability behavior, so no specialist concern reopens. Fresh-worktree build
+and task verification are required before integration acceptance.
