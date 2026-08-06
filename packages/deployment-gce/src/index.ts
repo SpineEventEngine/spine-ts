@@ -13,6 +13,34 @@ export interface GceMetadata {
   readonly privateAddress: string;
 }
 
+/** Retrieves trusted instance metadata from the GCE metadata service. */
+export interface GceMetadataProvider {
+  read(signal: AbortSignal): Promise<GceMetadata>;
+}
+
+/** Reads GCE metadata using the required metadata-service request header. */
+export class GceMetadataService implements GceMetadataProvider {
+  /** Reads the instance identity and private address. */
+  async read(signal: AbortSignal): Promise<GceMetadata> {
+    const root = "http://metadata.google.internal/computeMetadata/v1/instance";
+    const get = async (path: string) => {
+      const response = await fetch(`${root}/${path}`, {
+        signal,
+        headers: { "Metadata-Flavor": "Google" },
+      });
+      if (!response.ok) throw new Error("GCE metadata request failed.");
+      return response.text();
+    };
+    const [projectId, zonePath, instanceId, privateAddress] = await Promise.all([
+      get("project/project-id"),
+      get("zone"),
+      get("id"),
+      get("network-interfaces/0/ip"),
+    ]);
+    return { projectId, zone: zonePath.split("/").at(-1) ?? "", instanceId, privateAddress };
+  }
+}
+
 /** Builds one canonical application node from trusted GCE metadata. */
 export class GceApplicationNode {
   /** Creates a stable GCE node using the private HTTP address by default. */
@@ -40,6 +68,13 @@ export interface GceScheduler {
   schedule(delayMs: number, onTick: () => void): () => void;
 }
 
+const systemScheduler: GceScheduler = {
+  schedule: (delayMs, onTick) => {
+    const timer = setTimeout(onTick, delayMs);
+    return () => clearTimeout(timer);
+  },
+};
+
 /** Registers one ready GCE node and renews its lease. */
 export class GceRegistrar {
   readonly #registry: LeasedNodeRegistry;
@@ -58,14 +93,14 @@ export class GceRegistrar {
     readonly registry: LeasedNodeRegistry;
     readonly node: ApplicationNode;
     readonly identity?: string;
-    readonly scheduler: GceScheduler;
-    readonly now: () => number;
+    readonly scheduler?: GceScheduler;
+    readonly now?: () => number;
   }) {
     this.#registry = options.registry;
     this.#node = options.node;
     this.#identity = options.identity ?? randomUUID();
-    this.#scheduler = options.scheduler;
-    this.#now = options.now;
+    this.#scheduler = options.scheduler ?? systemScheduler;
+    this.#now = options.now ?? Date.now;
   }
 
   /** Confirms initial registration after the listener is ready. */
