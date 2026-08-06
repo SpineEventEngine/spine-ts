@@ -213,7 +213,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   async subscribeDefinition(
     request: PublicSubscriptionWire,
     signal: AbortSignal,
-    maxBackendEnvelopeBytes = Number.MAX_SAFE_INTEGER,
+    maxBackendEnvelopeBytes: number = Number.MAX_SAFE_INTEGER,
   ): Promise<void> {
     if (signal.aborted || this.#closed || this.#nodes.length === 0)
       throw new Error("Gateway backend is absent.");
@@ -338,7 +338,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       await this.#schedule([...this.#nodes.values()], false);
       if (!signal.aborted)
         await new Promise<void>((resolve) =>
-          signal.addEventListener("abort", resolve, { once: true }),
+          signal.addEventListener("abort", () => resolve(), { once: true }),
         );
     } finally {
       signal.removeEventListener("abort", abort);
@@ -353,6 +353,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       readonly active: boolean;
       readonly starts: Set<AbortController>;
       children: Map<string, SubscriptionChild>;
+      failure: Error | undefined;
     },
     id: string,
     current: {
