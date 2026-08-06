@@ -89,6 +89,11 @@ export class GceRegistrar {
     await this.#registry.remove(this.#node.id, this.#identity);
   }
 
+  /** Exposes listener-ready start and pre-network-close removal to a server assembly. */
+  lifecycle(): { start(): Promise<void>; close(): Promise<void> } {
+    return { start: () => this.start(), close: () => this.close() };
+  }
+
   #schedule(): void {
     this.#cancel = this.#scheduler.schedule(20_000, () => {
       void this.#enqueue(() => this.#renew()).catch(() => undefined);

@@ -75,4 +75,23 @@ describe("GceApplicationNode", () => {
     await Promise.resolve();
     await stop();
   });
+
+  it("adapts registration to the listener lifecycle contract", async () => {
+    const calls: string[] = [];
+    const registry = {
+      register: async () => (calls.push("start"), true),
+      remove: async () => (calls.push("close"), true),
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registrar = new GceRegistrar({
+      registry,
+      node: new ApplicationNode({ id: "node", endpoint: "http://10.0.0.1" }),
+      identity: "process",
+      now: () => 0,
+      scheduler: { schedule: () => () => undefined },
+    });
+    const lifecycle = registrar.lifecycle();
+    await lifecycle.start();
+    await lifecycle.close();
+    expect(calls).toEqual(["start", "close"]);
+  });
 });
