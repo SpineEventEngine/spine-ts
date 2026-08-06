@@ -120,7 +120,7 @@ export type SubscriptionAbortSignal = AbortSignal;
 /**
  * Processes a fresh canonical subscription definition copy.
  *
- * @param envelope Supplies the copied private envelope.
+ * @param definition Supplies the copied canonical subscription definition.
  * @param signal Cancels the backend effect.
  * @param guard Checks whether a durable owner may continue. When supplied, a
  * false result stops the next backend effect or public update. When absent,
@@ -166,7 +166,7 @@ export interface SubscriptionGatewayLimits {
   readonly maxRequestBytes?: number;
 
   /**
-   * Limits retained private backend-envelope bytes.
+   * Limits each ephemeral native backend envelope.
    */
   readonly maxBackendEnvelopeBytes?: number;
 
@@ -226,8 +226,8 @@ export interface SubscriptionBindings {
   // prettier-ignore
 
   /**
-   * Creates an inactive private binding.
-   * @param input Supplies the copied backend envelope and ownership facts.
+   * Creates an inactive logical binding.
+   * @param input Supplies the copied canonical definition and ownership facts.
    * @returns Returns the new public binding identifier.
    */
   create(input: {
@@ -240,8 +240,8 @@ export interface SubscriptionBindings {
   }): Promise<{ readonly id: string }>;
 
   /**
-   * Activates an owned private binding.
-   * @param input Supplies ownership facts and the backend callback.
+   * Activates an owned logical binding.
+   * @param input Supplies ownership facts and the definition callback.
    * @returns Returns the ownership transition outcome.
    */
   activate(input: {
@@ -259,8 +259,8 @@ export interface SubscriptionBindings {
   }): Promise<SubscriptionBindingTransition>;
 
   /**
-   * Cancels an owned private binding.
-   * @param input Supplies ownership facts and the backend callback.
+   * Cancels an owned logical binding.
+   * @param input Supplies ownership facts and the definition callback.
    * @returns Returns the ownership transition outcome.
    */
   cancel(input: {
@@ -364,7 +364,7 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   }
 
   /**
-   * Removes already-expired private envelopes without a background timer.
+   * Removes already-expired logical bindings without a background timer.
    * @param nowMs Supplies the current time in milliseconds.
    * @returns Completes after expired envelopes are removed.
    */
@@ -413,8 +413,6 @@ export class InMemorySubscriptionBindings implements SubscriptionBindings {
   }): Promise<{ readonly id: string }> {
     try {
       if (this.#closed) throw new Error("subscription bindings are closed");
-      if (input.definition.bytes.byteLength > this.#limits.maxBackendEnvelopeBytes)
-        throw new Error("backend-envelope-too-large");
       const reservation = input.reservation;
       if (
         (reservation === undefined || !this.#reservations.has(reservation)) &&
@@ -696,7 +694,7 @@ export interface SubscriptionCreator {
   // prettier-ignore
 
   /**
-   * Creates a backend subscription.
+   * Creates one per-node native subscription.
    * @param request Supplies the copied canonical subscription definition.
    * @param signal Cancels the backend operation.
    * @returns Returns the trusted backend envelope.
@@ -732,7 +730,7 @@ export interface SubscriptionCreator {
   ): Promise<void>;
 
   /**
-   * Removes a backend subscription envelope.
+   * Removes one per-node native subscription.
    * @param envelope Supplies the copied backend envelope.
    * @param signal Cancels the backend operation.
    * @returns Completes after disposal ends.
@@ -1262,9 +1260,6 @@ const SubscriptionGatewayValues = Object.freeze({
   discardUpdate(update: SubscriptionUpdateWire): Promise<void> {
     update.bytes.fill(0);
     return Promise.resolve();
-  },
-  envelope(bytes: Uint8Array): BackendSubscriptionEnvelope {
-    return { kind: "backend-subscription-envelope", bytes: bytes.slice() };
   },
   copyPublic(wire: PublicSubscriptionWire): PublicSubscriptionWire {
     return { kind: wire.kind, bytes: wire.bytes.slice() };

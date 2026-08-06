@@ -463,6 +463,38 @@ describe("DynamicSubscriptionCreator", () => {
     controller.abort();
     await activation;
   });
+
+  it("cancels every active native child before logical activation ends", async () => {
+    let disposed = 0;
+    const entered = deferred<void>();
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, []),
+        activate: async (_request, signal) => {
+          entered.resolve();
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", resolve, { once: true }),
+          );
+        },
+        dispose: async () => {
+          disposed++;
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const wire = subscription();
+    const controller = new AbortController();
+
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await creator.subscribe(wire, new AbortController().signal, 100);
+    const activation = creator.activate({ wire, updates: async () => {} }, controller.signal);
+    await entered.promise;
+    await creator.cancel({ wire }, new AbortController().signal);
+
+    expect(disposed).toBe(1);
+    controller.abort();
+    await activation;
+  });
 });
 
 function subscription() {

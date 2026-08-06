@@ -165,19 +165,21 @@ export const BrowserServer: Readonly<{
       fingerprint: options.fingerprint,
       creator,
     });
-    const recoverActive = (bindings as SubscriptionBindings).recoverActive;
-    if (recoverActive !== undefined) {
-      const now = options.clock?.now();
-      const nowMs =
-        now === undefined
-          ? undefined
-          : Number(now.seconds) * 1_000 + Math.floor(Number(now.nanos) / 1_000_000);
-      if (nowMs !== undefined && Number.isSafeInteger(nowMs))
-        await recoverActive({
-          nowMs,
-          onDefinition: (definition: import("@spine-event-engine/auth").PublicSubscriptionWire) =>
-            creator.rehydrate(definition, 1_048_576),
-        });
+    try {
+      const durableBindings = bindings as SubscriptionBindings;
+      if (durableBindings.recoverActive !== undefined) {
+        const now = options.clock.now();
+        const nowMs = Number(now.seconds) * 1_000 + Math.floor(Number(now.nanos) / 1_000_000);
+        if (Number.isSafeInteger(nowMs))
+          await durableBindings.recoverActive({
+            nowMs,
+            onDefinition: (definition: import("@spine-event-engine/auth").PublicSubscriptionWire) =>
+              creator.rehydrate(definition),
+          });
+      }
+    } catch (error) {
+      await Promise.allSettled([subscriptions.close(), stopDiscovery?.(), dynamic.close()]);
+      throw error;
     }
     const services = createNativeGatewayServices({ unary, subscriptions, requests });
     const handler = connectNodeAdapter({

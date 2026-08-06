@@ -60,6 +60,12 @@ export interface DynamicUnaryOptions {
    * Bounds simultaneous connection starts. Defaults to eight.
    */
   readonly maxConcurrentStarts?: number;
+
+  /**
+   * Limits native envelopes created while rehydrating durable definitions.
+   * Defaults to one mebibyte.
+   */
+  readonly maxBackendEnvelopeBytes?: number;
 }
 
 /**
@@ -69,6 +75,7 @@ export interface DynamicUnaryOptions {
 export class DynamicUnaryForwarder implements UnaryForwarder {
   readonly #options: DynamicUnaryOptions;
   readonly #maxConcurrentStarts: number;
+  readonly #maxBackendEnvelopeBytes: number;
   #clients = new Map<
     string,
     {
@@ -117,6 +124,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       throw new RangeError("maxConcurrentStarts must be a positive safe integer.");
     this.#options = options;
     this.#maxConcurrentStarts = options.maxConcurrentStarts ?? 8;
+    this.#maxBackendEnvelopeBytes = options.maxBackendEnvelopeBytes ?? 1_048_576;
   }
 
   /**
@@ -258,7 +266,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    */
   async rehydrateDefinition(
     request: PublicSubscriptionWire,
-    maxBackendEnvelopeBytes: number,
+    maxBackendEnvelopeBytes: number = this.#maxBackendEnvelopeBytes,
   ): Promise<void> {
     if (this.#closed) throw new Error("Gateway dynamic owner is closed.");
     const subscription = fromBinary(SubscriptionSchema, request.bytes);

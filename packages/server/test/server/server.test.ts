@@ -76,6 +76,46 @@ describe("Server", () => {
       ),
     ).toEqual({ baseUrl: "https://10.0.0.1", nodeOptions: { servername: "api.example.test" } });
   });
+
+  it("runs durable subscription recovery with the configured gateway clock", async () => {
+    const bindings = inMemoryBindings() as InMemorySubscriptionBindings & {
+      recoverActive: NonNullable<
+        import("@spine-event-engine/auth").SubscriptionBindings["recoverActive"]
+      >;
+    };
+    let recoveredAt: number | undefined;
+    bindings.recoverActive = async ({ nowMs }) => {
+      recoveredAt = nowMs;
+    };
+    const server = await new Server({
+      browser: { port: 0, ...browserGateway(), bindings },
+    }).start();
+
+    expect(recoveredAt).toBe(0);
+    await server.close();
+  });
+
+  it("closes subscription resources when durable recovery fails during startup", async () => {
+    const bindings = inMemoryBindings() as InMemorySubscriptionBindings & {
+      recoverActive: NonNullable<
+        import("@spine-event-engine/auth").SubscriptionBindings["recoverActive"]
+      >;
+    };
+    let closed = false;
+    const close = bindings.close.bind(bindings);
+    bindings.close = async () => {
+      closed = true;
+      await close();
+    };
+    bindings.recoverActive = async () => {
+      throw new Error("recovery failed");
+    };
+
+    await expect(
+      new Server({ browser: { port: 0, ...browserGateway(), bindings } }).start(),
+    ).rejects.toThrow("recovery failed");
+    expect(closed).toBe(true);
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
   });
@@ -678,7 +718,6 @@ describe("Server", () => {
         "/spine.client.QueryService/Read",
         "/spine.client.SubscriptionService/Subscribe",
         "/spine.client.SubscriptionService/Activate",
-        "/spine.client.SubscriptionService/Cancel",
       ]);
     } finally {
       await server.close();

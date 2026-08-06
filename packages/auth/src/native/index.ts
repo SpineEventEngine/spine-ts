@@ -265,7 +265,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
 
   /**
    * Creates a native subscription with the supplied admitted cancellation signal.
-   * @param request The admitted subscription topic.
+   * @param request The admitted canonical subscription definition.
    * @param signal The admitted cancellation signal.
    * @returns The private backend subscription envelope.
    */
@@ -282,7 +282,7 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
 
   /**
    * Streams native Activate updates through the supplied asynchronous public-update sink.
-   * @param request The public and private subscription envelopes plus update sink.
+   * @param request The canonical subscription definition and update sink.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native activation ends.
    */
@@ -305,8 +305,8 @@ export class NativeSubscriptionCreator implements SubscriptionCreator, UnaryForw
   }
 
   /**
-   * Cancels the native subscription represented by the private backend envelope.
-   * @param request The public and private subscription envelopes.
+   * Cancels the native subscription represented by the canonical definition.
+   * @param request The canonical subscription definition.
    * @param signal The admitted cancellation signal.
    * @returns Completes after native cancellation ends.
    */

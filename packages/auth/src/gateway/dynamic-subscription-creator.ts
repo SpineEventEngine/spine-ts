@@ -24,11 +24,10 @@ export class DynamicSubscriptionCreator implements SubscriptionCoordinator {
    * Rehydrates a retained durable definition into the current native membership.
    *
    * @param definition Supplies the retained canonical definition.
-   * @param maxBackendEnvelopeBytes Limits each native child envelope.
    * @returns Completes after child creation settles.
    */
-  rehydrate(definition: PublicSubscriptionWire, maxBackendEnvelopeBytes: number): Promise<void> {
-    return this.#owner.rehydrateDefinition(definition, maxBackendEnvelopeBytes);
+  rehydrate(definition: PublicSubscriptionWire): Promise<void> {
+    return this.#owner.rehydrateDefinition(definition);
   }
 
   subscribe(
