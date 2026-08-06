@@ -4,7 +4,6 @@
 
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
-import { createHash } from "node:crypto";
 
 import {
   createNativeGatewayServices,
@@ -70,7 +69,6 @@ export const BrowserServer: Readonly<{
     readonly baseUrl: string;
     readonly nodeOptions?: { readonly servername: string };
   };
-  topologyFingerprint(values: readonly string[]): string;
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void;
   authRoutes(
     routes: readonly BrowserAuthRoute[] | undefined,
@@ -164,7 +162,6 @@ export const BrowserServer: Readonly<{
       contexts: options.contexts,
       clock: options.clock,
       fingerprint: options.fingerprint,
-      topology: BrowserServer.topologyFingerprint(backendBaseUrls),
       creator,
     });
     const services = createNativeGatewayServices({ unary, subscriptions, requests });
@@ -341,17 +338,6 @@ export const BrowserServer: Readonly<{
         : { nodeOptions: { servername: node.tlsServerName } }),
     };
   },
-  topologyFingerprint(values: readonly string[]): string {
-    const hash = createHash("sha256");
-    for (const url of BrowserServer.backendUrls(values)) {
-      const bytes = new TextEncoder().encode(url);
-      const length = new Uint8Array(4);
-      new DataView(length.buffer).setUint32(0, bytes.byteLength);
-      hash.update(length);
-      hash.update(bytes);
-    }
-    return hash.digest("hex");
-  },
   requireDurableBindings(options: BrowserServerOptions, production: boolean): void {
     const supplied = options as Partial<BrowserServerOptions>;
     if (options.backend !== undefined) {
@@ -372,13 +358,6 @@ export const BrowserServer: Readonly<{
         throw new Error("Standalone browser server requires a fingerprint function.");
       if (options.bindings === undefined)
         throw new Error("Standalone browser server requires explicit subscription bindings.");
-      if (
-        BrowserServerValues.backendUrlsFor(options.backend).length > 1 &&
-        options.bindings.topologyFencing !== true
-      )
-        throw new Error(
-          "Standalone browser fan-in requires topology-fencing subscription bindings.",
-        );
     }
     if (options.backend !== undefined && production && options.registry === undefined)
       throw new Error("Production standalone browser server requires a type registry.");
