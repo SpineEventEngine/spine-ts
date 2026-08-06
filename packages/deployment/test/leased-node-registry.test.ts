@@ -156,6 +156,31 @@ describe("LeasedNodeRegistry", () => {
     await expect(first.cleanup(10)).resolves.toBe(0);
   });
 
+  it("advances past a live prefix to clean later expired rows", async () => {
+    const registry = new LeasedNodeRegistry({
+      factory: new InMemoryStorageFactory(),
+      namespace: "cleanup-prefix",
+      cleanupBatchSize: 2,
+    });
+    for (const [id, expiresAt] of [
+      ["a-live", 100],
+      ["b-live", 100],
+      ["z-expired", 0],
+    ] as const) {
+      await registry.register({
+        node: new ApplicationNode({
+          id,
+          endpoint: `http://10.3.0.${id.endsWith("a") ? "1" : "2"}`,
+        }),
+        registrationId: id,
+        expiresAt,
+      });
+    }
+    await expect(registry.cleanup(1)).resolves.toBe(0);
+    await expect(registry.cleanup(1)).resolves.toBe(1);
+    await expect(registry.read(1)).resolves.toHaveLength(2);
+  });
+
   it("joins an in-flight operation before closing and rejects later work", async () => {
     const factory = new DelayedQueryFactory();
     const registry = new LeasedNodeRegistry({
