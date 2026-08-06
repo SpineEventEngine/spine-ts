@@ -4,6 +4,42 @@ import { ApplicationNode } from "@spine-event-engine/deployment";
 import { DynamicUnaryForwarder } from "../src/index.js";
 
 describe("DynamicUnaryForwarder", () => {
+  it("coalesces B behind A so only the latest pending snapshot is created", async () => {
+    const started: string[] = [];
+    let releaseA: (() => void) | undefined;
+    const forwarder = new DynamicUnaryForwarder({
+      create: (node) => new Promise((resolve) => {
+        started.push(node.id);
+        if (node.id === "a") releaseA = () => resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+        else resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+      }),
+    });
+    const a = forwarder.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await Promise.resolve();
+    const b = forwarder.reconcile([new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" })]);
+    const c = forwarder.reconcile([new ApplicationNode({ id: "c", endpoint: "http://10.0.0.3" })]);
+    releaseA?.();
+    await Promise.all([a, b, c]);
+    expect(started).toEqual(["a", "c"]);
+  });
+
+  it("limits concurrent client starts while eventually including all nodes", async () => {
+    let active = 0;
+    let peak = 0;
+    const forwarder = new DynamicUnaryForwarder({
+      maxConcurrentStarts: 2,
+      create: async (node) => {
+        active++;
+        peak = Math.max(peak, active);
+        await Promise.resolve();
+        active--;
+        return { forward: async () => new TextEncoder().encode(node.id), close: async () => {} };
+      },
+    });
+    await forwarder.reconcile(Array.from({ length: 40 }, (_, index) => new ApplicationNode({ id: `${index}`, endpoint: `http://10.0.2.${index + 1}` })));
+    expect(peak).toBe(2);
+  });
+
   it("routes every node in round-robin order and recovers from empty membership", async () => {
     const calls: string[] = [];
     const forwarder = new DynamicUnaryForwarder({
