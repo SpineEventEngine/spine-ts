@@ -142,6 +142,59 @@ reviewer cannot self-introspect, the immutable configured role/profile and
 explicit dispatch fields are the acceptance evidence unless a visible mismatch
 or fallback occurs.
 
+## Planning Review Wave Result
+
+The complete four-concern wave finished. Every reviewer used the expected
+configured role/profile; no child surface exposed independent runtime model
+self-introspection, and no visible fallback or mismatch occurred.
+
+- Style/maintainability (`gpt-5.6-terra` / `high`): two P1 and one P2.
+- Documentation (`gpt-5.6-luna` / `medium`, immutable role dispatch because
+  the surface rejects a redundant Luna override): one P1, duplicated with the
+  style/reliability stale-status finding; otherwise clean.
+- TypeScript/API docs (`gpt-5.6-terra` / `high`): one P1 and four P2.
+- Performance/reliability (`gpt-5.6-terra` / `high`): one P1 and two P2.
+
+Accepted deduplicated correction batch:
+
+1. Remove the stale unresolved-question sentence that contradicts approved
+   execution.
+2. Make T-0121 split unary-only validation from the shared fixed fan-in, and
+   make T-0122 own removal of the subscription count/positional envelope.
+3. Give Terraform policy/fixture tests a focused `verify:task` invocation
+   instead of `--no-tests`.
+4. Require one generation-fenced reconciliation owner with only the latest
+   pending snapshot coalesced during rapid churn.
+5. Fence and quiesce GCE initial registration, renewal, and cleanup before
+   conditional deletion and listener close.
+6. State the repository-wide no-user/no-migration cutover explicitly: Wave 7
+   may delete the fixed topology field/envelope and bump internal storage keys;
+   it must not add a legacy migration layer or a pre-Wave-7 restart fixture.
+7. Freeze stable node-ID derivation and canonical HTTP(S) endpoint rules,
+   including address reuse, TLS authority, and IPv6 formatting.
+8. Keep observed/expected counts package-internal in Wave 7 and reserve public
+   logging/diagnostics exposure for Wave 8.
+9. Specify the leased record's internal encoding version, supported read,
+   malformed/unknown-version behavior, and incompatible storage-key policy.
+10. Define exact DNS refresh-versus-TTL precedence, including zero/missing TTL
+    and resolver failures.
+
+The API review's request for backward-compatible pre-Wave-7 durable-binding
+migration is rejected only in that proposed remedy. It conflicts with the
+human-approved rule that Spine TS has no deployed users and does not need a
+migration/deprecation cycle. The underlying P1 contract gap is accepted and is
+resolved through an explicit incompatible cutover.
+
+## Planning Correction Assignment
+
+- Existing authoring context: requirements splitter from the accepted Wave 7
+  split.
+- Scope: apply only the complete accepted batch above to the two planning
+  records, run focused deterministic checks, and report changed sections.
+- Configured profile retained from the original explicit dispatch:
+  `gpt-5.6-sol` / `high`.
+- Subagents may not spawn subagents.
+
 ## Dependency-Ordered Execution Queue
 
 1. T-0121: dynamic discovery and unary Gateway routing.
