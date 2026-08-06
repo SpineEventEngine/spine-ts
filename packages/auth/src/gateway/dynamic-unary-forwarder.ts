@@ -4,6 +4,7 @@ import type { UnaryForwarder } from "./index.js";
 
 type PendingSnapshot = {
   readonly nodes: readonly ApplicationNode[];
+  readonly generation: number;
 };
 
 /**
@@ -64,6 +65,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   #completion = Promise.resolve();
   #complete: (() => void) | undefined;
   #closing: Promise<void> | undefined;
+  #generation = 0;
 
   /**
    * Creates a dynamic unary router.
@@ -87,7 +89,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    * @returns Completes after the latest pending snapshot has reconciled.
    */
   reconcile(nodes: readonly ApplicationNode[]): Promise<void> {
-    this.#pending = { nodes: [...nodes] };
+    this.#pending = { nodes: [...nodes], generation: ++this.#generation };
     if (this.#running === undefined) {
       this.#completion = new Promise((resolve) => {
         this.#complete = resolve;
@@ -102,7 +104,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       const snapshot = this.#pending;
       this.#pending = undefined;
       try {
-        await this.#replace(snapshot.nodes);
+        await this.#replace(snapshot.nodes, snapshot.generation);
       } catch {
         // A later complete snapshot starts a fresh reconciliation owner.
       }
@@ -119,7 +121,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     return this.#pending;
   }
 
-  async #replace(nodes: readonly ApplicationNode[]): Promise<void> {
+  async #replace(nodes: readonly ApplicationNode[], generation: number): Promise<void> {
     if (this.#closed) return;
     const wanted = new Map<string, ApplicationNode>();
     for (const node of nodes) {
@@ -141,12 +143,14 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     const added = [...wanted.values()].filter((node) => !this.#clients.has(node.id));
     for (let index = 0; index < added.length; index += this.#maxConcurrentStarts)
       await Promise.all(
-        added.slice(index, index + this.#maxConcurrentStarts).map((node) => this.#start(node)),
+        added
+          .slice(index, index + this.#maxConcurrentStarts)
+          .map((node) => this.#start(node, generation)),
       );
     this.#next = 0;
   }
 
-  async #start(node: ApplicationNode): Promise<void> {
+  async #start(node: ApplicationNode, generation: number): Promise<void> {
     const controller = new AbortController();
     this.#creating.add(controller);
     let client: DynamicUnaryClient;
@@ -155,7 +159,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     } finally {
       this.#creating.delete(controller);
     }
-    if (this.#closed) await client.close();
+    if (this.#closed || generation !== this.#generation)
+      await client.close().catch(() => undefined);
     else
       this.#clients.set(node.id, {
         endpoint: node.endpoint,

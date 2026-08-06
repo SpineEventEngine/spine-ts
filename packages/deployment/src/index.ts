@@ -125,6 +125,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
   #cancel: (() => void) | undefined;
   #controller: AbortController | undefined;
   #watcher: ((nodes: readonly ApplicationNode[]) => void) | undefined;
+  #refreshing: Promise<void> | undefined;
   #closed = false;
 
   /**
@@ -154,6 +155,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
    * @returns Stops scheduling and cancels an in-flight read.
    */
   watch(onSnapshot: (nodes: readonly ApplicationNode[]) => void): () => Promise<void> {
+    if (this.#watcher !== undefined) throw new Error("Node discovery supports one active watch.");
     this.#watcher = onSnapshot;
     this.#schedule(0);
     return () => this.close();
@@ -170,11 +172,12 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
     this.#cancel?.();
     this.#controller?.abort();
     this.#watcher = undefined;
+    await this.#refreshing;
   }
 
   #schedule(delayMs: number): void {
     this.#cancel = this.#scheduler.schedule(delayMs, () => {
-      void this.#refresh();
+      this.#refreshing = this.#refresh().catch(() => undefined);
     });
   }
 
@@ -185,6 +188,8 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
     try {
       const nodes = await this.#reader.read(controller.signal);
       if (!this.#closed) this.#watcher?.([...nodes]);
+    } catch {
+      // Retain the last successful snapshot and retry at the configured interval.
     } finally {
       this.#controller = undefined;
       if (!this.#closed) this.#schedule(this.#intervalMs);
