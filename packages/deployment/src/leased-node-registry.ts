@@ -28,6 +28,9 @@ export class LeasedNodeRegistry {
   constructor(options: LeasedNodeRegistryOptions) {
     if (options.namespace.trim().length === 0)
       throw new Error("Lease storage namespace must be non-empty.");
+    const cleanupBatchSize = options.cleanupBatchSize ?? defaultCleanupBatchSize;
+    if (!Number.isSafeInteger(cleanupBatchSize) || cleanupBatchSize < 1)
+      throw new RangeError("Lease cleanup batch size must be a positive safe integer.");
     this.#storage = options.factory.createRecordStorage(
       { name: options.namespace, multitenant: false },
       leaseRecordSpec,
@@ -36,9 +39,7 @@ export class LeasedNodeRegistry {
       this.#storage.close();
       throw new Error("Leased node registry requires atomic compare-and-set storage.");
     }
-    this.#cleanupBatchSize = options.cleanupBatchSize ?? defaultCleanupBatchSize;
-    if (!Number.isSafeInteger(this.#cleanupBatchSize) || this.#cleanupBatchSize < 1)
-      throw new RangeError("Lease cleanup batch size must be a positive safe integer.");
+    this.#cleanupBatchSize = cleanupBatchSize;
   }
 
   /**
