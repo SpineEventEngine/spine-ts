@@ -10,6 +10,9 @@ describe("ApplicationNode", () => {
     "host.test#x",
     "[fd00::1]",
     "10.0.0.1",
+    "bad_label.test",
+    "-leading.test",
+    "trailing-.test",
   ])("rejects invalid TLS authority %s", (tlsServerName) => {
     expect(
       () => new ApplicationNode({ id: "node", endpoint: "https://10.0.0.1", tlsServerName }),
@@ -151,5 +154,14 @@ describe("ScheduledNodeDiscovery", () => {
     await Promise.resolve();
     expect(delays).toEqual([0, 10_000]);
     expect(seen).toEqual([["a"]]);
+  });
+
+  it("rejects watches after close", async () => {
+    const source = new ScheduledNodeDiscovery({
+      reader: { read: async () => [] },
+      scheduler: { schedule: () => () => {} },
+    });
+    await source.close();
+    expect(() => source.watch(() => undefined)).toThrow("closed");
   });
 });

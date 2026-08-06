@@ -704,8 +704,9 @@ class RunningBrowserServer implements RunningServer {
       failures,
     );
     if (failures.length > 0) {
-      const primary = failures[0];
-      if (failures.length > 1 && primary instanceof Error)
+      const reason = failures[0];
+      const primary = reason instanceof Error ? reason : new Error(String(reason));
+      if (failures.length > 1)
         Object.defineProperty(primary, "cleanupErrors", { value: failures.slice(1) });
       throw primary;
     }

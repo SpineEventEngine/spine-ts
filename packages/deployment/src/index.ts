@@ -70,6 +70,10 @@ export class ApplicationNode {
       isIP(parsed.hostname) !== 0
     )
       throw new Error("TLS server name must be one DNS hostname.");
+    if (
+      parsed.hostname.split(".").some((label) => !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label))
+    )
+      throw new Error("TLS server name must use DNS labels.");
     return parsed.hostname.toLowerCase();
   }
 }
@@ -162,6 +166,7 @@ export class ScheduledNodeDiscovery implements NodeDiscovery {
    * @returns Stops scheduling and cancels an in-flight read.
    */
   watch(onSnapshot: (nodes: readonly ApplicationNode[]) => void): () => Promise<void> {
+    if (this.#closed) throw new Error("Node discovery is closed.");
     if (this.#watcher !== undefined) throw new Error("Node discovery supports one active watch.");
     this.#watcher = onSnapshot;
     this.#schedule(0);
