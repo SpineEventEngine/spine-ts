@@ -1,6 +1,6 @@
 # T-0123 Review Record
 
-Status: Accepted; release verification pending
+Status: Accepted review; release-verification correction pending
 
 ## Second correction evidence
 
@@ -126,3 +126,17 @@ reliability final acceptance remain pending.
 All configured profiles matched their explicit dispatches. Runtime
 self-introspection was unavailable, with no visible fallback or mismatch.
 T-0123 is review-accepted and awaits the mandatory full release profile.
+
+## Release Verification Finding
+
+`pnpm verify:release` ran 3,899 tests and failed three. Two deterministic Proto
+module expectations still counted 43 owned sources and omitted the two new
+deployment schemas. The Datastore entity-commit test exposed a production
+layout mismatch: transactional delivery-event writes still use the removed
+schema-derived kind while `EventStore` reads the new storage-key-derived kind.
+
+The existing implementer owns one bounded correction: share the canonical
+Datastore record-kind derivation between generic record storage and entity
+commit delivery writes, preserve the hard cutover with no legacy path, and
+update the two generated-inventory expectations. Reliability/API review reopen
+only if the production layout helper changes their accepted contracts.
