@@ -64,6 +64,45 @@ describe("DatastoreRecordStorage storage keys", () => {
     await second.read("id");
     expect(client.kinds[0]).not.toBe(client.kinds[1]);
   });
+
+  it("keeps NFC and NFD storage keys distinct", async () => {
+    const client = new RecordingClient();
+    const first = new DatastoreRecordStorage(
+      { name: "context", multitenant: false },
+      spec("é"),
+      client as never,
+      10,
+    );
+    const second = new DatastoreRecordStorage(
+      { name: "context", multitenant: false },
+      spec("e\u0301"),
+      client as never,
+      10,
+    );
+    await first.read("id");
+    await second.read("id");
+    expect(client.kinds[0]).not.toBe(client.kinds[1]);
+  });
+
+  it("distinguishes tenancy mode and preserves tenant namespace", async () => {
+    const client = new RecordingClient();
+    const single = new DatastoreRecordStorage(
+      { name: "context", multitenant: false },
+      spec("key"),
+      client as never,
+      10,
+    );
+    const tenant = new DatastoreRecordStorage(
+      { name: "context", multitenant: true, tenantId: "tenant" },
+      spec("key"),
+      client as never,
+      10,
+    );
+    await single.read("id");
+    await tenant.read("id");
+    expect(client.kinds[0]).not.toBe(client.kinds[1]);
+    expect(client.namespaces[1]).toBe("tenant");
+  });
 });
 
 function spec(
@@ -79,9 +118,11 @@ function spec(
 
 class RecordingClient {
   readonly kinds: string[] = [];
+  readonly namespaces: (string | undefined)[] = [];
 
-  key(input: { readonly path: readonly [string, string] }): unknown {
+  key(input: { readonly path: readonly [string, string]; readonly namespace?: string }): unknown {
     this.kinds.push(input.path[0]);
+    this.namespaces.push(input.namespace);
     return input;
   }
 
