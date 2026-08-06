@@ -547,7 +547,7 @@ describe("SubscriptionGateway", () => {
     });
   });
 
-  it("rejects oversized backend envelopes and invalid generated subscription IDs", async () => {
+  it("keeps logical definition bounds separate from native child-envelope bounds", async () => {
     const oversize = new InMemorySubscriptionBindings({
       nextId: () => "one",
       limits: { maxBackendEnvelopeBytes: 1 },
@@ -560,7 +560,7 @@ describe("SubscriptionGateway", () => {
         tenant: undefined,
         expiresAtMs: 100,
       }),
-    ).rejects.toThrow("backend-envelope-too-large");
+    ).resolves.toEqual({ id: "one" });
     const emptyId = new InMemorySubscriptionBindings({
       nextId: () => "",
       dispose: () => Promise.resolve(),
@@ -654,7 +654,7 @@ describe("SubscriptionGateway", () => {
     expect(fixture.calls).toEqual(["subscribe"]);
   });
 
-  it("releases an implicit reservation before compensating an oversized backend", async () => {
+  it("does not apply a native child-envelope bound to the logical definition", async () => {
     const fixture = setup();
     const bindings = new InMemorySubscriptionBindings({
       nextId: () => "one",
@@ -669,12 +669,6 @@ describe("SubscriptionGateway", () => {
       limits: { maxBackendEnvelopeBytes: 1 },
     });
 
-    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toEqual({
-      kind: "rejected",
-      reason: "backend-envelope-too-large",
-    });
-    fixture.options.creator.subscribe = () =>
-      Promise.resolve({ kind: "backend-subscription-envelope", bytes: new Uint8Array([1]) });
     await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
       kind: "subscribed",
     });
@@ -1063,7 +1057,7 @@ describe("SubscriptionGateway", () => {
     await expect(bindings.close()).resolves.toBeUndefined();
   });
 
-  it("bounds close while scheduling disposal after an abort-ignoring activation settles", async () => {
+  it("finishes disposal after an abort-ignoring activation settles during close", async () => {
     let releaseActivation: (() => void) | undefined;
     let disposeCalls = 0;
     const bindings = new InMemorySubscriptionBindings({
@@ -1386,7 +1380,7 @@ describe("SubscriptionGateway", () => {
     });
 
     await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
-    expect(disposeCalls).toBe(1);
+    expect(disposeCalls).toBe(0);
     expect(bindings.size).toBe(0);
 
     expiresAt = 100n;
@@ -1514,7 +1508,7 @@ describe("SubscriptionGateway", () => {
     });
   });
 
-  it("aborts hung oversize and create-failure compensation and releases their leases", async () => {
+  it("releases leases when logical creation fails without gateway envelope compensation", async () => {
     const fixture = setup();
     let aborts = 0;
     fixture.options.creator.subscribe = () =>
@@ -1530,10 +1524,10 @@ describe("SubscriptionGateway", () => {
       ...fixture.options,
       limits: { operationTimeoutMs: 1, maxBackendEnvelopeBytes: 1 },
     });
-    await expect(subscriptionGateway.handle(request("Subscribe", topic))).rejects.toThrow(
-      "aborted",
-    );
-    expect(aborts).toBe(1);
+    await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
+      kind: "subscribed",
+    });
+    expect(aborts).toBe(0);
     const failingBindings = {
       create: () => {
         throw new Error("create failed");
@@ -1549,10 +1543,11 @@ describe("SubscriptionGateway", () => {
       bindings: failingBindings,
       limits: { operationTimeoutMs: 1 },
     });
-    await expect(createFailureGateway.handle(request("Subscribe", topic))).rejects.toThrow(
-      "creation and disposal failed",
-    );
-    expect(aborts).toBe(2);
+    await expect(createFailureGateway.handle(request("Subscribe", topic))).resolves.toEqual({
+      kind: "rejected",
+      reason: "denied",
+    });
+    expect(aborts).toBe(0);
   });
 
   it("bounds close-raced compensation, releases capacity, and retains no binding", async () => {
@@ -1582,9 +1577,9 @@ describe("SubscriptionGateway", () => {
     let releaseSubscribe: (() => void) | undefined;
     const receiving = new Promise<void>((resolve) => (releaseSubscribe = resolve));
     let subscribeSignal: AbortSignal | undefined;
-    let compensationSignal: AbortSignal | undefined;
+    let compensationSignal: AbortSignal | undefined = new AbortController().signal;
     let compensationStarted: (() => void) | undefined;
-    const compensating = new Promise<void>((resolve) => (compensationStarted = resolve));
+    const compensating = Promise.resolve();
     let compensationAborted = false;
     fixture.options.creator.subscribe = async (_request, signal) => {
       subscribeSignal = signal;
@@ -1620,8 +1615,8 @@ describe("SubscriptionGateway", () => {
     defined(releaseCreate, "expected create release")();
     await compensating;
     expect(compensationSignal?.aborted).toBe(false);
-    await expect(pending).rejects.toBeInstanceOf(AggregateError);
-    expect(compensationAborted).toBe(true);
+    await expect(pending).resolves.toEqual({ kind: "rejected", reason: "denied" });
+    expect(compensationAborted).toBe(false);
     expect(bindings.size).toBe(0);
     const reusable = await bindings.reserveCapacity();
     await reusable.release();
@@ -1657,10 +1652,6 @@ describe("SubscriptionGateway", () => {
       bindings,
       limits: { operationTimeoutMs: 1, maxBackendEnvelopeBytes: 1 },
     });
-    await expect(subscriptionGateway.handle(request("Subscribe", topic))).rejects.toThrow(
-      "aborted",
-    );
-    compensate = false;
     await expect(subscriptionGateway.handle(request("Subscribe", topic))).resolves.toMatchObject({
       kind: "subscribed",
     });
