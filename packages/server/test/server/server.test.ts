@@ -175,6 +175,39 @@ describe("Server", () => {
     await running.close();
   });
 
+  it("starts and stops dynamic discovery exactly once with fixed subscription assembly", async () => {
+    let watches = 0;
+    let stops = 0;
+    const discovery = {
+      watch(onSnapshot: (nodes: readonly ApplicationNode[]) => void) {
+        watches++;
+        onSnapshot([
+          new ApplicationNode({
+            id: "node/a",
+            endpoint: "https://10.0.0.1",
+            tlsServerName: "api.example.test",
+          }),
+        ]);
+        return async () => {
+          stops++;
+        };
+      },
+    };
+    const running = await BrowserServer.open("http://127.0.0.1:65534", {
+      ...browserGateway(),
+      bindings: inMemoryBindings(),
+      discovery,
+      host: "127.0.0.1",
+      port: 0,
+      readMaxBytes: 1_048_576,
+      writeMaxBytes: 1_048_576,
+      production: false,
+    });
+    expect(watches).toBe(1);
+    await Promise.all([running.close(), running.close()]);
+    expect(stops).toBe(1);
+  });
+
   it("starts one array-configured backend and handles empty browser request facts", async () => {
     const requests = BrowserServer.requests(browserGateway());
     const requestHeader = new Headers();
