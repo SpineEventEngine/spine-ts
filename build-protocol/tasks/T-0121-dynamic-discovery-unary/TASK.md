@@ -1,6 +1,6 @@
 # T-0121: Dynamic Discovery And Unary Gateway Routing
 
-Status: Focused re-review complete; second correction batch in progress
+Status: Complete; reviewed and release-verified
 
 ## Objective
 
@@ -89,11 +89,22 @@ membership, concurrency, cancellation, shutdown, and unary routing behavior.
 - `pnpm verify:release` once after review convergence because shared Gateway
   runtime and public package metadata change.
 
+Final evidence at `359553b4`:
+
+- `pnpm verify:release` passed.
+- 190 test files and 3,812 tests passed; 26 tests were skipped by their existing
+  environment/profile conditions.
+- Coverage: 94.07% statements, 90.02% branches, 94.62% functions, and 95.06%
+  lines.
+- Build/typecheck, ESLint, cleanup, TSDoc, formatting, API documentation,
+  documentation audience, Proto, offline package-consumer, and release
+  readiness gates passed.
+
 ## Review Concerns
 
-- Style/maintainability: relevant.
-- Documentation: relevant.
-- TypeScript/API docs: relevant, Terra/high.
-- Performance/reliability: relevant, Terra/high.
+- Style/maintainability: clean after correction and acceptance re-review.
+- Documentation: clean at final acceptance.
+- TypeScript/API docs: clean after correction and acceptance re-review.
+- Performance/reliability: clean at final acceptance.
 - Dedicated security review: N/A; trusted backend discovery does not change the
   authentication boundary.
