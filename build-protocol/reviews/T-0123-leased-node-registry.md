@@ -2,6 +2,12 @@
 
 Status: Second correction batch in progress; not accepted
 
+## Second correction evidence
+
+- Existing implementer: configured `gpt-5.6-terra` / `medium`; independent runtime metadata is unavailable and no visible fallback or mismatch occurred.
+- The registry paging and close fixtures now wrap `queryEntries`, the actual production path (`55f795e2`).
+- Exact supported Datastore first and continued ascending string-ID pages use requested limits; continued pages add `__key__ >` (`03dd8450`).
+
 ## Review Range
 
 - Baseline: `05a5bd85`.
