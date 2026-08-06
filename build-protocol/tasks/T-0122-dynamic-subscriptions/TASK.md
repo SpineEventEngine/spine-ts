@@ -139,3 +139,14 @@ accepted evidence with no visible mismatch.
 - Performance/reliability: relevant, Terra/high.
 - Dedicated security: N/A; authentication remains solely at the existing one
   Gateway and its trust boundary is unchanged.
+
+## Final Release Evidence
+
+- `pnpm verify:release` passed at `9fe8f4da`: 190 test files passed, three
+  skipped; 3,838 tests passed, 26 skipped.
+- Global coverage passed every threshold: statements 94% (21,342/22,704),
+  branches 90% (12,251/13,612), functions 94.54% (5,041/5,332), and lines 95%
+  (19,992/21,042).
+- All deterministic generation, build, tooling typecheck, lint, cleanup,
+  TSDoc, documentation, formatting, and diff gates passed. The task is ready
+  for integration into `main`; post-merge verification remains the next gate.

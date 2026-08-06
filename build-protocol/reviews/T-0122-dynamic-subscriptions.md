@@ -255,5 +255,14 @@ The final API and reliability reviewers used the same explicitly configured
 `gpt-5.6-terra` / `high` profiles. Runtime self-introspection was unavailable
 and no visible mismatch occurred. The final correction preflight passed seven
 suites / 382 tests plus generated typechecking, scoped lint/TSDoc,
-documentation audience, formatting, and diff checks. Release verification
-remains required.
+documentation audience, formatting, and diff checks.
+
+## Release Verification
+
+- `pnpm verify:release` passed at `9fe8f4da`: 190 test files passed, three
+  skipped; 3,838 tests passed, 26 skipped.
+- Global coverage passed: statements 94% (21,342/22,704), branches 90%
+  (12,251/13,612), functions 94.54% (5,041/5,332), and lines 95%
+  (19,992/21,042).
+- All deterministic gates passed. Final review acceptance is complete; T-0122
+  is ready to integrate into `main` and then receive post-merge verification.
