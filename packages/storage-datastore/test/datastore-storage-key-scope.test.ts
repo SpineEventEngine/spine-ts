@@ -28,6 +28,27 @@ describe("DatastoreRecordStorage storage keys", () => {
     expect(client.kinds[0]).not.toBe(client.kinds[1]);
   });
 
+  it("uses distinct physical keys for cross-key reads and deletes", async () => {
+    const client = new RecordingClient();
+    const first = new DatastoreRecordStorage(
+      { name: "context", multitenant: false },
+      spec("first"),
+      client as never,
+      10,
+    );
+    const second = new DatastoreRecordStorage(
+      { name: "context", multitenant: false },
+      spec("second"),
+      client as never,
+      10,
+    );
+
+    await first.delete("shared-slot");
+    await second.read("shared-slot");
+    expect(client.kinds).toHaveLength(2);
+    expect(client.kinds[0]).not.toBe(client.kinds[1]);
+  });
+
   it("shares one exact kind for independent handles with the same storage key", async () => {
     const client = new RecordingClient();
     const first = new DatastoreRecordStorage(
