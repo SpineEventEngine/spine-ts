@@ -425,6 +425,9 @@ importers:
 
   packages/deployment:
     dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
       '@spine-event-engine/storage':
         specifier: workspace:*
         version: link:../storage

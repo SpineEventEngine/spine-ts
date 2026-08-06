@@ -1,0 +1,214 @@
+import { create } from "@bufbuild/protobuf";
+import { StructSchema, ValueSchema, type Struct, type Value } from "@bufbuild/protobuf/wkt";
+import { RecordSpec, type RecordStorage, type StorageFactory } from "@spine-event-engine/storage";
+
+import { ApplicationNode } from "./index.js";
+
+const storageKey = "spine.deployment.ApplicationNodeLease:v1";
+const defaultCleanupBatchSize = 32;
+
+/**
+ * Stores and reads live application-node leases in one caller-owned storage namespace.
+ */
+export class LeasedNodeRegistry {
+  readonly #storage: RecordStorage<string, Struct>;
+  readonly #cleanupBatchSize: number;
+  #closed = false;
+
+  /**
+   * Creates a leased node registry over an explicit atomic record storage handle.
+   *
+   * @param options Supplies the operator-selected storage factory and namespace.
+   */
+  constructor(options: LeasedNodeRegistryOptions) {
+    if (options.namespace.trim().length === 0) throw new Error("Lease storage namespace must be non-empty.");
+    this.#storage = options.factory.createRecordStorage(
+      { name: options.namespace, multitenant: false },
+      leaseRecordSpec,
+    );
+    if (!this.#storage.atomicCompareAndSet) {
+      this.#storage.close();
+      throw new Error("Leased node registry requires atomic compare-and-set storage.");
+    }
+    this.#cleanupBatchSize = options.cleanupBatchSize ?? defaultCleanupBatchSize;
+    if (!Number.isSafeInteger(this.#cleanupBatchSize) || this.#cleanupBatchSize < 1)
+      throw new RangeError("Lease cleanup batch size must be a positive safe integer.");
+  }
+
+  /**
+   * Registers one previously absent node lease.
+   *
+   * @param lease Supplies the node, owning registration identity, and expiry time.
+   * @returns Whether the registration was written.
+   */
+  async register(lease: NodeLease): Promise<boolean> {
+    this.requireOpen();
+    const record = LeaseRecords.write(lease);
+    return this.#storage.compareAndSet(lease.node.id, undefined, record);
+  }
+
+  /**
+   * Renews a lease only when its registration identity still owns the node ID.
+   *
+   * @param nodeId Supplies the stable node identity.
+   * @param registrationId Supplies the opaque owning process identity.
+   * @param expiresAt Supplies the renewed expiry in epoch milliseconds.
+   * @returns Whether the owner still held and renewed the lease.
+   */
+  async renew(nodeId: string, registrationId: string, expiresAt: number): Promise<boolean> {
+    this.requireOpen();
+    const current = await this.#storage.read(nodeId);
+    if (current === undefined) return false;
+    const lease = LeaseRecords.read(current, nodeId);
+    if (lease.registrationId !== registrationId) return false;
+    return this.#storage.compareAndSet(nodeId, current, LeaseRecords.write({ ...lease, expiresAt }));
+  }
+
+  /**
+   * Deletes a lease only when its registration identity still owns the node ID.
+   *
+   * @param nodeId Supplies the stable node identity.
+   * @param registrationId Supplies the opaque owning process identity.
+   * @returns Whether the caller's lease was deleted.
+   */
+  async remove(nodeId: string, registrationId: string): Promise<boolean> {
+    this.requireOpen();
+    const current = await this.#storage.read(nodeId);
+    if (current === undefined || LeaseRecords.read(current, nodeId).registrationId !== registrationId)
+      return false;
+    return this.#storage.compareAndSet(nodeId, current, undefined);
+  }
+
+  /**
+   * Reads one complete validated snapshot of live nodes at a supplied clock time.
+   *
+   * @param now Supplies epoch milliseconds used for exact expiry filtering.
+   * @returns Every non-expired node after every stored row validates.
+   */
+  async read(now: number): Promise<readonly ApplicationNode[]> {
+    this.requireOpen();
+    LeaseRecords.requireTime(now);
+    const leases = (await this.#storage.query()).map((record) => LeaseRecords.read(record));
+    return leases.filter((lease) => lease.expiresAt > now).map((lease) => lease.node);
+  }
+
+  /**
+   * Conditionally removes one finite batch of expired leases.
+   *
+   * @param now Supplies epoch milliseconds used for exact expiry filtering.
+   * @returns The number of rows this pass removed.
+   */
+  async cleanup(now: number): Promise<number> {
+    this.requireOpen();
+    LeaseRecords.requireTime(now);
+    const records = await this.#storage.queryEntries({ limit: this.#cleanupBatchSize });
+    const removals = await Promise.all(
+      records.map(async ({ id, record }) => {
+        const lease = LeaseRecords.read(record, id);
+        return lease.expiresAt <= now && (await this.#storage.compareAndSet(id, record, undefined));
+      }),
+    );
+    return removals.filter(Boolean).length;
+  }
+
+  /**
+   * Closes the independently owned storage handle and rejects later operations.
+   */
+  close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#storage.close();
+  }
+
+  private requireOpen(): void {
+    if (this.#closed) throw new Error("Leased node registry is closed.");
+  }
+}
+
+/**
+ * Supplies storage ownership and finite cleanup settings for one registry.
+ */
+export interface LeasedNodeRegistryOptions {
+  /** The caller-selected storage factory. */
+  readonly factory: StorageFactory;
+  /** The caller-selected logical storage namespace. */
+  readonly namespace: string;
+  /** Maximum expired rows considered by one cleanup pass. */
+  readonly cleanupBatchSize?: number;
+}
+
+/**
+ * Supplies the durable data owned by one registration attempt.
+ */
+export interface NodeLease {
+  /** The stable reachable application node. */
+  readonly node: ApplicationNode;
+  /** The opaque identity of one application process. */
+  readonly registrationId: string;
+  /** The epoch-millisecond time at which this lease stops being live. */
+  readonly expiresAt: number;
+}
+
+const leaseRecordSpec = new RecordSpec<string, Struct>({
+  schema: StructSchema,
+  storageKey,
+  idKind: "string",
+  extractId: (record) => LeaseRecords.read(record).node.id,
+});
+
+const LeaseRecords = Object.freeze({
+  read(record: Struct, expectedId?: string): NodeLease {
+    const fields = record.fields;
+    if (Object.keys(fields).length !== 5) throw new Error("Application node lease record is invalid.");
+    const version = number(fields.version);
+    const id = string(fields.nodeId);
+    const endpoint = string(fields.endpoint);
+    const expiresAt = number(fields.expiresAt);
+    const registrationId = string(fields.registrationId);
+    if (version !== 1 || (expectedId !== undefined && id !== expectedId))
+      throw new Error("Application node lease record is invalid.");
+    try {
+      const node = new ApplicationNode({ id, endpoint });
+      this.requireTime(expiresAt);
+      if (!registrationId.trim()) throw Error();
+      return Object.freeze({ node, registrationId, expiresAt });
+    } catch {
+      throw new Error("Application node lease record is invalid.");
+    }
+  },
+
+  write(lease: NodeLease): Struct {
+    this.requireTime(lease.expiresAt);
+    if (!lease.registrationId.trim()) throw new Error("Lease registration identity must be non-empty.");
+    return create(StructSchema, {
+      fields: {
+        version: value(1),
+        nodeId: value(lease.node.id),
+        endpoint: value(lease.node.endpoint),
+        expiresAt: value(lease.expiresAt),
+        registrationId: value(lease.registrationId),
+      },
+    });
+  },
+
+  requireTime(value: number): void {
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new RangeError("Lease expiry must be a non-negative safe integer.");
+  },
+});
+
+function number(value: Value | undefined): number {
+  if (value?.kind.case !== "numberValue" || !Number.isSafeInteger(value.kind.value)) throw Error();
+  return value.kind.value;
+}
+
+function string(value: Value | undefined): string {
+  if (value?.kind.case !== "stringValue" || !value.kind.value.trim()) throw Error();
+  return value.kind.value;
+}
+
+function value(input: number | string): Value {
+  return create(ValueSchema, {
+    kind: typeof input === "string" ? { case: "stringValue", value: input } : { case: "numberValue", value: input },
+  });
+}

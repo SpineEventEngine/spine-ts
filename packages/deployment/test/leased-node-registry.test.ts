@@ -15,7 +15,7 @@ describe("LeasedNodeRegistry", () => {
     await expect(second.register({ node, registrationId: "second", expiresAt: 200 })).resolves.toBe(true);
     await expect(first.renew("node/a", "first", 300)).resolves.toBe(false);
     await expect(first.remove("node/a", "first")).resolves.toBe(false);
-    await expect(second.read(200)).resolves.toEqual([node]);
+    await expect(second.read(199)).resolves.toEqual([node]);
   });
 
   it("omits a lease exactly at its expiry and keeps namespaces isolated", async () => {
