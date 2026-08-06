@@ -78,6 +78,31 @@ describe("Server lifecycle integration", () => {
     expect(secondClose).not.toHaveBeenCalled();
     expect(thirdClose).not.toHaveBeenCalled();
   });
+
+  it("aggregates listener start and admitted rollback failures in order", async () => {
+    const startFailure = new Error("start failed");
+    const rollbackFailure = new Error("rollback failed");
+    const laterClose = vi.fn();
+    const server = Server.atPort(0)
+      .addListenerLifecycle({
+        start: () => undefined,
+        close: vi.fn().mockImplementationOnce(() => {
+          throw rollbackFailure;
+        }),
+      })
+      .addListenerLifecycle({
+        start: () => {
+          throw startFailure;
+        },
+        close: vi.fn(),
+      })
+      .addListenerLifecycle({ start: () => undefined, close: laterClose });
+    const failure = await server.start().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).errors).toEqual([startFailure, rollbackFailure]);
+    expect(laterClose).not.toHaveBeenCalled();
+    await expect(server.start()).rejects.toThrow("deferred cleanup");
+  });
   beforeEach(async () => {
     await resetServerEnvironmentForTest();
     createHttp2Server.mockReset();

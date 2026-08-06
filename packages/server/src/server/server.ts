@@ -61,6 +61,7 @@ export class Server {
   #startingOwnership: EnvironmentOwnership | undefined;
   #run: Promise<RunningServer> | undefined;
   #failedStartCleanup: FailedStartCleanup | undefined;
+  #failedListenerLifecycle: RunningHttp2Server | undefined;
   #failedStartConsumed = false;
 
   /**
@@ -166,8 +167,13 @@ export class Server {
       );
     }
     const cleanup = this.#failedStartCleanup;
+    const lifecycle = this.#failedListenerLifecycle;
     const starting =
-      cleanup === undefined ? this.#startOnce(ownership) : this.#retryFailedStartCleanup(cleanup);
+      lifecycle !== undefined
+        ? this.#retryFailedListenerLifecycle(lifecycle)
+        : cleanup === undefined
+          ? this.#startOnce(ownership)
+          : this.#retryFailedStartCleanup(cleanup);
     this.#starting = starting;
     this.#startingOwnership = ownership;
     void starting.then(
@@ -339,7 +345,12 @@ export class Server {
       closeables,
       listenerLifecycles: this.#listenerLifecycles,
     });
-    await running.startLifecycles();
+    try {
+      await running.startLifecycles();
+    } catch (error) {
+      if (running.hasListenerLifecycleCleanup()) this.#failedListenerLifecycle = running;
+      throw error;
+    }
     if (browser === undefined) return running;
     try {
       return await BrowserServer.open(running, {
@@ -373,6 +384,13 @@ export class Server {
     if (errors.length > 0) {
       ServerValues.throwCleanupErrors(errors);
     }
+    throw new Error("Server deferred cleanup completed after an earlier failed start.");
+  }
+
+  async #retryFailedListenerLifecycle(running: RunningHttp2Server): Promise<never> {
+    await running.close();
+    this.#failedListenerLifecycle = undefined;
+    this.#failedStartConsumed = true;
     throw new Error("Server deferred cleanup completed after an earlier failed start.");
   }
 
@@ -846,6 +864,10 @@ class RunningHttp2Server implements RunningServer {
       }
       throw error;
     }
+  }
+
+  hasListenerLifecycleCleanup(): boolean {
+    return this.#startedLifecycles.length > 0;
   }
 
   async #closeOnce(): Promise<void> {
