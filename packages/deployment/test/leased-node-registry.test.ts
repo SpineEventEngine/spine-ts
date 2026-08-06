@@ -116,6 +116,22 @@ describe("LeasedNodeRegistry", () => {
     ).toThrow("atomic compare-and-set");
   });
 
+  it("rejects invalid local lease inputs and reports absent ownership", async () => {
+    const factory = new InMemoryStorageFactory();
+    expect(() => new LeasedNodeRegistry({ factory, namespace: " " })).toThrow("namespace");
+    const registry = new LeasedNodeRegistry({ factory, namespace: "validation" });
+    const node = new ApplicationNode({ id: "node/a", endpoint: "http://10.0.0.1" });
+    await expect(registry.renew("missing", "owner", 1)).resolves.toBe(false);
+    await expect(registry.remove("missing", "owner")).resolves.toBe(false);
+    await expect(registry.register({ node, registrationId: " ", expiresAt: 1 })).rejects.toThrow(
+      "identity",
+    );
+    await expect(
+      registry.register({ node, registrationId: "owner", expiresAt: -1 }),
+    ).rejects.toThrow("expiry");
+    await expect(registry.read(-1)).rejects.toThrow("expiry");
+  });
+
   it("rejects an invalid cleanup bound before allocating a storage handle", () => {
     const factory = new CountingFactory();
 
