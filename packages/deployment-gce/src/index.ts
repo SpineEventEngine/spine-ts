@@ -84,10 +84,23 @@ export interface GceScheduler {
   schedule(delayMs: number, onTick: () => void): () => void;
 }
 
+/** Creates one cancellable deadline for cooperative operations. */
+export interface GceDeadlineFactory {
+  create(timeoutMs: number): { readonly signal: AbortSignal; close(): void };
+}
+
 const systemScheduler: GceScheduler = {
   schedule: (delayMs, onTick) => {
     const timer = setTimeout(onTick, delayMs);
     return () => clearTimeout(timer);
+  },
+};
+const systemDeadlines: GceDeadlineFactory = {
+  create(timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    timer.unref();
+    return { signal: controller.signal, close: () => clearTimeout(timer) };
   },
 };
 
@@ -100,6 +113,7 @@ export class GceRegistrar {
   readonly #identity: string;
   readonly #scheduler: GceScheduler;
   readonly #now: () => number;
+  readonly #deadlines: GceDeadlineFactory;
   #cancel: (() => void) | undefined;
   #closed = false;
   #started = false;
@@ -116,6 +130,7 @@ export class GceRegistrar {
     readonly identity?: string;
     readonly scheduler?: GceScheduler;
     readonly now?: () => number;
+    readonly deadlines?: GceDeadlineFactory;
   }) {
     this.#registry = options.registry;
     if (
@@ -129,6 +144,7 @@ export class GceRegistrar {
     this.#identity = options.identity ?? randomUUID();
     this.#scheduler = options.scheduler ?? systemScheduler;
     this.#now = options.now ?? Date.now;
+    this.#deadlines = options.deadlines ?? systemDeadlines;
   }
 
   /** Confirms initial registration after the listener is ready. */
@@ -210,7 +226,13 @@ export class GceRegistrar {
     const port = this.#port;
     if (metadata === undefined || port === undefined)
       throw new Error("GCE registrar has no node source.");
-    this.#node = GceApplicationNode.create(await metadata.read(this.#abort.signal), { port });
+    const deadline = this.#deadlines.create(20_000);
+    try {
+      const signal = AbortSignal.any([this.#abort.signal, deadline.signal]);
+      this.#node = GceApplicationNode.create(await metadata.read(signal), { port });
+    } finally {
+      deadline.close();
+    }
   }
 }
 
