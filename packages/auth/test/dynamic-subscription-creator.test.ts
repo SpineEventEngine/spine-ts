@@ -21,6 +21,31 @@ describe("DynamicSubscriptionCreator", () => {
     expect(starts).toEqual(["a"]);
   });
 
+  it("retains an active definition while no nodes exist and resumes it after recovery", async () => {
+    const starts: string[] = [];
+    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, starts) });
+    const creator = new DynamicSubscriptionCreator(owner);
+    const node = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const wire = subscription();
+
+    await owner.reconcile([node]);
+    await creator.subscribe(wire, new AbortController().signal);
+    await creator.activate({ wire, updates: async () => {} }, new AbortController().signal);
+    await owner.reconcile([]);
+    await owner.reconcile([node]);
+
+    expect(starts).toEqual(["a", "a"]);
+  });
+
+  it("rejects a new native subscription while membership is empty", async () => {
+    const owner = new DynamicUnaryForwarder({ create: async (node) => client(node.id, []) });
+    const creator = new DynamicSubscriptionCreator(owner);
+
+    await expect(creator.subscribe(subscription(), new AbortController().signal)).rejects.toThrow(
+      "Gateway backend is absent.",
+    );
+  });
+
   it("uses the shared dynamic owner to reconcile added and removed native streams", async () => {
     const starts: string[] = [];
     const owner = new DynamicUnaryForwarder({
