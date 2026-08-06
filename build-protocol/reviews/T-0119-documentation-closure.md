@@ -31,3 +31,13 @@ recovery behavior, and the single-Gateway/multi-node topology.
 Every dispatch states the existing role, expected model, and expected
 reasoning. Actual runtime metadata or the immutable configured-profile
 limitation is recorded before accepting a result.
+
+## Fresh Reader Test
+
+Status: PASS — eight reader questions answered correctly.
+
+The fresh reader used explicit `gpt-5.6-terra` / `medium`. Independent runtime
+metadata is not exposed, so the immutable configured profile is the accepted
+metadata evidence. One improvement was accepted: the server README now shows
+the exact `BoundedContext.singleTenant(...).persistSystemEvents().build()`
+builder chain. No runtime or Proto change was needed.

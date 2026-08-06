@@ -37,6 +37,16 @@ system events are forgotten after validation and notification. Call
 `persistSystemEvents()` when the application needs a separate optional System
 Context event store.
 
+Enable that option while assembling the context, before `build()` or
+`buildAsync()`:
+
+```ts
+import { BoundedContext } from "@spine-event-engine/server";
+
+const context = BoundedContext.singleTenant("Tasks").persistSystemEvents().build();
+await context.close();
+```
+
 `Stand` is the read side: it serves queries from current entity state and turns
 system entity-state notifications into subscription updates. A subscription is
 best effort, so clients use a query for their initial state and recovery after a
