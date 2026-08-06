@@ -19,8 +19,6 @@ interface SubscriptionChild {
   readonly backend: BackendSubscriptionEnvelope;
   readonly controller: AbortController;
   activation: Promise<void>;
-  readonly token: string;
-  readonly incarnation: number;
   active: boolean;
 }
 
@@ -97,10 +95,12 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     string,
     {
       readonly wire: PublicSubscriptionWire;
+      readonly maxBackendEnvelopeBytes: number;
       updates: SubscriptionUpdateSink | undefined;
       active: boolean;
       readonly starts: Set<AbortController>;
       readonly children: Map<string, SubscriptionChild>;
+      failure: Error | undefined;
     }
   >();
 
@@ -207,13 +207,15 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    *
    * @param request Supplies canonical logical subscription bytes.
    * @param signal Cancels creation before it reaches a native node.
-   * @returns The logical definition envelope retained by the durable store.
+   * @param maxBackendEnvelopeBytes Limits every per-node native envelope.
+   * @returns Completes after every current node installs its native child.
    */
   async subscribeDefinition(
     request: PublicSubscriptionWire,
     signal: AbortSignal,
-  ): Promise<BackendSubscriptionEnvelope> {
-    if (signal.aborted || this.#closed || this.#clients.size === 0)
+    maxBackendEnvelopeBytes = Number.MAX_SAFE_INTEGER,
+  ): Promise<void> {
+    if (signal.aborted || this.#closed || this.#nodes.length === 0)
       throw new Error("Gateway backend is absent.");
     const wire = { kind: "public-subscription" as const, bytes: request.bytes.slice() };
     const subscription = fromBinary(SubscriptionSchema, wire.bytes);
@@ -223,15 +225,28 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     if (!this.#definitions.has(key))
       this.#definitions.set(key, {
         wire,
+        maxBackendEnvelopeBytes,
         updates: undefined,
         active: false,
         starts: new Set(),
         children: new Map(),
+        failure: undefined,
       });
+    const definition = this.#definitions.get(key);
+    if (definition === undefined) throw new Error("subscription creation was cancelled");
     await this.#schedule([...this.#nodes.values()], false);
     if (!this.#definitions.has(key) || signal.aborted || this.#closed)
       throw new Error("subscription creation was cancelled");
-    return { kind: "backend-subscription-envelope", bytes: request.bytes.slice() };
+    if (definition.failure !== undefined) {
+      this.#definitions.delete(key);
+      await this.#removeDefinitionChildren(definition);
+      throw definition.failure;
+    }
+    if (definition.children.size !== this.#clients.size) {
+      this.#definitions.delete(key);
+      await this.#removeDefinitionChildren(definition);
+      throw new Error("Gateway backend is absent.");
+    }
   }
 
   async #reconcileDefinitions(generation: number): Promise<void> {
@@ -243,11 +258,16 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
         }
       const missing = [...this.#clients.entries()].filter(([id]) => !definition.children.has(id));
       for (let index = 0; index < missing.length; index += this.#maxConcurrentStarts)
-        await Promise.all(
+        for (const result of await Promise.allSettled(
           missing
             .slice(index, index + this.#maxConcurrentStarts)
             .map(([id, current]) => this.#startChild(definition, id, current, generation)),
-        );
+        ))
+          if (result.status === "rejected" && definition.failure === undefined)
+            definition.failure =
+              result.reason instanceof Error
+                ? result.reason
+                : new Error("native subscription creation failed");
       if (definition.active && definition.updates !== undefined)
         for (const [id, child] of definition.children) {
           const current = this.#clients.get(id);
@@ -310,6 +330,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
   async #startChild(
     definition: {
       readonly wire: PublicSubscriptionWire;
+      readonly maxBackendEnvelopeBytes: number;
       updates: SubscriptionUpdateSink | undefined;
       readonly active: boolean;
       readonly starts: Set<AbortController>;
@@ -334,6 +355,15 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     } finally {
       definition.starts.delete(controller);
     }
+    if (backend.bytes.byteLength > definition.maxBackendEnvelopeBytes) {
+      await this.#cleanupChild(
+        { backend, controller, activation: Promise.resolve(), active: false },
+        current.client,
+      );
+      const failure = new Error("backend-envelope-too-large");
+      definition.failure = failure;
+      throw failure;
+    }
     if (
       generation !== this.#generation ||
       this.#clients.get(id)?.incarnation !== current.incarnation ||
@@ -344,20 +374,15 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
           backend,
           controller,
           activation: Promise.resolve(),
-          token: "stale",
-          incarnation: current.incarnation,
           active: false,
         },
         current.client,
       );
       return;
     }
-    const token = crypto.randomUUID();
     const child: SubscriptionChild = {
       backend,
       controller,
-      token,
-      incarnation: current.incarnation,
       activation: Promise.resolve(),
       active: false,
     };
@@ -400,6 +425,17 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       definition.children.delete(id);
       await this.#cleanupChild(child, client);
     }
+  }
+
+  async #removeDefinitionChildren(definition: {
+    readonly children: Map<string, SubscriptionChild>;
+  }): Promise<void> {
+    await Promise.all(
+      [...definition.children].map(async ([id, child]) => {
+        definition.children.delete(id);
+        await this.#cleanupChild(child, this.#clients.get(id)?.client);
+      }),
+    );
   }
 
   async #cleanupChild(

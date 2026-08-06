@@ -728,6 +728,52 @@ export interface SubscriptionCreator {
 }
 
 /**
+ * Coordinates one logical public subscription without retaining native child envelopes.
+ *
+ * A coordinator may fan one definition out to several native application nodes. It
+ * compensates any partially created native children before it rejects creation.
+ */
+export interface SubscriptionCoordinator {
+  /**
+   * Creates every current native child for a logical definition.
+   *
+   * @param request Supplies the copied canonical definition.
+   * @param signal Cancels logical creation.
+   * @param maxBackendEnvelopeBytes Limits each native child envelope.
+   * @returns Completes only after all current children are installed.
+   */
+  subscribe(
+    request: PublicSubscriptionWire,
+    signal: SubscriptionAbortSignal,
+    maxBackendEnvelopeBytes: number,
+  ): Promise<void>;
+
+  /**
+   * Activates the native children and relays their updates until cancellation.
+   *
+   * @param request Supplies the definition and update sink.
+   * @param signal Cancels the active logical subscription.
+   * @returns Completes after activation ends.
+   */
+  activate(
+    request: { readonly wire: PublicSubscriptionWire; readonly updates: SubscriptionUpdateSink },
+    signal: SubscriptionAbortSignal,
+  ): Promise<void>;
+
+  /**
+   * Cancels every native child for one logical definition.
+   *
+   * @param request Supplies the definition to cancel.
+   * @param signal Cancels the cleanup operation.
+   * @returns Completes after child cleanup settles.
+   */
+  cancel(
+    request: { readonly wire: PublicSubscriptionWire },
+    signal: SubscriptionAbortSignal,
+  ): Promise<void>;
+}
+
+/**
  * Collaborators for independently authenticated and authorized subscription operations.
  */
 export interface SubscriptionGatewayOptions {
@@ -766,9 +812,9 @@ export interface SubscriptionGatewayOptions {
   readonly fingerprint: (principal: AuthenticatedPrincipal) => string;
 
   /**
-   * Creates and disposes backend subscriptions.
+   * Coordinates logical subscriptions across the current native membership.
    */
-  readonly creator: SubscriptionCreator;
+  readonly creator: SubscriptionCoordinator;
 
   /**
    * Overrides finite gateway limits.
@@ -1059,27 +1105,16 @@ export class SubscriptionGateway {
     const wire = subscribed.wire;
     const controller = new AbortController();
     this.#pendingSubscribes.set(controller, reservation);
-    let backend: BackendSubscriptionEnvelope | undefined;
     try {
-      backend = await this.#receiveBackend(wire, controller);
+      await this.#receiveBackend(wire, controller);
       const nowMs = this.#nowMs();
       if (nowMs === undefined || expiresAtMs <= nowMs) {
-        await this.#compensate(backend.bytes, controller);
         return SubscriptionGatewayValues.rejected("denied");
       }
-      return await this.#retainBackend(
-        backend,
-        wire,
-        fingerprint,
-        tenant,
-        expiresAtMs,
-        reservation,
-        controller,
-      );
+      return await this.#retainDefinition(wire, fingerprint, tenant, expiresAtMs, reservation);
     } finally {
       this.#pendingSubscribes.delete(controller);
       await reservation.release();
-      backend?.bytes.fill(0);
     }
   }
   async #reserveCapacity(): Promise<SubscriptionCapacityReservation | SubscriptionGatewayResult> {
@@ -1096,30 +1131,24 @@ export class SubscriptionGateway {
   async #receiveBackend(
     wire: PublicSubscriptionWire,
     controller: AbortController,
-  ): Promise<BackendSubscriptionEnvelope> {
+  ): Promise<void> {
     return SubscriptionGatewayValues.withTimeout(
       this.#options.creator.subscribe(
         SubscriptionGatewayValues.copyPublic(wire),
         controller.signal,
+        this.#limits.maxBackendEnvelopeBytes,
       ),
       this.#limits.operationTimeoutMs,
       controller,
     );
   }
-  async #retainBackend(
-    backend: BackendSubscriptionEnvelope,
+  async #retainDefinition(
     wire: PublicSubscriptionWire,
     fingerprint: string,
     tenant: string | undefined,
     expiresAtMs: number,
     reservation: SubscriptionCapacityReservation,
-    controller: AbortController,
   ): Promise<SubscriptionGatewayResult> {
-    if (backend.bytes.byteLength > this.#limits.maxBackendEnvelopeBytes) {
-      await reservation.release();
-      await this.#compensate(backend.bytes, controller);
-      return SubscriptionGatewayValues.rejected("backend-envelope-too-large");
-    }
     try {
       const binding = await this.#options.bindings.create({
         definition: SubscriptionGatewayValues.copyPublic(wire),
@@ -1131,46 +1160,19 @@ export class SubscriptionGateway {
       if (binding.id !== reservation.id) throw new Error("subscription reservation ID changed");
       return { kind: "subscribed", wire: SubscriptionGatewayValues.copyPublic(wire) };
     } catch (error) {
-      return this.#failedCreation(error, backend.bytes, controller, reservation);
+      return this.#failedCreation(error, reservation);
     }
   }
   async #failedCreation(
     error: unknown,
-    bytes: Uint8Array,
-    controller: AbortController,
     reservation: SubscriptionCapacityReservation,
   ): Promise<SubscriptionGatewayResult> {
-    try {
-      await reservation.release();
-      await this.#compensate(bytes, controller);
-    } catch (disposeError) {
-      throw new AggregateError(
-        [error, disposeError],
-        "subscription binding creation and disposal failed",
-      );
-    }
+    await reservation.release();
     return SubscriptionGatewayValues.rejected(
       error instanceof Error && error.message === "binding-capacity-exceeded"
         ? "binding-capacity-exceeded"
         : "denied",
     );
-  }
-  async #compensate(bytes: Uint8Array, controller: AbortController): Promise<void> {
-    const privateCopy = SubscriptionGatewayValues.envelope(bytes);
-    const compensation = controller.signal.aborted ? new AbortController() : controller;
-    const timeoutMs =
-      compensation === controller
-        ? this.#limits.operationTimeoutMs
-        : this.#limits.shutdownTimeoutMs;
-    try {
-      await SubscriptionGatewayValues.withTimeout(
-        this.#options.creator.dispose(privateCopy, compensation.signal),
-        timeoutMs,
-        compensation,
-      );
-    } finally {
-      privateCopy.bytes.fill(0);
-    }
   }
   async #cleanupAfterActivationFailure(
     id: string,

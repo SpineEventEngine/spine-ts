@@ -119,6 +119,29 @@ describe("DynamicSubscriptionCreator", () => {
     );
   });
 
+  it("rejects and compensates an oversized native child envelope", async () => {
+    let disposals = 0;
+    const owner = new DynamicUnaryForwarder({
+      create: async (node) => ({
+        ...client(node.id, []),
+        subscribe: async () => ({
+          kind: "backend-subscription-envelope" as const,
+          bytes: new Uint8Array([1, 2]),
+        }),
+        dispose: async () => {
+          disposals++;
+        },
+      }),
+    });
+    const creator = new DynamicSubscriptionCreator(owner);
+
+    await owner.reconcile([new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })]);
+    await expect(creator.subscribe(subscription(), new AbortController().signal, 1)).rejects.toThrow(
+      "backend-envelope-too-large",
+    );
+    expect(disposals).toBe(1);
+  });
+
   it("aborts a delayed start when cancellation removes its definition", async () => {
     let aborted = false;
     const owner = new DynamicUnaryForwarder({
