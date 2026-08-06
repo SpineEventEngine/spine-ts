@@ -440,6 +440,10 @@ importers:
       '@spine-event-engine/deployment':
         specifier: workspace:*
         version: link:../deployment
+    devDependencies:
+      '@spine-event-engine/storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/proto:
     dependencies:

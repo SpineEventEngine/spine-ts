@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ApplicationNode, ScheduledNodeDiscovery } from "@spine-event-engine/deployment";
+import {
+  ApplicationNode,
+  LeasedNodeRegistry,
+  ScheduledNodeDiscovery,
+} from "@spine-event-engine/deployment";
+import { InMemoryStorageFactory } from "@spine-event-engine/storage";
 import {
   GceApplicationNode,
   GceMetadataService,
@@ -8,6 +13,70 @@ import {
 } from "../src/index.js";
 
 describe("GceApplicationNode", () => {
+  it("keeps discovery active through crash expiry, zero, and later return", async () => {
+    const factory = new InMemoryStorageFactory();
+    const registry = new LeasedNodeRegistry({ factory, namespace: "gce-crash" });
+    const a = new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" });
+    const b = new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" });
+    let now = 0;
+    const ticks: (() => void)[] = [];
+    const snapshots: string[][] = [];
+    let resolveSnapshot: (() => void) | undefined;
+    const nextSnapshot = () =>
+      new Promise<void>((resolve) => {
+        resolveSnapshot = resolve;
+      });
+    const discovery = new ScheduledNodeDiscovery({
+      reader: new GceRegistryReader(registry, () => now),
+      scheduler: { schedule: (_delay, onTick) => (ticks.push(onTick), () => undefined) },
+    });
+    const stop = discovery.watch((nodes) => {
+      snapshots.push(nodes.map((node) => node.id));
+      resolveSnapshot?.();
+      resolveSnapshot = undefined;
+    });
+    try {
+      await registry.register({ node: a, registrationId: "a-owner", expiresAt: 10 });
+      let published = nextSnapshot();
+      ticks.shift()?.();
+      await published;
+      await Promise.resolve();
+
+      now = 10;
+      published = nextSnapshot();
+      ticks.shift()?.();
+      await published;
+      await Promise.resolve();
+
+      await registry.register({
+        node: new ApplicationNode({ id: "abandoned", endpoint: "http://10.0.0.3" }),
+        registrationId: "crashed-owner",
+        expiresAt: 10,
+      });
+      let renewal: (() => void) | undefined;
+      const registrar = new GceRegistrar({
+        registry,
+        node: b,
+        identity: "b-owner",
+        now: () => now,
+        scheduler: { schedule: (_delay, onTick) => ((renewal = onTick), () => undefined) },
+      });
+      await registrar.start();
+      renewal?.();
+      await registrar.close();
+      await expect(registry.lookup("abandoned", now)).resolves.toBeUndefined();
+
+      await registry.register({ node: b, registrationId: "b-restarted", expiresAt: 20 });
+      published = nextSnapshot();
+      ticks.shift()?.();
+      await published;
+      expect(snapshots).toEqual([["a"], [], ["b"]]);
+    } finally {
+      await stop();
+      await registry.close();
+      factory.close();
+    }
+  });
   it("reads documented GCE metadata paths with the required header", async () => {
     const original = globalThis.fetch;
     const requests: RequestInfo[] = [];
@@ -160,9 +229,18 @@ describe("GceApplicationNode", () => {
     let reads = 0;
     const first = [new ApplicationNode({ id: "a", endpoint: "http://10.0.0.1" })];
     const second = [new ApplicationNode({ id: "b", endpoint: "http://10.0.0.2" })];
-    const registry = { read: async () => { reads += 1; if (reads === 2) throw new Error("read failed"); return reads === 1 ? first : second; } } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
+    const registry = {
+      read: async () => {
+        reads += 1;
+        if (reads === 2) throw new Error("read failed");
+        return reads === 1 ? first : second;
+      },
+    } as unknown as import("@spine-event-engine/deployment").LeasedNodeRegistry;
     const snapshots: string[][] = [];
-    const discovery = new ScheduledNodeDiscovery({ reader: new GceRegistryReader(registry, () => 0), scheduler: { schedule: (_delay, onTick) => (ticks.push(onTick), () => undefined) } });
+    const discovery = new ScheduledNodeDiscovery({
+      reader: new GceRegistryReader(registry, () => 0),
+      scheduler: { schedule: (_delay, onTick) => (ticks.push(onTick), () => undefined) },
+    });
     const stop = discovery.watch((nodes) => snapshots.push(nodes.map((node) => node.id)));
     ticks.shift()?.();
     await Promise.resolve();
