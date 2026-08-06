@@ -221,11 +221,6 @@ export interface SubscriptionBindings {
   // prettier-ignore
 
   /**
-   * Declares that a custom durable fan-in store persists and equality-fences topology identities.
-   */
-  readonly topologyFencing?: true;
-
-  /**
    * Creates an inactive private binding.
    * @param input Supplies the copied backend envelope and ownership facts.
    * @returns Returns the new public binding identifier.
@@ -234,10 +229,6 @@ export interface SubscriptionBindings {
     readonly backend: BackendSubscriptionEnvelope;
     readonly principalFingerprint: string;
 
-    /**
-     * Exact ordered topology identity persisted with the binding; omitted values use `legacy`.
-     */
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly expiresAtMs: number;
     readonly reservation?: SubscriptionCapacityReservation;
@@ -252,10 +243,6 @@ export interface SubscriptionBindings {
     readonly id: string;
     readonly principalFingerprint: string;
 
-    /**
-     * Exact ordered topology identity equality-fenced before invoking the callback.
-     */
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
@@ -275,10 +262,6 @@ export interface SubscriptionBindings {
     readonly id: string;
     readonly principalFingerprint: string;
 
-    /**
-     * Exact ordered topology identity equality-fenced before invoking the callback.
-     */
-    readonly topology?: string;
     readonly tenant: string | undefined;
     readonly nowMs: number;
     readonly onBackend: OnBackendSubscription;
@@ -775,13 +758,6 @@ export interface SubscriptionGatewayOptions {
   readonly fingerprint: (principal: AuthenticatedPrincipal) => string;
 
   /**
-   *
-   * Identifies the ordered backend topology used to fence durable bindings;
-   * omission defaults to `legacy`.
-   */
-  readonly topology?: string;
-
-  /**
    * Creates and disposes backend subscriptions.
    */
   readonly creator: SubscriptionCreator;
@@ -976,10 +952,9 @@ export class SubscriptionGateway {
     signal: AbortSignal | undefined,
   ): Promise<SubscriptionGatewayResult> {
     const { source, context, fingerprint, tenant, expiresAtMs, nowMs } = prepared;
-    const topology = this.#options.topology ?? "legacy";
     const rewritten = SubscriptionGatewayValues.rewrite(source, context);
     if (source.kind === "subscribe")
-      return this.#subscribe(rewritten, fingerprint, topology, tenant, expiresAtMs);
+      return this.#subscribe(rewritten, fingerprint, tenant, expiresAtMs);
     const id = source.subscription.id?.value;
     if (id === undefined || id.length === 0) return SubscriptionGatewayValues.rejected("denied");
     const wire: PublicSubscriptionWire = { kind: "public-subscription", bytes: rewritten };
@@ -987,7 +962,6 @@ export class SubscriptionGateway {
       ? this.#activate(
           id,
           fingerprint,
-          topology,
           tenant,
           nowMs,
           expiresAtMs,
@@ -995,12 +969,11 @@ export class SubscriptionGateway {
           updates ?? SubscriptionGatewayValues.discardUpdate,
           signal,
         )
-      : this.#cancel(id, fingerprint, topology, tenant, nowMs, wire);
+      : this.#cancel(id, fingerprint, tenant, nowMs, wire);
   }
   async #activate(
     id: string,
     fingerprint: string,
-    topology: string,
     tenant: string | undefined,
     nowMs: number,
     expiresAtMs: number,
@@ -1025,7 +998,6 @@ export class SubscriptionGateway {
       const result = await this.#options.bindings.activate({
         id,
         principalFingerprint: fingerprint,
-        topology,
         tenant,
         nowMs,
         signal: active,
@@ -1033,12 +1005,12 @@ export class SubscriptionGateway {
           this.#forwardActivate(wire, backend, updates, signal, guard),
       });
       if (result.kind !== "activated") return SubscriptionGatewayValues.rejected("denied");
-      await this.#cleanupAfterActivationFailure(id, fingerprint, topology, tenant, nowMs, wire);
+      await this.#cleanupAfterActivationFailure(id, fingerprint, tenant, nowMs, wire);
       return { kind: "activated" };
     } catch (error) {
       if (error instanceof Error && error.message === "binding-busy")
         return SubscriptionGatewayValues.rejected("binding-busy");
-      await this.#cleanupAfterActivationFailure(id, fingerprint, topology, tenant, nowMs, wire);
+      await this.#cleanupAfterActivationFailure(id, fingerprint, tenant, nowMs, wire);
       throw error;
     } finally {
       clearTimeout(expiry);
@@ -1048,7 +1020,6 @@ export class SubscriptionGateway {
   async #cancel(
     id: string,
     fingerprint: string,
-    topology: string,
     tenant: string | undefined,
     nowMs: number,
     wire: PublicSubscriptionWire,
@@ -1057,7 +1028,6 @@ export class SubscriptionGateway {
       const result = await this.#options.bindings.cancel({
         id,
         principalFingerprint: fingerprint,
-        topology,
         tenant,
         nowMs,
         onBackend: (backend, signal, guard) => this.#forwardCancel(wire, backend, signal, guard),
@@ -1074,7 +1044,6 @@ export class SubscriptionGateway {
   async #subscribe(
     bytes: Uint8Array,
     fingerprint: string,
-    topology: string,
     tenant: string | undefined,
     expiresAtMs: number,
   ): Promise<SubscriptionGatewayResult> {
@@ -1094,7 +1063,6 @@ export class SubscriptionGateway {
         backend,
         bytes,
         fingerprint,
-        topology,
         tenant,
         expiresAtMs,
         reservation,
@@ -1134,7 +1102,6 @@ export class SubscriptionGateway {
     backend: BackendSubscriptionEnvelope,
     bytes: Uint8Array,
     fingerprint: string,
-    topology: string,
     tenant: string | undefined,
     expiresAtMs: number,
     reservation: SubscriptionCapacityReservation,
@@ -1149,7 +1116,6 @@ export class SubscriptionGateway {
       const binding = await this.#options.bindings.create({
         backend: SubscriptionGatewayValues.envelope(backend.bytes),
         principalFingerprint: fingerprint,
-        topology,
         tenant,
         expiresAtMs,
         reservation,
@@ -1200,7 +1166,6 @@ export class SubscriptionGateway {
   async #cleanupAfterActivationFailure(
     id: string,
     fingerprint: string,
-    topology: string,
     tenant: string | undefined,
     nowMs: number,
     wire: PublicSubscriptionWire,
@@ -1209,7 +1174,6 @@ export class SubscriptionGateway {
       await this.#options.bindings.cancel({
         id,
         principalFingerprint: fingerprint,
-        topology,
         tenant,
         nowMs,
         onBackend: (backend, signal, guard) => this.#forwardCancel(wire, backend, signal, guard),
