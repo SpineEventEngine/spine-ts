@@ -126,10 +126,12 @@ export class LeasedNodeRegistry {
    * @param now Supplies epoch milliseconds used for exact expiry filtering.
    * @returns Every non-expired node after every stored row validates.
    */
-  read(now: number): Promise<readonly ApplicationNode[]> {
+  read(now: number, signal?: AbortSignal): Promise<readonly ApplicationNode[]> {
     return this.start(async () => {
+      signal?.throwIfAborted();
       LeaseRecords.requireTime(now);
       const leases = (await this.readAll()).map(({ id, record }) => LeaseRecords.read(record, id));
+      signal?.throwIfAborted();
       return leases.filter((lease) => lease.expiresAt > now).map((lease) => lease.node);
     });
   }
@@ -141,10 +143,12 @@ export class LeasedNodeRegistry {
    * @param now Supplies epoch milliseconds for expiry evaluation.
    * @returns The live lease, or undefined when absent or expired.
    */
-  lookup(nodeId: string, now: number): Promise<NodeLease | undefined> {
+  lookup(nodeId: string, now: number, signal?: AbortSignal): Promise<NodeLease | undefined> {
     return this.start(async () => {
+      signal?.throwIfAborted();
       LeaseRecords.requireTime(now);
       const record = await this.#storage.read(nodeId);
+      signal?.throwIfAborted();
       if (record === undefined) return undefined;
       const lease = LeaseRecords.read(record, nodeId);
       return lease.expiresAt > now ? lease : undefined;

@@ -210,7 +210,7 @@ export class GceRegistrar {
           this.#registry.renew(node.id, this.#identity, this.#now() + 60_000, signal),
         );
       else {
-        const existing = await this.#registry.lookup(node.id, this.#now());
+        const existing = await this.#registry.lookup(node.id, this.#now(), this.#abort.signal);
         this.#confirmed = existing?.registrationId === this.#identity;
         if (!this.#confirmed)
           this.#confirmed = await this.#operation((signal) =>
@@ -278,7 +278,7 @@ export class GceRegistryReader implements NodeSnapshotReader {
   ) {}
 
   /** Reads every currently live node. */
-  read(_signal: AbortSignal): Promise<readonly ApplicationNode[]> {
-    return this.registry.read(this.now());
+  read(signal: AbortSignal): Promise<readonly ApplicationNode[]> {
+    return this.registry.read(this.now(), signal);
   }
 }
