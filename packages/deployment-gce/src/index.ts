@@ -121,6 +121,7 @@ export interface GceApplicationNodeOptions {
 /**
  * Builds one canonical application node from trusted GCE metadata.
  */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
 export class GceApplicationNode {
   // prettier-ignore
 
@@ -262,15 +263,24 @@ const systemScheduler: GceScheduler = {
   schedule: (delayMs, onTick) => {
     const timer = setTimeout(onTick, delayMs);
     timer.unref();
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   },
 };
 const systemDeadlines: GceDeadlineFactory = {
   create(timeoutMs) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
     timer.unref();
-    return { signal: controller.signal, close: () => clearTimeout(timer) };
+    return {
+      signal: controller.signal,
+      close: () => {
+        clearTimeout(timer);
+      },
+    };
   },
 };
 
@@ -416,6 +426,7 @@ export class GceRegistrar {
       }
       await this.#operation((signal) => this.#registry.cleanup(this.#now(), signal));
     } finally {
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
       if (!this.#closed) this.#schedule();
     }
   }

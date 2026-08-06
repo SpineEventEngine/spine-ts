@@ -62,7 +62,9 @@ const systemNodeScheduler: NodeScheduler = {
   schedule(delayMs, onTick) {
     const timer = setTimeout(onTick, delayMs);
     timer.unref();
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   },
 };
 

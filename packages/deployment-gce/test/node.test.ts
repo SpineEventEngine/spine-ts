@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-base-to-string, @typescript-eslint/no-confusing-void-expression, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/no-unused-vars, @typescript-eslint/require-await */
+
 import { describe, expect, it } from "vitest";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { DynamicUnaryForwarder, type DynamicUnaryClient } from "@spine-event-engine/auth";
