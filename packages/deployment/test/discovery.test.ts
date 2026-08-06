@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/require-await */
+
 import { describe, expect, it } from "vitest";
 
 import { ApplicationNode, ScheduledNodeDiscovery, StaticNodeDiscovery } from "../src/index.js";

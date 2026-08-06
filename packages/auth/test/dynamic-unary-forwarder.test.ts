@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/require-await, @typescript-eslint/restrict-template-expressions */
+
 import { describe, expect, it } from "vitest";
 import { ApplicationNode } from "@spine-event-engine/deployment";
 
@@ -86,8 +88,9 @@ describe("DynamicUnaryForwarder", () => {
         new Promise((resolve) => {
           started.push(node.id);
           if (node.id === "a")
-            release = () =>
+            release = () => {
               resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+            };
           else resolve({ forward: async () => new Uint8Array(), close: async () => {} });
         }),
     });
@@ -231,8 +234,9 @@ describe("DynamicUnaryForwarder", () => {
         new Promise((resolve) => {
           started.push(node.id);
           if (node.id === "a")
-            releaseA = () =>
+            releaseA = () => {
               resolve({ forward: async () => new Uint8Array(), close: async () => {} });
+            };
           else resolve({ forward: async () => new Uint8Array(), close: async () => {} });
         }),
     });

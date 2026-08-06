@@ -2,10 +2,10 @@ import type { ApplicationNode } from "@spine-event-engine/deployment";
 
 import type { UnaryForwarder } from "./index.js";
 
-type PendingSnapshot = {
+interface PendingSnapshot {
   readonly nodes: readonly ApplicationNode[];
   readonly generation: number;
-};
+}
 
 /**
  * Represents a connected unary backend with deterministic disposal.
@@ -118,8 +118,8 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     this.#complete = undefined;
   }
 
-  async #currentPending(): Promise<PendingSnapshot | undefined> {
-    return this.#pending;
+  #currentPending(): Promise<PendingSnapshot | undefined> {
+    return Promise.resolve(this.#pending);
   }
 
   async #replace(nodes: readonly ApplicationNode[], generation: number): Promise<void> {

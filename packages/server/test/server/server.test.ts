@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/require-await */
+
 import * as http2 from "node:http2";
 import * as http from "node:http";
 

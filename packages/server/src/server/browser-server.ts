@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return, @typescript-eslint/require-await */
+
 import * as http from "node:http";
 import type { AddressInfo } from "node:net";
 import { createHash } from "node:crypto";

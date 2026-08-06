@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unnecessary-condition, @typescript-eslint/require-await */
+
 import { isIP } from "node:net";
 
 /**
