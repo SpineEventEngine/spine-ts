@@ -72,6 +72,22 @@ ownership, cancellation, restart behavior, and shared Gateway assembly.
 - The implementer must not spawn subagents and must not modify platform
   adapters, registry storage, Terraform, or Wave 8 logging.
 
+## Architecture Blocker Split
+
+The first RED slice demonstrated that durable v3 binding identity, native
+fan-in activation, and T-0121 membership ownership cannot be changed safely as
+independent patches. The existing requirements-splitter role is dispatched at
+this demonstrated architectural blocker only.
+
+- Existing role: requirements splitter.
+- Expected model: `gpt-5.6-sol`.
+- Expected reasoning: `high`.
+- Both fields must be explicit in dispatch.
+- Scope: produce a bounded implementation packet mapping the single generation
+  owner, v4 logical record, ephemeral stream lifecycle, cancellation/restart,
+  and deletion of positional topology. It must not invent new requirements,
+  edit code, or split T-0122 into new human-facing tasks.
+
 ## Verification
 
 - Mandatory focused RED/GREEN commands and affected-package preflight.
