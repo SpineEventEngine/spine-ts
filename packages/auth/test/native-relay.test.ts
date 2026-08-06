@@ -193,7 +193,10 @@ describe("NativeSubscriptionCreator", () => {
     const signal = new AbortController().signal;
     const wire = {
       kind: "public-subscription" as const,
-      bytes: toBinary(SubscriptionSchema, create(SubscriptionSchema, { topic: create(TopicSchema) })),
+      bytes: toBinary(
+        SubscriptionSchema,
+        create(SubscriptionSchema, { topic: create(TopicSchema) }),
+      ),
     };
     const backend = await native.subscribe(wire, signal);
     const updates: Uint8Array[] = [];
@@ -207,10 +210,7 @@ describe("NativeSubscriptionCreator", () => {
       },
       signal,
     );
-    await native.cancel(
-      { wire },
-      signal,
-    );
+    await native.cancel({ wire }, signal);
     await native.dispose(backend, signal);
     expect(calls.map((call) => call.method)).toEqual([
       "Post",

@@ -190,13 +190,11 @@ describe("MessageBoard gateway policy", () => {
     expect(subscriptionWires).toHaveLength(1);
     expect(
       fromBinary(SubscriptionSchema, subscriptionWires[0] ?? new Uint8Array()).topic?.context,
-    ).toMatchObject(
-      {
-        actor: { value: "ada" },
-        tenantId: { kind: { case: "value", value: "tenant-a" } },
-        timestamp: { seconds: 42n },
-      },
-    );
+    ).toMatchObject({
+      actor: { value: "ada" },
+      tenantId: { kind: { case: "value", value: "tenant-a" } },
+      timestamp: { seconds: 42n },
+    });
     await subscriptions.close();
     const nativeQuery = (
       board: string,

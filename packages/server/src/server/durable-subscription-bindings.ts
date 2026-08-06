@@ -512,12 +512,7 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
         await this.#relinquish(claimed);
         throw error;
       }
-      const {
-        ownerId,
-        leaseUntilMs,
-        reason,
-        ...inactive
-      } = claimed;
+      const { ownerId, leaseUntilMs, reason, ...inactive } = claimed;
       void ownerId;
       void leaseUntilMs;
       void reason;
@@ -530,7 +525,10 @@ export class DurableSubscriptionBindings implements SubscriptionBindings {
       const claimedRow = await this.#storage.read(claimed.id);
       if (
         claimedRow === undefined ||
-        !this.#claimedRecovery(Values.read(claimedRow, claimed.id, this.#maxRecordBytes), claimed) ||
+        !this.#claimedRecovery(
+          Values.read(claimedRow, claimed.id, this.#maxRecordBytes),
+          claimed,
+        ) ||
         !(await this.#cas(claimed.id, claimedRow, Values.write(recovered, this.#maxRecordBytes)))
       ) {
         await this.#relinquish(claimed);

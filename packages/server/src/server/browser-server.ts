@@ -170,7 +170,8 @@ export const BrowserServer: Readonly<{
       if (durableBindings.recoverActive !== undefined) {
         const now = options.clock.now();
         const nowMs =
-          Number(now.seconds.toString()) * 1_000 + Math.floor(Number(now.nanos.toString()) / 1_000_000);
+          Number(now.seconds.toString()) * 1_000 +
+          Math.floor(Number(now.nanos.toString()) / 1_000_000);
         if (Number.isSafeInteger(nowMs))
           await durableBindings.recoverActive({
             nowMs,

@@ -262,8 +262,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     const definition = this.#definitions.get(key);
     if (definition === undefined) throw new Error("subscription creation was cancelled");
     await this.#schedule([...this.#nodes.values()], false);
-    if (!this.#definitions.has(key))
-      throw new Error("subscription creation was cancelled");
+    if (!this.#definitions.has(key)) throw new Error("subscription creation was cancelled");
     if (definition.failure !== undefined) {
       const cleanup = this.#detachDefinitionChildren(definition);
       await this.#cleanupRetainedChildren(cleanup);
@@ -464,11 +463,7 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
       });
   }
 
-  #completeChild(
-    definition: LogicalDefinitionState,
-    id: string,
-    child: SubscriptionChild,
-  ): void {
+  #completeChild(definition: LogicalDefinitionState, id: string, child: SubscriptionChild): void {
     if (definition.children.get(id) !== child || child.controller.signal.aborted) return;
     definition.children.delete(id);
   }
@@ -493,9 +488,13 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
    */
   static waitForAbort(signal: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
-      signal.addEventListener("abort", () => {
-        resolve();
-      }, { once: true });
+      signal.addEventListener(
+        "abort",
+        () => {
+          resolve();
+        },
+        { once: true },
+      );
       if (signal.aborted) resolve();
     });
   }
@@ -522,7 +521,9 @@ export class DynamicUnaryForwarder implements UnaryForwarder {
     retained: readonly RetainedChildCleanup[],
     signal: AbortSignal = new AbortController().signal,
   ): Promise<void> {
-    await Promise.all(retained.map(({ child, client }) => this.#cleanupChild(child, client, signal)));
+    await Promise.all(
+      retained.map(({ child, client }) => this.#cleanupChild(child, client, signal)),
+    );
   }
 
   async #cleanupChild(
